@@ -704,10 +704,20 @@ public partial class LlvmCodeGenerator
                         : "ptr";
 
                     string receiverLlvm3 = GetLlvmType(type: receiverType);
+                    // `s.Type!()` passes the receiver as a by-VALUE argument to `Type.$create(from)`,
+                    // so load the value when the receiver came in by-ref (struct record).
+                    string receiverVal3 = receiver;
+                    if (ReceiverPassedByRef(receiverType: receiverType))
+                    {
+                        receiverVal3 = NextTemp();
+                        EmitLine(sb: sb,
+                            line: $"  {receiverVal3} = load {receiverLlvm3}, ptr {receiver}");
+                    }
+
                     string result3 = NextTemp();
                     EmitLine(sb: sb,
                         line:
-                        $"  {result3} = call {retType3} @{funcName}({receiverLlvm3} {receiver})");
+                        $"  {result3} = call {retType3} @{funcName}({receiverLlvm3} {receiverVal3})");
 
                     return result3;
                 }
@@ -738,10 +748,22 @@ public partial class LlvmCodeGenerator
                             memberVariableName: member.PropertyName);
                     case RecordTypeInfo record when
                         record.MemberVariables.Any(predicate: mv => mv.Name == member.PropertyName):
+                    {
+                        // For by-ref struct records the receiver is the storage address; load the
+                        // record value before the extractvalue-based field read.
+                        string recVal = receiver;
+                        if (ReceiverPassedByRef(receiverType: receiverType))
+                        {
+                            recVal = NextTemp();
+                            EmitLine(sb: sb,
+                                line: $"  {recVal} = load {GetRecordTypeName(record: record)}, ptr {receiver}");
+                        }
+
                         return EmitRecordMemberVariableRead(sb: sb,
-                            recordValue: receiver,
+                            recordValue: recVal,
                             record: record,
                             memberVariableName: member.PropertyName);
+                    }
                 }
 
                 break;
@@ -761,7 +783,12 @@ public partial class LlvmCodeGenerator
             ? new List<string> { receiver }
             : new List<string>();
         var argTypes = methodTakesReceiver
-            ? new List<string> { GetParameterLlvmType(type: receiverType) }
+            ? new List<string>
+            {
+                ReceiverPassedByRef(receiverType: receiverType)
+                    ? "ptr"
+                    : GetParameterLlvmType(type: receiverType)
+            }
             : new List<string>();
         var argTypeInfos = methodTakesReceiver
             ? new List<TypeInfo> { receiverType }
@@ -1333,8 +1360,15 @@ public partial class LlvmCodeGenerator
             return (receiver, typeAsReceiver);
         }
 
-        string emittedReceiver = EmitExpression(sb: sb, expr: member.Object);
         TypeInfo? receiverType = GetExpressionType(expr: member.Object);
+        if (ReceiverPassedByRef(receiverType: receiverType))
+        {
+            // Struct-record methods take `me` by reference: pass the receiver's storage address
+            // (spilling an rvalue receiver to a temp), matching the by-ref `me` parameter ABI.
+            return (EmitLvalueAddress(sb: sb, expr: member.Object), receiverType);
+        }
+
+        string emittedReceiver = EmitExpression(sb: sb, expr: member.Object);
         return (emittedReceiver, receiverType);
     }
 
@@ -1388,6 +1422,12 @@ public partial class LlvmCodeGenerator
                         memberVars = entityParent.MemberVariables;
                         parentLlvmType = GetEntityTypeName(entity: entityParent);
                         break;
+                    case CrashableTypeInfo crashableParent:
+                        // Crashables are entity-like (the value is a ptr to the struct).
+                        basePtr = EmitExpression(sb: sb, expr: member.Object);
+                        memberVars = crashableParent.MemberVariables;
+                        parentLlvmType = GetCrashableTypeName(crashable: crashableParent);
+                        break;
                     case RecordTypeInfo recordParent:
                         basePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
                         memberVars = recordParent.MemberVariables;
@@ -1423,12 +1463,37 @@ public partial class LlvmCodeGenerator
                 return fieldPtr;
             }
             default:
-                throw new InvalidOperationException(
-                    message:
-                    $"Cannot take address of expression form '{expr.GetType().Name}'. " +
-                    "Address-of is supported on named locals and field-access chains; " +
-                    "index access (`arr[i].get_address()`) is deferred to post-v0.0.1a.");
+            {
+                // Rvalue receiver (call result, constructor, literal, …): no stable storage exists,
+                // so spill the value to a temp and return its address. Lets a by-ref struct-record
+                // method (or get_address/hijack) take the address of a temporary.
+                TypeInfo? exprType = GetExpressionType(expr: expr);
+                if (exprType == null)
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Cannot take address of expression form '{expr.GetType().Name}' — " +
+                        "unknown type, cannot spill to a temporary.");
+                }
+
+                string val = EmitExpression(sb: sb, expr: expr);
+                string llvm = GetLlvmType(type: exprType);
+                string slot = NextTemp();
+                EmitEntryAlloca(llvmName: slot, llvmType: llvm);
+                EmitLine(sb: sb, line: $"  store {llvm} {val}, ptr {slot}");
+                return slot;
+            }
         }
+    }
+
+    /// <summary>
+    /// Whether a method receiver of this type is passed by reference (a <c>ptr</c> to its storage):
+    /// struct records (no <c>@llvm</c> backend type). Mirrors <c>IsByRefMeReceiver</c> on the callee
+    /// side so call sites pass the receiver's address and the matching <c>ptr</c> argument type.
+    /// </summary>
+    private static bool ReceiverPassedByRef(TypeInfo? receiverType)
+    {
+        return receiverType is RecordTypeInfo { HasDirectBackendType: false };
     }
 
     /// <summary>

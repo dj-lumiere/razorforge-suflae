@@ -394,10 +394,11 @@ public partial class LlvmCodeGenerator
         // Register implicit 'me' parameter for methods (skip for $create static factories and common routines)
         if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine) && !routine.IsCommon)
         {
-            if (IsRecordSetItem(routine: routine))
+            if (IsByRefMeReceiver(routine: routine))
             {
-                // $setitem! on records: %me.addr IS the function parameter (caller's alloca pointer)
-                // No alloca/store needed — mutations go directly to the caller's variable
+                // Struct-record `me` is passed by reference: %me.addr IS the function parameter
+                // (the caller's storage pointer). No alloca/store — mutations and address-taking
+                // (hijack/get_address) reach the caller's variable directly.
                 _localVariables[key: "me"] = routine.OwnerType;
             }
             else
@@ -760,8 +761,10 @@ public partial class LlvmCodeGenerator
             throw new InvalidOperationException(message: "Implicit 'me' requested for routine without owner type.");
         }
 
-        if (IsRecordSetItem(routine: routine))
+        if (IsByRefMeReceiver(routine: routine))
         {
+            // Struct-record `me` is a pointer to the caller's storage (named %me.addr), so the
+            // parameter doubles as the field-access base — no alloca/store prologue needed.
             string nameSuffix = includeName ? " %me.addr" : string.Empty;
             return $"ptr{nameSuffix}";
         }
@@ -841,6 +844,19 @@ public partial class LlvmCodeGenerator
     private static bool IsRecordSetItem(RoutineInfo routine)
     {
         return routine.OwnerType is RecordTypeInfo && routine.Name.Contains(value: "$setitem");
+    }
+
+    /// <summary>
+    /// Whether a method receives its <c>me</c> by reference (a <c>ptr</c> to the caller's storage)
+    /// rather than by value. Struct records (no <c>@llvm</c> backend type) take <c>me</c> by-ref so
+    /// methods mutate in place and can take stable addresses (hijack/get_address, atomics, C FFI) —
+    /// the same convention <c>$setitem</c> already needed. <c>@llvm</c>-primitive records (S64,
+    /// Hijacked, etc.) keep <c>me</c> by value: their methods pass the raw value to intrinsics.
+    /// Entities are already by-ref via their pointer ABI.
+    /// </summary>
+    private static bool IsByRefMeReceiver(RoutineInfo routine)
+    {
+        return routine.OwnerType is RecordTypeInfo { HasDirectBackendType: false };
     }
 
     /// <summary>
