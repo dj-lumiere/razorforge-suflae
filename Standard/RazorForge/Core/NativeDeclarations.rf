@@ -39,6 +39,26 @@ dangerous routine rf_reallocate_dynamic(ptr: Address, size: ByteSize) -> Address
 ### Frees a dynamic memory block previously returned by the runtime allocator.
 ### :param ptr: The allocation to release.
 dangerous external("C") routine rf_invalidate(ptr: Address)
+
+# ============================================================================
+# Threaded tasks (v0.1 concurrency)
+# ============================================================================
+
+### Creates a task control block. `kind` is 1 for an OS thread (RF_TASK_THREADED).
+### :returns: The `rf_task*` handle as an `Address` (null on allocation failure).
+dangerous external("C") routine rf_task_create(kind: U32) -> Address
+### Spawns an OS thread running `entry(task, userdata)`.
+### :returns: 0 on success, non-zero on failure.
+dangerous external("C") routine rf_task_spawn_threaded(task: Address, entry: Address, userdata: Address) -> S32
+### Blocks until the task completes. :returns: the completion kind (1 = value).
+dangerous external("C") routine rf_task_wait(task: Address) -> S32
+### Blocks until the task completes or the deadline elapses.
+### :returns: the completion kind (1 = value, 4 = timeout).
+dangerous external("C") routine rf_task_wait_within(task: Address, secs: S64, ns: U32) -> S32
+### :returns: the boxed result payload pointer set by the task's entry thunk.
+dangerous external("C") routine rf_task_result_payload(task: Address) -> Address
+### Releases a task control block.
+dangerous external("C") routine rf_task_destroy(task: Address)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
