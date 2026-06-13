@@ -646,14 +646,6 @@ external("llvm") routine set_byte_at[N](array: Array[Byte, N], index: U64, value
 @llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\n{result} = load {T}, ptr {prev}")
 external("llvm") routine element_at[Array, T](array: Array, index: U64) -> ?T
 
-### Sets the element at component.
-### :param array: The `array` value.
-### :param index: The zero-based position to use.
-### :param value: The value to use.
-### :returns: The resulting `Array` value.
-@llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\nstore {T} {value}, ptr {prev}\n{result} = load {Array}, ptr {first}")
-external("llvm") routine set_element_at[Array, T](array: Array, index: U64, value: T) -> Array
-
 ### Loads the element at `index` from contiguous storage addressed by `ptr`.
 ### Unlike {element_at}, this reads in place through the pointer — no whole-aggregate copy. The
 ### pointer is typically `me.hijack()` of an inline-backed collection (`Array`, `BitArray`).

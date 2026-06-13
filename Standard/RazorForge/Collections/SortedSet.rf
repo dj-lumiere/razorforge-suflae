@@ -20,9 +20,11 @@ needs T obeys Comparable
   is_leaf: Bool
 
 # ============================================================================
-# Node buffer helpers — hide Array element plumbing behind readable names.
-# Reads use element_at intrinsic; writes use set_element_at and assign back to
-# the entity field (value semantics, O(N) per update).
+# Node buffer helpers — hide the inline-buffer plumbing behind readable names.
+# The node is an entity (by-ref `me`); its inline `Array` fields are addressed
+# directly via `me.hijack().recast_as[...]().stride(i)` and read/written with
+# `extract()`/`inject()` — O(1) per slot, no whole-array copy. The Array element
+# intrinsics (element_at/set_element_at) are NOT used here.
 # ============================================================================
 
 ### Returns the number of live keys currently stored in this node.
