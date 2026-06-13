@@ -839,29 +839,35 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Whether this routine is a $setitem on a record type (needs pass-by-pointer for me).
+    /// Whether a record's <c>me</c> is passed by reference (a <c>ptr</c> to the caller's storage)
+    /// rather than by value. This is a purely type-level decision — no per-method special cases:
+    /// <list type="bullet">
+    /// <item><b>By reference</b> — every <i>storage-backed</i> record: a struct record (no
+    /// <c>@llvm</c> backend) or an <c>@llvm</c> record whose backend is an <i>aggregate</i>
+    /// (<c>[N x T]</c>, i.e. <c>Array[T,N]</c> / <c>BitArray[N]</c>). By-ref lets any method mutate
+    /// in place and take stable addresses (hijack/get_address, atomics, C FFI), and avoids copying
+    /// the aggregate on every call.</item>
+    /// <item><b>By value</b> — only <i>scalar</i> <c>@llvm</c> records (<c>iN</c>, <c>fN</c>,
+    /// <c>ptr</c>: numerics, <c>Bool</c>, <c>Hijacked</c>, …). The value <i>is</i> the machine
+    /// register their operators feed to LLVM intrinsics (<c>add i64 %me, %you</c>), so a pointer
+    /// would be wrong. These are pure values and never mutate <c>me</c> in place, so "needs by-value"
+    /// and "mutates in place" never overlap.</item>
+    /// </list>
+    /// Entities are already by-ref via their pointer ABI. This replaces the old <c>$setitem</c>
+    /// name-check: <c>Array.$setitem</c> is by-ref because Array is aggregate-backed, like every
+    /// other Array method — not because of its name.
     /// </summary>
-    private static bool IsRecordSetItem(RoutineInfo routine)
+    internal static bool IsByRefMeRecord(TypeInfo? ownerType) => ownerType switch
     {
-        return routine.OwnerType is RecordTypeInfo && routine.Name.Contains(value: "$setitem");
-    }
+        // Struct record: no @llvm backend -> storage-backed -> by-ref.
+        RecordTypeInfo { HasDirectBackendType: false } => true,
+        // @llvm record: by-ref iff the backend is an aggregate ([N x T]); scalars stay by-value.
+        RecordTypeInfo { HasDirectBackendType: true, BackendType: { } bt } => bt.StartsWith(value: '['),
+        _ => false
+    };
 
-    /// <summary>
-    /// Whether a method receives its <c>me</c> by reference (a <c>ptr</c> to the caller's storage)
-    /// rather than by value. Struct records (no <c>@llvm</c> backend type) take <c>me</c> by-ref so
-    /// methods mutate in place and can take stable addresses (hijack/get_address, atomics, C FFI) —
-    /// the same convention <c>$setitem</c> already needed. <c>@llvm</c>-primitive records (S64,
-    /// Hijacked, etc.) keep <c>me</c> by value: their methods pass the raw value to intrinsics.
-    /// Entities are already by-ref via their pointer ABI.
-    /// </summary>
-    private static bool IsByRefMeReceiver(RoutineInfo routine)
-    {
-        // `$setitem` always needs by-ref `me` so the element write reaches the caller's storage —
-        // even on inline-backed records like Array[T, N] (`@llvm`-style `[N x T]`), whose call site
-        // passes the receiver address. Struct records (no direct backend type) are by-ref too.
-        return IsRecordSetItem(routine: routine)
-            || routine.OwnerType is RecordTypeInfo { HasDirectBackendType: false };
-    }
+    private static bool IsByRefMeReceiver(RoutineInfo routine) =>
+        IsByRefMeRecord(ownerType: routine.OwnerType);
 
     /// <summary>
     /// Gets the zero/default value for a type.

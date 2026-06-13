@@ -1488,13 +1488,14 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Whether a method receiver of this type is passed by reference (a <c>ptr</c> to its storage):
-    /// struct records (no <c>@llvm</c> backend type). Mirrors <c>IsByRefMeReceiver</c> on the callee
-    /// side so call sites pass the receiver's address and the matching <c>ptr</c> argument type.
+    /// storage-backed records — struct records (no <c>@llvm</c> backend) and aggregate-backed
+    /// <c>@llvm</c> records (<c>[N x T]</c>, e.g. Array/BitArray). Shares the exact predicate with
+    /// the callee-side <c>IsByRefMeReceiver</c> (via <c>IsByRefMeRecord</c>) so call sites pass the
+    /// receiver's address and the matching <c>ptr</c> argument type. Scalar <c>@llvm</c> records stay
+    /// by value.
     /// </summary>
-    private static bool ReceiverPassedByRef(TypeInfo? receiverType)
-    {
-        return receiverType is RecordTypeInfo { HasDirectBackendType: false };
-    }
+    private static bool ReceiverPassedByRef(TypeInfo? receiverType) =>
+        IsByRefMeRecord(ownerType: receiverType);
 
     /// <summary>
     /// Resolves the initial member routine call from semantic compiler state.
