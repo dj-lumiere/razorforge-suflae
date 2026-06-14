@@ -707,15 +707,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Compute substitution map for the callee from owner-type generics.
         var subs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
 
-        // Free generic functions (e.g. `show[T]`) carry their type arguments on the
-        // RoutineInfo when instantiated by SubstituteRoutine. Their body references the
-        // generic params as receiver/argument types — e.g. `show[T]`'s body has
-        // `value.$represent()` where value: T. Without `T → ConcreteType` in the frame's
-        // TypeSubs, the body walker can't resolve `T.$represent` to `ConcreteType.$represent`,
-        // leaving the concrete method out of the live set. Codegen then emits a call to it
-        // but never the definition → linker error.
-        if (callee.OwnerType == null && callee is { GenericDefinition: { GenericParameters: { Count: > 0 } freeParams }, TypeArguments: { Count: > 0 } freeArgs }
-                                     && freeParams.Count == freeArgs.Count)
+        // Method-level generic params carry their type arguments on the RoutineInfo when
+        // instantiated by SubstituteRoutine. The body references the params as receiver/argument
+        // types — e.g. free `show[T]`'s body has `value.$represent()` where value: T, and
+        // `T.share[P]()`'s body constructs `ShareController[T, P](...)`. Without `T → ConcreteType`
+        // / `P → ConcretePolicy` in the frame's TypeSubs, the body walker can't resolve those
+        // types, leaving the concrete method/constructor out of the live set. Codegen then emits a
+        // call to it but never the definition → linker error. This applies to BOTH free functions
+        // and member methods with method-level generics (the owner-type params are bound below).
+        if (callee is { GenericDefinition: { GenericParameters: { Count: > 0 } freeParams }, TypeArguments: { Count: > 0 } freeArgs }
+                && freeParams.Count == freeArgs.Count)
         {
             for (int i = 0; i < freeParams.Count; i++)
             {
@@ -958,6 +959,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         TypeInfo? ct = cre.ConstructedType;
         if (ct == null) return null;
+        // In a monomorphized frame the constructed type may be a generic parameter (e.g. `P()`
+        // inside `ShareController[T, P].$create`'s body, with P bound to a concrete LockPolicy).
+        // Substitute through the active frame subs so we enqueue the concrete policy's `$create`
+        // (and emit its body) rather than a bogus `P.$create`.
+        ct = RoutineInfo.SubstituteType(type: ct, substitution: _currentFrameSubs);
         // Match overload by parameter count — Text() (no args) and Text(from: CStr) are
         // distinct $create overloads on the same type. LookupMethod alone returns the
         // first-registered one and misses the no-arg variant when callers use it.
@@ -1036,7 +1042,20 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         if (ce.Arguments.Count != 0) return null;
         TypeInfo? ct = ce.ConstructedType;
+        // A no-arg construction of a generic parameter (e.g. `P()` inside `ShareController[T, P]
+        // .$create`'s body) is parsed as a CallExpression whose callee is an IdentifierExpression
+        // naming the param, and SA leaves ConstructedType null (the param has no concrete type yet).
+        // In a monomorphized frame the param is bound, so recover the concrete type from the frame
+        // subs — otherwise the concrete policy's `$create` body is never enqueued (LINKERR).
+        if (ct == null && ce.Callee is IdentifierExpression idCalleeForParam
+            && _currentFrameSubs.TryGetValue(key: idCalleeForParam.Name, value: out TypeInfo? boundParamType))
+        {
+            ct = boundParamType;
+        }
         if (ct == null) return null;
+        // Substitute through the active frame subs so a constructed type that is itself a generic
+        // parameter (or carries one) resolves to its concrete binding.
+        ct = RoutineInfo.SubstituteType(type: ct, substitution: _currentFrameSubs);
         foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
         {
             if (m is { Name: CreateMethodName, Parameters.Count: 0 }) return m;

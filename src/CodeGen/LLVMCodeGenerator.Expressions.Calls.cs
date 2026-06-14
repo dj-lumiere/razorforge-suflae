@@ -183,6 +183,16 @@ public partial class LlvmCodeGenerator
                     return EmitRecordConstruction(sb: sb, record: record, arguments: arguments);
                 }
 
+                // Zero-field record construction (e.g. `ReadOnly()` — a `record ... pass`, reached
+                // monomorphized from `P()` where P=ReadOnly): no fields to initialize and no user
+                // `$create`. Materialize the empty struct value directly. Without this the call
+                // falls through to a spurious `call void @TypeName()` to an undefined symbol (LINKERR).
+                if (calledType is RecordTypeInfo { MemberVariables.Count: 0 } emptyRecord &&
+                    arguments.Count == 0)
+                {
+                    return EmitRecordConstruction(sb: sb, record: emptyRecord, arguments: arguments);
+                }
+
                 if (!routesToUserCreate &&
                     calledType is EntityTypeInfo { MemberVariables.Count: > 0 } entity &&
                     arguments.Count == entity.MemberVariables.Count && arguments.All(

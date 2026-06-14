@@ -423,7 +423,20 @@ public sealed class RoutineInfo
             DeclaredMutation = DeclaredMutation,
             MutationCategory = MutationCategory,
             TypeArguments = typeArguments,
-            GenericDefinition = this,
+            // Preserve universal self-type provenance through this resolution layer. For a
+            // self-type extension method (`routine T.share[P]()`), `LookupMethod` returns an
+            // owner-bound intermediate (OwnerType already = the concrete receiver) whose
+            // GenericDefinition points at the original universal method (OwnerType = the bare
+            // `T` generic parameter). If we naively set GenericDefinition = this, that universal
+            // provenance is buried one level down, and reachability / GMP (which gate the
+            // self-type owner→receiver binding on `GenericDefinition.OwnerType is
+            // GenericParameterTypeInfo`) can no longer recover `T → receiver` — the concrete
+            // receiver carries no TypeArguments to recover it from, unlike `List[S32].method[U]`.
+            // The result is an emitted call to `Receiver.share[P]` with no matching definition
+            // (LINKERR). Keep the universal method as the definition so that binding survives.
+            GenericDefinition = GenericDefinition?.OwnerType is GenericParameterTypeInfo
+                ? GenericDefinition
+                : this,
             Visibility = Visibility,
             Location = Location,
             Module = Module,
