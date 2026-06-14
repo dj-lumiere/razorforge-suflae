@@ -7,7 +7,7 @@ import BuilderService
 ### :typeparam T: The entity type being viewed.
 ### :see: {Modifying[T]}, {Claiming[T]}, {Inspecting[T]}, {Access-Types}
 @llvm("ptr")
-record Viewing[T] obeys Referring[T]
+record Viewing[T] obeys Referring[T], Enterable
   pass
 
 ### Produces a temporary read-only view of `me`.
@@ -27,9 +27,11 @@ needs T is EntityType
 # Resource management — enables `using entity.view() as v`
 # ============================================================================
 
-### Called on entry to a `using` block; no-op for a view (access is already established).
-routine Viewing[T].$enter()
-  return
+### Called on entry to a `using` block; passes the view through as the bound value (access is
+### already established by `.view()`).
+### :returns: This view as `Viewing[T]`.
+routine Viewing[T].$enter() -> Viewing[T]
+  return me
 
 ### Called on exit from a `using` block; no-op for a view (the compiler handles scope cleanup).
 routine Viewing[T].$exit()

@@ -13,7 +13,7 @@ import BuilderService
 ### :typeparam P: The access-discipline lock policy of the originating `Shared`.
 ### :see: {Inspecting[T]}, {Modifying[T]}, {Shared[T, P]}, {Access-Types}
 @llvm("ptr")
-record Claiming[T, P] obeys Controlling[T]
+record Claiming[T, P] obeys Controlling[T], Enterable
 needs T is EntityType, P obeys LockPolicy
   pass
 
@@ -25,12 +25,14 @@ needs T is EntityType, P obeys LockPolicy
 # ============================================================================
 
 ### Called on entry to the `using` block: acquires the exclusive claimer hold on the controller's
-### access-discipline lock. Pairs with `$exit`, so the lock spans exactly the `using` scope.
-routine Claiming[T, P].$enter()
+### access-discipline lock, then passes the token through as the bound value. Pairs with `$exit`,
+### so the lock spans exactly the `using` scope.
+### :returns: This token as `Claiming[T, P]`.
+routine Claiming[T, P].$enter() -> Claiming[T, P]
   danger!
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.add_claimer()
-  return
+  return me
 
 ### Called on exit from the `using` block (and on every escape): releases the claimer hold.
 routine Claiming[T, P].$exit()

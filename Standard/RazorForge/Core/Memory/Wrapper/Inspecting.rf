@@ -13,7 +13,7 @@ import BuilderService
 ### :typeparam P: The access-discipline lock policy of the originating `Shared`.
 ### :see: {Claiming[T]}, {Viewing[T]}, {Shared[T, P]}, {Access-Types}
 @llvm("ptr")
-record Inspecting[T, P] obeys Referring[T]
+record Inspecting[T, P] obeys Referring[T], Enterable
 needs T is EntityType, P obeys LockPolicy
   pass
 
@@ -25,12 +25,14 @@ needs T is EntityType, P obeys LockPolicy
 # ============================================================================
 
 ### Called on entry to the `using` block: acquires the shared reader hold on the controller's
-### access-discipline lock. Pairs with `$exit`, so the lock spans exactly the `using` scope.
-routine Inspecting[T, P].$enter()
+### access-discipline lock, then passes the token through as the bound value. Pairs with `$exit`,
+### so the lock spans exactly the `using` scope.
+### :returns: This token as `Inspecting[T, P]`.
+routine Inspecting[T, P].$enter() -> Inspecting[T, P]
   danger!
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.add_inspector()
-  return
+  return me
 
 ### Called on exit from the `using` block (and on every escape): releases the reader hold.
 routine Inspecting[T, P].$exit()

@@ -20,8 +20,10 @@ choice FileMode
 # ============================================================================
 
 ### Represents an open file handle.
-### `FileHandle` supports explicit lifecycle control and the `using` protocol.
-entity FileHandle
+### `FileHandle` owns a unique OS descriptor with a `close` teardown, so it is an `entity` (single
+### owner, no implicit copy — preventing double-close) and obeys {Enterable} for scoped `using`
+### access. The fallible acquisition lives in the `open!` factory; `$enter` is pass-through.
+entity FileHandle obeys Enterable
   ### Stores the native file descriptor.
   secret fd: S32
   ### Stores the mode used to open the file.
@@ -40,7 +42,7 @@ entity FileHandle
 routine open!(path: Text, mode: FileMode = FileMode.READ) -> ?FileHandle
   var cstr = CStr(from: path)
   var mode_val = mode.S32()
-  var fd = rf_file_open(cstr, cstr.count().S32(), mode_val)
+  var fd = rf_file_open(cstr, cstr.count().S32!(), mode_val)
   if fd == -1
     throw IOError(description: f"Cannot open file: {path}")
   return FileHandle(fd: fd, mode: mode)
@@ -126,10 +128,10 @@ routine FileHandle.is_eof() -> Bool
 # Resource management — enables `using open!(path) as f`
 # ============================================================================
 
-### Enters a `using` scope with this file handle.
-### The handle itself is returned unchanged.
-routine FileHandle.$enter()
-  return
+### Enters a `using` scope with this file handle, passing it through as the bound value.
+### :returns: This handle as `?FileHandle`.
+routine FileHandle.$enter() -> ?FileHandle
+  return me
 
 ### Closes the file handle when leaving a `using` scope.
 ### This provides deterministic cleanup for scoped file access.
