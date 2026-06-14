@@ -1391,6 +1391,9 @@ public partial class LlvmCodeGenerator
     {
         switch (expr)
         {
+            case NamedArgumentExpression named:
+                // `f(name: lvalue)` — the address of the named argument is the address of its value.
+                return EmitLvalueAddress(sb: sb, expr: named.Value);
             case IdentifierExpression id:
             {
                 if (!_localVariables.ContainsKey(key: id.Name))

@@ -62,6 +62,8 @@ public partial class LlvmCodeGenerator
         bool isCExtern = routine.CallingConvention == "C";
         paramTypes.AddRange(collection: routine.Parameters.Select(selector: param =>
         {
+            // By-ref struct-record thread arg: the worker receives a pointer to the spawner's cell.
+            if (IsByRefThreadArg(routine: routine, param: param)) return "ptr";
             string t = GetParameterLlvmType(type: param.Type);
             if (isCExtern && t == "half") return "i16";
             string attrs = GetExplicitParameterAttributes(type: param.Type);
@@ -288,9 +290,13 @@ public partial class LlvmCodeGenerator
         // Sanitize names that conflict with LLVM's reserved block label "entry"
         paramList.AddRange(collection:
             from param in routineInfo.Parameters
-            let paramType = GetParameterLlvmType(type: param.Type)
-            let paramAttrs = GetExplicitParameterAttributes(type: param.Type)
-            let emittedName = param.Name == "entry" ? "entry_" : param.Name
+            let byRefThreadArg = IsByRefThreadArg(routine: routineInfo, param: param)
+            let paramType = byRefThreadArg ? "ptr" : GetParameterLlvmType(type: param.Type)
+            let paramAttrs = byRefThreadArg ? string.Empty : GetExplicitParameterAttributes(type: param.Type)
+            // By-ref thread arg: name the parameter `%<name>.addr` so it doubles as the cell's
+            // lvalue address (mirrors by-ref `me`); the prologue then skips the alloca/store copy.
+            let emittedName = byRefThreadArg ? $"{param.Name}.addr"
+                : param.Name == "entry" ? "entry_" : param.Name
             select string.IsNullOrEmpty(paramAttrs)
                 ? $"{paramType} %{emittedName}"
                 : $"{paramType} {paramAttrs} %{emittedName}");
@@ -430,6 +436,15 @@ public partial class LlvmCodeGenerator
         // Register parameters as local variables
         foreach (ParameterInfo param in routine.Parameters)
         {
+            // By-ref struct-record thread arg: `%<name>.addr` IS the parameter (a pointer to the
+            // spawner's cell), exactly like a by-ref `me`. No alloca/store — field/method access
+            // resolves through the address and reaches the shared cell directly.
+            if (IsByRefThreadArg(routine: routine, param: param))
+            {
+                _localVariables[key: param.Name] = param.Type;
+                continue;
+            }
+
             // Parameters are passed as value, create a local copy
             // Use "entry_" instead of "entry" to avoid conflict with the entry: block label
             string emittedParamName = param.Name == "entry" ? "entry_" : param.Name;
@@ -868,6 +883,18 @@ public partial class LlvmCodeGenerator
 
     private static bool IsByRefMeReceiver(RoutineInfo routine) =>
         IsByRefMeRecord(ownerType: routine.OwnerType);
+
+    /// <summary>
+    /// A struct-record argument to a <c>threaded routine</c> is passed BY REFERENCE: the worker's
+    /// parameter is a pointer to the spawner's storage, so every worker that receives the same cell
+    /// operates on one address (the basis of <c>Atomic[T]</c> cross-thread sharing). This mirrors
+    /// the by-ref <c>me</c> convention — the parameter doubles as the field/method-access base, no
+    /// alloca/store copy — and applies the SAME storage-backed predicate. Plain scalar value types
+    /// (numerics, <c>Hijacked</c>, ...) stay by value (copied into the argpack). The spawner must
+    /// keep the cell alive until it joins; lifetime is enforced statically in a later phase.
+    /// </summary>
+    private static bool IsByRefThreadArg(RoutineInfo routine, ParameterInfo param) =>
+        routine.AsyncStatus == AsyncStatus.Threaded && IsByRefMeRecord(ownerType: param.Type);
 
     /// <summary>
     /// Gets the zero/default value for a type.

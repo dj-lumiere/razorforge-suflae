@@ -218,7 +218,9 @@ public partial class LlvmCodeGenerator
         if (!_typeDeclarationsClosure.ContainsKey(key: name))
         {
             var fields = routine.Parameters
-                                .Select(selector: p => GetParameterLlvmType(type: p.Type))
+                                .Select(selector: p => IsByRefThreadArg(routine: routine, param: p)
+                                    ? "ptr"
+                                    : GetParameterLlvmType(type: p.Type))
                                 .ToList();
             _typeDeclarationsClosure[key: name] =
                 $"{name} = type {{ {string.Join(separator: ", ", values: fields)} }}\n";
@@ -256,7 +258,11 @@ public partial class LlvmCodeGenerator
             string packType = EnsureArgpackType(routine: routine);
             for (int i = 0; i < routine.Parameters.Count; i++)
             {
-                string pt = GetParameterLlvmType(type: routine.Parameters[index: i].Type);
+                // By-ref thread args are stored as a `ptr` (the spawner's cell address); load and
+                // forward the pointer so the worker's by-ref parameter aliases the shared cell.
+                string pt = IsByRefThreadArg(routine: routine, param: routine.Parameters[index: i])
+                    ? "ptr"
+                    : GetParameterLlvmType(type: routine.Parameters[index: i].Type);
                 b.Append(value:
                     $"  %fp{i} = getelementptr {packType}, ptr %userdata, i32 0, i32 {i}\n");
                 b.Append(value: $"  %a{i} = load {pt}, ptr %fp{i}\n");
@@ -307,6 +313,16 @@ public partial class LlvmCodeGenerator
         var types = new List<string>();
         for (int i = 0; i < n; i++)
         {
+            // By-ref struct-record arg: marshal the spawner's cell ADDRESS (not a copy) so the
+            // worker's by-ref parameter shares the one cell.
+            if (IsByRefThreadArg(routine: routine, param: routine.Parameters[index: i]))
+            {
+                string addr = EmitLvalueAddress(sb: sb, expr: arguments[index: i]);
+                values.Add(item: addr);
+                types.Add(item: "ptr");
+                continue;
+            }
+
             string v = EmitExpression(sb: sb, expr: arguments[index: i]);
             TypeInfo actual = GetExpressionType(expr: arguments[index: i])
                               ?? routine.Parameters[index: i].Type!;
