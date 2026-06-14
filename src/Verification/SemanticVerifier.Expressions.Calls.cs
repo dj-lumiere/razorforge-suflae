@@ -1033,6 +1033,15 @@ public sealed partial class SemanticVerifier
                     // inspect!/claim! validation (a variable→policy side-table that did not recognize
                     // the 2-arg `Shared[T, P]`) was removed in favour of the type system.
 
+                    // Enforce a method's `needs P in [...]` (TypeEquality) constraint when the
+                    // constrained parameter is INHERITED FROM THE RECEIVER (e.g.
+                    // `Shared[T, P].claim() needs P in [Exclusive, MultiRead]`, with P bound by the
+                    // receiver `Shared[Counter, ReadOnly]`). The general constraint validator only
+                    // fires for explicitly-instantiated generics, so a receiver-bound param — which
+                    // carries no explicit type args at the call site — is validated here instead.
+                    ValidateReceiverInheritedTypeEqualityConstraints(method: method,
+                        receiverType: objectType, member: member, location: call.Location);
+
                     // #22: Reject migratable operations on collection being iterated
                     if (member.Object is IdentifierExpression iterTarget &&
                         _activeIterationSources.Contains(item: iterTarget.Name) &&
@@ -1300,6 +1309,59 @@ public sealed partial class SemanticVerifier
         return type is WrapperTypeInfo
             ? CallLoweringKind.WrapperConstruction
             : CallLoweringKind.TypeConstructor;
+    }
+
+    /// <summary>
+    /// Validates a called method's <c>needs P in [...]</c> (<see cref="ConstraintKind.TypeEquality"/>)
+    /// constraints when the constrained parameter is inherited from the receiver type rather than
+    /// supplied as an explicit type argument — e.g. <c>Shared[T, P].claim() needs P in [Exclusive,
+    /// MultiRead]</c> called on a <c>Shared[Counter, ReadOnly]</c>. The standard constraint validator
+    /// (<c>TypeResolver.ValidateTypeEqualityConstraint</c>) only fires when a generic type/method is
+    /// explicitly instantiated, so receiver-bound parameters would otherwise go unchecked.
+    /// </summary>
+    private void ValidateReceiverInheritedTypeEqualityConstraints(RoutineInfo method,
+        TypeSymbol receiverType, MemberExpression member, SourceLocation location)
+    {
+        if (method.GenericConstraints is not { Count: > 0 } constraints)
+            return;
+
+        // Map the receiver's generic parameter names to its bound type arguments. The names live on
+        // the generic definition; the bindings on the resolved instance.
+        List<string>? paramNames = receiverType.GenericParameters
+            ?? (receiverType as RecordTypeInfo)?.GenericDefinition?.GenericParameters;
+        List<TypeInfo>? boundArgs = receiverType.TypeArguments;
+        if (paramNames is not { Count: > 0 } || boundArgs is not { Count: > 0 })
+            return;
+
+        foreach (GenericConstraintDeclaration constraint in constraints)
+        {
+            if (constraint.ConstraintType != ConstraintKind.TypeEquality ||
+                constraint.ConstraintTypes is not { Count: > 0 } allowed)
+                continue;
+
+            int paramIndex = paramNames.IndexOf(item: constraint.ParameterName);
+            if (paramIndex < 0 || paramIndex >= boundArgs.Count)
+                continue;
+
+            TypeInfo bound = boundArgs[index: paramIndex];
+            string boundBase = GetBaseTypeName(typeName: bound.Name);
+            string boundShort = boundBase.Contains(value: '.')
+                ? boundBase[(boundBase.LastIndexOf(value: '.') + 1)..]
+                : boundBase;
+
+            bool inSet = allowed.Any(predicate: ce =>
+                ce.Name == bound.Name || ce.Name == boundBase || ce.Name == boundShort);
+            if (inSet)
+                continue;
+
+            string allowedList = string.Join(separator: ", ",
+                values: allowed.Select(selector: t => t.Name));
+            ReportError(code: SemanticDiagnosticCode.TypeEqualityConstraintViolation,
+                message:
+                $"'{member.PropertyName}()' is not available on '{receiverType.Name}' — its lock " +
+                $"policy '{boundShort}' is not in [{allowedList}].",
+                location: location);
+        }
     }
 
 }

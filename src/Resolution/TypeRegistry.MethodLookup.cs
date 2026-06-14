@@ -885,8 +885,15 @@ public sealed partial class TypeRegistry
             if (methodOnlyGenericParams?.Count == 0)
                 methodOnlyGenericParams = null;
 
+            // Keep constraints on the method's own generic params, PLUS `in [...]` (TypeEquality)
+            // constraints on the OWNER's params (e.g. `Shared[T, P].claim() needs P in [...]`). The
+            // owner param is already substituted on the resolved instance, but the constraint is not
+            // validated here — it is preserved so the call-site verifier can check it against the
+            // receiver's bound argument (otherwise a method constraint on an inherited param vanishes
+            // unchecked).
             List<GenericConstraintDeclaration>? methodOnlyConstraints = method.GenericConstraints?
-                .Where(c => methodOnlyGenericParams?.Contains(c.ParameterName) == true)
+                .Where(c => methodOnlyGenericParams?.Contains(c.ParameterName) == true
+                    || c.ConstraintType == ConstraintKind.TypeEquality)
                 .ToList();
             if (methodOnlyConstraints?.Count == 0)
                 methodOnlyConstraints = null;
@@ -1052,10 +1059,13 @@ public sealed partial class TypeRegistry
         if (methodOnlyGenericParams2?.Count == 0)
             methodOnlyGenericParams2 = null;
 
-        // Only keep constraints on method-level generic parameters
+        // Keep method-level constraints PLUS owner-param `in [...]` (TypeEquality) constraints, so a
+        // method constraint on an inherited param (e.g. `Shared[T, P].claim() needs P in [...]`)
+        // survives to be validated at the call site against the receiver's bound argument.
         List<GenericConstraintDeclaration>? methodOnlyConstraints2 = method
             .GenericConstraints?
-            .Where(c => methodOnlyGenericParams2?.Contains(c.ParameterName) == true)
+            .Where(c => methodOnlyGenericParams2?.Contains(c.ParameterName) == true
+                || c.ConstraintType == ConstraintKind.TypeEquality)
             .ToList();
         if (methodOnlyConstraints2?.Count == 0)
             methodOnlyConstraints2 = null;
