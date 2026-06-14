@@ -269,6 +269,13 @@ public partial class LlvmCodeGenerator
             }
         }
 
+        // A `threaded routine` call spawns an OS thread; the expression value is the Task[T]
+        // handle (v0.1 concurrency, Phase 1).
+        if (routine is { AsyncStatus: AsyncStatus.Threaded })
+        {
+            return EmitThreadedSpawn(sb: sb, routine: routine, arguments: arguments);
+        }
+
         // Evaluate all arguments
         var argValues = new List<string>();
         var argTypes = new List<string>();

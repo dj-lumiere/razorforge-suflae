@@ -1,0 +1,50 @@
+module Core
+
+# TaskSpawnError / TaskTimeoutError are defined in Core/Errors/Common.rf (alongside the other
+# Core crashables) so their synthesized $represent/$diagnose resolve crash_message correctly.
+
+### Handle to an in-flight `threaded routine`. Calling a `threaded routine` runs its body on
+### an OS thread and yields one of these handles. Read the produced value with `retrieve!()`,
+### optionally bounding the wait first with `waitfor(deadline)`. Single-use.
+record Task[T]
+  ### The opaque `rf_task*` handle returned by the runtime.
+  secret task_handle: Address
+  ### The wait deadline; only meaningful when `has_deadline` is true.
+  secret deadline: Duration
+  ### Whether a deadline has been attached via `waitfor`.
+  secret has_deadline: Bool
+  ### Whether the OS thread was spawned successfully.
+  secret spawned: Bool
+
+### Attaches a deadline and returns the updated handle, enabling `task.waitfor(5s).retrieve!()`.
+### :param deadline: The maximum time `retrieve!` will block.
+### :returns: A copy of this handle carrying the deadline.
+routine Task[T].waitfor(deadline: Duration) -> Task[T]
+  return Task[T](task_handle: me.task_handle, deadline: deadline,
+                 has_deadline: true, spawned: me.spawned)
+
+### Blocks until the worker finishes and returns its produced value.
+### :throws: {TaskSpawnError} if the task could not be spawned.
+### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
+### :returns: The value produced by the threaded routine.
+routine Task[T].retrieve!() -> ?T
+  if not me.spawned
+    throw TaskSpawnError()
+
+  danger!
+    if me.has_deadline
+      var total = me.deadline.total_nanoseconds()
+      var secs = total // 1000000000
+      var nanos = U32(total - secs * 1000000000)
+      var kind = rf_task_wait_within(task: me.task_handle, secs: secs, ns: nanos)
+      if kind != 1
+        rf_task_destroy(task: me.task_handle)
+        throw TaskTimeoutError()
+    else
+      discard rf_task_wait(task: me.task_handle)
+
+    var payload = rf_task_result_payload(task: me.task_handle)
+    var value = Hijacked[T](from: payload).extract()
+    rf_invalidate(ptr: payload)
+    rf_task_destroy(task: me.task_handle)
+    return value

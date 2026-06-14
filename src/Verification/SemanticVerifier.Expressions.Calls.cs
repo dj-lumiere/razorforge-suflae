@@ -381,6 +381,19 @@ public sealed partial class SemanticVerifier
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
                     call.IsInFlight = routine.IsInFlightReturn;
+
+                    // A `threaded routine` call spawns an OS thread and yields a `Task[T]`
+                    // handle (T = the routine's own return type). The handle is awaited via the
+                    // stdlib `Task[T].retrieve!()` / `.waitfor(deadline)` methods. (v0.1.)
+                    if (routine.AsyncStatus == AsyncStatus.Threaded)
+                    {
+                        TypeSymbol? taskDef = _registry.LookupType(name: "Task");
+                        return taskDef != null
+                            ? _registry.GetOrCreateResolution(genericDef: taskDef,
+                                typeArguments: [returnType])
+                            : returnType;
+                    }
+
                     return returnType;
                 }
 

@@ -55,3 +55,23 @@ crashable KeyNotFoundError
 @readonly
 routine KeyNotFoundError.crash_message() -> Text
   return f"Key not found: {me.key}"
+
+### Raised when a threaded task could not be spawned (thread or allocation failure).
+crashable TaskSpawnError
+  pass
+
+### Returns the default message for task-spawn failures.
+### :returns: The resulting `Text` value.
+@readonly
+routine TaskSpawnError.crash_message() -> Text
+  return "Failed to spawn a threaded task."
+
+### Raised when a threaded task did not finish before its deadline.
+crashable TaskTimeoutError
+  pass
+
+### Returns the default message for task-timeout failures.
+### :returns: The resulting `Text` value.
+@readonly
+routine TaskTimeoutError.crash_message() -> Text
+  return "Threaded task did not finish before its deadline."
