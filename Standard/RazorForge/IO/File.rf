@@ -28,6 +28,9 @@ entity FileHandle obeys Enterable
   secret fd: S32
   ### Stores the mode used to open the file.
   secret mode: FileMode
+  ### Whether the descriptor has been closed. Guards `close()` so it is idempotent — `$exit`
+  ### (early close) and `$destroy` (RAII close at scope exit) can both run without double-closing.
+  secret is_closed: Bool
 
 # ============================================================================
 # Core operations
@@ -45,12 +48,15 @@ routine open!(path: Text, mode: FileMode = FileMode.READ) -> ?FileHandle
   var fd = rf_file_open(cstr, cstr.count().S32!(), mode_val)
   if fd == -1
     throw IOError(description: f"Cannot open file: {path}")
-  return FileHandle(fd: fd, mode: mode)
+  return FileHandle(fd: fd, mode: mode, is_closed: false)
 
-### Closes the file handle.
-### After closing, the handle should be treated as unusable.
+### Closes the file handle. Idempotent — closing an already-closed handle is a no-op, so explicit
+### `close()`, scope-exit `$exit`, and teardown `$destroy` never double-close the descriptor.
 routine FileHandle.close()
+  if me.is_closed
+    return
   rf_file_close(me.fd)
+  me.is_closed = true
   return
 
 ### Reads the remaining file contents as text.
@@ -136,6 +142,12 @@ routine FileHandle.$enter() -> ?FileHandle
 ### Closes the file handle when leaving a `using` scope.
 ### This provides deterministic cleanup for scoped file access.
 routine FileHandle.$exit()
+  me.close()
+  return
+
+### Closes the file handle at scope exit (RAII), so a handle bound without `using` still releases
+### its descriptor. Idempotent with `$exit`/`close()` via the `is_closed` guard, so no double-close.
+dangerous routine FileHandle.$destroy()
   me.close()
   return
 
