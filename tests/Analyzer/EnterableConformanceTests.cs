@@ -159,5 +159,49 @@ public class EnterableConformanceTests
         Assert.Empty(collection: result.Errors);
     }
 
+    [Fact]
+    public void Analyze_InspectBoundToVar_Errors()
+    {
+        string source = """
+                        import IO/Console
+                        import BuilderService
+
+                        entity Counter
+                          value: S64
+
+                        routine start()
+                          var s = Counter(value: 1).share[MultiRead]()
+                          var v = s.inspect()
+                          return
+                        """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "using");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MtTokenRequiresUsing);
+    }
+
+    #endregion
+
+    #region Resources are using-CAPABLE, not using-required (only claim/inspect are required)
+
+    [Fact]
+    public void Analyze_FileHandleVarBound_NotUsingRequired_Ok()
+    {
+        // FileHandle obeys Enterable but is NOT using-required (only the MT lock tokens are). A bare
+        // `var f = open!(...)` is legal — RAII `$destroy` closes it at scope exit.
+        string source = """
+                        import IO/File
+
+                        routine start!()
+                          var f = open!(path: "x.txt", mode: FileMode.WRITE)
+                          f.flush()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
     #endregion
 }

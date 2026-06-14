@@ -131,5 +131,39 @@ public class ReceiverInheritedConstraintTests
         Assert.Empty(collection: result.Errors);
     }
 
+    [Fact]
+    public void Analyze_ClaimOnExclusive_Ok()
+    {
+        string source = LockPrelude + """
+                                      routine Counter.bump(inc: S64)
+                                        me.value = me.value + inc
+                                        return
+
+                                      routine start()
+                                        var s = Counter(value: 1).share[Exclusive]()
+                                        using s.claim() as c
+                                          c.bump(inc: 1)
+                                        return
+                                      """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_InspectOnReadOnly_Ok()
+    {
+        string source = LockPrelude + """
+                                      routine start()
+                                        var s = Counter(value: 1).share[ReadOnly]()
+                                        using s.inspect() as v
+                                          show(f"{v.value}")
+                                        return
+                                      """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
     #endregion
 }
