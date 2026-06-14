@@ -526,6 +526,40 @@ public sealed partial class SemanticVerifier
         TypeSymbol resourceType = AnalyzeExpression(expression: usingStmt.Resource);
         _usingResourceNode = previousUsingResource;
 
+        // Readers-XOR-writer (RF-S630): if this `using` opens an MT access token on a named Shared
+        // handle, check it against the holds already live in the enclosing `using` scopes on the SAME
+        // handle. A writer (`claim`) conflicts with any other hold; readers (`inspect`) coexist.
+        // The hold is pushed for the duration of the body and popped on exit, so only OVERLAPPING
+        // scopes conflict (sequential `using`s on the same handle are fine).
+        string accessBase = GetBaseTypeName(typeName: resourceType.Name);
+        bool opensAccessToken = accessBase is "Inspecting" or "Claiming";
+        string? accessHandle = opensAccessToken
+            ? ExtractAccessReceiverName(resource: usingStmt.Resource)
+            : null;
+        if (accessHandle != null)
+        {
+            bool isWriter = accessBase == "Claiming";
+            foreach ((string Handle, bool IsWriter, SourceLocation Location) hold in _activeAccessHolds)
+            {
+                if (!PathsOverlap(a: hold.Handle, b: accessHandle) || (!isWriter && !hold.IsWriter))
+                    continue;
+                string newKind = isWriter ? "claim()" : "inspect()";
+                string heldKind = hold.IsWriter ? "claim()" : "inspect()";
+                string overlapNote = hold.Handle == accessHandle
+                    ? "the same shared handle"
+                    : $"the overlapping handle '{hold.Handle}'";
+                ReportError(code: SemanticDiagnosticCode.ReadersXorWriter,
+                    message:
+                    $"'{newKind}' on '{accessHandle}' conflicts with an active '{heldKind}' on " +
+                    $"{overlapNote} in an enclosing 'using' scope. A writer ('claim') excludes all other " +
+                    "access; readers ('inspect') may coexist only with other readers.",
+                    location: usingStmt.Location);
+                break;
+            }
+
+            _activeAccessHolds.Add(item: (accessHandle, isWriter, usingStmt.Location));
+        }
+
         // The bound variable type defaults to the resource type, but may be overridden
         // by $enter's return type when it returns non-void.
         TypeSymbol boundType = resourceType;
@@ -566,5 +600,45 @@ public sealed partial class SemanticVerifier
         // for tokens, and conceptually enforced by scope exit for resources)
 
         _registry.ExitScope();
+
+        // Pop the MT access hold now that the scope has closed (readers-XOR-writer, RF-S630).
+        if (accessHandle != null)
+            _activeAccessHolds.RemoveAt(index: _activeAccessHolds.Count - 1);
+    }
+
+    /// <summary>
+    /// Extracts a path key for the Shared handle of an `inspect`/`claim` access expression — the
+    /// receiver of `s.inspect()` / `s.claim()`, as a dotted path so distinct fields are distinct
+    /// handles: `s` → "s", `s.a` → "s.a". This makes `s.a.claim()` and `s.b.claim()` independent
+    /// (both claimable in one scope) while `s.a` claimed twice still conflicts. Returns null for
+    /// receivers that aren't a pure identifier/field path (indexing, call results), which the
+    /// readers-XOR-writer check conservatively skips (no false positives).
+    /// </summary>
+    private static string? ExtractAccessReceiverName(Expression resource)
+    {
+        return resource is CallExpression { Callee: MemberExpression { Object: var receiver } }
+            ? BuildAccessPath(expr: receiver)
+            : null;
+    }
+
+    /// <summary>Whether two access paths overlap — equal, or one a prefix of the other on a field
+    /// boundary (`s.a` overlaps `s.a.x` and `s`, but not `s.b` or `s.ab`). Overlapping paths name
+    /// memory where one contains the other, so concurrent access to them conflicts.</summary>
+    private static bool PathsOverlap(string a, string b)
+    {
+        return a == b || a.StartsWith(value: b + ".") || b.StartsWith(value: a + ".");
+    }
+
+    /// <summary>Builds a dotted path for an identifier/field-access chain (`s.a.b` → "s.a.b"), or
+    /// null if the chain bottoms out on anything else (indexing, a call, a literal).</summary>
+    private static string? BuildAccessPath(Expression expr)
+    {
+        return expr switch
+        {
+            IdentifierExpression id => id.Name,
+            MemberExpression { Object: var inner, PropertyName: var prop } =>
+                BuildAccessPath(expr: inner) is { } prefix ? $"{prefix}.{prop}" : null,
+            _ => null
+        };
     }
 }

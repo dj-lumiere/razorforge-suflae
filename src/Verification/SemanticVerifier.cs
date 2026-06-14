@@ -143,6 +143,11 @@ public sealed partial class SemanticVerifier
     /// any other use is rejected (RF-S629) so its lock is always `using`-scoped.</summary>
     private ISyntaxTreeNode? _usingResourceNode;
 
+    /// <summary>Stack of MT access holds (`inspect`/`claim`) live in the enclosing `using` scopes,
+    /// keyed by the Shared handle name. Pushed on `using` entry, popped on exit, so a nested `using`
+    /// sees the holds it overlaps — the basis of the readers-XOR-writer check (RF-S630).</summary>
+    private readonly List<(string Handle, bool IsWriter, SourceLocation Location)> _activeAccessHolds = [];
+
     /// <summary>Temporary: last share[Policy]() call info, propagated in variable declaration (#19).</summary>
     private (string SourceVar, string Policy)? _lastSharePolicy;
 

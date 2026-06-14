@@ -659,6 +659,10 @@ public enum SemanticDiagnosticCode
     /// opened with a `using` block — it cannot be used inline or stored.</summary>
     MtTokenRequiresUsing = 629,
 
+    /// <summary>Readers-XOR-writer violation: a `claim()` (writer) coexists with another `claim()`
+    /// or an `inspect()` (reader) on the same Shared handle in an overlapping `using` scope.</summary>
+    ReadersXorWriter = 630,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════
