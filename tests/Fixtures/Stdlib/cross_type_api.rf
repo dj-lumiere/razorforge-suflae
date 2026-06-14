@@ -5,9 +5,12 @@ import Collections
 # Composite types — collections of collections, carriers of records with fields,
 # Result wrapping a record, Maybe wrapping a List, etc.
 # Reminder: every entity slot in a collection type-param needs an explicit T.
-record Person
+record Person obeys Equatable
   name: Text
   age: S64
+
+routine Person.$eq(you: Person) -> Bool
+  return me.name == you.name and me.age == you.age
 
 routine start()
   # Dict[Text, List[S64]] — both key (Text) AND value (List, also

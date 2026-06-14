@@ -5,11 +5,14 @@ import IO/Console
 protocol Greetable
   routine Me.greet() -> Text
 
-record Cat obeys Greetable
+record Cat obeys Greetable, Equatable
   name: Text
 
 routine Cat.greet() -> Text
   return "Meow, I am " + me.name
+
+routine Cat.$eq(you: Cat) -> Bool
+  return me.name == you.name
 
 record Dog obeys Greetable
   name: Text
@@ -33,7 +36,7 @@ routine start()
   show(introduce(thing: c))
   show(introduce(thing: d))
 
-  # Conformance check via auto-derived Equatable on records
+  # Equality via the record's hand-written $eq (records don't auto-derive Equatable)
   var c2 = Cat(name: "Whiskers")
   show(f"c == c2: {c == c2}")
   var c3 = Cat(name: "Felix")
