@@ -1358,8 +1358,9 @@ public sealed partial class SemanticVerifier
                 values: allowed.Select(selector: t => t.Name));
             ReportError(code: SemanticDiagnosticCode.TypeEqualityConstraintViolation,
                 message:
-                $"'{member.PropertyName}()' is not available on '{receiverType.Name}' — its lock " +
-                $"policy '{boundShort}' is not in [{allowedList}].",
+                $"'{member.PropertyName}()' is not available on '{receiverType.Name}': " +
+                $"'{boundShort}' is not in [{allowedList}] " +
+                $"(constraint on '{constraint.ParameterName}').",
                 location: location);
         }
     }
