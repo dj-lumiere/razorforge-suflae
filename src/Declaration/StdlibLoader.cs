@@ -639,7 +639,7 @@ public sealed partial class StdlibLoader
             // Wrapper types (Hijacked, Viewing, Modifying, etc.) are not in _types — create directly
             if (typeExpr.GenericArguments.Count == 1 &&
                 typeName is "Hijacked" or "Viewing" or "Modifying"
-                    or "Retained" or "Tracked")
+                    or "Retained" or "Tracked" or "Shared" or "Watched")
             {
                 TypeInfo? wrapperInner = ResolveSimpleType(registry: registry,
                     typeExpr: typeExpr.GenericArguments[index: 0],

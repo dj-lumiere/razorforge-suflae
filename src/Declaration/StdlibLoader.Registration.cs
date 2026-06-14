@@ -702,7 +702,7 @@ public sealed partial class StdlibLoader
                         ? m.Type.Name[..m.Type.Name.IndexOf('[')]
                         : m.Type.Name;
                     return baseName is "Hijacked" or "Viewing" or "Modifying"
-                        or "Retained" or "Tracked";
+                        or "Retained" or "Tracked" or "Shared" or "Watched";
                 });
             if (allMembersPtrWrapper)
             {

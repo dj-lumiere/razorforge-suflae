@@ -466,8 +466,9 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void AnalyzeDiscardStatement(DiscardStatement discard)
     {
-        // discard must target a routine call, not an arbitrary expression like a literal or variable
-        if (discard.Expression is not CallExpression)
+        // discard must target a routine call, not an arbitrary expression like a literal or variable.
+        // Explicit-generic calls (`f[T](...)`) parse to GenericMethodCallExpression — also a call.
+        if (discard.Expression is not (CallExpression or GenericMethodCallExpression))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidDiscardTarget,
                 message: "'discard' can only be used with routine calls. " +
