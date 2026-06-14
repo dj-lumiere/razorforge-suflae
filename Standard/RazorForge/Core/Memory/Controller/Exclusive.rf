@@ -14,17 +14,13 @@ record Exclusive obeys LockPolicy
 routine Exclusive.$create() -> Exclusive
   return Exclusive(locked: Atomic[U8](initial: 0_u8))
 
-### Acquires the lock, spinning until it is free.
+### Acquires the lock, spinning until it is free. Blocking, not failing: a contended lock waits,
+### it does not crash. (A future re-entrant-deadlock check could make this a crashable routine.)
 routine Exclusive.acquire()
   loop
     if me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
       break
   return
-
-### Tries to acquire the lock without spinning.
-### :returns: `true` if the lock was acquired.
-routine Exclusive.try_acquire() -> Bool
-  return me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
 
 ### Releases the lock.
 routine Exclusive.release()
@@ -36,3 +32,27 @@ routine Exclusive.release()
 @readonly
 routine Exclusive.is_locked() -> Bool
   return me.locked.load() != 0_u8
+
+# ============================================================================
+# Uniform LockPolicy interface — there is one lock, so inspector == claimer.
+# ============================================================================
+
+### Admits an inspector by taking the single lock (no distinct reader mode under exclusion).
+routine Exclusive.add_inspector()
+  me.acquire()
+  return
+
+### Removes the inspector by releasing the single lock.
+routine Exclusive.remove_inspector()
+  me.release()
+  return
+
+### Admits the claimer by taking the single lock for exclusive access.
+routine Exclusive.add_claimer()
+  me.acquire()
+  return
+
+### Removes the claimer by releasing the single lock.
+routine Exclusive.remove_claimer()
+  me.release()
+  return

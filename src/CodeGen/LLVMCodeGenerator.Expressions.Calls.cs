@@ -658,6 +658,32 @@ public partial class LlvmCodeGenerator
             isFailableMethodCall: isFailableMethodCall,
             resolvedRoutine: resolvedRoutine);
 
+        // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets the shared
+        // ShareController[T, P], NOT the guarded entity. When the resolved method is a FORWARDED entity
+        // method (owned by the inner T — e.g. `c.bump()`), the callee's `me` must be the entity, so
+        // project the receiver through `controller.data`. Token-own methods ($enter/$exit/$refer/
+        // $control/$represent/$diagnose/$destroy, owned by the token itself) keep the controller ptr.
+        if (method is { OwnerType: { } methodOwner } &&
+            receiverType is RecordTypeInfo tokenRec &&
+            GetGenericBaseName(type: tokenRec) is "Inspecting" or "Claiming" &&
+            tokenRec.TypeArguments is { Count: > 1 } &&
+            tokenRec.TypeArguments[index: 0] is EntityTypeInfo tokenInner &&
+            methodOwner.FullName == tokenInner.FullName)
+        {
+            string policyName = tokenRec.TypeArguments[index: 1].FullName;
+            TypeInfo? ctrlType =
+                _registry.LookupType(name: $"ShareController[{tokenInner.FullName}, {policyName}]")
+                ?? _registry.LookupType(
+                    name: $"Core.ShareController[{tokenInner.FullName}, {policyName}]");
+            if (ctrlType is EntityTypeInfo ctrlEntity)
+            {
+                receiver = EmitEntityMemberVariableRead(sb: sb,
+                    entityPtr: receiver,
+                    entity: ctrlEntity,
+                    memberVariableName: "data");
+            }
+        }
+
         // Representable pattern: obj.Text() -> Text.$create(from: obj)
         // When the method name matches a registered type and no direct method exists,
         // route to TypeName.$create(from: receiver).

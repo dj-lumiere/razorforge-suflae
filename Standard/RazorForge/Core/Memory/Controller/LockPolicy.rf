@@ -12,4 +12,18 @@ module Core
 ### (`ReadOnly` is zero-sized → no overhead) and the acquire/release calls are statically inlined.
 ### :see: {ReadOnly}, {Exclusive}, {MultiRead}, {Shared}
 protocol LockPolicy
-  pass
+  ### Admits an inspector (shared reader). Many inspectors may hold concurrently. Blocking, not
+  ### failing: a contended lock waits. `ReadOnly` treats this as a no-op (immutable data);
+  ### `Exclusive` maps it to its single lock; `MultiRead` admits the holder to the reader set.
+  routine Me.add_inspector()
+
+  ### Removes an inspector previously admitted with `add_inspector`.
+  routine Me.remove_inspector()
+
+  ### Admits the claimer (exclusive writer). At most one claimer, with no concurrent inspectors.
+  ### Blocking, not failing. `ReadOnly` has no legal claimer (the borrow checker rejects `claim`
+  ### on `ReadOnly`); the method exists only to complete the uniform interface.
+  routine Me.add_claimer()
+
+  ### Removes the claimer previously admitted with `add_claimer`.
+  routine Me.remove_claimer()

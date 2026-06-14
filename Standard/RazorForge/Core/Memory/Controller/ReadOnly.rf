@@ -6,3 +6,20 @@ module Core
 ### :see: {LockPolicy}, {Shared}
 record ReadOnly obeys LockPolicy
   pass
+
+### No-op: immutable data needs no reader lock.
+routine ReadOnly.add_inspector()
+  return
+
+### No-op: immutable data needs no reader lock.
+routine ReadOnly.remove_inspector()
+  return
+
+### No-op: `ReadOnly` grants no claimer (the borrow checker rejects `claim`). Present only to
+### complete the {LockPolicy} interface.
+routine ReadOnly.add_claimer()
+  return
+
+### No-op: `ReadOnly` grants no claimer. Present only to complete the {LockPolicy} interface.
+routine ReadOnly.remove_claimer()
+  return

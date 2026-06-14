@@ -1026,51 +1026,12 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #100/#101: inspect!/claim! only valid on Shared entity handles
-                    if (member.PropertyName is InspectMethodName or "claim" &&
-                        !IsSharedType(type: objectType) && objectType is not ErrorTypeInfo)
-                    {
-                        ReportError(code: member.PropertyName == InspectMethodName
-                                ? SemanticDiagnosticCode.InspectRequiresMultiRead
-                                : SemanticDiagnosticCode.ReadOnlyRejectsLocking,
-                            message: $"'{member.PropertyName}!()' is only valid on Shared handles. " +
-                                     $"'{objectType.Name}' is not a Shared handle.",
-                            location: call.Location);
-                    }
-
-                    // #19: Lock policy validation — inspect!/claim! must match the lock policy
-                    if (member.PropertyName is InspectMethodName or "claim" &&
-                        member.Object is IdentifierExpression lockPolicyTarget &&
-                        _variableLockPolicies.TryGetValue(key: lockPolicyTarget.Name,
-                            value: out string? policy))
-                    {
-                        if (member.PropertyName == InspectMethodName && policy == "Exclusive")
-                        {
-                            ReportError(code: SemanticDiagnosticCode.InspectRequiresMultiRead,
-                                message:
-                                $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses Exclusive lock policy. " +
-                                "Exclusive locks do not support concurrent readers. Use 'claim!()' instead.",
-                                location: call.Location);
-                        }
-
-                        if (member.PropertyName == "claim" && policy == "ReadOnly")
-                        {
-                            ReportError(code: SemanticDiagnosticCode.ReadOnlyRejectsLocking,
-                                message:
-                                $"Cannot use 'claim!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
-                                "ReadOnly does not support exclusive write access. Use 'inspect!()' instead.",
-                                location: call.Location);
-                        }
-
-                        if (member.PropertyName == InspectMethodName && policy == "ReadOnly")
-                        {
-                            ReportError(code: SemanticDiagnosticCode.ReadOnlyRejectsLocking,
-                                message:
-                                $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
-                                "ReadOnly data does not need locking — use '.view()' instead.",
-                                location: call.Location);
-                        }
-                    }
+                    // NOTE: `inspect()` / `claim()` are ordinary `Shared[T, P]` methods now —
+                    // resolution + the `needs P in [...]` type-equality constraint (RF-S160) enforce
+                    // policy legality (inspect not on Exclusive, claim not on ReadOnly), and the
+                    // scoped-token / `using`-binding rules enforce lifetime. The earlier ad-hoc
+                    // inspect!/claim! validation (a variable→policy side-table that did not recognize
+                    // the 2-arg `Shared[T, P]`) was removed in favour of the type system.
 
                     // #22: Reject migratable operations on collection being iterated
                     if (member.Object is IdentifierExpression iterTarget &&

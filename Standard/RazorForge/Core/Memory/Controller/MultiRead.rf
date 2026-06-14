@@ -62,3 +62,27 @@ routine MultiRead.reader_count() -> S32
 @readonly
 routine MultiRead.is_write_locked() -> Bool
   return me.writer.load() != 0_u8
+
+# ============================================================================
+# Uniform LockPolicy interface — inspector = reader lock, claimer = writer lock.
+# ============================================================================
+
+### Admits an inspector to the reader set (shared read lock).
+routine MultiRead.add_inspector()
+  me.acquire_read()
+  return
+
+### Removes an inspector from the reader set.
+routine MultiRead.remove_inspector()
+  me.release_read()
+  return
+
+### Admits the claimer (exclusive writer lock; drains readers first).
+routine MultiRead.add_claimer()
+  me.acquire_write()
+  return
+
+### Removes the claimer (releases the writer lock).
+routine MultiRead.remove_claimer()
+  me.release_write()
+  return

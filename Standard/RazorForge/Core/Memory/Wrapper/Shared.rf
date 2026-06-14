@@ -61,6 +61,31 @@ routine Shared[T, P].watch() -> Watched[T, P]
     return Watched[T, P](me)
 
 # ============================================================================
+# Access — open a scoped token over the guarded entity (use with `using`)
+# ============================================================================
+
+### Opens shared (multi-reader) access to the guarded entity. The returned {Inspecting[T]} must be
+### opened with `using`: entering the scope acquires the reader hold, leaving it releases. Legal only
+### when `P` admits readers (`ReadOnly` / `MultiRead`); the borrow checker rejects it otherwise.
+### :returns: A scoped `Inspecting[T, P]` read token.
+### :note: Use as `using s.inspect() as v` — a bare `inspect()` never acquires the lock.
+routine Shared[T, P].inspect() -> Inspecting[T, P]
+needs P in [MultiRead, ReadOnly]
+  danger!
+    return Inspecting[T, P](me)
+
+### Opens exclusive (read/write) access to the guarded entity. The returned {Claiming[T]} must be
+### opened with `using`: entering the scope acquires the exclusive claimer hold, leaving it releases.
+### Legal only when `P` admits a writer (`Exclusive` / `MultiRead`); the borrow checker rejects it on
+### `ReadOnly`.
+### :returns: A scoped `Claiming[T, P]` write token.
+### :note: Use as `using s.claim() as c` — a bare `claim()` never acquires the lock.
+routine Shared[T, P].claim() -> Claiming[T, P]
+needs P in [Exclusive, MultiRead]
+  danger!
+    return Claiming[T, P](me)
+
+# ============================================================================
 # Inspection
 # ============================================================================
 

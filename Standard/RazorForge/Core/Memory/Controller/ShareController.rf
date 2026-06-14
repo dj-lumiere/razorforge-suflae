@@ -82,6 +82,32 @@ routine ShareController[T, P].weak_count() -> U64
 dangerous routine ShareController[T, P].borrow_data() -> Hijacked[T]
   return me.data
 
+# ============================================================================
+# Access-discipline lock — drives `Shared.inspect()` / `Shared.claim!()`. The lock state lives
+# here, at the single address every handle shares, so synchronization is correct across threads.
+# Each call delegates to the monomorphized policy `P` (no runtime dispatch).
+# ============================================================================
+
+### Admits an inspector (shared reader) through the access-discipline lock.
+routine ShareController[T, P].add_inspector()
+  me.lock.add_inspector()
+  return
+
+### Removes an inspector through the access-discipline lock.
+routine ShareController[T, P].remove_inspector()
+  me.lock.remove_inspector()
+  return
+
+### Admits the claimer (exclusive writer) through the access-discipline lock.
+routine ShareController[T, P].add_claimer()
+  me.lock.add_claimer()
+  return
+
+### Removes the claimer through the access-discipline lock.
+routine ShareController[T, P].remove_claimer()
+  me.lock.remove_claimer()
+  return
+
 ### Destroys the managed entity. Call only when the strong count reaches zero.
 ### Runs the entity's own `$destroy` (the sole free under unified teardown); does not also
 ### `invalidate`, which would double-free a self-freeing entity.
