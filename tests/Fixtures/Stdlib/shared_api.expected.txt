@@ -2,4 +2,6 @@ strong: 1
 strong: 2
 weak: 1
 alive: true
+ex strong: 1
+destroying node 9
 destroying node 7
