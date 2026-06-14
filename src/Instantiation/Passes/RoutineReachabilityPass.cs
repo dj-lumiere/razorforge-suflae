@@ -96,6 +96,21 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (string wiredName in WiredRoutineNames)
             {
+                // Only seed a wired routine the concrete type can actually host. For a generic
+                // instantiation like List[Person], List[T].$eq/$contains carry `needs T obeys
+                // Equatable`; if Person doesn't obey Equatable the routine is not instantiable —
+                // its body would call the abstract `Equatable.$eq`/`$ne` (no concrete impl) →
+                // LINKERR. The user program can't legally call it either (SA rejects the // constraint violation), so skipping is safe. Derived siblings ($ne, $notcontains,
+                // $lt/$le/$gt/$ge) aren't in the wired-capability map themselves — gate them on
+                // their base capability so seeding $ne doesn't drag in $eq (whose body LINKERRs).
+                string capabilityName = wiredName switch
+                {
+                    "$ne" => "$eq",
+                    "$notcontains" => "$contains",
+                    "$lt" or "$le" or "$gt" or "$ge" => "$cmp",
+                    _ => wiredName
+                };
+                if (!ctx.Registry.TypeHasWiredRoutine(type: type, wiredName: capabilityName)) continue;
                 RoutineInfo? routine = ctx.Registry.LookupMethod(type: type, methodName: wiredName);
                 if (routine != null) EnqueueCallee(callee: routine);
             }
