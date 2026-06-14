@@ -185,6 +185,34 @@ public class EnterableConformanceTests
 
     #region Resources are using-CAPABLE, not using-required (only claim/inspect are required)
 
+    /// <summary>A `using` target must OBEY Enterable, not merely define $enter/$exit by name.</summary>
+    [Fact]
+    public void Analyze_UsingNonEnterableType_Errors()
+    {
+        string source = """
+                        record Bare
+                          n: S32
+
+                        routine Bare.$enter() -> Bare
+                          return me
+
+                        routine Bare.$exit()
+                          return
+
+                        routine test()
+                          var b = Bare(n: 1)
+                          using b as x
+                            var a: S32 = x.n
+                          return
+                        """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "must obey 'Enterable'");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
+    }
+
+    /// <summary>FileHandle obeys Enterable but is using-CAPABLE, not using-required.</summary>
     [Fact]
     public void Analyze_FileHandleVarBound_NotUsingRequired_Ok()
     {
