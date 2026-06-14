@@ -6,7 +6,7 @@ module Core
 ### `S16` is used for audio samples (PCM 16-bit), compact numeric data,
 ### and other values that fit in 16 bits with a sign.
 @llvm("i16")
-record S16 obeys SignedIntegral, Ordered, ConstCompatible
+record S16 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for S16 limits

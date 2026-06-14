@@ -1,0 +1,15 @@
+module Core
+
+### Marker protocol for types that may back an `Atomic[T]` cell.
+###
+### A type obeys `AtomicType` iff it lowers to a byte-or-larger machine integer
+### that the hardware can load, store, and read-modify-write atomically without an
+### emulation lock. That is exactly the fixed-width integers `S8`..`S64` and
+### `U8`..`U64`. `S128`/`U128` are deliberately excluded — not every target has a
+### lock-free 128-bit atomic — as is `Bool`, whose `i1` lowering is sub-byte.
+###
+### This is a pure marker (no required routines); it exists only to constrain
+### `Atomic[T]` (`needs T obeys AtomicType`) so misuse is a compile error.
+### :see: {Atomic}
+protocol AtomicType
+  pass
