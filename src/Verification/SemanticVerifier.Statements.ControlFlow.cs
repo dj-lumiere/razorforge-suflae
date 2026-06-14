@@ -564,25 +564,27 @@ public sealed partial class SemanticVerifier
         // by $enter's return type when it returns non-void.
         TypeSymbol boundType = resourceType;
 
-        // All using targets (tokens and resources alike) require $enter/$exit
+        // A `using` target must obey `Enterable` — the protocol that declares the `$enter`/`$exit`
+        // scope-management contract. Conformance (not just the presence of `$enter`/`$exit` by name)
+        // is the gate, so being `using`-able is an explicit, checked capability.
         if (_registry.Language == Language.RazorForge)
         {
-            // LookupMethod handles generic type fallback (e.g., Viewing[Point].$enter -> Viewing.$enter)
-            RoutineInfo? enterMethod =
-                _registry.LookupMethod(type: resourceType, methodName: "$enter");
-            RoutineInfo? exitMethod =
-                _registry.LookupMethod(type: resourceType, methodName: "$exit");
-
-            if (enterMethod == null || exitMethod == null)
+            if (!ImplementsProtocol(type: resourceType, protocolName: "Enterable"))
             {
                 ReportError(code: SemanticDiagnosticCode.UsingTargetMissingEnterExit,
                     message:
-                    $"Using target of type '{resourceType.Name}' must implement '$enter' and '$exit' for resource management.",
+                    $"Using target of type '{resourceType.Name}' must obey 'Enterable' (which provides " +
+                    "'$enter'/'$exit') for scope-managed resource access.",
                     location: usingStmt.Location);
             }
-            else if (enterMethod.ReturnType is { IsBlank: false })
+            else
             {
-                boundType = enterMethod.ReturnType;
+                // The bound variable's type is `$enter`'s return type when non-void (pass-through).
+                // LookupMethod handles generic fallback (Viewing[Point].$enter -> Viewing.$enter).
+                RoutineInfo? enterMethod =
+                    _registry.LookupMethod(type: resourceType, methodName: "$enter");
+                if (enterMethod?.ReturnType is { IsBlank: false } enterReturn)
+                    boundType = enterReturn;
             }
         }
 
