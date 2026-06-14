@@ -1,0 +1,26 @@
+module Tests/Stdlib/SharedApi
+import IO/Console
+
+# Atomic Arc/Weak lifecycle: Shared[T] (strong) + Watched[T] (weak) over one ShareController[T].
+# Cloning is the explicit verb `.share()` / `.watch()` (these wrappers are not implicitly
+# copyable); dropping is automatic at scope exit. The entity is destroyed when the last strong
+# handle drops; the controller outlives it until the last weak handle drops too.
+
+entity Node
+  secret id: S64
+
+dangerous routine Node.$destroy()
+  show(f"destroying node {me.id}")
+  return
+
+routine start()
+  var a = Node(id: 7).share()
+  show(f"strong: {a.strong_count()}")
+
+  var b = a.share()
+  show(f"strong: {a.strong_count()}")
+
+  var w = a.watch()
+  show(f"weak: {a.weak_count()}")
+  show(f"alive: {w.is_alive()}")
+  return

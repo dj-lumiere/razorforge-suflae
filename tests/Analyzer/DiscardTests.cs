@@ -344,13 +344,15 @@ public class DiscardTests
 
     #endregion
 
-    #region RazorForge - Discard Parser Errors
-    /// <summary>
-    /// Verifies that the parser accepts discard variable and reports the expected error.
-    /// </summary>
+    #region RazorForge - Discard Non-Call Targets (semantic error)
 
+    // Whether the discarded expression is a routine call is a SEMANTIC check (RF-S421
+    // InvalidDiscardTarget), not a grammatical one — the parser records whatever expression
+    // follows `discard`, and the semantic verifier rejects non-call targets.
+
+    /// <summary>Verifies that discarding a bare variable is a semantic error.</summary>
     [Fact]
-    public void Parse_DiscardVariable_ReportsError()
+    public void Analyze_DiscardVariable_ReportsError()
     {
         string source = """
                         routine test()
@@ -359,15 +361,14 @@ public class DiscardTests
                           return
                         """;
 
-        // discard must be followed by a call expression - parser uses error recovery
-        AssertParseError(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidDiscardTarget);
     }
-    /// <summary>
-    /// Verifies that the parser accepts discard literal and reports the expected error.
-    /// </summary>
 
+    /// <summary>Verifies that discarding an integer literal is a semantic error.</summary>
     [Fact]
-    public void Parse_DiscardLiteral_ReportsError()
+    public void Analyze_DiscardLiteral_ReportsError()
     {
         string source = """
                         routine test()
@@ -375,15 +376,14 @@ public class DiscardTests
                           return
                         """;
 
-        // discard must be followed by a call expression
-        AssertParseError(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidDiscardTarget);
     }
-    /// <summary>
-    /// Verifies that the parser accepts discard string literal and reports the expected error.
-    /// </summary>
 
+    /// <summary>Verifies that discarding a string literal is a semantic error.</summary>
     [Fact]
-    public void Parse_DiscardStringLiteral_ReportsError()
+    public void Analyze_DiscardStringLiteral_ReportsError()
     {
         string source = """
                         routine test()
@@ -391,15 +391,14 @@ public class DiscardTests
                           return
                         """;
 
-        // discard must be followed by a call expression
-        AssertParseError(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidDiscardTarget);
     }
 
-    /// <summary>
-    /// Verifies that the parser rejects discard on a member field access (not a call).
-    /// </summary>
+    /// <summary>Verifies that discarding a member field access (not a call) is a semantic error.</summary>
     [Fact]
-    public void Parse_DiscardMemberAccess_ReportsError()
+    public void Analyze_DiscardMemberAccess_ReportsError()
     {
         string source = """
                         record Wrapper
@@ -411,7 +410,9 @@ public class DiscardTests
                           return
                         """;
 
-        AssertParseError(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidDiscardTarget);
     }
 
     #endregion

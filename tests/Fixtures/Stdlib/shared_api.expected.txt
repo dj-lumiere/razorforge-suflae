@@ -1,0 +1,5 @@
+strong: 1
+strong: 2
+weak: 1
+alive: true
+destroying node 7
