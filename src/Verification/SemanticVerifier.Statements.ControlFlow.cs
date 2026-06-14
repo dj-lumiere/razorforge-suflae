@@ -517,8 +517,14 @@ public sealed partial class SemanticVerifier
 
     private void AnalyzeUsingStatement(UsingStatement usingStmt)
     {
+        // Mark the resource node so a multi-threaded access token (Inspecting/Claiming) produced
+        // directly here is accepted; the same token produced anywhere else is rejected (RF-S629),
+        // keeping its lock strictly `using`-scoped. Save/restore to support nested `using`.
+        ISyntaxTreeNode? previousUsingResource = _usingResourceNode;
+        _usingResourceNode = usingStmt.Resource;
         // Analyze the resource expression to get its type
         TypeSymbol resourceType = AnalyzeExpression(expression: usingStmt.Resource);
+        _usingResourceNode = previousUsingResource;
 
         // The bound variable type defaults to the resource type, but may be overridden
         // by $enter's return type when it returns non-void.

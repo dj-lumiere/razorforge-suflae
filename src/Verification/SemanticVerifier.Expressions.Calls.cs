@@ -1042,6 +1042,23 @@ public sealed partial class SemanticVerifier
                     ValidateReceiverInheritedTypeEqualityConstraints(method: method,
                         receiverType: objectType, member: member, location: call.Location);
 
+                    // A multi-threaded access token (Inspecting/Claiming, produced by
+                    // inspect()/claim()) is only legal as the immediate resource of a `using` block,
+                    // so its lock spans exactly that scope. Reject every other position — inline use,
+                    // a function argument, an unbound statement — with RF-S629. (The "cannot bind to a
+                    // var" half is already enforced for inline-only tokens at var-declaration sites.)
+                    if (method.ReturnType is { } mtReturn &&
+                        GetBaseTypeName(typeName: mtReturn.Name) is "Inspecting" or "Claiming" &&
+                        !ReferenceEquals(objA: call, objB: _usingResourceNode))
+                    {
+                        ReportError(code: SemanticDiagnosticCode.MtTokenRequiresUsing,
+                            message:
+                            $"'{member.PropertyName}()' returns a scope-bound access token and must be " +
+                            $"opened with 'using' (e.g. 'using …{member.PropertyName}() as v'). It " +
+                            "cannot be used inline, passed as an argument, or stored.",
+                            location: call.Location);
+                    }
+
                     // #22: Reject migratable operations on collection being iterated
                     if (member.Object is IdentifierExpression iterTarget &&
                         _activeIterationSources.Contains(item: iterTarget.Name) &&

@@ -138,6 +138,11 @@ public sealed partial class SemanticVerifier
     /// <summary>Tracks lock policy per variable for lock policy validation (#19).</summary>
     private readonly Dictionary<string, string> _variableLockPolicies = [];
 
+    /// <summary>The resource expression currently being analyzed as a `using` target, if any. A
+    /// multi-threaded access token (Inspecting/Claiming) is only legal in this exact position —
+    /// any other use is rejected (RF-S629) so its lock is always `using`-scoped.</summary>
+    private ISyntaxTreeNode? _usingResourceNode;
+
     /// <summary>Temporary: last share[Policy]() call info, propagated in variable declaration (#19).</summary>
     private (string SourceVar, string Policy)? _lastSharePolicy;
 

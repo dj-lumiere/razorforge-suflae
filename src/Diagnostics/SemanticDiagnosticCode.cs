@@ -655,11 +655,9 @@ public enum SemanticDiagnosticCode
     /// <summary>.hijack() on Shared/Watched requires danger! block.</summary>
     SnatchRequiresDanger = 628,
 
-    /// <summary>inspect!() only valid with MultiRead lock policy.</summary>
-    InspectRequiresMultiRead = 629,
-
-    /// <summary>ReadOnly lock policy does not support claim!() or inspect!().</summary>
-    ReadOnlyRejectsLocking = 630,
+    /// <summary>A multi-threaded access token (Inspecting/Claiming from inspect()/claim()) must be
+    /// opened with a `using` block — it cannot be used inline or stored.</summary>
+    MtTokenRequiresUsing = 629,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
