@@ -358,6 +358,7 @@ routine ListEmitter[T].$next!() -> ?T
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
 routine List[T].$eq(other: Referring[List[T]]) -> Bool
+needs T obeys Equatable
   if me.count() != other.count()
     return false
   var i = 0u64
@@ -372,7 +373,7 @@ routine List[T].$eq(other: Referring[List[T]]) -> Bool
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
-routine List[T].$contains(value: T) -> Bool
+routine List[T].$contains(value: Referring[T]) -> Bool
 needs T obeys Equatable
   var i = 0u64
   while i < me.count()
