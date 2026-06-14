@@ -1,0 +1,87 @@
+module Core
+
+### Multi-threaded reference-counting controller — the atomic twin of {RetainController[T]}.
+### Owns the managed entity; shared between {Shared[T]} (strong) and {Watched[T]} (weak). All
+### count mutations go through SeqCst atomic intrinsics driven on the live field address
+### (`me.<field>.hijack()`), so cloning/dropping a handle is safe across threads.
+### :typeparam T: The exclusively owned entity type.
+entity ShareController[T]
+needs T is EntityType
+  ### Strong reference count (live `Shared` handles). Atomic.
+  secret strong_count: U64
+  ### Weak reference count (live `Watched` handles). Atomic.
+  secret weak_count: U64
+  ### Raw pointer to the managed entity.
+  secret data: Hijacked[T]
+
+### Creates a new controller with one strong reference and no weak references.
+### :param data: The raw pointer to the entity; ownership transfers to this controller.
+### :returns: The resulting `ShareController[T]` value.
+dangerous routine ShareController[T].$create(data: Hijacked[T]) -> ?ShareController[T]
+  return ShareController[T](
+    strong_count: 1_u64,
+    weak_count: 0_u64,
+    data: data
+  )
+
+### Atomically increments the strong count when a `Shared` handle is cloned.
+routine ShareController[T].increase_strong_count()
+  danger!
+    discard atomic_add[U64](ptr: me.strong_count.hijack(), value: 1_u64)
+  return
+
+### Atomically decrements the strong count. When it reaches zero the managed entity is dropped,
+### and the controller itself is freed if no weak handles remain.
+routine ShareController[T].decrease_strong_count()
+  danger!
+    var previous = atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
+    if previous == 1_u64
+      me.drop_data()
+      if me.weak_count() == 0_u64
+        me.$destroy()
+  return
+
+### Atomically increments the weak count when a `Watched` handle is cloned.
+routine ShareController[T].increase_weak_count()
+  danger!
+    discard atomic_add[U64](ptr: me.weak_count.hijack(), value: 1_u64)
+  return
+
+### Atomically decrements the weak count, freeing the controller when both counts reach zero.
+routine ShareController[T].decrease_weak_count()
+  danger!
+    var previous = atomic_sub[U64](ptr: me.weak_count.hijack(), value: 1_u64)
+    if previous == 1_u64
+      if me.strong_count() == 0_u64
+        me.$destroy()
+  return
+
+### Returns the current number of live strong (`Shared`) handles. Snapshot only.
+### :returns: The strong reference count.
+routine ShareController[T].strong_count() -> U64
+  danger!
+    return atomic_load[U64](ptr: me.strong_count.hijack())
+
+### Returns the current number of live weak (`Watched`) handles. Snapshot only.
+### :returns: The weak reference count.
+routine ShareController[T].weak_count() -> U64
+  danger!
+    return atomic_load[U64](ptr: me.weak_count.hijack())
+
+### Returns a non-owning pointer to the managed data.
+### :returns: The resulting `Hijacked[T]` value.
+dangerous routine ShareController[T].borrow_data() -> Hijacked[T]
+  return me.data
+
+### Destroys the managed entity. Call only when the strong count reaches zero.
+### Runs the entity's own `$destroy` (the sole free under unified teardown); does not also
+### `invalidate`, which would double-free a self-freeing entity.
+dangerous routine ShareController[T].drop_data()
+  me.data.as_entity().$destroy()
+  return
+
+dangerous routine ShareController[T].$destroy()
+  me.strong_count.$destroy()
+  me.weak_count.$destroy()
+  me.hijack().invalidate()
+  return

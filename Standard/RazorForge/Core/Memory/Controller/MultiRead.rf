@@ -1,0 +1,64 @@
+module Core
+
+### Readers-XOR-writer discipline — many concurrent readers (`Inspecting[T]`) OR one exclusive
+### writer (`Claiming[T]`). A spinlock read-write lock: readers bump an atomic count after checking
+### no writer is active (rechecking to close the race); a writer claims a flag then waits for the
+### reader count to drain. Spin-based, like {Exclusive}.
+### :see: {LockPolicy}, {Exclusive}, {Shared}, {Atomic}
+record MultiRead obeys LockPolicy
+  ### Number of active readers.
+  secret readers: Atomic[S32]
+  ### `1` while a writer holds (or is acquiring) the lock.
+  secret writer: Atomic[U8]
+
+### Creates an unlocked reader-writer policy.
+### :returns: The resulting `MultiRead` value.
+routine MultiRead.$create() -> MultiRead
+  return MultiRead(
+    readers: Atomic[S32](initial: 0_s32),
+    writer: Atomic[U8](initial: 0_u8)
+  )
+
+### Acquires a shared read lock; multiple readers may hold it simultaneously. Spins while a writer
+### is active.
+routine MultiRead.acquire_read()
+  loop
+    if me.writer.load() == 0_u8
+      discard me.readers.fetch_add(delta: 1_s32)
+      if me.writer.load() == 0_u8
+        break
+      # A writer slipped in between the check and the bump — back out and retry.
+      discard me.readers.fetch_sub(delta: 1_s32)
+  return
+
+### Releases a shared read lock.
+routine MultiRead.release_read()
+  discard me.readers.fetch_sub(delta: 1_s32)
+  return
+
+### Acquires the exclusive write lock: claims the writer flag, then waits for all readers to drain.
+routine MultiRead.acquire_write()
+  loop
+    if me.writer.compare_exchange(expected: 0_u8, desired: 1_u8)
+      break
+  loop
+    if me.readers.load() == 0_s32
+      break
+  return
+
+### Releases the exclusive write lock.
+routine MultiRead.release_write()
+  me.writer.store(desired: 0_u8)
+  return
+
+### Returns the current active-reader count. Snapshot only.
+### :returns: The number of readers currently holding the lock.
+@readonly
+routine MultiRead.reader_count() -> S32
+  return me.readers.load()
+
+### Returns whether a writer currently holds the lock. Snapshot only.
+### :returns: `true` if write-locked.
+@readonly
+routine MultiRead.is_write_locked() -> Bool
+  return me.writer.load() != 0_u8
