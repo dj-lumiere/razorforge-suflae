@@ -41,6 +41,31 @@ public sealed class VariableInfo
     public Expression? PresetValue { get; init; }
 
     /// <summary>
+    /// True when this preset is a constant <c>Array[T, N]</c> aggregate. Such presets are NOT
+    /// inlined at use sites (which would rebuild the whole array per reference — the cause of the
+    /// fun_bench OOM where an <c>Array[U16, 1000]</c> DPD table was reconstructed as a heap List on
+    /// every call). Instead the identifier is kept so codegen emits ONE module-level
+    /// <c>@preset.*</c> constant and indexes into it. Scalar <c>@llvm</c> presets stay inlined.
+    /// </summary>
+    public bool IsPresettableAggregate =>
+        IsPreset
+        && PresetValue is ListLiteralExpression
+        && Type is RecordTypeInfo record
+        && BaseTypeName(name: record.GenericDefinition?.Name ?? record.Name) == "Array";
+
+    /// <summary>
+    /// Strips generic arguments and module qualifiers from a type name
+    /// (e.g. <c>Core.Array[U16, 1000]</c> -&gt; <c>Array</c>).
+    /// </summary>
+    private static string BaseTypeName(string name)
+    {
+        int bracket = name.IndexOf(value: '[');
+        string bare = bracket > 0 ? name[..bracket] : name;
+        int dot = bare.LastIndexOf(value: '.');
+        return dot >= 0 ? bare[(dot + 1)..] : bare;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="VariableInfo"/> class.
     /// </summary>
     /// <param name="name">The name of the variable.</param>

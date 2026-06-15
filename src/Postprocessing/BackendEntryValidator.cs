@@ -120,8 +120,11 @@ public sealed class BackendEntryValidator
         out SemanticError? error)
     {
         if (node is IdentifierExpression identifier &&
-            registry.LookupVariable(name: identifier.Name) is { IsPreset: true })
+            registry.LookupVariable(name: identifier.Name) is { IsPreset: true } presetVar &&
+            !presetVar.IsPresettableAggregate)
         {
+            // Aggregate (Array[T,N]) presets are intentionally NOT inlined — codegen lowers them to
+            // a shared `@preset.*` constant global. Only scalar presets must be inlined before here.
             error = new SemanticError(
                 Code: SemanticDiagnosticCode.IllegalBackendPresetIdentifier,
                 Message:

@@ -6,6 +6,7 @@ using System.Text;
 using Compiler.Tokenizer;
 using Verification;
 using SyntaxTree;
+using TypeModel.Symbols;
 using TypeModel.Types;
 
 namespace Compiler.CodeGen;
@@ -16,6 +17,84 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    /// <summary>Module-level constant globals emitted for aggregate (Array[T,N]) presets,
+    /// keyed by the preset's qualified name so the table is emitted once and shared.</summary>
+    private readonly Dictionary<string, string> _presetGlobals = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Looks up <paramref name="name"/> as an aggregate (Array[T,N]) preset, trying the bare name
+    /// and the current routine's module prefix. Returns null for non-presets and scalar presets
+    /// (which are inlined before codegen). See <see cref="VariableInfo.IsPresettableAggregate"/>.
+    /// </summary>
+    private VariableInfo? ResolveAggregatePreset(string name)
+    {
+        if (_registry.LookupVariable(name: name) is { IsPresettableAggregate: true } direct)
+            return direct;
+
+        string? module = _currentEmittingRoutine?.OwnerType?.Module ??
+                         _currentEmittingRoutine?.Module;
+        if (module != null && !name.Contains(value: '.') &&
+            _registry.LookupVariable(name: $"{module}.{name}") is
+                { IsPresettableAggregate: true } qualified)
+            return qualified;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Emits (once) a <c>private unnamed_addr constant</c> global for an aggregate preset and
+    /// returns its symbol. The global holds the whole <c>[N x T]</c> array, so references become a
+    /// pointer to it (indexing = one gep+load) instead of rebuilding the array at each use site.
+    /// </summary>
+    private string EmitOrGetPresetGlobal(VariableInfo preset)
+    {
+        string key = preset.QualifiedName;
+        if (_presetGlobals.TryGetValue(key: key, value: out string? existing))
+            return existing;
+
+        var list = (ListLiteralExpression)preset.PresetValue!;
+        string arrLlvm = GetLlvmType(type: preset.Type);          // e.g. "[1000 x i16]"
+        string elemLlvm = ArrayElementLlvmType(arrLlvm: arrLlvm);  // e.g. "i16"
+        string symbol = $"@\"preset.{key}\"";
+
+        string initializer;
+        if (list.Elements.Count == 0)
+        {
+            initializer = "zeroinitializer";
+        }
+        else
+        {
+            var scratch = new StringBuilder();
+            var parts = new List<string>(capacity: list.Elements.Count);
+            foreach (Expression element in list.Elements)
+            {
+                if (element is not LiteralExpression lit)
+                    throw new NotImplementedException(
+                        message:
+                        $"Aggregate preset '{key}' element must be a scalar literal; got {element.GetType().Name}.");
+                // Numeric/bool/char literals render to a pure constant with no IR side effects.
+                parts.Add(item: $"{elemLlvm} {EmitLiteral(sb: scratch, literal: lit)}");
+            }
+
+            initializer = $"[{string.Join(separator: ", ", values: parts)}]";
+        }
+
+        EmitLine(sb: _globalDeclarations,
+            line: $"{symbol} = private unnamed_addr constant {arrLlvm} {initializer}");
+        _presetGlobals[key: key] = symbol;
+        return symbol;
+    }
+
+    /// <summary>Extracts the element type from an array LLVM type (<c>"[N x ELEM]"</c> -&gt; <c>"ELEM"</c>).</summary>
+    private static string ArrayElementLlvmType(string arrLlvm)
+    {
+        int x = arrLlvm.IndexOf(value: " x ", comparisonType: StringComparison.Ordinal);
+        if (arrLlvm.StartsWith(value: '[') && x > 0 && arrLlvm.EndsWith(value: ']'))
+            return arrLlvm[(x + 3)..^1];
+        throw new InvalidOperationException(
+            message: $"Expected an array LLVM type for an aggregate preset, got '{arrLlvm}'.");
+    }
+
     /// <summary>
     /// Emit literal as part of this compiler phase.
     /// </summary>

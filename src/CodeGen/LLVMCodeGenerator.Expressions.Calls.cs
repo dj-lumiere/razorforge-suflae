@@ -1381,8 +1381,11 @@ public partial class LlvmCodeGenerator
         }
 
         if (member.Object is IdentifierExpression typeId &&
-            !_localVariables.ContainsKey(key: typeId.Name))
+            !_localVariables.ContainsKey(key: typeId.Name) &&
+            ResolveAggregatePreset(name: typeId.Name) == null)
         {
+            // Aggregate-preset receivers are NOT typewise/static receivers — they are by-ref values
+            // whose storage is the `@preset.*` global. Fall through so EmitLvalueAddress returns it.
             TypeInfo? typeAsReceiver = GetExpressionType(expr: member.Object);
             if (typeAsReceiver == null)
             {
@@ -1432,6 +1435,12 @@ public partial class LlvmCodeGenerator
                 return EmitLvalueAddress(sb: sb, expr: named.Value);
             case IdentifierExpression id:
             {
+                // Aggregate (Array[T,N]) preset: its storage IS the shared `@preset.*` constant
+                // global, so its address is the global symbol — the by-ref `me` receiver and any
+                // `.hijack()` read in place from there (no per-use copy).
+                if (ResolveAggregatePreset(name: id.Name) is { } aggregatePreset)
+                    return EmitOrGetPresetGlobal(preset: aggregatePreset);
+
                 if (!_localVariables.ContainsKey(key: id.Name))
                 {
                     throw new InvalidOperationException(

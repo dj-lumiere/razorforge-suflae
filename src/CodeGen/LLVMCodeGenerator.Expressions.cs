@@ -401,8 +401,19 @@ public partial class LlvmCodeGenerator
             return constVal.Value.ToString();
         }
 
-        // Presets must be inlined before backend entry. Codegen should not read declaration AST
-        // to recover their values on demand.
+        // Aggregate (Array[T,N]) presets are not inlined — they live in a shared `@preset.*`
+        // constant global. A value-position read loads the whole array from the global.
+        if (ResolveAggregatePreset(name: identifier.Name) is { } aggregatePreset)
+        {
+            string presetSym = EmitOrGetPresetGlobal(preset: aggregatePreset);
+            string arrLlvm = GetLlvmType(type: aggregatePreset.Type);
+            string loaded = NextTemp();
+            EmitLine(sb: sb, line: $"  {loaded} = load {arrLlvm}, ptr {presetSym}");
+            return loaded;
+        }
+
+        // Scalar presets must be inlined before backend entry. Codegen should not read declaration
+        // AST to recover their values on demand.
         if (_registry.LookupVariable(name: identifier.Name) is { IsPreset: true })
         {
             throw new InvalidOperationException(
