@@ -18,3 +18,177 @@ routine verify!(expr: Bool)
 @crash_only
 routine breach!()
   throw LogicBreachedError()
+
+routine knuth_divide[N](
+  a: Hijacked[Array[U64, N]],
+  b: Hijacked[Array[U64, N]],
+  rem: Hijacked[Array[U64, N]]
+) -> Array[U64, N]
+needs N is U64
+  var nl = reinterpret_bits[U64, S64](N)
+  var q = Array[U64, N]()
+  danger!
+    var qp = q.hijack()
+    var rscratch = 0_u64
+
+    # significant limb count of the divisor (highest non-zero limb + 1)
+    var n = nl
+    while signed_gt[S64](a: n, b: 1_s64) and int_eq[U64](a: load_element_ref[Array[U64, N], U64](b, reinterpret_bits[S64, U64](sub[S64](a: n, b: 1_s64))), b: 0_u64)
+      n = sub[S64](a: n, b: 1_s64)
+
+    # ---- Single-limb divisor: simple long division, high limb to low ----
+    if signed_le[S64](a: n, b: 1_s64)
+      var d0 = load_element_ref[Array[U64, N], U64](b, 0_u64)
+      var r = 0_u64
+      var i = sub[S64](a: nl, b: 1_s64)
+      while signed_ge[S64](a: i, b: 0_s64)
+        var qi = rf_udivrem_128_64(hi: r, lo: load_element_ref[Array[U64, N], U64](a, reinterpret_bits[S64, U64](i)), d: d0, rem: rscratch.hijack())
+        store_element_ref[Array[U64, N], U64](qp, reinterpret_bits[S64, U64](i), qi)
+        r = rscratch
+        i = sub[S64](a: i, b: 1_s64)
+      store_element_ref[Array[U64, N], U64](rem, 0_u64, r)
+      var z = 1_s64
+      while signed_lt[S64](a: z, b: nl)
+        store_element_ref[Array[U64, N], U64](rem, reinterpret_bits[S64, U64](z), 0_u64)
+        z = add[S64](a: z, b: 1_s64)
+      return q
+
+    # significant limb count of the dividend
+    var mlen = nl
+    while signed_gt[S64](a: mlen, b: 1_s64) and int_eq[U64](a: load_element_ref[Array[U64, N], U64](a, reinterpret_bits[S64, U64](sub[S64](a: mlen, b: 1_s64))), b: 0_u64)
+      mlen = sub[S64](a: mlen, b: 1_s64)
+
+    # Dividend shorter than divisor → quotient 0, remainder = dividend.
+    if signed_lt[S64](a: mlen, b: n)
+      var z2 = 0_s64
+      while signed_lt[S64](a: z2, b: nl)
+        store_element_ref[Array[U64, N], U64](rem, reinterpret_bits[S64, U64](z2), load_element_ref[Array[U64, N], U64](a, reinterpret_bits[S64, U64](z2)))
+        z2 = add[S64](a: z2, b: 1_s64)
+      return q
+    var m = sub[S64](a: mlen, b: n)
+
+    # ---- D1: normalize so the divisor's top limb has its MSB set ----
+    var vtop = load_element_ref[Array[U64, N], U64](b, reinterpret_bits[S64, U64](sub[S64](a: n, b: 1_s64)))
+    var s = 0_s64
+    while int_eq[U64](a: bit_and[U64](a: vtop, b: shift_left[U64](1_u64, 63_u64)), b: 0_u64)
+      vtop = shift_left[U64](vtop, 1_u64)
+      s = add[S64](a: s, b: 1_s64)
+    var su = reinterpret_bits[S64, U64](s)
+    var su_inv = reinterpret_bits[S64, U64](sub[S64](a: 64_s64, b: s))
+
+    # vn = b << s  (n limbs)
+    var vn = Array[U64, N]()
+    var vnp = vn.hijack()
+    var vi = sub[S64](a: n, b: 1_s64)
+    while signed_ge[S64](a: vi, b: 0_s64)
+      var hi = shift_left[U64](load_element_ref[Array[U64, N], U64](b, reinterpret_bits[S64, U64](vi)), su)
+      var lo = if signed_gt[S64](a: vi, b: 0_s64) and signed_gt[S64](a: s, b: 0_s64) then shift_right_unsigned[U64](load_element_ref[Array[U64, N], U64](b, reinterpret_bits[S64, U64](sub[S64](a: vi, b: 1_s64))), su_inv) else 0_u64
+      store_element_ref[Array[U64, N], U64](vnp, reinterpret_bits[S64, U64](vi), bit_or[U64](a: hi, b: lo))
+      vi = sub[S64](a: vi, b: 1_s64)
+
+    # un = a << s  (mlen+1 limbs; the top limb lives in `un_hi`)
+    var un = Array[U64, N]()
+    var unp = un.hijack()
+    var un_hi = if signed_gt[S64](a: s, b: 0_s64) then shift_right_unsigned[U64](load_element_ref[Array[U64, N], U64](a, reinterpret_bits[S64, U64](sub[S64](a: mlen, b: 1_s64))), su_inv) else 0_u64
+    var ui = sub[S64](a: mlen, b: 1_s64)
+    while signed_ge[S64](a: ui, b: 0_s64)
+      var uhi = shift_left[U64](load_element_ref[Array[U64, N], U64](a, reinterpret_bits[S64, U64](ui)), su)
+      var ulo = if signed_gt[S64](a: ui, b: 0_s64) and signed_gt[S64](a: s, b: 0_s64) then shift_right_unsigned[U64](load_element_ref[Array[U64, N], U64](a, reinterpret_bits[S64, U64](sub[S64](a: ui, b: 1_s64))), su_inv) else 0_u64
+      store_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](ui), bit_or[U64](a: uhi, b: ulo))
+      ui = sub[S64](a: ui, b: 1_s64)
+
+    var vn1 = load_element_ref[Array[U64, N], U64](vnp, reinterpret_bits[S64, U64](sub[S64](a: n, b: 1_s64)))
+    var vn2 = load_element_ref[Array[U64, N], U64](vnp, reinterpret_bits[S64, U64](sub[S64](a: n, b: 2_s64)))
+
+    # ---- D2..D7: main loop over quotient limbs, high to low ----
+    var j = m
+    while signed_ge[S64](a: j, b: 0_s64)
+      # un_get(j+n) is in un_hi when j+n == mlen, else in the un array
+      var un_jn = if int_eq[S64](a: add[S64](a: j, b: n), b: mlen) then un_hi else load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](add[S64](a: j, b: n)))
+      var un_jn1 = load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](sub[S64](a: add[S64](a: j, b: n), b: 1_s64)))
+
+      # D3: estimate qhat, rhat from the top two dividend limbs / top divisor limb
+      var qhat = 0_u64
+      var rhat = 0_u64
+      if int_eq[U64](a: un_jn, b: vn1)
+        qhat = U64_MAX
+        rhat = add[U64](a: un_jn1, b: vn1)
+      else
+        qhat = rf_udivrem_128_64(hi: un_jn, lo: un_jn1, d: vn1, rem: rscratch.hijack())
+        rhat = rscratch
+      # correct qhat: while qhat*vn2 > (rhat:un[j+n-2]) and rhat fits 64 bits
+      var un_jn2 = load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](sub[S64](a: add[S64](a: j, b: n), b: 2_s64)))
+      var keep = true
+      while keep
+        var lhs = mul[U128](a: zero_extend[U64, U128](qhat), b: zero_extend[U64, U128](vn2))
+        var rhs = bit_or[U128](a: shift_left[U128](zero_extend[U64, U128](rhat), 64_u128), b: zero_extend[U64, U128](un_jn2))
+        if unsigned_gt[U128](a: lhs, b: rhs)
+          qhat = sub[U64](a: qhat, b: 1_u64)
+          var rnew = add[U64](a: rhat, b: vn1)
+          if unsigned_lt[U64](a: rnew, b: rhat)
+            keep = false
+          else
+            rhat = rnew
+        else
+          keep = false
+
+      # D4: multiply qhat*vn and subtract from un[j..j+n] (signed S128 borrow `k`)
+      var k = zero_extend[U64, S128](0_u64)
+      var ii = 0_s64
+      while signed_lt[S64](a: ii, b: n)
+        var p = mul[U128](a: zero_extend[U64, U128](qhat), b: zero_extend[U64, U128](load_element_ref[Array[U64, N], U64](vnp, reinterpret_bits[S64, U64](ii))))
+        var plo = int_truncate[U128, U64](p)
+        var phi = int_truncate[U128, U64](shift_right_unsigned[U128](p, 64_u128))
+        var idx = add[S64](a: ii, b: j)
+        var cur = if int_eq[S64](a: idx, b: mlen) then un_hi else load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](idx))
+        var t = sub[S128](a: sub[S128](a: zero_extend[U64, S128](cur), b: k), b: zero_extend[U64, S128](plo))
+        var tlo = int_truncate[S128, U64](t)
+        if int_eq[S64](a: idx, b: mlen)
+          un_hi = tlo
+        else
+          store_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](idx), tlo)
+        # k = phi - arithmetic_shift_right(t, 64)
+        k = sub[S128](a: zero_extend[U64, S128](phi), b: shift_right_signed[S128](t, 64_s128))
+        ii = add[S64](a: ii, b: 1_s64)
+      # final top limb: un[j+n] -= k
+      var topidx = add[S64](a: j, b: n)
+      var curtop = if int_eq[S64](a: topidx, b: mlen) then un_hi else load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](topidx))
+      var ttop = sub[S128](a: zero_extend[U64, S128](curtop), b: k)
+      var ttoplo = int_truncate[S128, U64](ttop)
+      if int_eq[S64](a: topidx, b: mlen)
+        un_hi = ttoplo
+      else
+        store_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](topidx), ttoplo)
+
+      store_element_ref[Array[U64, N], U64](qp, reinterpret_bits[S64, U64](j), qhat)
+
+      # D5/D6: if the subtraction went negative, qhat was 1 too big — add the divisor back
+      if signed_lt[S128](a: ttop, b: zero_extend[U64, S128](0_u64))
+        store_element_ref[Array[U64, N], U64](qp, reinterpret_bits[S64, U64](j), sub[U64](a: qhat, b: 1_u64))
+        var carry = 0_u64
+        var ai = 0_s64
+        while signed_lt[S64](a: ai, b: n)
+          var aidx = add[S64](a: ai, b: j)
+          var acur = if int_eq[S64](a: aidx, b: mlen) then un_hi else load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](aidx))
+          var sum = add[U128](a: add[U128](a: zero_extend[U64, U128](acur), b: zero_extend[U64, U128](load_element_ref[Array[U64, N], U64](vnp, reinterpret_bits[S64, U64](ai)))), b: zero_extend[U64, U128](carry))
+          if int_eq[S64](a: aidx, b: mlen)
+            un_hi = int_truncate[U128, U64](sum)
+          else
+            store_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](aidx), int_truncate[U128, U64](sum))
+          carry = int_truncate[U128, U64](shift_right_unsigned[U128](sum, 64_u128))
+          ai = add[S64](a: ai, b: 1_s64)
+        un_hi = add[U64](a: un_hi, b: carry)
+      j = sub[S64](a: j, b: 1_s64)
+
+    # ---- D8: denormalize the remainder (un >> s), low n limbs ----
+    var ri = 0_s64
+    while signed_lt[S64](a: ri, b: n)
+      var rlo = shift_right_unsigned[U64](load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](ri)), su)
+      var rhi = if signed_gt[S64](a: s, b: 0_s64) then shift_left[U64](load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](add[S64](a: ri, b: 1_s64))), su_inv) else 0_u64
+      store_element_ref[Array[U64, N], U64](rem, reinterpret_bits[S64, U64](ri), bit_or[U64](a: rlo, b: rhi))
+      ri = add[S64](a: ri, b: 1_s64)
+    var rz = n
+    while signed_lt[S64](a: rz, b: nl)
+      store_element_ref[Array[U64, N], U64](rem, reinterpret_bits[S64, U64](rz), 0_u64)
+      rz = add[S64](a: rz, b: 1_s64)
+  return q

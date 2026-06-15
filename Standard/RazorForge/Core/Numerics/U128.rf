@@ -196,6 +196,26 @@ routine U128.$mul!(you: U128) -> U128
     throw IntegerOverflowError()
   return result.item0
 
+### Unsigned 128/128 floor division via the generic base-2⁶⁴ Knuth-D kernel
+### (`knuth_divide[2]`), which bottoms out on hardware `DIV r64` for every estimation
+### step — avoiding the slow soft `__udivti3`/inline-expansion at every divisor size.
+### The `i128` storage is reinterpreted in place as two little-endian U64 limbs.
+### PRECONDITION: `b != 0`.
+routine u128_floordiv(a: U128, b: U128) -> U128
+  var av = a
+  var bv = b
+  var rem = Array[U64, 2]()
+  var qlo = 0_u64
+  var qhi = 0_u64
+  danger!
+    var q = knuth_divide[2](
+      a: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
+      b: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
+      rem: rem.hijack())
+    qlo = load_element_ref[Array[U64, 2], U64](q.hijack(), 0_u64)
+    qhi = load_element_ref[Array[U64, 2], U64](q.hijack(), 1_u64)
+  return bit_or[U128](shift_left[U128](zero_extend[U64, U128](qhi), 64_u128), zero_extend[U64, U128](qlo))
+
 ### Returns `me // you` (integer division), throwing if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient `me // you`.
@@ -203,15 +223,31 @@ routine U128.$mul!(you: U128) -> U128
 routine U128.$floordiv!(you: U128) -> U128
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U128](a: me, b: you)
+  return u128_floordiv(a: me, b: you)
 
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
 ### :returns: The remainder `me % you`. Behavior is undefined if `you == 0`.
+### Unsigned 128-bit remainder via the Knuth-D kernel. PRECONDITION: `b != 0`.
+routine u128_mod(a: U128, b: U128) -> U128
+  var av = a
+  var bv = b
+  var rem = Array[U64, 2]()
+  var rlo = 0_u64
+  var rhi = 0_u64
+  danger!
+    var q = knuth_divide[2](
+      a: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
+      b: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
+      rem: rem.hijack())
+    rlo = load_element_ref[Array[U64, 2], U64](rem.hijack(), 0_u64)
+    rhi = load_element_ref[Array[U64, 2], U64](rem.hijack(), 1_u64)
+  return bit_or[U128](shift_left[U128](zero_extend[U64, U128](rhi), 64_u128), zero_extend[U64, U128](rlo))
+
 routine U128.$mod!(you: U128) -> U128
   if you == 0_u128
     throw DivisionByZeroError()
-  return unsigned_rem[U128](a: me, b: you)
+  return u128_mod(a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)

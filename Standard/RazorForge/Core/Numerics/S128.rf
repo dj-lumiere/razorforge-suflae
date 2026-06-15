@@ -192,18 +192,31 @@ routine S128.$mul!(you: S128) -> S128
 ### :returns: The floor quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S128_MIN` and `you == -1`.
+### `|x|` as a U128 magnitude. `S128_MIN` maps to exactly 2¹²⁷ (the wrapping
+### negate reinterpreted as unsigned), so there is no overflow.
+routine s128_abs_u128(x: S128) -> U128
+  if signed_ge[S128](a: x, b: 0_s128)
+    return reinterpret_bits[S128, U128](x)
+  return reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: x))
+
 routine S128.$floordiv!(you: S128) -> S128
   if you == 0
     throw DivisionByZeroError()
   if me == S128_MIN and you == -1_s128
     throw IntegerOverflowError()
-  var quotient = signed_div[S128](a: me, b: you)
-  var remainder = signed_rem[S128](a: me, b: you)
-  if remainder < 0_s128
-    if you > 0_s128
-      return quotient - 1_s128
-    return quotient + 1_s128
-  return quotient
+  var amag = s128_abs_u128(x: me)
+  var bmag = s128_abs_u128(x: you)
+  var uq = u128_floordiv(a: amag, b: bmag)
+  var aneg = signed_lt[S128](a: me, b: 0_s128)
+  var bneg = signed_lt[S128](a: you, b: 0_s128)
+  # same sign → quotient positive (floor == trunc); differing signs → negate and,
+  # when the division was inexact, round toward -∞ by subtracting 1.
+  if aneg == bneg
+    return reinterpret_bits[U128, S128](uq)
+  var tq = sub[S128](a: 0_s128, b: reinterpret_bits[U128, S128](uq))
+  if int_ne[U128](a: u128_mod(a: amag, b: bmag), b: 0_u128)
+    tq = sub[S128](a: tq, b: 1_s128)
+  return tq
 
 ### Returns `me % you` (floor modulo), where the result sign matches `you`.
 ### :param you: The divisor.
@@ -212,7 +225,11 @@ routine S128.$floordiv!(you: S128) -> S128
 routine S128.$mod!(you: S128) -> S128
   if you == 0
     throw DivisionByZeroError()
-  var remainder = signed_rem[S128](a: me, b: you)
+  # truncated remainder (sign of dividend) via the unsigned Knuth kernel, then the
+  # floor-modulo adjustment so the result's sign matches the divisor.
+  var remainder = reinterpret_bits[U128, S128](u128_mod(a: s128_abs_u128(x: me), b: s128_abs_u128(x: you)))
+  if signed_lt[S128](a: me, b: 0_s128)
+    remainder = sub[S128](a: 0_s128, b: remainder)
   if remainder < 0_s128
     if you > 0_s128
       return remainder + you
