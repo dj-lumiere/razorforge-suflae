@@ -385,6 +385,31 @@ internal sealed class GenericCallLoweringPass
                 return partChanged ? inserted with { Parts = newParts } : expr;
             }
 
+            case CreatorExpression creator:
+            {
+                // Constructor arguments can themselves be GMCEs (e.g.
+                // `Limbs[4](d: Array[U32, 4]())`). Without recursing into the member
+                // values, a nested GMCE survives to codegen and trips the
+                // "GenericMethodCallExpression reached codegen" guard.
+                bool membersChanged = false;
+                var newMembers =
+                    new List<(string Name, Expression Value)>(capacity: creator.MemberVariables.Count);
+                foreach ((string name, Expression value) in creator.MemberVariables)
+                {
+                    Expression lowered = LowerExpression(value);
+                    membersChanged |= !ReferenceEquals(lowered, value);
+                    newMembers.Add(item: (name, lowered));
+                }
+                if (!membersChanged) return expr;
+                var rewritten = creator with { MemberVariables = newMembers };
+                // Mutable {get;set;} props are dropped by `with` — carry them over.
+                rewritten.LoweringKind = creator.LoweringKind;
+                rewritten.ConstructedType = creator.ConstructedType;
+                rewritten.ResolvedCreatorRoutine = creator.ResolvedCreatorRoutine;
+                rewritten.ResolvedType = creator.ResolvedType;
+                return rewritten;
+            }
+
             default:
                 return expr;
         }

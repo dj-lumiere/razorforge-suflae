@@ -598,18 +598,11 @@ public sealed partial class SemanticVerifier
                 location: routine.Location);
         }
 
-        // #66: Index operators ($getitem/$setitem) are only valid on indexable types — entities
-        // (heap collections like List/Dict) and records (value/aggregate collections like
-        // Array[T,N]/BitArray[N], and user value containers). Choice/flags/variant/crashable types
-        // are not indexable.
-        if (baseName is "$getitem" or "$setitem" && ownerType is not null &&
-            ownerType is not (EntityTypeInfo or RecordTypeInfo))
-        {
-            ReportError(code: SemanticDiagnosticCode.IndexOperatorTypeKindRestriction,
-                message:
-                $"Index operators are only valid on indexable types (entities and records), not on '{ownerType.Name}'.",
-                location: routine.Location);
-        }
+        // Index operators ($getitem/$setitem) are governed by PROTOCOL conformance, not type KIND:
+        // any type that follows Indexable/MutableIndexable may define them (records like
+        // Array[T,N]/BitArray[N], entities like List/Dict, and user containers alike). The
+        // conformance requirement is enforced by RF-S411 (OperatorWithoutProtocol) via the
+        // wired-routine→protocol catalog, so no type-kind restriction is applied here.
 
         // @writable is removed — emit error before the conflict check
         if (routine.Annotations.Contains(item: "writable"))

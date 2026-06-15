@@ -751,7 +751,9 @@ public enum SemanticDiagnosticCode
 /// <summary>Variant member cannot be Result[T], Lookup[T], a token, or a duplicate type.</summary>
     VariantCaseContainsInvalidType = 764,
 
-    /// <summary>Index operators ($getitem/$setitem) are only valid on entities.</summary>
+    /// <summary>RETIRED: index-operator legality is governed by protocol conformance
+    /// (Indexable/MutableIndexable, enforced by RF-S411 OperatorWithoutProtocol), not by type kind.
+    /// Code number reserved to avoid reuse.</summary>
     IndexOperatorTypeKindRestriction = 765,
 
     /// <summary>Cannot use compound assignment on a read-only token (Viewing or Inspecting).</summary>

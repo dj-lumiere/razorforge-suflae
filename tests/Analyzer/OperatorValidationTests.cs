@@ -10,9 +10,9 @@ using static TestHelpers;
 /// </summary>
 public class OperatorValidationTests
 {
-    #region #66: Index operator type-kind restriction
+    #region Index operator legality is governed by protocol conformance, not type kind
     /// <summary>
-    /// Verifies semantic analysis behavior for index operator on entity without unexpected diagnostics.
+    /// An entity that follows Indexable may define $getitem — no protocol-conformance error.
     /// </summary>
 
     [Fact]
@@ -31,14 +31,15 @@ public class OperatorValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.IndexOperatorTypeKindRestriction);
+            filter: e => e.Code == SemanticDiagnosticCode.OperatorWithoutProtocol);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for index operator on record and reports the expected error.
+    /// Records are indexable too (e.g. Array[T,N]/BitArray[N] are records), so a record that follows
+    /// Indexable may define $getitem with no error — legality follows the protocol, not the type kind.
     /// </summary>
 
     [Fact]
-    public void Analyze_IndexOperatorOnRecord_ReportsError()
+    public void Analyze_IndexOperatorOnRecord_NoError()
     {
         string source = """
                         protocol Indexable
@@ -53,8 +54,30 @@ public class OperatorValidationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.OperatorWithoutProtocol);
+    }
+
+    /// <summary>
+    /// Defining $getitem WITHOUT following Indexable is the actual error — governed by protocol
+    /// conformance (RF-S411), independent of whether the owner is a record or an entity.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_IndexOperatorWithoutIndexable_ReportsError()
+    {
+        string source = """
+                        record Pair
+                          x: S32
+                          y: S32
+                        @readonly
+                        routine Pair.$getitem(index: S32) -> S32
+                          return 0_s32
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.IndexOperatorTypeKindRestriction);
+            filter: e => e.Code == SemanticDiagnosticCode.OperatorWithoutProtocol);
     }
 
     #endregion
