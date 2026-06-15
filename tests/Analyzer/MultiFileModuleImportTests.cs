@@ -165,6 +165,39 @@ public sealed class MultiFileModuleImportTests
             filter: e => e.Code == SemanticDiagnosticCode.ModuleNotFound);
     }
 
+    /// <summary>
+    /// A generic free routine in an imported module is callable cross-module with EXPLICIT type
+    /// arguments (<c>gen_id[S32](7)</c>). Concrete free routines always resolved; generic ones used
+    /// to fail because the explicit-generic call path missed the generic-overload index.
+    /// </summary>
+    [Fact]
+    public void GenericFreeRoutine_ExplicitTypeArgs_ResolvesCrossModule_NoErrors()
+    {
+        List<SemanticError> errors = RunProject(
+            entrySource: """
+                module ImportProbe
+                import GenLib
+
+                routine start()
+                  var a = gen_id[S32](7)
+                  var b = con_id(5)
+                  return
+                """,
+            moduleFiles:
+            [
+                ("GenLib/Lib.rf", """
+                    module GenLib
+                    routine con_id(x: S32) -> S32
+                      return x
+
+                    routine gen_id[T](x: T) -> ?T
+                      return x
+                    """),
+            ]);
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors));
+    }
+
     // A module spread across three same-directory files; Main uses Aaa, and Aaa internally uses its
     // sibling Bbb — all `module SameMod`, with NO import linking them. Used for the entry-file case.
     private static readonly (string RelPath, string Source)[] SameModuleSiblingFiles =

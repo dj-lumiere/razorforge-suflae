@@ -95,6 +95,49 @@ public class TypeDeclarationTests
         Assert.Equal(expected: "Protocol2", actual: constraint.ConstraintTypes[index: 1].Name);
         Assert.Equal(expected: "Protocol3", actual: constraint.ConstraintTypes[index: 2].Name);
     }
+    /// <summary>
+    /// Verifies comma-separated constraints over DIFFERENT type parameters on a record —
+    /// <c>needs T obeys A, U obeys B</c> — yield two constraints (the second was dropped before).
+    /// </summary>
+    [Fact]
+    public void Parse_Record_WithConstraint_CommaSeparatedDifferentParams()
+    {
+        string source = """
+                        record Pair[T, U]
+                        needs T obeys Equatable, U obeys Equatable
+                          a: T
+                          b: U
+                        """;
+
+        Program program = AssertParses(source: source);
+        RecordDeclaration record = GetDeclaration<RecordDeclaration>(program: program);
+
+        Assert.NotNull(@object: record.GenericConstraints);
+        Assert.Equal(expected: 2, actual: record.GenericConstraints!.Count);
+        Assert.Equal(expected: "T", actual: record.GenericConstraints[index: 0].ParameterName);
+        Assert.Equal(expected: "U", actual: record.GenericConstraints[index: 1].ParameterName);
+    }
+    /// <summary>
+    /// Verifies the same comma-separated multi-parameter constraint form on a FREE routine —
+    /// <c>routine pair[T, U](...) needs T obeys A, U obeys B</c>. This used to fail with RF-G055.
+    /// </summary>
+    [Fact]
+    public void Parse_FreeRoutine_WithConstraint_CommaSeparatedDifferentParams()
+    {
+        string source = """
+                        routine pair[T, U](a: T, b: U) -> Bool
+                        needs T obeys Equatable, U obeys Equatable
+                          return true
+                        """;
+
+        Program program = AssertParses(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+
+        Assert.NotNull(@object: routine.GenericConstraints);
+        Assert.Equal(expected: 2, actual: routine.GenericConstraints!.Count);
+        Assert.Equal(expected: "T", actual: routine.GenericConstraints[index: 0].ParameterName);
+        Assert.Equal(expected: "U", actual: routine.GenericConstraints[index: 1].ParameterName);
+    }
 
     /// <summary>
     /// Verifies that the parser accepts record follows protocol.

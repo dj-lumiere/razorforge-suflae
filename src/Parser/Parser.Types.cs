@@ -480,10 +480,28 @@ public partial class Parser
                     // T obeys Protocol1, Protocol2
                     var constraintTypes = new List<TypeExpression>();
                     constraintTypes.Add(item: ParseType());
-                    while (Match(type: TokenType.Comma))
+                    while (Check(type: TokenType.Comma))
                     {
+                        // Peek PAST the comma (and any newlines): if a new "Param obeys/is/in"
+                        // constraint follows, this comma separates whole constraints — leave it
+                        // unconsumed for the outer constraint-separator loop. Consuming it here
+                        // (the old bug) dropped the next constraint, e.g. the `U obeys B` in
+                        // `needs T obeys A, U obeys B`, on routines and types alike.
+                        int peek = 1;
+                        while (PeekToken(offset: peek).Type == TokenType.Newline)
+                        {
+                            peek++;
+                        }
+
+                        if (PeekToken(offset: peek).Type == TokenType.Identifier &&
+                            PeekToken(offset: peek + 1).Type is TokenType.Obeys or TokenType.Is
+                                or TokenType.In)
+                        {
+                            break;
+                        }
+
+                        Match(type: TokenType.Comma);
                         while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
-                        if (IsNewConstraintDeclaration()) break;
                         constraintTypes.Add(item: ParseType());
                     }
 
