@@ -53,36 +53,74 @@ public partial class LlvmCodeGenerator
             return existing;
 
         var list = (ListLiteralExpression)preset.PresetValue!;
-        string arrLlvm = GetLlvmType(type: preset.Type);          // e.g. "[1000 x i16]"
-        string elemLlvm = ArrayElementLlvmType(arrLlvm: arrLlvm);  // e.g. "i16"
+        string arrLlvm = GetLlvmType(type: preset.Type);          // "[1000 x i16]" / "[8 x i8]"
         string symbol = $"@\"preset.{key}\"";
 
-        string initializer;
-        if (list.Elements.Count == 0)
-        {
-            initializer = "zeroinitializer";
-        }
-        else
-        {
-            var scratch = new StringBuilder();
-            var parts = new List<string>(capacity: list.Elements.Count);
-            foreach (Expression element in list.Elements)
-            {
-                if (element is not LiteralExpression lit)
-                    throw new NotImplementedException(
-                        message:
-                        $"Aggregate preset '{key}' element must be a scalar literal; got {element.GetType().Name}.");
-                // Numeric/bool/char literals render to a pure constant with no IR side effects.
-                parts.Add(item: $"{elemLlvm} {EmitLiteral(sb: scratch, literal: lit)}");
-            }
-
-            initializer = $"[{string.Join(separator: ", ", values: parts)}]";
-        }
+        // BitArray[N] packs its `N` bool elements into `[(N+7)/8 x i8]`; Array[T,N] stores one
+        // element per slot. Both reduce to a constant `[M x T]` initializer.
+        string initializer = GetGenericBaseName(type: preset.Type) == "BitArray"
+            ? BuildBitArrayPresetInitializer(key: key, list: list, arrLlvm: arrLlvm)
+            : BuildArrayPresetInitializer(key: key, list: list, arrLlvm: arrLlvm);
 
         EmitLine(sb: _globalDeclarations,
             line: $"{symbol} = private unnamed_addr constant {arrLlvm} {initializer}");
         _presetGlobals[key: key] = symbol;
         return symbol;
+    }
+
+    /// <summary>Builds the <c>[N x T] [...]</c> constant initializer for an <c>Array[T,N]</c> preset.</summary>
+    private string BuildArrayPresetInitializer(string key, ListLiteralExpression list, string arrLlvm)
+    {
+        if (list.Elements.Count == 0)
+            return "zeroinitializer";
+
+        string elemLlvm = ArrayElementLlvmType(arrLlvm: arrLlvm);  // e.g. "i16"
+        var scratch = new StringBuilder();
+        var parts = new List<string>(capacity: list.Elements.Count);
+        foreach (Expression element in list.Elements)
+        {
+            if (element is not LiteralExpression lit)
+                throw new NotImplementedException(
+                    message:
+                    $"Aggregate preset '{key}' element must be a scalar literal; got {element.GetType().Name}.");
+            // Numeric/bool/char literals render to a pure constant with no IR side effects.
+            parts.Add(item: $"{elemLlvm} {EmitLiteral(sb: scratch, literal: lit)}");
+        }
+
+        return $"[{string.Join(separator: ", ", values: parts)}]";
+    }
+
+    /// <summary>
+    /// Builds the <c>[(N+7)/8 x i8] [...]</c> constant initializer for a <c>BitArray[N]</c> preset by
+    /// packing 8 bool literals per byte (bit 0 = LSB), mirroring the inline literal bit-packing.
+    /// </summary>
+    private static string BuildBitArrayPresetInitializer(string key, ListLiteralExpression list,
+        string arrLlvm)
+    {
+        int bitCount = list.Elements.Count;
+        if (bitCount == 0)
+            return "zeroinitializer";
+
+        int byteCount = (bitCount + 7) / 8;
+        var parts = new List<string>(capacity: byteCount);
+        for (int byteIdx = 0; byteIdx < byteCount; byteIdx++)
+        {
+            int byteVal = 0;
+            for (int bitIdx = 0; bitIdx < 8 && byteIdx * 8 + bitIdx < bitCount; bitIdx++)
+            {
+                Expression bit = list.Elements[index: byteIdx * 8 + bitIdx];
+                if (bit is not LiteralExpression { Value: bool b })
+                    throw new NotImplementedException(
+                        message:
+                        $"BitArray preset '{key}' element must be a bool literal; got {bit.GetType().Name}.");
+                if (b)
+                    byteVal |= 1 << bitIdx;
+            }
+
+            parts.Add(item: $"i8 {byteVal}");
+        }
+
+        return $"[{string.Join(separator: ", ", values: parts)}]";
     }
 
     /// <summary>Extracts the element type from an array LLVM type (<c>"[N x ELEM]"</c> -&gt; <c>"ELEM"</c>).</summary>

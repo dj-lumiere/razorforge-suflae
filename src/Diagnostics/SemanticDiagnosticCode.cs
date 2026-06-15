@@ -295,6 +295,11 @@ public enum SemanticDiagnosticCode
     /// <summary>Type does not support the given operator (missing wired routine).</summary>
     TypeDoesNotSupportOperator = 259,
 
+    /// <summary>A collection-literal preset must be a fixed-size <c>Array[T, N]</c> or
+    /// <c>BitArray[N]</c>. Heap collections (List/Set/Dict/...) would rebuild the whole
+    /// collection on every use.</summary>
+    NonPresettableCollectionPreset = 260,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
     // ═══════════════════════════════════════════════════════════════════════════
