@@ -241,12 +241,19 @@ public sealed class BuildDriver
             // Register into the resolver index so later imports of this file resolve correctly.
             _resolver.RegisterFile(filePath: filePath, moduleName: modulePath, ast: unit.Ast);
 
+            // Pull in the rest of this file's own module: sibling files in the same directory that
+            // declare the same `module`. Files of one module see each other's types without an
+            // import, so they must all be analyzed together — even when no `import` links them and
+            // this file is the compilation entry (otherwise a sibling's type reads as unknown).
+            if (unit.Module != null)
+            {
+                ProcessSameModuleSiblings(filePath: filePath, modulePath: unit.Module);
+            }
+
             // Process imports recursively
             foreach (ImportDeclaration import in unit.Imports)
             {
-                string? resolvedPath = _resolver.ResolveImport(importPath: import.ModulePath,
-                    currentFile: filePath,
-                    location: import.Location);
+                string? resolvedPath = _resolver.TryResolveImport(importPath: import.ModulePath);
 
                 if (resolvedPath != null)
                 {
@@ -254,12 +261,151 @@ public sealed class BuildDriver
                         fromFile: filePath,
                         importLocation: import.Location,
                         importPathString: import.ModulePath);
+                    continue;
                 }
+
+                // No single file matched. Try the directory-as-module case: a bare/slash import
+                // (`import Fun2` / `import Fun2.[A, B]`) naming a directory whose files all declare
+                // the same `module Fun2`. Gather and process every such file so the whole module
+                // is available, not just one arbitrary anchor file.
+                if (ProcessDirectoryModule(moduleName: import.ModulePath,
+                        fromFile: filePath,
+                        importLocation: import.Location))
+                {
+                    continue;
+                }
+
+                // Truly unresolved — report it (TryResolveImport, unlike ResolveImport, records
+                // no error of its own).
+                _errors.Add(item: new SemanticError(
+                    Code: SemanticDiagnosticCode.ModuleNotFound,
+                    Message: $"Cannot resolve import '{import.ModulePath}'. Module not found.",
+                    Location: import.Location));
             }
         }
         finally
         {
             _processingFiles.Remove(item: filePath);
+        }
+    }
+
+    /// <summary>
+    /// Resolves and processes a directory-as-module import: several files in one directory that
+    /// all declare the same <c>module</c> name (e.g. <c>Fun2/A.rf</c> and <c>Fun2/B.rf</c> both
+    /// declaring <c>module Fun2</c>), gathered by a bare/selective import (<c>import Fun2</c> or
+    /// <c>import Fun2.[A, B]</c>) that no single-file resolution can satisfy.
+    /// Only files whose <c>module</c> declaration equals <paramref name="moduleName"/> are taken,
+    /// so an unrelated file living in the directory is not pulled in.
+    /// </summary>
+    /// <returns>True if at least one matching file was found and processed.</returns>
+    private bool ProcessDirectoryModule(string moduleName, string fromFile,
+        SourceLocation importLocation)
+    {
+        IReadOnlyList<string> candidates =
+            _resolver.EnumerateProjectModuleDirectory(moduleName: moduleName);
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
+        var matched = new List<string>();
+        foreach (string candidate in candidates)
+        {
+            Program? ast = ParseAstOnly(filePath: candidate);
+            if (ast is null)
+            {
+                continue;
+            }
+
+            foreach (ISyntaxTreeNode node in ast.Declarations)
+            {
+                if (node is ModuleDeclaration md && md.Path == moduleName)
+                {
+                    matched.Add(item: candidate);
+                    break;
+                }
+            }
+        }
+
+        if (matched.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (string file in matched)
+        {
+            ProcessFile(filePath: file,
+                fromFile: fromFile,
+                importLocation: importLocation,
+                importPathString: moduleName);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Discovers and processes the other files of <paramref name="filePath"/>'s own module: sibling
+    /// <c>.rf</c>/<c>.sf</c> files in the same directory that declare the same
+    /// <paramref name="modulePath"/>. This makes a module's files mutually visible without an explicit
+    /// import, including when one of them is the compilation entry and nothing imports the module.
+    /// Only same-directory siblings are gathered, matching the one-module-per-directory convention
+    /// (and the directory-as-module import resolution).
+    /// </summary>
+    private void ProcessSameModuleSiblings(string filePath, string modulePath)
+    {
+        string? directory = Path.GetDirectoryName(path: filePath);
+        if (directory is null)
+        {
+            return;
+        }
+
+        var candidates = new List<string>();
+        candidates.AddRange(collection: Directory.GetFiles(path: directory,
+            searchPattern: "*.rf",
+            searchOption: SearchOption.TopDirectoryOnly));
+        candidates.AddRange(collection: Directory.GetFiles(path: directory,
+            searchPattern: "*.sf",
+            searchOption: SearchOption.TopDirectoryOnly));
+
+        foreach (string candidate in candidates)
+        {
+            string fullCandidate = Path.GetFullPath(path: candidate);
+
+            // Skip the current file and anything already built or in-flight (the latter guards
+            // against re-entrancy when siblings reference each other).
+            if (fullCandidate.Equals(value: filePath, comparisonType: StringComparison.OrdinalIgnoreCase)
+                || _compiledUnits.ContainsKey(key: fullCandidate)
+                || _processingFiles.Contains(item: fullCandidate))
+            {
+                continue;
+            }
+
+            Program? ast = ParseAstOnly(filePath: fullCandidate);
+            if (ast is null)
+            {
+                continue;
+            }
+
+            bool sameModule = false;
+            foreach (ISyntaxTreeNode node in ast.Declarations)
+            {
+                if (node is ModuleDeclaration md && md.Path == modulePath)
+                {
+                    sameModule = true;
+                    break;
+                }
+            }
+
+            if (!sameModule)
+            {
+                continue;
+            }
+
+            // No import edge: same-module siblings are peers, not dependencies.
+            ProcessFile(filePath: fullCandidate,
+                fromFile: null,
+                importLocation: null,
+                importPathString: null);
         }
     }
 

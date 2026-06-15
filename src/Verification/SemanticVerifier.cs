@@ -896,13 +896,13 @@ public sealed partial class SemanticVerifier
         // Pre-mark their declared modules as provided so `import` statements between them
         // record the module name instead of re-loading the file through StdlibLoader
         // (which would register every routine a second time -> duplicate-definition errors).
-        foreach ((Program program, string _) in files)
+        foreach ((Program program, string filePath) in files)
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ModuleDeclaration moduleDecl)
                 {
-                    _registry.MarkModuleProvided(modulePath: moduleDecl.Path);
+                    _registry.MarkModuleProvided(modulePath: moduleDecl.Path, filePath: filePath);
                     break;
                 }
             }
