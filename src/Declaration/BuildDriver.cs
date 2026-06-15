@@ -311,19 +311,11 @@ public sealed class BuildDriver
         var matched = new List<string>();
         foreach (string candidate in candidates)
         {
-            Program? ast = ParseAstOnly(filePath: candidate);
-            if (ast is null)
+            // Cheap `module` line scan (no full parse) so an unrelated or broken file living in the
+            // directory is neither parsed nor pulled in.
+            if (ReadDeclaredModule(filePath: candidate) == moduleName)
             {
-                continue;
-            }
-
-            foreach (ISyntaxTreeNode node in ast.Declarations)
-            {
-                if (node is ModuleDeclaration md && md.Path == moduleName)
-                {
-                    matched.Add(item: candidate);
-                    break;
-                }
+                matched.Add(item: candidate);
             }
         }
 
@@ -380,23 +372,10 @@ public sealed class BuildDriver
                 continue;
             }
 
-            Program? ast = ParseAstOnly(filePath: fullCandidate);
-            if (ast is null)
-            {
-                continue;
-            }
-
-            bool sameModule = false;
-            foreach (ISyntaxTreeNode node in ast.Declarations)
-            {
-                if (node is ModuleDeclaration md && md.Path == modulePath)
-                {
-                    sameModule = true;
-                    break;
-                }
-            }
-
-            if (!sameModule)
+            // Read just the `module` declaration (cheap line scan, no full parse) so a broken or
+            // unrelated sibling is neither fully parsed nor pulled in — only same-module files are
+            // handed to ProcessFile, which is the one place that reports their parse/SA errors.
+            if (ReadDeclaredModule(filePath: fullCandidate) != modulePath)
             {
                 continue;
             }
@@ -654,6 +633,42 @@ public sealed class BuildDriver
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Reads a file's declared module name from its <c>module</c> line without a full parse.
+    /// Used to test directory siblings cheaply before deciding to compile them, so an unrelated or
+    /// intentionally-broken file in the same directory is never fully parsed just to be rejected.
+    /// Mirrors the manifest's module-name extraction.
+    /// </summary>
+    private static string? ReadDeclaredModule(string filePath)
+    {
+        try
+        {
+            foreach (string line in File.ReadLines(path: filePath))
+            {
+                string trimmed = line.Trim();
+                if (!trimmed.StartsWith(value: "module ", comparisonType: StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string name = trimmed["module ".Length..].Trim();
+                int commentIdx = name.IndexOf(value: '#');
+                if (commentIdx >= 0)
+                {
+                    name = name[..commentIdx].Trim();
+                }
+
+                return name.Length == 0 ? null : name;
+            }
+        }
+        catch (IOException)
+        {
+            // Unreadable file declares no usable module.
+        }
+
+        return null;
     }
 
     /// <summary>
