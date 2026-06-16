@@ -203,9 +203,24 @@ public abstract class TypeInfo
             "fp128" => 16,
             "ptr" => pointerSize,
             "void" => 0,
-            _ => throw new InvalidOperationException(
-                message: $"Unknown LLVM type for size calculation: {llvmType}")
+            _ => SizeOfArbitraryInt(llvmType: llvmType)
         };
+    }
+
+    /// <summary>
+    /// Size in bytes of an arbitrary-width integer type (<c>iN</c>, e.g. <c>i256</c>,
+    /// <c>i512</c>) = ceil(N / 8). Throws for any non-<c>iN</c> type.
+    /// </summary>
+    private static int SizeOfArbitraryInt(string llvmType)
+    {
+        if (llvmType.Length > 1 && llvmType[index: 0] == 'i'
+            && int.TryParse(s: llvmType[1..], result: out int bits) && bits > 0)
+        {
+            return (bits + 7) / 8;
+        }
+
+        throw new InvalidOperationException(
+            message: $"Unknown LLVM type for size calculation: {llvmType}");
     }
 
     /// <summary>
