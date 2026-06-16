@@ -928,6 +928,18 @@ public sealed partial class SemanticVerifier
         }
         Mark(label: "Phase 1 -> Declarations");
 
+        // Phase 1b: Re-resolve record/entity `obeys` conformances now that ALL files' types AND
+        // every referenced (lazily-loaded) protocol are registered. Initial per-file declaration
+        // resolution can drop a protocol whose definition wasn't loaded yet — e.g. a user module
+        // record obeying a Core protocol (FloorDivisible) registered before that protocol's file
+        // loaded — leaving ImplementedProtocols short. Re-resolving here (before signature
+        // resolution runs the generic-constraint checks, RF-S150) fills them in.
+        foreach ((Program program, string _) in files)
+        {
+            Compiler.Declaration.StdlibLoader.ResolveProgramProtocolConformances(registry: _registry, program: program);
+        }
+        Mark(label: "Phase 1b -> re-resolve conformances");
+
         // Phase 2: Resolve type bodies across ALL files (members can reference types from other files)
         foreach ((Program program, string filePath) in files)
         {

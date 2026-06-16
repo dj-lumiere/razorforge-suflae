@@ -398,6 +398,18 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 return changed ? gmc with { Arguments = args, Object = newReceiver } : gmc;
             }
 
+            // User assignment `target = value` reaches here as a BinaryExpression(Assign) wrapped
+            // in an ExpressionStatement (the AssignmentStatement node is only for synthesized
+            // bodies). The RHS is a copy position exactly like a var-init or call argument: a
+            // borrowed-reference value (e.g. a `Text` local) must be retained, otherwise
+            // scope-teardown's `$destroy` of the source frees the buffer the target now aliases
+            // (use-after-free). Mirrors the AssignmentStatement / DeclarationStatement handling.
+            case BinaryExpression { Operator: BinaryOperator.Assign } bin:
+            {
+                Expression newRight = LowerOwnership(expr: bin.Right, isReturn: false);
+                return ReferenceEquals(newRight, bin.Right) ? bin : bin with { Right = newRight };
+            }
+
             // All other expression types: steal cannot appear as a direct child in practice
             // (steal only wraps identifier or member expressions).
             default:
