@@ -1237,15 +1237,21 @@ public sealed partial class SemanticVerifier
                             return ErrorTypeInfo.Instance;
                         }
 
-                        // Type-check the object expression against the constructor parameter
+                        // Type-check the object expression against the constructor parameter.
+                        // We only reach the failure branch when LookupMethodOverload found no
+                        // $create overload accepting objectType and the fallback above returned
+                        // an arbitrary overload (e.g. $create(from: S8)). Report the real problem
+                        // — the missing conversion routine — rather than a misleading mismatch
+                        // against that arbitrary overload's parameter type.
                         if (!IsAssignableTo(source: objectType,
                                 target: nonMeParams[index: 0].Type))
                         {
                             ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
                                 message:
-                                $"Cannot convert '{objectType.Name}' to '{nonMeParams[index: 0].Type.Name}' " +
-                                $"for method-chain constructor '{potentialTypeName}'.",
+                                $"Type '{objectType.Name}' has no conversion to '{potentialTypeName}': " +
+                                $"no '{potentialTypeName}.$create(from: {objectType.Name})' is defined.",
                                 location: call.Location);
+                            return ErrorTypeInfo.Instance;
                         }
 
                         if (creator.IsFailable && _currentRoutine != null)
