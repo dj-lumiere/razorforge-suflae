@@ -718,14 +718,6 @@ public partial class LlvmCodeGenerator
                 // e.g., val.Address() -> inline zext/trunc.
                 // Non-primitive sources (e.g., Text.S32!()) must go through $create.
                 TypeInfo? targetType = _registry.LookupType(name: conversionTypeName);
-                if (targetType is RecordTypeInfo { HasDirectBackendType: true } &&
-                    receiverType is RecordTypeInfo { HasDirectBackendType: true })
-                {
-                    return EmitPrimitiveTypeConversion(sb: sb,
-                        arg: member.Object,
-                        targetType: targetType);
-                }
-
                 var argTypes2 = new List<TypeInfo> { receiverType };
                 // $create is owner-scoped; LookupRoutineOverload only indexes free functions,
                 // so use LookupMethodOverload to honor the receiver-type overload signature
@@ -737,6 +729,22 @@ public partial class LlvmCodeGenerator
                 string creatorName = $"{conversionTypeName}.{CreateMethodName}";
                 creator ??= _registry.LookupRoutineOverload(baseName: creatorName,
                     argTypes: argTypes2);
+
+                // A non-failable `target.$create(from: receiver)` IS the conversion — call it (the
+                // call path below passes the receiver). Its body does the right thing: numeric
+                // `$create`s emit the intrinsic cast, and an @llvm-scalar record like D32B runs its
+                // real decode/encode instead of a bogus bit reinterpret. Only inline a scalar cast
+                // when there's no such routine: a failable `$create!` (returns an optional carrier,
+                // kept as the unchecked cast) or a raw @llvm-primitive pair with no `$create`.
+                if (creator is not { IsFailable: false } &&
+                    targetType is RecordTypeInfo { HasDirectBackendType: true } &&
+                    receiverType is RecordTypeInfo { HasDirectBackendType: true })
+                {
+                    return EmitPrimitiveTypeConversion(sb: sb,
+                        arg: member.Object,
+                        targetType: targetType);
+                }
+
                 if (creator != null)
                 {
                     // Non-generic path

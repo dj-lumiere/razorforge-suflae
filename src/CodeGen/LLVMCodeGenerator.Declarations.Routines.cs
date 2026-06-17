@@ -221,7 +221,30 @@ public partial class LlvmCodeGenerator
 
                 if (astParamTypes.Count == routine.Parameters.Count)
                 {
-                    RoutineInfo? overload =
+                    RoutineInfo? overload = null;
+
+                    // Member declaration (Owner.method): disambiguate OWNER-SCOPED. The base-name
+                    // path below fails here — routineInfo.BaseName for a member routine is the bare
+                    // "F64.$create" (no module prefix), but overloads register under
+                    // "Core.F64.$create#…", and LookupRoutineOverload's Core-prefix fallback is
+                    // disabled whenever the base name contains a '.' (which member names always do).
+                    // So it would silently fall back to the first-registered overload, ignoring the
+                    // arg types we just computed. LookupMethodOverload collects the owner type's
+                    // member candidates and matches positionally by arg type instead.
+                    int dotIdx = routine.Name.IndexOf(value: '.');
+                    if (dotIdx > 0)
+                    {
+                        string ownerPart = routine.Name[..dotIdx];
+                        int bracketIdx = ownerPart.IndexOf(value: '[');
+                        if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
+                        string shortName = routine.Name[(dotIdx + 1)..];
+                        TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                        if (ownerType != null)
+                            overload = _registry.LookupMethodOverload(type: ownerType,
+                                methodName: shortName, argTypes: astParamTypes);
+                    }
+
+                    overload ??=
                         _registry.LookupRoutineOverload(baseName: routineInfo.BaseName,
                             argTypes: astParamTypes);
                     if (overload != null)

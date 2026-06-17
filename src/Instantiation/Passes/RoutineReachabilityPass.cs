@@ -1390,12 +1390,24 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             if (_userByName.TryGetValue(key: genericKey, value: out List<RoutineDeclaration>? gdu2))
                 return MatchOverload(decls: gdu2, callee: callee);
         }
-        // Concrete owner: e.g. "S32.$add" or "Bytes.split".
+        // Concrete owner: e.g. "S32.$add" or "Bytes.split". Match over BOTH stdlib AND user decls
+        // combined: a user program may define a NEW overload of a stdlib-type method (e.g.
+        // `routine F64.$create(from: D32B)` in playground code, against Core.F64's many numeric
+        // `$create` overloads). Checking stdlib alone first lets MatchOverload's count-only
+        // fallback bind to the wrong overload (`$create(S8)`) and walk ITS body — so the real
+        // D32B body's callees (`F64.from_bits`, `coeff.F64()`) never reach the live set. Merging
+        // lets the exact type-signature match (Pass 1) pick the user D32B overload.
         string concreteKey = $"{owner.Name}.{callee.Name}";
-        if (_stdlibByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? c))
-            return MatchOverload(decls: c, callee: callee);
-        if (_userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu))
-            return MatchOverload(decls: cu, callee: callee);
+        bool hasStdlib = _stdlibByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? c);
+        bool hasUser = _userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu);
+        if (hasStdlib && hasUser)
+        {
+            var combined = new List<RoutineDeclaration>(collection: c!);
+            combined.AddRange(collection: cu!);
+            return MatchOverload(decls: combined, callee: callee);
+        }
+        if (hasStdlib) return MatchOverload(decls: c!, callee: callee);
+        if (hasUser) return MatchOverload(decls: cu!, callee: callee);
 
         // Universal-method instance: callee was produced by SubstituteMethodForOwner from a
         // routine whose receiver is a bare generic parameter (e.g. `T.hijack()` substituted to
