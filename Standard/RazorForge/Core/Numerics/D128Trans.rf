@@ -89,7 +89,10 @@ routine f256_to_d128(x: F256) -> D128
   var q = sub[S64](a: 40_s64, b: decexp)
   var scaled = x.abs() * f256_pow10(e: q)
   var coeff = uf256_to_u256_round(u: scaled.to_uf())
-  return d128_of_parts(p: decfinB(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: sub[S64](a: 0_s64, b: q)))
+  # Normalize the result cohort: pref = qmax (6111) makes decfinB strip ALL trailing zeros
+  # after rounding to 34 digits, so a float->decimal result is stored reduced (e.g. exp2(10)
+  # is 1024×10^0, not 1024×10^-30) rather than padded to a fixed ~34-digit fraction.
+  return d128_of_parts(p: decfinB(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: 6111_s64))
 
 # ============================================================================
 # Transcendentals — decode to F256, run the F256 core, round back to D128.

@@ -81,7 +81,9 @@ routine f128_to_d64(x: F128) -> D64
   var q = sub[S64](a: 20_s64, b: decexp)
   var scaled = x.abs() * f128_pow10(e: q)
   var coeff = uf128_to_u128_round(u: scaled.to_uf())
-  return d64_of_parts(p: decfin64(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: sub[S64](a: 0_s64, b: q)))
+  # Normalize the result cohort: pref = qmax (369) makes decfin64 strip ALL trailing zeros
+  # after rounding to 16 digits, so a float->decimal result is stored reduced, not padded.
+  return d64_of_parts(p: decfin64(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: 369_s64))
 
 # ============================================================================
 # Transcendentals — all delegate to F128's method surface (erf/gamma included).

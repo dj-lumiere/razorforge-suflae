@@ -68,7 +68,9 @@ routine D32.$create(from: F64) -> D32
   var q = sub[S64](a: 12_s64, b: decexp)
   var scaled = float_mul[F64](a: av, b: f64_pow10(e: q))
   var coeff = scaled.round().U64()
-  return d32_of_parts(p: decfin32(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: sub[S64](a: 0_s64, b: q)))
+  # Normalize the result cohort: pref = qmax (90) makes decfin32 strip ALL trailing zeros
+  # after rounding to 7 digits, so a float->decimal result is stored reduced, not padded.
+  return d32_of_parts(p: decfin32(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: 90_s64))
 
 # ============================================================================
 # Transcendentals — F64 methods where present, external libm otherwise.
