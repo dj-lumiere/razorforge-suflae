@@ -35,8 +35,7 @@ internal partial class Program
     /// </summary>
     private static readonly string[] NativeRuntimeDlls =
     [
-        "razorforge_runtime.dll",
-        "gc.dll"
+        "razorforge_runtime.dll"
     ];
 
     /// <summary>
@@ -539,7 +538,7 @@ internal partial class Program
             if (warnings.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== WARNINGS ({warnings.Count}) ===");
+                Console.Error.WriteLine(value: $"=== WARNINGS ({warnings.Count}) ===");
                 foreach (BuildWarning warning in warnings)
                 {
                     DiagnosticRenderer.Print(warning: warning);
@@ -693,18 +692,18 @@ internal partial class Program
             if (result.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
+                Console.Error.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
                 DiagnosticRenderer.PrintAll(errors: result.Errors);
 
                 Console.WriteLine();
-                Console.WriteLine(value: "Code generation aborted due to errors.");
+                Console.Error.WriteLine(value: "Code generation aborted due to errors.");
                 return 1;
             }
 
             if (result.Warnings.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
+                Console.Error.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
                 DiagnosticRenderer.PrintAll(warnings: result.Warnings);
             }
 
@@ -1198,17 +1197,17 @@ internal partial class Program
             if (buildResult.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
+                Console.Error.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
                 DiagnosticRenderer.PrintAll(errors: buildResult.Errors);
 
                 Console.WriteLine();
-                Console.WriteLine(value: "Build aborted due to errors.");
+                Console.Error.WriteLine(value: "Build aborted due to errors.");
                 return 1;
             }
 
             if (buildResult.Warnings.Count > 0)
             {
-                Console.WriteLine(value: $"Warnings: {buildResult.Warnings.Count}");
+                Console.Error.WriteLine(value: $"Warnings: {buildResult.Warnings.Count}");
                 foreach (BuildWarning warning in buildResult.Warnings)
                 {
                     DiagnosticRenderer.Print(warning: warning);
@@ -1290,18 +1289,18 @@ internal partial class Program
             if (result.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
+                Console.Error.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
                 DiagnosticRenderer.PrintAll(errors: result.Errors);
 
                 Console.WriteLine();
-                Console.WriteLine(value: "Code generation aborted due to errors.");
+                Console.Error.WriteLine(value: "Code generation aborted due to errors.");
                 return 1;
             }
 
             if (result.Warnings.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
+                Console.Error.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
                 DiagnosticRenderer.PrintAll(warnings: result.Warnings);
             }
 
@@ -1443,17 +1442,17 @@ internal partial class Program
             if (buildResult.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
+                Console.Error.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
                 DiagnosticRenderer.PrintAll(errors: buildResult.Errors);
 
                 Console.WriteLine();
-                Console.WriteLine(value: "Check failed due to errors.");
+                Console.Error.WriteLine(value: "Check failed due to errors.");
                 return 1;
             }
 
             if (buildResult.Warnings.Count > 0)
             {
-                Console.WriteLine(value: $"Warnings: {buildResult.Warnings.Count}");
+                Console.Error.WriteLine(value: $"Warnings: {buildResult.Warnings.Count}");
                 foreach (BuildWarning warning in buildResult.Warnings)
                 {
                     DiagnosticRenderer.Print(warning: warning);
@@ -1513,18 +1512,18 @@ internal partial class Program
             if (result.Errors.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
+                Console.Error.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
                 DiagnosticRenderer.PrintAll(errors: result.Errors);
 
                 Console.WriteLine();
-                Console.WriteLine(value: "Check failed due to errors.");
+                Console.Error.WriteLine(value: "Check failed due to errors.");
                 return 1;
             }
 
             if (result.Warnings.Count > 0)
             {
                 Console.WriteLine();
-                Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
+                Console.Error.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
                 DiagnosticRenderer.PrintAll(warnings: result.Warnings);
             }
 

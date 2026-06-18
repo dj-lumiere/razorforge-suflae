@@ -71,6 +71,17 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
+    /// Warnings visible to a user build: stdlib-internal warnings are excluded (surface them with
+    /// the <c>validate-stdlib</c> verb instead). EVERY AnalysisResult must use this — passing the
+    /// raw <c>_warnings</c> list leaks stdlib style warnings (e.g. RF-W258) into user output.
+    /// </summary>
+    private List<SemanticWarning> UserVisibleWarnings() =>
+        _warnings
+            .Where(predicate: w => !string.IsNullOrEmpty(value: w.Location.FileName)
+                                && !IsStdlibFile(filePath: w.Location.FileName))
+            .ToList();
+
+    /// <summary>
     /// Parsed literal values for types requiring native library parsing.
     /// Keyed by source location for code generator lookup.
     /// </summary>
@@ -383,13 +394,9 @@ public sealed partial class SemanticVerifier
             allSynthesized[key] = variantBody;
         }
 
-        var userWarnings = _warnings
-            .Where(predicate: w => !string.IsNullOrEmpty(value: w.Location.FileName)
-                               && !IsStdlibFile(filePath: w.Location.FileName))
-            .ToList();
         return new AnalysisResult(Registry: _registry,
             Errors: _errors.ToList(),
-            Warnings: userWarnings.ToList(),
+            Warnings: UserVisibleWarnings(),
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -986,7 +993,7 @@ public sealed partial class SemanticVerifier
         {
             return new AnalysisResult(Registry: _registry,
                 Errors: _errors.ToList(),
-                Warnings: _warnings.ToList(),
+                Warnings: UserVisibleWarnings(),
                 ParsedLiterals: _parsedLiterals,
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -1070,7 +1077,7 @@ public sealed partial class SemanticVerifier
         {
             return new AnalysisResult(Registry: _registry,
                 Errors: _errors.ToList(),
-                Warnings: _warnings.ToList(),
+                Warnings: UserVisibleWarnings(),
                 ParsedLiterals: _parsedLiterals,
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -1130,7 +1137,7 @@ public sealed partial class SemanticVerifier
 
         return new AnalysisResult(Registry: _registry,
             Errors: _errors.ToList(),
-            Warnings: _warnings.ToList(),
+            Warnings: UserVisibleWarnings(),
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized2,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
