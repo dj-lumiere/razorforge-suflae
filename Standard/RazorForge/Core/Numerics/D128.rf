@@ -125,7 +125,7 @@ routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
     if signed_ge[S64](a: exp, b: 39_s64)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
     var prod = mul[U256](a: zero_extend[U128, U256](coeff), b: pow10_tbl(k: exp))
-    if int_ne[U256](a: shift_right_unsigned[U256](prod, uf_amt[U256](128_s64)), b: 0)
+    if int_ne[U256](a: shift_right_unsigned[U256](value: prod, bits: uf_amt[U256](128_s64)), b: 0)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
     return int_truncate[U256, U128](prod)
   var d = sub[S64](a: 0_s64, b: exp)
