@@ -1,0 +1,241 @@
+module Numerics
+
+### Arbitrary-precision binary floating-point real, backed by the libbf runtime.
+###
+### `Real` is a value record that mirrors {Integer}: it carries an atomically
+### refcounted libbf handle. Copying bumps the underlying refcount (no number data
+### is copied); the last drop frees the handle. Addition, subtraction and
+### multiplication are EXACT (the precision grows as needed); division, `sqrt` and
+### the transcendentals round to a generous default working precision under
+### round-to-nearest-ties-to-even.
+### :see: {Integer}, {Decimal}
+record Real obeys Assignable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Hashable, FastHashable
+  ### The native libbf handle managed by the runtime.
+  secret handle: CPtr
+  ### Atomic strong-count cell (or null) governing the shared handle lifetime.
+  secret ctrl: Hijacked[ImmutableSharedController]
+
+# ============================================================================
+# Construction
+# ============================================================================
+
+### Constructs the real value zero.
+### :returns: The resulting `Real` value.
+routine Real.$create() -> Real
+  return Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+
+### Constructs a `Real` from a signed 64-bit integer (exact).
+### :param value: The initial signed value.
+### :returns: The resulting `Real` value.
+routine Real.$create(value: S64) -> Real
+  var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_set_i64(handle: r.handle, value: value)
+  return r
+
+### Constructs a `Real` from an F64 (exact — the double is widened, not re-rounded).
+### :param value: The initial double value.
+### :returns: The resulting `Real` value.
+routine Real.$create(value: F64) -> Real
+  var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_set_f64(handle: r.handle, value: value)
+  return r
+
+### Constructs a `Real` from a decimal string.
+### :param text: The textual real representation.
+### :param radix: The numeric base to use.
+### :returns: The resulting `Real` value.
+### :throws: {ValueError} if `text` is not a valid real in `radix`.
+routine Real.$create!(text: Text, radix: S32 = 10) -> Real
+  var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var status = rf_real_set_str(handle: r.handle, str: text.to_cstr(), radix: radix)
+  if status != 0_s32
+    throw ValueError(f"Invalid real string: {text}")
+  return r
+
+### Materializes a `Real` from a tokenizer-validated decimal string (literal lowering).
+### :param text: The decimal string (no suffix, no separators).
+### :returns: The resulting `Real` value.
+common routine Real.$from_literal(text: Text) -> Real
+  var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  discard rf_real_set_str(handle: r.handle, str: text.to_cstr(), radix: 10_s32)
+  return r
+
+# ============================================================================
+# Lifetime (atomic refcount over the shared handle)
+# ============================================================================
+
+### Returns a copy with the underlying refcount bumped; the handle is shared.
+### :returns: The resulting `Real` value.
+@[readonly, inline]
+routine Real.$copy() -> Real
+  danger!
+    if not me.ctrl.is_none()
+      me.ctrl.as_entity().increase_strong_count()
+  return Real(handle: me.handle, ctrl: me.ctrl)
+
+### Releases this reference; frees the handle when this was the last live ref.
+dangerous routine Real.$destroy()
+  if me.ctrl.is_none()
+    return
+  var prev = me.ctrl.as_entity().decrease_strong_count()
+  if prev <= 1_u64
+    rf_real_clear(handle: me.handle)
+    me.ctrl.invalidate()
+  return
+
+# ============================================================================
+# Arithmetic (+, -, * exact; / rounded to the working precision)
+# ============================================================================
+
+### Adds `other` to this value (exact).
+### :param other: The value to add.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.$add(other: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_add(result: result.handle, a: me.handle, b: other.handle)
+  return result
+
+### Subtracts `other` from this value (exact).
+### :param other: The value to subtract.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.$sub(other: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_sub(result: result.handle, a: me.handle, b: other.handle)
+  return result
+
+### Multiplies this value by `other` (exact).
+### :param other: The value to multiply by.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.$mul(other: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_mul(result: result.handle, a: me.handle, b: other.handle)
+  return result
+
+### Divides this value by `other`, rounded to the working precision.
+### :param other: The divisor.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.$truediv(other: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_div(result: result.handle, a: me.handle, b: other.handle)
+  return result
+
+### Returns the additive inverse of this value.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.$neg() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_neg(result: result.handle, a: me.handle)
+  return result
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns `true` when both values represent the same real number.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Real.$eq(you: Real) -> Bool
+  return rf_real_cmp(a: me.handle, b: you.handle) == 0_s32
+
+### Compares this value with `you` under numeric ordering.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Real.$cmp(you: Real) -> ComparisonSign
+  var c = rf_real_cmp(a: me.handle, b: you.handle)
+  if c < 0_s32
+    return ME_SMALL
+  elseif c > 0_s32
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# libm surface (rounded to the working precision)
+# ============================================================================
+
+### Square root.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.sqrt() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_sqrt(result: result.handle, a: me.handle)
+  return result
+
+### Natural exponential e**me.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.exp() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_exp(result: result.handle, a: me.handle)
+  return result
+
+### Natural logarithm.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.log() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_log(result: result.handle, a: me.handle)
+  return result
+
+### Raises this value to the power `exp`.
+### :param exp: The exponent.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.pow(exp: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_pow(result: result.handle, a: me.handle, b: exp.handle)
+  return result
+
+### Sine (radians).
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.sin() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_sin(result: result.handle, a: me.handle)
+  return result
+
+### Cosine (radians).
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.cos() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_cos(result: result.handle, a: me.handle)
+  return result
+
+# ============================================================================
+# Conversion / representation / hashing
+# ============================================================================
+
+### Rounds this value to the nearest F64.
+### :returns: The resulting `F64` value.
+@readonly
+routine Real.to_f64() -> F64
+  return rf_real_get_f64(handle: me.handle)
+
+### Formats this value as base-10 decimal text.
+### :returns: The resulting `Text` value.
+@readonly
+routine Real.$represent() -> Text
+  var CStr = rf_real_to_str(handle: me.handle)
+  var text = Text(from: CStr)
+  rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
+  return text
+
+### Hashes the canonical decimal representation, so equal reals hash equally.
+### :param k0: The first hash key half.
+### :param k1: The second hash key half.
+### :returns: The resulting `U64` value.
+@readonly
+routine Real.$hash(k0: U64, k1: U64) -> U64
+  return me.$represent().$hash(k0: k0, k1: k1)
+
+### Fast (non-cryptographic) hash of the canonical representation.
+### :returns: The resulting `U64` value.
+@readonly
+routine Real.$fast_hash() -> U64
+  return me.$represent().$fast_hash()
