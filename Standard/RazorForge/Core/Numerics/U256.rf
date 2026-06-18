@@ -1,0 +1,795 @@
+module Core
+
+import Collections
+
+# ============================================================================
+# Register-resident U256 / U128 division (specialized, value-based). Mirrors
+# Core.knuth_divide's D3-D6 but with U64 locals and the quotient-digit loop hand-
+# unrolled (3 fixed steps), so all limb indices are constant and SROA keeps it in
+# registers instead of the Hijacked[Array] memory traffic the generic kernel forces.
+# Used by D128 div (divisor always fits U128, quotient fits U128).
+# ============================================================================
+
+### (quotient, remainder) of (hi:lo) / d via the hardware 128/64 divide. Requires
+### hi < d. Wraps the dangerous intrinsic so callers stay outside `danger!`.
+record UDR
+  q: U64
+  r: U64
+
+@inline
+routine udivrem128(hi: U64, lo: U64, d: U64) -> UDR
+  var scratch = 0_u64
+  danger!
+    var q = rf_udivrem_128_64(hi: hi, lo: lo, d: d, rem: scratch.hijack())
+    return UDR(q: q, r: scratch)
+
+### One Knuth-D quotient-digit step for a 2-limb divisor: divide (ujn:ujn1:ujn2) by
+### the normalized divisor (vn1:vn0), returning the updated dividend limbs + qhat.
+record KStep
+  ujn: U64
+  ujn1: U64
+  ujn2: U64
+  q: U64
+
+@inline
+routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64) -> KStep
+  var qhat = 0_u64
+  var rhat = 0_u64
+  if int_eq[U64](a: ujn, b: vn1)
+    qhat = 18446744073709551615_u64
+    rhat = add[U64](a: ujn1, b: vn1)
+  else
+    var dr = udivrem128(hi: ujn, lo: ujn1, d: vn1)
+    qhat = dr.q
+    rhat = dr.r
+  var keep = true
+  while keep
+    var lhs = mul[U128](a: zero_extend[U64, U128](qhat), b: zero_extend[U64, U128](vn0))
+    var rhs = bit_or[U128](a: shift_left[U128](value: zero_extend[U64, U128](rhat), bits: 64_u128), b: zero_extend[U64, U128](ujn2))
+    if unsigned_gt[U128](a: lhs, b: rhs)
+      qhat = sub[U64](a: qhat, b: 1_u64)
+      var rnew = add[U64](a: rhat, b: vn1)
+      if unsigned_lt[U64](a: rnew, b: rhat)
+        keep = false
+      else
+        rhat = rnew
+    else
+      keep = false
+  # D4: un[j..j+2] -= qhat * vn, S128 borrow k
+  var k = zero_extend[U64, S128](0_u64)
+  var p0 = mul[U128](a: zero_extend[U64, U128](qhat), b: zero_extend[U64, U128](vn0))
+  var t0 = sub[S128](a: sub[S128](a: zero_extend[U64, S128](ujn2), b: k), b: zero_extend[U64, S128](int_truncate[U128, U64](p0)))
+  var nujn2 = int_truncate[S128, U64](t0)
+  k = sub[S128](a: zero_extend[U64, S128](int_truncate[U128, U64](shift_right_unsigned[U128](p0, 64_u128))), b: shift_right_signed[S128](t0, 64_s128))
+  var p1 = mul[U128](a: zero_extend[U64, U128](qhat), b: zero_extend[U64, U128](vn1))
+  var t1 = sub[S128](a: sub[S128](a: zero_extend[U64, S128](ujn1), b: k), b: zero_extend[U64, S128](int_truncate[U128, U64](p1)))
+  var nujn1 = int_truncate[S128, U64](t1)
+  k = sub[S128](a: zero_extend[U64, S128](int_truncate[U128, U64](shift_right_unsigned[U128](p1, 64_u128))), b: shift_right_signed[S128](t1, 64_s128))
+  var ttop = sub[S128](a: zero_extend[U64, S128](ujn), b: k)
+  var nujn = int_truncate[S128, U64](ttop)
+  var qres = qhat
+  # D5/D6: if the subtraction went negative, qhat was 1 too big — add the divisor back
+  if signed_lt[S128](a: ttop, b: zero_extend[U64, S128](0_u64))
+    qres = sub[U64](a: qhat, b: 1_u64)
+    var sum0 = add[U128](a: zero_extend[U64, U128](nujn2), b: zero_extend[U64, U128](vn0))
+    nujn2 = int_truncate[U128, U64](sum0)
+    var carry = int_truncate[U128, U64](shift_right_unsigned[U128](sum0, 64_u128))
+    var sum1 = add[U128](a: add[U128](a: zero_extend[U64, U128](nujn1), b: zero_extend[U64, U128](vn1)), b: zero_extend[U64, U128](carry))
+    nujn1 = int_truncate[U128, U64](sum1)
+    carry = int_truncate[U128, U64](shift_right_unsigned[U128](sum1, 64_u128))
+    nujn = add[U64](a: nujn, b: carry)
+  return KStep(ujn: nujn, ujn1: nujn1, ujn2: nujn2, q: qres)
+
+### Assemble 4 U64 limbs (little-endian) into a U256.
+@inline
+routine asm256(q0: U64, q1: U64, q2: U64, q3: U64) -> U256
+  return bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](q0), b: shift_left[U256](value: zero_extend[U64, U256](q1), bits: uf_amt[U256](64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](q2), bits: uf_amt[U256](128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](q3), bits: uf_amt[U256](192_s64))))
+
+### Quotient of num // den (den fits U128) with the round-sticky in bit 0. Register-
+### resident: n=1 long division for a single-limb divisor, unrolled n=2 Knuth otherwise.
+routine udiv256_by_u128_sticky(num: U256, den: U256) -> U256
+  var a0 = int_truncate[U256, U64](num)
+  var a1 = int_truncate[U256, U64](shift_right_unsigned[U256](num, uf_amt[U256](64_s64)))
+  var a2 = int_truncate[U256, U64](shift_right_unsigned[U256](num, uf_amt[U256](128_s64)))
+  var a3 = int_truncate[U256, U64](shift_right_unsigned[U256](num, uf_amt[U256](192_s64)))
+  var d0 = int_truncate[U256, U64](den)
+  var d1 = int_truncate[U256, U64](shift_right_unsigned[U256](den, uf_amt[U256](64_s64)))
+  if int_eq[U64](a: d1, b: 0_u64)
+    # single-limb divisor: long division high -> low
+    var dr3 = udivrem128(hi: 0_u64, lo: a3, d: d0)
+    var dr2 = udivrem128(hi: dr3.r, lo: a2, d: d0)
+    var dr1 = udivrem128(hi: dr2.r, lo: a1, d: d0)
+    var dr0 = udivrem128(hi: dr1.r, lo: a0, d: d0)
+    var q = asm256(q0: dr0.q, q1: dr1.q, q2: dr2.q, q3: dr3.q)
+    var r = dr0.r
+    if int_ne[U64](a: r, b: 0_u64)
+      q = bit_or[U256](a: q, b: zero_extend[U64, U256](1_u64))
+    return q
+  # two-limb divisor: Knuth-D, mlen=4 / m=2 unrolled (extra leading quotient digits
+  # naturally come out 0). Normalize so the top divisor limb has its MSB set.
+  var s = reinterpret_bits[U64, S64](leading_zeros[U64](d1))
+  var su = reinterpret_bits[S64, U64](s)
+  var pos = signed_gt[S64](a: s, b: 0_s64)
+  var si = reinterpret_bits[S64, U64](sub[S64](a: 64_s64, b: s))
+  var vn1 = bit_or[U64](a: shift_left[U64](value: d1, bits: su), b: if pos then shift_right_unsigned[U64](d0, si) else 0_u64)
+  var vn0 = shift_left[U64](value: d0, bits: su)
+  var un0 = shift_left[U64](value: a0, bits: su)
+  var un1 = bit_or[U64](a: shift_left[U64](value: a1, bits: su), b: if pos then shift_right_unsigned[U64](a0, si) else 0_u64)
+  var un2 = bit_or[U64](a: shift_left[U64](value: a2, bits: su), b: if pos then shift_right_unsigned[U64](a1, si) else 0_u64)
+  var un3 = bit_or[U64](a: shift_left[U64](value: a3, bits: su), b: if pos then shift_right_unsigned[U64](a2, si) else 0_u64)
+  var un4 = if pos then shift_right_unsigned[U64](a3, si) else 0_u64
+  var st2 = knuth_step(ujn: un4, ujn1: un3, ujn2: un2, vn0: vn0, vn1: vn1)
+  un4 = st2.ujn
+  un3 = st2.ujn1
+  un2 = st2.ujn2
+  var st1 = knuth_step(ujn: un3, ujn1: un2, ujn2: un1, vn0: vn0, vn1: vn1)
+  un3 = st1.ujn
+  un2 = st1.ujn1
+  un1 = st1.ujn2
+  var st0 = knuth_step(ujn: un2, ujn1: un1, ujn2: un0, vn0: vn0, vn1: vn1)
+  un2 = st0.ujn
+  un1 = st0.ujn1
+  un0 = st0.ujn2
+  var q = asm256(q0: st0.q, q1: st1.q, q2: st2.q, q3: 0_u64)
+  # denormalized remainder (low 2 limbs) for the sticky
+  var rem0 = bit_or[U64](a: shift_right_unsigned[U64](un0, su), b: if pos then shift_left[U64](value: un1, bits: si) else 0_u64)
+  var rem1 = bit_or[U64](a: shift_right_unsigned[U64](un1, su), b: if pos then shift_left[U64](value: un2, bits: si) else 0_u64)
+  if int_ne[U64](a: bit_or[U64](a: rem0, b: rem1), b: 0_u64)
+    q = bit_or[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  return q
+
+### A 256-bit unsigned integer in the range 0 to 2²⁵⁶−1.
+###
+### `U256` is used for cryptographic computations, very large counters, and as a
+### wide intermediate for the software float / decimal kernels (e.g. F128 products
+### and division numerators). Note that `U256` does not implement `AtomicType`
+### because hardware atomic operations on 256-bit values are not available.
+@llvm("i256")
+record U256 obeys UnsignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for U256 limits
+preset U256_MIN: U256 = 0_u256
+preset U256_MAX: U256 = 115792089237316195423570985008687907853269984665640564039457584007913129639935_u256
+preset U256_ZERO: U256 = 0_u256
+preset U256_ONE: U256 = 1_u256
+
+### Returns me * you (wraps mod 2^256) — exposes the raw i256 multiply for
+### microbenchmarking the wide-op lowering.
+routine U256.$mul(you: U256) -> U256
+  return mul[U256](a: me, b: you)
+
+### Returns me // you via the generic base-2⁶⁴ Knuth-D kernel (`knuth_divide[4]`,
+### hardware `DIV r64` per step) instead of the slow inline-expanded `udiv i256`.
+routine U256.$floordiv(you: U256) -> U256
+  var av = me
+  var bv = you
+  var rem = Array[U64, 4]()
+  danger!
+    var q = knuth_divide[4](
+      a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
+      b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
+      rem: rem.hijack())
+    return reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](q.hijack()).extract()
+
+### Quotient of `num // den` with the round-sticky baked into bit 0 (set iff the
+### division left a nonzero remainder). One Knuth-D call returns both quotient and
+### remainder, so callers that only need a sticky avoid a separate %/mul-back.
+routine udiv256_sticky(num: U256, den: U256) -> U256
+  var av = num
+  var bv = den
+  var rem = Array[U64, 4]()
+  danger!
+    var qa = knuth_divide[4](
+      a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
+      b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
+      rem: rem.hijack())
+    var q = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](qa.hijack()).extract()
+    var r = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).extract()
+    if int_ne[U256](a: r, b: 0)
+      return bit_or[U256](a: q, b: zero_extend[U64, U256](1_u64))
+    return q
+
+### Returns me % you (remainder from the same Knuth-D kernel).
+routine U256.$mod(you: U256) -> U256
+  var av = me
+  var bv = you
+  var rem = Array[U64, 4]()
+  danger!
+    var q = knuth_divide[4](
+      a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
+      b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
+      rem: rem.hijack())
+    return reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).extract()
+
+### Diagnostic name (raw wide intermediate; not decimal-formatted).
+routine U256.$represent() -> Text
+  return wide_dec[U256](me)
+
+### Diagnostic representation tagged with the type name.
+routine U256.$diagnose() -> Text
+  return "U256(" + me.$represent() + ")"
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Converts an `S8` to `U256`, throwing if the value is negative.
+### :param from: The `S8` value to convert.
+### :returns: A `U256` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U256.$create!(from: S8) -> U256
+  if from < 0_s8
+    throw IntegerOverflowError()
+  return sign_extend[S8, U256](from)
+
+### Converts an `S16` to `U256`, throwing if the value is negative.
+### :param from: The `S16` value to convert.
+### :returns: A `U256` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U256.$create!(from: S16) -> U256
+  if from < 0_s16
+    throw IntegerOverflowError()
+  return sign_extend[S16, U256](from)
+
+### Converts an `S32` to `U256`, throwing if the value is negative.
+### :param from: The `S32` value to convert.
+### :returns: A `U256` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U256.$create!(from: S32) -> U256
+  if from < 0_s32
+    throw IntegerOverflowError()
+  return sign_extend[S32, U256](from)
+
+### Converts an `S64` to `U256`, throwing if the value is negative.
+### :param from: The `S64` value to convert.
+### :returns: A `U256` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U256.$create!(from: S64) -> U256
+  if from < 0_s64
+    throw IntegerOverflowError()
+  return sign_extend[S64, U256](from)
+
+### Converts an `S128` to `U256`, throwing if the value is negative.
+### A non-negative `S128` sign-extends to the same magnitude in 256 bits.
+### :param from: The `S128` value to convert.
+### :returns: A `U256` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U256.$create!(from: S128) -> U256
+  if from < 0_s128
+    throw IntegerOverflowError()
+  return sign_extend[S128, U256](from)
+
+### Zero-extends a `U8` to `U256`.
+### :param from: The `U8` value to widen.
+### :returns: A `U256` equal in value to `from`.
+routine U256.$create(from: U8) -> U256
+  return zero_extend[U8, U256](from)
+
+### Zero-extends a `U16` to `U256`.
+### :param from: The `U16` value to widen.
+### :returns: A `U256` equal in value to `from`.
+routine U256.$create(from: U16) -> U256
+  return zero_extend[U16, U256](from)
+
+### Zero-extends a `U32` to `U256`.
+### :param from: The `U32` value to widen.
+### :returns: A `U256` equal in value to `from`.
+routine U256.$create(from: U32) -> U256
+  return zero_extend[U32, U256](from)
+
+### Zero-extends a `U64` to `U256`.
+### :param from: The `U64` value to widen.
+### :returns: A `U256` equal in value to `from`.
+routine U256.$create(from: U64) -> U256
+  return zero_extend[U64, U256](from)
+
+### Zero-extends a `U128` to `U256`.
+### :param from: The `U128` value to widen.
+### :returns: A `U256` equal in value to `from`.
+routine U256.$create(from: U128) -> U256
+  return zero_extend[U128, U256](from)
+
+### Identity conversion — returns `from` unchanged.
+### :param from: The `U256` value to return.
+### :returns: `from` unchanged.
+routine U256.$create(from: U256) -> U256
+  return from
+
+### Converts an `F16` to `U256` via `U64` conversion.
+### :param from: The `F16` value to convert.
+### :returns: The integer part of `from` as a `U256`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U256.$create!(from: F16) -> U256
+  return from.U64!().U256()
+
+### Converts an `F32` to `U256` via `U64` conversion.
+### :param from: The `F32` value to convert.
+### :returns: The integer part of `from` as a `U256`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U256.$create!(from: F32) -> U256
+  return from.U64!().U256()
+
+### Converts an `F64` to `U256` via `U64` conversion.
+### :param from: The `F64` value to convert.
+### :returns: The integer part of `from` as a `U256`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U256.$create!(from: F64) -> U256
+  return from.U64!().U256()
+
+### Converts an `F128` to `U256` via `U64` conversion.
+### :param from: The `F128` value to convert.
+### :returns: The integer part of `from` as a `U256`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U256.$create!(from: F128) -> U256
+  return from.U64!().U256()
+
+### Converts a `D32` to `U256` via `U64` conversion.
+### :param from: The `D32` value to convert.
+### :returns: The integer part of `from` as a `U256`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U256.$create!(from: D32) -> U256
+  return from.U64!().U256()
+
+### Converts a `D64` to `U256` via `U64` conversion.
+### :param from: The `D64` value to convert.
+### :returns: The integer part of `from` as a `U256`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U256.$create!(from: D64) -> U256
+  return from.U64!().U256()
+
+### Converts a `D128` to `U256` via `U64` conversion.
+### :param from: The `D128` value to convert.
+### :returns: The integer part of `from` as a `U256`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U256.$create!(from: D128) -> U256
+  return from.U64!().U256()
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+### Returns the sum and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_sum, overflowed)`.
+routine U256.add_with_overflow(you: U256) -> (U256, Bool)
+  return unsigned_add_checked[U256](me, you)
+
+### Returns the difference and a flag indicating whether the result wrapped around.
+### :param you: The value to subtract.
+### :returns: A tuple of `(wrapped_difference, overflowed)`.
+routine U256.sub_with_overflow(you: U256) -> (U256, Bool)
+  return unsigned_sub_checked[U256](me, you)
+
+### Returns the product and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_product, overflowed)`.
+routine U256.mul_with_overflow(you: U256) -> (U256, Bool)
+  return unsigned_mul_checked[U256](me, you)
+
+### Returns `me + you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The sum `me + you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U256_MAX`.
+routine U256.$add!(you: U256) -> U256
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me - you`, throwing on underflow.
+### :param you: The value to subtract.
+### :returns: The difference `me - you`.
+### :throws: {IntegerOverflowError} if the result is less than `U256_MIN` (0).
+routine U256.$sub!(you: U256) -> U256
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me * you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U256_MAX`.
+routine U256.$mul!(you: U256) -> U256
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me // you` (integer division), throwing if `you` is zero.
+### :param you: The divisor.
+### :returns: The quotient `me // you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine U256.$floordiv!(you: U256) -> U256
+  if you == 0
+    throw DivisionByZeroError()
+  return me.$floordiv(you)
+
+### Returns `me % you` (integer remainder), throwing if `you` is zero.
+### :param you: The divisor.
+### :returns: The remainder `me % you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine U256.$mod!(you: U256) -> U256
+  if you == 0_u256
+    throw DivisionByZeroError()
+  return me.$mod(you)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+### Returns `(me + you) mod 2²⁵⁶` without overflow check.
+### :param you: The right operand.
+### :returns: The sum modulo 2²⁵⁶.
+routine U256.$add_wrap(you: U256) -> U256
+  return add[U256](a: me, b: you)
+
+### Returns `(me - you) mod 2²⁵⁶` without underflow check.
+### :param you: The value to subtract.
+### :returns: The difference modulo 2²⁵⁶.
+routine U256.$sub_wrap(you: U256) -> U256
+  return sub[U256](a: me, b: you)
+
+### Returns `(me * you) mod 2²⁵⁶` without overflow check.
+### :param you: The right operand.
+### :returns: The product modulo 2²⁵⁶.
+routine U256.$mul_wrap(you: U256) -> U256
+  return mul[U256](a: me, b: you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Returns `me + you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The sum, assuming no overflow.
+dangerous routine U256.$add_unchecked(you: U256) -> U256
+  return unsigned_add_exact[U256](a: me, b: you)
+
+### Returns `me - you` with undefined behavior on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, assuming no underflow.
+dangerous routine U256.$sub_unchecked(you: U256) -> U256
+  return unsigned_sub_exact[U256](a: me, b: you)
+
+### Returns `me * you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The product, assuming no overflow.
+dangerous routine U256.$mul_unchecked(you: U256) -> U256
+  return unsigned_mul_exact[U256](a: me, b: you)
+
+### Returns `me // you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The quotient, assuming `you != 0`.
+dangerous routine U256.$floordiv_unchecked(you: U256) -> U256
+  return unsigned_div[U256](a: me, b: you)
+
+### Returns `me % you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The remainder, assuming `you != 0`.
+dangerous routine U256.$mod_unchecked(you: U256) -> U256
+  return unsigned_rem[U256](a: me, b: you)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+### Returns `me + you`, clamped to `U256_MAX` on overflow.
+### :param you: The right operand.
+### :returns: The sum, or `U256_MAX` if it would overflow.
+routine U256.$add_clamp(you: U256) -> U256
+  return unsigned_add_sat[U256](a: me, b: you)
+
+### Returns `me - you`, clamped to `U256_MIN` on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, or `0` if it would go below `U256_MIN`.
+routine U256.$sub_clamp(you: U256) -> U256
+  return unsigned_sub_sat[U256](a: me, b: you)
+
+### Returns `me * you`, clamped to `U256_MAX` on overflow.
+### Uses a division-based overflow check since no 512-bit public type is available.
+### :param you: The right operand.
+### :returns: The product, or `U256_MAX` if it would overflow.
+routine U256.$mul_clamp(you: U256) -> U256
+  if int_eq[U256](a: me, b: 0_u256) or int_eq[U256](a: you, b: 0_u256)
+    return 0_u256
+  var result = mul[U256](a: me, b: you)
+  if int_ne[U256](unsigned_div[U256](a: result, b: me), you)
+    return U256_MAX
+  return result
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+### Returns `me ** exp` and a flag indicating whether the result wrapped around.
+### :param exp: The exponent.
+### :returns: A tuple of `(wrapped_result, overflowed)`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U256.pow_with_overflow!(exp: U256) -> (U256, Bool)
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U256 = 1
+  var base: U256 = me
+  var e: U32 = U32(exp)
+  var overflow = false
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Returns `me ** exp`, throwing on overflow.
+### :param exp: The exponent.
+### :returns: The result of raising `me` to the power `exp`.
+### :throws: {IntegerOverflowError} if the result exceeds `U256_MAX`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U256.$pow!(exp: U256) -> U256
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me ** exp` with wrapping arithmetic (mod 2²⁵⁶).
+### :param exp: The exponent.
+### :returns: The result modulo 2²⁵⁶.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U256.$pow_wrap!(exp: U256) -> U256
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U256 = 1
+  var base: U256 = me
+  var e: U32 = U32(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
+  return result
+
+### Returns `me ** exp`, clamped to `U256_MAX` on overflow.
+### :param exp: The exponent.
+### :returns: The result, or `U256_MAX` if it would overflow.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U256.$pow_clamp!(exp: U256) -> U256
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U256 = 1
+  var base: U256 = me
+  var e: U32 = U32(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
+    e = e >> 1_u32
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+### Returns the bitwise AND of this value and `you`.
+### :param you: The right operand.
+### :returns: `me & you`.
+routine U256.$bitand(you: U256) -> U256
+  return bit_and[U256](a: me, b: you)
+
+### Returns the bitwise OR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me | you`.
+routine U256.$bitor(you: U256) -> U256
+  return bit_or[U256](a: me, b: you)
+
+### Returns the bitwise XOR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me ^ you`.
+routine U256.$bitxor(you: U256) -> U256
+  return bit_xor[U256](a: me, b: you)
+
+### Returns the bitwise complement of this value.
+### :returns: `~me` — each bit flipped.
+routine U256.$bitnot() -> U256
+  return bit_xor[U256](a: me, b: U256_MAX)
+
+# ============================================================================
+# Shift Operations (<<, >>, <<<, >>>)
+# For unsigned types, arithmetic and logical shifts behave identically
+# ============================================================================
+
+### Left-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U256.$ashl(bits: U32) -> U256
+  return shift_left[U256](me, U256(bits))
+
+### Right-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits` (logical, zero-filling).
+routine U256.$ashr(bits: U32) -> U256
+  return shift_right_unsigned[U256](me, U256(bits))
+
+### Left-shifts this value by `bits` positions (logical shift, same as `$ashl` for unsigned).
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U256.$lshl(bits: U32) -> U256
+  return shift_left[U256](me, U256(bits))
+
+### Right-shifts this value by `bits` positions (logical shift, same as `$ashr` for unsigned).
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits` (zero-filling).
+routine U256.$lshr(bits: U32) -> U256
+  return shift_right_unsigned[U256](me, U256(bits))
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns `true` when both values are equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me == you`; `false` otherwise.
+routine U256.$eq(you: U256) -> Bool
+  return int_eq[U256](a: me, b: you)
+
+### Compares this value with `you`, returning the ordering relationship.
+### :param you: The value to compare against.
+### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+routine U256.$cmp(you: U256) -> ComparisonSign
+  if unsigned_lt[U256](me, you)
+    return ME_SMALL
+  if unsigned_gt[U256](me, you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`; otherwise `you`.
+routine U256.min(you: U256) -> U256
+  return if me <= you then me else you
+
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`; otherwise `you`.
+routine U256.max(you: U256) -> U256
+  return if me >= you then me else you
+
+### Returns this value clamped to the range `min_val..=max_val`.
+### :param min_val: The lower bound (inclusive).
+### :param max_val: The upper bound (inclusive).
+### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
+routine U256.clamp(min_val: U256, max_val: U256) -> U256
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+### Returns the count of set bits (popcount) in this value's 256-bit representation.
+### :returns: The number of `1` bits; between 0 and 256.
+routine U256.count_ones() -> U256
+  return count_ones[U256](me)
+
+### Returns the count of clear bits in this value's 256-bit representation.
+### :returns: `256` minus the popcount; between 0 and 256.
+routine U256.count_zeros() -> U256
+  return 256_u256 -% me.count_ones()
+
+### Returns the number of leading zero bits, starting from the most-significant bit.
+### :returns: The leading zero count; `256` if the value is zero.
+routine U256.leading_zeros() -> U256
+  return leading_zeros[U256](me)
+
+### Returns the number of trailing zero bits, starting from the least-significant bit.
+### :returns: The trailing zero count; `256` if the value is zero.
+routine U256.trailing_zeros() -> U256
+  return trailing_zeros[U256](me)
+
+### Returns the number of leading one bits, starting from the most-significant bit.
+### :returns: The leading one count; `256` if the value is `U256_MAX`.
+routine U256.leading_ones() -> U256
+  return me.$bitnot().leading_zeros()
+
+### Returns the number of trailing one bits, starting from the least-significant bit.
+### :returns: The trailing one count; `256` if the value is `U256_MAX`.
+routine U256.trailing_ones() -> U256
+  return me.$bitnot().trailing_zeros()
+
+### Returns this value with its bits reversed (bit 255 ↔ bit 0, etc.).
+### :returns: The bit-reversed `U256`.
+routine U256.reverse_bits() -> U256
+  return reverse_bits[U256](me)
+
+### Returns this value with its 32 bytes swapped (for endianness conversion).
+### :returns: A `U256` with its bytes in reverse order.
+routine U256.swap_bytes() -> U256
+  return byte_swap[U256](me)
+
+### Returns `true` if this value is an exact power of two.
+### :returns: `true` if `me` is 1, 2, 4, ..., 2²⁵⁵; `false` otherwise (including zero).
+routine U256.is_power_of_two() -> Bool
+  return me != 0_u256 and (me & (me - 1_u256)) == 0_u256
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns `true` if this value is zero.
+### :returns: `true` if `me == 0`.
+routine U256.is_zero() -> Bool
+  return me == 0_u256
+
+### Returns `true` if this value is divisible by 2.
+### :returns: `true` if the least-significant bit is 0.
+routine U256.is_even() -> Bool
+  var result = bit_and[U256](a: me, b: 1_u256)
+  return int_eq[U256](a: result, b: 0_u256)
+
+### Returns `true` if this value is not divisible by 2.
+### :returns: `true` if the least-significant bit is 1.
+routine U256.is_odd() -> Bool
+  return not me.is_even()
+
+### Returns the upper 128 bits of this 256-bit value.
+### :returns: Bits 255..128 as a `U128`.
+routine U256.high128() -> U128
+  var shifted = shift_right_unsigned[U256](me, 128_u32)
+  return int_truncate[U256, U128](shifted)
+
+### Returns the lower 128 bits of this 256-bit value.
+### :returns: Bits 127..0 as a `U128`.
+routine U256.low128() -> U128
+  return int_truncate[U256, U128](me)
+
+# ============================================================================
+# Parsing
+# ============================================================================
+
+### Parses a decimal string into a `U256`.
+### :param from_text: The decimal string to parse (no sign, no prefix).
+### :returns: The parsed `U256` value.
+### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
+routine U256.$create!(from_text: Text) -> U256
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "U256")
+  var result = 0u256
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u256 + U256(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "U256")
+    i = i + 1u64
+  return result
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a hash of this 256-bit value by folding its two 128-bit halves.
+### :returns: A `U64` hash combining the high and low 128-bit halves.
+routine U256.$fast_hash() -> U64
+  var lo = __hash_u128(v: me.low128())
+  var hi = __hash_u128(v: me.high128())
+  return lo ^ hi
+
+### Returns a SipHash-2-4 keyed hash of this 256-bit value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine U256.$hash(k0: U64, k1: U64) -> U64
+  var lo = __secure_hash_u128(v: me.low128(), k0: k0, k1: k1)
+  var hi = __secure_hash_u128(v: me.high128(), k0: k0, k1: k1)
+  return lo ^ hi
