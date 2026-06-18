@@ -39,6 +39,14 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     private readonly TypeInfo? _blankType = ctx.Registry.LookupType(name: "Blank");
     private int _spillCounter;
 
+    /// <summary>Return type of the routine currently being lowered. A plain <c>return EXPR</c>
+    /// yields the routine's return value, so the <c>__td_ret</c> spill must carry the routine
+    /// return type — NOT EXPR's inferred type, which can disagree when a failable creator call is
+    /// retargeted to its <c>try_</c>/<c>check_</c>/<c>lookup_</c> variant (the node records the bare
+    /// payload type, e.g. S64, while the emitted call returns the Maybe[S64] carrier). Mistyping the
+    /// spill there yields <c>store i64 %maybeVal</c>, which fails LLVM verification.</summary>
+    private TypeExpression? _currentReturnType;
+
     /// <summary>A live owned binding: its name, type, and resolved <c>$destroy</c> routine.
     /// An entity binding always holds a valid owned allocation while live (a lateinit zeroed
     /// placeholder, the declaration initializer, or a later-assigned value).</summary>
@@ -94,6 +102,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     private RoutineDeclaration LowerRoutine(RoutineDeclaration r)
     {
         _movedNames.Clear();
+        _currentReturnType = r.ReturnType;
         CollectMovedNames(r.Body);
         // Merge SA's authoritative per-routine "stolen / out of scope" record. `steal` takes a
         // binding out of scope (ownership moves to the callee, which destroys the content), but the
@@ -273,7 +282,12 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         if (retVal is not null and not IdentifierExpression && WillDestroyAny(live, from, skip))
         {
             string tmp = $"__td_ret_{_spillCounter++}";
-            var decl = new VariableDeclaration(Name: tmp, Type: null, Initializer: retVal,
+            // A plain `return EXPR` spills the ROUTINE return value — type the spill from the routine
+            // return type so a failable-creator-retargeted call (node says S64, emits Maybe[S64])
+            // sizes the slot correctly. A VariantReturnStatement spills the unwrapped payload (codegen
+            // wraps it into the Maybe carrier), so leave the type to be inferred from EXPR.
+            TypeExpression? spillType = exit is VariantReturnStatement ? null : _currentReturnType;
+            var decl = new VariableDeclaration(Name: tmp, Type: spillType, Initializer: retVal,
                 Visibility: VisibilityModifier.Secret, Location: exit.Location);
             stmts.Add(item: new DeclarationStatement(Declaration: decl, Location: exit.Location));
             var tmpRef = new IdentifierExpression(Name: tmp, Location: exit.Location)

@@ -163,11 +163,18 @@ public static class NumericLiteralParser
     private static DecimalLiteralParts ParseDecimalLiteral(string str)
     {
         string cleaned = str.Trim();
-        // The semantic-analyzer path passes the literal with its type suffix (e.g. "6.0_d128");
-        // codegen passes the cleaned digits. Strip a trailing decimal type suffix here so both
-        // callers work. (Digit-group separators "_" between digits are handled below.)
-        foreach (string suf in new[] { "_decimal", "_f128", "_d128", "_d64", "_d32", "_dec", "dn" })
+        // The semantic-analyzer path passes the literal with its type suffix (e.g. "6.0_d128" or
+        // the underscore-less "6.0d128"); codegen passes the cleaned digits. Strip a trailing
+        // decimal/float type suffix — WITH or WITHOUT the optional leading underscore — so all
+        // spellings (`3.14f128`, `3.14_f128`) work. Longest-first avoids a short suffix matching
+        // prematurely. (Digit-group separators "_" between digits are handled below.)
+        foreach (string suf in new[] { "decimal", "f128", "d128", "d64", "d32", "dec", "dn" })
         {
+            if (cleaned.EndsWith("_" + suf, System.StringComparison.OrdinalIgnoreCase))
+            {
+                cleaned = cleaned[..^(suf.Length + 1)];
+                break;
+            }
             if (cleaned.EndsWith(suf, System.StringComparison.OrdinalIgnoreCase))
             {
                 cleaned = cleaned[..^suf.Length];
