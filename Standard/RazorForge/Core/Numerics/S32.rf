@@ -130,32 +130,21 @@ routine S32.$create!(from: F128) -> S32
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D32) -> S32
-  var as_f64 = from.F64()
-  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
-    throw IntegerOverflowError()
-  var bits = reinterpret_bits[D32, U32](from)
-  return d32_to_s32(bits)
+  return D128(from: from).to_s128!().S32!()
 
 ### Converts a `D64` decimal to `S32` via its packed bit representation.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D64) -> S32
-  var as_f64 = from.F64()
-  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
-    throw IntegerOverflowError()
-  var bits = reinterpret_bits[D64, U64](from)
-  return d64_to_s32(bits)
+  return D128(from: from).to_s128!().S32!()
 
 ### Converts a `D128` decimal to `S32` via its low/high 64-bit halves.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D128) -> S32
-  var as_f64 = from.F64()
-  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
-    throw IntegerOverflowError()
-  return d128_to_s32(low: from.low, high: from.high)
+  return from.to_s128!().S32!()
 
 # ============================================================================
 # Arithmetic Operations

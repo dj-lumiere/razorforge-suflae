@@ -119,30 +119,19 @@ routine S64.$create!(from: F128) -> S64
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D32) -> S64
-  var as_f128 = from.F128()
-  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
-    throw IntegerOverflowError()
-  var bits = reinterpret_bits[D32, U32](from)
-  return d32_to_s64(bits)
+  return D128(from: from).to_s128!().S64!()
 
 ### Converts a 64-bit decimal float to `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D64) -> S64
-  var as_f128 = from.F128()
-  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
-    throw IntegerOverflowError()
-  var bits = reinterpret_bits[D64, U64](from)
-  return d64_to_s64(bits)
+  return D128(from: from).to_s128!().S64!()
 
 ### Converts a 128-bit decimal float to `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D128) -> S64
-  var as_f128 = from.F128()
-  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
-    throw IntegerOverflowError()
-  return d128_to_s64(low: from.low, high: from.high)
+  return from.to_s128!().S64!()
 
 # ============================================================================
 # Arithmetic Operations
