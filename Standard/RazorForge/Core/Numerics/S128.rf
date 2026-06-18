@@ -209,32 +209,32 @@ routine S128.$floordiv!(you: S128) -> S128
   var uq = u128_floordiv(a: amag, b: bmag)
   var aneg = signed_lt[S128](a: me, b: 0_s128)
   var bneg = signed_lt[S128](a: you, b: 0_s128)
-  # same sign → quotient positive (floor == trunc); differing signs → negate and,
-  # when the division was inexact, round toward -∞ by subtracting 1.
+  # EUCLIDEAN division (remainder always >= 0), consistent with S8..S64. The remainder
+  # is non-negative, so when the dividend is negative and the division is inexact the
+  # quotient MAGNITUDE rounds up by one before the sign is applied. The quotient is
+  # positive when the operands share a sign, negative otherwise.
+  if aneg and int_ne[U128](a: u128_mod(a: amag, b: bmag), b: 0_u128)
+    uq = add[U128](a: uq, b: 1_u128)
+  var q = reinterpret_bits[U128, S128](uq)
   if aneg == bneg
-    return reinterpret_bits[U128, S128](uq)
-  var tq = sub[S128](a: 0_s128, b: reinterpret_bits[U128, S128](uq))
-  if int_ne[U128](a: u128_mod(a: amag, b: bmag), b: 0_u128)
-    tq = sub[S128](a: tq, b: 1_s128)
-  return tq
+    return q
+  return sub[S128](a: 0_s128, b: q)
 
-### Returns `me % you` (floor modulo), where the result sign matches `you`.
+### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
 ### :param you: The divisor.
-### :returns: The floor modulo — result has the same sign as `you`.
+### :returns: The euclidean remainder — always non-negative.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S128.$mod!(you: S128) -> S128
   if you == 0
     throw DivisionByZeroError()
-  # truncated remainder (sign of dividend) via the unsigned Knuth kernel, then the
-  # floor-modulo adjustment so the result's sign matches the divisor.
-  var remainder = reinterpret_bits[U128, S128](u128_mod(a: s128_abs_u128(x: me), b: s128_abs_u128(x: you)))
-  if signed_lt[S128](a: me, b: 0_s128)
-    remainder = sub[S128](a: 0_s128, b: remainder)
-  if remainder < 0_s128
-    if you > 0_s128
-      return remainder + you
-    return remainder - you
-  return remainder
+  # EUCLIDEAN remainder (always >= 0), consistent with S8..S64. The magnitude
+  # remainder from the unsigned kernel is already in [0, |you|); for a negative
+  # dividend with a nonzero remainder, reflect it into [0, |you|) via |you| - r.
+  var bmag = s128_abs_u128(x: you)
+  var ur = u128_mod(a: s128_abs_u128(x: me), b: bmag)
+  if signed_lt[S128](a: me, b: 0_s128) and int_ne[U128](a: ur, b: 0_u128)
+    ur = sub[U128](a: bmag, b: ur)
+  return reinterpret_bits[U128, S128](ur)
 
 ### Returns `-me` (arithmetic negation), with wrapping behavior on `S128_MIN`.
 ### :returns: The negated value. `-S128_MIN` wraps to `S128_MIN`.
