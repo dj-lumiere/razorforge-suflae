@@ -1,0 +1,18 @@
+module Core
+
+### The IEEE-754 classification of a floating-point value, as returned by the
+### `fpclassify` method on every floating-point type. Mirrors C `<math.h>`'s
+### `FP_NAN` / `FP_INFINITE` / `FP_ZERO` / `FP_SUBNORMAL` / `FP_NORMAL`, with the
+### same numeric codes (0..4) so it interoperates with C and can be matched with
+### `when`.
+choice FpClass
+  ### Not-a-number (quiet or signaling).
+  NAN: 0
+  ### Positive or negative infinity.
+  INFINITE: 1
+  ### Positive or negative zero.
+  ZERO: 2
+  ### A subnormal (denormalized) nonzero value.
+  SUBNORMAL: 3
+  ### A finite, normal (non-subnormal, nonzero) value.
+  NORMAL: 4
