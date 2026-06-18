@@ -1,0 +1,517 @@
+module Core
+
+import Collections
+
+# CREDITS: the BID (Binary-Integer-Decimal) encoding, round-half-to-even rounding,
+# exponent clamping, and reciprocal / power-of-ten table approach of this decimal
+# engine are a port and extension of Intel's Decimal Floating-Point Math Library
+# ("libbid", © Intel Corporation, BSD 3-Clause). See THIRD-PARTY-NOTICES.md.
+
+# ============================================================================
+# Decimal — tabled-BID decimal256 (Pmax=70). Binary-coefficient storage in i256:
+# bit255=sign, bits254..233 = biased exponent (22 bits, bias 1572932), bits232..0
+# = coefficient (233 bits, holds 10^70-1). Working width U512 (product ≤140 digits
+# ≈466 bits); decfin rounds the U512 product to U256 then strips in U256. Uses the
+# verified reciprocal tables: div_pow10_u512 (round), div_pow10b (strip/digits).
+# ============================================================================
+
+### Decoded parts of a decimal256: value = (-1)^sign * coeff * 10^exp.
+record DecimalParts
+  sign: Bool
+  special: U64
+  exp: S64
+  coeff: U256
+
+### A software decimal256 value (BID-internal, binary coefficient storage).
+@llvm("i256")
+record Decimal obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Comparable
+  pass
+
+# ============================================================================
+# Constants (fixed 70-digit; Decimal is fixed-precision, so these are presets)
+# ============================================================================
+
+### The mathematical constant pi (Archimedes' constant), correctly rounded to the 70 significant
+### digits of `Decimal` precision. `Decimal` is a fixed 70-digit type, so pi is a constant value
+### rather than a precision-parameterized routine. The literal carries extra digits; the compile-time
+### BID encoder rounds it to 70 digits (round-half-to-even).
+preset DECIMAL_PI: Decimal = 3.141592653589793238462643383279502884197169399375105820974944592307816406286dn
+### Euler's number e (the base of the natural logarithm), correctly rounded to the 70 significant
+### digits of `Decimal` precision.
+preset DECIMAL_E: Decimal = 2.718281828459045235360287471352662497757247093699959574966967627724076630354dn
+
+# ============================================================================
+# Bit representation (raw i256 <-> value)
+# ============================================================================
+
+@readonly
+routine Decimal.to_bits() -> U256
+  return reinterpret_bits[Decimal, U256](me)
+
+common routine Decimal.from_bits(bits: U256) -> Decimal
+  return reinterpret_bits[U256, Decimal](bits)
+
+# ============================================================================
+# Decode / encode — value <-> DecimalParts (sign / special / exp / coeff)
+# ============================================================================
+
+### BINARY decode — sign / specials (combination prefix at bits 254..250: 0x1E inf,
+### 0x1F NaN with bit 249 = signaling) / 22-bit biased exponent / 233-bit coefficient.
+### Finite biased exponents top out near 0x18 in the top-5, so the inf/NaN prefixes never
+### collide with a finite value (mirrors D128's scheme).
+@readonly
+routine Decimal.decode() -> DecimalParts
+  var bits = me.to_bits()
+  var sign = int_ne[U256](a: bit_and[U256](a: bits, b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](255_s64))), b: zero_extend[U64, U256](0_u64))
+  var top5 = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, uf_amt[U256](250_s64)), b: zero_extend[U64, U256](0x1F_u64)))
+  if int_eq[U64](a: top5, b: 0x1E_u64)
+    return DecimalParts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+  if int_eq[U64](a: top5, b: 0x1F_u64)
+    var sp = 2_u64
+    if int_ne[U256](a: bit_and[U256](a: shift_right_unsigned[U256](bits, uf_amt[U256](249_s64)), b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
+      sp = 3_u64
+    return DecimalParts(sign: sign, special: sp, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+  var biased = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, uf_amt[U256](233_s64)), b: zero_extend[U64, U256](0x3FFFFF_u64)))
+  var coeff = bit_and[U256](a: bits, b: sub[U256](a: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](233_s64)), b: zero_extend[U64, U256](1_u64)))
+  return DecimalParts(sign: sign, special: 0_u64, exp: sub[S64](a: reinterpret_bits[U64, S64](biased), b: 1572932_s64), coeff: coeff)
+
+### BINARY encode — pack sign / specials (combination prefix) / exponent / coefficient.
+routine decimalfixed_of_parts(p: DecimalParts) -> Decimal
+  var sbit = shift_left[U256](value: zero_extend[U64, U256](if p.sign then 1_u64 else 0_u64), bits: uf_amt[U256](255_s64))
+  if int_ne[U64](a: p.special, b: 0_u64)
+    var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+    var b = bit_or[U256](a: sbit, b: shift_left[U256](value: zero_extend[U64, U256](top5), bits: uf_amt[U256](250_s64)))
+    if int_eq[U64](a: p.special, b: 3_u64)
+      b = bit_or[U256](a: b, b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](249_s64)))
+    return Decimal.from_bits(bits: b)
+  var biased = add[U64](a: reinterpret_bits[S64, U64](p.exp), b: 1572932_u64)
+  var ebits = shift_left[U256](value: zero_extend[U64, U256](bit_and[U64](a: biased, b: 0x3FFFFF_u64)), bits: uf_amt[U256](233_s64))
+  return Decimal.from_bits(bits: bit_or[U256](a: bit_or[U256](a: sbit, b: ebits), b: p.coeff))
+
+# ============================================================================
+# Special values & classification
+# ============================================================================
+
+### Infinity with the given sign / a quiet NaN.
+common routine Decimal.infinity(sign: Bool) -> Decimal
+  return decimalfixed_of_parts(p: DecimalParts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
+common routine Decimal.quiet_nan() -> Decimal
+  return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 2_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
+
+### Classification.
+@readonly
+routine Decimal.is_finite() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 0_u64)
+@readonly
+routine Decimal.is_infinite() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 1_u64)
+@readonly
+routine Decimal.is_nan() -> Bool
+  return unsigned_ge[U64](a: me.decode().special, b: 2_u64)
+
+# ============================================================================
+# Comparison (Equatable / Comparable) — by decoded parts, NOT by subtraction, so
+# it never crashes (Decimal arithmetic is @crash_only on overflow). Both operands
+# are finite in normal use; specials are handled defensively.
+# ============================================================================
+
+### Three-way magnitude comparison of two FINITE, NONZERO decimals |ca*10^ea| vs
+### |cb*10^eb|. Compares adjusted exponents (position of the most-significant digit)
+### first; on a tie the exponent spread is bounded by the digit-count difference
+### (<= 70), so aligning the coefficients in U512 cannot overflow.
+routine decimal_cmp_mag(ca: U256, ea: S64, cb: U256, eb: S64) -> ComparisonSign
+  var wa = zero_extend[U256, U512](ca)
+  var wb = zero_extend[U256, U512](cb)
+  var adja = add[S64](a: ea, b: sub[S64](a: digits10a(c: wa), b: 1_s64))
+  var adjb = add[S64](a: eb, b: sub[S64](a: digits10a(c: wb), b: 1_s64))
+  if signed_gt[S64](a: adja, b: adjb)
+    return ME_LARGE
+  if signed_lt[S64](a: adja, b: adjb)
+    return ME_SMALL
+  if signed_gt[S64](a: ea, b: eb)
+    wa = mul[U512](a: wa, b: pow10a(k: sub[S64](a: ea, b: eb)))
+  if signed_lt[S64](a: ea, b: eb)
+    wb = mul[U512](a: wb, b: pow10a(k: sub[S64](a: eb, b: ea)))
+  if unsigned_gt[U512](a: wa, b: wb)
+    return ME_LARGE
+  if unsigned_lt[U512](a: wa, b: wb)
+    return ME_SMALL
+  return SAME
+
+### Three-way comparison under IEEE ordered semantics. NaN is unordered and maps to
+### SAME (matching the engine convention). Zero compares equal regardless of sign.
+@readonly
+routine Decimal.$cmp(you: Decimal) -> ComparisonSign
+  var pa = me.decode()
+  var pb = you.decode()
+  if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+    return SAME
+  if int_eq[U64](a: pa.special, b: 1_u64) or int_eq[U64](a: pb.special, b: 1_u64)
+    if int_eq[U64](a: pa.special, b: pb.special) and pa.sign == pb.sign
+      return SAME
+    if int_eq[U64](a: pa.special, b: 1_u64)
+      return if pa.sign then ME_SMALL else ME_LARGE
+    return if pb.sign then ME_LARGE else ME_SMALL
+  var az = int_eq[U256](a: pa.coeff, b: 0)
+  var bz = int_eq[U256](a: pb.coeff, b: 0)
+  if az and bz
+    return SAME
+  if az
+    return if pb.sign then ME_LARGE else ME_SMALL
+  if bz
+    return if pa.sign then ME_SMALL else ME_LARGE
+  if pa.sign != pb.sign
+    return if pa.sign then ME_SMALL else ME_LARGE
+  # Same sign, both nonzero: for negatives the larger magnitude is the smaller value,
+  # so swap operands to flip the magnitude comparison.
+  if pa.sign
+    return decimal_cmp_mag(ca: pb.coeff, ea: pb.exp, cb: pa.coeff, eb: pa.exp)
+  return decimal_cmp_mag(ca: pa.coeff, ea: pa.exp, cb: pb.coeff, eb: pb.exp)
+
+### Value equality. NaN is never equal to anything (including itself); every other
+### case follows the three-way comparison (so 1.0 and 1.00 are equal).
+@readonly
+routine Decimal.$eq(you: Decimal) -> Bool
+  if me.is_nan() or you.is_nan()
+    return false
+  var c = me.$cmp(you: you)
+  return c is SAME
+
+# ============================================================================
+# Crash-only error sinks + result contract
+#
+# Decimal is a finite-only, beginner-facing type: arithmetic that would yield a
+# non-finite value crashes with a SPECIFIC cause — NumericOverflowError (true result
+# too large -> inf), NumericDomainError (an undefined result like 0/0 -> NaN), and
+# DivisionByZeroError (a nonzero value over zero). `@crash_only` makes each crash
+# unconditional, so the wired operators that call them need not be failable.
+# ============================================================================
+
+### Crashes with DivisionByZeroError (x / 0 where x != 0).
+@crash_only
+routine decimalfixed_divzero!() -> Decimal
+  throw DivisionByZeroError()
+
+### Crashes with NumericDomainError (an undefined operation such as 0/0, or an
+### out-of-domain transcendental input like sqrt of a negative or acos outside [-1,1]).
+@crash_only
+routine decimalfixed_domain!() -> Decimal
+  throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+
+### Crashes with NumericOverflowError (the magnitude is infinite / out of range —
+### a true overflow like exp of a large value, or a pole like log(0)).
+@crash_only
+routine decimalfixed_overflow!() -> Decimal
+  throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+
+### Enforces the Decimal contract on a finished arithmetic result: an infinity is an
+### overflow, a NaN is a domain error, and -0 normalizes to +0 (Decimal has no -0).
+@crash_only
+routine decimalfixed_check!(d: Decimal) -> Decimal
+  var p = d.decode()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (such as 0/0).")
+  if int_eq[U256](a: p.coeff, b: 0)
+    return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: p.exp, coeff: zero_extend[U64, U256](0_u64)))
+  return d
+
+# ============================================================================
+# Special-case arithmetic (inf / NaN / zero operands, on DecimalParts)
+# ============================================================================
+
+### Special-arithmetic parts (coeff 0). NaN propagates; rules mirror D128 / IEEE 754.
+routine nan256() -> DecimalParts
+  return DecimalParts(sign: false, special: 2_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+routine inf256(sign: Bool) -> DecimalParts
+  return DecimalParts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+routine zero256(sign: Bool) -> DecimalParts
+  return DecimalParts(sign: sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+routine has_nan256(pa: DecimalParts, pb: DecimalParts) -> Bool
+  return unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+routine add_special256(pa: DecimalParts, pb: DecimalParts) -> DecimalParts
+  if has_nan256(pa: pa, pb: pb)
+    return nan256()
+  if int_eq[U64](a: pa.special, b: 1_u64) and int_eq[U64](a: pb.special, b: 1_u64)
+    if pa.sign == pb.sign
+      return inf256(sign: pa.sign)
+    return nan256()
+  if int_eq[U64](a: pa.special, b: 1_u64)
+    return inf256(sign: pa.sign)
+  return inf256(sign: pb.sign)
+routine mul_special256(pa: DecimalParts, pb: DecimalParts) -> DecimalParts
+  if has_nan256(pa: pa, pb: pb)
+    return nan256()
+  var azero = int_eq[U64](a: pa.special, b: 0_u64) and int_eq[U256](a: pa.coeff, b: 0)
+  var bzero = int_eq[U64](a: pb.special, b: 0_u64) and int_eq[U256](a: pb.coeff, b: 0)
+  if azero or bzero
+    return nan256()
+  return inf256(sign: pa.sign != pb.sign)
+routine div_special256(pa: DecimalParts, pb: DecimalParts) -> DecimalParts
+  if has_nan256(pa: pa, pb: pb)
+    return nan256()
+  var sign = pa.sign != pb.sign
+  if int_eq[U64](a: pa.special, b: 1_u64)
+    if int_eq[U64](a: pb.special, b: 1_u64)
+      return nan256()
+    return inf256(sign: sign)
+  return zero256(sign: sign)
+
+# ============================================================================
+# Numeric helpers — powers of ten / digit count (U512 working width)
+# ============================================================================
+
+### 10^k as a U512 (k <= 76) — 10^k fits U256, widened.
+routine pow10a(k: S64) -> U512
+  return pow10_512_tbl(k: k)
+
+### Decimal digits in a U512 value, via 10^18 chunks (mulhi reciprocal).
+routine digits10a(c: U512) -> S64
+  if int_eq[U512](a: c, b: 0)
+    return 1_s64
+  # clz-based digit count (see digits10b), U512 pow10 table for the ±1 correction.
+  var nbits = sub[S64](a: 512_s64, b: int_truncate[U512, S64](leading_zeros[U512](c)))
+  var d = add[S64](a: signed_div[S64](a: mul[S64](a: nbits, b: 1233_s64), b: 4096_s64), b: 1_s64)
+  if signed_ge[S64](a: d, b: 1_s64) and unsigned_lt[U512](a: c, b: pow10_512_tbl(k: sub[S64](a: d, b: 1_s64)))
+    return sub[S64](a: d, b: 1_s64)
+  if signed_le[S64](a: d, b: 154_s64) and unsigned_ge[U512](a: c, b: pow10_512_tbl(k: d))
+    return add[S64](a: d, b: 1_s64)
+  return d
+
+# ============================================================================
+# Rounding / finalize — round a working value to <=70 digits + clamp exponent
+# ============================================================================
+
+### Rounds a U512 working value to <=70 sig digits (round-half-even), nudges toward
+### `pref`, returns finalized parts. Front rounds in U512; back strips in U256.
+routine decfinA(sign: Bool, coeff: U512, exp: S64, pref: S64) -> DecimalParts
+  var two = zero_extend[U64, U512](2_u64)
+  var one = zero_extend[U64, U512](1_u64)
+  if int_eq[U512](a: coeff, b: 0)
+    return DecimalParts(sign: sign, special: 0_u64, exp: pref, coeff: zero_extend[U64, U256](0_u64))
+  var c = coeff
+  var e = exp
+  var nd = digits10a(c: c)
+  if signed_gt[S64](a: nd, b: 70_s64)
+    var drop = sub[S64](a: nd, b: 70_s64)
+    var div = pow10a(k: drop)
+    var q = div_pow10_u512(x: c, k: drop)
+    var r = sub[U512](a: c, b: mul[U512](a: q, b: div))
+    var twice = mul[U512](a: r, b: two)
+    if unsigned_gt[U512](a: twice, b: div)
+      q = add[U512](a: q, b: one)
+    elseif int_eq[U512](a: twice, b: div) and int_ne[U512](a: bit_and[U512](a: q, b: one), b: 0)
+      q = add[U512](a: q, b: one)
+    c = q
+    e = add[S64](a: e, b: drop)
+    # Rounding can only carry 70 digits to 71, i.e. c >= 10^70. One U512 compare
+    # instead of a second full digits10a clz pass (matches decfinB's strat).
+    if unsigned_ge[U512](a: c, b: pow10a(k: 70_s64))
+      c = div_pow10_u512(x: c, k: 1_s64)
+      e = add[S64](a: e, b: 1_s64)
+  # c now <= 70 digits -> fits U256; strip/pad/digit-count in U256.
+  var cu = int_truncate[U512, U256](c)
+  var ten = zero_extend[U64, U256](10_u64)
+  # batched trailing-zero strip toward pref
+  var room = sub[S64](a: pref, b: e)
+  if signed_gt[S64](a: room, b: 0_s64) and int_ne[U256](a: cu, b: 0)
+    var cap = if signed_lt[S64](a: room, b: 70_s64) then room else 70_s64
+    # tz <= binary trailing zeros (cttz, one instruction); caps the probe search so
+    # div_pow10/mul never fire for candidates > t2 (odd coeffs => zero wide mults).
+    var t2 = int_truncate[U256, S64](trailing_zeros[U256](cu))
+    if signed_lt[S64](a: t2, b: cap)
+      cap = t2
+    var tz = 0_s64
+    if signed_gt[S64](a: cap, b: 0_s64)
+      # Fast path for exact-round results: if 10^cap divides cu outright, tz = cap in ONE
+      # wide check instead of log2(cap) probes (the common case for division).
+      var ctop = div_pow10b(x: cu, k: cap)
+      if int_eq[U256](a: cu, b: mul[U256](a: ctop, b: pow10b(k: cap)))
+        tz = cap
+      else
+        var hi = sub[S64](a: cap, b: 1_s64)
+        var probe = 64_s64
+        while signed_ge[S64](a: probe, b: 1_s64)
+          var cand = add[S64](a: tz, b: probe)
+          if signed_le[S64](a: cand, b: hi)
+            var c10 = div_pow10b(x: cu, k: cand)
+            if int_eq[U256](a: cu, b: mul[U256](a: c10, b: pow10b(k: cand)))
+              tz = cand
+          probe = signed_div[S64](a: probe, b: 2_s64)
+    if signed_gt[S64](a: tz, b: 0_s64)
+      cu = div_pow10b(x: cu, k: tz)
+      e = add[S64](a: e, b: tz)
+  # Pad toward pref while cu stays under 70 digits ("digits < 70" == "cu < 10^69").
+  var ten69 = pow10_tbl(k: 69_s64)
+  while signed_gt[S64](a: e, b: pref) and unsigned_lt[U256](a: cu, b: ten69)
+    cu = mul[U256](a: cu, b: ten)
+    e = sub[S64](a: e, b: 1_s64)
+  # IEEE decimal256 overflow clamp: the quantum exponent q must be <= qmax =
+  # Emax-(p-1) = 1572795 (p=70, bias 1572932). Above qmax, pad the coefficient with
+  # zeros to pull q down (the canonical max-q cohort); if it will not fit in 70 digits
+  # the magnitude exceeds Nmax -> infinity, which the wired operators turn into a crash.
+  if signed_gt[S64](a: e, b: 1572795_s64)
+    var spread = sub[S64](a: e, b: 1572795_s64)
+    var fits = false
+    if signed_le[S64](a: spread, b: 69_s64)
+      var lim = pow10_tbl(k: sub[S64](a: 70_s64, b: spread))
+      if unsigned_lt[U256](a: cu, b: lim)
+        fits = true
+    if not fits
+      return DecimalParts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+    cu = int_truncate[U512, U256](mul[U512](a: zero_extend[U256, U512](cu), b: pow10a(k: spread)))
+    e = 1572795_s64
+  return DecimalParts(sign: sign, special: 0_u64, exp: e, coeff: cu)
+
+# ============================================================================
+# Arithmetic operators ($mul / $add / $neg / $sub / $truediv)
+# ============================================================================
+
+### Returns me * you.
+routine Decimal.$mul(you: Decimal) -> Decimal
+  var pa = me.decode()
+  var pb = you.decode()
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return decimalfixed_check!(d: decimalfixed_of_parts(p: mul_special256(pa: pa, pb: pb)))
+  var sign = pa.sign != pb.sign
+  var prod = mul[U512](a: zero_extend[U256, U512](pa.coeff), b: zero_extend[U256, U512](pb.coeff))
+  return decimalfixed_check!(d: decimalfixed_of_parts(p: decfinA(sign: sign, coeff: prod, exp: add[S64](a: pa.exp, b: pb.exp), pref: add[S64](a: pa.exp, b: pb.exp))))
+
+### Returns me + you (align to smaller exponent, guard 76, U512 combine).
+routine Decimal.$add(you: Decimal) -> Decimal
+  var pa = me.decode()
+  var pb = you.decode()
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return decimalfixed_check!(d: decimalfixed_of_parts(p: add_special256(pa: pa, pb: pb)))
+  var eh = pa.exp
+  var ch = zero_extend[U256, U512](pa.coeff)
+  var sh = pa.sign
+  var el = pb.exp
+  var cl = zero_extend[U256, U512](pb.coeff)
+  var sl = pb.sign
+  if signed_lt[S64](a: pa.exp, b: pb.exp)
+    eh = pb.exp
+    ch = zero_extend[U256, U512](pb.coeff)
+    sh = pb.sign
+    el = pa.exp
+    cl = zero_extend[U256, U512](pa.coeff)
+    sl = pa.sign
+  var pref = el
+  var shift = sub[S64](a: eh, b: el)
+  var ew = el
+  if signed_le[S64](a: shift, b: 76_s64)
+    ch = mul[U512](a: ch, b: pow10a(k: shift))
+  else
+    ch = mul[U512](a: ch, b: pow10a(k: 76_s64))
+    ew = sub[S64](a: eh, b: 76_s64)
+    cl = if int_ne[U512](a: cl, b: 0) then zero_extend[U64, U512](1_u64) else zero_extend[U64, U512](0_u64)
+  var rc = zero_extend[U64, U512](0_u64)
+  var rsign = sh
+  if sh == sl
+    rc = add[U512](a: ch, b: cl)
+  elseif unsigned_ge[U512](a: ch, b: cl)
+    rc = sub[U512](a: ch, b: cl)
+  else
+    rc = sub[U512](a: cl, b: ch)
+    rsign = sl
+  if int_eq[U512](a: rc, b: 0)
+    # IEEE 754: a zero sum keeps the common sign ((-0)+(-0) = -0); opposite-sign
+    # cancellation gives +0 (roundTiesToEven).
+    rsign = if sh == sl then sh else false
+  return decimalfixed_check!(d: decimalfixed_of_parts(p: decfinA(sign: rsign, coeff: rc, exp: ew, pref: pref)))
+
+### Arithmetic negation (flip sign bit).
+routine decimalfixed_neg(a: Decimal) -> Decimal
+  return Decimal.from_bits(bits: bit_xor[U256](a: a.to_bits(), b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](255_s64))))
+
+### Returns me - you.
+routine Decimal.$sub(you: Decimal) -> Decimal
+  return me + decimalfixed_neg(a: you)
+
+### Returns me / you (scale numerator ~74 digits past, divide, sticky, round).
+routine Decimal.$truediv(you: Decimal) -> Decimal
+  var pa = me.decode()
+  var pb = you.decode()
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return decimalfixed_check!(d: decimalfixed_of_parts(p: div_special256(pa: pa, pb: pb)))
+  var sign = pa.sign != pb.sign
+  if int_eq[U256](a: pb.coeff, b: 0)
+    if int_eq[U256](a: pa.coeff, b: 0)
+      return decimalfixed_domain!()
+    return decimalfixed_divzero!()
+  var pref = sub[S64](a: pa.exp, b: pb.exp)
+  if int_eq[U256](a: pa.coeff, b: 0)
+    return decimalfixed_check!(d: decimalfixed_of_parts(p: decfinA(sign: sign, coeff: zero_extend[U64, U512](0_u64), exp: pref, pref: pref)))
+  var num = zero_extend[U256, U512](pa.coeff)
+  var den = zero_extend[U256, U512](pb.coeff)
+  # +71: quotient = 71-72 digits = 70 result + 1 round digit; sticky bit carries the rest
+  # (correct round-half-even). Narrower than the old +74's ~3 needless extra digits.
+  var target = add[S64](a: digits10a(c: den), b: 71_s64)
+  var shift = sub[S64](a: target, b: digits10a(c: num))
+  if signed_lt[S64](a: shift, b: 0_s64)
+    shift = 0_s64
+  num = mul[U512](a: num, b: pow10a(k: shift))
+  # register-resident n=1 long division (the common small-divisor case) + sticky;
+  # falls back to generic Knuth for multi-limb divisors.
+  var q = udiv512_by_u256_sticky(num: num, den: den)
+  var exp = sub[S64](a: pref, b: shift)
+  return decimalfixed_check!(d: decimalfixed_of_parts(p: decfinA(sign: sign, coeff: q, exp: exp, pref: pref)))
+
+# ============================================================================
+# Formatting — decimal text ($represent), decNumber decToString style
+# ============================================================================
+
+### Full decimal256 text — up to 70 digits (decNumber decToString style: plain when
+### exp<=0 and adjusted exp >= -6, else scientific). Digit extraction is table-free
+### (knuth `%`/`//` by 10), so it is NOT bounded by the 10^40 reciprocal table; the
+### decimal point is placed during extraction since Text has no slicing.
+routine d256b_represent(p: DecimalParts) -> Text
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return if p.sign then "-inf" else "inf"
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return "NaN"
+  var sign = p.sign
+  var coeff = p.coeff
+  var exp = p.exp
+  if int_eq[U256](a: coeff, b: zero_extend[U64, U256](0_u64))
+    return if sign then "-0" else "0"
+  var nd = digits10b(c: coeff)
+  var adj = add[S64](a: exp, b: sub[S64](a: nd, b: 1_s64))
+  var ten = zero_extend[U64, U256](10_u64)
+  # `out`/`x`/`j` kept at function scope — builds the result in place (clean, and the
+  # accumulator never escapes a branch). (The cross-scope-RC-assignment use-after-free
+  # this originally worked around was root-caused + fixed in RecordCopyLoweringPass.)
+  var out = ""
+  var x = coeff
+  var j = 0_s64
+  if signed_le[S64](a: exp, b: 0_s64) and signed_ge[S64](a: adj, b: -6_s64)
+    var frac = sub[S64](a: 0_s64, b: exp)
+    while signed_lt[S64](a: j, b: nd)
+      if int_eq[S64](a: j, b: frac) and signed_gt[S64](a: frac, b: 0_s64)
+        out = "." + out
+      var r = x % ten
+      var dg = int_truncate[U256, U64](r)
+      out = f"{dg}" + out
+      x = x // ten
+      j = add[S64](a: j, b: 1_s64)
+    if signed_ge[S64](a: frac, b: nd)
+      out = "0." + dec_zeros(n: sub[S64](a: frac, b: nd)) + out
+  else
+    while signed_lt[S64](a: j, b: nd)
+      var r = x % ten
+      var dg = int_truncate[U256, U64](r)
+      if int_eq[S64](a: j, b: sub[S64](a: nd, b: 1_s64)) and signed_gt[S64](a: nd, b: 1_s64)
+        out = f"{dg}" + "." + out
+      else
+        out = f"{dg}" + out
+      x = x // ten
+      j = add[S64](a: j, b: 1_s64)
+    var mag = if signed_lt[S64](a: adj, b: 0_s64) then sub[S64](a: 0_s64, b: adj) else adj
+    var es = if signed_lt[S64](a: adj, b: 0_s64) then "-" else "+"
+    out = out + "E" + es + f"{mag}"
+  return if sign then "-" + out else out
+
+### Returns the decimal text of this value (full 70-digit formatter).
+routine Decimal.$represent() -> Text
+  return d256b_represent(p: me.decode())

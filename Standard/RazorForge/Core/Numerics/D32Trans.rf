@@ -1,0 +1,298 @@
+module Core
+
+# ============================================================================
+# D32Trans — decimal32 (Pmax=7) transcendentals + libm surface via F64 (double,
+# ~15.9 decimal digits >> 7). A D32 value widened to F64, run through the
+# platform libm double routine, and rounded back to 7 digits is correctly
+# rounded (double error lands near digit ~16, far below 7).
+#
+# The dec<->bin conversions are HAND-ROLLED on our tabled-BID parts — NOT the
+# rf_d32_to_f64/rf_f64_to_d32 FFI, which assume decNumber's (DPD) layout and would
+# misread our binary-coefficient encoding. Transcendentals use F64 methods where
+# present and external("C") libm bindings (incl. erf/tgamma) otherwise.
+# ============================================================================
+
+
+# Transcendentals delegate to F64's libm methods (Standard F64.rf, bound to the
+# rf_f64_* runtime passthroughs). The dec<->f64 conversions below are hand-rolled
+# on our BID parts (NOT the rf_d32_to_f64 FFI, which assumes decNumber's layout).
+
+# ============================================================================
+# Hand-rolled radix conversions (our BID parts <-> F64). value = coeff * 10^exp.
+# ============================================================================
+
+### 10^e as an F64 via binary exponentiation of 10.0 (D32 exp range fits double).
+routine f64_pow10(e: S64) -> F64
+  var neg = signed_lt[S64](a: e, b: 0_s64)
+  var n = if neg then sub[S64](a: 0_s64, b: e) else e
+  var result = 1.0_f64
+  var base = 10.0_f64
+  while signed_gt[S64](a: n, b: 0_s64)
+    if int_ne[S64](a: bit_and[S64](a: n, b: 1_s64), b: 0_s64)
+      result = float_mul[F64](a: result, b: base)
+    base = float_mul[F64](a: base, b: base)
+    n = shift_right_unsigned[S64](n, 1_u32)
+  if neg
+    return float_div[F64](a: 1.0_f64, b: result)
+  return result
+
+### True if the F64 sign bit is set (handles -0).
+routine f64_signbit(v: F64) -> Bool
+  return int_ne[U64](a: bit_and[U64](a: v.to_bits(), b: 0x8000000000000000_u64), b: 0_u64)
+
+### dec -> bin: D32 value as an F64. The idiomatic conversion `someD32.F64()`.
+routine F64.$create(from: D32) -> F64
+  var p = from.decode()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    var ib = if p.sign then 0xFFF0000000000000_u64 else 0x7FF0000000000000_u64
+    return F64.from_bits(bits: ib)
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return F64.from_bits(bits: 0x7FF8000000000000_u64)
+  var cf = p.coeff.F64()
+  var v = float_mul[F64](a: cf, b: f64_pow10(e: p.exp))
+  if p.sign
+    return float_neg[F64](v)
+  return v
+
+### bin -> dec: F64 value as a D32, rounded to <=7 digits. The conversion `someF64.D32()`.
+routine D32.$create(from: F64) -> D32
+  if from.is_nan()
+    return D32.quiet_nan()
+  if from.is_infinite()
+    return D32.infinity(sign: f64_signbit(v: from))
+  if from.is_zero()
+    return d32_of_parts(p: D32Parts(sign: f64_signbit(v: from), special: 0_u64, exp: 0_s64, coeff: 0_u64))
+  var sign = f64_signbit(v: from)
+  var av = from.abs()
+  var decexp = av.log10().floor().S64()
+  var q = sub[S64](a: 12_s64, b: decexp)
+  var scaled = float_mul[F64](a: av, b: f64_pow10(e: q))
+  var coeff = scaled.round().U64()
+  return d32_of_parts(p: decfin32(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: sub[S64](a: 0_s64, b: q)))
+
+# ============================================================================
+# Transcendentals — F64 methods where present, external libm otherwise.
+# ============================================================================
+
+routine D32.exp() -> D32
+  return me.F64().exp().D32()
+routine D32.expm1() -> D32
+  return me.F64().expm1().D32()
+routine D32.exp2() -> D32
+  return me.F64().exp2().D32()
+routine D32.exp10() -> D32
+  return (10.0_f64).pow(exp: me.F64()).D32()
+routine D32.log() -> D32
+  return me.F64().log().D32()
+routine D32.log1p() -> D32
+  return me.F64().log1p().D32()
+routine D32.log2() -> D32
+  return me.F64().log2().D32()
+routine D32.log10() -> D32
+  return me.F64().log10().D32()
+routine D32.sqrt() -> D32
+  return me.F64().sqrt().D32()
+routine D32.cbrt() -> D32
+  return me.F64().cbrt().D32()
+routine D32.pow(you: D32) -> D32
+  return me.F64().pow(exp: you.F64()).D32()
+routine D32.hypot(you: D32) -> D32
+  return me.F64().hypot(you: you.F64()).D32()
+routine D32.fma(b: D32, c: D32) -> D32
+  return me.F64().fma(b: b.F64(), c: c.F64()).D32()
+routine D32.sin() -> D32
+  return me.F64().sin().D32()
+routine D32.cos() -> D32
+  return me.F64().cos().D32()
+routine D32.tan() -> D32
+  return me.F64().tan().D32()
+routine D32.asin() -> D32
+  return me.F64().asin().D32()
+routine D32.acos() -> D32
+  return me.F64().acos().D32()
+routine D32.atan() -> D32
+  return me.F64().atan().D32()
+routine D32.atan2(x: D32) -> D32
+  return me.F64().atan2(x: x.F64()).D32()
+routine D32.sinh() -> D32
+  return me.F64().sinh().D32()
+routine D32.cosh() -> D32
+  return me.F64().cosh().D32()
+routine D32.tanh() -> D32
+  return me.F64().tanh().D32()
+routine D32.asinh() -> D32
+  return me.F64().asinh().D32()
+routine D32.acosh() -> D32
+  return me.F64().acosh().D32()
+routine D32.atanh() -> D32
+  return me.F64().atanh().D32()
+routine D32.erf() -> D32
+  return me.F64().erf().D32()
+routine D32.erfc() -> D32
+  return me.F64().erfc().D32()
+routine D32.tgamma() -> D32
+  return me.F64().tgamma().D32()
+routine D32.lgamma() -> D32
+  return me.F64().lgamma().D32()
+
+# ============================================================================
+# libm manipulation / classification — decimal-native on D32Parts (coeff U64).
+# ============================================================================
+
+routine D32.signbit() -> Bool
+  return me.decode().sign
+
+### True if me is negative (sign bit set; includes -0 and -NaN).
+routine D32.is_negative() -> Bool
+  return me.decode().sign
+
+### True if me is strictly positive (not signed, not zero).
+routine D32.is_positive() -> Bool
+  var p = me.decode()
+  return not p.sign and int_eq[U64](a: p.special, b: 0_u64) and int_ne[U64](a: p.coeff, b: 0_u64)
+
+### True if me is a finite, nonzero subnormal: quantum exponent at the minimum (-101)
+### with a coefficient below 10^6 (fewer than the full 7 significant digits).
+routine D32.is_subnormal() -> Bool
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64) or int_eq[U64](a: p.coeff, b: 0_u64)
+    return false
+  return int_eq[S64](a: p.exp, b: -101_s64) and unsigned_lt[U64](a: p.coeff, b: 1000000_u64)
+
+### Splits into integer and fractional parts (C modf); both carry me's sign.
+routine D32.modf() -> (D32, D32)
+  if me.is_nan()
+    return (me, me)
+  var p = me.decode()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return (me, d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64)))
+  var ip = me.trunc()
+  return (ip, me - ip)
+
+routine D32.is_normal() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_ne[U64](a: p.coeff, b: 0_u64)
+
+routine D32.is_zero() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U64](a: p.coeff, b: 0_u64)
+
+routine D32.fpclassify() -> FpClass
+  var p = me.decode()
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return NAN
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return INFINITE
+  if int_eq[U64](a: p.coeff, b: 0_u64)
+    return ZERO
+  if me.is_subnormal()
+    return SUBNORMAL
+  return NORMAL
+
+routine D32.abs() -> D32
+  var p = me.decode()
+  return d32_of_parts(p: D32Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
+
+routine D32.$neg() -> D32
+  var p = me.decode()
+  return d32_of_parts(p: D32Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
+
+routine D32.copysign(you: D32) -> D32
+  var p = me.decode()
+  return d32_of_parts(p: D32Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
+
+routine D32.fmax(you: D32) -> D32
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if (me - you).decode().sign
+    return you
+  return me
+
+routine D32.fmin(you: D32) -> D32
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if (me - you).decode().sign
+    return me
+  return you
+
+routine D32.fdim(you: D32) -> D32
+  if me.is_nan() or you.is_nan()
+    return D32.quiet_nan()
+  var d = me - you
+  if d.decode().sign
+    return d32_of_parts(p: D32Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u64))
+  return d
+
+routine D32.scaleb(n: S64) -> D32
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64) or int_eq[U64](a: p.coeff, b: 0_u64)
+    return me
+  var ne = add[S64](a: p.exp, b: n)
+  if signed_gt[S64](a: ne, b: 90_s64)
+    return D32.infinity(sign: p.sign)
+  if signed_lt[S64](a: ne, b: -101_s64)
+    return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64))
+  return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: ne, coeff: p.coeff))
+
+### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 round (half away), 4 rint (half even).
+routine d32_round_int(x: D32, mode: S64) -> D32
+  var p = x.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    return x
+  if int_eq[U64](a: p.coeff, b: 0_u64)
+    return x
+  if signed_ge[S64](a: p.exp, b: 0_s64)
+    return x
+  var ndrop = sub[S64](a: 0_s64, b: p.exp)
+  var cw = zero_extend[U64, U256](p.coeff)
+  var q = zero_extend[U64, U256](0_u64)
+  var rnz = true
+  var half = false
+  var gthalf = false
+  if signed_le[S64](a: ndrop, b: 7_s64)
+    var divp = pow10b(k: ndrop)
+    q = div_pow10b(x: cw, k: ndrop)
+    var r = sub[U256](a: cw, b: mul[U256](a: q, b: divp))
+    rnz = int_ne[U256](a: r, b: 0)
+    var twice = mul[U256](a: r, b: zero_extend[U64, U256](2_u64))
+    half = int_eq[U256](a: twice, b: divp)
+    gthalf = unsigned_gt[U256](a: twice, b: divp)
+  var inc = false
+  if int_eq[S64](a: mode, b: 1_s64)
+    inc = p.sign and rnz
+  elseif int_eq[S64](a: mode, b: 2_s64)
+    inc = (not p.sign) and rnz
+  elseif int_eq[S64](a: mode, b: 3_s64)
+    inc = gthalf or half
+  elseif int_eq[S64](a: mode, b: 4_s64)
+    if gthalf
+      inc = true
+    elseif half
+      inc = int_ne[U256](a: bit_and[U256](a: q, b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
+  var qq = q
+  if inc
+    qq = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: int_truncate[U256, U64](qq)))
+
+routine D32.trunc() -> D32
+  return d32_round_int(x: me, mode: 0_s64)
+routine D32.floor() -> D32
+  return d32_round_int(x: me, mode: 1_s64)
+routine D32.ceil() -> D32
+  return d32_round_int(x: me, mode: 2_s64)
+routine D32.round() -> D32
+  return d32_round_int(x: me, mode: 3_s64)
+routine D32.rint() -> D32
+  return d32_round_int(x: me, mode: 4_s64)
+
+routine D32.frac() -> D32
+  if me.is_nan()
+    return me
+  var p = me.decode()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64))
+  return me - me.trunc()

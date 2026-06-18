@@ -1,0 +1,657 @@
+module Core
+
+# ============================================================================
+# DecimalTrans — decimal256 transcendentals via the binary512 engine (F512).
+#
+# Decimal (Pmax=70 decimal digits) has no transcendental cores of its own. F512
+# carries a 489-bit significand (~147 decimal digits), so a D256 value converted
+# to F512, run through the (faithfully-rounded) F512 transcendental, and rounded
+# back to 70 digits is CORRECTLY ROUNDED: the ~few-ULP F512 error lands near
+# decimal digit ~145, far below the 70-digit rounding boundary.
+#
+# The two radix adapters are the substance here:
+#   decimalfixed_to_f512 (dec->bin): load coeff exactly into the engine, multiply by 10^exp
+#     computed by binary-exponentiation of 10.0 in F512 (no big-int 10^k table).
+#   f512_to_decimala (bin->dec): scale |x|*10^(76-decexp) to ~10^77, extract the integer
+#     with round-half-even, hand the 77-digit coeff to Decimal's decfinA (rounds to 70).
+#
+# SUPPORTED RANGE: values whose magnitude keeps 10^(76-decexp) inside F512's range
+# (decimal exponent within ~+-1.26e6). Beyond that f512_pow10 overflows/underflows;
+# real transcendental I/O never reaches it. Verified by round-trip + cross-checks.
+# ============================================================================
+
+
+# ============================================================================
+# Radix adapters
+# ============================================================================
+
+### Builds the engine value of a non-negative U256 integer (exact; coeff <= 233 bits
+### fits the 489-bit significand). value = mant * 2^(exp-509), mant MSB at bit 510.
+routine uf512_from_u256(c: U256) -> ?UnpackedFloat[U512, U1024, 512]
+  if int_eq[U256](a: c, b: 0)
+    return UnpackedFloat[U512, U1024, 512].zero(sign: false)
+  var cw = zero_extend[U256, U512](c)
+  var x = sub[S64](a: 512_s64, b: int_truncate[U512, S64](leading_zeros[U512](cw)))
+  var mant = shift_left[U512](value: cw, bits: uf_amt[U512](sub[S64](a: 511_s64, b: x)))
+  return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: x, b: 2_s64), sign: false, iszero: false, isinf: false, isnan: false)
+
+### Rounds the engine value (assumed a positive ~integer) to a U512, round-half-even.
+### integer = round(mant * 2^(exp-509)); shift = 509 - exp (positive in the ~10^77 range).
+routine uf512_to_u512_round(u: UnpackedFloat[U512, U1024, 512]) -> U512
+  var shift = sub[S64](a: 509_s64, b: u.exp)
+  if signed_le[S64](a: shift, b: 0_s64)
+    return shift_left[U512](value: u.mant, bits: uf_amt[U512](sub[S64](a: 0_s64, b: shift)))
+  if signed_ge[S64](a: shift, b: 512_s64)
+    return zero_extend[U64, U512](0_u64)
+  var q = shift_right_unsigned[U512](u.mant, uf_amt[U512](shift))
+  var lost = bit_and[U512](a: u.mant, b: uf_lowmask[U512](shift))
+  var half = shift_left[U512](value: 1, bits: uf_amt[U512](sub[S64](a: shift, b: 1_s64)))
+  if unsigned_gt[U512](a: lost, b: half)
+    q = add[U512](a: q, b: 1)
+  elseif int_eq[U512](a: lost, b: half) and int_ne[U512](a: bit_and[U512](a: q, b: 1), b: 0)
+    q = add[U512](a: q, b: 1)
+  return q
+
+### 10^e as an F512. Common range [-400,400] is a correctly-rounded table lookup
+### (one gep+load, more accurate than the loop); extreme |e| falls back to binary
+### exponentiation of 10.0 (negative via final reciprocal; faithful ~few ULP).
+routine f512_pow10(e: S64) -> F512
+  if f512_pow10_in_table(k: e)
+    return f512_pow10_tbl(k: e)
+  var neg = signed_lt[S64](a: e, b: 0_s64)
+  var n = if neg then sub[S64](a: 0_s64, b: e) else e
+  var result = f512a_one()
+  var base = UnpackedFloat[U512, U1024, 512].from_s64(src: 10_s64).to_f512a()
+  while signed_gt[S64](a: n, b: 0_s64)
+    if int_ne[S64](a: bit_and[S64](a: n, b: 1_s64), b: 0_s64)
+      result = result * base
+    base = base * base
+    n = shift_right_unsigned[S64](n, 1_u32)
+  if neg
+    return f512a_one() / result
+  return result
+
+### dec -> bin: Decimal value as an F512 (coeff exact, scaled by 10^exp).
+routine decimalfixed_to_f512(x: Decimal) -> F512
+  var p = x.decode()
+  var s = if p.sign then 1_u64 else 0_u64
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return F512.from_bits(bits: f512a_inf(sign: s))
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return F512.from_bits(bits: f512a_qnan())
+  if int_eq[U256](a: p.coeff, b: 0)
+    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](s), bits: uf_amt[U512](511_s64)))
+  var c = uf512_from_u256(c: p.coeff).to_f512a()
+  var v = c * f512_pow10(e: p.exp)
+  if p.sign
+    return v.$neg()
+  return v
+
+### bin -> dec: F512 value as a Decimal, correctly rounded to <=70 digits, then
+### subject to the finite-only Decimal contract: a NaN result crashes with
+### NumericDomainError (no real answer), a non-finite (inf) result crashes with
+### NumericOverflowError (out of range / pole), and -0 normalizes to +0. This is the
+### single chokepoint for ALL Decimal transcendentals, so it carries the policy for
+### log(0), acos(2), sqrt(-1), exp(huge), tgamma poles, etc.
+routine f512_to_decimala(x: F512) -> Decimal
+  if x.is_nan()
+    return decimalfixed_domain!()
+  if x.is_infinite()
+    return decimalfixed_overflow!()
+  if x.is_zero()
+    return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
+  var sign = x.is_negative()
+  var e_bin = x.to_uf().ilogb()
+  # decexp ~ floor(e_bin * log10(2)); log10(2) ~ 315653 / 2^20. +-1 error is absorbed
+  # by decfinA (it recounts digits and rounds to 70 either way).
+  var decexp = signed_div[S64](a: mul[S64](a: e_bin, b: 315653_s64), b: 1048576_s64)
+  var q = sub[S64](a: 76_s64, b: decexp)
+  var scaled = x.abs() * f512_pow10(e: q)
+  var coeff = uf512_to_u512_round(u: scaled.to_uf())
+  # decfinA may itself clamp an out-of-range magnitude to inf; decimalfixed_check! turns
+  # that into NumericOverflowError (and is a no-op for an in-range finite result).
+  return decimalfixed_check!(d: decimalfixed_of_parts(p: decfinA(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: sub[S64](a: 0_s64, b: q))))
+
+# ============================================================================
+# Correctly-rounded F512 exp — the "proper" core: k*ln2 range reduction + the
+# degree-44 Remez minimax poly (err 2^-299 ~ 90 digits, >> D256's 70) via
+# FMA-Horner, scale by 2^k. This is the template the rest of the suite should
+# follow (each function needs its own range reduction + Remez poly).
+# ============================================================================
+
+### Small-integer F512 constant via the engine (for range-reduction thresholds).
+routine f512_intval(n: S64) -> F512
+  return UnpackedFloat[U512, U1024, 512].from_s64(src: n).to_f512a()
+
+### ln2 / ln10 / 1/ln2 as F512 (engine constants, full 510-bit at W=512).
+routine f512_ln2() -> F512
+  return UnpackedFloat[U512, U1024, 512].ln2().to_f512a()
+routine f512_ln10() -> F512
+  return UnpackedFloat[U512, U1024, 512].ln10().to_f512a()
+routine f512_recip_ln2() -> F512
+  return UnpackedFloat[U512, U1024, 512].recip_ln2().to_f512a()
+routine f512_recip_ln10() -> F512
+  return UnpackedFloat[U512, U1024, 512].recip_ln10().to_f512a()
+
+### Correctly-rounded-to-D256 binary512 exp. Specials per IEEE/C99; F512 overflow
+### (x > ln(maxfinite) ~ 2.907e6) -> +inf, underflow (x < ln(min_subnormal) ~ -2.908e6)
+### -> +0. Thresholds also keep `k` and the F512 exponent inside range.
+routine f512_exp_cr(x: F512) -> F512
+  if x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return F512.from_bits(bits: zero_extend[U64, U512](0_u64))
+    return F512.from_bits(bits: f512a_inf(sign: 0_u64))
+  if x > f512_intval(n: 2907271_s64)
+    return F512.from_bits(bits: f512a_inf(sign: 0_u64))
+  if x < f512_intval(n: -2907609_s64)
+    return F512.from_bits(bits: zero_extend[U64, U512](0_u64))
+  var kf = (x * expc512_invln2()).round()
+  var k = kf.to_uf().to_s64()
+  var r = x - kf * expc512_ln2()
+  var p = expc512_poly(r: r)
+  return p.to_uf().ldexp(e: k).to_f512a()
+
+# ============================================================================
+# Correctly-rounded-to-D256 binary512 atan — the second "proper" core (mirrors
+# f512_exp_cr). Range reduction: odd symmetry -> x>=0; x>1 -> pi/2 - atan(1/x)
+# folds to [0,1]; additive table k=round(32x), c=k/32, u=(x-c)/(1+x*c) shrinks
+# |u| to <=1/64; atan(u)=u*H(u^2) with H the even degree-23 Remez minimax
+# (atanc512_poly, err 2^-340). Constants baked as F512 patterns in F512Atan.rf.
+# ============================================================================
+
+### Correctly-rounded-to-D256 binary512 atan. Specials per C99: atan(NaN)=NaN,
+### atan(+-inf)=+-pi/2, atan(+-0)=+-0 (signed zero preserved).
+routine f512_atan_cr(x: F512) -> F512
+  if x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return atanc512_halfpi().$neg()
+    return atanc512_halfpi()
+  if x.is_zero()
+    return x
+  var neg = x.is_negative()
+  var ax = x.abs()
+  var one = f512a_one()
+  var invert = ax > one
+  if invert
+    ax = one / ax
+  var kf = (ax * f512_intval(n: 32_s64)).round()
+  var k = kf.to_uf().to_s64()
+  if signed_gt[S64](a: k, b: 32_s64)
+    k = 32_s64
+  var c = kf / f512_intval(n: 32_s64)
+  var u = (ax - c) / (one + ax * c)
+  var r = atanc512_tab(k: k) + u * atanc512_poly(w: u * u)
+  if invert
+    r = atanc512_halfpi() - r
+  if neg
+    return r.$neg()
+  return r
+
+### Correctly-rounded-to-D256 binary512 asin, composed on the atan core:
+### asin(x) = atan(x / sqrt(1 - x^2)). Sign rides through atan (odd); domain
+### |x|<=1, with |x|==1 -> +-pi/2 exact and |x|>1 -> NaN.
+routine f512_asin_cr(x: F512) -> F512
+  if x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  var one = f512a_one()
+  var ax = x.abs()
+  if ax > one
+    return F512.from_bits(bits: f512a_qnan())
+  if ax == one
+    if x.is_negative()
+      return atanc512_halfpi().$neg()
+    return atanc512_halfpi()
+  var t = x / (one - x * x).sqrt()
+  return f512_atan_cr(x: t)
+
+### Correctly-rounded-to-D256 binary512 acos, half-angle form on the atan core:
+### acos(x) = 2*atan(sqrt((1-x)/(1+x))) — covers [0,pi] with no pi/2-asin
+### cancellation. acos(1)=+0, acos(-1)=pi exact; |x|>1 -> NaN.
+routine f512_acos_cr(x: F512) -> F512
+  if x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  var one = f512a_one()
+  var ax = x.abs()
+  if ax > one
+    return F512.from_bits(bits: f512a_qnan())
+  if ax == one
+    if x.is_negative()
+      return f512_intval(n: 2_s64) * atanc512_halfpi()
+    return F512.from_bits(bits: zero_extend[U64, U512](0_u64))
+  var t = ((one - x) / (one + x)).sqrt()
+  return f512_intval(n: 2_s64) * f512_atan_cr(x: t)
+
+### Correctly-rounded-to-D256 binary512 atan2(y, x), built on the atan core with
+### C99 quadrant/sign rules. x>0: atan(y/x); x<0: atan(y/x) +- pi by sign(y);
+### x=0: +-pi/2; infinities -> +-pi/4, +-3pi/4, +-pi/2, +-pi, +-0 per sign(y).
+routine f512_atan2_cr(y: F512, x: F512) -> F512
+  if y.is_nan() or x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  var hp = atanc512_halfpi()
+  var pi = f512_intval(n: 2_s64) * hp
+  var zero = f512_intval(n: 0_s64)
+  if x.is_infinite()
+    if y.is_infinite()
+      var qp = hp / f512_intval(n: 2_s64)
+      var base = if x.is_negative() then f512_intval(n: 3_s64) * qp else qp
+      return base.copysign(sign: y)
+    if x.is_negative()
+      return pi.copysign(sign: y)
+    return zero.copysign(sign: y)
+  if y.is_infinite()
+    return hp.copysign(sign: y)
+  if x.is_zero()
+    if y.is_zero()
+      if x.is_negative()
+        return pi.copysign(sign: y)
+      return y
+    return hp.copysign(sign: y)
+  var r = f512_atan_cr(x: y / x)
+  if x.is_negative()
+    return r + pi.copysign(sign: y)
+  return r
+
+# ============================================================================
+# Transcendentals — decode to F512, run the F512 core, round back to Decimal.
+# (Mirrors the F512 surface one-for-one.)
+# ============================================================================
+
+### e raised to this value. Uses the range-reduced Remez core (f512_exp_cr).
+routine Decimal.exp() -> Decimal
+  return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: me)))
+
+### Natural logarithm.
+routine Decimal.log() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).log())
+
+### exp(me) - 1. Engine expm1 core — cancellation-free near 0 (NOT exp(me)-1).
+routine Decimal.expm1() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).expm1())
+
+### log(1 + me). Engine log1p core — cancellation-free near 0 (NOT log(1+me)).
+routine Decimal.log1p() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).log1p())
+
+### Base-2 logarithm: log(me) * (1/ln2). recip_ln2 is a verified full-precision
+### constant (correct to ~154 digits), so this is one log + a multiply (no second log).
+routine Decimal.log2() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).log() * f512_recip_ln2())
+
+### Base-10 logarithm: log(me) * (1/ln10), constified like log2.
+routine Decimal.log10() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).log() * f512_recip_ln10())
+
+### 2 raised to this value: exp(me * ln2) via the Remez core.
+routine Decimal.exp2() -> Decimal
+  return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: me) * f512_ln2()))
+
+### 10 raised to this value: exp(me * ln10) via the Remez core.
+routine Decimal.exp10() -> Decimal
+  return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: me) * f512_ln10()))
+
+### me raised to the power `you`: exp(you * log(me)) via the Remez core.
+routine Decimal.pow(you: Decimal) -> Decimal
+  return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: you) * decimalfixed_to_f512(x: me).log()))
+
+### Square root (correctly rounded).
+routine Decimal.sqrt() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).sqrt())
+
+### Cube root.
+routine Decimal.cbrt() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).cbrt())
+
+### Hypotenuse sqrt(me^2 + you^2).
+routine Decimal.hypot(you: Decimal) -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).hypot(you: decimalfixed_to_f512(x: you)))
+
+### Fused multiply-add me*b + c.
+routine Decimal.fma(b: Decimal, c: Decimal) -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).fma(b: decimalfixed_to_f512(x: b), c: decimalfixed_to_f512(x: c)))
+
+### Sine.
+routine Decimal.sin() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).sin())
+
+### Cosine.
+routine Decimal.cos() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).cos())
+
+### Tangent.
+routine Decimal.tan() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).tan())
+
+### Arcsine. Composed on the dedicated atan core (f512_asin_cr).
+routine Decimal.asin() -> Decimal
+  return f512_to_decimala(x: f512_asin_cr(x: decimalfixed_to_f512(x: me)))
+
+### Arccosine. Composed on the dedicated atan core (f512_acos_cr).
+routine Decimal.acos() -> Decimal
+  return f512_to_decimala(x: f512_acos_cr(x: decimalfixed_to_f512(x: me)))
+
+### Arctangent. Uses the dedicated range-reduced Remez core (f512_atan_cr).
+routine Decimal.atan() -> Decimal
+  return f512_to_decimala(x: f512_atan_cr(x: decimalfixed_to_f512(x: me)))
+
+### Two-argument arctangent atan2(me, x). Dedicated atan-core + C99 quadrant rules.
+routine Decimal.atan2(x: Decimal) -> Decimal
+  return f512_to_decimala(x: f512_atan2_cr(y: decimalfixed_to_f512(x: me), x: decimalfixed_to_f512(x: x)))
+
+### Hyperbolic sine. Engine sinh core (built on cancellation-free expm1).
+routine Decimal.sinh() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).sinh())
+
+### Hyperbolic cosine. Engine cosh core.
+routine Decimal.cosh() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).cosh())
+
+### Hyperbolic tangent. Engine tanh core (built on cancellation-free expm1).
+routine Decimal.tanh() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).tanh())
+
+### Inverse hyperbolic sine. Engine asinh core (log1p-based near 0).
+routine Decimal.asinh() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).asinh())
+
+### Inverse hyperbolic cosine. Engine acosh core.
+routine Decimal.acosh() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).acosh())
+
+### Inverse hyperbolic tangent. Engine atanh core (log1p-based near 0).
+routine Decimal.atanh() -> Decimal
+  return f512_to_decimala(x: decimalfixed_to_f512(x: me).atanh())
+
+# ============================================================================
+# erf / erfc — the generic N=120 continued-fraction cores (erf_cf/erfc_cf) run
+# at W=512. The CF math error is 2^-402 and the inner exp(n:22) matches the
+# 70-digit regime of F512.exp(n:20), so these are correctly-rounded to D256.
+# Threshold |x| = 3.1 splits erf-CF (small |x|) from erfc-CF (large |x|), per
+# the F128 surface.
+# ============================================================================
+
+### Error function erf(x). Specials: erf(NaN)=NaN, erf(+-inf)=+-1.
+routine f512_erf_cr(x: F512) -> F512
+  if x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return f512_intval(n: -1_s64)
+    return f512_intval(n: 1_s64)
+  var thr = f512_intval(n: 31_s64) / f512_intval(n: 10_s64)
+  var a = x.to_uf()
+  if x < thr.$neg()
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: -1_s64).sub(you: a.erfc_cf()).to_f512a()
+  if x < thr
+    return a.erf_cf().to_f512a()
+  return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erfc_cf()).to_f512a()
+
+### Complementary error function erfc(x)=1-erf(x). Specials: erfc(NaN)=NaN,
+### erfc(-inf)=2, erfc(+inf)=0.
+routine f512_erfc_cr(x: F512) -> F512
+  if x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return f512_intval(n: 2_s64)
+    return f512_intval(n: 0_s64)
+  var thr = f512_intval(n: 31_s64) / f512_intval(n: 10_s64)
+  var a = x.to_uf()
+  if x < thr.$neg()
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: 2_s64).add(you: a.erfc_cf()).to_f512a()
+  if x < thr
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erf_cf()).to_f512a()
+  return a.erfc_cf().to_f512a()
+
+### Error function.
+routine Decimal.erf() -> Decimal
+  return f512_to_decimala(x: f512_erf_cr(x: decimalfixed_to_f512(x: me)))
+
+### Complementary error function.
+routine Decimal.erfc() -> Decimal
+  return f512_to_decimala(x: f512_erfc_cr(x: decimalfixed_to_f512(x: me)))
+
+# ============================================================================
+# tgamma / lgamma — dedicated F512 Stirling core (mirrors the octuple
+# lgamma_core but with the wider gamma512_coef table, augmentation threshold 32
+# and O=80 terms -> ~2^-280, plus the W=512 sin(n:26)/log(n:23) counts). The
+# octuple core (T=20, O=35) only reaches ~2^-164, short of D256's 70 digits.
+# ============================================================================
+
+### lgamma core (TLFloat-style): returns (sign of gamma, log|gamma(z)|) at W=512.
+routine f512_lgamma_core(z: UnpackedFloat[U512, U1024, 512]) -> UFSign[U512, U1024, 512]
+  var one = UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64)
+  var p5 = one.ldexp(e: -1_s64)
+  var reflect = z.lt(you: one.neg())
+  var a = if reflect then one.sub(you: z) else z
+  var inv = a.rint()
+  var fr = a.sub(you: inv)
+  var w = UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64)
+  var thr = UnpackedFloat[U512, U1024, 512].from_s64(src: 32_s64)
+  if inv.lt(you: thr)
+    var ii = inv.to_s64()
+    while signed_lt[S64](a: ii, b: 32_s64)
+      w = w.mul(you: UnpackedFloat[U512, U1024, 512].from_s64(src: ii).add(you: fr))
+      ii = add[S64](a: ii, b: 1_s64)
+    a = thr.add(you: fr)
+  var inv_aa = one.div(you: a.mul(you: a))
+  var y = gamma512_coef(i: 79_s64).to_uf()
+  var i = 78_s64
+  while signed_ge[S64](a: i, b: 0_s64)
+    y = y.fma(b: inv_aa, c: gamma512_coef(i: i).to_uf())
+    i = sub[S64](a: i, b: 1_s64)
+  var loga = a.log(n: 23_s64, m: 0_s64, t: 0_s64)
+  y = y.div(you: a).add(you: a.sub(you: p5).mul(you: loga)).sub(you: a).add(you: p5.mul(you: UnpackedFloat[U512, U1024, 512].ln_2pi()))
+  y = y.sub(you: w.abs().log(n: 23_s64, m: 0_s64, t: 0_s64))
+  var sign = w.sign
+  if reflect
+    var s = UnpackedFloat[U512, U1024, 512].pi().mul(you: fr).sin(n: 26_s64)
+    y = UnpackedFloat[U512, U1024, 512].ln_pi().sub(you: s.abs().log(n: 23_s64, m: 0_s64, t: 0_s64)).sub(you: y)
+    sign = uf_bxor(a: sign, b: s.sign)
+    sign = sign == inv.iseven()
+  return UFSign[U512, U1024, 512](item0: sign, item1: y)
+
+### Gamma function. tgamma(NaN)=NaN, tgamma(+inf)=+inf, tgamma(-inf)=NaN,
+### tgamma(+-0)=+-inf, tgamma(negative integer)=NaN.
+routine f512_tgamma_cr(x: F512) -> F512
+  if x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return F512.from_bits(bits: f512a_qnan())
+    return x
+  if x.is_zero()
+    var sg = 0_u64
+    if x.is_negative()
+      sg = 1_u64
+    return F512.from_bits(bits: f512a_inf(sign: sg))
+  var zu = x.to_uf()
+  if x.is_negative() and zu.isint()
+    return F512.from_bits(bits: f512a_qnan())
+  var p = f512_lgamma_core(z: zu)
+  var r = p.item1.exp(n: 20_s64)
+  if p.item0
+    r = r.neg()
+  return r.to_f512a()
+
+### Log-gamma ln|gamma(x)|. lgamma(NaN)=NaN; lgamma(0)=lgamma(+-inf)=
+### lgamma(negative integer)=+inf.
+routine f512_lgamma_cr(x: F512) -> F512
+  if x.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  if x.is_zero() or x.is_infinite()
+    return F512.from_bits(bits: f512a_inf(sign: 0_u64))
+  var zu = x.to_uf()
+  if x.is_negative() and zu.isint()
+    return F512.from_bits(bits: f512a_inf(sign: 0_u64))
+  var p = f512_lgamma_core(z: zu)
+  return p.item1.to_f512a()
+
+### Gamma function.
+routine Decimal.tgamma() -> Decimal
+  return f512_to_decimala(x: f512_tgamma_cr(x: decimalfixed_to_f512(x: me)))
+
+### Natural log of the absolute value of gamma.
+routine Decimal.lgamma() -> Decimal
+  return f512_to_decimala(x: f512_lgamma_cr(x: decimalfixed_to_f512(x: me)))
+
+# ============================================================================
+# libm manipulation / classification — decimal-native on DecimalParts (value =
+# (-1)^sign * coeff * 10^exp). No binary round-trip: exact for the decimal type.
+# fmod/remainder/remquo (exact coefficient long-division) and the binary-exponent
+# ops (ldexp/frexp/logb/ilogb) are intentionally omitted; `scaleb` (x*10^n) is the
+# decimal-native analog provided instead.
+# ============================================================================
+
+### Sign bit (true when negative, including -0, -inf, -NaN).
+routine Decimal.signbit() -> Bool
+  return me.decode().sign
+
+### True for a finite non-zero value (decimal has no binary subnormals).
+routine Decimal.is_normal() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_ne[U256](a: p.coeff, b: 0)
+
+### True for +-0.
+routine Decimal.is_zero() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U256](a: p.coeff, b: 0)
+
+### libm fpclassify code: 0 NaN, 1 infinite, 2 zero, 4 normal (3 subnormal unused).
+routine Decimal.fpclassify() -> FpClass
+  var p = me.decode()
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return NAN
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return INFINITE
+  if int_eq[U256](a: p.coeff, b: 0)
+    return ZERO
+  return NORMAL
+
+### Absolute value (clears the sign, including on NaN/inf).
+routine Decimal.abs() -> Decimal
+  var p = me.decode()
+  return decimalfixed_of_parts(p: DecimalParts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
+
+### Negation (flips the sign, including on NaN/inf/zero).
+routine Decimal.$neg() -> Decimal
+  var p = me.decode()
+  return decimalfixed_of_parts(p: DecimalParts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
+
+### Magnitude of me with the sign of `you`.
+routine Decimal.copysign(you: Decimal) -> Decimal
+  var p = me.decode()
+  return decimalfixed_of_parts(p: DecimalParts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
+
+### Larger of me and you (NaN-skipping, per C99 fmax).
+routine Decimal.fmax(you: Decimal) -> Decimal
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if (me - you).decode().sign
+    return you
+  return me
+
+### Smaller of me and you (NaN-skipping, per C99 fmin).
+routine Decimal.fmin(you: Decimal) -> Decimal
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if (me - you).decode().sign
+    return me
+  return you
+
+### Positive difference max(me - you, 0); NaN if either is NaN.
+routine Decimal.fdim(you: Decimal) -> Decimal
+  if me.is_nan() or you.is_nan()
+    return Decimal.quiet_nan()
+  var d = me - you
+  if d.decode().sign
+    return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
+  return d
+
+### Scale by a power of ten: me * 10^n (exact, the decimal analog of ldexp).
+routine Decimal.scaleb(n: S64) -> Decimal
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64) or int_eq[U256](a: p.coeff, b: 0)
+    return me
+  var ne = add[S64](a: p.exp, b: n)
+  if signed_gt[S64](a: ne, b: 2621371_s64)
+    return Decimal.infinity(sign: p.sign)
+  if signed_lt[S64](a: ne, b: -1572932_s64)
+    return decimalfixed_of_parts(p: DecimalParts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
+  return decimalfixed_of_parts(p: DecimalParts(sign: p.sign, special: 0_u64, exp: ne, coeff: p.coeff))
+
+### Rounds me to an integral value. mode: 0 trunc, 1 floor, 2 ceil, 3 round
+### (half away from zero), 4 rint (half to even). Decimal-native, exact.
+routine decimalfixed_round_int(x: Decimal, mode: S64) -> Decimal
+  var p = x.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    return x
+  if int_eq[U256](a: p.coeff, b: 0)
+    return x
+  if signed_ge[S64](a: p.exp, b: 0_s64)
+    return x
+  var ndrop = sub[S64](a: 0_s64, b: p.exp)
+  var q = zero_extend[U64, U256](0_u64)
+  var rnz = true
+  var half = false
+  var gthalf = false
+  if signed_le[S64](a: ndrop, b: 70_s64)
+    var divp = pow10b(k: ndrop)
+    q = div_pow10b(x: p.coeff, k: ndrop)
+    var r = sub[U256](a: p.coeff, b: mul[U256](a: q, b: divp))
+    rnz = int_ne[U256](a: r, b: 0)
+    var twice = mul[U256](a: r, b: zero_extend[U64, U256](2_u64))
+    half = int_eq[U256](a: twice, b: divp)
+    gthalf = unsigned_gt[U256](a: twice, b: divp)
+  var inc = false
+  if int_eq[S64](a: mode, b: 1_s64)
+    inc = p.sign and rnz
+  elseif int_eq[S64](a: mode, b: 2_s64)
+    inc = (not p.sign) and rnz
+  elseif int_eq[S64](a: mode, b: 3_s64)
+    inc = gthalf or half
+  elseif int_eq[S64](a: mode, b: 4_s64)
+    if gthalf
+      inc = true
+    elseif half
+      inc = int_ne[U256](a: bit_and[U256](a: q, b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
+  var qq = q
+  if inc
+    qq = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  return decimalfixed_of_parts(p: DecimalParts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: qq))
+
+### Truncate toward zero.
+routine Decimal.trunc() -> Decimal
+  return decimalfixed_round_int(x: me, mode: 0_s64)
+
+### Round toward -inf.
+routine Decimal.floor() -> Decimal
+  return decimalfixed_round_int(x: me, mode: 1_s64)
+
+### Round toward +inf.
+routine Decimal.ceil() -> Decimal
+  return decimalfixed_round_int(x: me, mode: 2_s64)
+
+### Round to nearest, ties away from zero.
+routine Decimal.round() -> Decimal
+  return decimalfixed_round_int(x: me, mode: 3_s64)
+
+### Round to nearest, ties to even (nearbyint/rint).
+routine Decimal.rint() -> Decimal
+  return decimalfixed_round_int(x: me, mode: 4_s64)
+
+### Fractional part me - trunc(me) (same sign as me); modf int part = trunc(me).
+routine Decimal.frac() -> Decimal
+  if me.is_nan()
+    return me
+  var p = me.decode()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return decimalfixed_of_parts(p: DecimalParts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
+  return me - me.trunc()

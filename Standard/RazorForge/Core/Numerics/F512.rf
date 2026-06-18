@@ -1,0 +1,446 @@
+module Core
+
+# CREDITS: this software binary512 engine is a port and extension of TLFloat (© Naoki
+# Shibata and contributors, Boost Software License 1.0). See THIRD-PARTY-NOTICES.md.
+
+# ============================================================================
+# F512 — software IEEE 754 binary512, pure-integer. Storage: raw 512-bit
+# container. Arithmetic, members and transcendentals run on the generic
+# UnpackedFloat[U512, U1024, 512] engine (the same engine F128/F256 use at
+# narrower widths); F512 only adds the packed binary512 bit layout and the
+# cast adapters.
+#
+# Layout (IEEE 754 binary512): sign(1) | exponent(23, bias 4194303) | mantissa(488).
+#   significand = 489 bits (488 stored + implicit). Engine nbmant = W-2 = 510, so the
+#   round-out shift is W-490 = 22 (cf. F256's W-238 = 18 for 236-bit binary256).
+#
+# NOTE: there is no Core.F512 oracle. Arithmetic/sqrt/rounding are correctly rounded to
+# binary512 via the engine. PURPOSE: a binary512 engine to delegate decimal256 (Decimal)
+# transcendentals to — 489-bit significand (~147 decimal digits) gives ample guard over
+# decimal256's 70 digits. Transcendentals reuse the engine cores at the same degrees
+# F256's path uses. Verified by exact identities + narrow-to-F256 cross-checks.
+# ============================================================================
+
+
+### A software binary512 float backed by a raw 512-bit container.
+@llvm("i512")
+record F512 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible
+  pass
+
+# ============================================================================
+# Width constants / bit masks (binary512)
+# ============================================================================
+
+### The implicit-bit mask `1 << 488`.
+routine f512a_implicit() -> U512
+  return shift_left[U512](value: 1, bits: uf_amt[U512](488_s64))
+
+### The 488-bit mantissa mask `(1 << 488) - 1`.
+routine f512a_mant_mask() -> U512
+  return sub[U512](a: f512a_implicit(), b: 1)
+
+### The sign-bit mask `1 << 511`.
+routine f512a_sign_mask() -> U512
+  return shift_left[U512](value: 1, bits: uf_amt[U512](511_s64))
+
+### The magnitude mask `~(1 << 511)` (all but the sign bit).
+routine f512a_abs_mask() -> U512
+  return sub[U512](a: f512a_sign_mask(), b: 1)
+
+### The infinity encoding `0x7FFFFF << 488` for the given sign bit.
+routine f512a_inf(sign: U64) -> U512
+  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64))
+  var e = shift_left[U512](value: zero_extend[U64, U512](0x7FFFFF_u64), bits: uf_amt[U512](488_s64))
+  return bit_or[U512](a: s, b: e)
+
+### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
+routine f512a_qnan() -> U512
+  var e = shift_left[U512](value: zero_extend[U64, U512](0x7FFFFF_u64), bits: uf_amt[U512](488_s64))
+  var q = shift_left[U512](value: 1, bits: uf_amt[U512](487_s64))
+  return bit_or[U512](a: e, b: q)
+
+### Sign-magnitude total-order key for comparison.
+routine f512a_order_key(bits: U512) -> U512
+  if int_ne[U512](a: bit_and[U512](a: bits, b: f512a_sign_mask()), b: 0)
+    return bit_xor[U512](a: bits, b: sub[U512](a: 0, b: 1))
+  return bit_or[U512](a: bits, b: f512a_sign_mask())
+
+# ============================================================================
+# Raw bit access
+# ============================================================================
+
+### Reinterprets this value as its raw IEEE 754 bit pattern.
+routine F512.to_bits() -> U512
+  return reinterpret_bits[F512, U512](me)
+
+### Builds a value directly from a raw IEEE 754 bit pattern.
+common routine F512.from_bits(bits: U512) -> F512
+  return reinterpret_bits[U512, F512](bits)
+
+### Returns the raw biased exponent field (0..8388607).
+routine F512.raw_exponent() -> U64
+  return int_truncate[U512, U64](bit_and[U512](a: shift_right_unsigned[U512](me.to_bits(), uf_amt[U512](488_s64)), b: zero_extend[U64, U512](0x7FFFFF_u64)))
+
+### Returns the raw 488-bit mantissa field (no implicit bit).
+routine F512.raw_mantissa() -> U512
+  return bit_and[U512](a: me.to_bits(), b: f512a_mant_mask())
+
+# ============================================================================
+# Classification
+# ============================================================================
+
+### Returns `true` when the value is negative (sign bit set).
+routine F512.is_negative() -> Bool
+  return int_ne[U512](a: bit_and[U512](a: me.to_bits(), b: f512a_sign_mask()), b: 0)
+
+### Returns `true` when the value is strictly positive.
+routine F512.is_positive() -> Bool
+  return not me.is_negative() and not me.is_zero()
+
+### Returns `true` when the value encodes a NaN.
+routine F512.is_nan() -> Bool
+  return me.raw_exponent() == 0x7FFFFF_u64 and int_ne[U512](a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the value encodes positive or negative infinity.
+routine F512.is_infinite() -> Bool
+  return me.raw_exponent() == 0x7FFFFF_u64 and int_eq[U512](a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the value is neither NaN nor infinity.
+routine F512.is_finite() -> Bool
+  return me.raw_exponent() != 0x7FFFFF_u64
+
+### Returns `true` when the value is zero (either sign).
+routine F512.is_zero() -> Bool
+  return me.raw_exponent() == 0_u64 and int_eq[U512](a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the value is subnormal (denormalized, nonzero).
+routine F512.is_subnormal() -> Bool
+  return me.raw_exponent() == 0_u64 and int_ne[U512](a: me.raw_mantissa(), b: 0)
+
+# ============================================================================
+# Sign operations
+# ============================================================================
+
+### Returns the arithmetic negation (sign bit flipped).
+routine F512.$neg() -> F512
+  return F512.from_bits(bits: bit_xor[U512](a: me.to_bits(), b: f512a_sign_mask()))
+
+### Returns the absolute value (sign bit cleared).
+routine F512.abs() -> F512
+  return F512.from_bits(bits: bit_and[U512](a: me.to_bits(), b: f512a_abs_mask()))
+
+### Returns this magnitude carrying the sign of `sign`.
+routine F512.copysign(sign: F512) -> F512
+  var mag = bit_and[U512](a: me.to_bits(), b: f512a_abs_mask())
+  var sgn = bit_and[U512](a: sign.to_bits(), b: f512a_sign_mask())
+  return F512.from_bits(bits: bit_or[U512](a: mag, b: sgn))
+
+# ============================================================================
+# Comparison (pure sign-magnitude bit logic)
+# ============================================================================
+
+### Returns whether two values compare equal (NaN unequal; +0 == -0).
+routine F512.$eq(you: F512) -> Bool
+  if me.is_nan() or you.is_nan()
+    return false
+  if me.is_zero() and you.is_zero()
+    return true
+  return int_eq[U512](a: me.to_bits(), b: you.to_bits())
+
+### Compares this value with `you` under IEEE ordered semantics.
+routine F512.$cmp(you: F512) -> ComparisonSign
+  if me.is_nan() or you.is_nan()
+    return SAME
+  if me.is_zero() and you.is_zero()
+    return SAME
+  var ka = f512a_order_key(bits: me.to_bits())
+  var kb = f512a_order_key(bits: you.to_bits())
+  if unsigned_lt[U512](a: ka, b: kb)
+    return ME_SMALL
+  if unsigned_gt[U512](a: ka, b: kb)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Packed F512 <-> UnpackedFloat[U512, U1024, 512] casts
+# ============================================================================
+
+### Decodes this `F512` into the engine unpacked value (exact).
+routine F512.to_uf() -> UnpackedFloat[U512, U1024, 512]
+  var bits = me.to_bits()
+  var sign = int_ne[U512](a: bit_and[U512](a: bits, b: f512a_sign_mask()), b: 0)
+  var e = int_truncate[U512, U64](bit_and[U512](a: shift_right_unsigned[U512](bits, uf_amt[U512](488_s64)), b: zero_extend[U64, U512](0x7FFFFF_u64)))
+  var f = bit_and[U512](a: bits, b: f512a_mant_mask())
+  if e == 0x7FFFFF_u64
+    if int_ne[U512](a: f, b: 0)
+      return UnpackedFloat[U512, U1024, 512].nan()
+    return UnpackedFloat[U512, U1024, 512].inf(sign: sign)
+  if e == 0_u64 and int_eq[U512](a: f, b: 0)
+    return UnpackedFloat[U512, U1024, 512].zero(sign: sign)
+  if e == 0_u64
+    var msbf = int_truncate[U512, S64](sub[U512](a: zero_extend[U64, U512](511_u64), b: leading_zeros[U512](f)))
+    var shift = sub[S64](a: 510_s64, b: msbf)
+    var mant = shift_left[U512](value: f, bits: uf_amt[U512](shift))
+    return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: msbf, b: 4194791_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  var sig = bit_or[U512](a: f, b: f512a_implicit())
+  var mant = shift_left[U512](value: sig, bits: uf_amt[U512](22_s64))
+  return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 4194304_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+
+### Packs the implicit-stripped significand and exponent into binary512 bits.
+routine f512a_pack(sign: U64, biased: U64, sig: U512) -> U512
+  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64))
+  var e = shift_left[U512](value: zero_extend[U64, U512](biased), bits: uf_amt[U512](488_s64))
+  var f = bit_and[U512](a: sig, b: f512a_mant_mask())
+  return bit_or[U512](a: bit_or[U512](a: s, b: e), b: f)
+
+### Builds a subnormal binary512 encoding by shifting the significand down.
+routine f512a_finish_subnormal(sign: U64, sig: U512, under: S64) -> U512
+  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64))
+  if signed_gt[S64](a: under, b: 488_s64)
+    return s
+  var lost = bit_and[U512](a: sig, b: uf_lowmask[U512](under))
+  var half = shift_left[U512](value: 1, bits: uf_amt[U512](sub[S64](a: under, b: 1_s64)))
+  var q = shift_right_unsigned[U512](sig, uf_amt[U512](under))
+  if unsigned_gt[U512](a: lost, b: half)
+    q = add[U512](a: q, b: 1)
+  elseif int_eq[U512](a: lost, b: half) and int_ne[U512](a: bit_and[U512](a: q, b: 1), b: 0)
+    q = add[U512](a: q, b: 1)
+  return bit_or[U512](a: s, b: q)
+
+### Rounds any engine value back to an `F512` (round-to-nearest-even).
+### The mantissa shift is `W - 490` (22 for the 512-bit engine).
+routine UnpackedFloat[M, L, W].to_f512a() -> F512
+  var sign = 0_u64
+  if me.sign
+    sign = 1_u64
+  if me.isnan
+    return F512.from_bits(bits: f512a_qnan())
+  if me.isinf
+    return F512.from_bits(bits: f512a_inf(sign: sign))
+  if me.iszero
+    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64)))
+  var biased = add[S64](a: me.exp, b: 4194304_s64)
+  var sh = sub[S64](a: reinterpret_bits[U64, S64](W), b: 490_s64)
+  var lost = bit_and[M](a: me.mant, b: uf_lowmask[M](sh))
+  var half = shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: sh, b: 1_s64)))
+  var sig = int_truncate[L, U512](zero_extend[M, L](shift_right_unsigned[M](me.mant, uf_amt[M](sh))))
+  if unsigned_gt[M](a: lost, b: half)
+    sig = add[U512](a: sig, b: 1)
+  elseif int_eq[M](a: lost, b: half) and int_ne[U512](a: bit_and[U512](a: sig, b: 1), b: 0)
+    sig = add[U512](a: sig, b: 1)
+  if int_ne[U512](a: bit_and[U512](a: sig, b: shift_left[U512](value: 1, bits: uf_amt[U512](489_s64))), b: 0)
+    sig = shift_right_unsigned[U512](sig, uf_amt[U512](1_s64))
+    biased = add[S64](a: biased, b: 1_s64)
+  if signed_ge[S64](a: biased, b: 8388607_s64)
+    return F512.from_bits(bits: f512a_inf(sign: sign))
+  if signed_lt[S64](a: biased, b: 1_s64)
+    return F512.from_bits(bits: f512a_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased)))
+  return F512.from_bits(bits: f512a_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig))
+
+# ============================================================================
+# Software arithmetic (delegated to the engine)
+# ============================================================================
+
+### Returns `me + you`.
+routine F512.$add(you: F512) -> F512
+  return me.to_uf().add(you: you.to_uf()).to_f512a()
+
+### Returns `me - you`.
+routine F512.$sub(you: F512) -> F512
+  return me.to_uf().sub(you: you.to_uf()).to_f512a()
+
+### Returns `me * you`.
+routine F512.$mul(you: F512) -> F512
+  return me.to_uf().mul(you: you.to_uf()).to_f512a()
+
+### Returns `me / you`.
+routine F512.$truediv(you: F512) -> F512
+  return me.to_uf().div(you: you.to_uf()).to_f512a()
+
+# ============================================================================
+# Exact members
+# ============================================================================
+
+### The constant 1.0 as an F512.
+routine f512a_one() -> F512
+  return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).to_f512a()
+
+### Returns the smaller of two values (NaN-propagating like the engine).
+routine F512.min(you: F512) -> F512
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  return if me <= you then me else you
+
+### Returns the larger of two values.
+routine F512.max(you: F512) -> F512
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  return if me >= you then me else you
+
+### Returns the positive difference `max(me - you, +0)` (C `fdim`).
+routine F512.fdim(you: F512) -> F512
+  if me.is_nan() or you.is_nan()
+    return F512.from_bits(bits: f512a_qnan())
+  if me > you
+    return me - you
+  return F512.from_bits(bits: zero_extend[U64, U512](0_u64))
+
+### Truncates toward zero to an integer value.
+routine F512.trunc() -> F512
+  return me.to_uf().trunc().to_f512a()
+
+### Rounds to nearest integer, ties away from zero.
+routine F512.round() -> F512
+  return me.to_uf().round().to_f512a()
+
+### Rounds to nearest integer, ties to even.
+routine F512.rint() -> F512
+  return me.to_uf().rint().to_f512a()
+
+### Largest integer <= me (C `floor`).
+routine F512.floor() -> F512
+  var t = me.trunc()
+  if me.is_negative() and t != me
+    return t - f512a_one()
+  return t
+
+### Smallest integer >= me (C `ceil`).
+routine F512.ceil() -> F512
+  var t = me.trunc()
+  if me.is_positive() and t != me
+    return t + f512a_one()
+  return t
+
+### Returns the correctly-rounded square root.
+routine F512.sqrt() -> F512
+  return me.to_uf().sqrt().to_f512a()
+
+# ============================================================================
+# Transcendentals (engine cores; degrees per F256's path)
+# ============================================================================
+
+### e raised to this value.
+routine F512.exp() -> F512
+  return me.to_uf().exp(n: 20_s64).to_f512a()
+
+### Natural logarithm.
+routine F512.log() -> F512
+  return me.to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).to_f512a()
+
+### exp(me) - 1.
+routine F512.expm1() -> F512
+  return me.to_uf().expm1(n: 21_s64).to_f512a()
+
+### log(1 + me).
+routine F512.log1p() -> F512
+  return me.to_uf().log1p(n: 23_s64, m: 0_s64).to_f512a()
+
+### Base-2 logarithm.
+routine F512.log2() -> F512
+  return me.to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).div(you: UnpackedFloat[U512, U1024, 512].ln2()).to_f512a()
+
+### Base-10 logarithm.
+routine F512.log10() -> F512
+  return me.to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).div(you: UnpackedFloat[U512, U1024, 512].ln10()).to_f512a()
+
+### 2 raised to this value.
+routine F512.exp2() -> F512
+  return me.to_uf().mul(you: UnpackedFloat[U512, U1024, 512].ln2()).exp(n: 20_s64).to_f512a()
+
+### 10 raised to this value.
+routine F512.exp10() -> F512
+  return me.to_uf().mul(you: UnpackedFloat[U512, U1024, 512].ln10()).exp(n: 20_s64).to_f512a()
+
+### me raised to the power `you`.
+routine F512.pow(you: F512) -> F512
+  return me.abs().to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).mul(you: you.to_uf()).exp(n: 20_s64).to_f512a()
+
+### Cube root.
+routine F512.cbrt() -> F512
+  return me.to_uf().cbrt().to_f512a()
+
+### Hypotenuse sqrt(me^2 + you^2) (engine arithmetic).
+routine F512.hypot(you: F512) -> F512
+  var a = me.abs()
+  var b = you.abs()
+  return (a * a + b * b).sqrt()
+
+### Fused multiply-add me*b + c with a single rounding.
+routine F512.fma(b: F512, c: F512) -> F512
+  return me.to_uf().fma(b: b.to_uf(), c: c.to_uf()).to_f512a()
+
+### Sine.
+routine F512.sin() -> F512
+  return me.to_uf().sin(n: 26_s64).to_f512a()
+
+### Cosine.
+routine F512.cos() -> F512
+  return me.to_uf().cos().to_f512a()
+
+### Tangent (engine tanxy, W=512-tuned: reduce by 2^6, degree-25 numerator).
+routine F512.tan() -> F512
+  return me.to_uf().tan().to_f512a()
+
+### Arcsine.
+routine F512.asin() -> F512
+  return me.to_uf().asin().to_f512a()
+
+### Arccosine.
+routine F512.acos() -> F512
+  return me.to_uf().acos().to_f512a()
+
+### Arctangent.
+routine F512.atan() -> F512
+  return me.to_uf().atan().to_f512a()
+
+### Two-argument arctangent atan2(me, x).
+routine F512.atan2(x: F512) -> F512
+  return me.to_uf().atan2(x0: x.to_uf()).to_f512a()
+
+### Hyperbolic sine.
+routine F512.sinh() -> F512
+  return me.to_uf().sinh().to_f512a()
+
+### Hyperbolic cosine.
+routine F512.cosh() -> F512
+  return me.to_uf().cosh().to_f512a()
+
+### Hyperbolic tangent.
+routine F512.tanh() -> F512
+  return me.to_uf().tanh().to_f512a()
+
+### Inverse hyperbolic sine.
+routine F512.asinh() -> F512
+  return me.to_uf().asinh().to_f512a()
+
+### Inverse hyperbolic cosine.
+routine F512.acosh() -> F512
+  return me.to_uf().acosh().to_f512a()
+
+### Inverse hyperbolic tangent.
+routine F512.atanh() -> F512
+  return me.to_uf().atanh().to_f512a()
+
+# ============================================================================
+# Text — narrow to F256 for a readable decimal (full binary512 %g is TODO).
+# ============================================================================
+
+### Narrows this value to F256 (binary256) by re-rounding through the engine.
+routine F512.to_f256a() -> F256
+  return me.to_uf().to_f256a()
+
+### Returns the decimal text (narrowed to binary256 precision for display).
+routine F512.$represent() -> Text
+  if me.is_nan()
+    return "NaN"
+  if me.is_infinite()
+    return if me.is_negative() then "-inf" else "inf"
+  return me.to_f256a().$represent()
+
+### Returns a diagnostic representation tagged with the type name.
+routine F512.$diagnose() -> Text
+  return "F512(" + me.$represent() + ")"
