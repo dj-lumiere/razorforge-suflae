@@ -29,18 +29,21 @@ preset F32_LN_10: F32 = 2.3025851_f32
 ### Converts an `S8` into single-precision floating-point form.
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F32` value.
+@inline
 routine F32.$create(from: S8) -> F32
   return signed_to_float[S8, F32](from)
 
 ### Converts an `S16` into single-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F32` value.
+@inline
 routine F32.$create(from: S16) -> F32
   return signed_to_float[S16, F32](from)
 
 ### Converts an `S32` into single-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The closest representable `F32` value.
+@inline
 routine F32.$create(from: S32) -> F32
   return signed_to_float[S32, F32](from)
 
@@ -48,60 +51,70 @@ routine F32.$create(from: S32) -> F32
 ### Precision may be rounded when the integer cannot be represented exactly.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F32` value.
+@inline
 routine F32.$create(from: S64) -> F32
   return signed_to_float[S64, F32](from)
 
 ### Converts an `S128` into single-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F32` value under the target rounding rules.
+@inline
 routine F32.$create(from: S128) -> F32
   return signed_to_float[S128, F32](from)
 
 ### Converts a `U8` into single-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F32` value.
+@inline
 routine F32.$create(from: U8) -> F32
   return unsigned_to_float[U8, F32](from)
 
 ### Converts a `U16` into single-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F32` value.
+@inline
 routine F32.$create(from: U16) -> F32
   return unsigned_to_float[U16, F32](from)
 
 ### Converts a `U32` into single-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The closest representable `F32` value.
+@inline
 routine F32.$create(from: U32) -> F32
   return unsigned_to_float[U32, F32](from)
 
 ### Converts a `U64` into single-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F32` value.
+@inline
 routine F32.$create(from: U64) -> F32
   return unsigned_to_float[U64, F32](from)
 
 ### Converts a `U128` into single-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F32` value under the target rounding rules.
+@inline
 routine F32.$create(from: U128) -> F32
   return unsigned_to_float[U128, F32](from)
 
 ### Widens a half-precision float to single precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F32` carrying the same numeric value when representable.
+@inline
 routine F32.$create(from: F16) -> F32
   return float_extend[F16, F32](from)
 
 ### Returns an existing `F32` unchanged.
 ### :param from: The single-precision value to forward.
 ### :returns: `from`.
+@inline
 routine F32.$create(from: F32) -> F32
   return from
 
 ### Narrows a double-precision float to single precision.
 ### :param from: The `F64` value to convert.
 ### :returns: The nearest representable `F32` value.
+@inline
 routine F32.$create(from: F64) -> F32
   return float_narrow[F64, F32](from)
 
@@ -109,71 +122,63 @@ routine F32.$create(from: F64) -> F32
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F32` value.
 routine F32.$create(from: F128) -> F32
-  return rf_f128_to_f32_parts(low: from.low_bits(), high: from.high_bits())
+  return from.F32()
 
 ### Converts a decimal32 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F32` value.
 routine F32.$create(from: D32) -> F32
-  var bits = reinterpret_bits[D32, U32](from)
-  return rf_d32_to_f32(bits)
+  return F32(from: F64(from))
 
 ### Converts a decimal64 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F32` value.
 routine F32.$create(from: D64) -> F32
-  var bits = reinterpret_bits[D64, U64](from)
-  return rf_d64_to_f32(bits)
+  return F32(from: F64(from))
 
 ### Converts a decimal128 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F32` value.
 routine F32.$create(from: D128) -> F32
-  return rf_d128_to_f32(low: from.low_bits(), high: from.high_bits())
+  return F32(from: F64(from))
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
-### Returns `me + you`, throwing if the result is non-finite.
+### Returns `me + you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The addend.
 ### :returns: The single-precision sum.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F32.$add!(you: F32) -> F32
-  var result = float_add[F32](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F32 addition produced non-finite result: {me} + {you}")
-  return result
+routine F32.$add(you: F32) -> F32
+  return float_add[F32](a: me, b: you)
 
-### Returns `me - you`, throwing if the result is non-finite.
+### Returns `me - you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The value to subtract.
 ### :returns: The single-precision difference.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F32.$sub!(you: F32) -> F32
-  var result = float_sub[F32](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F32 subtraction produced non-finite result: {me} - {you}")
-  return result
+routine F32.$sub(you: F32) -> F32
+  return float_sub[F32](a: me, b: you)
 
-### Returns `me * you`, throwing if the result is non-finite.
+### Returns `me * you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The multiplier.
 ### :returns: The single-precision product.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F32.$mul!(you: F32) -> F32
-  var result = float_mul[F32](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F32 multiplication produced non-finite result: {me} * {you}")
-  return result
+routine F32.$mul(you: F32) -> F32
+  return float_mul[F32](a: me, b: you)
 
-### Returns `me / you`, throwing if the result is non-finite.
+### Returns `me / you` following IEEE 754: division by zero yields ±infinity and
+### 0/0 yields NaN (no exception). Use `.finite!()` to assert a finite result.
 ### :param you: The divisor.
-### :returns: The single-precision quotient.
-### :throws: {NumericOverflowError} if the result is infinity or NaN (including division by zero).
-routine F32.$truediv!(you: F32) -> F32
-  var result = float_div[F32](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F32 division produced non-finite result: {me} / {you}")
-  return result
+### :returns: The single-precision quotient (possibly ±infinity or NaN).
+routine F32.$truediv(you: F32) -> F32
+  return float_div[F32](a: me, b: you)
+
+### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
+### :returns: `me`, when finite.
+### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
+routine F32.finite!() -> F32
+  if not me.is_finite()
+    throw NumericOverflowError(description: f"F32 value is non-finite: {me}")
+  return me
 
 ### Returns the negated value.
 ### :returns: The resulting `F32` value.
@@ -284,14 +289,11 @@ routine F32.log10() -> F32
 routine F32.pow(exp: F32) -> F32
   return pow[F32](me, exp)
 
-### Raises this value to `exp` and rejects non-finite results.
+### Raises this value to `exp` (IEEE semantics: overflow/domain errors yield inf/NaN).
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp` in single precision.
-routine F32.$pow!(exp: F32) -> F32
-  var result = me.pow(exp)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F32 power produced non-finite result: {me} ** {exp}")
-  return result
+routine F32.$pow(exp: F32) -> F32
+  return me.pow(exp)
 
 ### Returns this value with its sign bit replaced by the sign of `sign`.
 ### :param sign: The value supplying the sign bit.
@@ -500,3 +502,188 @@ routine F32.to_bytes_be() -> Array[Byte, 4]
 ### :returns: The resulting `U64` value.
 routine F32.$hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[U32, U64](reinterpret_bits[F32, U32](me)), k0: k0, k1: k1)
+
+# ============================================================================
+# Full libm parity (rf_f32_* runtime, TLFloat/libm-backed). Basic ops above use
+# LLVM intrinsics; the extended surface binds the single-precision runtime.
+# ============================================================================
+external("C") routine rf_f32_tan(value: F32) -> F32
+external("C") routine rf_f32_asin(value: F32) -> F32
+external("C") routine rf_f32_acos(value: F32) -> F32
+external("C") routine rf_f32_atan(value: F32) -> F32
+external("C") routine rf_f32_atan2(y: F32, x: F32) -> F32
+external("C") routine rf_f32_sinh(value: F32) -> F32
+external("C") routine rf_f32_cosh(value: F32) -> F32
+external("C") routine rf_f32_tanh(value: F32) -> F32
+external("C") routine rf_f32_asinh(value: F32) -> F32
+external("C") routine rf_f32_acosh(value: F32) -> F32
+external("C") routine rf_f32_atanh(value: F32) -> F32
+external("C") routine rf_f32_cbrt(value: F32) -> F32
+external("C") routine rf_f32_exp2(value: F32) -> F32
+external("C") routine rf_f32_expm1(value: F32) -> F32
+external("C") routine rf_f32_log1p(value: F32) -> F32
+external("C") routine rf_f32_log2(value: F32) -> F32
+external("C") routine rf_f32_hypot(x: F32, y: F32) -> F32
+external("C") routine rf_f32_fma(x: F32, y: F32, z: F32) -> F32
+external("C") routine rf_f32_fmod(x: F32, y: F32) -> F32
+external("C") routine rf_f32_remainder(x: F32, y: F32) -> F32
+external("C") routine rf_f32_fdim(x: F32, y: F32) -> F32
+external("C") routine rf_f32_fmax(x: F32, y: F32) -> F32
+external("C") routine rf_f32_fmin(x: F32, y: F32) -> F32
+external("C") routine rf_f32_exp10(value: F32) -> F32
+external("C") routine rf_f32_sinpi(value: F32) -> F32
+external("C") routine rf_f32_cospi(value: F32) -> F32
+external("C") routine rf_f32_tanpi(value: F32) -> F32
+external("C") routine rf_f32_nextafter(x: F32, y: F32) -> F32
+external("C") routine rf_f32_scalbn(value: F32, n: S64) -> F32
+external("C") routine rf_f32_ilogb(value: F32) -> S64
+external("C") routine rf_f32_rint(value: F32) -> F32
+external("C") routine rf_f32_erf(value: F32) -> F32
+external("C") routine rf_f32_erfc(value: F32) -> F32
+external("C") routine rf_f32_tgamma(value: F32) -> F32
+external("C") routine rf_f32_lgamma(value: F32) -> F32
+
+### Tangent (radians).
+routine F32.tan() -> F32
+  return rf_f32_tan(value: me)
+### Arc sine.
+routine F32.asin() -> F32
+  return rf_f32_asin(value: me)
+### Arc cosine.
+routine F32.acos() -> F32
+  return rf_f32_acos(value: me)
+### Arc tangent.
+routine F32.atan() -> F32
+  return rf_f32_atan(value: me)
+### Two-argument arc tangent atan2(me, x).
+routine F32.atan2(x: F32) -> F32
+  return rf_f32_atan2(y: me, x: x)
+### Hyperbolic sine.
+routine F32.sinh() -> F32
+  return rf_f32_sinh(value: me)
+### Hyperbolic cosine.
+routine F32.cosh() -> F32
+  return rf_f32_cosh(value: me)
+### Hyperbolic tangent.
+routine F32.tanh() -> F32
+  return rf_f32_tanh(value: me)
+### Inverse hyperbolic sine.
+routine F32.asinh() -> F32
+  return rf_f32_asinh(value: me)
+### Inverse hyperbolic cosine.
+routine F32.acosh() -> F32
+  return rf_f32_acosh(value: me)
+### Inverse hyperbolic tangent.
+routine F32.atanh() -> F32
+  return rf_f32_atanh(value: me)
+### Cube root.
+routine F32.cbrt() -> F32
+  return rf_f32_cbrt(value: me)
+### Base-2 exponential.
+routine F32.exp2() -> F32
+  return rf_f32_exp2(value: me)
+### exp(me) - 1, accurate near zero.
+routine F32.expm1() -> F32
+  return rf_f32_expm1(value: me)
+### log(1 + me), accurate near zero.
+routine F32.log1p() -> F32
+  return rf_f32_log1p(value: me)
+### Base-2 logarithm.
+routine F32.log2() -> F32
+  return rf_f32_log2(value: me)
+### Base-10 exponential 10**me.
+routine F32.exp10() -> F32
+  return rf_f32_exp10(value: me)
+### Hypotenuse sqrt(me^2 + you^2) without overflow.
+routine F32.hypot(you: F32) -> F32
+  return rf_f32_hypot(x: me, y: you)
+### Fused multiply-add me*b + c with a single rounding.
+routine F32.fma(b: F32, c: F32) -> F32
+  return rf_f32_fma(x: me, y: b, z: c)
+### Floating-point remainder of me/you (C fmod).
+routine F32.fmod(you: F32) -> F32
+  return rf_f32_fmod(x: me, y: you)
+### IEEE remainder of me/you (C remainder).
+routine F32.remainder(you: F32) -> F32
+  return rf_f32_remainder(x: me, y: you)
+### Positive difference max(me - you, 0) (C fdim).
+routine F32.fdim(you: F32) -> F32
+  return rf_f32_fdim(x: me, y: you)
+### Larger of me and you (C fmax).
+routine F32.fmax(you: F32) -> F32
+  return rf_f32_fmax(x: me, y: you)
+### Smaller of me and you (C fmin).
+routine F32.fmin(you: F32) -> F32
+  return rf_f32_fmin(x: me, y: you)
+### sin(pi*me).
+routine F32.sinpi() -> F32
+  return rf_f32_sinpi(value: me)
+### cos(pi*me).
+routine F32.cospi() -> F32
+  return rf_f32_cospi(value: me)
+### tan(pi*me).
+routine F32.tanpi() -> F32
+  return rf_f32_tanpi(value: me)
+### Next representable value after me toward you.
+routine F32.nextafter(you: F32) -> F32
+  return rf_f32_nextafter(x: me, y: you)
+### me * 2^n (C scalbn).
+routine F32.scalbn(n: S64) -> F32
+  return rf_f32_scalbn(value: me, n: n)
+### Alias of scalbn (C ldexp).
+routine F32.ldexp(n: S64) -> F32
+  return rf_f32_scalbn(value: me, n: n)
+### Rounds to nearest integer in the current rounding mode (C rint).
+routine F32.rint() -> F32
+  return rf_f32_rint(value: me)
+### Error function.
+routine F32.erf() -> F32
+  return rf_f32_erf(value: me)
+### Complementary error function.
+routine F32.erfc() -> F32
+  return rf_f32_erfc(value: me)
+### Gamma function.
+routine F32.tgamma() -> F32
+  return rf_f32_tgamma(value: me)
+### Natural log of |gamma(me)|.
+routine F32.lgamma() -> F32
+  return rf_f32_lgamma(value: me)
+### Truncates toward zero (C trunc; alias of int_truncate).
+routine F32.trunc() -> F32
+  return float_truncate[F32](me)
+### Fractional part me - trunc(me).
+routine F32.frac() -> F32
+  return me - float_truncate[F32](me)
+### Integer and fractional parts (C modf); both carry me's sign.
+routine F32.modf() -> (F32, F32)
+  var ip = float_truncate[F32](me)
+  return (ip, me - ip)
+### Fraction in [0.5,1) and power-of-two exponent (C frexp).
+routine F32.frexp() -> (F32, S64)
+  if me.is_zero() or me.is_infinite() or me.is_nan()
+    return (me, 0_s64)
+  var e = add[S64](a: rf_f32_ilogb(value: me), b: 1_s64)
+  return (rf_f32_scalbn(value: me, n: sub[S64](a: 0_s64, b: e)), e)
+### True if the sign bit is set (C signbit).
+routine F32.signbit() -> Bool
+  return int_ne[U32](a: bit_and[U32](a: me.to_bits(), b: 0x80000000_u32), b: 0_u32)
+### True for a subnormal (denormalized, nonzero) value.
+routine F32.is_subnormal() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U32](a: bits, b: 0x7F800000_u32)
+  var mantissa = bit_and[U32](a: bits, b: 0x007FFFFF_u32)
+  return exponent == 0_u32 and mantissa != 0_u32
+### True for a finite, normal value (nonzero and not subnormal).
+routine F32.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+### C fpclassify: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
+routine F32.fpclassify() -> FpClass
+  if me.is_nan()
+    return NAN
+  if me.is_infinite()
+    return INFINITE
+  if me.is_zero()
+    return ZERO
+  if me.is_subnormal()
+    return SUBNORMAL
+  return NORMAL

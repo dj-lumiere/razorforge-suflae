@@ -29,78 +29,91 @@ preset F16_SQRT_2: F16 = 1.414063_f16
 ### Converts an `S8` into half-precision floating-point form.
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F16` value.
+@inline
 routine F16.$create(from: S8) -> F16
   return signed_to_float[S8, F16](from)
 
 ### Converts an `S16` into half-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The closest representable `F16` value.
+@inline
 routine F16.$create(from: S16) -> F16
   return signed_to_float[S16, F16](from)
 
 ### Converts an `S32` into half-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The closest representable `F16` value.
+@inline
 routine F16.$create(from: S32) -> F16
   return signed_to_float[S32, F16](from)
 
 ### Converts an `S64` into half-precision floating-point form.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F16` value.
+@inline
 routine F16.$create(from: S64) -> F16
   return signed_to_float[S64, F16](from)
 
 ### Converts an `S128` into half-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F16` value.
+@inline
 routine F16.$create(from: S128) -> F16
   return signed_to_float[S128, F16](from)
 
 ### Converts a `U8` into half-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F16` value.
+@inline
 routine F16.$create(from: U8) -> F16
   return unsigned_to_float[U8, F16](from)
 
 ### Converts a `U16` into half-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The closest representable `F16` value.
+@inline
 routine F16.$create(from: U16) -> F16
   return unsigned_to_float[U16, F16](from)
 
 ### Converts a `U32` into half-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The closest representable `F16` value.
+@inline
 routine F16.$create(from: U32) -> F16
   return unsigned_to_float[U32, F16](from)
 
 ### Converts a `U64` into half-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F16` value.
+@inline
 routine F16.$create(from: U64) -> F16
   return unsigned_to_float[U64, F16](from)
 
 ### Converts a `U128` into half-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F16` value.
+@inline
 routine F16.$create(from: U128) -> F16
   return unsigned_to_float[U128, F16](from)
 
 ### Returns an existing `F16` unchanged.
 ### :param from: The half-precision value to forward.
 ### :returns: `from`.
+@inline
 routine F16.$create(from: F16) -> F16
   return from
 
 ### Narrows a single-precision float to half precision.
 ### :param from: The `F32` value to convert.
 ### :returns: The nearest representable `F16` value.
+@inline
 routine F16.$create(from: F32) -> F16
   return float_narrow[F32, F16](from)
 
 ### Narrows a double-precision float to half precision.
 ### :param from: The `F64` value to convert.
 ### :returns: The nearest representable `F16` value.
+@inline
 routine F16.$create(from: F64) -> F16
   return float_narrow[F64, F16](from)
 
@@ -108,75 +121,65 @@ routine F16.$create(from: F64) -> F16
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F16` value.
 routine F16.$create(from: F128) -> F16
-  # Narrow to F32 first (the f128 bridge returns scalars only); F32 keeps more
-  # than enough precision that the second rounding step is harmless in
-  # practice, and no fp128 instruction is emitted.
-  return F16(from: rf_f128_to_f32_parts(low: from.low_bits(), high: from.high_bits()))
+  # Narrow to F32 first (F32 keeps more than enough precision that the second
+  # rounding step is harmless in practice), then to F16.
+  return F16(from: from.F32())
 
 ### Converts a decimal32 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
 routine F16.$create(from: D32) -> F16
-  var f32_val = rf_d32_to_f32(from.to_bits())
-  return float_narrow[F32, F16](f32_val)
+  return float_narrow[F32, F16](F32(from: F64(from)))
 
 ### Converts a decimal64 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
 routine F16.$create(from: D64) -> F16
-  var f32_val = rf_d64_to_f32(from.to_bits())
-  return float_narrow[F32, F16](f32_val)
+  return float_narrow[F32, F16](F32(from: F64(from)))
 
 ### Converts a decimal128 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
 routine F16.$create(from: D128) -> F16
-  var f32_val = rf_d128_to_f32(low: from.low_bits(), high: from.high_bits())
-  return float_narrow[F32, F16](f32_val)
+  return float_narrow[F32, F16](F32(from: F64(from)))
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
-### Returns `me + you`, throwing if the result is non-finite.
+### Returns `me + you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The addend.
 ### :returns: The half-precision sum.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F16.$add!(you: F16) -> F16
-  var result = float_add[F16](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F16 addition produced non-finite result: {me} + {you}")
-  return result
+routine F16.$add(you: F16) -> F16
+  return float_add[F16](a: me, b: you)
 
-### Returns `me - you`, throwing if the result is non-finite.
+### Returns `me - you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The value to subtract.
 ### :returns: The half-precision difference.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F16.$sub!(you: F16) -> F16
-  var result = float_sub[F16](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F16 subtraction produced non-finite result: {me} - {you}")
-  return result
+routine F16.$sub(you: F16) -> F16
+  return float_sub[F16](a: me, b: you)
 
-### Returns `me * you`, throwing if the result is non-finite.
+### Returns `me * you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The multiplier.
 ### :returns: The half-precision product.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F16.$mul!(you: F16) -> F16
-  var result = float_mul[F16](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F16 multiplication produced non-finite result: {me} * {you}")
-  return result
+routine F16.$mul(you: F16) -> F16
+  return float_mul[F16](a: me, b: you)
 
-### Returns `me / you`, throwing if the result is non-finite.
+### Returns `me / you` following IEEE 754: division by zero yields ±infinity and
+### 0/0 yields NaN (no exception). Use `.finite!()` to assert a finite result.
 ### :param you: The divisor.
-### :returns: The half-precision quotient.
-### :throws: {NumericOverflowError} if the result is infinity or NaN (including division by zero).
-routine F16.$truediv!(you: F16) -> F16
-  var result = float_div[F16](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F16 division produced non-finite result: {me} / {you}")
-  return result
+### :returns: The half-precision quotient (possibly ±infinity or NaN).
+routine F16.$truediv(you: F16) -> F16
+  return float_div[F16](a: me, b: you)
+
+### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
+### :returns: `me`, when finite.
+### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
+routine F16.finite!() -> F16
+  if not me.is_finite()
+    throw NumericOverflowError(description: f"F16 value is non-finite: {me}")
+  return me
 
 ### Returns the negated value.
 ### :returns: The resulting `F16` value.
@@ -458,3 +461,213 @@ routine F16.to_bytes_be() -> Array[Byte, 2]
 ### :returns: The resulting `U64` value.
 routine F16.$hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)), k0: k0, k1: k1)
+
+# ============================================================================
+# Full libm parity (rf_f16_* runtime; uint16_t bit-pattern ABI, so each call
+# round-trips through to_bits/from_bits). f16 results are computed in f32 by the
+# runtime and re-narrowed.
+# ============================================================================
+external("C") routine rf_f16_sin(bits: U16) -> U16
+external("C") routine rf_f16_cos(bits: U16) -> U16
+external("C") routine rf_f16_tan(bits: U16) -> U16
+external("C") routine rf_f16_asin(bits: U16) -> U16
+external("C") routine rf_f16_acos(bits: U16) -> U16
+external("C") routine rf_f16_atan(bits: U16) -> U16
+external("C") routine rf_f16_atan2(y: U16, x: U16) -> U16
+external("C") routine rf_f16_sinh(bits: U16) -> U16
+external("C") routine rf_f16_cosh(bits: U16) -> U16
+external("C") routine rf_f16_tanh(bits: U16) -> U16
+external("C") routine rf_f16_asinh(bits: U16) -> U16
+external("C") routine rf_f16_acosh(bits: U16) -> U16
+external("C") routine rf_f16_atanh(bits: U16) -> U16
+external("C") routine rf_f16_exp(bits: U16) -> U16
+external("C") routine rf_f16_exp2(bits: U16) -> U16
+external("C") routine rf_f16_expm1(bits: U16) -> U16
+external("C") routine rf_f16_exp10(bits: U16) -> U16
+external("C") routine rf_f16_log(bits: U16) -> U16
+external("C") routine rf_f16_log2(bits: U16) -> U16
+external("C") routine rf_f16_log10(bits: U16) -> U16
+external("C") routine rf_f16_log1p(bits: U16) -> U16
+external("C") routine rf_f16_pow(base: U16, exp: U16) -> U16
+external("C") routine rf_f16_cbrt(bits: U16) -> U16
+external("C") routine rf_f16_hypot(x: U16, y: U16) -> U16
+external("C") routine rf_f16_fma(x: U16, y: U16, z: U16) -> U16
+external("C") routine rf_f16_fmod(x: U16, y: U16) -> U16
+external("C") routine rf_f16_remainder(x: U16, y: U16) -> U16
+external("C") routine rf_f16_fdim(x: U16, y: U16) -> U16
+external("C") routine rf_f16_max(x: U16, y: U16) -> U16
+external("C") routine rf_f16_min(x: U16, y: U16) -> U16
+external("C") routine rf_f16_sinpi(bits: U16) -> U16
+external("C") routine rf_f16_cospi(bits: U16) -> U16
+external("C") routine rf_f16_tanpi(bits: U16) -> U16
+external("C") routine rf_f16_nextafter(x: U16, y: U16) -> U16
+external("C") routine rf_f16_scalbn(bits: U16, n: S64) -> U16
+external("C") routine rf_f16_ilogb(bits: U16) -> S64
+external("C") routine rf_f16_rint(bits: U16) -> U16
+external("C") routine rf_f16_erf(bits: U16) -> U16
+external("C") routine rf_f16_erfc(bits: U16) -> U16
+external("C") routine rf_f16_tgamma(bits: U16) -> U16
+external("C") routine rf_f16_lgamma(bits: U16) -> U16
+
+### Sine (radians).
+routine F16.sin() -> F16
+  return F16.from_bits(bits: rf_f16_sin(bits: me.to_bits()))
+### Cosine (radians).
+routine F16.cos() -> F16
+  return F16.from_bits(bits: rf_f16_cos(bits: me.to_bits()))
+### Tangent (radians).
+routine F16.tan() -> F16
+  return F16.from_bits(bits: rf_f16_tan(bits: me.to_bits()))
+### Arc sine.
+routine F16.asin() -> F16
+  return F16.from_bits(bits: rf_f16_asin(bits: me.to_bits()))
+### Arc cosine.
+routine F16.acos() -> F16
+  return F16.from_bits(bits: rf_f16_acos(bits: me.to_bits()))
+### Arc tangent.
+routine F16.atan() -> F16
+  return F16.from_bits(bits: rf_f16_atan(bits: me.to_bits()))
+### Two-argument arc tangent atan2(me, x).
+routine F16.atan2(x: F16) -> F16
+  return F16.from_bits(bits: rf_f16_atan2(y: me.to_bits(), x: x.to_bits()))
+### Hyperbolic sine.
+routine F16.sinh() -> F16
+  return F16.from_bits(bits: rf_f16_sinh(bits: me.to_bits()))
+### Hyperbolic cosine.
+routine F16.cosh() -> F16
+  return F16.from_bits(bits: rf_f16_cosh(bits: me.to_bits()))
+### Hyperbolic tangent.
+routine F16.tanh() -> F16
+  return F16.from_bits(bits: rf_f16_tanh(bits: me.to_bits()))
+### Inverse hyperbolic sine.
+routine F16.asinh() -> F16
+  return F16.from_bits(bits: rf_f16_asinh(bits: me.to_bits()))
+### Inverse hyperbolic cosine.
+routine F16.acosh() -> F16
+  return F16.from_bits(bits: rf_f16_acosh(bits: me.to_bits()))
+### Inverse hyperbolic tangent.
+routine F16.atanh() -> F16
+  return F16.from_bits(bits: rf_f16_atanh(bits: me.to_bits()))
+### Natural exponential.
+routine F16.exp() -> F16
+  return F16.from_bits(bits: rf_f16_exp(bits: me.to_bits()))
+### Base-2 exponential.
+routine F16.exp2() -> F16
+  return F16.from_bits(bits: rf_f16_exp2(bits: me.to_bits()))
+### exp(me) - 1, accurate near zero.
+routine F16.expm1() -> F16
+  return F16.from_bits(bits: rf_f16_expm1(bits: me.to_bits()))
+### Base-10 exponential.
+routine F16.exp10() -> F16
+  return F16.from_bits(bits: rf_f16_exp10(bits: me.to_bits()))
+### Natural logarithm.
+routine F16.log() -> F16
+  return F16.from_bits(bits: rf_f16_log(bits: me.to_bits()))
+### Base-2 logarithm.
+routine F16.log2() -> F16
+  return F16.from_bits(bits: rf_f16_log2(bits: me.to_bits()))
+### Base-10 logarithm.
+routine F16.log10() -> F16
+  return F16.from_bits(bits: rf_f16_log10(bits: me.to_bits()))
+### log(1 + me), accurate near zero.
+routine F16.log1p() -> F16
+  return F16.from_bits(bits: rf_f16_log1p(bits: me.to_bits()))
+### Raises me to the power exp.
+routine F16.pow(exp: F16) -> F16
+  return F16.from_bits(bits: rf_f16_pow(base: me.to_bits(), exp: exp.to_bits()))
+### Cube root.
+routine F16.cbrt() -> F16
+  return F16.from_bits(bits: rf_f16_cbrt(bits: me.to_bits()))
+### Hypotenuse without overflow.
+routine F16.hypot(you: F16) -> F16
+  return F16.from_bits(bits: rf_f16_hypot(x: me.to_bits(), y: you.to_bits()))
+### Fused multiply-add me*b + c with a single rounding.
+routine F16.fma(b: F16, c: F16) -> F16
+  return F16.from_bits(bits: rf_f16_fma(x: me.to_bits(), y: b.to_bits(), z: c.to_bits()))
+### Floating-point remainder (C fmod).
+routine F16.fmod(you: F16) -> F16
+  return F16.from_bits(bits: rf_f16_fmod(x: me.to_bits(), y: you.to_bits()))
+### IEEE remainder (C remainder).
+routine F16.remainder(you: F16) -> F16
+  return F16.from_bits(bits: rf_f16_remainder(x: me.to_bits(), y: you.to_bits()))
+### Positive difference max(me - you, 0) (C fdim).
+routine F16.fdim(you: F16) -> F16
+  return F16.from_bits(bits: rf_f16_fdim(x: me.to_bits(), y: you.to_bits()))
+### Larger of me and you (C fmax).
+routine F16.fmax(you: F16) -> F16
+  return F16.from_bits(bits: rf_f16_max(x: me.to_bits(), y: you.to_bits()))
+### Smaller of me and you (C fmin).
+routine F16.fmin(you: F16) -> F16
+  return F16.from_bits(bits: rf_f16_min(x: me.to_bits(), y: you.to_bits()))
+### sin(pi*me).
+routine F16.sinpi() -> F16
+  return F16.from_bits(bits: rf_f16_sinpi(bits: me.to_bits()))
+### cos(pi*me).
+routine F16.cospi() -> F16
+  return F16.from_bits(bits: rf_f16_cospi(bits: me.to_bits()))
+### tan(pi*me).
+routine F16.tanpi() -> F16
+  return F16.from_bits(bits: rf_f16_tanpi(bits: me.to_bits()))
+### Next representable value after me toward you.
+routine F16.nextafter(you: F16) -> F16
+  return F16.from_bits(bits: rf_f16_nextafter(x: me.to_bits(), y: you.to_bits()))
+### me * 2^n (C scalbn).
+routine F16.scalbn(n: S64) -> F16
+  return F16.from_bits(bits: rf_f16_scalbn(bits: me.to_bits(), n: n))
+### Alias of scalbn (C ldexp).
+routine F16.ldexp(n: S64) -> F16
+  return F16.from_bits(bits: rf_f16_scalbn(bits: me.to_bits(), n: n))
+### Rounds to nearest integer in the current rounding mode (C rint).
+routine F16.rint() -> F16
+  return F16.from_bits(bits: rf_f16_rint(bits: me.to_bits()))
+### Error function.
+routine F16.erf() -> F16
+  return F16.from_bits(bits: rf_f16_erf(bits: me.to_bits()))
+### Complementary error function.
+routine F16.erfc() -> F16
+  return F16.from_bits(bits: rf_f16_erfc(bits: me.to_bits()))
+### Gamma function.
+routine F16.tgamma() -> F16
+  return F16.from_bits(bits: rf_f16_tgamma(bits: me.to_bits()))
+### Natural log of the absolute value of gamma(me).
+routine F16.lgamma() -> F16
+  return F16.from_bits(bits: rf_f16_lgamma(bits: me.to_bits()))
+### Truncates toward zero (alias of int_truncate).
+routine F16.trunc() -> F16
+  return float_truncate[F16](me)
+### Fractional part me - trunc(me).
+routine F16.frac() -> F16
+  return me - float_truncate[F16](me)
+### Integer and fractional parts (C modf); both carry the sign of me.
+routine F16.modf() -> (F16, F16)
+  var ip = float_truncate[F16](me)
+  return (ip, me - ip)
+### Fraction in [0.5,1) and power-of-two exponent (C frexp).
+routine F16.frexp() -> (F16, S64)
+  if me.is_zero() or me.is_infinite() or me.is_nan()
+    return (me, 0_s64)
+  var e = add[S64](a: rf_f16_ilogb(bits: me.to_bits()), b: 1_s64)
+  return (F16.from_bits(bits: rf_f16_scalbn(bits: me.to_bits(), n: sub[S64](a: 0_s64, b: e))), e)
+### True if the sign bit is set (C signbit).
+routine F16.signbit() -> Bool
+  return int_ne[U16](a: bit_and[U16](a: me.to_bits(), b: 0x8000_u16), b: 0_u16)
+### True for a subnormal (denormalized, nonzero) value.
+routine F16.is_subnormal() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U16](a: bits, b: 0x7C00_u16)
+  var mantissa = bit_and[U16](a: bits, b: 0x03FF_u16)
+  return exponent == 0_u16 and mantissa != 0_u16
+### True for a finite, normal value (nonzero and not subnormal).
+routine F16.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+### C fpclassify: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
+routine F16.fpclassify() -> FpClass
+  if me.is_nan()
+    return NAN
+  if me.is_infinite()
+    return INFINITE
+  if me.is_zero()
+    return ZERO
+  if me.is_subnormal()
+    return SUBNORMAL
+  return NORMAL

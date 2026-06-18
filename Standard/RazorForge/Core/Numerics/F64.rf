@@ -32,18 +32,21 @@ preset F64_INFINITY: F64 = inf_f64
 ### Converts an `S8` to `F64`. The result is exact for all values.
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
+@inline
 routine F64.$create(from: S8) -> F64
   return signed_to_float[S8, F64](from)
 
 ### Converts an `S16` to `F64`. The result is exact for all values.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
+@inline
 routine F64.$create(from: S16) -> F64
   return signed_to_float[S16, F64](from)
 
 ### Converts an `S32` to `F64`. The result is exact for all values.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
+@inline
 routine F64.$create(from: S32) -> F64
   return signed_to_float[S32, F64](from)
 
@@ -52,6 +55,7 @@ routine F64.$create(from: S32) -> F64
 ### representable double.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F64` value.
+@inline
 routine F64.$create(from: S64) -> F64
   return signed_to_float[S64, F64](from)
 
@@ -59,24 +63,28 @@ routine F64.$create(from: S64) -> F64
 ### Precision is limited to approximately 53 bits of significand.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F64` value.
+@inline
 routine F64.$create(from: S128) -> F64
   return signed_to_float[S128, F64](from)
 
 ### Converts a `U8` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
+@inline
 routine F64.$create(from: U8) -> F64
   return unsigned_to_float[U8, F64](from)
 
 ### Converts a `U16` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
+@inline
 routine F64.$create(from: U16) -> F64
   return unsigned_to_float[U16, F64](from)
 
 ### Converts a `U32` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
+@inline
 routine F64.$create(from: U32) -> F64
   return unsigned_to_float[U32, F64](from)
 
@@ -84,6 +92,7 @@ routine F64.$create(from: U32) -> F64
 ### Values larger than 2⁵³ may be rounded to the nearest representable double.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F64` value.
+@inline
 routine F64.$create(from: U64) -> F64
   return unsigned_to_float[U64, F64](from)
 
@@ -91,24 +100,28 @@ routine F64.$create(from: U64) -> F64
 ### Precision is limited to approximately 53 bits of significand.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F64` value.
+@inline
 routine F64.$create(from: U128) -> F64
   return unsigned_to_float[U128, F64](from)
 
 ### Widens a half-precision float to double precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
+@inline
 routine F64.$create(from: F16) -> F64
   return float_extend[F16, F64](from)
 
 ### Widens a single-precision float to double precision.
 ### :param from: The `F32` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
+@inline
 routine F64.$create(from: F32) -> F64
   return float_extend[F32, F64](from)
 
 ### Returns an existing `F64` unchanged.
 ### :param from: The double-precision value to forward.
 ### :returns: `from`.
+@inline
 routine F64.$create(from: F64) -> F64
   return from
 
@@ -116,71 +129,59 @@ routine F64.$create(from: F64) -> F64
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F64` value.
 routine F64.$create(from: F128) -> F64
-  return rf_f128_to_f64_parts(low: from.low_bits(), high: from.high_bits())
+  return from.F64()
 
-### Converts a decimal32 value to double-precision binary floating point.
-### :param from: The decimal floating-point input value.
-### :returns: The closest representable `F64` value.
-routine F64.$create(from: D32) -> F64
-  var bits = reinterpret_bits[D32, U32](from)
-  return rf_d32_to_f64(bits)
+### (`F64.$create(from: D32)` is provided by the decimal32 engine — `D32Trans.rf`.)
 
 ### Converts a decimal64 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F64` value.
 routine F64.$create(from: D64) -> F64
-  var bits = reinterpret_bits[D64, U64](from)
-  return rf_d64_to_f64(bits)
+  return d64_to_f128(x: from).F64()
 
 ### Converts a decimal128 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F64` value.
 routine F64.$create(from: D128) -> F64
-  return rf_d128_to_f64(low: from.low_bits(), high: from.high_bits())
+  return d128_to_f256(x: from).to_f128().F64()
 
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
 
-### Returns `me + you`, throwing if the result is non-finite.
+### Returns `me + you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The addend.
 ### :returns: The double-precision sum.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F64.$add!(you: F64) -> F64
-  var result = float_add[F64](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F64 addition produced non-finite result: {me} + {you}")
-  return result
+routine F64.$add(you: F64) -> F64
+  return float_add[F64](a: me, b: you)
 
-### Returns `me - you`, throwing if the result is non-finite.
+### Returns `me - you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The value to subtract.
 ### :returns: The double-precision difference.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F64.$sub!(you: F64) -> F64
-  var result = float_sub[F64](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F64 subtraction produced non-finite result: {me} - {you}")
-  return result
+routine F64.$sub(you: F64) -> F64
+  return float_sub[F64](a: me, b: you)
 
-### Returns `me * you`, throwing if the result is non-finite.
+### Returns `me * you` following IEEE 754 (may produce ±infinity or NaN).
 ### :param you: The multiplier.
 ### :returns: The double-precision product.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F64.$mul!(you: F64) -> F64
-  var result = float_mul[F64](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F64 multiplication produced non-finite result: {me} * {you}")
-  return result
+routine F64.$mul(you: F64) -> F64
+  return float_mul[F64](a: me, b: you)
 
-### Returns `me / you`, throwing if the result is non-finite.
+### Returns `me / you` following IEEE 754: division by zero yields ±infinity and
+### 0/0 yields NaN (no exception). Use `.finite!()` to assert a finite result.
 ### :param you: The divisor.
-### :returns: The double-precision quotient.
-### :throws: {NumericOverflowError} if the result is infinity or NaN (including division by zero).
-routine F64.$truediv!(you: F64) -> F64
-  var result = float_div[F64](a: me, b: you)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F64 division produced non-finite result: {me} / {you}")
-  return result
+### :returns: The double-precision quotient (possibly ±infinity or NaN).
+routine F64.$truediv(you: F64) -> F64
+  return float_div[F64](a: me, b: you)
+
+### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
+### :returns: `me`, when finite.
+### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
+routine F64.finite!() -> F64
+  if not me.is_finite()
+    throw NumericOverflowError(description: f"F64 value is non-finite: {me}")
+  return me
 
 ### Returns the arithmetic negation of this value.
 ### :returns: `-me` in double precision.
@@ -293,13 +294,9 @@ routine F64.pow(exp: F64) -> F64
 
 ### Raises this value to `exp` and rejects non-finite results.
 ### :param exp: The exponent applied to `me`.
-### :returns: `me` raised to `exp` in double precision.
-### :throws: {NumericOverflowError} if the result is infinity or NaN.
-routine F64.$pow!(exp: F64) -> F64
-  var result = me.pow(exp)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F64 power produced non-finite result: {me} ** {exp}")
-  return result
+### :returns: `me` raised to `exp` in double precision (IEEE semantics: inf/NaN on overflow/domain error).
+routine F64.$pow(exp: F64) -> F64
+  return me.pow(exp)
 
 ### Returns this value with its sign bit replaced by the sign of `sign`.
 ### :param sign: The value supplying the sign bit.
@@ -513,3 +510,210 @@ routine F64.to_bytes_be() -> Array[Byte, 8]
 ### :returns: The resulting `U64` value.
 routine F64.$hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: reinterpret_bits[F64, U64](me), k0: k0, k1: k1)
+
+# ============================================================================
+# Platform libm (<math.h>) doubles via the runtime's UNIQUELY-NAMED rf_f64_*
+# passthroughs (native/runtime/math_functions.c). Unique names are essential: a
+# bare `atan`/`cbrt`/... (or a method `x.cbrt()`) resolves to UnpackedFloat's
+# same-named 0-arg generic wherever the engine is in scope (a resolver quirk).
+# erf/erfc/tgamma/lgamma have no rf_f64_ passthrough but also no UnpackedFloat
+# twin, so their bare libm symbols bind fine.
+# ============================================================================
+external("C") routine rf_f64_sin(value: F64) -> F64
+external("C") routine rf_f64_cos(value: F64) -> F64
+external("C") routine rf_f64_tan(value: F64) -> F64
+external("C") routine rf_f64_asin(value: F64) -> F64
+external("C") routine rf_f64_acos(value: F64) -> F64
+external("C") routine rf_f64_atan(value: F64) -> F64
+external("C") routine rf_f64_atan2(y: F64, x: F64) -> F64
+external("C") routine rf_f64_sinh(value: F64) -> F64
+external("C") routine rf_f64_cosh(value: F64) -> F64
+external("C") routine rf_f64_tanh(value: F64) -> F64
+external("C") routine rf_f64_asinh(value: F64) -> F64
+external("C") routine rf_f64_acosh(value: F64) -> F64
+external("C") routine rf_f64_atanh(value: F64) -> F64
+external("C") routine rf_f64_sqrt(value: F64) -> F64
+external("C") routine rf_f64_cbrt(value: F64) -> F64
+external("C") routine rf_f64_exp(value: F64) -> F64
+external("C") routine rf_f64_exp2(value: F64) -> F64
+external("C") routine rf_f64_expm1(value: F64) -> F64
+external("C") routine rf_f64_log(value: F64) -> F64
+external("C") routine rf_f64_log2(value: F64) -> F64
+external("C") routine rf_f64_log10(value: F64) -> F64
+external("C") routine rf_f64_log1p(value: F64) -> F64
+external("C") routine rf_f64_pow(base: F64, exp: F64) -> F64
+external("C") routine rf_f64_hypot(x: F64, y: F64) -> F64
+external("C") routine rf_f64_fma(x: F64, y: F64, z: F64) -> F64
+external("C") routine erf(value: F64) -> F64
+external("C") routine erfc(value: F64) -> F64
+external("C") routine tgamma(value: F64) -> F64
+external("C") routine lgamma(value: F64) -> F64
+
+# ============================================================================
+# F64 libm methods (the C99 doubles F64 didn't already have via LLVM intrinsics),
+# delegating to the rf_f64_* runtime passthroughs / bare libm externals above.
+# ============================================================================
+### exp(me) - 1, accurate near 0.
+routine F64.expm1() -> F64
+  return rf_f64_expm1(value: me)
+### 2 raised to me.
+routine F64.exp2() -> F64
+  return rf_f64_exp2(value: me)
+### log(1 + me), accurate near 0.
+routine F64.log1p() -> F64
+  return rf_f64_log1p(value: me)
+### Base-2 logarithm.
+routine F64.log2() -> F64
+  return rf_f64_log2(value: me)
+### Euclidean distance sqrt(me^2 + you^2) without overflow.
+routine F64.hypot(you: F64) -> F64
+  return rf_f64_hypot(x: me, y: you)
+### Fused multiply-add me*b + c (single rounding).
+routine F64.fma(b: F64, c: F64) -> F64
+  return rf_f64_fma(x: me, y: b, z: c)
+### Cube root.
+routine F64.cbrt() -> F64
+  return rf_f64_cbrt(value: me)
+### Tangent (radians).
+routine F64.tan() -> F64
+  return rf_f64_tan(value: me)
+### Arc sine.
+routine F64.asin() -> F64
+  return rf_f64_asin(value: me)
+### Arc cosine.
+routine F64.acos() -> F64
+  return rf_f64_acos(value: me)
+### Arc tangent.
+routine F64.atan() -> F64
+  return rf_f64_atan(value: me)
+### Two-argument arc tangent atan2(me, x).
+routine F64.atan2(x: F64) -> F64
+  return rf_f64_atan2(y: me, x: x)
+### Hyperbolic sine.
+routine F64.sinh() -> F64
+  return rf_f64_sinh(value: me)
+### Hyperbolic cosine.
+routine F64.cosh() -> F64
+  return rf_f64_cosh(value: me)
+### Hyperbolic tangent.
+routine F64.tanh() -> F64
+  return rf_f64_tanh(value: me)
+### Inverse hyperbolic sine.
+routine F64.asinh() -> F64
+  return rf_f64_asinh(value: me)
+### Inverse hyperbolic cosine.
+routine F64.acosh() -> F64
+  return rf_f64_acosh(value: me)
+### Inverse hyperbolic tangent.
+routine F64.atanh() -> F64
+  return rf_f64_atanh(value: me)
+### Error function.
+routine F64.erf() -> F64
+  return erf(value: me)
+### Complementary error function.
+routine F64.erfc() -> F64
+  return erfc(value: me)
+### Gamma function.
+routine F64.tgamma() -> F64
+  return tgamma(value: me)
+### Natural log of |gamma(me)|.
+routine F64.lgamma() -> F64
+  return lgamma(value: me)
+
+# ============================================================================
+# Extended libm parity: exp10, sinpi/cospi/tanpi, nextafter, scalbn/ldexp,
+# frexp, modf, rint, fdim, fmod, remainder, fmax/fmin, trunc, frac, and
+# classification (signbit/is_normal/is_subnormal/fpclassify).
+# ============================================================================
+external("C") routine rf_f64_exp10(value: F64) -> F64
+external("C") routine rf_f64_sinpi(value: F64) -> F64
+external("C") routine rf_f64_cospi(value: F64) -> F64
+external("C") routine rf_f64_tanpi(value: F64) -> F64
+external("C") routine rf_f64_nextafter(x: F64, y: F64) -> F64
+external("C") routine rf_f64_scalbn(value: F64, n: S64) -> F64
+external("C") routine rf_f64_ilogb(value: F64) -> S64
+external("C") routine rf_f64_rint(value: F64) -> F64
+external("C") routine rf_f64_fdim(x: F64, y: F64) -> F64
+external("C") routine rf_f64_fmod(x: F64, y: F64) -> F64
+external("C") routine rf_f64_remainder(x: F64, y: F64) -> F64
+external("C") routine rf_f64_fmax(x: F64, y: F64) -> F64
+external("C") routine rf_f64_fmin(x: F64, y: F64) -> F64
+
+### Base-10 exponential 10**me.
+routine F64.exp10() -> F64
+  return rf_f64_exp10(value: me)
+### sin(pi*me), exact at integers/half-integers.
+routine F64.sinpi() -> F64
+  return rf_f64_sinpi(value: me)
+### cos(pi*me).
+routine F64.cospi() -> F64
+  return rf_f64_cospi(value: me)
+### tan(pi*me).
+routine F64.tanpi() -> F64
+  return rf_f64_tanpi(value: me)
+### Next representable value after me toward you.
+routine F64.nextafter(you: F64) -> F64
+  return rf_f64_nextafter(x: me, y: you)
+### me * 2^n (C scalbn).
+routine F64.scalbn(n: S64) -> F64
+  return rf_f64_scalbn(value: me, n: n)
+### Alias of scalbn (C ldexp).
+routine F64.ldexp(n: S64) -> F64
+  return rf_f64_scalbn(value: me, n: n)
+### Rounds to nearest integer in the current rounding mode (C rint).
+routine F64.rint() -> F64
+  return rf_f64_rint(value: me)
+### Positive difference max(me - you, 0) (C fdim).
+routine F64.fdim(you: F64) -> F64
+  return rf_f64_fdim(x: me, y: you)
+### Floating-point remainder of me/you (C fmod).
+routine F64.fmod(you: F64) -> F64
+  return rf_f64_fmod(x: me, y: you)
+### IEEE remainder of me/you, ties to even (C remainder).
+routine F64.remainder(you: F64) -> F64
+  return rf_f64_remainder(x: me, y: you)
+### Larger of me and you (C fmax).
+routine F64.fmax(you: F64) -> F64
+  return rf_f64_fmax(x: me, y: you)
+### Smaller of me and you (C fmin).
+routine F64.fmin(you: F64) -> F64
+  return rf_f64_fmin(x: me, y: you)
+### Truncates toward zero (C trunc; alias of int_truncate).
+routine F64.trunc() -> F64
+  return float_truncate[F64](me)
+### Fractional part me - trunc(me).
+routine F64.frac() -> F64
+  return me - float_truncate[F64](me)
+### Integer and fractional parts (C modf); both carry me's sign.
+routine F64.modf() -> (F64, F64)
+  var ip = float_truncate[F64](me)
+  return (ip, me - ip)
+### Fraction in [0.5,1) and power-of-two exponent (C frexp).
+routine F64.frexp() -> (F64, S64)
+  if me.is_zero() or me.is_infinite() or me.is_nan()
+    return (me, 0_s64)
+  var e = add[S64](a: rf_f64_ilogb(value: me), b: 1_s64)
+  return (rf_f64_scalbn(value: me, n: sub[S64](a: 0_s64, b: e)), e)
+### True if the sign bit is set (C signbit; true for -0 and -NaN).
+routine F64.signbit() -> Bool
+  return int_ne[U64](a: bit_and[U64](a: me.to_bits(), b: 0x8000000000000000_u64), b: 0_u64)
+### True for a subnormal (denormalized, nonzero) value.
+routine F64.is_subnormal() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000_u64)
+  var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
+  return exponent == 0_u64 and mantissa != 0_u64
+### True for a finite, normal value (nonzero and not subnormal).
+routine F64.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+### C fpclassify: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
+routine F64.fpclassify() -> FpClass
+  if me.is_nan()
+    return NAN
+  if me.is_infinite()
+    return INFINITE
+  if me.is_zero()
+    return ZERO
+  if me.is_subnormal()
+    return SUBNORMAL
+  return NORMAL
