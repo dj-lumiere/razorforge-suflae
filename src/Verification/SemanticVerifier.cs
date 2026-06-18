@@ -42,11 +42,33 @@ public sealed partial class SemanticVerifier
     private readonly CallGraph _callGraph = new();
     private MarkerProtocolDesugarPass? _markerPass;
 
-    /// <summary>Errors collected during analysis.</summary>
+    /// <summary>Errors collected during analysis (insertion order preserved; deduplicated).</summary>
     private readonly List<SemanticError> _errors = [];
 
-    /// <summary>Warnings collected during analysis.</summary>
+    /// <summary>Warnings collected during analysis (insertion order preserved; deduplicated).</summary>
     private readonly List<SemanticWarning> _warnings = [];
+
+    // The analyzer runs several passes and re-resolves expressions (post type/protocol
+    // registration, monomorphization, etc.), so the SAME diagnostic can be produced more than
+    // once for one source location. These sets dedup by value — SemanticError/SemanticWarning are
+    // records whose equality is (Code, Message, Location) — so a re-reported diagnostic is dropped
+    // while the List keeps first-seen order. All add-sites route through AddError/AddWarning.
+    private readonly HashSet<SemanticError> _seenErrors = [];
+    private readonly HashSet<SemanticWarning> _seenWarnings = [];
+
+    /// <summary>Adds an error unless an identical one (same code/message/location) was already recorded.</summary>
+    private void AddError(SemanticError error)
+    {
+        if (_seenErrors.Add(item: error))
+            _errors.Add(item: error);
+    }
+
+    /// <summary>Adds a warning unless an identical one (same code/message/location) was already recorded.</summary>
+    private void AddWarning(SemanticWarning warning)
+    {
+        if (_seenWarnings.Add(item: warning))
+            _warnings.Add(item: warning);
+    }
 
     /// <summary>
     /// Parsed literal values for types requiring native library parsing.
@@ -706,7 +728,10 @@ public sealed partial class SemanticVerifier
         foreach ((Program program, _, _) in _registry.UserPrograms)
         {
             reprPass.Run(program: program);
-            _errors.AddRange(collection: validator.ValidateProgram(program: program));
+            foreach (SemanticError error in validator.ValidateProgram(program: program))
+            {
+                AddError(error: error);
+            }
         }
 
         foreach ((Program stdlibProgram, _, _) in _registry.StdlibPrograms)
@@ -719,7 +744,7 @@ public sealed partial class SemanticVerifier
             reprPass.Run(statement: body);
             foreach (SemanticError error in validator.ValidateStatement(statement: body))
             {
-                _errors.Add(item: error with
+                AddError(error: error with
                 {
                     Message = $"[{key}] {error.Message}"
                 });
@@ -735,7 +760,7 @@ public sealed partial class SemanticVerifier
 
             foreach (SemanticError error in BackendEntryValidator.ValidateMonomorphizedBody(body: mono))
             {
-                _errors.Add(item: error with
+                AddError(error: error with
                 {
                     Message = $"[mono:{key}] {error.Message}"
                 });
@@ -1352,7 +1377,7 @@ public sealed partial class SemanticVerifier
     /// <param name="location">The source location of the error.</param>
     internal void ReportError(SemanticDiagnosticCode code, string message, SourceLocation location)
     {
-        _errors.Add(item: new SemanticError(Code: code, Message: message, Location: location));
+        AddError(error: new SemanticError(Code: code, Message: message, Location: location));
     }
 
     /// <summary>
@@ -1364,7 +1389,7 @@ public sealed partial class SemanticVerifier
     internal void ReportWarning(SemanticWarningCode code, string message, SourceLocation location)
     {
         if (SuppressedWarnings.Contains(item: code)) return;
-        _warnings.Add(item: new SemanticWarning(Code: code, Message: message, Location: location));
+        AddWarning(warning: new SemanticWarning(Code: code, Message: message, Location: location));
     }
 
     private static readonly HashSet<SemanticWarningCode> SuppressedWarnings = new()
