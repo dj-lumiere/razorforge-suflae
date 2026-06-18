@@ -187,9 +187,11 @@ public partial class LlvmCodeGenerator
         return type is TokenType.IntegerLiteral or TokenType.S8Literal
             or TokenType.S16Literal or TokenType.S32Literal
             or TokenType.S64Literal or TokenType.S128Literal
+            or TokenType.S256Literal
             or TokenType.U8Literal or TokenType.U16Literal
             or TokenType.U32Literal or TokenType.U64Literal
-            or TokenType.U128Literal or TokenType.AddressLiteral;
+            or TokenType.U128Literal or TokenType.U256Literal
+            or TokenType.AddressLiteral;
     }
 
     /// <summary>
@@ -324,7 +326,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static readonly string[] NumericSuffixes =
     [
-        "addr", "s128", "u128", "s64", "u64", "s32", "u32",
+        "addr", "s256", "u256", "s128", "u128", "s64", "u64", "s32", "u32",
         "s16", "u16", "s8", "u8", "f128", "f64", "f32", "f16",
         "d128", "d64", "d32"
     ];

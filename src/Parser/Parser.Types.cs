@@ -206,6 +206,8 @@ public partial class Parser
                 TokenType.U8Literal,
                 TokenType.S128Literal,
                 TokenType.U128Literal,
+                TokenType.S256Literal,
+                TokenType.U256Literal,
                 TokenType.AddressLiteral))
         {
             string value = PeekToken(offset: -1)

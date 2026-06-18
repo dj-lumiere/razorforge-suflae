@@ -1065,11 +1065,13 @@ internal sealed class TypeResolver
             case TokenType.S32Literal:
             case TokenType.S64Literal:
             case TokenType.S128Literal:
+            case TokenType.S256Literal:
             case TokenType.U8Literal:
             case TokenType.U16Literal:
             case TokenType.U32Literal:
             case TokenType.U64Literal:
             case TokenType.U128Literal:
+            case TokenType.U256Literal:
             case TokenType.AddressLiteral:
                 if (literal.Value is string rawNumeric &&
                     TryParseConstGenericLiteral(name: rawNumeric,

@@ -49,12 +49,14 @@ public sealed partial class SemanticVerifier
             TokenType.S32Literal => "S32",
             TokenType.S64Literal => "S64",
             TokenType.S128Literal => "S128",
+            TokenType.S256Literal => "S256",
             // Unsigned integers
             TokenType.U8Literal => "U8",
             TokenType.U16Literal => "U16",
             TokenType.U32Literal => "U32",
             TokenType.U64Literal => "U64",
             TokenType.U128Literal => "U128",
+            TokenType.U256Literal => "U256",
             TokenType.AddressLiteral => AddressTypeName,
 
             // Floating-point
@@ -251,11 +253,13 @@ public sealed partial class SemanticVerifier
                 ? magnitude <= 9223372036854775808UL
                 : magnitude <= 9223372036854775807UL,
             "S128" => true, // Any 64-bit magnitude fits in S128
+            "S256" => true, // Any 64-bit magnitude fits in S256
             "U8" => !negative && magnitude <= byte.MaxValue,
             "U16" => !negative && magnitude <= ushort.MaxValue,
             "U32" => !negative && magnitude <= uint.MaxValue,
             "U64" => !negative, // Any non-negative 64-bit magnitude fits in U64
             "U128" => !negative,
+            "U256" => !negative, // Any non-negative 64-bit magnitude fits in U256
             AddressTypeName => true, // System-dependent, allow for now
             _ => false
         };
@@ -330,6 +334,7 @@ public sealed partial class SemanticVerifier
                     rawValue: rawValue,
                     resolvedTypeName: resolvedTypeName),
                 TokenType.S128Literal => ParseS128Literal(literal: literal, rawValue: rawValue),
+                TokenType.S256Literal => ParseS256Literal(literal: literal, rawValue: rawValue),
                 // Fixed-width unsigned integers
                 TokenType.U8Literal => ParseUnsignedIntLiteral(literal: literal,
                     rawValue: rawValue,
@@ -348,6 +353,7 @@ public sealed partial class SemanticVerifier
                     typeName: "U64",
                     maxValue: ulong.MaxValue),
                 TokenType.U128Literal => ParseU128Literal(literal: literal, rawValue: rawValue),
+                TokenType.U256Literal => ParseU256Literal(literal: literal, rawValue: rawValue),
                 TokenType.AddressLiteral => ParseUnsignedIntLiteral(literal: literal,
                     rawValue: rawValue,
                     typeName: AddressTypeName,
@@ -668,6 +674,7 @@ public sealed partial class SemanticVerifier
                 minValue: long.MinValue,
                 maxValue: long.MaxValue),
             "S128" => ParseS128Literal(literal: literal, rawValue: rawValue),
+            "S256" => ParseS256Literal(literal: literal, rawValue: rawValue),
             "U8" => ParseUnsignedIntLiteral(literal: literal,
                 rawValue: rawValue,
                 typeName: "U8",
@@ -685,6 +692,7 @@ public sealed partial class SemanticVerifier
                 typeName: "U64",
                 maxValue: ulong.MaxValue),
             "U128" => ParseU128Literal(literal: literal, rawValue: rawValue),
+            "U256" => ParseU256Literal(literal: literal, rawValue: rawValue),
             AddressTypeName => ParseUnsignedIntLiteral(literal: literal,
                 rawValue: rawValue,
                 typeName: AddressTypeName,
@@ -767,6 +775,54 @@ public sealed partial class SemanticVerifier
 
         ReportError(code: SemanticDiagnosticCode.InvalidIntegerLiteral,
             message: $"Invalid U128 literal: '{rawValue}'",
+            location: literal.Location);
+        return null;
+    }
+
+    // 256-bit integer range bounds (no .NET native type — validated with BigInteger).
+    private static readonly System.Numerics.BigInteger U256MaxValue =
+        (System.Numerics.BigInteger.One << 256) - 1;
+    private static readonly System.Numerics.BigInteger S256MaxValue =
+        (System.Numerics.BigInteger.One << 255) - 1;
+    private static readonly System.Numerics.BigInteger S256MinValue =
+        -(System.Numerics.BigInteger.One << 255);
+
+    /// <summary>
+    /// Parses a U256 literal (range 0 .. 2^256-1) via BigInteger. The literal is a non-negative
+    /// magnitude; codegen emits the raw decimal digits as the LLVM i256 constant.
+    /// </summary>
+    private ParsedLiteral? ParseU256Literal(LiteralExpression literal, string rawValue)
+    {
+        string cleanedValue = CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "u256"));
+        if (System.Numerics.BigInteger.TryParse(value: cleanedValue, result: out System.Numerics.BigInteger value)
+            && value.Sign >= 0 && value <= U256MaxValue)
+        {
+            return new ParsedWideInt(Location: literal.Location, TypeName: "U256", Value: value);
+        }
+
+        ReportError(code: SemanticDiagnosticCode.InvalidIntegerLiteral,
+            message: $"Invalid or out-of-range U256 literal: '{rawValue}' (valid range 0 to 2^256-1).",
+            location: literal.Location);
+        return null;
+    }
+
+    /// <summary>
+    /// Parses an S256 literal magnitude (0 .. 2^255-1) via BigInteger. The sign comes from a unary
+    /// minus operator, so the literal itself is a non-negative magnitude.
+    /// </summary>
+    private ParsedLiteral? ParseS256Literal(LiteralExpression literal, string rawValue)
+    {
+        string cleanedValue = CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "s256"));
+        // The lexer bakes a leading sign into the literal text (mirroring S128), so accept the
+        // full signed range here. Codegen emits the (possibly negative) decimal as an i256 const.
+        if (System.Numerics.BigInteger.TryParse(value: cleanedValue, result: out System.Numerics.BigInteger value)
+            && value >= S256MinValue && value <= S256MaxValue)
+        {
+            return new ParsedWideInt(Location: literal.Location, TypeName: "S256", Value: value);
+        }
+
+        ReportError(code: SemanticDiagnosticCode.InvalidIntegerLiteral,
+            message: $"Invalid or out-of-range S256 literal: '{rawValue}' (valid range -2^255 to 2^255-1).",
             location: literal.Location);
         return null;
     }

@@ -950,11 +950,13 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     "S16"     => TokenType.S16Literal,
                     "S32"     => TokenType.S32Literal,
                     "S128"    => TokenType.S128Literal,
+                    "S256"    => TokenType.S256Literal,
                     "U8"      => TokenType.U8Literal,
                     "U16"     => TokenType.U16Literal,
                     "U32"     => TokenType.U32Literal,
                     "U64"     => TokenType.U64Literal,
                     "U128"    => TokenType.U128Literal,
+                    "U256"    => TokenType.U256Literal,
                     "Address" => TokenType.AddressLiteral,
                     "Integer" => TokenType.IntegerLiteral,
                     _         => TokenType.S64Literal  // This should be language specific: Suflae should use IntegerLiteral

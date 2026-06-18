@@ -241,12 +241,14 @@ public partial class Tokenizer
             [key: "s32"] = TokenType.S32Literal,
             [key: "s64"] = TokenType.S64Literal,
             [key: "s128"] = TokenType.S128Literal,
+            [key: "s256"] = TokenType.S256Literal,
             // Unsigned integers
             [key: "u8"] = TokenType.U8Literal,
             [key: "u16"] = TokenType.U16Literal,
             [key: "u32"] = TokenType.U32Literal,
             [key: "u64"] = TokenType.U64Literal,
             [key: "u128"] = TokenType.U128Literal,
+            [key: "u256"] = TokenType.U256Literal,
             [key: "addr"] = TokenType.AddressLiteral,
 
             // Floating-point

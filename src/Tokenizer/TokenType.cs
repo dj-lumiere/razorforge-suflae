@@ -96,6 +96,9 @@ public enum TokenType
     /// <summary>128-bit signed integer literal (42s128)</summary>
     S128Literal,
 
+    /// <summary>256-bit signed integer literal (42s256)</summary>
+    S256Literal,
+
     // Unsigned integers
     /// <summary>8-bit unsigned integer literal (255u8)</summary>
     U8Literal,
@@ -111,6 +114,9 @@ public enum TokenType
 
     /// <summary>128-bit unsigned integer literal (42u128)</summary>
     U128Literal,
+
+    /// <summary>256-bit unsigned integer literal (42u256)</summary>
+    U256Literal,
 
     /// <summary>Arbitrary precision integer literal</summary>
     IntegerLiteral,
