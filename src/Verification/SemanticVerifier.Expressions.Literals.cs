@@ -472,7 +472,7 @@ public sealed partial class SemanticVerifier
             return new ParsedF128(literal.Location, Lo: 0UL, Hi: 0x7FFF000000000000UL);
         if (rawValue == "nan")
             return new ParsedF128(literal.Location, Lo: 0UL, Hi: 0x7FFF800000000000UL);
-        NumericLiteralParser.F128 result = NumericLiteralParser.ParseF128(str: rawValue);
+        NumericLiteralParser.F128 result = NumericLiteralParser.EncodeF128(str: rawValue);
         return new ParsedF128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
     }
 
@@ -485,7 +485,7 @@ public sealed partial class SemanticVerifier
             return new ParsedD32(literal.Location, Value: 0x78000000U);
         if (rawValue == "nan")
             return new ParsedD32(literal.Location, Value: 0x7C000000U);
-        NumericLiteralParser.D32 result = NumericLiteralParser.ParseD32(str: rawValue);
+        NumericLiteralParser.D32 result = NumericLiteralParser.EncodeD32Bid(str: rawValue);
         return new ParsedD32(Location: literal.Location, Value: result.Value);
     }
 
@@ -498,7 +498,7 @@ public sealed partial class SemanticVerifier
             return new ParsedD64(literal.Location, Value: 0x7800000000000000UL);
         if (rawValue == "nan")
             return new ParsedD64(literal.Location, Value: 0x7C00000000000000UL);
-        NumericLiteralParser.D64 result = NumericLiteralParser.ParseD64(str: rawValue);
+        NumericLiteralParser.D64 result = NumericLiteralParser.EncodeD64Bid(str: rawValue);
         return new ParsedD64(Location: literal.Location, Value: result.Value);
     }
 
@@ -511,7 +511,7 @@ public sealed partial class SemanticVerifier
             return new ParsedD128(literal.Location, Lo: 0UL, Hi: 0x7800000000000000UL);
         if (rawValue == "nan")
             return new ParsedD128(literal.Location, Lo: 0UL, Hi: 0x7C00000000000000UL);
-        NumericLiteralParser.D128 result = NumericLiteralParser.ParseD128(str: rawValue);
+        NumericLiteralParser.D128 result = NumericLiteralParser.EncodeD128Bid(str: rawValue);
         return new ParsedD128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
     }
 
@@ -549,6 +549,18 @@ public sealed partial class SemanticVerifier
         // Strip the `dn` suffix and digit-group underscores (e.g. "3.14_159dn" -> "3.14159")
         // before parsing. decNumber (unlike libbf's bf_atof) rejects trailing non-numeric chars.
         string digits = CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "dn"));
+
+        // Validate against the i256 BID Decimal range the same way codegen will encode it:
+        // EncodeDecimal throws OverflowException when the value would round to ±infinity, and the
+        // ParseDeferredLiteral catch turns that into a clean NumericLiteralParseFailed diagnostic
+        // (overflow-to-infinity is a compile error, not a silently-saturated literal). This mirrors
+        // the D32/D64/D128 fixed-width paths and keeps the compile-time encode the single source of
+        // truth — codegen re-runs EncodeDecimal on the same text to emit the bits.
+        if (rawValue != "inf" && rawValue != "nan")
+        {
+            NumericLiteralParser.EncodeDecimal(str: digits);
+        }
+
         (string value, int sign, int exponent, int significantDigits, bool isInteger) =
             NumericLiteralParser.ParseDecimalInfo(str: digits);
 
@@ -1013,7 +1025,7 @@ public sealed partial class SemanticVerifier
 
         try
         {
-            NumericLiteralParser.F128 result = NumericLiteralParser.ParseF128(str: cleanedValue);
+            NumericLiteralParser.F128 result = NumericLiteralParser.EncodeF128(str: cleanedValue);
             return new ParsedJ128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
         }
         catch (Exception ex)

@@ -98,18 +98,10 @@ public partial class LlvmCodeGenerator
 
         switch (loweringKind)
         {
-            case CallLoweringKind.ValueConversion when arguments.Count == 1 &&
-                                                       constructedType is RecordTypeInfo { HasDirectBackendType: true } &&
-                                                       GetExpressionType(expr: arguments[index: 0]) is RecordTypeInfo { HasDirectBackendType: true } convSourceType &&
-                                                       !ConversionNeedsF128Routine(a: constructedType, b: convSourceType):
-                // Both source and target must be @llvm primitive-typed for inline cast.
-                // When source is non-primitive (e.g. Text in `F128!("3.14")`), fall through
-                // to the routine lookup path so it resolves to `Target.$create!(from: src)`.
-                // F128 conversions also fall through: F128's i128 backend type is a bit
-                // carrier, so a scalar cast would reinterpret integers as IEEE bits.
-                return EmitPrimitiveTypeConversion(sb: sb,
-                    arg: arguments[index: 0],
-                    targetType: constructedType);
+            // ValueConversion (`x.D128()`-style casts) is NOT inlined here: it falls through to the
+            // routine-call path, which resolves `Target.$create(from: source)` and calls it. The
+            // creator's body is the conversion (scalar cast for primitives, BID/IEEE encode for
+            // carrier records) — the backend must not re-decide it with a scalar cast.
             case CallLoweringKind.CollectionConstruction when constructedType != null:
                 return EmitCollectionLiteralConstructor(sb: sb,
                     resolvedType: constructedType,
@@ -473,65 +465,40 @@ public partial class LlvmCodeGenerator
     /// Otherwise call the routine — same LLVM type with a resolved $create indicates a real
     /// conversion (e.g. CStr.$create(from: Referring[Text])), which a reinterpret would skip.
     /// </summary>
-    /// <summary>
-    /// True when a primitive conversion between the two types must go through the
-    /// resolved $create routine because one side is F128. F128's @llvm type is an
-    /// i128 BIT CARRIER for IEEE binary128 — inline scalar casts (sext/sitofp/
-    /// fptoui/...) would convert the carrier integer, not the float value.
-    /// Same-LLVM-type pairs (e.g. F128 vs U128 reinterprets) are not affected.
-    /// </summary>
-    private bool ConversionNeedsF128Routine(TypeInfo? a, TypeInfo? b)
-    {
-        if (a == null || b == null) return false;
-        bool involvesF128 = a.Name == "F128" || b.Name == "F128";
-        return involvesF128 && GetLlvmType(type: a) != GetLlvmType(type: b);
-    }
-
     private bool ShouldInlineDirectBackendConstruction(RecordTypeInfo record, Expression arg,
         RoutineInfo? resolvedRoutine)
     {
+        // No creator resolved -> memberwise / synthesized construction; inline the backend value.
         if (resolvedRoutine == null) return true;
 
         TypeInfo? argType = GetExpressionType(expr: arg);
         if (argType == null) return false;
 
-        string targetLlvm = GetLlvmType(type: record);
-        string argLlvm = GetLlvmType(type: argType);
-        if (argLlvm != targetLlvm)
+        // When SA resolved a real `$create(from: argType)` (or a reference-wrapper of argType),
+        // that routine IS the conversion: its body does the correct thing for every backend
+        // shape — a scalar cast for @llvm primitives, a real BID/IEEE encode for carrier records
+        // (F128/F256/D32/D64/D128/Decimal store a bit-ENCODING, not the value), a UTF-8 encode
+        // for CStr(Referring[Text]), and so on. Honor it; never inline a scalar cast, which would
+        // bypass the encoding and corrupt carriers (e.g. `D128(42)` as a raw i128 decodes to
+        // 4.2E-6175). The backend must not re-decide a conversion the resolver already settled.
+        if (resolvedRoutine is { IsSynthesized: false, Name: "$create" or "$create!", Parameters.Count: 1 })
         {
-            // F128 conversions must never inline: F128's i128 backend type carries IEEE
-            // bits, so a scalar cast (sext/sitofp/...) would produce garbage. The real
-            // conversion lives in the rf_f128_* bridge called by `$create`.
-            if (ConversionNeedsF128Routine(a: record, b: argType))
+            TypeInfo? paramType = resolvedRoutine.Parameters[index: 0].Type;
+            if (paramType != null &&
+                (paramType.FullName == argType.FullName ||
+                 paramType.TypeArguments is { Count: 1 } pta && pta[index: 0].FullName == argType.FullName))
             {
                 return false;
             }
-
-            // Differing LLVM types: only inline as a scalar cast when the source is also
-            // @llvm-primitive (e.g. S64→S32 trunc, F32→F64 fpext). When the source is a
-            // non-primitive carrier such as Text, inlining would emit a bogus
-            // `ptrtoint ptr to i128`; the real conversion lives in `$create!` and the
-            // routine call must be honored instead.
-            return argType is RecordTypeInfo { HasDirectBackendType: true };
         }
 
-        // Same LLVM type. If the resolved routine's first param doesn't match the arg type,
-        // SA picked the wrong overload (e.g. synthesized U64(Address) resolving to U64.$create(S8));
-        // a no-op reinterpret is the correct lowering since LLVM types coincide.
-        if (resolvedRoutine.Parameters.Count == 0) return true;
-        TypeInfo? paramType = resolvedRoutine.Parameters[index: 0].Type;
-        if (paramType == null) return false;
-        if (paramType.FullName == argType.FullName) return false;
-        // Referring[X] (protocol) / Possessed[X] / ... reference wrappers accept X as the
-        // underlying value. The routine body does a real conversion (e.g.
-        // CStr.$create(from: Referring[Text]) UTF-8-encodes a Text entity); inlining the
-        // construction as a pointer reinterpret would skip that and pass the entity bytes
-        // straight to rf_console_show — garbling. Check both wrapper and protocol shapes
-        // since Referring[T] is a `protocol Referring[T]` (ProtocolTypeInfo), not a record.
-        if (paramType.TypeArguments is { Count: 1 } pTypeArgs
-            && pTypeArgs[0].FullName == argType.FullName)
-            return false;
-        return true;
+        // Otherwise the resolved routine is synthesized or a mismatched overload (e.g. SA's
+        // synthesized U64(Address) landing on U64.$create(S8)). A direct backend reinterpret /
+        // scalar cast is the right lowering when the LLVM shapes coincide (no-op reinterpret) or
+        // when the source is itself @llvm-primitive; a non-primitive source must go through its
+        // routine.
+        if (GetLlvmType(type: record) == GetLlvmType(type: argType)) return true;
+        return argType is RecordTypeInfo { HasDirectBackendType: true };
     }
 
     /// <summary>
@@ -668,6 +635,38 @@ public partial class LlvmCodeGenerator
             isFailableMethodCall: isFailableMethodCall,
             resolvedRoutine: resolvedRoutine);
 
+        // Member-conversion call (`x.U64()`, `"42".S32!()`): SA classified it as a
+        // TypeConstructor and stamped the resolved `$create`/`$create!` (see #78 in
+        // SemanticVerifier.Expressions.Calls — LoweringKind=TypeConstructor is set only when a
+        // creator was found, so `method` is guaranteed non-null here). The receiver is the
+        // conversion SOURCE: it becomes the `from:` argument, NOT an implicit `me`. Emit the
+        // resolved creator call directly — no re-resolution, no inline scalar-cast heuristic. The
+        // numeric `$create` bodies do the real cast (e.g. U64.$create(from: U8) = zero_extend),
+        // which is also why F128 is correct here: its i128 backend is an IEEE bit carrier, so a
+        // scalar cast would reinterpret integer bits as float bits (the old s128→F128 NaN bug).
+        if (loweringKind == CallLoweringKind.TypeConstructor && method != null)
+        {
+            string convMangled = MangleRoutineName(routine: method);
+            GenerateRoutineDeclaration(routine: method);
+            string convRetTy = method.ReturnType != null
+                ? GetLlvmType(type: method.ReturnType)
+                : "ptr";
+            string convSrcLlvm = GetLlvmType(type: receiverType);
+            string convSrcVal = receiver;
+            if (ReceiverPassedByRef(receiverType: receiverType))
+            {
+                convSrcVal = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {convSrcVal} = load {convSrcLlvm}, ptr {receiver}");
+            }
+
+            string convResult = NextTemp();
+            EmitLine(sb: sb,
+                line:
+                $"  {convResult} = call {convRetTy} @{convMangled}({convSrcLlvm} {convSrcVal})");
+            return convResult;
+        }
+
         // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets the shared
         // ShareController[T, P], NOT the guarded entity. When the resolved method is a FORWARDED entity
         // method (owned by the inner T — e.g. `c.bump()`), the callee's `me` must be the entity, so
@@ -694,131 +693,30 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Representable pattern: obj.Text() -> Text.$create(from: obj)
-        // When the method name matches a registered type and no direct method exists,
-        // route to TypeName.$create(from: receiver).
-        // Strip '!' suffix for failable conversions (e.g., index.U64!() -> U64)
-        // Guard: if SA stamped this call (loweringKind != Unknown), it must have resolved the method.
-        // Reaching this fallback for SA-classified calls is a codegen contract violation.
-        string conversionTypeName = member.PropertyName.EndsWith(value: '!')
-            ? member.PropertyName[..^1]
-            : member.PropertyName;
-        switch (method)
+        // Member-conversions (`obj.Text()`, `index.U64!()`) are handled above via the
+        // TypeConstructor intercept using the SA-stamped `$create`. Any DirectMemberRoutine that
+        // still reaches here with no resolved method is a semantic-verifier contract violation.
+        if (method == null && loweringKind is CallLoweringKind.DirectMemberRoutine)
         {
-            case null when loweringKind is CallLoweringKind.DirectMemberRoutine:
-                throw new InvalidOperationException(
-                    $"Method call .{member.PropertyName} on {receiverType.FullName} reached codegen " +
-                    $"with loweringKind={loweringKind} but no resolved method. Semantic verifier" +
-                    $" must resolve this.");
-            case null when arguments.Count == 0 &&
-                           _registry.LookupType(name: conversionTypeName) != null:
-            {
-                // For @llvm primitive types where the source is also primitive,
-                // emit inline conversion (trunc/zext/sext/fpcast) instead of a function call.
-                // e.g., val.Address() -> inline zext/trunc.
-                // Non-primitive sources (e.g., Text.S32!()) must go through $create.
-                TypeInfo? targetType = _registry.LookupType(name: conversionTypeName);
-                var argTypes2 = new List<TypeInfo> { receiverType };
-                // $create is owner-scoped; LookupRoutineOverload only indexes free functions,
-                // so use LookupMethodOverload to honor the receiver-type overload signature
-                // (otherwise Text.S32!() resolves to S32.$create(from: S8), the first overload).
-                RoutineInfo? creator =
-                    _registry.LookupMethodOverload(type: targetType!,
-                        methodName: CreateMethodName,
-                        argTypes: argTypes2);
-                string creatorName = $"{conversionTypeName}.{CreateMethodName}";
-                creator ??= _registry.LookupRoutineOverload(baseName: creatorName,
-                    argTypes: argTypes2);
-
-                // A non-failable `target.$create(from: receiver)` IS the conversion — call it (the
-                // call path below passes the receiver). Its body does the right thing: numeric
-                // `$create`s emit the intrinsic cast, and an @llvm-scalar record like D32B runs its
-                // real decode/encode instead of a bogus bit reinterpret. Only inline a scalar cast
-                // when there's no such routine: a failable `$create!` (returns an optional carrier,
-                // kept as the unchecked cast) or a raw @llvm-primitive pair with no `$create`.
-                if (creator is not { IsFailable: false } &&
-                    targetType is RecordTypeInfo { HasDirectBackendType: true } &&
-                    receiverType is RecordTypeInfo { HasDirectBackendType: true })
-                {
-                    return EmitPrimitiveTypeConversion(sb: sb,
-                        arg: member.Object,
-                        targetType: targetType);
-                }
-
-                if (creator != null)
-                {
-                    // Non-generic path
-                    string funcName = MangleRoutineName(routine: creator);
-                    GenerateRoutineDeclaration(routine: creator);
-                    string retType3 = creator.ReturnType != null
-                        ? GetLlvmType(type: creator.ReturnType)
-                        : "ptr";
-
-                    string receiverLlvm3 = GetLlvmType(type: receiverType);
-                    // `s.Type!()` passes the receiver as a by-VALUE argument to `Type.$create(from)`,
-                    // so load the value when the receiver came in by-ref (struct record).
-                    string receiverVal3 = receiver;
-                    if (ReceiverPassedByRef(receiverType: receiverType))
-                    {
-                        receiverVal3 = NextTemp();
-                        EmitLine(sb: sb,
-                            line: $"  {receiverVal3} = load {receiverLlvm3}, ptr {receiver}");
-                    }
-
-                    string result3 = NextTemp();
-                    EmitLine(sb: sb,
-                        line:
-                        $"  {result3} = call {retType3} @{funcName}({receiverLlvm3} {receiverVal3})");
-
-                    return result3;
-                }
-
-                break;
-            }
+            throw new InvalidOperationException(
+                $"Method call .{member.PropertyName} on {receiverType.FullName} reached codegen " +
+                $"with loweringKind={loweringKind} but no resolved method. Semantic verifier" +
+                $" must resolve this.");
         }
 
-        switch (method)
+        // SA contract: a member call either resolves to a concrete routine (stamped on the call)
+        // or is rejected (RF-S458 for `.field()` typos, the dynamic-field `ptr` closure call is
+        // classified DynamicCall and handled above). A non-null resolvedRoutine that codegen can't
+        // re-find is a registry bug, not a fallback to paper over. The former zero-arg field-read
+        // fallback ("`obj.field()` means read the field") was removed: `.field` (access) and
+        // `.field()` (call) are distinct forms, so calling a data member is now an SA error, not a
+        // silent field read (task #23 — codegen emits the resolved routine, it does not rediscover
+        // intent).
+        if (method == null && resolvedRoutine != null)
         {
-            // For zero-argument methods on entity/record types, if the method name matches a field,
-            // emit as a direct field access (common pattern: List[T].count() returns me.count)
-            // Also applies when method is a generic definition that can't be monomorphized.
-            // Guard: if SA provided resolvedRoutine, method must be non-null and concrete here.
-            case null when resolvedRoutine != null:
-                throw new InvalidOperationException(
-                    $"SA-resolved routine '{resolvedRoutine.RegistryKey}' could not be located as a " +
-                    $"method on {receiverType.FullName}.{member.PropertyName} during codegen.");
-            case null when arguments.Count == 0:
-            {
-                switch (receiverType)
-                {
-                    case EntityTypeInfo entity when
-                        entity.MemberVariables.Any(predicate: mv => mv.Name == member.PropertyName):
-                        return EmitEntityMemberVariableRead(sb: sb,
-                            entityPtr: receiver,
-                            entity: entity,
-                            memberVariableName: member.PropertyName);
-                    case RecordTypeInfo record when
-                        record.MemberVariables.Any(predicate: mv => mv.Name == member.PropertyName):
-                    {
-                        // For by-ref struct records the receiver is the storage address; load the
-                        // record value before the extractvalue-based field read.
-                        string recVal = receiver;
-                        if (ReceiverPassedByRef(receiverType: receiverType))
-                        {
-                            recVal = NextTemp();
-                            EmitLine(sb: sb,
-                                line: $"  {recVal} = load {GetRecordTypeName(record: record)}, ptr {receiver}");
-                        }
-
-                        return EmitRecordMemberVariableRead(sb: sb,
-                            recordValue: recVal,
-                            record: record,
-                            memberVariableName: member.PropertyName);
-                    }
-                }
-
-                break;
-            }
+            throw new InvalidOperationException(
+                $"SA-resolved routine '{resolvedRoutine.RegistryKey}' could not be located as a " +
+                $"method on {receiverType.FullName}.{member.PropertyName} during codegen.");
         }
 
         // Build argument list: receiver first, then explicit arguments.
@@ -863,10 +761,15 @@ public partial class LlvmCodeGenerator
             argTypes.Add(item: llvmArgType);
         }
 
-        // Some synthesized/lowered bodies still reach codegen without an attached ResolvedRoutine
-        // on operator-style method calls. Once the concrete argument types are known, retry exact
-        // overload lookup here so failable operators like $add!/$sub! do not degrade to
-        // undecorated placeholder symbols such as Core.S32.$add.
+        // Synthesized/lowered bodies (programmatic $eq/$cmp/$hash, operator-lowered calls) never
+        // pass through SemanticVerifier, so they arrive without a stamped ResolvedRoutine. Once the
+        // concrete argument types are known, resolve the exact overload here so failable operators
+        // like $add!/$sub! do not degrade to undecorated placeholder symbols (Core.S32.$add). This
+        // is resolution for SA-bypassing bodies, NOT intent-rediscovery on user calls — every
+        // SA-analyzed member call is already stamped or rejected (RF-S458). The former bare
+        // `LookupMethod(name)` that resolved a non-failable name to its failable variant was
+        // removed: that failability-masking is now an SA error (`obj.foo()` when only `foo!`
+        // exists), so codegen no longer needs to paper over it (task #23).
         int receiverSkip = methodTakesReceiver ? 1 : 0;
         if (method == null)
         {
@@ -880,12 +783,6 @@ public partial class LlvmCodeGenerator
             method ??= _registry.LookupMethod(type: receiverType,
                 methodName: methodName,
                 isFailable: isFailableMethodCall);
-
-            if (method == null && !isFailableMethodCall)
-            {
-                method ??= _registry.LookupMethod(type: receiverType,
-                    methodName: methodName);
-            }
         }
 
         method = NormalizeResolvedRoutineReference(routine: method,

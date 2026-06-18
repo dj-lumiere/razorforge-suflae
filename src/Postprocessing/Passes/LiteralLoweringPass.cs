@@ -529,8 +529,8 @@ internal sealed class LiteralLoweringPass
         {
             TokenType.IntegerLiteral when _integerType != null && _integerFromLiteral != null =>
                 MakeFromLiteralCall(s, "n", _integerType, _integerFromLiteral, loc),
-            TokenType.DecimalLiteral when _decimalType != null && _decimalFromLiteral != null =>
-                MakeFromLiteralCall(s, "dn", _decimalType, _decimalFromLiteral, loc),
+            // Decimal is now @llvm("i256") BID — its literals bake to a compile-time i256 constant
+            // (NumericLiteralParser.EncodeDecimal) like D128, not a runtime from-string call.
             _ => null
         };
     }

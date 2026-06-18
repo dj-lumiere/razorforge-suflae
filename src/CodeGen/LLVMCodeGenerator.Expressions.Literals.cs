@@ -197,7 +197,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static bool IsFloatLiteralType(TokenType type)
     {
-        return type is TokenType.DecimalLiteral or TokenType.F16Literal
+        return type is TokenType.F16Literal
             or TokenType.F32Literal or TokenType.F64Literal
             or TokenType.F128Literal;
     }
@@ -208,7 +208,7 @@ public partial class LlvmCodeGenerator
     private static bool IsDecimalFloatLiteralType(TokenType type)
     {
         return type is TokenType.D32Literal or TokenType.D64Literal
-            or TokenType.D128Literal;
+            or TokenType.D128Literal or TokenType.DecimalLiteral;
     }
 
     /// <summary>
@@ -527,14 +527,16 @@ public partial class LlvmCodeGenerator
                     return (isNan ? 0x7C00000000000000UL : 0x7800000000000000UL).ToString();
                 case TokenType.D128Literal:
                 {
+                    // D128 is now @llvm("i128") BID; emit a single i128 constant. The combination
+                    // prefix (0x78.. inf / 0x7C.. nan) lives in the high 64 bits, low bits zero.
                     ulong hi = isNan ? 0x7C00000000000000UL : 0x7800000000000000UL;
-                    string tmp1 = NextTemp();
-                    string tmp2 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {tmp1} = insertvalue %Record.D128 zeroinitializer, i64 0, 0");
-                    EmitLine(sb: sb,
-                        line: $"  {tmp2} = insertvalue %Record.D128 {tmp1}, i64 {hi}, 1");
-                    return tmp2;
+                    return $"u0x{hi:X16}0000000000000000";
+                }
+                case TokenType.DecimalLiteral:
+                {
+                    // Decimal is @llvm("i256") BID; combination prefix in the top byte, rest zero.
+                    ulong top = isNan ? 0x7C00000000000000UL : 0x7800000000000000UL;
+                    return $"u0x{top:X16}000000000000000000000000000000000000000000000000";
                 }
             }
         }
@@ -542,25 +544,27 @@ public partial class LlvmCodeGenerator
         {
             case TokenType.D32Literal:
                 return NumericLiteralParser
-                                       .ParseD32(str: numericValue)
+                                       .EncodeD32Bid(str: numericValue)
                                        .Value
                                        .ToString();
             case TokenType.D64Literal:
                 return NumericLiteralParser
-                                       .ParseD64(str: numericValue)
+                                       .EncodeD64Bid(str: numericValue)
                                        .Value
                                        .ToString();
             case TokenType.D128Literal:
             {
+                // D128 is now @llvm("i128") BID; emit a single i128 constant (like F128).
                 NumericLiteralParser.D128 d128 =
-                    NumericLiteralParser.ParseD128(str: numericValue);
-                string tmp1 = NextTemp();
-                string tmp2 = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {tmp1} = insertvalue %Record.D128 zeroinitializer, i64 {d128.Lo}, 0");
-                EmitLine(sb: sb,
-                    line: $"  {tmp2} = insertvalue %Record.D128 {tmp1}, i64 {d128.Hi}, 1");
-                return tmp2;
+                    NumericLiteralParser.EncodeD128Bid(str: numericValue);
+                return $"u0x{d128.Hi:X16}{d128.Lo:X16}";
+            }
+            case TokenType.DecimalLiteral:
+            {
+                // Decimal is @llvm("i256") BID; emit a single i256 constant (4 words, big-endian).
+                NumericLiteralParser.Decimal256 d =
+                    NumericLiteralParser.EncodeDecimal(str: numericValue);
+                return $"u0x{d.W3:X16}{d.W2:X16}{d.W1:X16}{d.W0:X16}";
             }
             default:
                 return numericValue;

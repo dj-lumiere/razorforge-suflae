@@ -1033,13 +1033,18 @@ public sealed partial class SemanticVerifier
             .Select(selector: g => g.First())
             .ToList();
 
-        // The all-args creator `T(fields)` written *inside* T's own `$create` is the primitive
-        // field-init base case — it must NOT route back to `$create` (infinite recursion).
-        // Detect that self-reference and fall through to inline field-init.
+        // `T(...)` written *inside* T's own `$create` is the field-init base case ONLY when it
+        // resolves back to the SAME `$create` we are compiling (genuine self-recursion). A call to
+        // a *different* `$create` overload (e.g. `F128(from: hi)` -> `$create(from: U64)` inside
+        // `$create(from: U128)`) is an ordinary conversion and must route to that overload;
+        // otherwise codegen falls back to inline field-init and mis-lowers bit-carrier types like
+        // F128 to a raw integer reinterpret of the IEEE storage.
         bool insideOwnCreate = _currentRoutine is { Name: "$create" or "$create!" } currentCreate
             && currentCreate.OwnerType != null
             && (currentCreate.OwnerType.FullName == type.FullName
-                || currentCreate.OwnerType.Name == type.Name);
+                || currentCreate.OwnerType.Name == type.Name)
+            && userMatches.Count == 1
+            && ReferenceEquals(objA: userMatches[index: 0], objB: currentCreate);
 
         // Route through a unique user-defined `$create` (so its body runs). Otherwise — no
         // user match, ambiguous user overloads, or self-reference inside the creator — fall back

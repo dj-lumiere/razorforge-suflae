@@ -323,7 +323,9 @@ public partial class LlvmCodeGenerator
             // Bare unsuffixed literals default to S64/F64 in RazorForge (same as SA rule).
             // Stdlib bodies bypass SA so we must handle these token types here.
             TokenType.IntegerLiteral => "S64",
-            TokenType.DecimalLiteral => "F64",
+            // Explicit `dn` Decimal literal -> the @llvm("i256") BID Decimal (baked as an i256
+            // constant by EmitDecimalFloatLiteral). Bare unsuffixed decimals are UndecidedDecimal.
+            TokenType.DecimalLiteral => "Decimal",
             TokenType.S8Literal => "S8",
             TokenType.S16Literal => "S16",
             TokenType.S32Literal => "S32",
