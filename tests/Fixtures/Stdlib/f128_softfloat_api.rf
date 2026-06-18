@@ -1,0 +1,69 @@
+module Tests/Stdlib/F128SoftfloatApi
+import IO/Console
+
+# Covers the software F128 engine after the F128A -> F128 migration: arithmetic,
+# comparison, and libm all run through the pure-integer UnpackedFloat engine (no
+# TLFloat, no LLVM fp128). Integer constructors (S64/U64/S128/U128) also lower to
+# the engine. Float widen/narrow + parse remain on FFI for now.
+
+### Probe: does a U128 argument arrive intact, and do shift/truncate work on it?
+routine u128lo(x: U128) -> U64
+  return int_truncate[U128, U64](x)
+routine u128hi(x: U128) -> U64
+  return int_truncate[U128, U64](x >>> 64u32)
+### Probe: replicate the exact F128-from-U128 body, but as a Main-module routine.
+routine probe_u128_to_f128(from: U128) -> F128
+  var hi = int_truncate[U128, U64](from >>> 64u32)
+  var lo = int_truncate[U128, U64](from)
+  var two64 = F128(from: 9223372036854775808_u64) * F128(from: 2_s64)
+  return F128(from: hi) * two64 + F128(from: lo)
+
+routine start()
+  var a = F128(from: 2_s64)
+  var b = F128(from: 3_s64)
+  show(f"2+3 = {a + b}")
+  show(f"2-3 = {a - b}")
+  show(f"2*3 = {a * b}")
+  show(f"3/2 = {b / a}")
+  show(f"sqrt(2) = {a.sqrt()}")
+  show(f"exp(1) = {F128(from: 1_s64).exp()}")
+  show(f"log(2) = {a.log()}")
+  show(f"2<3 = {a < b}")
+  show(f"2==2 = {a == F128(from: 2_s64)}")
+  show(f"max(2,3) = {a.max(you: b)}")
+  show(f"clamp(3,0,2) = {b.clamp(min_val: F128(from: 0_s64), max_val: a)}")
+  # Integer constructors through the engine.
+  var big = F128(from: 1000000000000000000_s64)
+  show(f"from s64 1e18 = {big}")
+  var u = F128(from: 18446744073709551615_u64)
+  show(f"from u64 max = {u}")
+  var s128v = F128(from: 170141183460469231731687303715884105727_s128)
+  show(f"from s128 max = {s128v}")
+  # --- DEBUG: isolate the U128 compose path ---
+  show(f"DBG hi(2^63-1) = {F128(from: 9223372036854775807_u64)}")
+  show(f"DBG 2^63 = {F128(from: 9223372036854775808_u64)}")
+  var dbg_two64 = F128(from: 9223372036854775808_u64) * F128(from: 2_s64)
+  show(f"DBG two64 = {dbg_two64}")
+  show(f"DBG hi*two64 = {F128(from: 9223372036854775807_u64) * dbg_two64}")
+  var dbgu = F128(from: 18446744073709551615_u128)
+  show(f"DBG u128 small = {dbgu}")
+  show(f"DBG 0*two64 = {F128(from: 0_u64) * dbg_two64}")
+  show(f"DBG bigmul+lo = {F128(from: 9223372036854775807_u64) * dbg_two64 + F128(from: 18446744073709551615_u64)}")
+  var mtest = 170141183460469231731687303715884105727_u128
+  var hx = int_truncate[U128, U64](mtest >>> 64u32)
+  var lx = int_truncate[U128, U64](mtest)
+  show(f"DBG hx = {hx}")
+  show(f"DBG lx = {lx}")
+  show(f"DBG recompose = {F128(from: hx) * dbg_two64 + F128(from: lx)}")
+  show(f"DBG param lo = {u128lo(x: 18446744073709551615_u128)}")
+  show(f"DBG param hi = {u128hi(x: 170141183460469231731687303715884105727_u128)}")
+  show(f"DBG probe-routine u128 = {probe_u128_to_f128(from: 18446744073709551615_u128)}")
+  show(f"DBG probe-routine s128max = {probe_u128_to_f128(from: 170141183460469231731687303715884105727_u128)}")
+  # Float widen (F64 -> F128, exact) and narrow (F128 -> F64, correctly rounded).
+  var w = F128(from: 1.5_f64)
+  show(f"from f64 1.5 = {w}")
+  show(f"to f64 1.5 = {w.F64()}")
+  show(f"3/2 to f64 = {(b / a).F64()}")
+  show(f"pi to f64 = {F128_PI.F64()}")
+  show(f"to f32 = {w.F32()}")
+  return

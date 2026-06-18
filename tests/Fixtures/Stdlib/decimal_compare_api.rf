@@ -1,0 +1,31 @@
+module Tests/Stdlib/DecimalCompareApi
+import IO/Console
+import Numerics.[Decimal]
+
+# Arbitrary-precision Decimal comparison — Decimal obeys Comparable, so ==, !=, <,
+# >, <=, >= are all available (the relational family is generated from $cmp/$eq).
+# Comparison is by decoded parts (never by subtraction), so it does not crash.
+routine start()
+  var a: Decimal = 3.14159dn
+  var b: Decimal = 2.71828dn
+  var c: Decimal = 3.14159dn
+  var neg: Decimal = -2.5dn
+
+  show(f"a == c: {a == c}")
+  show(f"a == b: {a == b}")
+  show(f"a != b: {a != b}")
+  show(f"a > b: {a > b}")
+  show(f"b < a: {b < a}")
+  show(f"a >= c: {a >= c}")
+  show(f"a <= c: {a <= c}")
+  show(f"neg < b: {neg < b}")
+  show(f"neg < a: {neg < a}")
+
+  # Cohort equality: 1.0 and 1.00 are the same value.
+  show(f"1.0 == 1.00: {1.0dn == 1.00dn}")
+
+  # Zero compares equal regardless of sign.
+  show(f"0.0 == -0.0: {0.0dn == -0.0dn}")
+
+  show("DONE")
+  return

@@ -2,16 +2,16 @@ module Tests/Stdlib/DecimalTrigApi
 import IO/Console
 import Numerics.[Decimal]
 
-# Arbitrary-precision Decimal trig/hyperbolic/constants, LibBF-backed at the
-# requested precision (default 50 significant digits). These externs were
-# previously phantom — declared but unimplemented, so any call LINKERR'd.
+# Fixed 70-digit Decimal (BID softfloat) trig/hyperbolic/constants. pi/e are the
+# DECIMAL_PI / DECIMAL_E presets (Decimal is fixed-precision, so they are constants,
+# not precision-parameterized routines).
 
 routine start()
   var one = 1dn
   var half = 0.5dn
 
-  show(f"pi: {Decimal.pi()}")
-  show(f"e: {Decimal.e()}")
+  show(f"pi: {DECIMAL_PI}")
+  show(f"e: {DECIMAL_E}")
 
   show(f"sin(1): {one.sin()}")
   show(f"cos(1): {one.cos()}")
@@ -24,8 +24,6 @@ routine start()
   show(f"sinh(1): {one.sinh()}")
   show(f"cosh(1): {one.cosh()}")
   show(f"tanh(1): {one.tanh()}")
-
-  show(f"pi(100): {Decimal.pi(100)}")
 
   show("DONE")
   return
