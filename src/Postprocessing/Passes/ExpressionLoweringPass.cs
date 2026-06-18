@@ -619,9 +619,14 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 // D-AST-6: hoist to var _cif_N: T; if cond { _cif_N = a } else { _cif_N = b }
                 // ResolvedType must be set -- SA annotates user ternaries, and synthesized
                 // ConditionalExpression nodes (from DerivedOperatorPass) are explicitly typed.
-                TypeInfo? resultType = cond.ResolvedType
-                    ?? cond.TrueExpression.ResolvedType
-                    ?? cond.FalseExpression.ResolvedType;
+                // Prefer a concrete (non-generic-definition) candidate: SA types a conditional from
+                // its TRUE branch, and in a monomorphized body `if e==0 then me else …` the cond node's
+                // own ResolvedType can keep the generic self-type `UnpackedFloat[M,L,W]` (the
+                // rewriter concretizes the `me` IDENTIFIER but not the conditional node it feeds). A
+                // generic-definition record lowers to `ptr` (GetLlvmType), mistyping the `_cif` slot —
+                // so fall through to a branch type that the rewriter DID concretize.
+                TypeInfo? resultType = FirstConcrete(cond.ResolvedType,
+                    cond.TrueExpression.ResolvedType, cond.FalseExpression.ResolvedType);
                 if (resultType == null)
                     throw new InvalidOperationException(
                         $"ConditionalExpression reached ExpressionLoweringPass without a resolved type " +
@@ -2064,6 +2069,24 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Adds <c>var name: T</c> (no initializer) to <paramref name="hoisted"/>.</summary>
+    /// <summary>
+    /// Picks the first candidate type that is concrete (not a generic-definition record/entity,
+    /// which would lower to <c>ptr</c>), falling back to the first non-null candidate. Used to type
+    /// a hoisted result temp from a conditional/when whose own ResolvedType may carry a stale generic
+    /// self-type even when a branch was concretized during monomorphization.
+    /// </summary>
+    private static TypeInfo? FirstConcrete(params TypeInfo?[] candidates)
+    {
+        TypeInfo? firstNonNull = null;
+        foreach (TypeInfo? c in candidates)
+        {
+            if (c == null) continue;
+            firstNonNull ??= c;
+            if (!c.IsGenericDefinition) return c;
+        }
+        return firstNonNull;
+    }
+
     private static void AddTempVarUninit(
         List<Statement> hoisted, string name, TypeInfo? typeHint, SourceLocation loc)
     {

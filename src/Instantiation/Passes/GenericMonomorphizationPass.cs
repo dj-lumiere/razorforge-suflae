@@ -1386,8 +1386,14 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                             if (actual == null) continue;
                             // Compare by base name (strip [T]/[K,V]) so `Set[T]` matches `Set`
                             // and `FastSet[T]` matches `FastSet` regardless of generic-arg form.
-                            string expectedBase = StripGenericSuffix(expected);
-                            string actualBase = StripGenericSuffix(actual);
+                            // Also unwrap a borrow/reference wrapper on the resolved side: a param
+                            // declared `from: Referring[FastSet[T]]` carries Type.Name "FastSet" in
+                            // the AST (the wrapper is a modifier), but the resolved RoutineInfo keeps
+                            // the full "Referring[FastSet[T]]". Without unwrapping, the right overload
+                            // is rejected and FindInStdlib falls back to an arbitrary same-arity one
+                            // (e.g. List's `capacity:U64` body mounted under the FastSet creator).
+                            string expectedBase = MatchableBaseName(expected);
+                            string actualBase = MatchableBaseName(actual);
                             if (expectedBase != actualBase)
                             {
                                 typesMatch = false;
@@ -1416,6 +1422,32 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     {
         int bracket = typeName.IndexOf('[');
         return bracket >= 0 ? typeName[..bracket] : typeName;
+    }
+
+    /// <summary>Borrow/reference wrapper type names. A parameter declared with one of these
+    /// (e.g. <c>from: Referring[FastSet[T]]</c>) reaches the AST as the bare inner type
+    /// (<c>FastSet</c>), while the resolved <see cref="RoutineInfo"/> keeps the full wrapper —
+    /// so overload disambiguation must compare the inner type, not the wrapper.</summary>
+    private static readonly HashSet<string> BorrowWrapperNames = new(System.StringComparer.Ordinal)
+    {
+        "Referring", "Viewing", "Controlling", "Modifying", "Hijacked",
+        "Inspecting", "Claiming", "Retained", "Tracked", "Shared"
+    };
+
+    /// <summary>Base type name for overload matching: strips generic args and unwraps a leading
+    /// borrow/reference wrapper to its inner type (recursively), so <c>Referring[FastSet[T]]</c>
+    /// and the AST's bare <c>FastSet</c> compare equal.</summary>
+    private static string MatchableBaseName(string typeName)
+    {
+        string baseName = StripGenericSuffix(typeName);
+        if (BorrowWrapperNames.Contains(baseName))
+        {
+            int open = typeName.IndexOf('[');
+            int close = typeName.LastIndexOf(']');
+            if (open >= 0 && close > open + 1)
+                return MatchableBaseName(typeName[(open + 1)..close].Trim());
+        }
+        return baseName;
     }
 
     /// <summary>

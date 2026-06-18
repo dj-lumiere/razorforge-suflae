@@ -41,6 +41,9 @@ internal sealed class LiteralLoweringPass
     private readonly TypeInfo? _f32Type;
     private readonly TypeInfo? _f64Type;
     private readonly TypeInfo? _f128Type;
+    // `jn` imaginary literals build a Complex whose components are arbitrary-precision Real.
+    private readonly TypeInfo? _realType;
+    private readonly RoutineInfo? _realFromLiteral;
 
     /// <summary>
     /// Initializes a new instance with the dependencies required for its compiler phase.
@@ -73,6 +76,10 @@ internal sealed class LiteralLoweringPass
         _f32Type = ctx.Registry.LookupType(name: "F32");
         _f64Type = ctx.Registry.LookupType(name: "F64");
         _f128Type = ctx.Registry.LookupType(name: "F128");
+        _realType = ctx.Registry.LookupType(name: "Real");
+        _realFromLiteral = _realType != null
+            ? ctx.Registry.LookupMethod(type: _realType, methodName: "$from_literal")
+            : null;
     }
 
     // -----------------------------------------------------------------------------
@@ -558,13 +565,13 @@ internal sealed class LiteralLoweringPass
                 return MakeComplexCreator("C64", _c64Type, mag, TokenType.F64Literal, _f64Type, loc);
             case TokenType.J128Literal when _c128Type != null:
                 return MakeComplexCreator("C128", _c128Type, mag, TokenType.F128Literal, _f128Type, loc);
-            case TokenType.JnLiteral when _complexType != null && _decimalType != null
-                                          && _decimalFromLiteral != null:
-                // Complex components are arbitrary-precision Decimal -> $from_literal calls
+            case TokenType.JnLiteral when _complexType != null && _realType != null
+                                          && _realFromLiteral != null:
+                // Complex components are arbitrary-precision Real -> $from_literal calls
                 // (the creator's args are not re-lowered, so build them already-lowered here).
                 return new CreatorExpression("Complex", null,
-                    [("real", MakeFromLiteralCall("0", "", _decimalType, _decimalFromLiteral, loc)),
-                     ("imag", MakeFromLiteralCall(mag, "", _decimalType, _decimalFromLiteral, loc))],
+                    [("real", MakeFromLiteralCall("0", "", _realType, _realFromLiteral, loc)),
+                     ("imag", MakeFromLiteralCall(mag, "", _realType, _realFromLiteral, loc))],
                     loc) { ResolvedType = _complexType };
             default:
                 return null;
