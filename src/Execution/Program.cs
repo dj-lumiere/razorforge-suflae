@@ -958,7 +958,8 @@ internal partial class Program
                 liveRoutineKeys: result.LiveRoutineKeys,
                 liveOwnerTypeNames: result.LiveOwnerTypeNames) { Timing = saTiming };
             string llvmIr = generator.Generate();
-            Console.WriteLine(value: $"Routines emitted: {generator.EmittedRoutineCount}");
+            if (showBuildStages)
+                Console.Error.WriteLine(value: $"Routines emitted: {generator.EmittedRoutineCount}");
 
             // Output
             string outPath = outputFile ?? Path.ChangeExtension(path: entryFile, extension: ".ll");
