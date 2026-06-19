@@ -218,7 +218,7 @@ routine S256.$floordiv!(you: S256) -> S256
     throw IntegerOverflowError()
   var amag = s256_abs_u256(x: me)
   var bmag = s256_abs_u256(x: you)
-  var uq = amag.$floordiv(bmag)
+  var uq = amag.$floordiv!(bmag)
   var aneg = signed_lt[S256](a: me, b: 0_s256)
   var bneg = signed_lt[S256](a: you, b: 0_s256)
   # EUCLIDEAN division (remainder always >= 0), consistent with S8..S128. When the
@@ -241,7 +241,7 @@ routine S256.$mod!(you: S256) -> S256
   # EUCLIDEAN remainder (always >= 0), consistent with S8..S128. For a negative
   # dividend with a nonzero remainder, reflect the magnitude remainder into [0, |you|).
   var bmag = s256_abs_u256(x: you)
-  var ur = s256_abs_u256(x: me).$mod(bmag)
+  var ur = s256_abs_u256(x: me).$mod!(bmag)
   if signed_lt[S256](a: me, b: 0_s256) and int_ne[U256](a: ur, b: 0_u256)
     ur = sub[U256](a: bmag, b: ur)
   return reinterpret_bits[U256, S256](ur)

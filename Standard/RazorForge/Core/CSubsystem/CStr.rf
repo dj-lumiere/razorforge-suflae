@@ -60,9 +60,9 @@ routine CStr.$create(from: Bytes) -> CStr
     loop
       if i >= len
         break
-      buffer.offset(i.bytes()).inject(from[i])
+      buffer.offset(i.to_bytes_le()).inject(from[i])
       i = i + 1u64
-    buffer.offset(len.bytes()).inject(BYTE_NULL)
+    buffer.offset(len.to_bytes_le()).inject(BYTE_NULL)
 
     return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
@@ -86,27 +86,27 @@ routine CStr.$create(from: Text) -> CStr
       var cp = from[i].codepoint()
 
       if cp <= 0x7Fu32
-        buffer.offset(write_pos.bytes()).inject(Byte(U8(cp)))
+        buffer.offset(write_pos.to_bytes_le()).inject(Byte(U8(cp)))
         write_pos = write_pos + 1u64
       elseif cp <= 0x7FFu32
-        buffer.offset(write_pos.bytes()).inject(Byte(U8(0xC0u32 | (cp >> 6u32))))
-        buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        buffer.offset(write_pos.to_bytes_le()).inject(Byte(U8(0xC0u32 | (cp >> 6u32))))
+        buffer.offset((write_pos + 1u64).to_bytes_le()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
         write_pos = write_pos + 2u64
       elseif cp <= 0xFFFFu32
-        buffer.offset(write_pos.bytes()).inject(Byte(U8(0xE0u32 | (cp >> 12u32))))
-        buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-        buffer.offset((write_pos + 2u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        buffer.offset(write_pos.to_bytes_le()).inject(Byte(U8(0xE0u32 | (cp >> 12u32))))
+        buffer.offset((write_pos + 1u64).to_bytes_le()).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+        buffer.offset((write_pos + 2u64).to_bytes_le()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
         write_pos = write_pos + 3u64
       else
-        buffer.offset(write_pos.bytes()).inject(Byte(U8(0xF0u32 | (cp >> 18u32))))
-        buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
-        buffer.offset((write_pos + 2u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-        buffer.offset((write_pos + 3u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        buffer.offset(write_pos.to_bytes_le()).inject(Byte(U8(0xF0u32 | (cp >> 18u32))))
+        buffer.offset((write_pos + 1u64).to_bytes_le()).inject(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
+        buffer.offset((write_pos + 2u64).to_bytes_le()).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+        buffer.offset((write_pos + 3u64).to_bytes_le()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
         write_pos = write_pos + 4u64
 
       i = i + 1u64
 
-    buffer.offset(write_pos.bytes()).inject(BYTE_NULL)
+    buffer.offset(write_pos.to_bytes_le()).inject(BYTE_NULL)
     return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Returns the length of this C string in bytes, excluding the trailing null.
@@ -130,7 +130,7 @@ routine CStr.is_empty() -> Bool
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 dangerous routine CStr.$getitem(index: U64) -> Byte
-  return me.ptr().offset(index.bytes()).extract()
+  return me.ptr().offset(index.to_bytes_le()).extract()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
@@ -164,10 +164,10 @@ routine CStr.copy() -> CStr
 ### :param n: The number of bytes to skip.
 ### :returns: The resulting `CStr` value.
 dangerous routine CStr.offset(n: U64) -> CStr
-  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(n.bytes()))
+  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(n.to_bytes_le()))
 
 ### Returns a `CStr` view starting at `start` bytes from the current pointer.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `CStr` value.
 dangerous routine CStr.from_index(start: U64) -> CStr
-  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(start.bytes()))
+  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(start.to_bytes_le()))
