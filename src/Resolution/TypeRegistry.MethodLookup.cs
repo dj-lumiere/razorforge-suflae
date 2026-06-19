@@ -27,9 +27,11 @@ public sealed partial class TypeRegistry
         // Never let a synthesized (builder-generated) routine overwrite a user-written one:
         // explicit user routines override synthetic same-signature defaults (e.g., a user
         // `T.$create(field: Foo)` overrides the auto-generated record field constructor).
-        if (_routines.TryGetValue(key: registryKey, value: out RoutineInfo? existingByKey))
+        bool keyExisted =
+            _routines.TryGetValue(key: registryKey, value: out RoutineInfo? existingByKey);
+        if (keyExisted)
         {
-            bool existingIsUser = !existingByKey.IsSynthesized;
+            bool existingIsUser = !existingByKey!.IsSynthesized;
             bool incomingIsSynthetic = routine.IsSynthesized;
             if (!(existingIsUser && incomingIsSynthetic))
                 _routines[key: registryKey] = routine;
@@ -62,7 +64,28 @@ public sealed partial class TypeRegistry
                 _routinesByOwner[key: ownerKey] = list;
             }
 
-            list.Add(item: routine);
+            // Dedup by (RegistryKey, IsFailable): a re-registered routine (same owner, signature,
+            // and failability) REPLACES its prior list entry instead of appending. Appending
+            // duplicates here let method resolution iterate stale-and-fresh copies of the same
+            // overload and pick order-dependently — a non-determinism that manifested as
+            // platform-specific codegen. Failability is part of the identity because `$mul` and
+            // `$mul!` share a RegistryKey (the `!` is not in it) yet are distinct overloads that
+            // must coexist. The dedup scan only runs when the RegistryKey was already present
+            // (`keyExisted`); a key's first registration stays an O(1) append. User-written
+            // routines are never replaced by a synthesized same-identity routine.
+            if (keyExisted)
+            {
+                int existingIdx = list.FindIndex(match: r =>
+                    r.IsFailable == routine.IsFailable && r.RegistryKey == registryKey);
+                if (existingIdx < 0)
+                    list.Add(item: routine);
+                else if (!(!list[index: existingIdx].IsSynthesized && routine.IsSynthesized))
+                    list[index: existingIdx] = routine;
+            }
+            else
+            {
+                list.Add(item: routine);
+            }
 
             // Index universal methods (on GenericParameterTypeInfo owners) by name for O(1) lookup
             if (routine.OwnerType is GenericParameterTypeInfo)
