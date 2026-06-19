@@ -15,6 +15,12 @@ public partial class LlvmCodeGenerator
 {
     private void GenerateRoutineDeclaration(RoutineInfo routine, string? nameOverride = null)
     {
+        // Record the reference: if we are emitting a routine body, this routine is a real callee and
+        // must itself be emitted. Gated on _emittingRoutineBody so the broad declaration pre-pass
+        // (which declares much of the registry up front) does not mark everything referenced.
+        if (_emittingRoutineBody)
+            _referencedKeys.Add(item: routine.RegistryKey);
+
         string funcName = nameOverride ?? MangleRoutineName(routine: routine);
 
         // Skip if already generated
@@ -417,6 +423,13 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void GenerateRoutineBody(StringBuilder sb, Statement body, RoutineInfo routine) // NOSONAR S3776
     {
+        // Mark that we are emitting a body: every routine declared (referenced) from here on is a
+        // real callee of an emitted routine, so it must itself be emitted. Save/restore in case a
+        // body's emission ever re-enters this method.
+        bool prevEmittingBody = _emittingRoutineBody;
+        _emittingRoutineBody = true;
+        try
+        {
         // Clear local variables for this function
         _localVariables.Clear();
         _localVarLlvmNames.Clear();
@@ -588,6 +601,11 @@ public partial class LlvmCodeGenerator
         {
             string zeroValue = GetZeroValue(type: routine.ReturnType!);
             EmitLine(sb: sb, line: $"  ret {retType} {zeroValue}");
+        }
+        }
+        finally
+        {
+            _emittingRoutineBody = prevEmittingBody;
         }
     }
 

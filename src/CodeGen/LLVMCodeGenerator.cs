@@ -50,6 +50,22 @@ public partial class LlvmCodeGenerator
     private HashSet<string> _liveRoutineKeys = new(comparer: StringComparer.Ordinal);
 
     /// <summary>
+    /// RegistryKeys of routines actually REFERENCED while emitting a routine body (the transitive
+    /// closure from the user entry points). Codegen gates body definitions on this set so a routine
+    /// is emitted only if some emitted body calls it — pruning every routine nothing references
+    /// (dead derived operators, dead variants, etc.). Populated by <c>GenerateRoutineDeclaration</c>
+    /// whenever <see cref="_emittingRoutineBody"/> is set. The do/while fixpoint in
+    /// <c>GenerateRoutineDefinitions</c> drives convergence: each newly-emitted body adds its callees.
+    /// </summary>
+    private readonly HashSet<string> _referencedKeys = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
+    /// True while emitting a routine body (inside <c>GenerateRoutineBody</c>). Reference recording
+    /// is gated on this so the broad declaration pre-pass doesn't pollute <see cref="_referencedKeys"/>.
+    /// </summary>
+    private bool _emittingRoutineBody;
+
+    /// <summary>
     /// Live concrete owner type FullNames from RoutineReachabilityPass. Used to drive Phase C
     /// monomorphization of synthesized routines (try_next, $represent, $diagnose) for generic owners.
     /// </summary>
@@ -159,6 +175,14 @@ public partial class LlvmCodeGenerator
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
     // TODO: this should be routine info, not string.
     private readonly HashSet<string> _generatedRoutineDefs = [];
+
+    /// <summary>
+    /// Number of routine bodies actually emitted (the transitive closure referenced from the entry
+    /// point). This is the meaningful "how much code did we compile" figure — far smaller than the
+    /// registry's total routine count, which holds every stdlib routine available for resolution.
+    /// Valid after <see cref="Generate"/> returns.
+    /// </summary>
+    public int EmittedRoutineCount => _generatedRoutineDefs.Count;
 
     /// <summary>The return type of the current function being generated.</summary>
     private TypeInfo? _currentRoutineReturnType;
@@ -433,20 +457,28 @@ public partial class LlvmCodeGenerator
                 GenerateCrashableType(crashable: crashable);
         }
 
-        // Generate record types (value types)
-        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
+        // Generate record types (value types). When reachability ran (real builds), SKIP this broad
+        // emission: GetLlvmType -> EnsureRecordTypeDeclared emits each record on first use, so only
+        // records actually referenced by emitted code get a struct definition — pruning dead record
+        // types. (Entities/crashables/variants stay broad: crashables are used opaquely in size GEPs
+        // and variants are passed by value, neither of which auto-generates their struct.) The
+        // no-reachability config (unit tests) falls back to emitting every record.
+        if (_liveRoutineKeys.Count == 0)
         {
-            if (type is RecordTypeInfo { IsGenericDefinition: false } record)
+            foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
             {
-                if (record.TypeArguments != null &&
-                    record.TypeArguments.Any(predicate: t =>
-                        ContainsGenericParameter(t) || t is ErrorTypeInfo ||
-                        ContainsAbstractProjection(t)))
+                if (type is RecordTypeInfo { IsGenericDefinition: false } record)
                 {
-                    continue;
-                }
+                    if (record.TypeArguments != null &&
+                        record.TypeArguments.Any(predicate: t =>
+                            ContainsGenericParameter(t) || t is ErrorTypeInfo ||
+                            ContainsAbstractProjection(t)))
+                    {
+                        continue;
+                    }
 
-                GenerateRecordType(record: record);
+                    GenerateRecordType(record: record);
+                }
             }
         }
 
@@ -899,7 +931,7 @@ public partial class LlvmCodeGenerator
                     // from pulling in entire stdlib subgraphs (SortedList, BTreeNode, etc.)
                     // that the user program never invokes.
                     if (_liveRoutineKeys.Count > 0
-                        && !_liveRoutineKeys.Contains(item: routineInfo.RegistryKey))
+                        && !_referencedKeys.Contains(item: routineInfo.RegistryKey))
                     {
                         continue;
                     }
@@ -930,7 +962,7 @@ public partial class LlvmCodeGenerator
                 string instFuncName = MangleRoutineName(routine: body.Info);
                 if (_generatedRoutineDefs.Contains(item: instFuncName)) continue;
                 if (_liveRoutineKeys.Count > 0
-                    && !_liveRoutineKeys.Contains(item: body.Info.RegistryKey))
+                    && !_referencedKeys.Contains(item: body.Info.RegistryKey))
                     continue;
 
                 var savedSubs = _typeSubstitutions;
@@ -986,7 +1018,7 @@ public partial class LlvmCodeGenerator
                     && synthInfo.OwnerType?.IsGenericDefinition == true;
                 if (!isWrapperForwarderGenDef
                     && _liveRoutineKeys.Count > 0
-                    && !_liveRoutineKeys.Contains(item: synthInfo.RegistryKey))
+                    && !_referencedKeys.Contains(item: synthInfo.RegistryKey))
                     continue;
                 // Skip routines whose owner type still has unresolved generic parameters
                 // (e.g. $represent/$hash on DictEntry[K, V] — the generic definition).
@@ -1034,7 +1066,7 @@ public partial class LlvmCodeGenerator
                                 type: candidateOwner, methodName: synthInfo.Name);
                             if (concreteMethod == null) continue;
                             if (_liveRoutineKeys.Count > 0
-                                && !_liveRoutineKeys.Contains(item: concreteMethod.RegistryKey))
+                                && !_referencedKeys.Contains(item: concreteMethod.RegistryKey))
                                 continue;
                             string monoFuncName = MangleRoutineName(routine: concreteMethod);
                             if (_generatedRoutineDefs.Contains(item: monoFuncName)) continue;
