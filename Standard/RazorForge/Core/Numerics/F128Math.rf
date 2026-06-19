@@ -324,6 +324,11 @@ routine UnpackedFloat[M, L, W].acosh() -> UnpackedFloat[M, L, W]
 
 ### Returns `e^me`.
 routine F128.exp() -> F128
+  var rr = me.exp_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.exp_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
@@ -334,6 +339,11 @@ routine F128.exp() -> F128
 
 ### Returns `ln(me)`.
 routine F128.log() -> F128
+  var rr = me.log_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.log_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -346,6 +356,11 @@ routine F128.log() -> F128
 
 ### Returns `e^me - 1`.
 routine F128.expm1() -> F128
+  var rr = me.expm1_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.expm1_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
@@ -356,6 +371,11 @@ routine F128.expm1() -> F128
 
 ### Returns `ln(1 + me)`.
 routine F128.log1p() -> F128
+  var rr = me.log1p_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.log1p_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -371,6 +391,11 @@ routine F128.log1p() -> F128
 
 ### Returns `log2(me)`.
 routine F128.log2() -> F128
+  var rr = me.log2_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.log2_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -383,6 +408,11 @@ routine F128.log2() -> F128
 
 ### Returns `log10(me)`.
 routine F128.log10() -> F128
+  var rr = me.log10_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.log10_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -401,6 +431,11 @@ routine F128.cbrt() -> F128
 
 ### Returns `2^me` (computed in octuple).
 routine F128.exp2() -> F128
+  var rr = me.exp2_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.exp2_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
@@ -411,6 +446,11 @@ routine F128.exp2() -> F128
 
 ### Returns `10^me` (computed in octuple).
 routine F128.exp10() -> F128
+  var rr = me.exp10_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.exp10_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
@@ -421,6 +461,11 @@ routine F128.exp10() -> F128
 
 ### Returns `me ^ you` (computed in octuple).
 routine F128.pow(you: F128) -> F128
+  var rr = me.pow_unchecked(you: you)
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.pow_unchecked(you: F128) -> F128
   var one = UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).to_f128()
   var negone = one.$neg()
   var yo = you.to_oct()
@@ -486,12 +531,22 @@ routine F128.atan() -> F128
 
 ### Returns `asin(me)`.
 routine F128.asin() -> F128
+  var rr = me.asin_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.asin_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   return me.to_uf().asin().to_f128()
 
 ### Returns `acos(me)`.
 routine F128.acos() -> F128
+  var rr = me.acos_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.acos_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   return me.to_uf().acos().to_f128()
@@ -517,10 +572,20 @@ routine F128.atan2(you: F128) -> F128
 
 ### Returns `sinh(me)`.
 routine F128.sinh() -> F128
+  var rr = me.sinh_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.sinh_unchecked() -> F128
   return me.to_uf().sinh().to_f128()
 
 ### Returns `cosh(me)`.
 routine F128.cosh() -> F128
+  var rr = me.cosh_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.cosh_unchecked() -> F128
   return me.to_uf().cosh().to_f128()
 
 ### Returns `tanh(me)`.
@@ -529,6 +594,11 @@ routine F128.tanh() -> F128
 
 ### Returns `atanh(me)`.
 routine F128.atanh() -> F128
+  var rr = me.atanh_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.atanh_unchecked() -> F128
   return me.to_uf().atanh().to_f128()
 
 ### Returns `asinh(me)` (computed in octuple).
@@ -539,6 +609,11 @@ routine F128.asinh() -> F128
 
 ### Returns `acosh(me)` (computed in octuple).
 routine F128.acosh() -> F128
+  var rr = me.acosh_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.acosh_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   return me.to_oct().acosh().to_f128()
@@ -744,10 +819,20 @@ routine F128.tan() -> F128
 
 ### Returns the fused multiply-add `me*b + c` with a single rounding (octuple).
 routine F128.fma(b: F128, c: F128) -> F128
+  var rr = me.fma_unchecked(b: b, c: c)
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.fma_unchecked(b: F128, c: F128) -> F128
   return me.to_oct().fma(b: b.to_oct(), c: c.to_oct()).to_f128()
 
 ### Returns `sqrt(me^2 + you^2)` without spurious overflow (TLFloat hypot).
 routine F128.hypot(you: F128) -> F128
+  var rr = me.hypot_unchecked(you: you)
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.hypot_unchecked(you: F128) -> F128
   var xx = me.to_uf()
   var yy = you.to_uf()
   if xx.isinf or yy.isinf
@@ -975,6 +1060,11 @@ routine UnpackedFloat[M, L, W].lgamma_core() -> UFSign[M, L, W]
 
 ### Returns the gamma function `tgamma(me)`.
 routine F128.tgamma() -> F128
+  var rr = me.tgamma_unchecked()
+  if rr.is_finite()
+    return rr
+  return f128_nonfinite_crash!(r: rr)
+routine F128.tgamma_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()

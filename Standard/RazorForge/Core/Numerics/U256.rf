@@ -506,10 +506,7 @@ routine U256.$mul_clamp(you: U256) -> U256
 ### Returns `me ** exp` and a flag indicating whether the result wrapped around.
 ### :param exp: The exponent.
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U256.pow_with_overflow!(exp: U256) -> (U256, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U256.pow_with_overflow(exp: U256) -> (U256, Bool)
   var result: U256 = 1
   var base: U256 = me
   var e: U32 = U32(exp)
@@ -530,9 +527,8 @@ routine U256.pow_with_overflow!(exp: U256) -> (U256, Bool)
 ### :param exp: The exponent.
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U256_MAX`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U256.$pow!(exp: U256) -> U256
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -540,10 +536,7 @@ routine U256.$pow!(exp: U256) -> U256
 ### Returns `me ** exp` with wrapping arithmetic (mod 2²⁵⁶).
 ### :param exp: The exponent.
 ### :returns: The result modulo 2²⁵⁶.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U256.$pow_wrap!(exp: U256) -> U256
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U256.$pow_wrap(exp: U256) -> U256
   var result: U256 = 1
   var base: U256 = me
   var e: U32 = U32(exp)
@@ -558,10 +551,7 @@ routine U256.$pow_wrap!(exp: U256) -> U256
 ### Returns `me ** exp`, clamped to `U256_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `U256_MAX` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U256.$pow_clamp!(exp: U256) -> U256
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U256.$pow_clamp(exp: U256) -> U256
   var result: U256 = 1
   var base: U256 = me
   var e: U32 = U32(exp)

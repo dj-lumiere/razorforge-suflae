@@ -71,6 +71,10 @@ routine F128.is_positive() -> Bool
 routine F128.is_nan() -> Bool
   return me.raw_exponent() == 0x7FFF_u64 and int_ne[U128](a: me.raw_mantissa(), b: 0_u128)
 
+### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
+routine F128.is_signaling() -> Bool
+  return me.is_nan() and int_eq[U128](a: bit_and[U128](a: me.raw_mantissa(), b: shift_left[U128](value: 1_u128, bits: 111_u128)), b: 0_u128)
+
 ### Returns `true` when the value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern is an infinity.
 routine F128.is_infinite() -> Bool
@@ -101,6 +105,8 @@ routine F128.is_normal() -> Bool
 
 ### C `fpclassify`: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
 routine F128.fpclassify() -> FpClass
+  if me.is_signaling()
+    return SIGNALING_NAN
   if me.is_nan()
     return NAN
   if me.is_infinite()
@@ -110,6 +116,137 @@ routine F128.fpclassify() -> FpClass
   if me.is_subnormal()
     return SUBNORMAL
   return NORMAL
+
+# ============================================================================
+# IEEE 754 Tier 1 — total ordering predicates
+# ============================================================================
+
+### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
+### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
+routine f128_order_key(bits: U128) -> U128
+  if int_ne[U128](a: bit_and[U128](a: bits, b: f128_sign_mask()), b: 0_u128)
+    return bit_xor[U128](a: bits, b: bit_or[U128](a: f128_sign_mask(), b: f128_abs_mask()))
+  return bit_or[U128](a: bits, b: f128_sign_mask())
+
+### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
+### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
+### :param you: The value to compare against.
+### :returns: Whether `me` precedes or equals `you` in the total order.
+routine F128.total_order(you: F128) -> Bool
+  return f128_order_key(bits: me.to_bits()) <= f128_order_key(bits: you.to_bits())
+
+### IEEE 754 totalOrderMag: `total_order` applied to the magnitudes (sign bit cleared).
+### :param you: The value whose magnitude to compare against.
+### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
+routine F128.total_order_mag(you: F128) -> Bool
+  return bit_and[U128](a: me.to_bits(), b: f128_abs_mask()) <= bit_and[U128](a: you.to_bits(), b: f128_abs_mask())
+
+# ============================================================================
+# IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding
+# ============================================================================
+
+### IEEE 754 nextUp: the least value greater than `me`. Propagating; never crashes.
+### :returns: The next representable value toward +infinity.
+routine F128.next_up() -> F128
+  return me.nextafter(you: F128.from_bits(bits: f128_inf(sign: 0_u64)))
+
+### IEEE 754 nextDown: the greatest value less than `me`. Never crashes.
+### :returns: The next representable value toward -infinity.
+routine F128.next_down() -> F128
+  return me.nextafter(you: F128.from_bits(bits: f128_inf(sign: 1_u64)))
+
+### IEEE 754 logb: the unbiased exponent of `me` as a floating value (logb(0)=-inf,
+### logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
+### :returns: The radix-2 exponent of `me`.
+routine F128.logb() -> F128
+  if me.is_nan()
+    return me
+  if me.is_infinite()
+    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+  if me.is_zero()
+    return F128.from_bits(bits: f128_inf(sign: 1_u64))
+  return F128(from: f128_ilogb(v: me))
+
+### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
+### :param n: The power-of-two exponent to apply.
+### :returns: `me` scaled by `2^n`.
+routine F128.scaleb(n: S64) -> F128
+  var r = me.scalbn(n: n)
+  if r.is_finite() or not me.is_finite()
+    return r
+  return f128_nonfinite_crash!(r: r)
+
+### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
+### :param n: The power-of-two exponent to apply.
+### :returns: `me` scaled by `2^n`.
+routine F128.scaleb_unchecked(n: S64) -> F128
+  return me.scalbn(n: n)
+
+### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, ignoring NaN.
+routine F128.min_num(you: F128) -> F128
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then me else you
+    return me
+  return if me < you then me else you
+
+### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, ignoring NaN.
+routine F128.max_num(you: F128) -> F128
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then you else me
+    return me
+  return if me > you then me else you
+
+### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, NaN if either is NaN.
+routine F128.minimum(you: F128) -> F128
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then me else you
+    return me
+  return if me < you then me else you
+
+### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, NaN if either is NaN.
+routine F128.maximum(you: F128) -> F128
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then you else me
+    return me
+  return if me > you then me else you
+
+### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero.
+### :returns: `me` rounded to an integral value with ties away from zero.
+routine F128.round_ties_away() -> F128
+  if not me.is_finite()
+    return me
+  var a = me.abs()
+  var t = a.trunc()
+  var rounded = if a - t >= 0.5_f128 then t + 1.0_f128 else t
+  return rounded.copysign(sign: me)
 
 ### Returns the fractional part `me - trunc(me)`, preserving sign (frac(±inf) = ±0).
 routine F128.frac() -> F128
@@ -175,30 +312,66 @@ routine F128.$cmp(you: F128) -> ComparisonSign
 # Software arithmetic
 # ============================================================================
 
-### Returns `me + you` using software IEEE 754 round-to-nearest-even.
-### :param you: The addend.
-### :returns: The sum, possibly infinity or NaN.
-routine F128.$add(you: F128) -> F128
-  return F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: you.to_bits()))
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
+# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+@crash_only
+routine f128_overflow_crash!() -> F128
+  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
+@crash_only
+routine f128_domain_crash!() -> F128
+  throw NumericDomainError(description: "F128: undefined operation with no real result (e.g. 0/0 or inf - inf).")
+@crash_only
+routine f128_divzero_crash!() -> F128
+  throw DivisionByZeroError()
+@crash_only
+routine f128_nonfinite_crash!(r: F128) -> F128
+  if r.is_nan()
+    return f128_domain_crash!()
+  return f128_overflow_crash!()
 
-### Returns `me - you` using software IEEE 754 round-to-nearest-even.
+### Returns `me + you` (software IEEE 754, round-to-nearest-even). Checked: crashes if the result is
+### non-finite. Use `$add_unchecked` for raw IEEE 754 propagation.
+### :param you: The addend.
+### :returns: The sum (always finite).
+routine F128.$add(you: F128) -> F128
+  var r = F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: you.to_bits()))
+  if r.is_finite()
+    return r
+  return f128_nonfinite_crash!(r: r)
+
+### Returns `me - you` (software IEEE 754). Checked: crashes if the result is non-finite.
+### Use `$sub_unchecked` for raw IEEE 754 propagation.
 ### :param you: The value to subtract.
-### :returns: The difference, possibly infinity or NaN.
+### :returns: The difference (always finite).
 routine F128.$sub(you: F128) -> F128
   var yb = bit_xor[U128](a: you.to_bits(), b: f128_sign_mask())
-  return F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: yb))
+  var r = F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: yb))
+  if r.is_finite()
+    return r
+  return f128_nonfinite_crash!(r: r)
 
-### Returns `me * you` using software IEEE 754 round-to-nearest-even.
+### Returns `me * you` (software IEEE 754). Checked: crashes if the result is non-finite.
+### Use `$mul_unchecked` for raw IEEE 754 propagation.
 ### :param you: The multiplier.
-### :returns: The product, possibly infinity or NaN.
+### :returns: The product (always finite).
 routine F128.$mul(you: F128) -> F128
-  return F128.from_bits(bits: f128_mul_bits(a: me.to_bits(), b: you.to_bits()))
+  var r = F128.from_bits(bits: f128_mul_bits(a: me.to_bits(), b: you.to_bits()))
+  if r.is_finite()
+    return r
+  return f128_nonfinite_crash!(r: r)
 
-### Returns `me / you` using software IEEE 754 round-to-nearest-even.
+### Returns `me / you` (software IEEE 754). Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain,
+### overflow -> overflow. Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 ### :param you: The divisor.
-### :returns: The quotient, possibly infinity or NaN.
+### :returns: The quotient (always finite).
 routine F128.$truediv(you: F128) -> F128
-  return F128.from_bits(bits: f128_div_bits(a: me.to_bits(), b: you.to_bits()))
+  var r = F128.from_bits(bits: f128_div_bits(a: me.to_bits(), b: you.to_bits()))
+  if r.is_finite()
+    return r
+  if you.is_zero() and not me.is_zero()
+    return f128_divzero_crash!()
+  return f128_nonfinite_crash!(r: r)
 
 # ============================================================================
 # Rounding to integer and value selection (exact, on packed bits — no rounding
@@ -409,6 +582,10 @@ routine f128_qnan() -> U128
 ### Forces the quiet bit on a NaN encoding (top mantissa bit).
 routine f128_quiet(bits: U128) -> U128
   return bit_or[U128](a: bits, b: shift_left[U128](value: 1_u128, bits: 111_u128))
+
+### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+common routine F128.signaling_nan() -> F128
+  return F128.from_bits(bits: bit_or[U128](a: shift_left[U128](value: 32767_u128, bits: 112_u128), b: 1_u128))
 
 ### Sign-magnitude total-order key for comparison: negatives are bit-inverted,
 ### non-negatives get the sign bit set, so an unsigned compare orders the floats.
@@ -782,9 +959,18 @@ routine f128_isqrt256(n: U256) -> U256
     bit = f128_u256_shr(v: bit, n: 2_u128)
   return res
 
-### Returns the correctly-rounded square root (C `sqrt`).
-### :returns: `sqrt(me)`: NaN for negatives, +inf for +inf, ±0 for ±0.
+### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` -> NaN).
+### Use `sqrt_unchecked` for raw IEEE 754 propagation.
+### :returns: The quadruple-precision square root (always finite for finite non-negative input).
 routine F128.sqrt() -> F128
+  var r = me.sqrt_unchecked()
+  if r.is_finite()
+    return r
+  return f128_nonfinite_crash!(r: r)
+
+### Returns the correctly-rounded square root with raw IEEE 754 propagation (C `sqrt`):
+### NaN for negatives, +inf for +inf, ±0 for ±0.
+routine F128.sqrt_unchecked() -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -966,6 +1152,8 @@ routine F128.remainder(you: F128) -> F128
 ### Returns the decimal text of this value (%g with 6 significant digits).
 ### :returns: The formatted representation.
 routine F128.$represent() -> Text
+  if me.is_signaling()
+    return "snan"
   return f128_represent(bits: me.to_bits())
 
 ### Returns a diagnostic representation tagged with the type name.
@@ -1451,24 +1639,25 @@ routine F128.finite!() -> F128
     throw NumericOverflowError(description: f"F128 value is non-finite: {me}")
   return me
 
-### Divides `me` by `you` without overflow checking.
-### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
-### :param you: The divisor.
-### :returns: The quadruple-precision quotient, possibly infinity or NaN.
-dangerous routine F128.$truediv_unchecked(you: F128) -> F128
-  return me / you
+# Unchecked variants — raw IEEE 754 propagation. They call the software engine DIRECTLY (not the
+# checked `+ - * /` operators, which would crash), so `x/0` -> ±inf and `0/0` -> NaN instead of a
+# crash. Plain (not `dangerous`): inf/NaN are valid IEEE values; the `_unchecked` spelling is the marker.
 
-### Adds `me + you` without finiteness checking (raw IEEE 754).
-dangerous routine F128.$add_unchecked(you: F128) -> F128
-  return me + you
+### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+routine F128.$truediv_unchecked(you: F128) -> F128
+  return F128.from_bits(bits: f128_div_bits(a: me.to_bits(), b: you.to_bits()))
 
-### Subtracts `me - you` without finiteness checking (raw IEEE 754).
-dangerous routine F128.$sub_unchecked(you: F128) -> F128
-  return me - you
+### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine F128.$add_unchecked(you: F128) -> F128
+  return F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: you.to_bits()))
 
-### Multiplies `me * you` without finiteness checking (raw IEEE 754).
-dangerous routine F128.$mul_unchecked(you: F128) -> F128
-  return me * you
+### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine F128.$sub_unchecked(you: F128) -> F128
+  return F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: bit_xor[U128](a: you.to_bits(), b: f128_sign_mask())))
+
+### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine F128.$mul_unchecked(you: F128) -> F128
+  return F128.from_bits(bits: f128_mul_bits(a: me.to_bits(), b: you.to_bits()))
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)

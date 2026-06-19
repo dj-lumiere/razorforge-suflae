@@ -351,13 +351,10 @@ routine S128.$mul_clamp(you: S128) -> S128
 ### Returns `me ** exp` and a flag indicating whether the result overflowed.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)
@@ -378,8 +375,7 @@ routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result is outside the S128 range.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.$pow!(exp: S128) -> S128
   var result = me.pow_with_overflow!(exp)
   if result.item1
@@ -389,13 +385,10 @@ routine S128.$pow!(exp: S128) -> S128
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result modulo 2¹²⁸ (signed wrap).
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.$pow_wrap!(exp: S128) -> S128
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0_s128
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)
@@ -410,13 +403,10 @@ routine S128.$pow_wrap!(exp: S128) -> S128
 ### Returns `me ** exp`, clamped to `S128_MAX` or `S128_MIN` on overflow.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result, or `S128_MAX` / `S128_MIN` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.$pow_clamp!(exp: S128) -> S128
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)

@@ -90,31 +90,91 @@ routine f128_to_d64(x: F128) -> D64
 # ============================================================================
 
 routine D64.exp() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).exp())
+  var r = me.exp_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.exp_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).exp_unchecked())
 routine D64.expm1() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).expm1())
+  var r = me.expm1_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.expm1_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).expm1_unchecked())
 routine D64.exp2() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).exp2())
+  var r = me.exp2_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.exp2_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).exp2_unchecked())
 routine D64.exp10() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).exp10())
+  var r = me.exp10_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.exp10_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).exp10_unchecked())
 routine D64.log() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log())
+  var r = me.log_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.log_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).log_unchecked())
 routine D64.log1p() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log1p())
+  var r = me.log1p_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.log1p_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).log1p_unchecked())
 routine D64.log2() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log2())
+  var r = me.log2_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.log2_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).log2_unchecked())
 routine D64.log10() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log10())
+  var r = me.log10_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.log10_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).log10_unchecked())
 routine D64.sqrt() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).sqrt())
+  var r = me.sqrt_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.sqrt_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).sqrt_unchecked())
 routine D64.cbrt() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).cbrt())
 routine D64.pow(you: D64) -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).pow(you: d64_to_f128(x: you)))
+  var r = me.pow_unchecked(you: you)
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.pow_unchecked(you: D64) -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).pow_unchecked(you: d64_to_f128(x: you)))
 routine D64.hypot(you: D64) -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).hypot(you: d64_to_f128(x: you)))
+  var r = me.hypot_unchecked(you: you)
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.hypot_unchecked(you: D64) -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).hypot_unchecked(you: d64_to_f128(x: you)))
 routine D64.fma(b: D64, c: D64) -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).fma(b: d64_to_f128(x: b), c: d64_to_f128(x: c)))
+  var r = me.fma_unchecked(b: b, c: c)
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.fma_unchecked(b: D64, c: D64) -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).fma_unchecked(b: d64_to_f128(x: b), c: d64_to_f128(x: c)))
 routine D64.sin() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).sin())
 routine D64.cos() -> D64
@@ -122,31 +182,66 @@ routine D64.cos() -> D64
 routine D64.tan() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).tan())
 routine D64.asin() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).asin())
+  var r = me.asin_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.asin_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).asin_unchecked())
 routine D64.acos() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).acos())
+  var r = me.acos_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.acos_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).acos_unchecked())
 routine D64.atan() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).atan())
 routine D64.atan2(x: D64) -> D64
   return f128_to_d64(x: d64_to_f128(x: me).atan2(you: d64_to_f128(x: x)))
 routine D64.sinh() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).sinh())
+  var r = me.sinh_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.sinh_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).sinh_unchecked())
 routine D64.cosh() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).cosh())
+  var r = me.cosh_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.cosh_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).cosh_unchecked())
 routine D64.tanh() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).tanh())
 routine D64.asinh() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).asinh())
 routine D64.acosh() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).acosh())
+  var r = me.acosh_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.acosh_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).acosh_unchecked())
 routine D64.atanh() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atanh())
+  var r = me.atanh_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.atanh_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).atanh_unchecked())
 routine D64.erf() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).erf())
 routine D64.erfc() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).erfc())
 routine D64.tgamma() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tgamma())
+  var r = me.tgamma_unchecked()
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+routine D64.tgamma_unchecked() -> D64
+  return f128_to_d64(x: d64_to_f128(x: me).tgamma_unchecked())
 routine D64.lgamma() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).lgamma())
 
@@ -194,6 +289,8 @@ routine D64.is_zero() -> Bool
 
 routine D64.fpclassify() -> FpClass
   var p = me.decode()
+  if int_eq[U64](a: p.special, b: 3_u64)
+    return SIGNALING_NAN
   if unsigned_ge[U64](a: p.special, b: 2_u64)
     return NAN
   if int_eq[U64](a: p.special, b: 1_u64)
@@ -207,6 +304,30 @@ routine D64.fpclassify() -> FpClass
 routine D64.abs() -> D64
   var p = me.decode()
   return d64_of_parts(p: D64Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
+
+### IEEE 754 totalOrder for decimals (see `D128.total_order`). Orders signed zeros, cohorts,
+### and NaNs into one total ranking; never crashes.
+### :param you: The value to compare against.
+### :returns: Whether `me` precedes or equals `you` in the total order.
+routine D64.total_order(you: D64) -> Bool
+  var pa = me.decode()
+  var pb = you.decode()
+  if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+    return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
+  var c = me.$cmp(you: you)
+  if c isnot SAME
+    return c is ME_SMALL
+  if pa.sign != pb.sign
+    return pa.sign
+  if pa.sign
+    return signed_ge[S64](a: pa.exp, b: pb.exp)
+  return signed_le[S64](a: pa.exp, b: pb.exp)
+
+### IEEE 754 totalOrderMag for decimals: `total_order` on the magnitudes.
+### :param you: The value whose magnitude to compare against.
+### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
+routine D64.total_order_mag(you: D64) -> Bool
+  return me.abs().total_order(you: you.abs())
 
 routine D64.$neg() -> D64
   var p = me.decode()
@@ -242,7 +363,19 @@ routine D64.fdim(you: D64) -> D64
     return d64_of_parts(p: D64Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u64))
   return d
 
+### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
+### :param n: The power-of-ten exponent to apply.
+### :returns: `me` scaled by `10^n`.
 routine D64.scaleb(n: S64) -> D64
+  var r = me.scaleb_unchecked(n: n)
+  if r.is_finite() or not me.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+
+### `me * 10^n` with raw propagation (overflow -> ±infinity, underflow -> 0).
+### :param n: The power-of-ten exponent to apply.
+### :returns: `me` scaled by `10^n`.
+routine D64.scaleb_unchecked(n: S64) -> D64
   var p = me.decode()
   if int_ne[U64](a: p.special, b: 0_u64) or int_eq[U64](a: p.coeff, b: 0_u64)
     return me
@@ -252,6 +385,145 @@ routine D64.scaleb(n: S64) -> D64
   if signed_lt[S64](a: ne, b: -398_s64)
     return d64_of_parts(p: D64Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64))
   return d64_of_parts(p: D64Parts(sign: p.sign, special: 0_u64, exp: ne, coeff: p.coeff))
+
+# ============================================================================
+# IEEE 754 Tier 2 — exponent extraction, selection, rounding
+# (decimal next_up/next_down deferred — cohort/ULP stepping not yet implemented)
+# ============================================================================
+
+### IEEE 754 logb: the base-10 exponent of `me` as a decimal integer (logb(0)=-inf,
+### logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
+### :returns: The radix-10 exponent of `me`.
+routine D64.logb() -> D64
+  var p = me.decode()
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return D64.quiet_nan()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return D64.infinity(sign: false)
+  if int_eq[U64](a: p.coeff, b: 0_u64)
+    return D64.infinity(sign: true)
+  return D64(from: add[S64](a: p.exp, b: sub[S64](a: digits10_u64(c: p.coeff), b: 1_s64)))
+
+### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, ignoring NaN.
+routine D64.min_num(you: D64) -> D64
+  return me.fmin(you: you)
+
+### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, ignoring NaN.
+routine D64.max_num(you: D64) -> D64
+  return me.fmax(you: you)
+
+### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, NaN if either is NaN.
+routine D64.minimum(you: D64) -> D64
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  var c = me.$cmp(you: you)
+  if c is ME_SMALL
+    return me
+  if c is ME_LARGE
+    return you
+  if me.is_zero()
+    return if me.signbit() then me else you
+  return me
+
+### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, NaN if either is NaN.
+routine D64.maximum(you: D64) -> D64
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  var c = me.$cmp(you: you)
+  if c is ME_LARGE
+    return me
+  if c is ME_SMALL
+    return you
+  if me.is_zero()
+    return if me.signbit() then you else me
+  return me
+
+### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero
+### (alias of `round`). Never crashes.
+### :returns: `me` rounded to an integral value with ties away from zero.
+routine D64.round_ties_away() -> D64
+  return me.round()
+
+# ============================================================================
+# IEEE 754 Tier 3 — decimal-specific (quantize, same_quantum, remainder)
+# ============================================================================
+
+### IEEE 754 sameQuantum: `true` when `me` and `other` share an exponent, or are both infinite,
+### or both NaN. Never crashes.
+### :param other: The value whose quantum to compare against.
+### :returns: Whether the two share a quantum.
+routine D64.same_quantum(other: D64) -> Bool
+  var pa = me.decode()
+  var pb = other.decode()
+  if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+    return unsigned_ge[U64](a: pa.special, b: 2_u64) and unsigned_ge[U64](a: pb.special, b: 2_u64)
+  if int_eq[U64](a: pa.special, b: 1_u64) or int_eq[U64](a: pb.special, b: 1_u64)
+    return int_eq[U64](a: pa.special, b: 1_u64) and int_eq[U64](a: pb.special, b: 1_u64)
+  return int_eq[S64](a: pa.exp, b: pb.exp)
+
+### IEEE 754 quantize: `me`'s value re-expressed with `other`'s exponent (half-even when dropping
+### digits). NaN if the result needs more than 16 significand digits, or for incompatible specials.
+### :param other: The value supplying the target exponent.
+### :returns: `me` quantized to `other`'s exponent, or NaN if not representable.
+routine D64.quantize(other: D64) -> D64
+  var pa = me.decode()
+  var pb = other.decode()
+  if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+    return D64.quiet_nan()
+  var ainf = int_eq[U64](a: pa.special, b: 1_u64)
+  var binf = int_eq[U64](a: pb.special, b: 1_u64)
+  if ainf or binf
+    if ainf and binf
+      return me
+    return D64.quiet_nan()
+  var target = pb.exp
+  if int_eq[S64](a: pa.exp, b: target)
+    return me
+  if signed_gt[S64](a: pa.exp, b: target)
+    var shift = sub[S64](a: pa.exp, b: target)
+    if int_ne[U64](a: pa.coeff, b: 0_u64) and signed_gt[S64](a: add[S64](a: digits10_u64(c: pa.coeff), b: shift), b: 16_s64)
+      return D64.quiet_nan()
+    var scaled = mul[U256](a: zero_extend[U64, U256](pa.coeff), b: pow10b(k: shift))
+    return d64_of_parts(p: D64Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: int_truncate[U256, U64](scaled)))
+  var drop = sub[S64](a: target, b: pa.exp)
+  if signed_gt[S64](a: drop, b: 16_s64)
+    return d64_of_parts(p: D64Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: 0_u64))
+  var cw = zero_extend[U64, U256](pa.coeff)
+  var divp = pow10b(k: drop)
+  var q = div_pow10b(x: cw, k: drop)
+  var r = sub[U256](a: cw, b: mul[U256](a: q, b: divp))
+  var twice = mul[U256](a: r, b: zero_extend[U64, U256](2_u64))
+  if unsigned_gt[U256](a: twice, b: divp)
+    q = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  elseif int_eq[U256](a: twice, b: divp) and int_ne[U256](a: bit_and[U256](a: q, b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
+    q = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  return d64_of_parts(p: D64Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: int_truncate[U256, U64](q)))
+
+### IEEE 754 remainder: `me - other * n` with `n` the nearest integer to `me / other` (ties even).
+### NaN if `me` infinite or `other` zero; `me` if `other` infinite. Never crashes.
+### :param other: The divisor.
+### :returns: The IEEE remainder of `me / other`.
+routine D64.remainder(other: D64) -> D64
+  if me.is_nan() or other.is_nan()
+    return D64.quiet_nan()
+  if me.is_infinite() or other.is_zero()
+    return D64.quiet_nan()
+  if other.is_infinite()
+    return me
+  var n = me.$truediv_unchecked(you: other).rint()
+  return me.$sub_unchecked(you: other.$mul_unchecked(you: n))
 
 ### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 round (half away), 4 rint (half even).
 routine d64_round_int(x: D64, mode: S64) -> D64

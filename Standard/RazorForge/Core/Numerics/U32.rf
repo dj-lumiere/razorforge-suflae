@@ -317,14 +317,11 @@ routine U32.$mul_clamp(you: U32) -> U32
 ### Returns `me ** exp` and a flag indicating whether the result wrapped around.
 ### :param exp: The exponent.
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U32.pow_with_overflow!(exp: U32) -> (U32, Bool)
+routine U32.pow_with_overflow(exp: U32) -> (U32, Bool)
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
   var overflow = false
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -341,9 +338,8 @@ routine U32.pow_with_overflow!(exp: U32) -> (U32, Bool)
 ### :param exp: The exponent.
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U32.$pow!(exp: U32) -> U32
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -351,13 +347,10 @@ routine U32.$pow!(exp: U32) -> U32
 ### Returns `me ** exp` with wrapping arithmetic (mod 2³²).
 ### :param exp: The exponent.
 ### :returns: The result modulo 4294967296.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U32.$pow_wrap!(exp: U32) -> U32
+routine U32.$pow_wrap(exp: U32) -> U32
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -369,13 +362,10 @@ routine U32.$pow_wrap!(exp: U32) -> U32
 ### Returns `me ** exp`, clamped to `U32_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `4294967295` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U32.$pow_clamp!(exp: U32) -> U32
+routine U32.$pow_clamp(exp: U32) -> U32
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)

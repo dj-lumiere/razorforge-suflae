@@ -303,13 +303,10 @@ routine U64.$mul_clamp(you: U64) -> U64
 # ============================================================================
 
 ### Returns `me ** exp` and an overflow flag.
-### Uses repeated squaring. `0 ** 0` is considered indeterminate.
+### Uses repeated squaring. `0 ** 0 == 1` (the empty product).
 ### :param exp: The exponent.
 ### :returns: A tuple of `(result, overflow_flag)`.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
-routine U64.pow_with_overflow!(exp: U64) -> (U64, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U64.pow_with_overflow(exp: U64) -> (U64, Bool)
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = U32(exp)
@@ -329,10 +326,9 @@ routine U64.pow_with_overflow!(exp: U64) -> (U64, Bool)
 ### Returns `me ** exp`, throwing on overflow.
 ### :param exp: The exponent.
 ### :returns: The result.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U64_MAX`.
 routine U64.$pow!(exp: U64) -> U64
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -340,10 +336,7 @@ routine U64.$pow!(exp: U64) -> U64
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent.
 ### :returns: The result modulo 2⁶⁴.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
-routine U64.$pow_wrap!(exp: U64) -> U64
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U64.$pow_wrap(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = U32(exp)
@@ -358,10 +351,7 @@ routine U64.$pow_wrap!(exp: U64) -> U64
 ### Returns `me ** exp` clamped to `U64_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The clamped result.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
-routine U64.$pow_clamp!(exp: U64) -> U64
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U64.$pow_clamp(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = U32(exp)

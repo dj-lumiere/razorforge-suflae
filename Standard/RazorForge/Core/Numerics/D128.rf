@@ -91,6 +91,9 @@ common routine D128.infinity(sign: Bool) -> D128
 ### A quiet NaN.
 common routine D128.quiet_nan() -> D128
   return d128_of_parts(p: D128Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+common routine D128.signaling_nan() -> D128
+  return d128_of_parts(p: D128Parts(sign: false, special: 3_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
 
 ### True when finite (neither inf nor NaN).
 routine D128.is_finite() -> Bool
@@ -103,6 +106,15 @@ routine D128.is_infinite() -> Bool
 ### True when NaN (quiet or signaling).
 routine D128.is_nan() -> Bool
   return unsigned_ge[U64](a: me.decode().special, b: 2_u64)
+
+### True when this is a SIGNALING NaN (special field == 3).
+routine D128.is_signaling() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 3_u64)
+
+### True when this is a finite zero (±0).
+routine D128.is_zero() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U128](a: p.coeff, b: zero_extend[U64, U128](0_u64))
 
 ### Builds a finite D128 from a signed coefficient and a base-10 exponent:
 ### value = (-1)^sign * coeff * 10^exp. The native constructor — no decNumber/DPD.
@@ -489,20 +501,69 @@ routine d128_div(a: D128, b: D128) -> D128
 # Wired operators
 # ============================================================================
 
-### Returns `me + you`.
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
+# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+@crash_only
+routine d128_overflow_crash!() -> D128
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+@crash_only
+routine d128_domain_crash!() -> D128
+  throw NumericDomainError(description: "D128: undefined operation with no real result (e.g. 0/0 or inf - inf).")
+@crash_only
+routine d128_divzero_crash!() -> D128
+  throw DivisionByZeroError()
+@crash_only
+routine d128_nonfinite_crash!(r: D128) -> D128
+  if r.is_nan()
+    return d128_domain_crash!()
+  return d128_overflow_crash!()
+
+### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw IEEE.
 routine D128.$add(you: D128) -> D128
+  var r = d128_add(a: me, b: you)
+  if r.is_finite()
+    return r
+  return d128_nonfinite_crash!(r: r)
+
+### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw IEEE.
+routine D128.$sub(you: D128) -> D128
+  var r = d128_sub(a: me, b: you)
+  if r.is_finite()
+    return r
+  return d128_nonfinite_crash!(r: r)
+
+### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw IEEE.
+routine D128.$mul(you: D128) -> D128
+  var r = d128_mul(a: me, b: you)
+  if r.is_finite()
+    return r
+  return d128_nonfinite_crash!(r: r)
+
+### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow -> overflow.
+### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+routine D128.$truediv(you: D128) -> D128
+  var r = d128_div(a: me, b: you)
+  if r.is_finite()
+    return r
+  if you.is_zero() and not me.is_zero()
+    return d128_divzero_crash!()
+  return d128_nonfinite_crash!(r: r)
+
+### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D128.$add_unchecked(you: D128) -> D128
   return d128_add(a: me, b: you)
 
-### Returns `me - you`.
-routine D128.$sub(you: D128) -> D128
+### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D128.$sub_unchecked(you: D128) -> D128
   return d128_sub(a: me, b: you)
 
-### Returns `me * you`.
-routine D128.$mul(you: D128) -> D128
+### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D128.$mul_unchecked(you: D128) -> D128
   return d128_mul(a: me, b: you)
 
-### Returns `me / you`.
-routine D128.$truediv(you: D128) -> D128
+### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+routine D128.$truediv_unchecked(you: D128) -> D128
   return d128_div(a: me, b: you)
 
 ### Decimal value equality. NaN is never equal to anything (including itself);
@@ -572,6 +633,8 @@ routine dec_digit_range(c: U128, hi: S64, lo: S64) -> Text
 routine d128_represent(p: D128Parts) -> Text
   if int_eq[U64](a: p.special, b: 1_u64)
     return if p.sign then "-inf" else "inf"
+  if int_eq[U64](a: p.special, b: 3_u64)
+    return "sNaN"
   if unsigned_ge[U64](a: p.special, b: 2_u64)
     return "NaN"
   var nd = digits10_u128(c: p.coeff)

@@ -315,10 +315,7 @@ routine U16.$mul_clamp(you: U16) -> U16
 ### Returns `me ** exp` and a flag indicating whether the result wrapped around.
 ### :param exp: The exponent.
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U16.pow_with_overflow!(exp: U16) -> (U16, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U16.pow_with_overflow(exp: U16) -> (U16, Bool)
   var result: U16 = 1
   var base: U16 = me
   var e: U32 = U32(exp)
@@ -339,9 +336,8 @@ routine U16.pow_with_overflow!(exp: U16) -> (U16, Bool)
 ### :param exp: The exponent.
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U16_MAX`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U16.$pow!(exp: U16) -> U16
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -349,10 +345,7 @@ routine U16.$pow!(exp: U16) -> U16
 ### Returns `me ** exp` with wrapping arithmetic (mod 65536).
 ### :param exp: The exponent.
 ### :returns: The result modulo 65536.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U16.$pow_wrap!(exp: U16) -> U16
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U16.$pow_wrap(exp: U16) -> U16
   var result: U16 = 1
   var base: U16 = me
   var e: U32 = U32(exp)
@@ -367,10 +360,7 @@ routine U16.$pow_wrap!(exp: U16) -> U16
 ### Returns `me ** exp`, clamped to `U16_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `65535` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U16.$pow_clamp!(exp: U16) -> U16
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U16.$pow_clamp(exp: U16) -> U16
   var result: U16 = 1
   var base: U16 = me
   var e: U32 = U32(exp)

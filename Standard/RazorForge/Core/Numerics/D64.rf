@@ -115,6 +115,9 @@ common routine D64.infinity(sign: Bool) -> D64
   return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
 common routine D64.quiet_nan() -> D64
   return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
+### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+common routine D64.signaling_nan() -> D64
+  return d64_of_parts(p: D64Parts(sign: false, special: 3_u64, exp: 0_s64, coeff: 0_u64))
 
 routine D64.is_finite() -> Bool
   return int_eq[U64](a: me.decode().special, b: 0_u64)
@@ -122,6 +125,15 @@ routine D64.is_infinite() -> Bool
   return int_eq[U64](a: me.decode().special, b: 1_u64)
 routine D64.is_nan() -> Bool
   return unsigned_ge[U64](a: me.decode().special, b: 2_u64)
+
+### True when this is a SIGNALING NaN (special field == 3).
+routine D64.is_signaling() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 3_u64)
+
+### True when this is a finite zero (±0).
+routine D64.is_zero() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U64](a: p.coeff, b: 0_u64)
 
 # ============================================================================
 # Finalize: round a U128 working coeff to Pmax=16, clamp exponent to [-398, 369]
@@ -283,13 +295,63 @@ routine d64_div(a: D64, b: D64) -> D64
   return d64_of_parts(p: decfin64(sign: sign, coeff: q, exp: exp, pref: pref))
 
 # ---- wired operators + represent ----
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
+# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+@crash_only
+routine d64_overflow_crash!() -> D64
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
+@crash_only
+routine d64_domain_crash!() -> D64
+  throw NumericDomainError(description: "D64: undefined operation with no real result (e.g. 0/0 or inf - inf).")
+@crash_only
+routine d64_divzero_crash!() -> D64
+  throw DivisionByZeroError()
+@crash_only
+routine d64_nonfinite_crash!(r: D64) -> D64
+  if r.is_nan()
+    return d64_domain_crash!()
+  return d64_overflow_crash!()
+
+### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw IEEE.
 routine D64.$add(you: D64) -> D64
-  return d64_add(a: me, b: you)
+  var r = d64_add(a: me, b: you)
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw IEEE.
 routine D64.$sub(you: D64) -> D64
-  return d64_sub(a: me, b: you)
+  var r = d64_sub(a: me, b: you)
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw IEEE.
 routine D64.$mul(you: D64) -> D64
-  return d64_mul(a: me, b: you)
+  var r = d64_mul(a: me, b: you)
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
+### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow -> overflow.
+### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 routine D64.$truediv(you: D64) -> D64
+  var r = d64_div(a: me, b: you)
+  if r.is_finite()
+    return r
+  if you.is_zero() and not me.is_zero()
+    return d64_divzero_crash!()
+  return d64_nonfinite_crash!(r: r)
+
+### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D64.$add_unchecked(you: D64) -> D64
+  return d64_add(a: me, b: you)
+### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D64.$sub_unchecked(you: D64) -> D64
+  return d64_sub(a: me, b: you)
+### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D64.$mul_unchecked(you: D64) -> D64
+  return d64_mul(a: me, b: you)
+### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+routine D64.$truediv_unchecked(you: D64) -> D64
   return d64_div(a: me, b: you)
 
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;

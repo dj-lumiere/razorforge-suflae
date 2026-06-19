@@ -324,20 +324,18 @@ routine S64.$mul_clamp(you: S64) -> S64
 # ============================================================================
 
 ### Returns `me ** exp` and an overflow flag.
-### Uses repeated squaring. `0 ** 0` is indeterminate; negative exponents are rejected.
+### Uses repeated squaring. `0 ** 0 == 1` (the empty product); a negative exponent crashes
+### with NumericDomainError (the result would not be an integer).
 ### :param exp: The exponent. Must be non-negative.
 ### :returns: A tuple of `(result, overflow_flag)`.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S64.pow_with_overflow!(exp: S64) -> (S64, Bool)
   var result: S64 = 1
   var base: S64 = me
   var e: S64 = exp
   var overflow = false
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -353,7 +351,6 @@ routine S64.pow_with_overflow!(exp: S64) -> (S64, Bool)
 ### Returns `me ** exp`, throwing on overflow.
 ### :param exp: The exponent. Must be non-negative.
 ### :returns: The result.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 ### :throws: {IntegerOverflowError} if the result is outside the `S64` range.
 routine S64.$pow!(exp: S64) -> S64
   var result = me.pow_with_overflow!(exp)
@@ -364,12 +361,9 @@ routine S64.$pow!(exp: S64) -> S64
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent. Must be non-negative.
 ### :returns: The result modulo 2⁶⁴ in two's complement.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 routine S64.$pow_wrap!(exp: S64) -> S64
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0_s64
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
   var result: S64 = 1
   var base: S64 = me
   var e: U32 = U32(exp)
@@ -384,14 +378,11 @@ routine S64.$pow_wrap!(exp: S64) -> S64
 ### Returns `me ** exp` clamped to `[S64_MIN, S64_MAX]` on overflow.
 ### :param exp: The exponent. Must be non-negative.
 ### :returns: The clamped result.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 routine S64.$pow_clamp!(exp: S64) -> S64
   var result: S64 = 1
   var base: S64 = me
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
   while exp > 0
     if (exp & 1) == 1
       result = result.$mul_clamp(base)
