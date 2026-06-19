@@ -1217,6 +1217,16 @@ public partial class LlvmCodeGenerator
         } while (_generatedRoutineDefs.Count > prevDefCount ||
                  _generatedRoutines.Count > prevDeclCount);
 
+        if (Environment.GetEnvironmentVariable(variable: "RF_PRUNE_STATS") == "1")
+        {
+            int liveNotRef = _liveRoutineKeys.Count(predicate: k => !_referencedKeys.Contains(item: k));
+            Console.Error.WriteLine(
+                value:
+                $"[PRUNE-STATS] live={_liveRoutineKeys.Count} referenced={_referencedKeys.Count} " +
+                $"defs={_generatedRoutineDefs.Count} expectedBodies={_expectedBodyNames.Count} " +
+                $"live_not_referenced={liveNotRef}");
+        }
+
         // Over-prune tripwire (only meaningful when reachability gating is active; with no live set
         // nothing is pruned, so every referenced routine is emitted and this is trivially satisfied).
         // Every routine an emitted body actually references must itself have been emitted. A name in
