@@ -163,6 +163,7 @@ public sealed class ModuleResolver
                 continue;
             }
 
+            // Sort by ordinal path for OS-independent registration order (see BuildDriver/StdlibLoader).
             var files = new List<string>();
             files.AddRange(collection: Directory.GetFiles(path: dir,
                 searchPattern: "*.rf",
@@ -170,6 +171,7 @@ public sealed class ModuleResolver
             files.AddRange(collection: Directory.GetFiles(path: dir,
                 searchPattern: "*.sf",
                 searchOption: SearchOption.TopDirectoryOnly));
+            files.Sort(comparer: StringComparer.Ordinal);
 
             if (files.Count > 0)
             {

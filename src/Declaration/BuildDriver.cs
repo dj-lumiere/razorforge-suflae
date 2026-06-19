@@ -546,9 +546,14 @@ public sealed class BuildDriver
             return;
         }
 
+        // Sort by ordinal path so registration order is identical on every OS. Directory.GetFiles
+        // returns OS-dependent order (NTFS sorts, ext4/APFS do not); without this, stdlib routines
+        // register in different orders per platform, making method/overload resolution
+        // order-dependent — the root of the Linux/macOS-only UnpackedFloat resolution failures.
         foreach (string filePath in Directory.GetFiles(path: dirPath,
                      searchPattern: extension,
-                     searchOption: SearchOption.AllDirectories))
+                     searchOption: SearchOption.AllDirectories)
+                 .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
         {
             Program? ast = ParseAstOnly(filePath: filePath);
             if (ast is null)
@@ -590,7 +595,8 @@ public sealed class BuildDriver
             {
                 foreach (string filePath in Directory.GetFiles(path: libraryRoot,
                              searchPattern: pattern,
-                             searchOption: SearchOption.AllDirectories))
+                             searchOption: SearchOption.AllDirectories)
+                         .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
                 {
                     Program? ast = ParseAstOnly(filePath: filePath);
                     if (ast is null)

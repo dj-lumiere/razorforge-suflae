@@ -224,10 +224,13 @@ public sealed partial class StdlibLoader
 
         _stdlibScanned = true;
 
-        // Recursively find all files with the appropriate extension
+        // Recursively find all files with the appropriate extension. Sort by ordinal path so the
+        // scan/registration order is identical on every OS (Directory.GetFiles order is
+        // OS-dependent) — otherwise method resolution becomes order-dependent across platforms.
         foreach (string filePath in Directory.GetFiles(path: _stdlibPath,
                      searchPattern: _fileExtension,
-                     searchOption: SearchOption.AllDirectories))
+                     searchOption: SearchOption.AllDirectories)
+                 .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
         {
             try
             {
