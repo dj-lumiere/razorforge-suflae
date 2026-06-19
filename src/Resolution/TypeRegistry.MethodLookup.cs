@@ -668,6 +668,19 @@ public sealed partial class TypeRegistry
                     return SynthesizeProtocolMethod(proto: protoInfo,
                         protoMethod: protoMethod,
                         ownerType: param);
+
+                // Extension methods (default implementations) declared as
+                // `routine Iterable[T].List()` are registered against the protocol's owner
+                // table, NOT in `protoInfo.Methods` (which holds only the abstract signatures).
+                // Resolve them through the protocol's generic definition so a generic-parameter
+                // receiver (`S obeys Iterable[T]`) can call them. The returned routine keeps the
+                // protocol's element params and `Me` in its signature; the caller's member-call
+                // substitution block binds them (the obeys constraint maps `Iterable[T]`'s element
+                // → the receiver's element, and `Me` → the receiver `param`).
+                RoutineInfo? extensionMethod =
+                    LookupMethod(type: protoInfo, methodName: methodName, isFailable: isFailable);
+                if (extensionMethod is { OwnerType: not GenericParameterTypeInfo })
+                    return extensionMethod;
             }
         }
 
