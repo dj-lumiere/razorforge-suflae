@@ -9,7 +9,7 @@ module Numerics
 ### the transcendentals round to a generous default working precision under
 ### round-to-nearest-ties-to-even.
 ### :see: {Integer}, {Decimal}
-record Real obeys Assignable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Hashable, FastHashable
+record Real obeys Assignable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable, FastHashable
   ### The native libbf handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count cell (or null) governing the shared handle lifetime.
@@ -216,7 +216,7 @@ routine Real.log() -> Real
 ### :param exp: The exponent.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.pow(exp: Real) -> Real
+routine Real.$pow!(exp: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_pow(result: result.handle, a: me.handle, b: exp.handle)
   return result

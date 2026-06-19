@@ -167,14 +167,8 @@ routine D128.sqrt_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).sqrt())
 routine D128.cbrt() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).cbrt())
-### Raises this value to `you`. NOTE: contrary to mathematical convention, `0 ** 0 == 1` (IEEE 754 `pow`).
-routine D128.pow(you: D128) -> D128
-  var r = me.pow_unchecked(you: you)
-  if r.is_finite()
-    return r
-  return d128_nonfinite_crash!(r: r)
 routine D128.pow_unchecked(you: D128) -> D128
-  return f256_to_d128(x: d128_to_f256(x: me).pow(you: d128_to_f256(x: you)))
+  return f256_to_d128(x: d128_to_f256(x: me).$pow!(you: d128_to_f256(x: you)))
 routine D128.hypot(you: D128) -> D128
   var r = me.hypot_unchecked(you: you)
   if r.is_finite()

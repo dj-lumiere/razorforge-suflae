@@ -98,6 +98,10 @@ routine C32.$eq(you: C32) -> Bool
 routine C32.abs() -> F32
   return (me.real * me.real + me.imag * me.imag).sqrt()
 
+### Returns the phase angle of this complex value in radians.
+routine C32.arg() -> F32
+  return me.imag.atan2(me.real)
+
 ### Returns the complex conjugate (negates the imaginary part).
 ### :returns: `real - imag·i`.
 routine C32.conjugate() -> C32
@@ -140,6 +144,27 @@ routine C32.tan() -> C32
   var d = a2.cos() + (ep + em) / 2.0_f32
   return C32(real: a2.sin() / d, imag: (ep - em) / 2.0_f32 / d)
 
+### Returns the complex arcsine of this value.
+routine C32.asin() -> C32
+  var iz = C32(real: -me.imag, imag: me.real)
+  var w = iz + (C32_ONE - me * me).sqrt()
+  var v = w.log()
+  return C32(real: v.imag, imag: -v.real)
+
+### Returns the complex arccosine of this value.
+routine C32.acos() -> C32
+  var s = (C32_ONE - me * me).sqrt()
+  var w = me + C32(real: -s.imag, imag: s.real)
+  var v = w.log()
+  return C32(real: v.imag, imag: -v.real)
+
+### Returns the complex arctangent of this value.
+routine C32.atan() -> C32
+  var num = C32(real: me.real, imag: me.imag + 1.0_f32)
+  var den = C32(real: -me.real, imag: 1.0_f32 - me.imag)
+  var v = (num / den).log()
+  return C32(real: -v.imag / 2.0_f32, imag: v.real / 2.0_f32)
+
 # ============================================================================
 # Hyperbolic (sinh/cosh computed from exp since F32 lacks native versions)
 # ============================================================================
@@ -172,8 +197,21 @@ routine C32.tanh() -> C32
   var d = (ep + em) / 2.0_f32 + b2.cos()
   return C32(real: (ep - em) / 2.0_f32 / d, imag: b2.sin() / d)
 
+### Returns the complex inverse hyperbolic sine of this value.
+routine C32.asinh() -> C32
+  return (me + (me * me + C32_ONE).sqrt()).log()
+
+### Returns the complex inverse hyperbolic cosine of this value.
+routine C32.acosh() -> C32
+  return (me + (me * me - C32_ONE).sqrt()).log()
+
+### Returns the complex inverse hyperbolic tangent of this value.
+routine C32.atanh() -> C32
+  var v = ((C32_ONE + me) / (C32_ONE - me)).log()
+  return C32(real: v.real / 2.0_f32, imag: v.imag / 2.0_f32)
+
 # ============================================================================
-# Exponential and Square Root
+# Exponential, Logarithmic, and Square Root
 # ============================================================================
 
 ### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
@@ -181,6 +219,15 @@ routine C32.tanh() -> C32
 routine C32.exp() -> C32
   var ea = me.real.exp()
   return C32(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+
+### Returns the principal natural logarithm of this complex value.
+routine C32.log() -> C32
+  return C32(real: me.abs().log(), imag: me.arg())
+
+### Returns the base-10 logarithm of this complex value.
+routine C32.log10() -> C32
+  var v = me.log()
+  return C32(real: v.real / F32_LN_10, imag: v.imag / F32_LN_10)
 
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
@@ -193,6 +240,10 @@ routine C32.sqrt() -> C32
   if me.imag < 0.0_f32
     ip = -ip
   return C32(real: rp, imag: ip)
+
+### Returns this complex value raised to the complex power `you`.
+routine C32.$pow(you: C32) -> C32
+  return (you * me.log()).exp()
 
 # ============================================================================
 # Query Routines

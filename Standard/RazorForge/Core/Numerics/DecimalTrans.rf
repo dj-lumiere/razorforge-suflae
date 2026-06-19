@@ -294,7 +294,7 @@ routine Decimal.exp10() -> Decimal
   return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: me) * f512_ln10()))
 
 ### me raised to the power `you`: exp(you * log(me)) via the Remez core.
-routine Decimal.pow(you: Decimal) -> Decimal
+routine Decimal.$pow!(you: Decimal) -> Decimal
   return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: you) * decimalfixed_to_f512(x: me).log()))
 
 ### Square root (correctly rounded).

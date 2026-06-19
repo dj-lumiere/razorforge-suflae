@@ -206,6 +206,13 @@ routine Complex.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 routine Complex.pow(exp: Complex, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return (exp * me.log(precision)).exp(precision)
 
+### Raises this value to a complex exponent using the default precision.
+### :param exp: The exponent value.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.$pow!(exp: Complex) -> Complex
+  return (exp * me.log()).exp()
+
 ### Computes the complex sine of this value.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.

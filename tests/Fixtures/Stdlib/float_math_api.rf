@@ -5,7 +5,7 @@ import IO/Console
 routine start()
   show(f"sqrt(2): {(2.0_f64).sqrt()}")
   show(f"sqrt(16): {(16.0_f64).sqrt()}")
-  show(f"pow(2, 10): {(2.0_f64).pow(exp: 10.0_f64)}")
+  show(f"pow(2, 10): {2.0_f64 ** 10.0_f64}")
   show(f"exp(0): {(0.0_f64).exp()}")
   show(f"exp(1): {(1.0_f64).exp()}")
   show(f"log(e): {(1.0_f64).exp().log()}")

@@ -154,11 +154,6 @@ routine D64.sqrt_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).sqrt_unchecked())
 routine D64.cbrt() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).cbrt())
-routine D64.pow(you: D64) -> D64
-  var r = me.pow_unchecked(you: you)
-  if r.is_finite()
-    return r
-  return d64_nonfinite_crash!(r: r)
 routine D64.pow_unchecked(you: D64) -> D64
   return f128_to_d64(x: d64_to_f128(x: me).pow_unchecked(you: d64_to_f128(x: you)))
 routine D64.hypot(you: D64) -> D64

@@ -205,13 +205,6 @@ routine U32.$mul!(you: U32) -> U32
     throw IntegerOverflowError()
   return result.item0
 
-### Returns `me * you`, throwing on overflow (alias for `$mul!`).
-### :param you: The right operand.
-### :returns: The product `me * you`.
-### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
-routine U32.$mul(you: U32) -> U32
-  return me.$mul!(you)
-
 ### Returns `me // you` (integer division), throwing if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient `me // you`.
@@ -521,6 +514,48 @@ routine U32.swap_bytes() -> U32
 ### :returns: `true` if `me` is 1, 2, 4, ..., 2147483648; `false` otherwise (including zero).
 routine U32.is_power_of_two() -> Bool
   return me != 0_u32 and (me & (me -% 1_u32)) == 0_u32
+
+### Returns this value rotated left by `bits` positions.
+routine U32.rotate_left(bits: U32) -> U32
+  var n = bits % 32_u32
+  if n == 0_u32
+    return me
+  return bit_or[U32](a: shift_left[U32](me, n), b: shift_right_unsigned[U32](me, 32_u32 -% n))
+
+### Returns this value rotated right by `bits` positions.
+routine U32.rotate_right(bits: U32) -> U32
+  var n = bits % 32_u32
+  if n == 0_u32
+    return me
+  return bit_or[U32](a: shift_right_unsigned[U32](me, n), b: shift_left[U32](me, 32_u32 -% n))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U32.to_bytes_le() -> Array[Byte, 4]
+  var result = Array[Byte, 4]()
+  var i = 0_u64
+  while i < 4_u64
+    var b = int_truncate[U32, U8](shift_right_unsigned[U32](me, U32(i * 8_u64)))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = i + 1_u64
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U32.to_bytes_be() -> Array[Byte, 4]
+  return me.swap_bytes().to_bytes_le()
+
+### Builds a `U32` from its little-endian raw byte representation.
+common routine U32.from_bytes_le(bytes: Array[Byte, 4]) -> U32
+  var result = 0_u32
+  var i = 0_u64
+  while i < 4_u64
+    var part = shift_left[U32](zero_extend[U8, U32](byte_at(array: bytes, index: i)), U32(i * 8_u64))
+    result = bit_or[U32](a: result, b: part)
+    i = i + 1_u64
+  return result
+
+### Builds a `U32` from its big-endian raw byte representation.
+common routine U32.from_bytes_be(bytes: Array[Byte, 4]) -> U32
+  return U32.from_bytes_le(bytes: bytes).swap_bytes()
 
 # ============================================================================
 # Utility Methods

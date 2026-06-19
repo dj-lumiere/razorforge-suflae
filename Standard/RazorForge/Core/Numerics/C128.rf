@@ -77,7 +77,7 @@ routine C128.$truediv(you: C128) -> C128
 ### Returns this complex value raised to the complex power `you` via `exp(you * log(me))`.
 ### :param you: The complex exponent.
 ### :returns: `me ** you` in quadruple precision.
-routine C128.$pow(you: C128) -> C128
+routine C128.$pow!(you: C128) -> C128
   return (you * me.log()).exp()
 
 ### Returns the arithmetic negation of this value.
@@ -235,12 +235,6 @@ routine C128.sqrt() -> C128
   if me.imag < 0.0_f128
     ip = -ip
   return C128(real: rp, imag: ip)
-
-### Raises this complex value to the complex exponent `exp` via `exp(exp * log(me))`.
-### :param exp: The complex exponent.
-### :returns: `me ** exp` in quadruple precision.
-routine C128.pow(exp: C128) -> C128
-  return (exp * me.log()).exp()
 
 # ============================================================================
 # Query Routines

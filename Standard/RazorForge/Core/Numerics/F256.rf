@@ -423,7 +423,7 @@ routine F256.exp10() -> F256
 ### me ** you with the full C99 / IEEE pow special-case matrix (mirrors F128.pow):
 ### odd-integer exponent sign rules, the pow(-1,±inf)=1 / pow(1,NaN)=1 carve-outs, and
 ### pow(negative, non-integer) = NaN. Finite results go through exp(you*log|me|).
-routine F256.pow(you: F256) -> F256
+routine F256.$pow!(you: F256) -> F256
   var one = UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a()
   var poszero = F256.from_bits(bits: zero_extend[U64, U256](0_u64))
   var negzero = F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](255_s64)))

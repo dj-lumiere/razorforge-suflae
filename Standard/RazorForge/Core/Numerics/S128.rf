@@ -599,6 +599,14 @@ routine S128.is_even() -> Bool
 routine S128.is_odd() -> Bool
   return not me.is_even()
 
+### Returns `true` if this value is an exact power of two.
+### Negative values always return `false`.
+routine S128.is_power_of_two() -> Bool
+  var is_pos = signed_gt[S128](me, 0_s128)
+  var minus_one = sub[S128](a: me, b: 1_s128)
+  var anded = bit_and[S128](a: me, b: minus_one)
+  return is_pos and int_eq[S128](a: anded, b: 0_s128)
+
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
 routine S128.signum() -> S128

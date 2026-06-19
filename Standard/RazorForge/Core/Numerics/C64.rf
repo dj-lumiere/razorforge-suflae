@@ -97,6 +97,10 @@ routine C64.$eq(you: C64) -> Bool
 routine C64.abs() -> F64
   return (me.real * me.real + me.imag * me.imag).sqrt()
 
+### Returns the phase angle of this complex value in radians.
+routine C64.arg() -> F64
+  return me.imag.atan2(me.real)
+
 ### Returns the complex conjugate (negates the imaginary part).
 ### :returns: `real - imag·i`.
 routine C64.conjugate() -> C64
@@ -139,6 +143,27 @@ routine C64.tan() -> C64
   var d = a2.cos() + (ep + em) / 2.0_f64
   return C64(real: a2.sin() / d, imag: (ep - em) / 2.0_f64 / d)
 
+### Returns the complex arcsine of this value.
+routine C64.asin() -> C64
+  var iz = C64(real: -me.imag, imag: me.real)
+  var w = iz + (C64_ONE - me * me).sqrt()
+  var v = w.log()
+  return C64(real: v.imag, imag: -v.real)
+
+### Returns the complex arccosine of this value.
+routine C64.acos() -> C64
+  var s = (C64_ONE - me * me).sqrt()
+  var w = me + C64(real: -s.imag, imag: s.real)
+  var v = w.log()
+  return C64(real: v.imag, imag: -v.real)
+
+### Returns the complex arctangent of this value.
+routine C64.atan() -> C64
+  var num = C64(real: me.real, imag: me.imag + 1.0_f64)
+  var den = C64(real: -me.real, imag: 1.0_f64 - me.imag)
+  var v = (num / den).log()
+  return C64(real: -v.imag / 2.0_f64, imag: v.real / 2.0_f64)
+
 # ============================================================================
 # Hyperbolic (sinh/cosh computed from exp since F64 lacks native versions)
 # ============================================================================
@@ -171,8 +196,21 @@ routine C64.tanh() -> C64
   var d = (ep + em) / 2.0_f64 + b2.cos()
   return C64(real: (ep - em) / 2.0_f64 / d, imag: b2.sin() / d)
 
+### Returns the complex inverse hyperbolic sine of this value.
+routine C64.asinh() -> C64
+  return (me + (me * me + C64_ONE).sqrt()).log()
+
+### Returns the complex inverse hyperbolic cosine of this value.
+routine C64.acosh() -> C64
+  return (me + (me * me - C64_ONE).sqrt()).log()
+
+### Returns the complex inverse hyperbolic tangent of this value.
+routine C64.atanh() -> C64
+  var v = ((C64_ONE + me) / (C64_ONE - me)).log()
+  return C64(real: v.real / 2.0_f64, imag: v.imag / 2.0_f64)
+
 # ============================================================================
-# Exponential and Square Root
+# Exponential, Logarithmic, and Square Root
 # ============================================================================
 
 ### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
@@ -180,6 +218,15 @@ routine C64.tanh() -> C64
 routine C64.exp() -> C64
   var ea = me.real.exp()
   return C64(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+
+### Returns the principal natural logarithm of this complex value.
+routine C64.log() -> C64
+  return C64(real: me.abs().log(), imag: me.arg())
+
+### Returns the base-10 logarithm of this complex value.
+routine C64.log10() -> C64
+  var v = me.log()
+  return C64(real: v.real / 2.302585092994046_f64, imag: v.imag / 2.302585092994046_f64)
 
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
@@ -192,6 +239,10 @@ routine C64.sqrt() -> C64
   if me.imag < 0.0_f64
     ip = -ip
   return C64(real: rp, imag: ip)
+
+### Returns this complex value raised to the complex power `you`.
+routine C64.$pow(you: C64) -> C64
+  return (you * me.log()).exp()
 
 # ============================================================================
 # Query Routines

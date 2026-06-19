@@ -1688,12 +1688,6 @@ routine F128.int_truncate() -> F128
 # Power Functions (via LibBF native runtime)
 # ============================================================================
 
-### Raises this value to `exp` (IEEE semantics: overflow/domain errors yield inf/NaN).
-### :param exp: The exponent applied to `me`.
-### :returns: `me` raised to `exp` in quadruple precision.
-routine F128.$pow(exp: F128) -> F128
-  return me.pow(exp)
-
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -1772,7 +1766,7 @@ routine F128.$truediv_clamp(you: F128) -> F128
 ### :param exp: The exponent applied to `me`.
 ### :returns: The power, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$pow_clamp(exp: F128) -> F128
-  var result = me.pow(exp)
+  var result = me ** exp
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
   return result
@@ -1818,17 +1812,17 @@ routine f128_rshift_rne(sig: U128, drop: U64) -> U64
 
 ### Narrows this quadruple-precision value to single precision.
 ### :returns: The nearest representable `F32` value.
-routine F128.F32() -> F32
+routine F32.$create(from: F128) -> F32
   # F128 -> F64 (correctly rounded) -> F32 (native fptrunc). The wide F64 slack
   # makes the second rounding faithful for all but pathological double-round ties.
-  return float_narrow[F64, F32](me.F64())
+  return float_narrow[F64, F32](F64(from: from))
 
 ### Narrows this quadruple-precision value to double precision (correctly rounded,
 ### pure bit surgery — F128 is an i128 carrier, so no LLVM `fptrunc` is available).
 ### Handles inf/NaN, overflow to ±inf, the F64 subnormal range, and underflow to ±0.
 ### :returns: The nearest representable `F64` value (round-to-nearest-ties-to-even).
-routine F128.F64() -> F64
-  var raw = me.to_bits()
+routine F64.$create(from: F128) -> F64
+  var raw = from.to_bits()
   var sign = int_truncate[U128, U64](shift_right_unsigned[U128](raw, 127_u128))
   var E = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](raw, 112_u128), b: 32767_u128))
   var M = bit_and[U128](a: raw, b: sub[U128](a: shift_left[U128](1_u128, 112_u128), b: 1_u128))
@@ -1972,4 +1966,3 @@ routine F128.to_bytes_be() -> Array[Byte, 16]
 ### :returns: The resulting `U64` value.
 routine F128.$hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u128(v: reinterpret_bits[F128, U128](me), k0: k0, k1: k1)
-

@@ -383,8 +383,11 @@ routine D64.$cmp(you: D64) -> ComparisonSign
   return if d.sign then ME_SMALL else ME_LARGE
 
 ### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
-routine D64.$pow(you: D64) -> D64
-  return me.pow(you: you)
+routine D64.$pow!(you: D64) -> D64
+  var r = me.pow_unchecked(you: you)
+  if r.is_finite()
+    return r
+  return d64_nonfinite_crash!(r: r)
 
 routine D64.$represent() -> Text
   return d128_represent(p: d64parts_to_d128(p: me.decode()))

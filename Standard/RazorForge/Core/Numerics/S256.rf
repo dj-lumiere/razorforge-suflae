@@ -608,6 +608,14 @@ routine S256.is_even() -> Bool
 routine S256.is_odd() -> Bool
   return not me.is_even()
 
+### Returns `true` if this value is an exact power of two.
+### Negative values always return `false`.
+routine S256.is_power_of_two() -> Bool
+  var is_pos = signed_gt[S256](me, 0_s256)
+  var minus_one = sub[S256](a: me, b: 1_s256)
+  var anded = bit_and[S256](a: me, b: minus_one)
+  return is_pos and int_eq[S256](a: anded, b: 0_s256)
+
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
 routine S256.signum() -> S256

@@ -192,13 +192,6 @@ routine U64.$mul!(you: U64) -> U64
     throw IntegerOverflowError()
   return result.item0
 
-### Returns `me * you`, throwing on overflow (alias for `$mul!`).
-### :param you: The right operand.
-### :returns: The product.
-### :throws: {IntegerOverflowError} on overflow.
-routine U64.$mul(you: U64) -> U64
-  return me.$mul!(you)
-
 ### Returns `me // you` (floor division), throwing if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient, rounding toward zero.
@@ -515,17 +508,51 @@ routine U64.is_power_of_two() -> Bool
 ### :param bits: The number of bit positions to rotate.
 ### :returns: The rotated value.
 routine U64.rotate_left(bits: U32) -> U64
-  var left = shift_left[U64](me, U64(bits))
-  var right = shift_right_unsigned[U64](me, U64(64_u32 -% bits))
+  var n = bits % 64_u32
+  if n == 0_u32
+    return me
+  var left = shift_left[U64](me, U64(n))
+  var right = shift_right_unsigned[U64](me, U64(64_u32 -% n))
   return bit_or[U64](a: left, b: right)
 
 ### Returns this value rotated right by `bits` positions.
 ### :param bits: The number of bit positions to rotate.
 ### :returns: The rotated value.
 routine U64.rotate_right(bits: U32) -> U64
-  var right = shift_right_unsigned[U64](me, U64(bits))
-  var left = shift_left[U64](me, U64(64_u32 -% bits))
+  var n = bits % 64_u32
+  if n == 0_u32
+    return me
+  var right = shift_right_unsigned[U64](me, U64(n))
+  var left = shift_left[U64](me, U64(64_u32 -% n))
   return bit_or[U64](a: right, b: left)
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U64.to_bytes_le() -> Array[Byte, 8]
+  var result = Array[Byte, 8]()
+  var i = 0_u64
+  while i < 8_u64
+    var b = int_truncate[U64, U8](shift_right_unsigned[U64](me, i * 8_u64))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = i + 1_u64
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U64.to_bytes_be() -> Array[Byte, 8]
+  return me.swap_bytes().to_bytes_le()
+
+### Builds a `U64` from its little-endian raw byte representation.
+common routine U64.from_bytes_le(bytes: Array[Byte, 8]) -> U64
+  var result = 0_u64
+  var i = 0_u64
+  while i < 8_u64
+    var part = shift_left[U64](zero_extend[U8, U64](byte_at(array: bytes, index: i)), i * 8_u64)
+    result = bit_or[U64](a: result, b: part)
+    i = i + 1_u64
+  return result
+
+### Builds a `U64` from its big-endian raw byte representation.
+common routine U64.from_bytes_be(bytes: Array[Byte, 8]) -> U64
+  return U64.from_bytes_le(bytes: bytes).swap_bytes()
 
 # ============================================================================
 # Utility Methods
@@ -546,11 +573,6 @@ routine U64.is_even() -> Bool
 ### :returns: `true` when the least significant bit is set.
 routine U64.is_odd() -> Bool
   return not me.is_even()
-
-### Wraps this value in a `ByteSize` so it can be used as a storage measurement.
-### :returns: A `ByteSize` representing `me` bytes.
-routine U64.bytes() -> ByteSize
-  return ByteSize(me)
 
 # ============================================================================
 # Text Representation and Parsing

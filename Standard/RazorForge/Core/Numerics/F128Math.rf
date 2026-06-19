@@ -460,7 +460,7 @@ routine F128.exp10_unchecked() -> F128
   return me.to_oct().mul(you: UnpackedFloat[U256, U512, 256].ln10()).exp(n: 20_s64).to_f128()
 
 ### Returns `me ^ you` (computed in octuple).
-routine F128.pow(you: F128) -> F128
+routine F128.$pow!(you: F128) -> F128
   var rr = me.pow_unchecked(you: you)
   if rr.is_finite()
     return rr

@@ -370,12 +370,6 @@ routine F64.log10_unchecked() -> F64
 ### following the IEEE 754 `pow` definition (which keeps `x ** 0 == 1` for every `x`).
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp` (always finite).
-routine F64.pow(exp: F64) -> F64
-  var r = me.pow_unchecked(exp)
-  if r.is_finite()
-    return r
-  return f64_nonfinite_crash!(r: r)
-
 ### Raises this value to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain).
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp`, possibly ±infinity or NaN.
@@ -386,8 +380,11 @@ routine F64.pow_unchecked(exp: F64) -> F64
 ### NOTE: contrary to mathematical convention, `0 ** 0 == 1` (IEEE 754 `pow`).
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp` (always finite).
-routine F64.$pow(exp: F64) -> F64
-  return me.pow(exp)
+routine F64.$pow!(exp: F64) -> F64
+  var r = me.pow_unchecked(exp)
+  if r.is_finite()
+    return r
+  return f64_nonfinite_crash!(r: r)
 
 ### Returns this value with its sign bit replaced by the sign of `sign`.
 ### :param sign: The value supplying the sign bit.

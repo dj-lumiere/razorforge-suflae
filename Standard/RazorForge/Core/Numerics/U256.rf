@@ -154,24 +154,6 @@ preset U256_MAX: U256 = 11579208923731619542357098500868790785326998466564056403
 preset U256_ZERO: U256 = 0_u256
 preset U256_ONE: U256 = 1_u256
 
-### Returns me * you (wraps mod 2^256) — exposes the raw i256 multiply for
-### microbenchmarking the wide-op lowering.
-routine U256.$mul(you: U256) -> U256
-  return mul[U256](a: me, b: you)
-
-### Returns me // you via the generic base-2⁶⁴ Knuth-D kernel (`knuth_divide[4]`,
-### hardware `DIV r64` per step) instead of the slow inline-expanded `udiv i256`.
-routine U256.$floordiv(you: U256) -> U256
-  var av = me
-  var bv = you
-  var rem = Array[U64, 4]()
-  danger!
-    var q = knuth_divide[4](
-      a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
-      b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
-      rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](q.hijack()).extract()
-
 ### Quotient of `num // den` with the round-sticky baked into bit 0 (set iff the
 ### division left a nonzero remainder). One Knuth-D call returns both quotient and
 ### remainder, so callers that only need a sticky avoid a separate %/mul-back.
@@ -189,18 +171,6 @@ routine udiv256_sticky(num: U256, den: U256) -> U256
     if int_ne[U256](a: r, b: 0)
       return bit_or[U256](a: q, b: zero_extend[U64, U256](1_u64))
     return q
-
-### Returns me % you (remainder from the same Knuth-D kernel).
-routine U256.$mod(you: U256) -> U256
-  var av = me
-  var bv = you
-  var rem = Array[U64, 4]()
-  danger!
-    var q = knuth_divide[4](
-      a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
-      b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
-      rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).extract()
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
 routine U256.$represent() -> Text
@@ -404,7 +374,7 @@ routine U256.$mul!(you: U256) -> U256
 routine U256.$floordiv!(you: U256) -> U256
   if you == 0
     throw DivisionByZeroError()
-  return me.$floordiv(you)
+  return unsigned_div[U256](a: me, b: you)
 
 ### Returns `me % you` (integer remainder), throwing if `you` is zero.
 ### :param you: The divisor.
@@ -413,7 +383,7 @@ routine U256.$floordiv!(you: U256) -> U256
 routine U256.$mod!(you: U256) -> U256
   if you == 0_u256
     throw DivisionByZeroError()
-  return me.$mod(you)
+  return unsigned_rem[U256](a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -710,6 +680,48 @@ routine U256.swap_bytes() -> U256
 ### :returns: `true` if `me` is 1, 2, 4, ..., 2²⁵⁵; `false` otherwise (including zero).
 routine U256.is_power_of_two() -> Bool
   return me != 0_u256 and (me & (me - 1_u256)) == 0_u256
+
+### Returns this value rotated left by `bits` positions.
+routine U256.rotate_left(bits: U32) -> U256
+  var n = bits % 256_u32
+  if n == 0_u32
+    return me
+  return bit_or[U256](a: shift_left[U256](me, U256(n)), b: shift_right_unsigned[U256](me, U256(256_u32 -% n)))
+
+### Returns this value rotated right by `bits` positions.
+routine U256.rotate_right(bits: U32) -> U256
+  var n = bits % 256_u32
+  if n == 0_u32
+    return me
+  return bit_or[U256](a: shift_right_unsigned[U256](me, U256(n)), b: shift_left[U256](me, U256(256_u32 -% n)))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U256.to_bytes_le() -> Array[Byte, 32]
+  var result = Array[Byte, 32]()
+  var i = 0_u64
+  while i < 32_u64
+    var b = int_truncate[U256, U8](shift_right_unsigned[U256](me, U256(i * 8_u64)))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = i + 1_u64
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U256.to_bytes_be() -> Array[Byte, 32]
+  return me.swap_bytes().to_bytes_le()
+
+### Builds a `U256` from its little-endian raw byte representation.
+common routine U256.from_bytes_le(bytes: Array[Byte, 32]) -> U256
+  var result = 0_u256
+  var i = 0_u64
+  while i < 32_u64
+    var part = shift_left[U256](zero_extend[U8, U256](byte_at(array: bytes, index: i)), U256(i * 8_u64))
+    result = bit_or[U256](a: result, b: part)
+    i = i + 1_u64
+  return result
+
+### Builds a `U256` from its big-endian raw byte representation.
+common routine U256.from_bytes_be(bytes: Array[Byte, 32]) -> U256
+  return U256.from_bytes_le(bytes: bytes).swap_bytes()
 
 # ============================================================================
 # Utility Methods

@@ -689,14 +689,13 @@ routine F16.log1p() -> F16
   return f16_nonfinite_crash!(r: rr)
 routine F16.log1p_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_log1p(bits: me.to_bits()))
-### Raises me to the power exp.
-routine F16.pow(exp: F16) -> F16
+routine F16.pow_unchecked(exp: F16) -> F16
+  return F16.from_bits(bits: rf_f16_pow(base: me.to_bits(), exp: exp.to_bits()))
+routine F16.$pow!(exp: F16) -> F16
   var rr = me.pow_unchecked(exp: exp)
   if rr.is_finite()
     return rr
   return f16_nonfinite_crash!(r: rr)
-routine F16.pow_unchecked(exp: F16) -> F16
-  return F16.from_bits(bits: rf_f16_pow(base: me.to_bits(), exp: exp.to_bits()))
 ### Cube root.
 routine F16.cbrt() -> F16
   return F16.from_bits(bits: rf_f16_cbrt(bits: me.to_bits()))

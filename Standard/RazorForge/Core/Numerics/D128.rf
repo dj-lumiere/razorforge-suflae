@@ -24,7 +24,7 @@ import Collections
 
 ### A software decimal128 value in BID binary storage.
 @llvm("i128")
-record D128 obeys Addable, Subtractable, Multiplicable, Divisible, Negatable
+record D128 obeys Numeric, Ordered
   pass
 
 ### The decoded fields of a decimal128: value = (-1)^sign * coeff * 10^exp.
@@ -599,9 +599,12 @@ routine D128.$cmp(you: D128) -> ComparisonSign
 
 ### Returns `me` raised to the `you` power. Delegates to the transcendental `pow`;
 ### follows IEEE semantics (overflow/domain errors yield inf/NaN, never throw), so the
-### wired `$pow` is non-failable and satisfies `Exponentiable`.
-routine D128.$pow(you: D128) -> D128
-  return me.pow(you: you)
+### wired `$pow!` is crashable and satisfies `Exponentiable`.
+routine D128.$pow!(you: D128) -> D128
+  var r = me.pow_unchecked(you: you)
+  if r.is_finite()
+    return r
+  return d128_nonfinite_crash!(r: r)
 
 # ============================================================================
 # Decimal formatting (decNumber decToString rules) — operates on the binary

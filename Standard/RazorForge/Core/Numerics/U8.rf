@@ -511,6 +511,38 @@ routine U8.reverse_bits() -> U8
 routine U8.is_power_of_two() -> Bool
   return me != 0_u8 and (me & (me - 1_u8)) == 0_u8
 
+### Returns this value rotated left by `bits` positions.
+routine U8.rotate_left(bits: U32) -> U8
+  var n = bits % 8_u32
+  if n == 0_u32
+    return me
+  return bit_or[U8](a: shift_left[U8](me, U8(n)), b: shift_right_unsigned[U8](me, U8(8_u32 -% n)))
+
+### Returns this value rotated right by `bits` positions.
+routine U8.rotate_right(bits: U32) -> U8
+  var n = bits % 8_u32
+  if n == 0_u32
+    return me
+  return bit_or[U8](a: shift_right_unsigned[U8](me, U8(n)), b: shift_left[U8](me, U8(8_u32 -% n)))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U8.to_bytes_le() -> Array[Byte, 1]
+  var result = Array[Byte, 1]()
+  result = set_byte_at(array: result, index: 0_u64, value: me)
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U8.to_bytes_be() -> Array[Byte, 1]
+  return me.to_bytes_le()
+
+### Builds a `U8` from its little-endian raw byte representation.
+common routine U8.from_bytes_le(bytes: Array[Byte, 1]) -> U8
+  return byte_at(array: bytes, index: 0_u64)
+
+### Builds a `U8` from its big-endian raw byte representation.
+common routine U8.from_bytes_be(bytes: Array[Byte, 1]) -> U8
+  return U8.from_bytes_le(bytes: bytes)
+
 # ============================================================================
 # Type Conversions (creator syntax)
 # ============================================================================
