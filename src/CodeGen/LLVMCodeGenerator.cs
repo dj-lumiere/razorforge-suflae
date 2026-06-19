@@ -177,6 +177,16 @@ public partial class LlvmCodeGenerator
     private readonly HashSet<string> _generatedRoutineDefs = [];
 
     /// <summary>
+    /// The emitted <c>define …</c> header line for each generated routine, keyed by mangled name.
+    /// Used at output assembly to assert that a routine's <c>define</c> agrees with any <c>declare</c>
+    /// recorded for the same symbol (see <see cref="NormalizeFunctionSignature"/>). A mismatch means
+    /// codegen computed the function type two different ways — an internal compiler bug that would
+    /// otherwise surface as a cryptic <c>llvm-as</c>/<c>opt</c> "call argument type mismatch" far from
+    /// the source. We catch it here instead.
+    /// </summary>
+    private readonly Dictionary<string, string> _generatedRoutineDefHeaders = new();
+
+    /// <summary>
     /// Number of routine bodies actually emitted (the transitive closure referenced from the entry
     /// point). This is the meaningful "how much code did we compile" figure — far smaller than the
     /// registry's total routine count, which holds every stdlib routine available for resolution.
@@ -1290,12 +1300,35 @@ public partial class LlvmCodeGenerator
             output.Append(value: _functionDeclarations);
         }
 
-        // RF function forward declarations — skip any that now have definitions
+        // RF function forward declarations — skip any that now have definitions.
+        // A symbol with BOTH a declare and a define is an RF routine (C externs are declare-only,
+        // never defined), so the two MUST describe the same function type. If they diverge, codegen
+        // computed the signature two different ways — an internal bug that LLVM would otherwise only
+        // flag downstream as a cryptic "call argument type mismatch". Assert the invariant here.
         foreach ((string name, string line) in _rfRoutineDeclarations)
         {
             if (!_generatedRoutineDefs.Contains(item: name))
             {
                 output.AppendLine(value: line);
+                continue;
+            }
+
+            // Define wins (the declare is dropped); first verify the pair agrees.
+            if (_generatedRoutineDefHeaders.TryGetValue(key: name, value: out string? defHeader))
+            {
+                string declSig = NormalizeFunctionSignature(header: line);
+                string defSig = NormalizeFunctionSignature(header: defHeader);
+                if (declSig != defSig)
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Codegen bug: declare/define signature mismatch for @{name}.\n" +
+                        $"  declare: {declSig}  ({line.Trim()})\n" +
+                        $"  define : {defSig}  ({defHeader.Trim()})\n" +
+                        "The forward declaration and the emitted body disagree on the function type. " +
+                        "This is an internal compiler error — the conversion/mangling path that built " +
+                        "the declare differs from the one that built the define.");
+                }
             }
         }
 
@@ -1452,6 +1485,173 @@ public partial class LlvmCodeGenerator
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// Attribute/linkage words that may precede the return type of a <c>declare</c>/<c>define</c>
+    /// header (e.g. <c>define private noalias ptr @f</c>). Stripped when isolating the bare type.
+    /// </summary>
+    private static readonly HashSet<string> ReturnAttributeWords =
+    [
+        "private", "internal", "external", "linkonce", "linkonce_odr", "weak", "weak_odr",
+        "noalias", "zeroext", "signext", "inreg", "noundef", "nonnull"
+    ];
+
+    /// <summary>
+    /// Reduces a <c>declare …</c> or <c>define … {</c> header to a canonical type-only signature
+    /// such as <c>i64(i32,ptr)</c> — return type plus the ordered parameter types, with parameter
+    /// names and all attributes (sret/byval/align/…) stripped. Two headers for the same symbol that
+    /// describe the same LLVM function type normalize to the same string, so an inequality is a real
+    /// signature divergence. Used only by the declare/define consistency assertion at output assembly.
+    /// </summary>
+    private static string NormalizeFunctionSignature(string header)
+    {
+        int at = header.IndexOf(value: '@');
+        int open = at < 0 ? -1 : header.IndexOf(value: '(', startIndex: at);
+        if (at < 0 || open < 0)
+        {
+            return header.Trim();
+        }
+
+        // Depth-aware scan for the matching close paren of the parameter list.
+        int depth = 0;
+        int close = -1;
+        for (int i = open; i < header.Length; i++)
+        {
+            char c = header[index: i];
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    close = i;
+                    break;
+                }
+            }
+        }
+
+        if (close < 0)
+        {
+            return header.Trim();
+        }
+
+        // Return segment = everything between the leading keyword (declare/define) and '@'.
+        string head = header[..at].Trim();
+        int firstSpace = head.IndexOf(value: ' ');
+        string returnSegment = firstSpace < 0 ? "" : head[(firstSpace + 1)..].Trim();
+        string returnType = NormalizeTypeToken(token: returnSegment);
+
+        // Parameter types: split on top-level commas, normalize each to its bare type.
+        string paramSegment = header[(open + 1)..close];
+        var paramTypes = new List<string>();
+        depth = 0;
+        int start = 0;
+        for (int i = 0; i <= paramSegment.Length; i++)
+        {
+            if (i == paramSegment.Length || (paramSegment[index: i] == ',' && depth == 0))
+            {
+                string raw = paramSegment[start..i].Trim();
+                if (raw.Length > 0)
+                {
+                    paramTypes.Add(item: NormalizeTypeToken(token: raw));
+                }
+
+                start = i + 1;
+            }
+            else if (paramSegment[index: i] == '(')
+            {
+                depth++;
+            }
+            else if (paramSegment[index: i] == ')')
+            {
+                depth--;
+            }
+        }
+
+        return $"{returnType}({string.Join(separator: ",", values: paramTypes)})";
+    }
+
+    /// <summary>
+    /// Extracts the leading LLVM type from a parameter or return token, discarding any leading
+    /// return attributes, any trailing parameter attributes, and the <c>%name</c>. Handles struct
+    /// (<c>{…}</c>), array (<c>[…]</c>), and quoted named (<c>%"…"</c>) types whose spelling contains
+    /// spaces or commas.
+    /// </summary>
+    private static string NormalizeTypeToken(string token)
+    {
+        token = token.Trim();
+        if (token.Length == 0)
+        {
+            return "";
+        }
+
+        // Strip leading attribute/linkage words (these precede the return type). Parameter attributes
+        // follow the type, so they are dropped naturally by reading only the leading type below.
+        bool stripped = true;
+        while (stripped && token.Length > 0)
+        {
+            stripped = false;
+            int sp = token.IndexOf(value: ' ');
+            string firstWord = sp < 0 ? token : token[..sp];
+            if (ReturnAttributeWords.Contains(item: firstWord))
+            {
+                token = sp < 0 ? "" : token[(sp + 1)..].TrimStart();
+                stripped = true;
+            }
+        }
+
+        if (token.Length == 0)
+        {
+            return "";
+        }
+
+        // Read the leading balanced type.
+        char first = token[index: 0];
+        if (first is '{' or '[')
+        {
+            char closeChar = first == '{' ? '}' : ']';
+            int depth = 0;
+            for (int i = 0; i < token.Length; i++)
+            {
+                if (token[index: i] == first)
+                {
+                    depth++;
+                }
+                else if (token[index: i] == closeChar)
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return token[..(i + 1)];
+                    }
+                }
+            }
+
+            return token;
+        }
+
+        if (token.StartsWith(value: "%\"", comparisonType: StringComparison.Ordinal))
+        {
+            int endQuote = token.IndexOf(value: '"', startIndex: 2);
+            return endQuote < 0 ? token : token[..(endQuote + 1)];
+        }
+
+        // Simple type: up to the first whitespace or '(' (an attribute like sret(...) following ptr).
+        int stop = token.Length;
+        for (int i = 0; i < token.Length; i++)
+        {
+            if (token[index: i] is ' ' or '(')
+            {
+                stop = i;
+                break;
+            }
+        }
+
+        return token[..stop];
+    }
 
     /// <summary>
     /// Gets the next unique temporary variable name.

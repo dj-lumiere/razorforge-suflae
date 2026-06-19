@@ -369,8 +369,10 @@ public partial class LlvmCodeGenerator
         bool isInline = routineInfo.Annotations.Contains(value: "inline");
         string returnPrefix = isCreator && returnType == "ptr" ? "noalias " : "";
         string funcAttrs = isInline ? " alwaysinline" : "";
-        EmitLine(sb: _functionDefinitions,
-            line: $"define {returnPrefix}{returnType} @{funcName}({parameters}){funcAttrs} {{");
+        string defineHeader =
+            $"define {returnPrefix}{returnType} @{funcName}({parameters}){funcAttrs} {{";
+        _generatedRoutineDefHeaders[key: funcName] = defineHeader;
+        EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();
 
@@ -408,6 +410,7 @@ public partial class LlvmCodeGenerator
             _functionDefinitions.Length = savedLength;
             _tempCounter = savedTempCounter;
             _generatedRoutineDefs.Remove(item: funcName);
+            _generatedRoutineDefHeaders.Remove(key: funcName);
             _generatedRoutines.Remove(item: funcName);
             throw;
         }
