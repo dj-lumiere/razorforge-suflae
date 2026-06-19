@@ -433,6 +433,16 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void GenerateTypeDeclarations() // NOSONAR S3776
     {
+        // When reachability ran (real builds), SKIP the broad registry type sweep entirely: every
+        // struct that emitted code uses is generated on-demand — records & variants via GetLlvmType,
+        // entities & crashables via Get{Entity,Crashable}TypeName at their alloc/access/size sites,
+        // and nested by-value (record/variant) field types recursively via EnsureTypeGenerated.
+        // Entity/crashable fields are `ptr`, so the broad sweep only ADDS dead reference types. The
+        // no-reachability config (some unit tests build the generator without RoutineReachabilityPass)
+        // still needs the full sweep.
+        if (_liveRoutineKeys.Count != 0)
+            return;
+
         // Generate entity types (reference types, heap-allocated)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity))
         {
