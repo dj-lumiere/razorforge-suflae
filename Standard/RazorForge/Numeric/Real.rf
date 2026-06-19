@@ -40,6 +40,16 @@ routine Real.$create(value: F64) -> Real
   rf_real_set_f64(handle: r.handle, value: value)
   return r
 
+### Returns the real value zero.
+### :returns: The resulting `Real` value.
+common routine Real.zero() -> Real
+  return Real()
+
+### Returns the real value one.
+### :returns: The resulting `Real` value.
+common routine Real.one() -> Real
+  return Real(value: 1_s64)
+
 ### Constructs a `Real` from a decimal string.
 ### :param text: The textual real representation.
 ### :param radix: The numeric base to use.
@@ -130,6 +140,20 @@ routine Real.$neg() -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_neg(result: result.handle, a: me.handle)
   return result
+
+### Returns `true` when this value is strictly less than zero.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Real.is_negative() -> Bool
+  return rf_real_cmp(a: me.handle, b: Real().handle) < 0_s32
+
+### Returns the absolute value of this real number.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.abs() -> Real
+  if me.is_negative()
+    return me.$neg()
+  return me.$copy()
 
 # ============================================================================
 # Comparison
