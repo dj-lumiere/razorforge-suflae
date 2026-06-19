@@ -1286,9 +1286,14 @@ public sealed partial class TypeRegistry
     /// <returns>An enumerable of all registered routines.</returns>
     public IEnumerable<RoutineInfo> GetAllRoutines()
     {
+        // `_routines` indexes each first-overload routine under BOTH its RegistryKey and its
+        // (owner-qualified) BaseName, so `.Values` yields that object twice. Dedup by reference so
+        // every consumer (codegen, synthesis passes, the registered-count) sees each routine once
+        // instead of ~2x — the inflated count that made a trivial program look like it had 12k
+        // routines when it actually has ~6.6k.
         IEnumerable<RoutineInfo> all = _prunedGenericBases.Count == 0
-            ? _routines.Values
-            : _routines.Values.Where(r => !_prunedGenericBases.Contains(r.BaseName));
+            ? _routines.Values.Distinct()
+            : _routines.Values.Distinct().Where(r => !_prunedGenericBases.Contains(r.BaseName));
         // Exclude:
         // - @innate routines: compile-time-only stubs (type_name, module_name, etc.) that
         //   BuilderServiceInliningPass folds to literals; they have no body and must never reach codegen.
