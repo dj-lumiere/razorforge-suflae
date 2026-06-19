@@ -134,6 +134,18 @@ public partial class LlvmCodeGenerator
             _rfRoutineDeclarations[key: funcName] =
                 $"declare {returnPrefix}{returnType} @{funcName}({parameters})";
         }
+
+        // Over-prune tripwire: this declare was emitted because an emitted body references the
+        // routine, and it is a real RF routine (not a bodyless C extern), so it MUST also be
+        // defined. Record it so the post-fixpoint check in GenerateRoutineDefinitions can catch a
+        // reachability over-prune (a called routine whose body got dropped) as a located codegen
+        // error rather than a downstream linker "undefined symbol". Gated on _emittingRoutineBody
+        // so the broad declaration pre-pass — which declares much of the registry but references
+        // nothing — does not enroll dead routines.
+        if (_emittingRoutineBody && !isCExtern)
+        {
+            _expectedBodyNames.Add(item: funcName);
+        }
     }
 
     /// <summary>

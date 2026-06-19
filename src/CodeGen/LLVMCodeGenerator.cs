@@ -66,6 +66,18 @@ public partial class LlvmCodeGenerator
     private bool _emittingRoutineBody;
 
     /// <summary>
+    /// Mangled names of non-extern RF routines that were referenced from an emitted body (so a
+    /// forward <c>declare</c> was recorded for them) and therefore MUST also receive a <c>define</c>.
+    /// A name left here without a matching entry in <see cref="_generatedRoutineDefs"/> after the
+    /// fixpoint converges means reachability pruned away a routine that emitted code actually calls —
+    /// an over-prune that would otherwise surface only as a linker "undefined symbol". Only populated
+    /// while <see cref="_emittingRoutineBody"/> is set, so dead declares from the broad pre-pass
+    /// (e.g. an unreferenced <c>List[Character].merge_into</c>) never enter it.
+    /// <c>external("C")</c> routines and <c>@innate</c> stubs are excluded — they are bodyless by design.
+    /// </summary>
+    private readonly HashSet<string> _expectedBodyNames = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
     /// Live concrete owner type FullNames from RoutineReachabilityPass. Used to drive Phase C
     /// monomorphization of synthesized routines (try_next, $represent, $diagnose) for generic owners.
     /// </summary>
@@ -1204,6 +1216,32 @@ public partial class LlvmCodeGenerator
             }
         } while (_generatedRoutineDefs.Count > prevDefCount ||
                  _generatedRoutines.Count > prevDeclCount);
+
+        // Over-prune tripwire (only meaningful when reachability gating is active; with no live set
+        // nothing is pruned, so every referenced routine is emitted and this is trivially satisfied).
+        // Every routine an emitted body actually references must itself have been emitted. A name in
+        // _expectedBodyNames with no define means RoutineReachabilityPass dropped a routine that
+        // emitted code calls — caught here as a located codegen error instead of a linker
+        // "undefined symbol" far downstream.
+        if (_liveRoutineKeys.Count > 0)
+        {
+            List<string> overPruned = _expectedBodyNames
+                                     .Where(predicate: name => !_generatedRoutineDefs.Contains(item: name))
+                                     .OrderBy(keySelector: name => name, comparer: StringComparer.Ordinal)
+                                     .ToList();
+            if (overPruned.Count > 0)
+            {
+                string sample = string.Join(separator: "\n",
+                    values: overPruned.Take(count: 20).Select(selector: n => $"  @{n}"));
+                string more = overPruned.Count > 20 ? $"\n  … and {overPruned.Count - 20} more" : "";
+                throw new InvalidOperationException(
+                    message:
+                    $"Codegen bug: {overPruned.Count} referenced routine(s) were declared and called " +
+                    "but never defined — reachability pruned a routine that emitted code calls. " +
+                    "This would surface as a linker \"undefined symbol\"; catching it here instead.\n" +
+                    sample + more);
+            }
+        }
     }
 
     /// <summary>
