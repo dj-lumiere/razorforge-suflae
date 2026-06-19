@@ -421,6 +421,16 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string EmitDoubleAsLlvmHex(double d, TokenType literalType)
     {
+        if (literalType == TokenType.F16Literal)
+        {
+            // half constants use LLVM's 16-bit hex form `0xH<4 hex digits>` — NOT the 64-bit
+            // double form (`0x...16 hex...`) the float/double branches below emit. Without this,
+            // every F16 literal (incl. inf/nan, which also route here) emits invalid IR that
+            // llvm-as rejects. Round the value to IEEE binary16 and emit its bit pattern.
+            ushort halfBits = BitConverter.HalfToUInt16Bits(value: (Half)d);
+            return $"0xH{halfBits:X4}";
+        }
+
         if (literalType == TokenType.F32Literal)
         {
             // F32: promote to double for LLVM's float hex format
