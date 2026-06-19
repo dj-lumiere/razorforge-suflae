@@ -488,6 +488,25 @@ public static class NumericLiteralParser
         if (overflow)
             throw new OverflowException($"decimal literal '{str}' is out of range for Decimal (overflows to infinity)");
 
+        // Canonicalize. `Decimal` is RazorForge's own canonical decimal — unlike the IEEE-cohort
+        // D32/D64/D128, fractional trailing zeros are not preserved, so equal values share bits:
+        // 2.50 and 2.5 both encode to 25*10^-1, 3.0 to 3*10^0. Integers (exp >= 0) are left as-is
+        // so 100 stays 100*10^0 (not 1*10^2 -> "1E+2") and 6.02e23 keeps its scientific form. This
+        // mirrors the runtime `decimal_normalize_parts`, so a literal and the arithmetic result of
+        // the same value are bit-identical. (RoundAndClamp is shared with the IEEE encoders, which
+        // must NOT normalize — hence this lives here, not in RoundAndClamp.)
+        const int decBias = 1572932;
+        if (coeff.IsZero)
+        {
+            biased = decBias; // canonical zero: exponent 0
+        }
+        else
+        {
+            int exp = biased - decBias;
+            while (exp < 0 && (coeff % 10).IsZero) { coeff /= 10; exp++; }
+            biased = exp + decBias;
+        }
+
         BigInteger bits = ((BigInteger)biased << 233) | coeff;
         if (p.Sign)
             bits |= BigInteger.One << 255;
