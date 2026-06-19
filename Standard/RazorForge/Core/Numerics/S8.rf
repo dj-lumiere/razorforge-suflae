@@ -562,6 +562,12 @@ routine S8.trailing_ones() -> S8
 routine S8.reverse_bits() -> S8
   return reverse_bits[S8](me)
 
+### Returns this value with its single byte unchanged (8-bit byte swap is identity).
+### Provided for API uniformity with the wider integer types.
+### :returns: `me`.
+routine S8.swap_bytes() -> S8
+  return me
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -591,6 +597,12 @@ routine S8.is_even() -> Bool
 ### :returns: `true` if the least-significant bit is 1.
 routine S8.is_odd() -> Bool
   return not me.is_even()
+
+### Returns true if this value is an exact power of two.
+### Negative values always return `false`.
+### :returns: `true` if `me > 0 and (me & (me - 1)) == 0`.
+routine S8.is_power_of_two() -> Bool
+  return me > 0_s8 and (me & (me -% 1_s8)) == 0_s8
 
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.

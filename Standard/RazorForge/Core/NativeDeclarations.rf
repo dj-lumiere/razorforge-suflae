@@ -832,5 +832,58 @@ external("C") routine rf_real_pow(result: CPtr, a: CPtr, b: CPtr)
 external("C") routine rf_real_sin(result: CPtr, a: CPtr)
 ### Stores cos(a) into result.
 external("C") routine rf_real_cos(result: CPtr, a: CPtr)
+### Stores tan(a) into result.
+external("C") routine rf_real_tan(result: CPtr, a: CPtr)
+### Stores asin(a) into result.
+external("C") routine rf_real_asin(result: CPtr, a: CPtr)
+### Stores acos(a) into result.
+external("C") routine rf_real_acos(result: CPtr, a: CPtr)
+### Stores atan(a) into result.
+external("C") routine rf_real_atan(result: CPtr, a: CPtr)
+### Stores atan2(y, x) into result.
+external("C") routine rf_real_atan2(result: CPtr, y: CPtr, x: CPtr)
+### Stores sinh(a) into result.
+external("C") routine rf_real_sinh(result: CPtr, a: CPtr)
+### Stores cosh(a) into result.
+external("C") routine rf_real_cosh(result: CPtr, a: CPtr)
+### Stores tanh(a) into result.
+external("C") routine rf_real_tanh(result: CPtr, a: CPtr)
+### Stores asinh(a) into result.
+external("C") routine rf_real_asinh(result: CPtr, a: CPtr)
+### Stores acosh(a) into result.
+external("C") routine rf_real_acosh(result: CPtr, a: CPtr)
+### Stores atanh(a) into result.
+external("C") routine rf_real_atanh(result: CPtr, a: CPtr)
+### Stores log2(a) into result.
+external("C") routine rf_real_log2(result: CPtr, a: CPtr)
+### Stores log10(a) into result.
+external("C") routine rf_real_log10(result: CPtr, a: CPtr)
+### Stores hypot(a, b) into result.
+external("C") routine rf_real_hypot(result: CPtr, a: CPtr, b: CPtr)
+### Stores cbrt(a) into result.
+external("C") routine rf_real_cbrt(result: CPtr, a: CPtr)
+### Precision-aware variants (prec = decimal significant digits).
+external("C") routine rf_real_div_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+external("C") routine rf_real_sqrt_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_exp_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_log_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_pow_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+external("C") routine rf_real_sin_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_cos_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_tan_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_asin_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_acos_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_atan_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_atan2_p(result: CPtr, y: CPtr, x: CPtr, prec: S32)
+external("C") routine rf_real_sinh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_cosh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_tanh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_asinh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_acosh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_atanh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_log2_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_log10_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_hypot_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+external("C") routine rf_real_cbrt_p(result: CPtr, a: CPtr, prec: S32)
 ### Compares two Real handles: -1 / 0 / 1 (2 = unordered/NaN).
 external("C") routine rf_real_cmp(a: CPtr, b: CPtr) -> S32

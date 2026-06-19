@@ -235,10 +235,13 @@ routine S16.$mod!(you: S16) -> S16
     return remainder - you
   return remainder
 
-### Returns `-me` (arithmetic negation), with wrapping behavior on `S16_MIN`.
-### :returns: The negated value. `-S16_MIN` wraps to `S16_MIN` (−32768).
-routine S16.$neg() -> S16
-  return sub[S16](a: 0, b: me)
+### Returns `-me` (arithmetic negation), throwing on overflow.
+### :returns: The negated value.
+### :throws: {IntegerOverflowError} when `me` is `S16_MIN` (its negation is not representable).
+routine S16.$neg!() -> S16
+  if me == -32768_s16
+    throw IntegerOverflowError()
+  return sub[S16](a: 0_s16, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -588,6 +591,12 @@ routine S16.is_even() -> Bool
 ### :returns: `true` if the least-significant bit is 1.
 routine S16.is_odd() -> Bool
   return not me.is_even()
+
+### Returns true if this value is an exact power of two.
+### Negative values always return `false`.
+### :returns: `true` if `me > 0 and (me & (me - 1)) == 0`.
+routine S16.is_power_of_two() -> Bool
+  return me > 0_s16 and (me & (me -% 1_s16)) == 0_s16
 
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.

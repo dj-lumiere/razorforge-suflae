@@ -10,6 +10,10 @@ record Complex obeys Numeric, Equatable, Hashable, FastHashable, Assignable
   ### Stores the imaginary component.
   secret imag: Real
 
+# Default decimal precision (significant digits) for Complex transcendentals.
+# 100 digits — comfortably above Decimal's fixed 70.
+preset DECIMAL_DEFAULT_PRECISION: S32 = 100
+
 # Complex constants
 preset COMPLEX_ZERO: Complex = Complex(real: Real.zero(), imag: Real.zero())
 preset COMPLEX_ONE: Complex = Complex(real: Real.one(), imag: Real.zero())
@@ -161,7 +165,7 @@ routine Complex.conjugate() -> Complex
 ### :returns: The resulting `Real` value.
 @readonly
 routine Complex.arg(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Real
-  return me.imag.atan2(me.real, precision)
+  return me.imag.atan2(x: me.real, precision: precision)
 
 ### Computes the principal complex square root.
 ### :param precision: The decimal precision to use.
@@ -172,7 +176,7 @@ routine Complex.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   if r.is_zero()
     return COMPLEX_ZERO
 
-  var two = Real(2_s64)
+  var two = Real(value: 2_s64)
   var rp = (r + me.real).divide(other: two, precision: precision).sqrt(precision)
   var ip = (r - me.real).divide(other: two, precision: precision).sqrt(precision)
   if me.imag.is_negative()
@@ -258,7 +262,7 @@ routine Complex.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 @readonly
 routine Complex.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var one = Real.one()
-  var two = Real(2_s64)
+  var two = Real(value: 2_s64)
   var num = Complex(real: me.real, imag: me.imag + one)
   var den = Complex(real: -me.real, imag: one - me.imag)
   var v = (num / den).log(precision)
@@ -313,7 +317,7 @@ routine Complex.acosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :returns: The resulting `Complex` value.
 @readonly
 routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
-  var two = Real(2_s64)
+  var two = Real(value: 2_s64)
   var v = ((COMPLEX_ONE + me) / (COMPLEX_ONE - me)).log(precision)
   return Complex(real: v.real_part().divide(other: two, precision: precision), imag: v.imag_part().divide(other: two, precision: precision))
 
@@ -323,7 +327,7 @@ routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 @readonly
 routine Complex.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var v = me.log(precision)
-  var ln10 = Real(10_s64).log(precision)
+  var ln10 = Real(value: 10_s64).log(precision)
   return Complex(real: v.real_part().divide(other: ln10, precision: precision), imag: v.imag_part().divide(other: ln10, precision: precision))
 
 # ============================================================================
