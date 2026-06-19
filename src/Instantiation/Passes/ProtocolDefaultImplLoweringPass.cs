@@ -158,6 +158,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                         VariantStatus: null,
                         VariantInnerType: null,
                         IsSynthesized: false);
+                    SeedConstructorCallees(body: mgBody);
                     added = true;
                     return;
                 }
@@ -204,10 +205,48 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                     VariantStatus: null,
                     VariantInnerType: null,
                     IsSynthesized: false);
+                SeedConstructorCallees(body: clonedBody);
                 added = true;
             });
         }
         return added;
+    }
+
+    /// <summary>
+    /// Seeds the no-arg constructor symbols a freshly-synthesized per-implementer body references so
+    /// codegen emits their definitions. A collector body like <c>Iterable[T].Set</c> cloned onto
+    /// <c>List[S64]</c> contains <c>var result = Set[S64]()</c>; reachability (which seeds
+    /// <c>&lt;Type&gt;.$create</c> for no-arg constructions) ran BEFORE this synthesis, so without this
+    /// the call links to an undefined <c>Set[S64].$create</c>. The subsequent incremental GMP pass
+    /// monomorphizes the constructor body; this just keeps it past the liveness gate.
+    /// </summary>
+    private void SeedConstructorCallees(Statement body)
+    {
+        AstWalker.WalkExpressions(root: body, visit: expr =>
+        {
+            // A no-arg construction in a cloned collector body — e.g. `Set[T]()` / `List[T]()` —
+            // reaches here as a GenericMethodCallExpression (or CreatorExpression) carrying a concrete
+            // ConstructedType after the T→implementer substitution. Codegen emits a `<Type>.$create`
+            // call by mangled name; mark it live so the body GMP monomorphizes survives the gate.
+            TypeInfo? ct = expr switch
+            {
+                CreatorExpression cre => cre.ConstructedType,
+                GenericMethodCallExpression gmc => gmc.ConstructedType,
+                CallExpression { Arguments.Count: 0 } ce => ce.ConstructedType,
+                _ => null
+            };
+            if (ct is null || !IsConcreteType(t: ct)) return;
+            ctx.LiveRoutineKeys.Add(item: $"{ct.FullName}.$create");
+        });
+    }
+
+    /// <summary>True when <paramref name="t"/> carries no unresolved generic parameter (so its
+    /// <c>$create</c> mangles to a real symbol, not e.g. <c>ExcludeIterator[T, Me, SO].$create</c>).</summary>
+    private static bool IsConcreteType(TypeInfo t)
+    {
+        if (t is GenericParameterTypeInfo or ProtocolTypeInfo) return false;
+        if (t is { IsGenericDefinition: true, GenericParameters.Count: > 0 }) return false;
+        return t.TypeArguments is not { Count: > 0 } args || args.All(predicate: IsConcreteType);
     }
 
     /// <summary>
@@ -280,9 +319,6 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         protoRoutine = null;
         implementer = null;
         if (resolvedRoutine is not { } rr) return false;
-        if (receiverResolvedType is not { } recvType) return false;
-        TypeInfo impl = UnwrapWrappers(t: recvType);
-        if (impl is ProtocolTypeInfo) return false; // implementer still unresolved
 
         // Walk the GenericDefinition chain to find a protocol-owned default-impl body. One level
         // covers the re-homed owner-resolved form (List[Text].enumerate -> Iterable[T].enumerate);
@@ -299,6 +335,19 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         }
 
         if (proto == null) return false;
+
+        // Pick the implementer. When the resolved routine is ALREADY re-homed onto a concrete owner
+        // (e.g. `me.transform(x).List()` monomorphized to `List[S64].List`), `rr.OwnerType` IS the
+        // implementer — and is authoritative. The receiver expression's ResolvedType can be a stale
+        // generic param here (GenericAstRewriter re-resolves the call's routine but leaves a dynamic
+        // closure-call's receiver type unsubstituted), so trusting it would synthesize `Sub.List`
+        // garbage instead of `List[S64].List`. Fall back to the receiver type only when `rr` is still
+        // protocol-owned (not yet re-homed, e.g. an `Iterable[T].Set()` call).
+        TypeInfo? impl = rr.OwnerType is RecordTypeInfo or EntityTypeInfo
+            ? rr.OwnerType
+            : receiverResolvedType is { } recvType ? UnwrapWrappers(t: recvType) : null;
+        if (impl is null or ProtocolTypeInfo or GenericParameterTypeInfo) return false;
+
         protoRoutine = proto;
         implementer = impl;
         return true;
