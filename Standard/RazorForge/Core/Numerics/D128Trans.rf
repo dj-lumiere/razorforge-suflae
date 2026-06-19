@@ -626,6 +626,19 @@ routine D128.remainder(other: D128) -> D128
   var n = me.$truediv_unchecked(you: other).rint()
   return me.$sub_unchecked(you: other.$mul_unchecked(you: n))
 
+### IEEE 754 normalize (the `reduce` operation): the value with trailing zeros stripped to the
+### simplest member of its cohort (e.g. `3.00` -> `3`, `1.50` -> `1.5`, `100` -> `1E+2`,
+### `0.00` -> `0`). Specials pass through unchanged. Never crashes. Arithmetic stays
+### cohort-preserving (IEEE); this is the explicit opt-in to the shortest representation.
+### :returns: `me` normalized to its simplest cohort member.
+routine D128.normalize() -> D128
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    return me
+  if int_eq[U128](a: p.coeff, b: 0_u128)
+    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+  return d128_of_parts(p: decfinB(sign: p.sign, coeff: zero_extend[U128, U256](p.coeff), exp: p.exp, pref: 6111_s64))
+
 ### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 round (half away), 4 rint (half even).
 routine d128_round_int(x: D128, mode: S64) -> D128
   var p = x.decode()
