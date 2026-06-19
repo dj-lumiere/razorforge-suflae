@@ -581,6 +581,36 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
+    /// Verifies const generic LLVM intrinsic arguments substitute numeric values, not carrier types.
+    /// </summary>
+    [Fact]
+    public void Codegen_ConstGenericLlvmIntrinsicCall_SubstitutesConstValue()
+    {
+        string source = """
+                        routine test() -> Array[Byte, 8]
+                          return 1_u64.to_bytes_le()
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+
+        Assert.Empty(collection: result.Errors);
+
+        var generator = new LlvmCodeGenerator(program: program,
+            registry: result.Registry,
+            stdlibPrograms: result.Registry.StdlibPrograms,
+            synthesizedBodies: result.SynthesizedBodies,
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
+
+        string llvmIr = generator.Generate();
+        string body = ExtractFunctionDefinition(llvmIr: llvmIr,
+            functionMarker: "define [8 x i8] @Core.U64.to_bytes_le");
+        Assert.Contains(expectedSubstring: "alloca [8 x i8]", actualString: body);
+        Assert.DoesNotContain(expectedSubstring: "[i64 x i8]", actualString: llvmIr);
+    }
+
+    /// <summary>
     /// Verifies code generation behavior for bit list to U8 uses concrete hijacked U64 extract.
     /// </summary>
     [Fact]
