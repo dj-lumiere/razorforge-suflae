@@ -1,0 +1,43 @@
+module Tests/Stdlib/F128ParseRoundtrip
+import IO/Console
+
+# Regression coverage for the provably-correct Text -> F128 parser: the F512 fast path
+# (correctly-rounded for every non-tie input) plus the exact-tie resolution (exp >= 0 is
+# exact in F512; exp < 0 with 5^|exp| | coeff uses the exact ldexp path), and the shared
+# decimal scanner. All assertions are BIT-EXACT booleans so they are stable regardless of
+# how F128.$represent formats values.
+
+routine ck(got: F128, want: F128, label: Text)
+  show(label + ": " + f"{int_eq[U128](a: got.to_bits(), b: want.to_bits())}")
+  return
+
+routine start()
+  var p112 = F128(from: shift_left[U128](1_u128, 112_u128))   # 2^112 (even mantissa)
+  var p113 = F128(from: shift_left[U128](1_u128, 113_u128))   # 2^113 (even mantissa)
+  var p112p2 = p112 + F128(from: 2_s64)
+
+  # Exact ties must round half-to-even, both directions, both code paths.
+  ck(got: F128!("5192296858534827628530496329220096.5"), want: p112, label: "tie -1 (ldexp) -> 2^112")
+  ck(got: F128!("10384593717069655257060992658440193"), want: p113, label: "tie  0 (fast)  -> 2^113")
+  ck(got: F128!("5192296858534827628530496329220097.5"), want: p112p2, label: "tie -1 odd     -> 2^112+2")
+
+  # 36-significant-digit references round to the exact bits (binary128 round-trip width).
+  ck(got: F128!("1.41421356237309504880168872420969808"), want: F128(from: 2_s64).sqrt(), label: "sqrt(2) 36-digit")
+  ck(got: F128!("1.73205080756887729352744634150587237"), want: F128(from: 3_s64).sqrt(), label: "sqrt(3) 36-digit")
+  ck(got: F128!("0.333333333333333333333333333333333333"), want: F128(from: 1_s64) / F128(from: 3_s64), label: "1/3 36-digit")
+
+  # Short numerics (exactly 3 and 8 characters) must SCAN, not throw — regression for the
+  # special-value check that used to reject any 3/8-char non-nan/inf input.
+  ck(got: F128!("0.5"), want: F128(from: 1_s64) / F128(from: 2_s64), label: "0.5 (3-char)")
+  ck(got: F128!("100"), want: F128(from: 100_s64), label: "100 (3-char)")
+  ck(got: F128!("12345678"), want: F128(from: 12345678_s64), label: "12345678 (8-char)")
+  ck(got: F128!("1e-300"), want: F128(from: 10_s64) ** F128(from: -300_s64), label: "1e-300")
+
+  # Special values parse correctly.
+  var vinf = F128!("inf")
+  var vninf = F128!("-inf")
+  var vnan = F128!("nan")
+  show("inf  parses inf: " + f"{vinf.is_infinite()}")
+  show("-inf parses neg: " + f"{vninf.is_infinite() and vninf.is_negative()}")
+  show("nan  parses nan: " + f"{vnan.is_nan()}")
+  return

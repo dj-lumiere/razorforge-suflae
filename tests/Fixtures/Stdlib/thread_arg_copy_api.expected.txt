@@ -1,0 +1,3 @@
+shared total: 10
+worker saw: 3
+origin x after join: 1
