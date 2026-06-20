@@ -27,3 +27,11 @@ protocol LockPolicy
 
   ### Removes the claimer previously admitted with `add_claimer`.
   routine Me.remove_claimer()
+
+### Aborts the program for a re-entrant exclusive lock acquisition (the calling thread already
+### holds the lock — the spin would never end). Called by the lock policies when owner-thread
+### tracking detects self-deadlock; infallible-acquire callers stay plain (`@crash_only` does not
+### propagate failability). :throws: always {ReentrantLockError}.
+@crash_only
+routine crash_reentrant_lock!()
+  throw ReentrantLockError()

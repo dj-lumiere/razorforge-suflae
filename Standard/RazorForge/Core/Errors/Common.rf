@@ -75,3 +75,15 @@ crashable TaskTimeoutError
 @readonly
 routine TaskTimeoutError.crash_message() -> Text
   return "Threaded task did not finish before its deadline."
+
+### Raised when a thread tries to acquire an exclusive lock it already holds — a re-entrant
+### `claim()` (or `claim()` while `inspect()`-blocked under exclusion). The acquire would spin
+### forever, so it is reported as a self-deadlock crash rather than hanging.
+crashable ReentrantLockError
+  pass
+
+### Returns the default message for re-entrant lock acquisition.
+### :returns: The resulting `Text` value.
+@readonly
+routine ReentrantLockError.crash_message() -> Text
+  return "Re-entrant exclusive lock acquisition — the calling thread already holds this lock (self-deadlock)."

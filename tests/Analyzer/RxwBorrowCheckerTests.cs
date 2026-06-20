@@ -132,4 +132,64 @@ public class RxwBorrowCheckerTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+
+    [Fact]
+    public void Analyze_NestedClaim_AliasedHandle_Errors()
+    {
+        // `s2 = s.share()` is a CLONE — a second handle to the SAME controller. Claiming both in
+        // overlapping scopes deadlocks at runtime; the identity-keyed check catches it even though
+        // the handle names differ.
+        string source = Prelude + """
+                                  routine start()
+                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s2 = s.share()
+                                    using s.claim() as c1
+                                      using s2.claim() as c2
+                                        show("aliased")
+                                    return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "same shared data");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ReadersXorWriter);
+    }
+
+    [Fact]
+    public void Analyze_NestedClaimInspect_AliasedHandle_Errors()
+    {
+        // A reader on a clone still conflicts with a writer on the original (same controller).
+        string source = Prelude + """
+                                  routine start()
+                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s2 = s.share()
+                                    using s.claim() as c
+                                      using s2.inspect() as v
+                                        show("aliased reader")
+                                    return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "same shared data");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ReadersXorWriter);
+    }
+
+    [Fact]
+    public void Analyze_NestedInspect_AliasedHandle_Ok()
+    {
+        // Two readers coexist even on the same controller — readers-XOR-writer permits shared reads.
+        string source = Prelude + """
+                                  routine start()
+                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s2 = s.share()
+                                    using s.inspect() as v1
+                                      using s2.inspect() as v2
+                                        show("two readers, one controller")
+                                    return
+                                  """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
 }

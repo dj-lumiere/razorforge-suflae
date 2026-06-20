@@ -70,6 +70,10 @@ dangerous external("C") routine rf_task_wait_within(task: Address, secs: S64, ns
 dangerous external("C") routine rf_task_result_payload(task: Address) -> Address
 ### Releases a task control block.
 dangerous external("C") routine rf_task_destroy(task: Address)
+### Opaque, stable identifier for the calling OS thread (lock re-entrancy detection). Safe: takes
+### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
+### the same thread.
+external("C") routine rf_current_thread_id() -> U64
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.

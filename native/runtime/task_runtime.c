@@ -13,6 +13,17 @@
 #include <time.h>
 #endif
 
+/* Stable identifier for the calling OS thread. The exact value is opaque — only equality across
+ * calls on the same thread matters (lock re-entrancy detection). */
+uint64_t rf_current_thread_id(void)
+{
+#ifdef _WIN32
+    return (uint64_t)GetCurrentThreadId();
+#else
+    return (uint64_t)(uintptr_t)pthread_self();
+#endif
+}
+
 typedef struct rf_task_node
 {
     struct rf_task_node* next;

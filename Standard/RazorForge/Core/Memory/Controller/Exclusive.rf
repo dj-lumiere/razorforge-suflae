@@ -8,22 +8,33 @@ module Core
 record Exclusive obeys LockPolicy
   ### The lock flag: `0` = free, `1` = held.
   secret locked: Atomic[U8]
+  ### Thread id of the current holder, `0` when free. Tracked to detect a re-entrant acquire
+  ### (the holding thread asking for the lock again — a self-deadlock).
+  secret owner: Atomic[U64]
 
 ### Creates an unlocked exclusive policy.
 ### :returns: The resulting `Exclusive` value.
 routine Exclusive.$create() -> Exclusive
-  return Exclusive(locked: Atomic[U8](initial: 0_u8))
+  return Exclusive(locked: Atomic[U8](initial: 0_u8), owner: Atomic[U64](initial: 0_u64))
 
-### Acquires the lock, spinning until it is free. Blocking, not failing: a contended lock waits,
-### it does not crash. (A future re-entrant-deadlock check could make this a crashable routine.)
+### Acquires the lock, spinning until it is free. Blocking, not failing: a contended lock waits.
+### The ONE failure it does report is a re-entrant acquire — if the spin finds the lock held by the
+### CALLING thread, that can never resolve, so it crashes with {ReentrantLockError} instead of
+### hanging. Detection is best-effort (owner is read only on a failed CAS), so it never false-fires.
 routine Exclusive.acquire()
+  var tid = rf_current_thread_id()
   loop
     if me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
+      me.owner.store(desired: tid)
       break
+    if me.owner.load() == tid
+      crash_reentrant_lock!()
   return
 
-### Releases the lock.
+### Releases the lock. Clears the owner before the flag so a waiter that wins the next CAS never
+### observes the previous holder's id.
 routine Exclusive.release()
+  me.owner.store(desired: 0_u64)
   me.locked.store(desired: 0_u8)
   return
 
