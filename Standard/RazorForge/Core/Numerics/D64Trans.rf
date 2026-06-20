@@ -332,6 +332,32 @@ routine D64.copysign(you: D64) -> D64
   var p = me.decode()
   return d64_of_parts(p: D64Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
+### Returns -1, 0, or +1 indicating the sign of `me`; NaN propagates; ±0 -> +0.
+routine D64.signum() -> D64
+  if me.is_nan()
+    return D64.quiet_nan()
+  if me.is_zero()
+    return d64_of_parts(p: D64Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u64))
+  return if me.decode().sign then D64(from: -1_s64) else D64(from: 1_s64)
+
+### Throws when `me` is non-finite (inf or NaN).
+@crash_only
+routine D64.finite!() -> D64
+  if not me.is_finite()
+    return d64_nonfinite_crash!(r: me)
+  return me
+
+### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
+routine D64.fmod(you: D64) -> D64
+  if me.is_nan() or you.is_nan()
+    return D64.quiet_nan()
+  if me.is_infinite() or you.is_zero()
+    return D64.quiet_nan()
+  if you.is_infinite()
+    return me
+  var n = me.$truediv_unchecked(you: you).trunc()
+  return me.$sub_unchecked(you: you.$mul_unchecked(you: n))
+
 routine D64.fmax(you: D64) -> D64
   if me.is_nan()
     return you

@@ -561,7 +561,10 @@ routine UnpackedFloat[M, L, W].sqrt() -> ?UnpackedFloat[M, L, W]
     return UnpackedFloat[M, L, W].nan()
   if me.isinf
     return me
-  if int_eq[U64](a: W, b: 512_u64)
+  # Newton's reciprocal-sqrt (10 iters, quadratic) is width-generic and ~O(W); the bitwise
+  # `uf_isqrt` fallback below is O(W²). Only F256/F512 reach this engine (F128 has its own sqrt),
+  # so route both to Newton — previously only W==512 did, leaving F256 stuck on the slow path.
+  if unsigned_ge[U64](a: W, b: 256_u64)
     return me.sqrt_newton()
   var wb = reinterpret_bits[U64, S64](W)
   var offset = 100000000_s64

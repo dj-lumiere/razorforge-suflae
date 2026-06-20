@@ -95,54 +95,94 @@ routine U128.$create(from: U64) -> U128
 routine U128.$create(from: U128) -> U128
   return from
 
-### Converts an `F16` to `U128` via `U64` conversion.
+### Converts an `S256` to `U128`, throwing if the value is negative or exceeds U128_MAX.
+### :param from: The `S256` value to convert.
+### :returns: The lower 128 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..340282366920938463463374607431768211455.
+routine U128.$create!(from: S256) -> U128
+  if not (0_s256 <= from <= 340282366920938463463374607431768211455_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U128](from)
+
+### Converts a `U256` to `U128`, throwing if the value exceeds U128_MAX.
+### :param from: The `U256` value to convert.
+### :returns: The lower 128 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 340282366920938463463374607431768211455`.
+routine U128.$create!(from: U256) -> U128
+  if from > 340282366920938463463374607431768211455_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U128](from)
+
+### Converts an `F16` to `U128`, truncating toward zero.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the integer part exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
 routine U128.$create!(from: F16) -> U128
-  return from.U64!().U128()
+  return from.F32().U128!()
 
-### Converts an `F32` to `U128` via `U64` conversion.
+### Converts an `F32` to `U128`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
 routine U128.$create!(from: F32) -> U128
-  return from.U64!().U128()
+  if not from.is_finite() or from < 0.0_f32
+    throw IntegerOverflowError()
+  return float_to_unsigned[F32, U128](from)
 
-### Converts an `F64` to `U128` via `U64` conversion.
+### Converts an `F64` to `U128`, truncating toward zero.
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, negative, or >= 2^128.
 routine U128.$create!(from: F64) -> U128
-  return from.U64!().U128()
+  if from.is_nan() or from < 0.0_f64 or from >= 340282366920938463463374607431768211456.0_f64
+    throw IntegerOverflowError()
+  return float_to_unsigned[F64, U128](from)
 
-### Converts an `F128` to `U128` via `U64` conversion.
+### Converts an `F128` to `U128`, truncating toward zero.
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if negative or >= 2^128; {NumericDomainError} if NaN.
 routine U128.$create!(from: F128) -> U128
-  return from.U64!().U128()
+  var bits = from.to_bits()
+  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
+  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var frac = bit_and[U128](a: bits, b: f128_mant_mask())
+  if biased == 0x7FFF_u64
+    if int_eq[U128](a: frac, b: 0_u128)
+      throw NumericOverflowError(description: "cannot convert infinite F128 to U128")
+    throw NumericDomainError(description: "cannot convert NaN F128 to U128")
+  if sign == 1_u64 and (int_ne[U64](a: biased, b: 0_u64) or int_ne[U128](a: frac, b: 0_u128))
+    throw NumericOverflowError(description: "cannot convert negative F128 to U128")
+  if biased < 16383_u64
+    return 0_u128
+  var actual_exp = sub[U64](a: biased, b: 16383_u64)
+  if actual_exp >= 128_u64
+    throw NumericOverflowError(description: "F128 value out of range for U128")
+  var sig = bit_or[U128](a: f128_implicit(), b: frac)
+  if actual_exp <= 112_u64
+    return shift_right_unsigned[U128](sig, zero_extend[U64, U128](sub[U64](a: 112_u64, b: actual_exp)))
+  return shift_left[U128](sig, zero_extend[U64, U128](sub[U64](a: actual_exp, b: 112_u64)))
 
-### Converts a `D32` to `U128` via `U64` conversion.
+### Converts a `D32` to `U128`, truncating toward zero.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if the integer part overflows U128.
 routine U128.$create!(from: D32) -> U128
-  return from.U64!().U128()
+  return D128(from: from).to_u128!()
 
-### Converts a `D64` to `U128` via `U64` conversion.
+### Converts a `D64` to `U128`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if the integer part overflows U128.
 routine U128.$create!(from: D64) -> U128
-  return from.U64!().U128()
+  return D128(from: from).to_u128!()
 
-### Converts a `D128` to `U128` via `U64` conversion.
+### Converts a `D128` to `U128`, truncating toward zero.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if the integer part overflows U128.
 routine U128.$create!(from: D128) -> U128
-  return from.U64!().U128()
+  return from.to_u128!()
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)

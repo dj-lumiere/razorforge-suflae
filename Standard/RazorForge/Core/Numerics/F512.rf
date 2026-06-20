@@ -356,7 +356,7 @@ routine F512.exp10() -> F512
   return me.to_uf().mul(you: UnpackedFloat[U512, U1024, 512].ln10()).exp(n: 20_s64).to_f512a()
 
 ### me raised to the power `you`.
-routine F512.$pow!(you: F512) -> F512
+routine F512.$pow(you: F512) -> F512
   return me.abs().to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).mul(you: you.to_uf()).exp(n: 20_s64).to_f512a()
 
 ### Cube root.

@@ -1,4 +1,4 @@
-module Core
+﻿module Core
 
 import Collections
 
@@ -424,6 +424,8 @@ routine D32.$create(from: S64) -> D32
   return D32.from_int64(value: from)
 routine D32.$create(from: S128) -> D32
   return D32(from: D128(from: from))
+routine D32.$create(from: S256) -> D32
+  return D32(from: D128(from: from))
 
 routine D32.$create(from: U8) -> D32
   return D32.from_components(sign: false, coeff: U64(from), exp: 0_s64)
@@ -434,6 +436,8 @@ routine D32.$create(from: U32) -> D32
 routine D32.$create(from: U64) -> D32
   return D32.from_components(sign: false, coeff: from, exp: 0_s64)
 routine D32.$create(from: U128) -> D32
+  return D32(from: D128(from: from))
+routine D32.$create(from: U256) -> D32
   return D32(from: D128(from: from))
 
 # ============================================================================

@@ -290,7 +290,7 @@ routine UnpackedFloat[M, L, W].atanh() -> UnpackedFloat[M, L, W]
     d = d.neg()
   return d
 
-### asinh on the unpacked engine (log_/log1p_ N=20, M=1).
+### asinh on the unpacked engine (log_/log1p_ N=24, M=0 — no reduction sqrt).
 routine UnpackedFloat[M, L, W].asinh() -> UnpackedFloat[M, L, W]
   var y = me.abs()
   if me.isnan or y.isinf
@@ -301,12 +301,16 @@ routine UnpackedFloat[M, L, W].asinh() -> UnpackedFloat[M, L, W]
   d = d.fma(b: d, c: one).sqrt()
   # Pick ONE transcendental (lazy conditional): |x|>1 -> log, else log1p. The old
   # form always evaluated log1p then overwrote it with log for |x|>1 (double work).
-  var res = if ygt1 then d.fma(b: y, c: y).log(n: 20_s64, m: 1_s64, t: -10_s64) else d.sub(you: one).add(you: y).log1p(n: 20_s64, m: 1_s64)
+  # m=0 (no half-argument sqrt-reduction): the frexp range bounds |x|<=0.1716, so
+  # n=24 gives ~2^-130 (> F128's 113-bit / D128's 34-digit target) with NO reduction
+  # sqrt. The old m=1 paid a SECOND F256 sqrt (~1126 ns) on top of the inherent
+  # sqrt(x^2+1) for precision nothing downstream uses. atanh already runs m=0 here.
+  var res = if ygt1 then d.fma(b: y, c: y).log(n: 24_s64, m: 0_s64, t: -10_s64) else d.sub(you: one).add(you: y).log1p(n: 24_s64, m: 0_s64)
   if me.sign
     res = res.neg()
   return res
 
-### acosh on the unpacked engine (log_ N=20, M=1).
+### acosh on the unpacked engine (log_ N=24, M=0 — no reduction sqrt).
 routine UnpackedFloat[M, L, W].acosh() -> UnpackedFloat[M, L, W]
   if me.isnan
     return me
@@ -316,7 +320,8 @@ routine UnpackedFloat[M, L, W].acosh() -> UnpackedFloat[M, L, W]
   if me.isinf
     return UnpackedFloat[M, L, W].inf(sign: false)
   var s = me.add(you: one).mul(you: me.sub(you: one)).sqrt().add(you: me)
-  return s.log(n: 20_s64, m: 1_s64, t: -10_s64)
+  # m=0: drop the second (reduction) sqrt; n=24 (~2^-130) covers the F128/D128 target.
+  return s.log(n: 24_s64, m: 0_s64, t: -10_s64)
 
 # ============================================================================
 # F128 method wrappers

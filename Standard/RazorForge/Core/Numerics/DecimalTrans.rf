@@ -71,6 +71,24 @@ routine f512_pow10(e: S64) -> F512
     return f512a_one() / result
   return result
 
+### dec -> bin (F512): D128 parts (sign, coeff, exp10) as an F512. The 489-bit significand
+### makes `coeff x 10^exp` correctly-rounded for EVERY non-tie decimal->binary128 input —
+### the ~2^-475 worst-case error (correctly-rounded f512_pow10 table for |exp|<=400, faithful
+### beyond) is far below the ~2^-239 hardest-case decimal->F128 separation. F128.$create! uses
+### this as its provably-correct fast path; exact ties are resolved separately.
+routine d128parts_to_f512(p: D128Parts) -> F512
+  var s = if p.sign then 1_u64 else 0_u64
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return F512.from_bits(bits: f512a_inf(sign: s))
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return F512.from_bits(bits: f512a_qnan())
+  if int_eq[U128](a: p.coeff, b: 0_u128)
+    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](s), bits: uf_amt[U512](511_s64)))
+  var v = uf512_from_u256(c: zero_extend[U128, U256](p.coeff)).to_f512a() * f512_pow10(e: p.exp)
+  if p.sign
+    return v.$neg()
+  return v
+
 ### dec -> bin: Decimal value as an F512 (coeff exact, scaled by 10^exp).
 routine decimalfixed_to_f512(x: Decimal) -> F512
   var p = x.decode()
@@ -264,25 +282,41 @@ routine f512_atan2_cr(y: F512, x: F512) -> F512
 routine Decimal.exp() -> Decimal
   return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: me)))
 
-### Natural logarithm.
-routine Decimal.log() -> Decimal
+### Natural logarithm. Crashes with NumericDomainError if me < 0, NumericOverflowError if me = 0.
+routine Decimal.log!() -> Decimal
+  if me.signbit()
+    return decimalfixed_domain!()
+  if me.is_zero()
+    return decimalfixed_overflow!()
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).log())
 
 ### exp(me) - 1. Engine expm1 core — cancellation-free near 0 (NOT exp(me)-1).
 routine Decimal.expm1() -> Decimal
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).expm1())
 
-### log(1 + me). Engine log1p core — cancellation-free near 0 (NOT log(1+me)).
-routine Decimal.log1p() -> Decimal
+### log(1 + me). Engine log1p core — cancellation-free near 0. Crashes if me <= -1.
+routine Decimal.log1p!() -> Decimal
+  var y = me + Decimal(from: 1_s64)
+  if y.signbit()
+    return decimalfixed_domain!()
+  if y.is_zero()
+    return decimalfixed_overflow!()
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).log1p())
 
-### Base-2 logarithm: log(me) * (1/ln2). recip_ln2 is a verified full-precision
-### constant (correct to ~154 digits), so this is one log + a multiply (no second log).
-routine Decimal.log2() -> Decimal
+### Base-2 logarithm. Crashes with NumericDomainError if me < 0, NumericOverflowError if me = 0.
+routine Decimal.log2!() -> Decimal
+  if me.signbit()
+    return decimalfixed_domain!()
+  if me.is_zero()
+    return decimalfixed_overflow!()
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).log() * f512_recip_ln2())
 
-### Base-10 logarithm: log(me) * (1/ln10), constified like log2.
-routine Decimal.log10() -> Decimal
+### Base-10 logarithm. Crashes with NumericDomainError if me < 0, NumericOverflowError if me = 0.
+routine Decimal.log10!() -> Decimal
+  if me.signbit()
+    return decimalfixed_domain!()
+  if me.is_zero()
+    return decimalfixed_overflow!()
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).log() * f512_recip_ln10())
 
 ### 2 raised to this value: exp(me * ln2) via the Remez core.
@@ -294,11 +328,16 @@ routine Decimal.exp10() -> Decimal
   return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: me) * f512_ln10()))
 
 ### me raised to the power `you`: exp(you * log(me)) via the Remez core.
+### Crashes with NumericDomainError if me <= 0, NumericOverflowError on overflow.
 routine Decimal.$pow!(you: Decimal) -> Decimal
+  if me.signbit() or me.is_zero()
+    return decimalfixed_domain!()
   return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: you) * decimalfixed_to_f512(x: me).log()))
 
-### Square root (correctly rounded).
-routine Decimal.sqrt() -> Decimal
+### Square root (correctly rounded). Crashes with NumericDomainError if me < 0.
+routine Decimal.sqrt!() -> Decimal
+  if me.signbit()
+    return decimalfixed_domain!()
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).sqrt())
 
 ### Cube root.
@@ -325,13 +364,19 @@ routine Decimal.cos() -> Decimal
 routine Decimal.tan() -> Decimal
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).tan())
 
-### Arcsine. Composed on the dedicated atan core (f512_asin_cr).
-routine Decimal.asin() -> Decimal
-  return f512_to_decimala(x: f512_asin_cr(x: decimalfixed_to_f512(x: me)))
+### Arcsine. Crashes with NumericDomainError if |me| > 1.
+routine Decimal.asin!() -> Decimal
+  var x = decimalfixed_to_f512(x: me)
+  if x.abs() > f512a_one()
+    return decimalfixed_domain!()
+  return f512_to_decimala(x: f512_asin_cr(x: x))
 
-### Arccosine. Composed on the dedicated atan core (f512_acos_cr).
-routine Decimal.acos() -> Decimal
-  return f512_to_decimala(x: f512_acos_cr(x: decimalfixed_to_f512(x: me)))
+### Arccosine. Crashes with NumericDomainError if |me| > 1.
+routine Decimal.acos!() -> Decimal
+  var x = decimalfixed_to_f512(x: me)
+  if x.abs() > f512a_one()
+    return decimalfixed_domain!()
+  return f512_to_decimala(x: f512_acos_cr(x: x))
 
 ### Arctangent. Uses the dedicated range-reduced Remez core (f512_atan_cr).
 routine Decimal.atan() -> Decimal
@@ -357,13 +402,22 @@ routine Decimal.tanh() -> Decimal
 routine Decimal.asinh() -> Decimal
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).asinh())
 
-### Inverse hyperbolic cosine. Engine acosh core.
-routine Decimal.acosh() -> Decimal
-  return f512_to_decimala(x: decimalfixed_to_f512(x: me).acosh())
+### Inverse hyperbolic cosine. Crashes with NumericDomainError if me < 1.
+routine Decimal.acosh!() -> Decimal
+  var x = decimalfixed_to_f512(x: me)
+  if x < f512a_one()
+    return decimalfixed_domain!()
+  return f512_to_decimala(x: x.acosh())
 
-### Inverse hyperbolic tangent. Engine atanh core (log1p-based near 0).
-routine Decimal.atanh() -> Decimal
-  return f512_to_decimala(x: decimalfixed_to_f512(x: me).atanh())
+### Inverse hyperbolic tangent. Crashes with NumericDomainError if |me| > 1, NumericOverflowError if |me| = 1.
+routine Decimal.atanh!() -> Decimal
+  var x = decimalfixed_to_f512(x: me)
+  var ax = x.abs()
+  if ax > f512a_one()
+    return decimalfixed_domain!()
+  if ax == f512a_one()
+    return decimalfixed_overflow!()
+  return f512_to_decimala(x: x.atanh())
 
 # ============================================================================
 # erf / erfc — the generic N=120 continued-fraction cores (erf_cf/erfc_cf) run
@@ -490,13 +544,21 @@ routine f512_lgamma_cr(x: F512) -> F512
   var p = f512_lgamma_core(z: zu)
   return p.item1.to_f512a()
 
-### Gamma function.
-routine Decimal.tgamma() -> Decimal
-  return f512_to_decimala(x: f512_tgamma_cr(x: decimalfixed_to_f512(x: me)))
+### Gamma function. Crashes with NumericDomainError if me is a non-positive integer, NumericOverflowError on overflow.
+routine Decimal.tgamma!() -> Decimal
+  var r = f512_tgamma_cr(x: decimalfixed_to_f512(x: me))
+  if r.is_nan()
+    return decimalfixed_domain!()
+  if r.is_infinite()
+    return decimalfixed_overflow!()
+  return f512_to_decimala(x: r)
 
-### Natural log of the absolute value of gamma.
-routine Decimal.lgamma() -> Decimal
-  return f512_to_decimala(x: f512_lgamma_cr(x: decimalfixed_to_f512(x: me)))
+### Natural log of the absolute value of gamma. Crashes with NumericOverflowError at poles (me = 0 or negative integer).
+routine Decimal.lgamma!() -> Decimal
+  var r = f512_lgamma_cr(x: decimalfixed_to_f512(x: me))
+  if r.is_infinite()
+    return decimalfixed_overflow!()
+  return f512_to_decimala(x: r)
 
 # ============================================================================
 # libm manipulation / classification — decimal-native on DecimalParts (value =

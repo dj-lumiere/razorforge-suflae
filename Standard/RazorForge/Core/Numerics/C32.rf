@@ -37,6 +37,40 @@ routine C32.$create(from: C64) -> C32
 routine C32.$create(from: C128) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
+### Real scalar -> `C32` (imaginary part 0), routing the value through `F32`.
+### :param from: A real integer or float value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: S8) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: S16) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: S32) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: S64) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: S128) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: S256) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: U8) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: U16) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: U32) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: U64) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: U128) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: U256) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: F16) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: F64) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+routine C32.$create(from: F128) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
 ### Constructs a `C32` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
 ### :param r: The modulus (distance from origin).
 ### :param theta: The argument (angle in radians).

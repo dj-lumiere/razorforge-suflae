@@ -36,6 +36,40 @@ routine C64.$create(from: C32) -> C64
 routine C64.$create(from: C128) -> C64
   return C64(real: F64(from.real), imag: F64(from.imag))
 
+### Real scalar -> `C64` (imaginary part 0), routing the value through `F64`.
+### :param from: A real integer or float value.
+### :returns: `from + 0i` in double precision.
+routine C64.$create(from: S8) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: S16) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: S32) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: S64) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: S128) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: S256) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: U8) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: U16) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: U32) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: U64) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: U128) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: U256) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: F16) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: F32) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+routine C64.$create(from: F128) -> C64
+  return C64(real: F64(from: from), imag: 0.0_f64)
+
 ### Constructs a `C64` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
 ### :param r: The modulus (distance from origin).
 ### :param theta: The argument (angle in radians).

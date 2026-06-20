@@ -172,6 +172,27 @@ routine udiv256_sticky(num: U256, den: U256) -> U256
       return bit_or[U256](a: q, b: zero_extend[U64, U256](1_u64))
     return q
 
+### (quotient, remainder) of `num // den` from ONE Knuth-D call. Caller guarantees
+### `den != 0` (the single-limb path traps on a zero divisor, matching `//!` UB).
+### Replaces the inline `udiv/urem i256` software bit-loop (~256 iterations) with the
+### base-2⁶⁴ Knuth kernel (hardware `DIV r64` per limb).
+record UDR256
+  q: U256
+  r: U256
+
+routine udivrem256(num: U256, den: U256) -> UDR256
+  var av = num
+  var bv = den
+  var rem = Array[U64, 4]()
+  danger!
+    var qa = knuth_divide[4](
+      a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
+      b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
+      rem: rem.hijack())
+    var q = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](qa.hijack()).extract()
+    var r = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).extract()
+    return UDR256(q: q, r: r)
+
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
 routine U256.$represent() -> Text
   return wide_dec[U256](me)
@@ -230,6 +251,15 @@ routine U256.$create!(from: S128) -> U256
     throw IntegerOverflowError()
   return sign_extend[S128, U256](from)
 
+### Converts an `S256` to `U256`, throwing if the value is negative.
+### :param from: The `S256` value to convert.
+### :returns: The same bit pattern reinterpreted as `U256`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U256.$create!(from: S256) -> U256
+  if from < 0_s256
+    throw IntegerOverflowError()
+  return reinterpret_bits[S256, U256](from)
+
 ### Zero-extends a `U8` to `U256`.
 ### :param from: The `U8` value to widen.
 ### :returns: A `U256` equal in value to `from`.
@@ -266,54 +296,76 @@ routine U256.$create(from: U128) -> U256
 routine U256.$create(from: U256) -> U256
   return from
 
-### Converts an `F16` to `U256` via `U64` conversion.
+### Converts an `F16` to `U256`, truncating toward zero.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
 routine U256.$create!(from: F16) -> U256
-  return from.U64!().U256()
+  return from.F32().U256!()
 
-### Converts an `F32` to `U256` via `U64` conversion.
+### Converts an `F32` to `U256`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
 routine U256.$create!(from: F32) -> U256
-  return from.U64!().U256()
+  if not from.is_finite() or from < 0.0_f32
+    throw IntegerOverflowError()
+  return float_to_unsigned[F32, U256](from)
 
-### Converts an `F64` to `U256` via `U64` conversion.
+### Converts an `F64` to `U256`, truncating toward zero.
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, negative, or >= 2^256.
 routine U256.$create!(from: F64) -> U256
-  return from.U64!().U256()
+  if from.is_nan() or from < 0.0_f64 or from >= 115792089237316195423570985008687907853269984665640564039457584007913129639936.0_f64
+    throw IntegerOverflowError()
+  return float_to_unsigned[F64, U256](from)
 
-### Converts an `F128` to `U256` via `U64` conversion.
+### Converts an `F128` to `U256`, truncating toward zero.
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if negative or >= 2^256; {NumericDomainError} if NaN.
 routine U256.$create!(from: F128) -> U256
-  return from.U64!().U256()
+  var bits = from.to_bits()
+  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
+  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var frac = bit_and[U128](a: bits, b: f128_mant_mask())
+  if biased == 0x7FFF_u64
+    if int_eq[U128](a: frac, b: 0_u128)
+      throw NumericOverflowError(description: "cannot convert infinite F128 to U256")
+    throw NumericDomainError(description: "cannot convert NaN F128 to U256")
+  if sign == 1_u64 and (int_ne[U64](a: biased, b: 0_u64) or int_ne[U128](a: frac, b: 0_u128))
+    throw NumericOverflowError(description: "cannot convert negative F128 to U256")
+  if biased < 16383_u64
+    return 0_u256
+  var actual_exp = sub[U64](a: biased, b: 16383_u64)
+  if actual_exp >= 256_u64
+    throw NumericOverflowError(description: "F128 value out of range for U256")
+  var sig = zero_extend[U128, U256](bit_or[U128](a: f128_implicit(), b: frac))
+  if actual_exp <= 112_u64
+    return shift_right_unsigned[U256](sig, zero_extend[U64, U256](sub[U64](a: 112_u64, b: actual_exp)))
+  return shift_left[U256](sig, zero_extend[U64, U256](sub[U64](a: actual_exp, b: 112_u64)))
 
-### Converts a `D32` to `U256` via `U64` conversion.
+### Converts a `D32` to `U256`, truncating toward zero.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if the integer part overflows U256.
 routine U256.$create!(from: D32) -> U256
-  return from.U64!().U256()
+  return D128(from: from).to_u256!()
 
-### Converts a `D64` to `U256` via `U64` conversion.
+### Converts a `D64` to `U256`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if the integer part overflows U256.
 routine U256.$create!(from: D64) -> U256
-  return from.U64!().U256()
+  return D128(from: from).to_u256!()
 
-### Converts a `D128` to `U256` via `U64` conversion.
+### Converts a `D128` to `U256`, truncating toward zero.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if the integer part overflows U256.
 routine U256.$create!(from: D128) -> U256
-  return from.U64!().U256()
+  return from.to_u256!()
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
@@ -374,7 +426,7 @@ routine U256.$mul!(you: U256) -> U256
 routine U256.$floordiv!(you: U256) -> U256
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U256](a: me, b: you)
+  return udivrem256(num: me, den: you).q
 
 ### Returns `me % you` (integer remainder), throwing if `you` is zero.
 ### :param you: The divisor.
@@ -383,7 +435,7 @@ routine U256.$floordiv!(you: U256) -> U256
 routine U256.$mod!(you: U256) -> U256
   if you == 0_u256
     throw DivisionByZeroError()
-  return unsigned_rem[U256](a: me, b: you)
+  return udivrem256(num: me, den: you).r
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -433,13 +485,13 @@ dangerous routine U256.$mul_unchecked(you: U256) -> U256
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
 dangerous routine U256.$floordiv_unchecked(you: U256) -> U256
-  return unsigned_div[U256](a: me, b: you)
+  return udivrem256(num: me, den: you).q
 
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
 dangerous routine U256.$mod_unchecked(you: U256) -> U256
-  return unsigned_rem[U256](a: me, b: you)
+  return udivrem256(num: me, den: you).r
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -465,7 +517,7 @@ routine U256.$mul_clamp(you: U256) -> U256
   if int_eq[U256](a: me, b: 0_u256) or int_eq[U256](a: you, b: 0_u256)
     return 0_u256
   var result = mul[U256](a: me, b: you)
-  if int_ne[U256](unsigned_div[U256](a: result, b: me), you)
+  if int_ne[U256](udivrem256(num: result, den: me).q, you)
     return U256_MAX
   return result
 

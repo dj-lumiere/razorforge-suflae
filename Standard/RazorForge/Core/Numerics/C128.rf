@@ -37,6 +37,40 @@ routine C128.$create(from: C32) -> C128
 routine C128.$create(from: C64) -> C128
   return C128(real: F128(from.real), imag: F128(from.imag))
 
+### Real scalar -> `C128` (imaginary part 0), routing the value through `F128`.
+### :param from: A real integer or float value.
+### :returns: `from + 0i` in quadruple precision.
+routine C128.$create(from: S8) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: S16) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: S32) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: S64) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: S128) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: S256) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: U8) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: U16) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: U32) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: U64) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: U128) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: U256) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: F16) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: F32) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+routine C128.$create(from: F64) -> C128
+  return C128(real: F128(from: from), imag: 0.0_f128)
+
 ### Constructs a `C128` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
 ### :param r: The modulus (distance from origin).
 ### :param theta: The argument (angle in radians).
@@ -77,7 +111,7 @@ routine C128.$truediv(you: C128) -> C128
 ### Returns this complex value raised to the complex power `you` via `exp(you * log(me))`.
 ### :param you: The complex exponent.
 ### :returns: `me ** you` in quadruple precision.
-routine C128.$pow!(you: C128) -> C128
+routine C128.$pow(you: C128) -> C128
   return (you * me.log()).exp()
 
 ### Returns the arithmetic negation of this value.

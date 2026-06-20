@@ -1,4 +1,4 @@
-module Core
+﻿module Core
 
 import Collections
 
@@ -423,6 +423,8 @@ routine D64.$create(from: S64) -> D64
   return D64.from_int64(value: from)
 routine D64.$create(from: S128) -> D64
   return D64(from: D128(from: from))
+routine D64.$create(from: S256) -> D64
+  return D64(from: D128(from: from))
 
 routine D64.$create(from: U8) -> D64
   return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
@@ -433,6 +435,8 @@ routine D64.$create(from: U32) -> D64
 routine D64.$create(from: U64) -> D64
   return D64.from_components(sign: false, coeff: from, exp: 0_s64)
 routine D64.$create(from: U128) -> D64
+  return D64(from: D128(from: from))
+routine D64.$create(from: U256) -> D64
   return D64(from: D128(from: from))
 
 # ============================================================================
@@ -501,3 +505,4 @@ routine D64.to_bytes_be() -> Array[Byte, 8]
     result = set_byte_at(array: result, index: i, value: b)
     i = add[U64](a: i, b: 1_u64)
   return result
+

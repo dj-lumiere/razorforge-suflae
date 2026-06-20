@@ -100,6 +100,24 @@ routine U32.$create!(from: U128) -> U32
     throw IntegerOverflowError()
   return int_truncate[U128, U32](from)
 
+### Converts an `S256` to `U32`, throwing if the value is negative or exceeds 4294967295.
+### :param from: The `S256` value to convert.
+### :returns: The lower 32 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..4294967295.
+routine U32.$create!(from: S256) -> U32
+  if not (0_s256 <= from <= 4294967295_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U32](from)
+
+### Converts a `U256` to `U32`, throwing if the value exceeds 4294967295.
+### :param from: The `U256` value to convert.
+### :returns: The lower 32 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 4294967295`.
+routine U32.$create!(from: U256) -> U32
+  if from > 4294967295_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U32](from)
+
 ### Converts an `F16` to `U32` by widening to `F32` first, then truncating.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U32`.

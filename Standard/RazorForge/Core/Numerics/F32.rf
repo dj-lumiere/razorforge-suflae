@@ -92,12 +92,27 @@ routine F32.$create(from: U32) -> F32
 routine F32.$create(from: U64) -> F32
   return unsigned_to_float[U64, F32](from)
 
-### Converts a `U128` into single-precision floating-point form.
+### Converts a `U128` into single-precision floating-point form. Failable: throws when the
+### value exceeds the F32 range (overflow to +inf) — handle with `F32!`/`when`/`try_`.
 ### :param from: The unsigned 128-bit integer to convert.
-### :returns: The closest representable `F32` value under the target rounding rules.
-@inline
-routine F32.$create(from: U128) -> F32
-  return unsigned_to_float[U128, F32](from)
+### :returns: The closest representable `F32` value (finite).
+### :throws: {NumericOverflowError} if the value is out of the F32 range.
+routine F32.$create!(from: U128) -> F32
+  return unsigned_to_float[U128, F32](from).finite!()
+
+### Converts an `S256` to `F32`. Failable: throws if the value exceeds the F32 range.
+### :param from: The signed 256-bit integer to convert.
+### :returns: The closest representable `F32` value (finite).
+### :throws: {NumericOverflowError} if the value is out of the F32 range.
+routine F32.$create!(from: S256) -> F32
+  return signed_to_float[S256, F32](from).finite!()
+
+### Converts a `U256` to `F32`. Failable: throws if the value exceeds the F32 range.
+### :param from: The unsigned 256-bit integer to convert.
+### :returns: The closest representable `F32` value (finite).
+### :throws: {NumericOverflowError} if the value is out of the F32 range.
+routine F32.$create!(from: U256) -> F32
+  return unsigned_to_float[U256, F32](from).finite!()
 
 ### Widens a half-precision float to single precision.
 ### :param from: The `F16` value to widen.
@@ -165,6 +180,7 @@ routine f32_nonfinite_crash!(r: F32) -> F32
   if r.is_nan()
     return f32_domain_crash!()
   return f32_overflow_crash!()
+
 
 ### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `$add_unchecked` for raw IEEE.
 ### :param you: The addend.

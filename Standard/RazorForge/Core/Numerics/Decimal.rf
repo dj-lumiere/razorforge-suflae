@@ -146,6 +146,99 @@ common routine Decimal.infinity(sign: Bool) -> Decimal
 common routine Decimal.quiet_nan() -> Decimal
   return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 2_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
 
+# ============================================================================
+# Creators — integers. A `Decimal` is an `@llvm("i256")` carrier, so without these
+# `$create` overloads `Decimal(from: <int>)` would lower to a RAW i256 cast (storing
+# the bare integer in the bits) instead of the BID encoding {coeff, exp: 0}. decfinA
+# rounds magnitudes wider than 70 digits (round-half-even).
+# ============================================================================
+
+### Builds a Decimal from a sign + U256 magnitude at the given exponent (rounds to <= 70 digits).
+common routine Decimal.from_components(sign: Bool, coeff: U256, exp: S64) -> Decimal
+  return decimalfixed_of_parts(p: decfinA(sign: sign, coeff: zero_extend[U256, U512](coeff), exp: exp, pref: exp))
+
+### Builds a Decimal from a 64-bit signed integer (exponent 0).
+common routine Decimal.from_int64(value: S64) -> Decimal
+  var neg = signed_lt[S64](a: value, b: 0_s64)
+  var mag = if neg then sub[S64](a: 0_s64, b: value) else value
+  return Decimal.from_components(sign: neg, coeff: zero_extend[U64, U256](reinterpret_bits[S64, U64](mag)), exp: 0_s64)
+
+### Signed integer -> Decimal.
+routine Decimal.$create(from: S8) -> Decimal
+  return Decimal.from_int64(value: S64(from))
+routine Decimal.$create(from: S16) -> Decimal
+  return Decimal.from_int64(value: S64(from))
+routine Decimal.$create(from: S32) -> Decimal
+  return Decimal.from_int64(value: S64(from))
+routine Decimal.$create(from: S64) -> Decimal
+  return Decimal.from_int64(value: from)
+routine Decimal.$create(from: S128) -> Decimal
+  var neg = signed_lt[S128](a: from, b: 0_s128)
+  var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
+  return Decimal.from_components(sign: neg, coeff: zero_extend[U128, U256](mag), exp: 0_s64)
+routine Decimal.$create(from: S256) -> Decimal
+  var neg = signed_lt[S256](a: from, b: 0_s256)
+  var mag = if neg then reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: from)) else reinterpret_bits[S256, U256](from)
+  return Decimal.from_components(sign: neg, coeff: mag, exp: 0_s64)
+
+### Unsigned integer -> Decimal.
+routine Decimal.$create(from: U8) -> Decimal
+  return Decimal.from_components(sign: false, coeff: zero_extend[U8, U256](from), exp: 0_s64)
+routine Decimal.$create(from: U16) -> Decimal
+  return Decimal.from_components(sign: false, coeff: zero_extend[U16, U256](from), exp: 0_s64)
+routine Decimal.$create(from: U32) -> Decimal
+  return Decimal.from_components(sign: false, coeff: zero_extend[U32, U256](from), exp: 0_s64)
+routine Decimal.$create(from: U64) -> Decimal
+  return Decimal.from_components(sign: false, coeff: zero_extend[U64, U256](from), exp: 0_s64)
+routine Decimal.$create(from: U128) -> Decimal
+  return Decimal.from_components(sign: false, coeff: zero_extend[U128, U256](from), exp: 0_s64)
+routine Decimal.$create(from: U256) -> Decimal
+  return Decimal.from_components(sign: false, coeff: from, exp: 0_s64)
+
+# ============================================================================
+# Creators — binary floats. Routed through D128 (the matched float->decimal engine,
+# correctly rounded): F16/F32/F64 are captured well within D128's 34 digits
+# (round-trip-exact); F128 is correctly rounded to 34 digits. inf/NaN pass through
+# the D128 -> Decimal parts path. A full 70-digit binary->decimal would need an F512
+# widening primitive (`to_f512a` only accepts the native 512-engine uf) — future work.
+# ============================================================================
+
+### Binary float -> Decimal (correctly rounded via D128).
+routine Decimal.$create(from: F16) -> Decimal
+  return Decimal(from: D128(from: from))
+routine Decimal.$create(from: F32) -> Decimal
+  return Decimal(from: D128(from: from))
+routine Decimal.$create(from: F64) -> Decimal
+  return Decimal(from: D128(from: from))
+routine Decimal.$create(from: F128) -> Decimal
+  return Decimal(from: D128(from: from))
+
+# ============================================================================
+# Creators — IEEE decimals (D32/D64/D128). Exact: the source coefficient (<= 34
+# digits) and exponent transfer directly into the 70-digit cohort; inf/NaN pass
+# through. Routed via the decoded parts, NOT binary F512 (decimals aren't exact
+# in binary).
+# ============================================================================
+
+### Builds a Decimal from already-decoded decimal parts (special-aware).
+common routine Decimal.from_decimal_parts(sign: Bool, special: U64, exp: S64, coeff: U256) -> Decimal
+  if int_eq[U64](a: special, b: 1_u64)
+    return Decimal.infinity(sign: sign)
+  if unsigned_ge[U64](a: special, b: 2_u64)
+    return Decimal.quiet_nan()
+  return Decimal.from_components(sign: sign, coeff: coeff, exp: exp)
+
+### IEEE decimal -> Decimal.
+routine Decimal.$create(from: D32) -> Decimal
+  var p = from.decode()
+  return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U256](p.coeff))
+routine Decimal.$create(from: D64) -> Decimal
+  var p = from.decode()
+  return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U256](p.coeff))
+routine Decimal.$create(from: D128) -> Decimal
+  var p = from.decode()
+  return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U128, U256](p.coeff))
+
 ### Classification.
 @readonly
 routine Decimal.is_finite() -> Bool

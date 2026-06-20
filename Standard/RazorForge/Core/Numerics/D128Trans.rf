@@ -62,9 +62,11 @@ routine f256_pow10(e: S64) -> F256
     return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a() / result
   return result
 
-### dec -> bin: D128 value as an F256 (coeff exact, scaled by 10^exp).
-routine d128_to_f256(x: D128) -> F256
-  var p = x.decode()
+### dec -> bin: decimal parts (sign, coeff, exp10) as an F256 (coeff exact, scaled by
+### 10^exp). Takes raw parts so the binary parsers (F128/F64) can convert the FULL scanned
+### coefficient directly and round once, instead of double-rounding through 34-digit D128.
+### The coeff may carry up to 38 digits (<= 126 bits); the 237-bit significand holds it exactly.
+routine d128parts_to_f256(p: D128Parts) -> F256
   var s = if p.sign then 1_u64 else 0_u64
   if int_eq[U64](a: p.special, b: 1_u64)
     return F256.from_bits(bits: f256a_inf(sign: s))
@@ -73,6 +75,10 @@ routine d128_to_f256(x: D128) -> F256
   if int_eq[U128](a: p.coeff, b: 0_u128)
     return F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](s), bits: uf_amt[U256](255_s64)))
   return uf256_from_u128(c: p.coeff, sign: p.sign).to_f256a() * f256_pow10(e: p.exp)
+
+### dec -> bin: D128 value as an F256 (coeff exact, scaled by 10^exp).
+routine d128_to_f256(x: D128) -> F256
+  return d128parts_to_f256(p: x.decode())
 
 ### bin -> dec: F256 value as a D128, correctly rounded to <=34 digits.
 routine f256_to_d128(x: F256) -> D128
@@ -168,7 +174,7 @@ routine D128.sqrt_unchecked() -> D128
 routine D128.cbrt() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).cbrt())
 routine D128.pow_unchecked(you: D128) -> D128
-  return f256_to_d128(x: d128_to_f256(x: me).$pow!(you: d128_to_f256(x: you)))
+  return f256_to_d128(x: d128_to_f256(x: me).$pow(you: d128_to_f256(x: you)))
 routine D128.hypot(you: D128) -> D128
   var r = me.hypot_unchecked(you: you)
   if r.is_finite()
@@ -427,6 +433,32 @@ routine D128.$neg() -> D128
 routine D128.copysign(you: D128) -> D128
   var p = me.decode()
   return d128_of_parts(p: D128Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
+
+### Returns -1, 0, or +1 indicating the sign of `me`; NaN propagates; ±0 -> +0.
+routine D128.signum() -> D128
+  if me.is_nan()
+    return D128.quiet_nan()
+  if me.is_zero()
+    return d128_of_parts(p: D128Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u128))
+  return if me.decode().sign then D128(from: -1_s64) else D128(from: 1_s64)
+
+### Throws when `me` is non-finite (inf or NaN).
+@crash_only
+routine D128.finite!() -> D128
+  if not me.is_finite()
+    return d128_nonfinite_crash!(r: me)
+  return me
+
+### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
+routine D128.fmod(you: D128) -> D128
+  if me.is_nan() or you.is_nan()
+    return D128.quiet_nan()
+  if me.is_infinite() or you.is_zero()
+    return D128.quiet_nan()
+  if you.is_infinite()
+    return me
+  var n = (me / you).trunc()
+  return me - n * you
 
 routine D128.fmax(you: D128) -> D128
   if me.is_nan()

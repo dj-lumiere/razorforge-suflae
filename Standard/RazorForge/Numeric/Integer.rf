@@ -51,6 +51,68 @@ routine Integer.$create(value: U64) -> Integer
   rf_bigint_set_u64(handle: int.handle, value: value)
   return int
 
+# ============================================================================
+# Creators — fixed-width integer widenings. Pure RazorForge: every width is
+# composed from S64/U64 limbs via shift+add, so the native handle only ever
+# ingests 64-bit values — no new FFI entry point. All are total (any fixed-width
+# integer fits an unbounded Integer exactly).
+# ============================================================================
+
+# Private 64-bit base builders. They reuse the EXISTING native setters (no new FFI) and
+# construct via the real handle/ctrl fields, so they avoid the `Integer(value:)` call form
+# (which mis-lowers) and don't collide with the `$create(value: S64/U64)` overloads.
+routine integer_of_s64(v: S64) -> Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigint_set_i64(handle: int.handle, value: v)
+  return int
+routine integer_of_u64(v: U64) -> Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigint_set_u64(handle: int.handle, value: v)
+  return int
+
+### Widens a fixed-width integer into an `Integer` (exact). 64-bit limbs go through the
+### native setters; wider widths compose them with shift+add — no new FFI surface. (`S64`
+### and `U64` keep their existing `$create(value:)` overloads, which a label-blind mangle
+### would collide with.)
+### :param from: The signed source value.
+### :returns: The equal `Integer` value.
+routine Integer.$create(from: S8) -> Integer
+  return integer_of_s64(v: sign_extend[S8, S64](from))
+routine Integer.$create(from: S16) -> Integer
+  return integer_of_s64(v: sign_extend[S16, S64](from))
+routine Integer.$create(from: S32) -> Integer
+  return integer_of_s64(v: sign_extend[S32, S64](from))
+routine Integer.$create(from: S128) -> Integer
+  var neg = signed_lt[S128](a: from, b: 0_s128)
+  var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
+  var r = Integer(from: mag)
+  return if neg then r.$neg() else r
+routine Integer.$create(from: S256) -> Integer
+  var neg = signed_lt[S256](a: from, b: 0_s256)
+  var mag = if neg then reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: from)) else reinterpret_bits[S256, U256](from)
+  var r = Integer(from: mag)
+  return if neg then r.$neg() else r
+
+### Widens an unsigned fixed-width integer into an `Integer` (exact).
+### :param from: The unsigned source value.
+### :returns: The equal `Integer` value.
+routine Integer.$create(from: U8) -> Integer
+  return integer_of_u64(v: zero_extend[U8, U64](from))
+routine Integer.$create(from: U16) -> Integer
+  return integer_of_u64(v: zero_extend[U16, U64](from))
+routine Integer.$create(from: U32) -> Integer
+  return integer_of_u64(v: zero_extend[U32, U64](from))
+routine Integer.$create(from: U128) -> Integer
+  # value = hi * 2^64 + lo, from the two 64-bit limbs.
+  var hi = integer_of_u64(v: int_truncate[U128, U64](from >>> 64u32))
+  var lo = integer_of_u64(v: int_truncate[U128, U64](from))
+  return hi.$shl(bits: 64_s32).$add(other: lo)
+routine Integer.$create(from: U256) -> Integer
+  # value = hi * 2^128 + lo, reusing the U128 widening for each 128-bit half.
+  var hi = Integer(from: int_truncate[U256, U128](from >>> 128u32))
+  var lo = Integer(from: int_truncate[U256, U128](from))
+  return hi.$shl(bits: 128_s32).$add(other: lo)
+
 ### Parses an integer from text using the requested radix.
 ### The input may include the sign and digits accepted by the selected base.
 ### :param text: The textual integer representation.

@@ -94,6 +94,24 @@ routine U64.$create!(from: U128) -> U64
     throw IntegerOverflowError()
   return int_truncate[U128, U64](from)
 
+### Converts an `S256` to `U64`, throwing if the value is negative or exceeds U64_MAX.
+### :param from: The `S256` value to convert.
+### :returns: The lower 64 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..18446744073709551615.
+routine U64.$create!(from: S256) -> U64
+  if not (0_s256 <= from <= 18446744073709551615_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U64](from)
+
+### Converts a `U256` to `U64`, throwing if the value exceeds U64_MAX.
+### :param from: The `U256` value to convert.
+### :returns: The lower 64 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 18446744073709551615`.
+routine U64.$create!(from: U256) -> U64
+  if from > 18446744073709551615_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U64](from)
+
 ### Truncates a 16-bit float to `U64` by first widening to `F32`.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.

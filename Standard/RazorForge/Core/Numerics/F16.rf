@@ -43,23 +43,20 @@ routine F16.$create(from: S16) -> F16
 ### Converts an `S32` into half-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-@inline
-routine F16.$create(from: S32) -> F16
-  return signed_to_float[S32, F16](from)
+routine F16.$create!(from: S32) -> F16
+  return signed_to_float[S32, F16](from).finite!()
 
 ### Converts an `S64` into half-precision floating-point form.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-@inline
-routine F16.$create(from: S64) -> F16
-  return signed_to_float[S64, F16](from)
+routine F16.$create!(from: S64) -> F16
+  return signed_to_float[S64, F16](from).finite!()
 
 ### Converts an `S128` into half-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-@inline
-routine F16.$create(from: S128) -> F16
-  return signed_to_float[S128, F16](from)
+routine F16.$create!(from: S128) -> F16
+  return signed_to_float[S128, F16](from).finite!()
 
 ### Converts a `U8` into half-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
@@ -71,30 +68,38 @@ routine F16.$create(from: U8) -> F16
 ### Converts a `U16` into half-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-@inline
-routine F16.$create(from: U16) -> F16
-  return unsigned_to_float[U16, F16](from)
+routine F16.$create!(from: U16) -> F16
+  return unsigned_to_float[U16, F16](from).finite!()
 
 ### Converts a `U32` into half-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-@inline
-routine F16.$create(from: U32) -> F16
-  return unsigned_to_float[U32, F16](from)
+routine F16.$create!(from: U32) -> F16
+  return unsigned_to_float[U32, F16](from).finite!()
 
 ### Converts a `U64` into half-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-@inline
-routine F16.$create(from: U64) -> F16
-  return unsigned_to_float[U64, F16](from)
+routine F16.$create!(from: U64) -> F16
+  return unsigned_to_float[U64, F16](from).finite!()
 
 ### Converts a `U128` into half-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-@inline
-routine F16.$create(from: U128) -> F16
-  return unsigned_to_float[U128, F16](from)
+routine F16.$create!(from: U128) -> F16
+  return unsigned_to_float[U128, F16](from).finite!()
+
+### Converts an `S256` into half-precision floating-point form.
+### :param from: The signed 256-bit integer to convert.
+### :returns: The closest representable `F16` value.
+routine F16.$create!(from: S256) -> F16
+  return signed_to_float[S256, F16](from).finite!()
+
+### Converts a `U256` into half-precision floating-point form.
+### :param from: The unsigned 256-bit integer to convert.
+### :returns: The closest representable `F16` value.
+routine F16.$create!(from: U256) -> F16
+  return unsigned_to_float[U256, F16](from).finite!()
 
 ### Returns an existing `F16` unchanged.
 ### :param from: The half-precision value to forward.
@@ -164,6 +169,7 @@ routine f16_nonfinite_crash!(r: F16) -> F16
   if r.is_nan()
     return f16_domain_crash!()
   return f16_overflow_crash!()
+
 
 ### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `$add_unchecked` for raw IEEE.
 ### :param you: The addend.

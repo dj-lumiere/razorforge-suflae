@@ -96,54 +96,83 @@ routine S256.$create!(from: U256) -> S256
     throw IntegerOverflowError()
   return reinterpret_bits[U256, S256](from)
 
-### Converts an `F16` to `S256` via `S64` conversion.
+### Converts an `F16` to `S256`, truncating toward zero.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
 routine S256.$create!(from: F16) -> S256
-  return from.S64!().S256()
+  return from.F32().S256!()
 
-### Converts an `F32` to `S256` via `S64` conversion.
+### Converts an `F32` to `S256`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
 routine S256.$create!(from: F32) -> S256
-  return from.S64!().S256()
+  if not from.is_finite()
+    throw IntegerOverflowError()
+  return float_to_signed[F32, S256](from)
 
-### Converts an `F64` to `S256` via `S64` conversion.
+### Converts an `F64` to `S256`, truncating toward zero.
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^255, 2^255-1].
 routine S256.$create!(from: F64) -> S256
-  return from.S64!().S256()
+  if from.is_nan() or from < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0_f64 or from >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0_f64
+    throw IntegerOverflowError()
+  return float_to_signed[F64, S256](from)
 
-### Converts an `F128` to `S256` via `S64` conversion.
+### Converts an `F128` to `S256`, truncating toward zero.
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
 routine S256.$create!(from: F128) -> S256
-  return from.S64!().S256()
+  var bits = from.to_bits()
+  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
+  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var frac = bit_and[U128](a: bits, b: f128_mant_mask())
+  if biased == 0x7FFF_u64
+    if int_eq[U128](a: frac, b: 0_u128)
+      throw NumericOverflowError(description: "cannot convert infinite F128 to S256")
+    throw NumericDomainError(description: "cannot convert NaN F128 to S256")
+  if biased < 16383_u64
+    return 0_s256
+  var actual_exp = sub[U64](a: biased, b: 16383_u64)
+  if actual_exp >= 256_u64
+    throw NumericOverflowError(description: "F128 value out of range for S256")
+  if actual_exp == 255_u64
+    if sign == 0_u64 or int_ne[U128](a: frac, b: 0_u128)
+      throw NumericOverflowError(description: "F128 value out of range for S256")
+    return reinterpret_bits[U256, S256](shift_left[U256](value: 1_u256, bits: 255_u256))
+  var sig = zero_extend[U128, U256](bit_or[U128](a: f128_implicit(), b: frac))
+  lateinit var int_part: U256
+  if actual_exp <= 112_u64
+    int_part = shift_right_unsigned[U256](sig, zero_extend[U64, U256](sub[U64](a: 112_u64, b: actual_exp)))
+  else
+    int_part = shift_left[U256](sig, zero_extend[U64, U256](sub[U64](a: actual_exp, b: 112_u64)))
+  if sign == 1_u64
+    return sub[S256](a: 0_s256, b: reinterpret_bits[U256, S256](int_part))
+  return reinterpret_bits[U256, S256](int_part)
 
-### Converts a `D32` to `S256` via `S64` conversion.
+### Converts a `D32` to `S256`, truncating toward zero.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {NumericOverflowError} if the integer part overflows S256.
 routine S256.$create!(from: D32) -> S256
-  return from.S64!().S256()
+  return D128(from: from).to_s256!()
 
-### Converts a `D64` to `S256` via `S64` conversion.
+### Converts a `D64` to `S256`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {NumericOverflowError} if the integer part overflows S256.
 routine S256.$create!(from: D64) -> S256
-  return from.S64!().S256()
+  return D128(from: from).to_s256!()
 
-### Converts a `D128` to `S256` via `S64` conversion.
+### Converts a `D128` to `S256`, truncating toward zero.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {NumericOverflowError} if the integer part overflows S256.
 routine S256.$create!(from: D128) -> S256
-  return from.S64!().S256()
+  return from.to_s256!()
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
@@ -204,11 +233,11 @@ routine s256_abs_u256(x: S256) -> U256
     return reinterpret_bits[S256, U256](x)
   return reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: x))
 
-### Returns `me // you` (floor division), throwing on errors.
-### Floor division rounds toward negative infinity (unlike truncating division).
+### Returns `me // you` (euclidean division), throwing on errors.
+### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `$mod!`.
 ### The special case `S256_MIN // -1` would overflow and throws.
 ### :param you: The divisor.
-### :returns: The floor quotient `me // you`.
+### :returns: The euclidean quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S256_MIN` and `you == -1`.
 routine S256.$floordiv!(you: S256) -> S256
@@ -218,13 +247,15 @@ routine S256.$floordiv!(you: S256) -> S256
     throw IntegerOverflowError()
   var amag = s256_abs_u256(x: me)
   var bmag = s256_abs_u256(x: you)
-  var uq = amag.$floordiv!(bmag)
+  # ONE Knuth divide yields both magnitude quotient and remainder.
+  var dr = udivrem256(num: amag, den: bmag)
+  var uq = dr.q
   var aneg = signed_lt[S256](a: me, b: 0_s256)
   var bneg = signed_lt[S256](a: you, b: 0_s256)
   # EUCLIDEAN division (remainder always >= 0), consistent with S8..S128. When the
   # dividend is negative and the division is inexact the quotient MAGNITUDE rounds up
   # by one; the quotient is positive iff the operands share a sign.
-  if aneg and int_ne[U256](a: amag.$mod(bmag), b: 0_u256)
+  if aneg and int_ne[U256](a: dr.r, b: 0_u256)
     uq = add[U256](a: uq, b: 1_u256)
   var q = reinterpret_bits[U256, S256](uq)
   if aneg == bneg
@@ -298,28 +329,32 @@ dangerous routine S256.$sub_unchecked(you: S256) -> S256
 dangerous routine S256.$mul_unchecked(you: S256) -> S256
   return signed_mul_exact[S256](a: me, b: you)
 
-### Returns `me // you` (floor division) with undefined behavior if `you == 0` or overflow.
+### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
-### :returns: The floor quotient, assuming `you != 0` and no overflow.
+### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
 dangerous routine S256.$floordiv_unchecked(you: S256) -> S256
-  var quotient = signed_div[S256](a: me, b: you)
-  var remainder = signed_rem[S256](a: me, b: you)
-  if remainder < 0_s256
-    if you > 0_s256
-      return quotient - 1_s256
-    return quotient + 1_s256
-  return quotient
+  # Knuth divide on magnitudes (one call → quotient + remainder), euclidean adjust.
+  var dr = udivrem256(num: s256_abs_u256(x: me), den: s256_abs_u256(x: you))
+  var uq = dr.q
+  var aneg = signed_lt[S256](a: me, b: 0_s256)
+  var bneg = signed_lt[S256](a: you, b: 0_s256)
+  if aneg and int_ne[U256](a: dr.r, b: 0_u256)
+    uq = add[U256](a: uq, b: 1_u256)
+  var q = reinterpret_bits[U256, S256](uq)
+  if aneg == bneg
+    return q
+  return sub[S256](a: 0_s256, b: q)
 
-### Returns `me % you` (floor modulo) with undefined behavior if `you == 0`.
+### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
-### :returns: The floor modulo, assuming `you != 0`.
+### :returns: The euclidean remainder, assuming `you != 0`.
 dangerous routine S256.$mod_unchecked(you: S256) -> S256
-  var remainder = signed_rem[S256](a: me, b: you)
-  if remainder < 0_s256
-    if you > 0_s256
-      return remainder + you
-    return remainder - you
-  return remainder
+  # Knuth divide on magnitudes; reflect a negative dividend's remainder into [0, |you|).
+  var bmag = s256_abs_u256(x: you)
+  var ur = udivrem256(num: s256_abs_u256(x: me), den: bmag).r
+  if signed_lt[S256](a: me, b: 0_s256) and int_ne[U256](a: ur, b: 0_u256)
+    ur = sub[U256](a: bmag, b: ur)
+  return reinterpret_bits[U256, S256](ur)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -346,7 +381,12 @@ routine S256.$mul_clamp(you: S256) -> S256
   if int_eq[S256](a: me, b: 0_s256) or int_eq[S256](a: you, b: 0_s256)
     return 0_s256
   var result = mul[S256](a: me, b: you)
-  if int_ne[S256](signed_div[S256](a: result, b: me), you)
+  # Signed divide-back via Knuth on magnitudes (me != 0): trunc(result / me).
+  var qmag = udivrem256(num: s256_abs_u256(x: result), den: s256_abs_u256(x: me)).q
+  var q = reinterpret_bits[U256, S256](qmag)
+  if int_ne[Bool](a: signed_lt[S256](a: result, b: 0_s256), b: signed_lt[S256](a: me, b: 0_s256))
+    q = sub[S256](a: 0_s256, b: q)
+  if int_ne[S256](a: q, b: you)
     var same_sign = int_eq[Bool](signed_gt[S256](me, 0_s256), signed_gt[S256](you, 0_s256))
     if same_sign
       return S256_MAX
@@ -578,6 +618,30 @@ routine S256.reverse_bits() -> S256
 routine S256.swap_bytes() -> S256
   return byte_swap[S256](me)
 
+### Returns this value rotated left by `bits` positions.
+routine S256.rotate_left(bits: U32) -> S256
+  return reinterpret_bits[U256, S256](reinterpret_bits[S256, U256](me).rotate_left(bits: bits))
+
+### Returns this value rotated right by `bits` positions.
+routine S256.rotate_right(bits: U32) -> S256
+  return reinterpret_bits[U256, S256](reinterpret_bits[S256, U256](me).rotate_right(bits: bits))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine S256.to_bytes_le() -> Array[Byte, 32]
+  return reinterpret_bits[S256, U256](me).to_bytes_le()
+
+### Returns the raw byte representation of this value in big-endian order.
+routine S256.to_bytes_be() -> Array[Byte, 32]
+  return reinterpret_bits[S256, U256](me).to_bytes_be()
+
+### Builds an `S256` from its little-endian raw byte representation.
+common routine S256.from_bytes_le(bytes: Array[Byte, 32]) -> S256
+  return reinterpret_bits[U256, S256](U256.from_bytes_le(bytes: bytes))
+
+### Builds an `S256` from its big-endian raw byte representation.
+common routine S256.from_bytes_be(bytes: Array[Byte, 32]) -> S256
+  return reinterpret_bits[U256, S256](U256.from_bytes_be(bytes: bytes))
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -611,10 +675,7 @@ routine S256.is_odd() -> Bool
 ### Returns `true` if this value is an exact power of two.
 ### Negative values always return `false`.
 routine S256.is_power_of_two() -> Bool
-  var is_pos = signed_gt[S256](me, 0_s256)
-  var minus_one = sub[S256](a: me, b: 1_s256)
-  var anded = bit_and[S256](a: me, b: minus_one)
-  return is_pos and int_eq[S256](a: anded, b: 0_s256)
+  return me > 0_s256 and (me & (me -% 1_s256)) == 0_s256
 
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.

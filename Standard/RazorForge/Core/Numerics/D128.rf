@@ -172,6 +172,53 @@ routine D128.to_s128!() -> S128
   if unsigned_ge[U128](a: mag, b: lim)
     throw NumericOverflowError(description: "decimal out of range for a signed 128-bit integer")
   return reinterpret_bits[U128, S128](mag)
+
+### Truncating integer magnitude (toward zero) of a finite decimal as a U256. Throws when
+### the integer part overflows U256. Coefficient carries <= 34 digits so exp >= 78 always
+### overflows; negative exp past -38 truncates to zero (no 34-digit value survives /10^39).
+routine d128_int_magnitude_u256!(coeff: U128, exp: S64) -> U256
+  if int_eq[U128](a: coeff, b: 0)
+    return 0_u256
+  if signed_ge[S64](a: exp, b: 0_s64)
+    if signed_ge[S64](a: exp, b: 78_s64)
+      throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
+    var prod = mul[U512](a: zero_extend[U128, U512](coeff), b: zero_extend[U256, U512](pow10_tbl(k: exp)))
+    if int_ne[U512](a: shift_right_unsigned[U512](value: prod, bits: uf_amt[U512](256_s64)), b: 0)
+      throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
+    return int_truncate[U512, U256](prod)
+  var d = sub[S64](a: 0_s64, b: exp)
+  if signed_ge[S64](a: d, b: 39_s64)
+    return 0_u256
+  return zero_extend[U128, U256](div_pow10_u128(x: coeff, k: d))
+
+### Truncates toward zero to an unsigned 256-bit integer. Throws on a non-finite value, a
+### negative value, or an integer part beyond U256.
+routine D128.to_u256!() -> U256
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    throw NumericDomainError(description: "cannot convert a non-finite decimal to an integer")
+  if p.sign and int_ne[U128](a: p.coeff, b: 0)
+    throw NumericOverflowError(description: "cannot convert a negative decimal to an unsigned integer")
+  return d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
+
+### Truncates toward zero to a signed 256-bit integer. Throws on a non-finite value or an
+### integer part outside [-2^255, 2^255-1].
+routine D128.to_s256!() -> S256
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    throw NumericDomainError(description: "cannot convert a non-finite decimal to an integer")
+  var mag = d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
+  var lim = shift_left[U256](value: 1, bits: uf_amt[U256](255_s64))
+  if p.sign
+    if unsigned_gt[U256](a: mag, b: lim)
+      throw NumericOverflowError(description: "decimal out of range for a signed 256-bit integer")
+    if int_eq[U256](a: mag, b: lim)
+      return reinterpret_bits[U256, S256](lim)
+    return sub[S256](a: 0_s256, b: reinterpret_bits[U256, S256](mag))
+  if unsigned_ge[U256](a: mag, b: lim)
+    throw NumericOverflowError(description: "decimal out of range for a signed 256-bit integer")
+  return reinterpret_bits[U256, S256](mag)
+
 # ============================================================================
 # Arithmetic core (formerly DecMathB) — U256 working width, clz digit count,
 # reciprocal pow10 reduction.
@@ -889,6 +936,12 @@ routine D128.$create(from: S128) -> D128
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
   return D128.from_components(sign: neg, coeff: mag, exp: 0_s64)
+routine D128.$create(from: S256) -> D128
+  # The 256-bit magnitude can exceed 34 digits, so round it (half-even) via decfinB
+  # rather than D128.from_components (which assumes a <=34-digit U128 coefficient).
+  var neg = signed_lt[S256](a: from, b: 0_s256)
+  var mag = if neg then reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: from)) else reinterpret_bits[S256, U256](from)
+  return d128_of_parts(p: decfinB(sign: neg, coeff: mag, exp: 0_s64, pref: 0_s64))
 
 ### Converts an unsigned integer into decimal128.
 routine D128.$create(from: U8) -> D128
@@ -901,6 +954,9 @@ routine D128.$create(from: U64) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 routine D128.$create(from: U128) -> D128
   return D128.from_components(sign: false, coeff: from, exp: 0_s64)
+routine D128.$create(from: U256) -> D128
+  # >34-digit magnitude rounds (half-even) via decfinB, same as the S256 path.
+  return d128_of_parts(p: decfinB(sign: false, coeff: from, exp: 0_s64, pref: 0_s64))
 
 # ============================================================================
 # Creators — binary floats (route through the matched-width engine F256)
@@ -936,10 +992,15 @@ routine D128.$create(from: D128) -> D128
 ### D64/D32 narrow the result). Accepts an optional sign, an integer/fraction mantissa, an
 ### optional `e`/`E` exponent, and the special values `inf`/`infinity`/`nan` (case-insensitive).
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
-routine parse_decimal_d128!(from_text: Text) -> D128
+### Scans decimal text into raw parts (sign, special, coeff, exp10) WITHOUT rounding to
+### 34 digits — the shared front end for both `D128` and `F128`/`F64` parsing. Keeping the
+### full coefficient (up to 38 digits in the U128) lets the binary parsers round once,
+### correctly, instead of double-rounding through decimal128.
+### :throws: {InvalidValueError} on malformed input.
+routine scan_decimal_parts!(from_text: Text) -> D128Parts
   var len = from_text.count()
   if len == 0u64
-    throw InvalidValueError(input: from_text, target: "D128")
+    throw InvalidValueError(input: from_text, target: "decimal number")
   var i = 0u64
   var neg = false
   var first = from_text[0u64]
@@ -947,7 +1008,7 @@ routine parse_decimal_d128!(from_text: Text) -> D128
     neg = first == Character(0x002Du32)
     i = 1u64
     if i >= len
-      throw InvalidValueError(input: from_text, target: "D128")
+      throw InvalidValueError(input: from_text, target: "decimal number")
   # special values
   var rest = len - i
   if rest == 3u64 or rest == 8u64
@@ -955,18 +1016,19 @@ routine parse_decimal_d128!(from_text: Text) -> D128
     var c1 = from_text[i + 1u64].to_lowercase()
     var c2 = from_text[i + 2u64].to_lowercase()
     if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
-      return D128.quiet_nan()
+      return D128Parts(sign: neg, special: 2_u64, exp: 0_s64, coeff: 0_u128)
     if c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
       if rest == 3u64
-        return D128.infinity(sign: neg)
+        return D128Parts(sign: neg, special: 1_u64, exp: 0_s64, coeff: 0_u128)
       var c3 = from_text[i + 3u64].to_lowercase()
       var c4 = from_text[i + 4u64].to_lowercase()
       var c5 = from_text[i + 5u64].to_lowercase()
       var c6 = from_text[i + 6u64].to_lowercase()
       var c7 = from_text[i + 7u64].to_lowercase()
       if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
-        return D128.infinity(sign: neg)
-    throw InvalidValueError(input: from_text, target: "D128")
+        return D128Parts(sign: neg, special: 1_u64, exp: 0_s64, coeff: 0_u128)
+    # NOT a special value: a 3- or 8-char numeric like "0.5" / "100" / "12345678" must fall
+    # through to the numeric scan below — do NOT throw here (that was a latent bug).
   # numeric: accumulate coefficient and base-10 exponent
   var coeff = 0_u128
   var exp10 = 0_s64
@@ -981,11 +1043,11 @@ routine parse_decimal_d128!(from_text: Text) -> D128
       has_digit = true
     elseif ch == Character(0x002Eu32)
       if seen_dot
-        throw InvalidValueError(input: from_text, target: "D128")
+        throw InvalidValueError(input: from_text, target: "decimal number")
       seen_dot = true
     elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
       if not has_digit
-        throw InvalidValueError(input: from_text, target: "D128")
+        throw InvalidValueError(input: from_text, target: "decimal number")
       i = i + 1u64
       var esign = false
       if i < len and (from_text[i] == Character(0x002Bu32) or from_text[i] == Character(0x002Du32))
@@ -996,20 +1058,30 @@ routine parse_decimal_d128!(from_text: Text) -> D128
       while i < len
         var ec = from_text[i]
         if not ec.is_numeric()
-          throw InvalidValueError(input: from_text, target: "D128")
+          throw InvalidValueError(input: from_text, target: "decimal number")
         eval = add[S64](a: mul[S64](a: eval, b: 10_s64), b: S64(ec.digit_value()))
         has_edigit = true
         i = i + 1u64
       if not has_edigit
-        throw InvalidValueError(input: from_text, target: "D128")
+        throw InvalidValueError(input: from_text, target: "decimal number")
       exp10 = add[S64](a: exp10, b: if esign then sub[S64](a: 0_s64, b: eval) else eval)
       break
     else
-      throw InvalidValueError(input: from_text, target: "D128")
+      throw InvalidValueError(input: from_text, target: "decimal number")
     i = i + 1u64
   if not has_digit
-    throw InvalidValueError(input: from_text, target: "D128")
-  return D128.from_components(sign: neg, coeff: coeff, exp: exp10)
+    throw InvalidValueError(input: from_text, target: "decimal number")
+  return D128Parts(sign: neg, special: 0_u64, exp: exp10, coeff: coeff)
+
+### Parses decimal text into a `D128` (rounds the scanned coefficient to 34 digits).
+### :throws: {InvalidValueError} on malformed input.
+routine parse_decimal_d128!(from_text: Text) -> D128
+  var p = scan_decimal_parts!(from_text: from_text)
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return D128.infinity(sign: p.sign)
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return D128.quiet_nan()
+  return D128.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
 
 ### Parses a decimal literal into a `D128`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.

@@ -104,6 +104,20 @@ routine F64.$create(from: U64) -> F64
 routine F64.$create(from: U128) -> F64
   return unsigned_to_float[U128, F64](from)
 
+### Converts an `S256` to `F64` (precision limited to ~53 bits of significand).
+### :param from: The signed 256-bit integer to convert.
+### :returns: The closest representable `F64` value.
+@inline
+routine F64.$create(from: S256) -> F64
+  return signed_to_float[S256, F64](from)
+
+### Converts a `U256` to `F64` (precision limited to ~53 bits of significand).
+### :param from: The unsigned 256-bit integer to convert.
+### :returns: The closest representable `F64` value.
+@inline
+routine F64.$create(from: U256) -> F64
+  return unsigned_to_float[U256, F64](from)
+
 ### Widens a half-precision float to double precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F64` carrying the same numeric value.

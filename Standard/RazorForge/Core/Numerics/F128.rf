@@ -883,8 +883,11 @@ routine f128_div_bits(a: U128, b: U128) -> U128
     eb_unb = reinterpret_bits[U64, S64](eb) - 16383_s64
   var numerator = f128_u256_shl(v: f128_u256(ma), n: 115_u128)
   var divisor = f128_u256(mb)
-  var q256 = numerator // divisor
-  var r256 = sub[U256](a: numerator, b: mul[U256](a: q256, b: divisor))
+  # Knuth divide (mb is a normalized >=113-bit mantissa, never zero): returns quotient
+  # AND remainder in one call, replacing the slow inline `udiv i256` plus a mul-back.
+  var dr = udivrem256(num: numerator, den: divisor)
+  var q256 = dr.q
+  var r256 = dr.r
   var q = f128_u256_to128(q256)
   var topadj = 114_s64
   var shu = 2_u128
@@ -943,21 +946,42 @@ routine f128_finish_subnormal(sign: U64, sig: U128, under: S64) -> U128
 ### Returns `floor(sqrt(n))` for a wide integer via the restoring bitwise method.
 ### :param n: The radicand.
 ### :returns: The integer square root.
+# Floor integer sqrt of a U256. An f64-seeded Newton iteration (the U256 `//` is the Knuth divide
+# via `udivrem256`, so each step is cheap) lands within a couple of ulp; an exact ±1 correction via
+# `x*x` comparison then pins the EXACT floor — which keeps F128 sqrt correctly-rounded. This replaces
+# the O(W) restoring-bitwise method (~128 wide-int iterations). Only F128.sqrt calls this; its input
+# `bigm < 2^237`, so `x*x` (x < 2^119) never overflows U256.
 routine f128_isqrt256(n: U256) -> U256
-  var rem = n
-  var res = f128_u256(0_u128)
-  var bit = f128_u256_bit(254_u128)
-  while unsigned_gt[U256](a: bit, b: rem)
-    bit = f128_u256_shr(v: bit, n: 2_u128)
-  while int_ne[U256](a: bit, b: f128_u256(0_u128))
-    var rb = add[U256](a: res, b: bit)
-    if unsigned_ge[U256](a: rem, b: rb)
-      rem = sub[U256](a: rem, b: rb)
-      res = add[U256](a: f128_u256_shr(v: res, n: 1_u128), b: bit)
-    else
-      res = f128_u256_shr(v: res, n: 1_u128)
-    bit = f128_u256_shr(v: bit, n: 2_u128)
-  return res
+  var zero = f128_u256(0_u128)
+  var one = f128_u256(1_u128)
+  if int_eq[U256](a: n, b: zero)
+    return zero
+  # Seed: hardware f64 sqrt of the top <=53 bits, scaled back by 2^(sh/2).
+  var bl = sub[S64](a: 256_s64, b: int_truncate[U256, S64](leading_zeros[U256](n)))
+  var sh = 0_s64
+  if signed_gt[S64](a: bl, b: 52_s64)
+    sh = sub[S64](a: bl, b: 52_s64)
+    if int_ne[S64](a: signed_rem[S64](a: sh, b: 2_s64), b: 0_s64)
+      sh = sub[S64](a: sh, b: 1_s64)
+  var ntop = int_truncate[U256, U64](shift_right_unsigned[U256](n, uf_amt[U256](sh)))
+  var seed = float_to_unsigned[F64, U64](F64(from: ntop).sqrt())
+  var x = shift_left[U256](value: zero_extend[U64, U256](seed), bits: uf_amt[U256](signed_div[S64](a: sh, b: 2_s64)))
+  if int_eq[U256](a: x, b: zero)
+    x = one
+  # Newton: x <- (x + n/x)/2. Quadratic; 4 iterations from a ~52-bit seed is ample.
+  var j = 0_s64
+  while signed_lt[S64](a: j, b: 4_s64)
+    var q = udivrem256(num: n, den: x).q
+    x = shift_right_unsigned[U256](add[U256](a: x, b: q), uf_amt[U256](1_s64))
+    j = add[S64](a: j, b: 1_s64)
+  # Exact correction to floor(sqrt(n)).
+  while unsigned_gt[U256](a: mul[U256](a: x, b: x), b: n)
+    x = sub[U256](a: x, b: one)
+  var x1 = add[U256](a: x, b: one)
+  while unsigned_le[U256](a: mul[U256](a: x1, b: x1), b: n)
+    x = x1
+    x1 = add[U256](a: x1, b: one)
+  return x
 
 ### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` -> NaN).
 ### Use `sqrt_unchecked` for raw IEEE 754 propagation.
@@ -1237,11 +1261,13 @@ routine f128_floor_int(v: F128) -> U64
   var shu = zero_extend[U32, U128](int_truncate[S64, U32](shift))
   return int_truncate[U128, U64](shift_right_unsigned[U128](sig, shu))
 
-### Returns the single-character text for a decimal digit 0..9.
+### Returns the single-character text for a decimal digit 0..9. Clamps to 9 so any
+### residual drift in the high-digit extraction can never emit a non-digit character.
 ### :param d: The digit value.
 ### :returns: The digit character as text.
 routine f128_digit(d: U64) -> Text
-  return Text(from_character: Character(from: add[U32](a: 0x30u32, b: int_truncate[U64, U32](d))))
+  var dd = if unsigned_gt[U64](a: d, b: 9_u64) then 9_u64 else d
+  return Text(from_character: Character(from: add[U32](a: 0x30u32, b: int_truncate[U64, U32](dd))))
 
 ### Returns the unsigned decimal text of `n` (recursive).
 ### :param n: The value to format.
@@ -1277,7 +1303,11 @@ routine f128_strip(s: Text) -> Text
     r = r.remove_suffix(suffix: ".")
   return r
 
-### The faithful TLFloat `%g`/6-significant-digit decimal conversion.
+### `%g`-style decimal conversion at 34 significant digits (`FLT128_DIG`) — the digits
+### F128 carries reliably. Extraction runs in F128 arithmetic, so it CANNOT exceed ~34
+### digits (the residual drifts past [0,10) and emits garbage); a bit-exact 36-digit
+### round-trip would need F256-precision digit extraction here AND a 36-digit parser
+### (the current `$create!` narrows through 34-digit D128). Trailing zeros are stripped.
 ### :param bits: The raw `F128` encoding.
 ### :returns: The decimal text.
 routine f128_represent(bits: U128) -> Text
@@ -1292,7 +1322,9 @@ routine f128_represent(bits: U128) -> Text
   if x.is_zero()
     return sgn + "0"
   var value = x.abs()
-  var precision = 5_s64
+  # 34 significant digits = FLT128_DIG (precision+1 are printed). This is the most
+  # F128-arithmetic extraction can reliably produce; higher counts drift into garbage.
+  var precision = 33_s64
   var rounder = f128_exp10i(sub[S64](a: 0_s64, b: precision)) / f128_from_int(2_u64)
   var exp = f128_ilog10(value)
   value = value * f128_exp10i(sub[S64](a: 0_s64, b: exp))
@@ -1515,6 +1547,15 @@ routine F128.$create(from: S128) -> F128
   var r = F128(from: mag)
   return if neg then r.$neg() else r
 
+### Converts an `S256` into quadruple-precision floating-point form.
+### :param from: The signed 256-bit integer to convert.
+### :returns: The closest representable `F128` value.
+routine F128.$create(from: S256) -> F128
+  var neg = signed_lt[S256](a: from, b: 0_s256)
+  var mag = if neg then reinterpret_bits[S256, U256](0_s256 - from) else reinterpret_bits[S256, U256](from)
+  var r = F128(from: mag)
+  return if neg then r.$neg() else r
+
 ### Converts a `U8` into quadruple-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F128` value.
@@ -1555,6 +1596,20 @@ routine F128.$create(from: U128) -> F128
   var hipart = fhi * two64
   var result = hipart + flo
   return result
+
+### Converts a `U256` into quadruple-precision floating-point form.
+### value = hi * 2^128 + lo, evaluated in correctly-rounded F128 arithmetic (2^256 is
+### far inside F128's range, so the checked `*`/`+` never overflow).
+### :param from: The unsigned 256-bit integer to convert.
+### :returns: The closest representable `F128` value.
+routine F128.$create(from: U256) -> F128
+  var hi = int_truncate[U256, U128](from >>> 128u32)
+  var lo = int_truncate[U256, U128](from)
+  var two63 = F128(from: 9223372036854775808_u64)
+  var two = F128(from: 2_s64)
+  var two64 = two63 * two
+  var two128 = two64 * two64
+  return F128(from: hi) * two128 + F128(from: lo)
 
 ### Widens a half-precision float to quadruple precision.
 ### :param from: The `F16` value to widen.
@@ -1886,14 +1941,41 @@ routine F128.hash() -> U64
 # Text Representation and Parsing
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param from_text: The `from_text` value.
-### :returns: The resulting `F128` value.
-### :throws: May throw {InvalidValueError}.
+### Returns `5^k` as a U256 (exact for `k <= 110`). Used to detect/resolve exact-tie
+### decimal inputs during parsing (a negative-exponent tie needs `5^|exp|` to divide the
+### coefficient). Cheap: at most ~56 multiplies, only on the rare tie path.
+### :param k: The non-negative power.
+### :returns: `5^k`.
+routine f128_pow5(k: S64) -> U256
+  var r = zero_extend[U64, U256](1_u64)
+  var five = zero_extend[U64, U256](5_u64)
+  var i = 0_s64
+  while signed_lt[S64](a: i, b: k)
+    r = mul[U256](a: r, b: five)
+    i = add[S64](a: i, b: 1_s64)
+  return r
+
+### Parses decimal text into the correctly-rounded `F128` (provably, round-to-nearest-even).
+### :param from_text: The decimal literal.
+### :returns: The correctly-rounded `F128` value.
+### :throws: {InvalidValueError} on malformed input.
 routine F128.$create!(from_text: Text) -> F128
-  # Parse via the shared decimal scanner (D128, 34 digits ~ binary128 precision), then
-  # D128 -> F256 (exact) -> F128 (round-to-nearest-even). Pure-RF; no TLFloat FFI.
-  return d128_to_f256(x: parse_decimal_d128!(from_text: from_text)).to_f128()
+  # PROVABLY-CORRECT decimal->binary128. FAST PATH: `coeff x 10^exp` in F512 (489-bit
+  # significand) is correctly-rounded for EVERY non-tie input — its ~2^-475 error is far
+  # below the ~2^-239 worst-case decimal->F128 separation. EXACT TIES (the round-half-even
+  # cases a fast path can't see) provably need exp in [-56,55]; for exp>=0 the F512 product
+  # is exact anyway, and for exp<0 a tie requires 5^|exp| | coeff, in which case
+  # V = (coeff / 5^|exp|) x 2^exp is EXACT in F512 via ldexp and resolved with bounded U256.
+  # No bignum, no module-Numerics dependency, no table beyond the existing f512_pow10.
+  var p = scan_decimal_parts!(from_text: from_text)
+  if int_eq[U64](a: p.special, b: 0_u64) and int_ne[U128](a: p.coeff, b: 0_u128) and signed_lt[S64](a: p.exp, b: 0_s64) and signed_ge[S64](a: p.exp, b: -56_s64)
+    var p5 = f128_pow5(k: sub[S64](a: 0_s64, b: p.exp))
+    var cw = zero_extend[U128, U256](p.coeff)
+    if int_eq[U256](a: unsigned_rem[U256](a: cw, b: p5), b: zero_extend[U64, U256](0_u64))
+      var m = unsigned_div[U256](a: cw, b: p5)
+      var r = uf512_from_u256(c: m).ldexp(e: p.exp).to_f128()
+      return if p.sign then r.$neg() else r
+  return d128parts_to_f512(p: p).to_uf().to_f128()
 
 # ============================================================================
 # Hashing

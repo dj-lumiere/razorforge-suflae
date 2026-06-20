@@ -105,6 +105,24 @@ routine U8.$create!(from: U128) -> U8
     throw IntegerOverflowError()
   return int_truncate[U128, U8](from)
 
+### Converts an `S256` to `U8`, throwing if the value is negative or exceeds 255.
+### :param from: The `S256` value to convert.
+### :returns: The lower 8 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..255.
+routine U8.$create!(from: S256) -> U8
+  if not (0_s256 <= from <= 255_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U8](from)
+
+### Converts a `U256` to `U8`, throwing if the value exceeds 255.
+### :param from: The `U256` value to convert.
+### :returns: The lower 8 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 255`.
+routine U8.$create!(from: U256) -> U8
+  if from > 255_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U8](from)
+
 ### Converts an `F16` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
