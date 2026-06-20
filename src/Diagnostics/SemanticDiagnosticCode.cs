@@ -668,6 +668,11 @@ public enum SemanticDiagnosticCode
     /// or an `inspect()` (reader) on the same Shared handle in an overlapping `using` scope.</summary>
     ReadersXorWriter = 630,
 
+    /// <summary>A `threaded routine` parameter is neither trivially copyable (passed by value) nor a
+    /// thread-shareable wrapper (Atomic/Shared/Watched); passing it would silently alias
+    /// unsynchronized state across the thread boundary.</summary>
+    ThreadArgNotShareable = 632,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════

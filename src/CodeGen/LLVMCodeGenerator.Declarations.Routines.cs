@@ -955,16 +955,34 @@ public partial class LlvmCodeGenerator
         IsByRefMeRecord(ownerType: routine.OwnerType);
 
     /// <summary>
-    /// A struct-record argument to a <c>threaded routine</c> is passed BY REFERENCE: the worker's
-    /// parameter is a pointer to the spawner's storage, so every worker that receives the same cell
-    /// operates on one address (the basis of <c>Atomic[T]</c> cross-thread sharing). This mirrors
-    /// the by-ref <c>me</c> convention — the parameter doubles as the field/method-access base, no
-    /// alloca/store copy — and applies the SAME storage-backed predicate. Plain scalar value types
-    /// (numerics, <c>Hijacked</c>, ...) stay by value (copied into the argpack). The spawner must
-    /// keep the cell alive until it joins; lifetime is enforced statically in a later phase.
+    /// A <b>thread-shareable</b> record argument to a <c>threaded routine</c> is passed BY
+    /// REFERENCE: the worker's parameter is a pointer to the spawner's storage, so every worker
+    /// that receives the same cell operates on one address (the basis of <c>Atomic[T]</c>
+    /// cross-thread sharing). This mirrors the by-ref <c>me</c> convention — the parameter doubles
+    /// as the field/method-access base, no alloca/store copy.
+    /// <para>
+    /// Only types that carry their own synchronization (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>)
+    /// are shared this way. Every OTHER record falls through to the normal by-value parameter path
+    /// (an independent copy is materialised in the worker's prologue), so unsynchronized state can
+    /// never silently alias across the thread boundary. Plain scalar value types
+    /// (numerics, <c>Hijacked</c>, ...) were always by value. SA (RF-S632) rejects by-ref records
+    /// that are neither shareable nor trivially copyable, so they never reach codegen.
+    /// </para>
     /// </summary>
     private static bool IsByRefThreadArg(RoutineInfo routine, ParameterInfo param) =>
-        routine.AsyncStatus == AsyncStatus.Threaded && IsByRefMeRecord(ownerType: param.Type);
+        routine.AsyncStatus == AsyncStatus.Threaded &&
+        IsByRefMeRecord(ownerType: param.Type) &&
+        IsThreadShareableType(type: param.Type);
+
+    /// <summary>
+    /// True when a type carries its own cross-thread synchronization — the atomic / shared-ownership
+    /// wrappers <c>Atomic[T]</c>, <c>Shared[T,P]</c>, <c>Watched[T,P]</c>. These may be passed by
+    /// reference across a thread boundary; everything else is copied. Mirrors the SA-side
+    /// <c>IsThreadShareable</c>.
+    /// </summary>
+    private static bool IsThreadShareableType(TypeInfo? type) =>
+        type != null &&
+        GetGenericBaseNameStatic(type: type) is "Atomic" or "Shared" or "Watched";
 
     /// <summary>
     /// Gets the zero/default value for a type.

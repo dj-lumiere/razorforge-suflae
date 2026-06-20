@@ -246,6 +246,16 @@ public sealed partial class SemanticVerifier
     /// <c>Tracked</c>, scoped tokens). The recursive structural walk that this used to do
     /// is now subsumed by the protocol's auto-derivation rule.
     /// </summary>
+    /// <summary>
+    /// True when a type carries its own cross-thread synchronization and may therefore be passed
+    /// to a <c>threaded routine</c> by reference (the worker aliases the spawner's cell). Exactly
+    /// the atomic / shared-ownership wrappers — <c>Atomic[T]</c>, <c>Shared[T,P]</c>,
+    /// <c>Watched[T,P]</c>. Every other type must be trivially copyable (passed by value as an
+    /// independent copy) so unsynchronized state can never alias across the thread boundary.
+    /// </summary>
+    private static bool IsThreadShareable(TypeSymbol type) =>
+        GetBaseTypeName(typeName: type.Name) is "Atomic" or "Shared" or "Watched";
+
     private static bool IsTriviallyCopyable(TypeSymbol type)
     {
         if (type is ErrorTypeInfo or GenericParameterTypeInfo || type.IsBlank)

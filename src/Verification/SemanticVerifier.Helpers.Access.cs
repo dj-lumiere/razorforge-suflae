@@ -139,6 +139,57 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
+    /// Validates that every parameter of a <c>threaded routine</c> can cross the thread boundary
+    /// safely. A threaded call spawns an OS thread, so each argument is either passed BY VALUE (an
+    /// independent copy) when its type is trivially copyable, or BY REFERENCE when its type is a
+    /// thread-shareable wrapper (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>) that carries its own
+    /// synchronization. A type that is neither — e.g. a record owning an entity
+    /// (<c>Retained</c>/<c>Tracked</c>), or a bare entity — would silently alias unsynchronized
+    /// state across threads, so it is rejected (RF-S632). Synchronization must be MARKED, never
+    /// implied (same ethos as <c>steal</c>/<c>!</c>/overflow).
+    /// </summary>
+    private void ValidateThreadedRoutineArguments(RoutineInfo routine, SourceLocation location)
+    {
+        if (_registry.Language != Language.RazorForge)
+        {
+            return;
+        }
+
+        foreach (ParameterInfo param in routine.Parameters)
+        {
+            TypeSymbol type = param.Type;
+            if (type is ErrorTypeInfo || IsThreadShareable(type: type))
+            {
+                continue;
+            }
+
+            // A bare entity is a heap handle; passing it copies the pointer, so the same object
+            // would be aliased across threads. A record/tuple that transitively owns a
+            // single-threaded RC wrapper (Retained/Tracked) or a scoped token would alias its
+            // interior the same way. Pure value data has neither and is copied safely. (Structural
+            // walk — does NOT depend on `Assignable` protocol population, which is not attached to
+            // the resolved parameter-type instances reached here.)
+            bool isEntity = type is EntityTypeInfo;
+            (string Wrapper, string Path)? offender =
+                isEntity ? null : FindNonTriviallyCopyableWrapper(type: type);
+            if (!isEntity && offender == null)
+            {
+                continue;
+            }
+
+            string reason = isEntity
+                ? "a bare entity aliases the same object across threads"
+                : $"it transitively owns `{offender!.Value.Wrapper}` at `{offender.Value.Path}`";
+            ReportError(code: SemanticDiagnosticCode.ThreadArgNotShareable,
+                message:
+                $"Parameter `{param.Name}: {type.Name}` of a threaded routine cannot cross the " +
+                $"thread boundary safely — {reason}. Share it across threads with " +
+                "`Shared`/`Watched`/`Atomic`, or pass a copyable value.",
+                location: location);
+        }
+    }
+
+    /// <summary>
     /// Gets a string key representing an expression for uniqueness checking.
     /// Returns null for complex expressions that can't be easily tracked.
     /// </summary>

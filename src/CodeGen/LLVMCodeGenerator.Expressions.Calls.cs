@@ -1291,7 +1291,13 @@ public partial class LlvmCodeGenerator
         {
             // Aggregate-preset receivers are NOT typewise/static receivers — they are by-ref values
             // whose storage is the `@preset.*` global. Fall through so EmitLvalueAddress returns it.
-            TypeInfo? typeAsReceiver = GetExpressionType(expr: member.Object);
+            // `common`/static calls on a bare TYPE name (e.g. `Real.zero()`, `Real(value: 2)` lowered
+            // to `Real.$create(...)`) carry no value expression, so GetExpressionType is null on some
+            // stdlib paths where SA didn't stamp the receiver's type. Resolve the type by name
+            // (module-aware) before giving up — the synthesized zero receiver below is correct for a
+            // static method (it has no `me` to read).
+            TypeInfo? typeAsReceiver = GetExpressionType(expr: member.Object)
+                ?? LookupTypeInCurrentModule(name: typeId.Name);
             if (typeAsReceiver == null)
             {
                 throw new InvalidOperationException(

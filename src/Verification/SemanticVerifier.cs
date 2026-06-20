@@ -176,10 +176,24 @@ public sealed partial class SemanticVerifier
     /// any other use is rejected (RF-S629) so its lock is always `using`-scoped.</summary>
     private ISyntaxTreeNode? _usingResourceNode;
 
-    /// <summary>Stack of MT access holds (`inspect`/`claim`) live in the enclosing `using` scopes,
-    /// keyed by the Shared handle name. Pushed on `using` entry, popped on exit, so a nested `using`
-    /// sees the holds it overlaps — the basis of the readers-XOR-writer check (RF-S630).</summary>
-    private readonly List<(string Handle, bool IsWriter, SourceLocation Location)> _activeAccessHolds = [];
+    /// <summary>Stack of MT access holds (`inspect`/`claim`) live in the enclosing `using` scopes.
+    /// Each hold records the syntactic handle path AND the controller-identity it resolves to (see
+    /// <see cref="_sharedHandleIdentity"/>), so aliased handles (`s2 = s.share()`) conflict even
+    /// though their names differ. Pushed on `using` entry, popped on exit, so a nested `using` sees
+    /// the holds it overlaps — the basis of the readers-XOR-writer check (RF-S630).</summary>
+    private readonly List<(string Handle, int Identity, bool IsWriter, SourceLocation Location)>
+        _activeAccessHolds = [];
+
+    /// <summary>Maps a Shared/Watched handle path (`s`, `s.a`) to the identity of the controller
+    /// (the atomic Arc cell) it refers to. A fresh `T.share[P]()` mints a new identity;
+    /// `.share()`/`.watch()` clones and plain copies INHERIT the source handle's identity, so all
+    /// handles to one controller share an identity. Lets the readers-XOR-writer check key on the
+    /// shared DATA rather than the variable name. Paths never bound to a tracked handle are
+    /// lazily assigned a unique identity on first use (degrades to per-path = the old behaviour).</summary>
+    private readonly Dictionary<string, int> _sharedHandleIdentity = new(StringComparer.Ordinal);
+
+    /// <summary>Monotonic source of fresh controller identities for <see cref="_sharedHandleIdentity"/>.</summary>
+    private int _nextSharedHandleIdentity;
 
     /// <summary>Temporary: last share[Policy]() call info, propagated in variable declaration (#19).</summary>
     private (string SourceVar, string Policy)? _lastSharePolicy;

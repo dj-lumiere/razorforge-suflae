@@ -393,6 +393,8 @@ public sealed partial class SemanticVerifier
                     // stdlib `Task[T].retrieve!()` / `.waitfor(deadline)` methods. (v0.1.)
                     if (routine.AsyncStatus == AsyncStatus.Threaded)
                     {
+                        ValidateThreadedRoutineArguments(routine: routine,
+                            location: call.Location);
                         TypeSymbol? taskDef = _registry.LookupType(name: "Task");
                         return taskDef != null
                             ? _registry.GetOrCreateResolution(genericDef: taskDef,

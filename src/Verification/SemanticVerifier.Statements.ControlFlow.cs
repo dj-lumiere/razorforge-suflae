@@ -539,15 +539,24 @@ public sealed partial class SemanticVerifier
         if (accessHandle != null)
         {
             bool isWriter = accessBase == "Claiming";
-            foreach ((string Handle, bool IsWriter, SourceLocation Location) hold in _activeAccessHolds)
+            int accessIdentity = GetOrAssignHandleIdentity(path: accessHandle);
+            foreach ((string Handle, int Identity, bool IsWriter, SourceLocation Location) hold
+                     in _activeAccessHolds)
             {
-                if (!PathsOverlap(a: hold.Handle, b: accessHandle) || (!isWriter && !hold.IsWriter))
+                // Two holds touch the same memory when they resolve to the same controller identity
+                // (aliased handles — `s` and `s2 = s.share()`) OR when their syntactic paths overlap
+                // on a field boundary (a parent handle and one of its sub-handles).
+                bool sameMemory = hold.Identity == accessIdentity ||
+                                  PathsOverlap(a: hold.Handle, b: accessHandle);
+                if (!sameMemory || (!isWriter && !hold.IsWriter))
                     continue;
                 string newKind = isWriter ? "claim()" : "inspect()";
                 string heldKind = hold.IsWriter ? "claim()" : "inspect()";
                 string overlapNote = hold.Handle == accessHandle
                     ? "the same shared handle"
-                    : $"the overlapping handle '{hold.Handle}'";
+                    : hold.Identity == accessIdentity
+                        ? $"the aliased handle '{hold.Handle}' (same shared data)"
+                        : $"the overlapping handle '{hold.Handle}'";
                 ReportError(code: SemanticDiagnosticCode.ReadersXorWriter,
                     message:
                     $"'{newKind}' on '{accessHandle}' conflicts with an active '{heldKind}' on " +
@@ -557,7 +566,8 @@ public sealed partial class SemanticVerifier
                 break;
             }
 
-            _activeAccessHolds.Add(item: (accessHandle, isWriter, usingStmt.Location));
+            _activeAccessHolds.Add(
+                item: (accessHandle, accessIdentity, isWriter, usingStmt.Location));
         }
 
         // The bound variable type defaults to the resource type, but may be overridden
@@ -642,5 +652,54 @@ public sealed partial class SemanticVerifier
                 BuildAccessPath(expr: inner) is { } prefix ? $"{prefix}.{prop}" : null,
             _ => null
         };
+    }
+
+    /// <summary>Returns the controller identity for a Shared/Watched handle path. A path bound to a
+    /// tracked handle (recorded at its <c>var</c> declaration, see
+    /// <see cref="RecordSharedHandleIdentity"/>) reuses its identity; an untracked path is assigned a
+    /// fresh unique identity on first use and remembered, so repeated uses of the same path match
+    /// (the readers-XOR-writer check then degrades to per-path keying — the pre-aliasing behaviour —
+    /// for handles whose origin it can't see).</summary>
+    private int GetOrAssignHandleIdentity(string path)
+    {
+        if (_sharedHandleIdentity.TryGetValue(key: path, out int id))
+            return id;
+        id = _nextSharedHandleIdentity++;
+        _sharedHandleIdentity[key: path] = id;
+        return id;
+    }
+
+    /// <summary>Records the controller identity of a freshly declared Shared/Watched handle from its
+    /// initializer, so later aliases and access-token receivers resolve to the same controller:
+    /// <list type="bullet">
+    /// <item>a fresh Arc (<c>node.share[P]()</c> — a generic-call) mints a NEW identity;</item>
+    /// <item>a clone (<c>s.share()</c>/<c>s.watch()</c>) or a plain copy (<c>var s2 = s</c>)
+    /// INHERITS the source handle's identity;</item>
+    /// <item>anything else gets a fresh identity (conservative — a missed alias only weakens the
+    /// check, never a false positive).</item>
+    /// </list></summary>
+    private void RecordSharedHandleIdentity(string name, Expression? initializer)
+    {
+        int identity = initializer switch
+        {
+            // Fresh Arc: `node.share[P]()` / `node.watch[P]()` — an explicit-generic call.
+            GenericMethodCallExpression { MethodName: "share" or "watch" } =>
+                _nextSharedHandleIdentity++,
+            // Clone: `s.share()` / `s.watch()` — inherit the receiver handle's identity.
+            CallExpression
+                {
+                    Callee: MemberExpression
+                    {
+                        Object: var receiver, PropertyName: "share" or "watch"
+                    }
+                } when BuildAccessPath(expr: receiver) is { } recvPath =>
+                GetOrAssignHandleIdentity(path: recvPath),
+            // Plain copy: `var s2 = s` — inherit (usually blocked by the copy-verb rule, handled
+            // here for completeness).
+            IdentifierExpression copySource =>
+                GetOrAssignHandleIdentity(path: copySource.Name),
+            _ => _nextSharedHandleIdentity++
+        };
+        _sharedHandleIdentity[key: name] = identity;
     }
 }
