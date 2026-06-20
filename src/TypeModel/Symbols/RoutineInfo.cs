@@ -284,19 +284,23 @@ public sealed class RoutineInfo
                     continue;
                 }
 
-                // Extract template: llvm_ir("template") or llvm_ir(template)
-                int start = annotation.IndexOf(value: '"') + 1;
-                int end = annotation.LastIndexOf(value: '"');
-                if (start > 0 && end > start)
-                {
-                    return annotation[start..end];
-                }
-
-                // Unquoted: strip llvm_ir( prefix and ) suffix
+                // Extract template: llvm_ir("template") or llvm_ir(template).
+                // The tokenizer already decodes string escapes and strips the outer
+                // delimiters, so the annotation text is `llvm_ir(<decoded template>)`.
+                // A template may itself CONTAIN quotes (e.g. inline-asm constraint
+                // strings: `asm sideeffect "", "=r,0"(...)`), so we must NOT scan for
+                // the first/last '"' to find the bounds — that would slice the span
+                // between inner quotes. Strip the `llvm_ir(` prefix and trailing `)`,
+                // then strip exactly one wrapping quote pair only if BOTH ends are quotes.
                 ReadOnlySpan<char> content = annotation.AsSpan()["llvm_ir(".Length..];
                 if (content.Length > 0 && content[^1] == ')')
                 {
                     content = content[..^1];
+                }
+
+                if (content.Length >= 2 && content[0] == '"' && content[^1] == '"')
+                {
+                    content = content[1..^1];
                 }
 
                 return content.ToString();
