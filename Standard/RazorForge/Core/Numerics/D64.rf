@@ -287,10 +287,10 @@ routine d64_div(a: D64, b: D64) -> D64
   if signed_lt[S64](a: shift, b: 0_s64)
     shift = 0_s64
   num = mul[U128](a: num, b: p10_u128(k: shift))
-  var q = ((num) // (den))
-  var rem = sub[U128](a: num, b: mul[U128](a: q, b: den))
-  if int_ne[U128](a: rem, b: 0)
-    q = bit_or[U128](a: q, b: 1)
+  # The divisor is always a single U64 limb (zero-extended coeff), so the whole U128/U64
+  # divide is two hardware 128/64 divides with the sticky in bit 0 — far cheaper than the
+  # generic `num // den` U128 libcall plus a `q*den` multiply-back to recover the remainder.
+  var q = udiv128_by_u64_sticky(num: num, den: pb.coeff)
   var exp = sub[S64](a: sub[S64](a: pa.exp, b: pb.exp), b: shift)
   return d64_of_parts(p: decfin64(sign: sign, coeff: q, exp: exp, pref: pref))
 

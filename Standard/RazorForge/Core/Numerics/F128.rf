@@ -795,28 +795,28 @@ routine f128_mul_bits(a: U128, b: U128) -> U128
     ea_unb = -16382_s64
     while int_eq[U128](a: bit_and[U128](a: ma, b: f128_implicit()), b: 0_u128)
       ma = shift_left[U128](value: ma, bits: 1_u128)
-      ea_unb = ea_unb - 1_s64
+      ea_unb = sub[S64](a: ea_unb, b: 1_s64)
   else
     ma = bit_or[U128](a: ma, b: f128_implicit())
-    ea_unb = reinterpret_bits[U64, S64](ea) - 16383_s64
+    ea_unb = sub[S64](a: reinterpret_bits[U64, S64](ea), b: 16383_s64)
   var mb = fb
   var eb_unb = 0_s64
   if eb == 0_u64
     eb_unb = -16382_s64
     while int_eq[U128](a: bit_and[U128](a: mb, b: f128_implicit()), b: 0_u128)
       mb = shift_left[U128](value: mb, bits: 1_u128)
-      eb_unb = eb_unb - 1_s64
+      eb_unb = sub[S64](a: eb_unb, b: 1_s64)
   else
     mb = bit_or[U128](a: mb, b: f128_implicit())
-    eb_unb = reinterpret_bits[U64, S64](eb) - 16383_s64
+    eb_unb = sub[S64](a: reinterpret_bits[U64, S64](eb), b: 16383_s64)
   var prod = mul[U256](a: f128_u256(ma), b: f128_u256(mb))
-  var exp = ea_unb + eb_unb
+  var exp = add[S64](a: ea_unb, b: eb_unb)
   var topadj = 224_s64
   var shu = 112_u128
   if int_ne[U256](a: bit_and[U256](a: prod, b: f128_u256_bit(225_u128)), b: f128_u256(0_u128))
     topadj = 225_s64
     shu = 113_u128
-  var biased = exp - 224_s64 + topadj + 16383_s64
+  var biased = add[S64](a: add[S64](a: sub[S64](a: exp, b: 224_s64), b: topadj), b: 16383_s64)
   var sig = f128_u256_to128(f128_u256_shr(v: prod, n: shu))
   var rem = bit_and[U256](a: prod, b: f128_u256_lowmask(shu))
   var half = f128_u256_bit(sub[U128](a: shu, b: 1_u128))
@@ -827,11 +827,11 @@ routine f128_mul_bits(a: U128, b: U128) -> U128
   var round_carry = shift_left[U128](value: 1_u128, bits: 113_u128)
   if int_ne[U128](a: bit_and[U128](a: sig, b: round_carry), b: 0_u128)
     sig = shift_right_unsigned[U128](sig, 1_u128)
-    biased = biased + 1_s64
+    biased = add[S64](a: biased, b: 1_s64)
   if biased >= 32767_s64
     return f128_inf(sign: sign)
   if biased <= 0_s64
-    return f128_finish_subnormal(sign: sign, sig: sig, under: 1_s64 - biased)
+    return f128_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased))
   return f128_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig)
 
 ### Software binary128 division over raw encodings (U256 numerator).
@@ -867,20 +867,20 @@ routine f128_div_bits(a: U128, b: U128) -> U128
     ea_unb = -16382_s64
     while int_eq[U128](a: bit_and[U128](a: ma, b: f128_implicit()), b: 0_u128)
       ma = shift_left[U128](value: ma, bits: 1_u128)
-      ea_unb = ea_unb - 1_s64
+      ea_unb = sub[S64](a: ea_unb, b: 1_s64)
   else
     ma = bit_or[U128](a: ma, b: f128_implicit())
-    ea_unb = reinterpret_bits[U64, S64](ea) - 16383_s64
+    ea_unb = sub[S64](a: reinterpret_bits[U64, S64](ea), b: 16383_s64)
   var mb = fb
   var eb_unb = 0_s64
   if eb == 0_u64
     eb_unb = -16382_s64
     while int_eq[U128](a: bit_and[U128](a: mb, b: f128_implicit()), b: 0_u128)
       mb = shift_left[U128](value: mb, bits: 1_u128)
-      eb_unb = eb_unb - 1_s64
+      eb_unb = sub[S64](a: eb_unb, b: 1_s64)
   else
     mb = bit_or[U128](a: mb, b: f128_implicit())
-    eb_unb = reinterpret_bits[U64, S64](eb) - 16383_s64
+    eb_unb = sub[S64](a: reinterpret_bits[U64, S64](eb), b: 16383_s64)
   var numerator = f128_u256_shl(v: f128_u256(ma), n: 115_u128)
   var divisor = f128_u256(mb)
   # Knuth divide (mb is a normalized >=113-bit mantissa, never zero): returns quotient
@@ -894,7 +894,7 @@ routine f128_div_bits(a: U128, b: U128) -> U128
   if int_ne[U128](a: bit_and[U128](a: q, b: shift_left[U128](value: 1_u128, bits: 115_u128)), b: 0_u128)
     topadj = 115_s64
     shu = 3_u128
-  var biased = ea_unb - eb_unb - 115_s64 + topadj + 16383_s64
+  var biased = add[S64](a: add[S64](a: sub[S64](a: sub[S64](a: ea_unb, b: eb_unb), b: 115_s64), b: topadj), b: 16383_s64)
   var sig = shift_right_unsigned[U128](q, shu)
   var mask = sub[U128](a: shift_left[U128](value: 1_u128, bits: shu), b: 1_u128)
   var rem_low = bit_and[U128](a: q, b: mask)
@@ -907,11 +907,11 @@ routine f128_div_bits(a: U128, b: U128) -> U128
   var round_carry = shift_left[U128](value: 1_u128, bits: 113_u128)
   if int_ne[U128](a: bit_and[U128](a: sig, b: round_carry), b: 0_u128)
     sig = shift_right_unsigned[U128](sig, 1_u128)
-    biased = biased + 1_s64
+    biased = add[S64](a: biased, b: 1_s64)
   if biased >= 32767_s64
     return f128_inf(sign: sign)
   if biased <= 0_s64
-    return f128_finish_subnormal(sign: sign, sig: sig, under: 1_s64 - biased)
+    return f128_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased))
   return f128_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig)
 
 ### Denormalizes a normalized significand into the subnormal range by shifting right
