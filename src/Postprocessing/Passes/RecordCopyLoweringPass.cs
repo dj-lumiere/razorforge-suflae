@@ -187,23 +187,38 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 
             case IfStatement ifStmt:
             {
+                // The condition holds copy positions: `when`/`is` desugar to an if whose condition
+                // is e.g. `(x.$cmp(you: v)).$eq(ME_SMALL)`, where `v` is a call argument needing a
+                // retaining `$copy`. Without lowering the condition, the callee `$destroy`s the
+                // by-value param while the caller never copied it -> double-free of the reused source.
+                Expression newCond = StripStealFromExpr(expr: ifStmt.Condition);
                 Statement newThen = LowerStatement(stmt: ifStmt.ThenStatement);
                 Statement? newElse = ifStmt.ElseStatement != null
                     ? LowerStatement(stmt: ifStmt.ElseStatement)
                     : null;
-                bool changed = !ReferenceEquals(newThen, ifStmt.ThenStatement) ||
+                bool changed = !ReferenceEquals(newCond, ifStmt.Condition) ||
+                               !ReferenceEquals(newThen, ifStmt.ThenStatement) ||
                                !ReferenceEquals(newElse, ifStmt.ElseStatement);
                 return changed
-                    ? ifStmt with { ThenStatement = newThen, ElseStatement = newElse }
+                    ? ifStmt with
+                    {
+                        Condition = newCond,
+                        ThenStatement = newThen,
+                        ElseStatement = newElse
+                    }
                     : stmt;
             }
 
             case WhileStatement whileStmt:
             {
+                // Same as IfStatement: the loop condition can carry copy positions.
+                Expression newCond = StripStealFromExpr(expr: whileStmt.Condition);
                 Statement newBody = LowerStatement(stmt: whileStmt.Body);
-                return ReferenceEquals(newBody, whileStmt.Body)
-                    ? stmt
-                    : whileStmt with { Body = newBody };
+                bool changed = !ReferenceEquals(newCond, whileStmt.Condition) ||
+                               !ReferenceEquals(newBody, whileStmt.Body);
+                return changed
+                    ? whileStmt with { Condition = newCond, Body = newBody }
+                    : stmt;
             }
 
             case LoopStatement loopStmt:
@@ -225,6 +240,12 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             case WhenStatement whenStmt:
             {
                 bool changed = false;
+                // The subject holds copy positions too (e.g. `when x.$cmp(you: v) is ...` — `v` is a
+                // call argument that needs a retaining `$copy`). Mirrors the WhenExpression case.
+                Expression newSubject = StripStealFromExpr(expr: whenStmt.Expression);
+                if (!ReferenceEquals(newSubject, whenStmt.Expression))
+                    changed = true;
+
                 var newClauses = new List<WhenClause>(capacity: whenStmt.Clauses.Count);
                 foreach (WhenClause clause in whenStmt.Clauses)
                 {
@@ -239,7 +260,9 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                         newClauses.Add(item: clause);
                     }
                 }
-                return changed ? whenStmt with { Clauses = newClauses } : stmt;
+                return changed
+                    ? whenStmt with { Expression = newSubject, Clauses = newClauses }
+                    : stmt;
             }
 
             case UsingStatement usingStmt:
@@ -418,6 +441,59 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             {
                 Expression newRight = LowerOwnership(expr: bin.Right, isReturn: false);
                 return ReferenceEquals(newRight, bin.Right) ? bin : bin with { Right = newRight };
+            }
+
+            // A `when` used as an EXPRESSION (e.g. `acc +% when x.$cmp(you: v) is ... => ...`).
+            // The subject and the arm bodies hold copy positions (call arguments, RHS values) that
+            // must be lowered — without this, an argument like `v` inside the subject call never
+            // gets its retaining `$copy`, yet the callee (e.g. `Integer.$cmp`) still `$destroy`s the
+            // by-value parameter, double-freeing the reused source on the next iteration.
+            case WhenExpression whenExpr:
+            {
+                bool changed = false;
+                Expression? newSubject = whenExpr.Expression is { } subj
+                    ? StripStealFromExpr(expr: subj)
+                    : null;
+                if (newSubject is not null && !ReferenceEquals(newSubject, whenExpr.Expression))
+                    changed = true;
+
+                var newClauses = new List<WhenClause>(capacity: whenExpr.Clauses.Count);
+                foreach (WhenClause clause in whenExpr.Clauses)
+                {
+                    Statement nb = LowerStatement(stmt: clause.Body);
+                    if (!ReferenceEquals(nb, clause.Body))
+                    {
+                        newClauses.Add(item: clause with { Body = nb });
+                        changed = true;
+                    }
+                    else
+                    {
+                        newClauses.Add(item: clause);
+                    }
+                }
+
+                return changed
+                    ? whenExpr with { Expression = newSubject, Clauses = newClauses }
+                    : expr;
+            }
+
+            // Top-level conditional expression (`if c then a else b`). The branches are copy
+            // positions (each can be the result value); the condition is recursed for nested args.
+            case ConditionalExpression cond:
+            {
+                Expression newCond = StripStealFromExpr(expr: cond.Condition);
+                Expression newTrue = LowerOwnership(expr: cond.TrueExpression, isReturn: false);
+                Expression newFalse = LowerOwnership(expr: cond.FalseExpression, isReturn: false);
+                return ReferenceEquals(newCond, cond.Condition)
+                    && ReferenceEquals(newTrue, cond.TrueExpression)
+                    && ReferenceEquals(newFalse, cond.FalseExpression)
+                    ? expr
+                    : cond with
+                    {
+                        Condition = newCond,
+                        TrueExpression = newTrue,
+                        FalseExpression = newFalse
+                    };
             }
 
             // All other expression types: steal cannot appear as a direct child in practice
