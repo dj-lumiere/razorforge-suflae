@@ -59,7 +59,7 @@ routine Real.$create!(text: Text, radix: S32 = 10) -> Real
   var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   var status = rf_real_set_str(handle: r.handle, str: text.to_cstr(), radix: radix)
   if status != 0_s32
-    throw ValueError(f"Invalid real string: {text}")
+    throw InvalidValueError(input: text, target: "Real")
   return r
 
 ### Materializes a `Real` from a tokenizer-validated decimal string (literal lowering).

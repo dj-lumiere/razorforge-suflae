@@ -89,85 +89,107 @@ routine f128_to_d64(x: F128) -> D64
 # Transcendentals — all delegate to F128's method surface (erf/gamma included).
 # ============================================================================
 
-routine D64.exp() -> D64
+routine D64.exp!() -> D64
   var r = me.exp_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.exp_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).exp_unchecked())
-routine D64.expm1() -> D64
+routine D64.expm1!() -> D64
   var r = me.expm1_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.expm1_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).expm1_unchecked())
-routine D64.exp2() -> D64
+routine D64.exp2!() -> D64
   var r = me.exp2_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.exp2_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).exp2_unchecked())
-routine D64.exp10() -> D64
+routine D64.exp10!() -> D64
   var r = me.exp10_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.exp10_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).exp10_unchecked())
-routine D64.log() -> D64
+routine D64.log!() -> D64
   var r = me.log_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.log_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).log_unchecked())
-routine D64.log1p() -> D64
+routine D64.log1p!() -> D64
   var r = me.log1p_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.log1p_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).log1p_unchecked())
-routine D64.log2() -> D64
+routine D64.log2!() -> D64
   var r = me.log2_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.log2_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).log2_unchecked())
-routine D64.log10() -> D64
+routine D64.log10!() -> D64
   var r = me.log10_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.log10_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).log10_unchecked())
-routine D64.sqrt() -> D64
+routine D64.sqrt!() -> D64
   var r = me.sqrt_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.sqrt_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).sqrt_unchecked())
 routine D64.cbrt() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).cbrt())
 routine D64.pow_unchecked(you: D64) -> D64
   return f128_to_d64(x: d64_to_f128(x: me).pow_unchecked(you: d64_to_f128(x: you)))
-routine D64.hypot(you: D64) -> D64
+routine D64.hypot!(you: D64) -> D64
   var r = me.hypot_unchecked(you: you)
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.hypot_unchecked(you: D64) -> D64
   return f128_to_d64(x: d64_to_f128(x: me).hypot_unchecked(you: d64_to_f128(x: you)))
-routine D64.fma(b: D64, c: D64) -> D64
+routine D64.fma!(b: D64, c: D64) -> D64
   var r = me.fma_unchecked(b: b, c: c)
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.fma_unchecked(b: D64, c: D64) -> D64
   return f128_to_d64(x: d64_to_f128(x: me).fma_unchecked(b: d64_to_f128(x: b), c: d64_to_f128(x: c)))
 routine D64.sin() -> D64
@@ -176,65 +198,79 @@ routine D64.cos() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).cos())
 routine D64.tan() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).tan())
-routine D64.asin() -> D64
+routine D64.asin!() -> D64
   var r = me.asin_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.asin_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).asin_unchecked())
-routine D64.acos() -> D64
+routine D64.acos!() -> D64
   var r = me.acos_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.acos_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).acos_unchecked())
 routine D64.atan() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).atan())
 routine D64.atan2(x: D64) -> D64
   return f128_to_d64(x: d64_to_f128(x: me).atan2(you: d64_to_f128(x: x)))
-routine D64.sinh() -> D64
+routine D64.sinh!() -> D64
   var r = me.sinh_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.sinh_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).sinh_unchecked())
-routine D64.cosh() -> D64
+routine D64.cosh!() -> D64
   var r = me.cosh_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.cosh_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).cosh_unchecked())
 routine D64.tanh() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).tanh())
 routine D64.asinh() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).asinh())
-routine D64.acosh() -> D64
+routine D64.acosh!() -> D64
   var r = me.acosh_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.acosh_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).acosh_unchecked())
-routine D64.atanh() -> D64
+routine D64.atanh!() -> D64
   var r = me.atanh_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.atanh_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).atanh_unchecked())
 routine D64.erf() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).erf())
 routine D64.erfc() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).erfc())
-routine D64.tgamma() -> D64
+routine D64.tgamma!() -> D64
   var r = me.tgamma_unchecked()
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 routine D64.tgamma_unchecked() -> D64
   return f128_to_d64(x: d64_to_f128(x: me).tgamma_unchecked())
 routine D64.lgamma() -> D64
@@ -344,7 +380,9 @@ routine D64.signum() -> D64
 @crash_only
 routine D64.finite!() -> D64
   if not me.is_finite()
-    return d64_nonfinite_crash!(r: me)
+    if me.is_nan()
+      throw NumericDomainError(description: "D64: undefined operation with no real result.")
+    throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
   return me
 
 ### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
@@ -387,11 +425,13 @@ routine D64.fdim(you: D64) -> D64
 ### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-ten exponent to apply.
 ### :returns: `me` scaled by `10^n`.
-routine D64.scaleb(n: S64) -> D64
+routine D64.scaleb!(n: S64) -> D64
   var r = me.scaleb_unchecked(n: n)
   if r.is_finite() or not me.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 
 ### `me * 10^n` with raw propagation (overflow -> ±infinity, underflow -> 0).
 ### :param n: The power-of-ten exponent to apply.

@@ -155,60 +155,54 @@ routine F16.$create(from: D128) -> F16
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
-@crash_only
-routine f16_overflow_crash!() -> F16
-  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
-@crash_only
-routine f16_domain_crash!() -> F16
-  throw NumericDomainError(description: "F16: undefined operation with no real result (e.g. 0/0 or inf - inf).")
-@crash_only
-routine f16_divzero_crash!() -> F16
-  throw DivisionByZeroError()
-@crash_only
-routine f16_nonfinite_crash!(r: F16) -> F16
-  if r.is_nan()
-    return f16_domain_crash!()
-  return f16_overflow_crash!()
 
 
 ### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `$add_unchecked` for raw IEEE.
 ### :param you: The addend.
 ### :returns: The half-precision sum (always finite).
-routine F16.$add(you: F16) -> F16
+routine F16.$add!(you: F16) -> F16
   var r = float_add[F16](a: me, b: you)
   if r.is_finite()
     return r
-  return f16_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 
 ### Returns `me - you`. Checked: crashes if the IEEE result is non-finite. Use `$sub_unchecked` for raw IEEE.
 ### :param you: The value to subtract.
 ### :returns: The half-precision difference (always finite).
-routine F16.$sub(you: F16) -> F16
+routine F16.$sub!(you: F16) -> F16
   var r = float_sub[F16](a: me, b: you)
   if r.is_finite()
     return r
-  return f16_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 
 ### Returns `me * you`. Checked: crashes if the IEEE result is non-finite. Use `$mul_unchecked` for raw IEEE.
 ### :param you: The multiplier.
 ### :returns: The half-precision product (always finite).
-routine F16.$mul(you: F16) -> F16
+routine F16.$mul!(you: F16) -> F16
   var r = float_mul[F16](a: me, b: you)
   if r.is_finite()
     return r
-  return f16_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow -> overflow.
 ### Use `$truediv_unchecked` for raw IEEE 754, or `(a / b).finite!()` for recoverable handling.
 ### :param you: The divisor.
 ### :returns: The half-precision quotient (always finite).
-routine F16.$truediv(you: F16) -> F16
+routine F16.$truediv!(you: F16) -> F16
   var r = float_div[F16](a: me, b: you)
   if r.is_finite()
     return r
   if you.is_zero() and not me.is_zero()
-    return f16_divzero_crash!()
-  return f16_nonfinite_crash!(r: r)
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 
 ### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
 ### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
@@ -269,11 +263,13 @@ routine F16.$cmp(you: F16) -> ComparisonSign
 
 ### Returns the square root of this value in half precision.
 ### :returns: The intrinsic square-root result for `me`.
-routine F16.sqrt() -> F16
+routine F16.sqrt!() -> F16
   var rr = me.sqrt_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.sqrt_unchecked() -> F16
   return sqrt[F16](me)
 
@@ -572,19 +568,23 @@ routine F16.cos() -> F16
 routine F16.tan() -> F16
   return F16.from_bits(bits: rf_f16_tan(bits: me.to_bits()))
 ### Arc sine.
-routine F16.asin() -> F16
+routine F16.asin!() -> F16
   var rr = me.asin_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.asin_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_asin(bits: me.to_bits()))
 ### Arc cosine.
-routine F16.acos() -> F16
+routine F16.acos!() -> F16
   var rr = me.acos_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.acos_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_acos(bits: me.to_bits()))
 ### Arc tangent.
@@ -594,19 +594,23 @@ routine F16.atan() -> F16
 routine F16.atan2(x: F16) -> F16
   return F16.from_bits(bits: rf_f16_atan2(y: me.to_bits(), x: x.to_bits()))
 ### Hyperbolic sine.
-routine F16.sinh() -> F16
+routine F16.sinh!() -> F16
   var rr = me.sinh_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.sinh_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_sinh(bits: me.to_bits()))
 ### Hyperbolic cosine.
-routine F16.cosh() -> F16
+routine F16.cosh!() -> F16
   var rr = me.cosh_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.cosh_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_cosh(bits: me.to_bits()))
 ### Hyperbolic tangent.
@@ -616,83 +620,103 @@ routine F16.tanh() -> F16
 routine F16.asinh() -> F16
   return F16.from_bits(bits: rf_f16_asinh(bits: me.to_bits()))
 ### Inverse hyperbolic cosine.
-routine F16.acosh() -> F16
+routine F16.acosh!() -> F16
   var rr = me.acosh_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.acosh_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_acosh(bits: me.to_bits()))
 ### Inverse hyperbolic tangent.
-routine F16.atanh() -> F16
+routine F16.atanh!() -> F16
   var rr = me.atanh_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.atanh_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_atanh(bits: me.to_bits()))
 ### Natural exponential.
-routine F16.exp() -> F16
+routine F16.exp!() -> F16
   var rr = me.exp_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.exp_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_exp(bits: me.to_bits()))
 ### Base-2 exponential.
-routine F16.exp2() -> F16
+routine F16.exp2!() -> F16
   var rr = me.exp2_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.exp2_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_exp2(bits: me.to_bits()))
 ### exp(me) - 1, accurate near zero.
-routine F16.expm1() -> F16
+routine F16.expm1!() -> F16
   var rr = me.expm1_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.expm1_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_expm1(bits: me.to_bits()))
 ### Base-10 exponential.
-routine F16.exp10() -> F16
+routine F16.exp10!() -> F16
   var rr = me.exp10_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.exp10_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_exp10(bits: me.to_bits()))
 ### Natural logarithm.
-routine F16.log() -> F16
+routine F16.log!() -> F16
   var rr = me.log_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.log_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_log(bits: me.to_bits()))
 ### Base-2 logarithm.
-routine F16.log2() -> F16
+routine F16.log2!() -> F16
   var rr = me.log2_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.log2_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_log2(bits: me.to_bits()))
 ### Base-10 logarithm.
-routine F16.log10() -> F16
+routine F16.log10!() -> F16
   var rr = me.log10_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.log10_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_log10(bits: me.to_bits()))
 ### log(1 + me), accurate near zero.
-routine F16.log1p() -> F16
+routine F16.log1p!() -> F16
   var rr = me.log1p_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.log1p_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_log1p(bits: me.to_bits()))
 routine F16.pow_unchecked(exp: F16) -> F16
@@ -701,24 +725,30 @@ routine F16.$pow!(exp: F16) -> F16
   var rr = me.pow_unchecked(exp: exp)
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 ### Cube root.
 routine F16.cbrt() -> F16
   return F16.from_bits(bits: rf_f16_cbrt(bits: me.to_bits()))
 ### Hypotenuse without overflow.
-routine F16.hypot(you: F16) -> F16
+routine F16.hypot!(you: F16) -> F16
   var rr = me.hypot_unchecked(you: you)
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.hypot_unchecked(you: F16) -> F16
   return F16.from_bits(bits: rf_f16_hypot(x: me.to_bits(), y: you.to_bits()))
 ### Fused multiply-add me*b + c with a single rounding.
-routine F16.fma(b: F16, c: F16) -> F16
+routine F16.fma!(b: F16, c: F16) -> F16
   var rr = me.fma_unchecked(b: b, c: c)
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.fma_unchecked(b: F16, c: F16) -> F16
   return F16.from_bits(bits: rf_f16_fma(x: me.to_bits(), y: b.to_bits(), z: c.to_bits()))
 ### Floating-point remainder (C fmod).
@@ -764,11 +794,13 @@ routine F16.erf() -> F16
 routine F16.erfc() -> F16
   return F16.from_bits(bits: rf_f16_erfc(bits: me.to_bits()))
 ### Gamma function.
-routine F16.tgamma() -> F16
+routine F16.tgamma!() -> F16
   var rr = me.tgamma_unchecked()
   if rr.is_finite()
     return rr
-  return f16_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 routine F16.tgamma_unchecked() -> F16
   return F16.from_bits(bits: rf_f16_tgamma(bits: me.to_bits()))
 ### Natural log of the absolute value of gamma(me).
@@ -869,11 +901,13 @@ routine F16.logb() -> F16
 ### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
-routine F16.scaleb(n: S64) -> F16
+routine F16.scaleb!(n: S64) -> F16
   var r = me.scalbn(n: n)
   if r.is_finite() or not me.is_finite()
     return r
-  return f16_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F16: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F16 overflow: the result is infinite (out of range).")
 
 ### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
 ### :param n: The power-of-two exponent to apply.

@@ -112,7 +112,7 @@ routine C128.$truediv(you: C128) -> C128
 ### :param you: The complex exponent.
 ### :returns: `me ** you` in quadruple precision.
 routine C128.$pow(you: C128) -> C128
-  return (you * me.log()).exp()
+  return (you * me.log_unchecked()).exp_unchecked()
 
 ### Returns the arithmetic negation of this value.
 ### :returns: A `C128` with both components negated.
@@ -136,7 +136,7 @@ routine C128.$eq(you: C128) -> Bool
 ### Returns the modulus (absolute value) of this complex number.
 ### :returns: `√(real² + imag²)`.
 routine C128.abs() -> F128
-  return (me.real * me.real + me.imag * me.imag).sqrt()
+  return (me.real * me.real + me.imag * me.imag).sqrt_unchecked()
 
 ### Returns the phase angle of this complex value in radians.
 ### :returns: `atan2(imag, real)`, in the range (−π, π].
@@ -160,35 +160,35 @@ routine C128.norm() -> F128
 ### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
 ### :returns: The complex sine of this value.
 routine C128.sin() -> C128
-  return C128(real: me.real.sin() * me.imag.cosh(), imag: me.real.cos() * me.imag.sinh())
+  return C128(real: me.real.sin() * me.imag.cosh_unchecked(), imag: me.real.cos() * me.imag.sinh_unchecked())
 
 ### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
 ### :returns: The complex cosine of this value.
 routine C128.cos() -> C128
-  return C128(real: me.real.cos() * me.imag.cosh(), imag: -(me.real.sin() * me.imag.sinh()))
+  return C128(real: me.real.cos() * me.imag.cosh_unchecked(), imag: -(me.real.sin() * me.imag.sinh_unchecked()))
 
 ### Returns the complex tangent of this value.
 ### :returns: The complex tangent.
 routine C128.tan() -> C128
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
-  var d = a2.cos() + b2.cosh()
-  return C128(real: a2.sin() / d, imag: b2.sinh() / d)
+  var d = a2.cos() + b2.cosh_unchecked()
+  return C128(real: a2.sin() / d, imag: b2.sinh_unchecked() / d)
 
 ### Returns the complex arcsine of this value.
 ### :returns: The principal value of `arcsin(me)`.
 routine C128.asin() -> C128
   var iz = C128(real: -me.imag, imag: me.real)
-  var w = iz + (C128_ONE - me * me).sqrt()
-  var v = w.log()
+  var w = iz + (C128_ONE - me * me).sqrt_unchecked()
+  var v = w.log_unchecked()
   return C128(real: v.imag, imag: -v.real)
 
 ### Returns the complex arccosine of this value.
 ### :returns: The principal value of `arccos(me)`.
 routine C128.acos() -> C128
-  var s = (C128_ONE - me * me).sqrt()
+  var s = (C128_ONE - me * me).sqrt_unchecked()
   var w = me + C128(real: -s.imag, imag: s.real)
-  var v = w.log()
+  var v = w.log_unchecked()
   return C128(real: v.imag, imag: -v.real)
 
 ### Returns the complex arctangent of this value.
@@ -196,7 +196,7 @@ routine C128.acos() -> C128
 routine C128.atan() -> C128
   var num = C128(real: me.real, imag: me.imag + 1.0_f128)
   var den = C128(real: -me.real, imag: 1.0_f128 - me.imag)
-  var v = (num / den).log()
+  var v = (num / den).log_unchecked()
   return C128(real: -v.imag / 2.0_f128, imag: v.real / 2.0_f128)
 
 # ============================================================================
@@ -205,36 +205,36 @@ routine C128.atan() -> C128
 
 ### Returns the complex hyperbolic sine of this value.
 ### :returns: The complex hyperbolic sine.
-routine C128.sinh() -> C128
-  return C128(real: me.real.sinh() * me.imag.cos(), imag: me.real.cosh() * me.imag.sin())
+routine C128.sinh_unchecked() -> C128
+  return C128(real: me.real.sinh_unchecked() * me.imag.cos(), imag: me.real.cosh_unchecked() * me.imag.sin())
 
 ### Returns the complex hyperbolic cosine of this value.
 ### :returns: The complex hyperbolic cosine.
-routine C128.cosh() -> C128
-  return C128(real: me.real.cosh() * me.imag.cos(), imag: me.real.sinh() * me.imag.sin())
+routine C128.cosh_unchecked() -> C128
+  return C128(real: me.real.cosh_unchecked() * me.imag.cos(), imag: me.real.sinh_unchecked() * me.imag.sin())
 
 ### Returns the complex hyperbolic tangent of this value.
 ### :returns: The complex hyperbolic tangent.
 routine C128.tanh() -> C128
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
-  var d = a2.cosh() + b2.cos()
-  return C128(real: a2.sinh() / d, imag: b2.sin() / d)
+  var d = a2.cosh_unchecked() + b2.cos()
+  return C128(real: a2.sinh_unchecked() / d, imag: b2.sin() / d)
 
 ### Returns the complex inverse hyperbolic sine of this value.
 ### :returns: The principal value of `arcsinh(me)`.
 routine C128.asinh() -> C128
-  return (me + (me * me + C128_ONE).sqrt()).log()
+  return (me + (me * me + C128_ONE).sqrt_unchecked()).log_unchecked()
 
 ### Returns the complex inverse hyperbolic cosine of this value.
 ### :returns: The principal value of `arccosh(me)`.
 routine C128.acosh() -> C128
-  return (me + (me * me - C128_ONE).sqrt()).log()
+  return (me + (me * me - C128_ONE).sqrt_unchecked()).log_unchecked()
 
 ### Returns the complex inverse hyperbolic tangent of this value.
 ### :returns: The principal value of `arctanh(me)`.
 routine C128.atanh() -> C128
-  var v = ((C128_ONE + me) / (C128_ONE - me)).log()
+  var v = ((C128_ONE + me) / (C128_ONE - me)).log_unchecked()
   return C128(real: v.real / 2.0_f128, imag: v.imag / 2.0_f128)
 
 # ============================================================================
@@ -243,29 +243,29 @@ routine C128.atanh() -> C128
 
 ### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
 ### :returns: The complex exponential.
-routine C128.exp() -> C128
-  var ea = me.real.exp()
+routine C128.exp_unchecked() -> C128
+  var ea = me.real.exp_unchecked()
   return C128(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
 
 ### Returns the principal natural logarithm of this complex value.
 ### :returns: `log(|me|) + i·arg(me)`.
-routine C128.log() -> C128
-  return C128(real: me.abs().log(), imag: me.arg())
+routine C128.log_unchecked() -> C128
+  return C128(real: me.abs().log_unchecked(), imag: me.arg())
 
 ### Returns the base-10 logarithm of this complex value.
 ### :returns: `log(me) / ln(10)`.
 routine C128.log10() -> C128
-  var v = me.log()
+  var v = me.log_unchecked()
   return C128(real: v.real / F128_LN_10, imag: v.imag / F128_LN_10)
 
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
-routine C128.sqrt() -> C128
+routine C128.sqrt_unchecked() -> C128
   var r = me.abs()
   if r == 0.0_f128
     return C128_ZERO
-  var rp = ((r + me.real) / 2.0_f128).sqrt()
-  var ip = ((r - me.real) / 2.0_f128).sqrt()
+  var rp = ((r + me.real) / 2.0_f128).sqrt_unchecked()
+  var ip = ((r - me.real) / 2.0_f128).sqrt_unchecked()
   if me.imag < 0.0_f128
     ip = -ip
   return C128(real: rp, imag: ip)

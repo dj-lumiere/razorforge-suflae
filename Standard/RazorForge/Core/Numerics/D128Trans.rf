@@ -108,85 +108,107 @@ routine f256_to_d128(x: F256) -> D128
 # Transcendentals delegate to the internal F256 engine (propagating). The bare `op()` is CHECKED
 # (crashes if the result is non-finite — domain/overflow); `op_unchecked()` propagates inf/NaN.
 # Finite-preserving ops (cbrt, sin/cos/tan/atan/atan2, tanh, asinh) need no split.
-routine D128.exp() -> D128
+routine D128.exp!() -> D128
   var r = me.exp_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.exp_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).exp())
-routine D128.expm1() -> D128
+routine D128.expm1!() -> D128
   var r = me.expm1_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.expm1_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).expm1())
-routine D128.exp2() -> D128
+routine D128.exp2!() -> D128
   var r = me.exp2_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.exp2_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).exp2())
-routine D128.exp10() -> D128
+routine D128.exp10!() -> D128
   var r = me.exp10_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.exp10_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).exp10())
-routine D128.log() -> D128
+routine D128.log!() -> D128
   var r = me.log_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.log_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).log())
-routine D128.log1p() -> D128
+routine D128.log1p!() -> D128
   var r = me.log1p_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.log1p_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).log1p())
-routine D128.log2() -> D128
+routine D128.log2!() -> D128
   var r = me.log2_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.log2_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).log2())
-routine D128.log10() -> D128
+routine D128.log10!() -> D128
   var r = me.log10_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.log10_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).log10())
-routine D128.sqrt() -> D128
+routine D128.sqrt!() -> D128
   var r = me.sqrt_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.sqrt_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).sqrt())
 routine D128.cbrt() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).cbrt())
 routine D128.pow_unchecked(you: D128) -> D128
   return f256_to_d128(x: d128_to_f256(x: me).$pow(you: d128_to_f256(x: you)))
-routine D128.hypot(you: D128) -> D128
+routine D128.hypot!(you: D128) -> D128
   var r = me.hypot_unchecked(you: you)
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.hypot_unchecked(you: D128) -> D128
   return f256_to_d128(x: d128_to_f256(x: me).hypot(you: d128_to_f256(x: you)))
-routine D128.fma(b: D128, c: D128) -> D128
+routine D128.fma!(b: D128, c: D128) -> D128
   var r = me.fma_unchecked(b: b, c: c)
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.fma_unchecked(b: D128, c: D128) -> D128
   return f256_to_d128(x: d128_to_f256(x: me).fma(b: d128_to_f256(x: b), c: d128_to_f256(x: c)))
 routine D128.sin() -> D128
@@ -195,54 +217,66 @@ routine D128.cos() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).cos())
 routine D128.tan() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).tan())
-routine D128.asin() -> D128
+routine D128.asin!() -> D128
   var r = me.asin_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.asin_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).asin())
-routine D128.acos() -> D128
+routine D128.acos!() -> D128
   var r = me.acos_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.acos_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).acos())
 routine D128.atan() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).atan())
 routine D128.atan2(x: D128) -> D128
   return f256_to_d128(x: d128_to_f256(x: me).atan2(x: d128_to_f256(x: x)))
-routine D128.sinh() -> D128
+routine D128.sinh!() -> D128
   var r = me.sinh_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.sinh_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).sinh())
-routine D128.cosh() -> D128
+routine D128.cosh!() -> D128
   var r = me.cosh_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.cosh_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).cosh())
 routine D128.tanh() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).tanh())
 routine D128.asinh() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).asinh())
-routine D128.acosh() -> D128
+routine D128.acosh!() -> D128
   var r = me.acosh_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.acosh_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).acosh())
-routine D128.atanh() -> D128
+routine D128.atanh!() -> D128
   var r = me.atanh_unchecked()
   if r.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 routine D128.atanh_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).atanh())
 
@@ -446,7 +480,9 @@ routine D128.signum() -> D128
 @crash_only
 routine D128.finite!() -> D128
   if not me.is_finite()
-    return d128_nonfinite_crash!(r: me)
+    if me.is_nan()
+      throw NumericDomainError(description: "D128: undefined operation with no real result.")
+    throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
   return me
 
 ### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
@@ -489,11 +525,13 @@ routine D128.fdim(you: D128) -> D128
 ### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-ten exponent to apply.
 ### :returns: `me` scaled by `10^n`.
-routine D128.scaleb(n: S64) -> D128
+routine D128.scaleb!(n: S64) -> D128
   var r = me.scaleb_unchecked(n: n)
   if r.is_finite() or not me.is_finite()
     return r
-  return d128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
 
 ### `me * 10^n` with raw propagation (overflow -> ±infinity, underflow -> 0).
 ### :param n: The power-of-ten exponent to apply.

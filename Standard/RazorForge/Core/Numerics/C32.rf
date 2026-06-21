@@ -130,7 +130,7 @@ routine C32.$eq(you: C32) -> Bool
 ### Returns the modulus (absolute value) of this complex number.
 ### :returns: `√(real² + imag²)`.
 routine C32.abs() -> F32
-  return (me.real * me.real + me.imag * me.imag).sqrt()
+  return (me.real * me.real + me.imag * me.imag).sqrt_unchecked()
 
 ### Returns the phase angle of this complex value in radians.
 routine C32.arg() -> F32
@@ -153,8 +153,8 @@ routine C32.norm() -> F32
 ### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
 ### :returns: The complex sine of this value.
 routine C32.sin() -> C32
-  var ep = me.imag.exp()
-  var em = (-me.imag).exp()
+  var ep = me.imag.exp_unchecked()
+  var em = (-me.imag).exp_unchecked()
   var ch = (ep + em) / 2.0_f32
   var sh = (ep - em) / 2.0_f32
   return C32(real: me.real.sin() * ch, imag: me.real.cos() * sh)
@@ -162,8 +162,8 @@ routine C32.sin() -> C32
 ### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
 ### :returns: The complex cosine of this value.
 routine C32.cos() -> C32
-  var ep = me.imag.exp()
-  var em = (-me.imag).exp()
+  var ep = me.imag.exp_unchecked()
+  var em = (-me.imag).exp_unchecked()
   var ch = (ep + em) / 2.0_f32
   var sh = (ep - em) / 2.0_f32
   return C32(real: me.real.cos() * ch, imag: -(me.real.sin() * sh))
@@ -173,30 +173,30 @@ routine C32.cos() -> C32
 routine C32.tan() -> C32
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
-  var ep = b2.exp()
-  var em = (-b2).exp()
+  var ep = b2.exp_unchecked()
+  var em = (-b2).exp_unchecked()
   var d = a2.cos() + (ep + em) / 2.0_f32
   return C32(real: a2.sin() / d, imag: (ep - em) / 2.0_f32 / d)
 
 ### Returns the complex arcsine of this value.
 routine C32.asin() -> C32
   var iz = C32(real: -me.imag, imag: me.real)
-  var w = iz + (C32_ONE - me * me).sqrt()
-  var v = w.log()
+  var w = iz + (C32_ONE - me * me).sqrt_unchecked()
+  var v = w.log_unchecked()
   return C32(real: v.imag, imag: -v.real)
 
 ### Returns the complex arccosine of this value.
 routine C32.acos() -> C32
-  var s = (C32_ONE - me * me).sqrt()
+  var s = (C32_ONE - me * me).sqrt_unchecked()
   var w = me + C32(real: -s.imag, imag: s.real)
-  var v = w.log()
+  var v = w.log_unchecked()
   return C32(real: v.imag, imag: -v.real)
 
 ### Returns the complex arctangent of this value.
 routine C32.atan() -> C32
   var num = C32(real: me.real, imag: me.imag + 1.0_f32)
   var den = C32(real: -me.real, imag: 1.0_f32 - me.imag)
-  var v = (num / den).log()
+  var v = (num / den).log_unchecked()
   return C32(real: -v.imag / 2.0_f32, imag: v.real / 2.0_f32)
 
 # ============================================================================
@@ -205,18 +205,18 @@ routine C32.atan() -> C32
 
 ### Returns the complex hyperbolic sine of this value.
 ### :returns: The complex hyperbolic sine.
-routine C32.sinh() -> C32
-  var ep = me.real.exp()
-  var em = (-me.real).exp()
+routine C32.sinh_unchecked() -> C32
+  var ep = me.real.exp_unchecked()
+  var em = (-me.real).exp_unchecked()
   var sh = (ep - em) / 2.0_f32
   var ch = (ep + em) / 2.0_f32
   return C32(real: sh * me.imag.cos(), imag: ch * me.imag.sin())
 
 ### Returns the complex hyperbolic cosine of this value.
 ### :returns: The complex hyperbolic cosine.
-routine C32.cosh() -> C32
-  var ep = me.real.exp()
-  var em = (-me.real).exp()
+routine C32.cosh_unchecked() -> C32
+  var ep = me.real.exp_unchecked()
+  var em = (-me.real).exp_unchecked()
   var sh = (ep - em) / 2.0_f32
   var ch = (ep + em) / 2.0_f32
   return C32(real: ch * me.imag.cos(), imag: sh * me.imag.sin())
@@ -226,22 +226,22 @@ routine C32.cosh() -> C32
 routine C32.tanh() -> C32
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
-  var ep = a2.exp()
-  var em = (-a2).exp()
+  var ep = a2.exp_unchecked()
+  var em = (-a2).exp_unchecked()
   var d = (ep + em) / 2.0_f32 + b2.cos()
   return C32(real: (ep - em) / 2.0_f32 / d, imag: b2.sin() / d)
 
 ### Returns the complex inverse hyperbolic sine of this value.
 routine C32.asinh() -> C32
-  return (me + (me * me + C32_ONE).sqrt()).log()
+  return (me + (me * me + C32_ONE).sqrt_unchecked()).log_unchecked()
 
 ### Returns the complex inverse hyperbolic cosine of this value.
 routine C32.acosh() -> C32
-  return (me + (me * me - C32_ONE).sqrt()).log()
+  return (me + (me * me - C32_ONE).sqrt_unchecked()).log_unchecked()
 
 ### Returns the complex inverse hyperbolic tangent of this value.
 routine C32.atanh() -> C32
-  var v = ((C32_ONE + me) / (C32_ONE - me)).log()
+  var v = ((C32_ONE + me) / (C32_ONE - me)).log_unchecked()
   return C32(real: v.real / 2.0_f32, imag: v.imag / 2.0_f32)
 
 # ============================================================================
@@ -250,34 +250,34 @@ routine C32.atanh() -> C32
 
 ### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
 ### :returns: The complex exponential.
-routine C32.exp() -> C32
-  var ea = me.real.exp()
+routine C32.exp_unchecked() -> C32
+  var ea = me.real.exp_unchecked()
   return C32(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
 
 ### Returns the principal natural logarithm of this complex value.
-routine C32.log() -> C32
-  return C32(real: me.abs().log(), imag: me.arg())
+routine C32.log_unchecked() -> C32
+  return C32(real: me.abs().log_unchecked(), imag: me.arg())
 
 ### Returns the base-10 logarithm of this complex value.
 routine C32.log10() -> C32
-  var v = me.log()
+  var v = me.log_unchecked()
   return C32(real: v.real / F32_LN_10, imag: v.imag / F32_LN_10)
 
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
-routine C32.sqrt() -> C32
+routine C32.sqrt_unchecked() -> C32
   var r = me.abs()
   if r == 0.0_f32
     return C32_ZERO
-  var rp = ((r + me.real) / 2.0_f32).sqrt()
-  var ip = ((r - me.real) / 2.0_f32).sqrt()
+  var rp = ((r + me.real) / 2.0_f32).sqrt_unchecked()
+  var ip = ((r - me.real) / 2.0_f32).sqrt_unchecked()
   if me.imag < 0.0_f32
     ip = -ip
   return C32(real: rp, imag: ip)
 
 ### Returns this complex value raised to the complex power `you`.
 routine C32.$pow(you: C32) -> C32
-  return (you * me.log()).exp()
+  return (you * me.log_unchecked()).exp_unchecked()
 
 # ============================================================================
 # Query Routines

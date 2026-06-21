@@ -166,60 +166,54 @@ routine F32.$create(from: D128) -> F32
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
-@crash_only
-routine f32_overflow_crash!() -> F32
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
-@crash_only
-routine f32_domain_crash!() -> F32
-  throw NumericDomainError(description: "F32: undefined operation with no real result (e.g. 0/0 or inf - inf).")
-@crash_only
-routine f32_divzero_crash!() -> F32
-  throw DivisionByZeroError()
-@crash_only
-routine f32_nonfinite_crash!(r: F32) -> F32
-  if r.is_nan()
-    return f32_domain_crash!()
-  return f32_overflow_crash!()
 
 
 ### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `$add_unchecked` for raw IEEE.
 ### :param you: The addend.
 ### :returns: The single-precision sum (always finite).
-routine F32.$add(you: F32) -> F32
+routine F32.$add!(you: F32) -> F32
   var r = float_add[F32](a: me, b: you)
   if r.is_finite()
     return r
-  return f32_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 
 ### Returns `me - you`. Checked: crashes if the IEEE result is non-finite. Use `$sub_unchecked` for raw IEEE.
 ### :param you: The value to subtract.
 ### :returns: The single-precision difference (always finite).
-routine F32.$sub(you: F32) -> F32
+routine F32.$sub!(you: F32) -> F32
   var r = float_sub[F32](a: me, b: you)
   if r.is_finite()
     return r
-  return f32_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 
 ### Returns `me * you`. Checked: crashes if the IEEE result is non-finite. Use `$mul_unchecked` for raw IEEE.
 ### :param you: The multiplier.
 ### :returns: The single-precision product (always finite).
-routine F32.$mul(you: F32) -> F32
+routine F32.$mul!(you: F32) -> F32
   var r = float_mul[F32](a: me, b: you)
   if r.is_finite()
     return r
-  return f32_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow -> overflow.
 ### Use `$truediv_unchecked` for raw IEEE 754, or `(a / b).finite!()` for recoverable handling.
 ### :param you: The divisor.
 ### :returns: The single-precision quotient (always finite).
-routine F32.$truediv(you: F32) -> F32
+routine F32.$truediv!(you: F32) -> F32
   var r = float_div[F32](a: me, b: you)
   if r.is_finite()
     return r
   if you.is_zero() and not me.is_zero()
-    return f32_divzero_crash!()
-  return f32_nonfinite_crash!(r: r)
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 
 ### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
 ### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
@@ -280,11 +274,13 @@ routine F32.$cmp(you: F32) -> ComparisonSign
 
 ### Returns the square root of this value in single precision.
 ### :returns: The intrinsic square-root result for `me`.
-routine F32.sqrt() -> F32
+routine F32.sqrt!() -> F32
   var rr = me.sqrt_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.sqrt_unchecked() -> F32
   return sqrt[F32](me)
 
@@ -325,31 +321,37 @@ routine F32.cos() -> F32
 
 ### Returns `e` raised to this value.
 ### :returns: The single-precision exponential result.
-routine F32.exp() -> F32
+routine F32.exp!() -> F32
   var rr = me.exp_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.exp_unchecked() -> F32
   return exp[F32](me)
 
 ### Returns the natural logarithm of this value.
 ### :returns: The single-precision natural-log result.
-routine F32.log() -> F32
+routine F32.log!() -> F32
   var rr = me.log_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.log_unchecked() -> F32
   return log[F32](me)
 
 ### Returns the base-10 logarithm of this value.
 ### :returns: The single-precision common-log result.
-routine F32.log10() -> F32
+routine F32.log10!() -> F32
   var rr = me.log10_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.log10_unchecked() -> F32
   return log10[F32](me)
 
@@ -363,7 +365,9 @@ routine F32.$pow!(exp: F32) -> F32
   var rr = me.pow_unchecked(exp: exp)
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 
 ### Returns this value with its sign bit replaced by the sign of `sign`.
 ### :param sign: The value supplying the sign bit.
@@ -627,19 +631,23 @@ external("C") routine rf_f32_lgamma(value: F32) -> F32
 routine F32.tan() -> F32
   return rf_f32_tan(value: me)
 ### Arc sine.
-routine F32.asin() -> F32
+routine F32.asin!() -> F32
   var rr = me.asin_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.asin_unchecked() -> F32
   return rf_f32_asin(value: me)
 ### Arc cosine.
-routine F32.acos() -> F32
+routine F32.acos!() -> F32
   var rr = me.acos_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.acos_unchecked() -> F32
   return rf_f32_acos(value: me)
 ### Arc tangent.
@@ -649,19 +657,23 @@ routine F32.atan() -> F32
 routine F32.atan2(x: F32) -> F32
   return rf_f32_atan2(y: me, x: x)
 ### Hyperbolic sine.
-routine F32.sinh() -> F32
+routine F32.sinh!() -> F32
   var rr = me.sinh_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.sinh_unchecked() -> F32
   return rf_f32_sinh(value: me)
 ### Hyperbolic cosine.
-routine F32.cosh() -> F32
+routine F32.cosh!() -> F32
   var rr = me.cosh_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.cosh_unchecked() -> F32
   return rf_f32_cosh(value: me)
 ### Hyperbolic tangent.
@@ -671,78 +683,96 @@ routine F32.tanh() -> F32
 routine F32.asinh() -> F32
   return rf_f32_asinh(value: me)
 ### Inverse hyperbolic cosine.
-routine F32.acosh() -> F32
+routine F32.acosh!() -> F32
   var rr = me.acosh_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.acosh_unchecked() -> F32
   return rf_f32_acosh(value: me)
 ### Inverse hyperbolic tangent.
-routine F32.atanh() -> F32
+routine F32.atanh!() -> F32
   var rr = me.atanh_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.atanh_unchecked() -> F32
   return rf_f32_atanh(value: me)
 ### Cube root.
 routine F32.cbrt() -> F32
   return rf_f32_cbrt(value: me)
 ### Base-2 exponential.
-routine F32.exp2() -> F32
+routine F32.exp2!() -> F32
   var rr = me.exp2_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.exp2_unchecked() -> F32
   return rf_f32_exp2(value: me)
 ### exp(me) - 1, accurate near zero.
-routine F32.expm1() -> F32
+routine F32.expm1!() -> F32
   var rr = me.expm1_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.expm1_unchecked() -> F32
   return rf_f32_expm1(value: me)
 ### log(1 + me), accurate near zero.
-routine F32.log1p() -> F32
+routine F32.log1p!() -> F32
   var rr = me.log1p_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.log1p_unchecked() -> F32
   return rf_f32_log1p(value: me)
 ### Base-2 logarithm.
-routine F32.log2() -> F32
+routine F32.log2!() -> F32
   var rr = me.log2_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.log2_unchecked() -> F32
   return rf_f32_log2(value: me)
 ### Base-10 exponential 10**me.
-routine F32.exp10() -> F32
+routine F32.exp10!() -> F32
   var rr = me.exp10_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.exp10_unchecked() -> F32
   return rf_f32_exp10(value: me)
 ### Hypotenuse sqrt(me^2 + you^2) without overflow.
-routine F32.hypot(you: F32) -> F32
+routine F32.hypot!(you: F32) -> F32
   var rr = me.hypot_unchecked(you: you)
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.hypot_unchecked(you: F32) -> F32
   return rf_f32_hypot(x: me, y: you)
 ### Fused multiply-add me*b + c with a single rounding.
-routine F32.fma(b: F32, c: F32) -> F32
+routine F32.fma!(b: F32, c: F32) -> F32
   var rr = me.fma_unchecked(b: b, c: c)
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.fma_unchecked(b: F32, c: F32) -> F32
   return rf_f32_fma(x: me, y: b, z: c)
 ### Floating-point remainder of me/you (C fmod).
@@ -788,11 +818,13 @@ routine F32.erf() -> F32
 routine F32.erfc() -> F32
   return rf_f32_erfc(value: me)
 ### Gamma function.
-routine F32.tgamma() -> F32
+routine F32.tgamma!() -> F32
   var rr = me.tgamma_unchecked()
   if rr.is_finite()
     return rr
-  return f32_nonfinite_crash!(r: rr)
+  if rr.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 routine F32.tgamma_unchecked() -> F32
   return rf_f32_tgamma(value: me)
 ### Natural log of |gamma(me)|.
@@ -893,11 +925,13 @@ routine F32.logb() -> F32
 ### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
-routine F32.scaleb(n: S64) -> F32
+routine F32.scaleb!(n: S64) -> F32
   var r = me.scalbn(n: n)
   if r.is_finite() or not me.is_finite()
     return r
-  return f32_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
 
 ### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
 ### :param n: The power-of-two exponent to apply.

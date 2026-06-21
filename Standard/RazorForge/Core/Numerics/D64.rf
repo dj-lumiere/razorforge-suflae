@@ -298,48 +298,42 @@ routine d64_div(a: D64, b: D64) -> D64
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
-@crash_only
-routine d64_overflow_crash!() -> D64
-  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
-@crash_only
-routine d64_domain_crash!() -> D64
-  throw NumericDomainError(description: "D64: undefined operation with no real result (e.g. 0/0 or inf - inf).")
-@crash_only
-routine d64_divzero_crash!() -> D64
-  throw DivisionByZeroError()
-@crash_only
-routine d64_nonfinite_crash!(r: D64) -> D64
-  if r.is_nan()
-    return d64_domain_crash!()
-  return d64_overflow_crash!()
 
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw IEEE.
-routine D64.$add(you: D64) -> D64
+routine D64.$add!(you: D64) -> D64
   var r = d64_add(a: me, b: you)
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw IEEE.
-routine D64.$sub(you: D64) -> D64
+routine D64.$sub!(you: D64) -> D64
   var r = d64_sub(a: me, b: you)
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw IEEE.
-routine D64.$mul(you: D64) -> D64
+routine D64.$mul!(you: D64) -> D64
   var r = d64_mul(a: me, b: you)
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow -> overflow.
 ### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
-routine D64.$truediv(you: D64) -> D64
+routine D64.$truediv!(you: D64) -> D64
   var r = d64_div(a: me, b: you)
   if r.is_finite()
     return r
   if you.is_zero() and not me.is_zero()
-    return d64_divzero_crash!()
-  return d64_nonfinite_crash!(r: r)
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D64.$add_unchecked(you: D64) -> D64
@@ -387,7 +381,9 @@ routine D64.$pow!(you: D64) -> D64
   var r = me.pow_unchecked(you: you)
   if r.is_finite()
     return r
-  return d64_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D64: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
 
 routine D64.$represent() -> Text
   return d128_represent(p: d64parts_to_d128(p: me.decode()))

@@ -111,11 +111,11 @@ routine decimalfixed_to_f512(x: Decimal) -> F512
 ### NumericOverflowError (out of range / pole), and -0 normalizes to +0. This is the
 ### single chokepoint for ALL Decimal transcendentals, so it carries the policy for
 ### log(0), acos(2), sqrt(-1), exp(huge), tgamma poles, etc.
-routine f512_to_decimala(x: F512) -> Decimal
+routine f512_to_decimala!(x: F512) -> Decimal
   if x.is_nan()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   if x.is_infinite()
-    return decimalfixed_overflow!()
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
   if x.is_zero()
     return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
   var sign = x.is_negative()
@@ -128,7 +128,15 @@ routine f512_to_decimala(x: F512) -> Decimal
   var coeff = uf512_to_u512_round(u: scaled.to_uf())
   # decfinA may itself clamp an out-of-range magnitude to inf; decimalfixed_check! turns
   # that into NumericOverflowError (and is a no-op for an in-range finite result).
-  return decimalfixed_check!(d: decimalfixed_of_parts(p: decfinA(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: sub[S64](a: 0_s64, b: q))))
+  var __dchk0 = decimalfixed_of_parts(p: decfinA(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: sub[S64](a: 0_s64, b: q)))
+  var __dp0 = __dchk0.decode()
+  if int_eq[U64](a: __dp0.special, b: 1_u64)
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+  if unsigned_ge[U64](a: __dp0.special, b: 2_u64)
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+  if int_eq[U256](a: __dp0.coeff, b: 0)
+    return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp0.exp, coeff: zero_extend[U64, U256](0_u64)))
+  return __dchk0
 
 # ============================================================================
 # Correctly-rounded F512 exp — the "proper" core: k*ln2 range reduction + the
@@ -285,9 +293,9 @@ routine Decimal.exp() -> Decimal
 ### Natural logarithm. Crashes with NumericDomainError if me < 0, NumericOverflowError if me = 0.
 routine Decimal.log!() -> Decimal
   if me.signbit()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   if me.is_zero()
-    return decimalfixed_overflow!()
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).log())
 
 ### exp(me) - 1. Engine expm1 core — cancellation-free near 0 (NOT exp(me)-1).
@@ -298,25 +306,25 @@ routine Decimal.expm1() -> Decimal
 routine Decimal.log1p!() -> Decimal
   var y = me + Decimal(from: 1_s64)
   if y.signbit()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   if y.is_zero()
-    return decimalfixed_overflow!()
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).log1p())
 
 ### Base-2 logarithm. Crashes with NumericDomainError if me < 0, NumericOverflowError if me = 0.
 routine Decimal.log2!() -> Decimal
   if me.signbit()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   if me.is_zero()
-    return decimalfixed_overflow!()
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).log() * f512_recip_ln2())
 
 ### Base-10 logarithm. Crashes with NumericDomainError if me < 0, NumericOverflowError if me = 0.
 routine Decimal.log10!() -> Decimal
   if me.signbit()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   if me.is_zero()
-    return decimalfixed_overflow!()
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).log() * f512_recip_ln10())
 
 ### 2 raised to this value: exp(me * ln2) via the Remez core.
@@ -331,13 +339,13 @@ routine Decimal.exp10() -> Decimal
 ### Crashes with NumericDomainError if me <= 0, NumericOverflowError on overflow.
 routine Decimal.$pow!(you: Decimal) -> Decimal
   if me.signbit() or me.is_zero()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: you) * decimalfixed_to_f512(x: me).log()))
 
 ### Square root (correctly rounded). Crashes with NumericDomainError if me < 0.
 routine Decimal.sqrt!() -> Decimal
   if me.signbit()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   return f512_to_decimala(x: decimalfixed_to_f512(x: me).sqrt())
 
 ### Cube root.
@@ -368,14 +376,14 @@ routine Decimal.tan() -> Decimal
 routine Decimal.asin!() -> Decimal
   var x = decimalfixed_to_f512(x: me)
   if x.abs() > f512a_one()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   return f512_to_decimala(x: f512_asin_cr(x: x))
 
 ### Arccosine. Crashes with NumericDomainError if |me| > 1.
 routine Decimal.acos!() -> Decimal
   var x = decimalfixed_to_f512(x: me)
   if x.abs() > f512a_one()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   return f512_to_decimala(x: f512_acos_cr(x: x))
 
 ### Arctangent. Uses the dedicated range-reduced Remez core (f512_atan_cr).
@@ -406,7 +414,7 @@ routine Decimal.asinh() -> Decimal
 routine Decimal.acosh!() -> Decimal
   var x = decimalfixed_to_f512(x: me)
   if x < f512a_one()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   return f512_to_decimala(x: x.acosh())
 
 ### Inverse hyperbolic tangent. Crashes with NumericDomainError if |me| > 1, NumericOverflowError if |me| = 1.
@@ -414,9 +422,9 @@ routine Decimal.atanh!() -> Decimal
   var x = decimalfixed_to_f512(x: me)
   var ax = x.abs()
   if ax > f512a_one()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   if ax == f512a_one()
-    return decimalfixed_overflow!()
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
   return f512_to_decimala(x: x.atanh())
 
 # ============================================================================
@@ -548,16 +556,16 @@ routine f512_lgamma_cr(x: F512) -> F512
 routine Decimal.tgamma!() -> Decimal
   var r = f512_tgamma_cr(x: decimalfixed_to_f512(x: me))
   if r.is_nan()
-    return decimalfixed_domain!()
+    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
   if r.is_infinite()
-    return decimalfixed_overflow!()
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
   return f512_to_decimala(x: r)
 
 ### Natural log of the absolute value of gamma. Crashes with NumericOverflowError at poles (me = 0 or negative integer).
 routine Decimal.lgamma!() -> Decimal
   var r = f512_lgamma_cr(x: decimalfixed_to_f512(x: me))
   if r.is_infinite()
-    return decimalfixed_overflow!()
+    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
   return f512_to_decimala(x: r)
 
 # ============================================================================

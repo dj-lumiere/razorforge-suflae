@@ -298,48 +298,42 @@ routine d32_div(a: D32, b: D32) -> D32
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
-@crash_only
-routine d32_overflow_crash!() -> D32
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
-@crash_only
-routine d32_domain_crash!() -> D32
-  throw NumericDomainError(description: "D32: undefined operation with no real result (e.g. 0/0 or inf - inf).")
-@crash_only
-routine d32_divzero_crash!() -> D32
-  throw DivisionByZeroError()
-@crash_only
-routine d32_nonfinite_crash!(r: D32) -> D32
-  if r.is_nan()
-    return d32_domain_crash!()
-  return d32_overflow_crash!()
 
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw IEEE.
-routine D32.$add(you: D32) -> D32
+routine D32.$add!(you: D32) -> D32
   var r = d32_add(a: me, b: you)
   if r.is_finite()
     return r
-  return d32_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw IEEE.
-routine D32.$sub(you: D32) -> D32
+routine D32.$sub!(you: D32) -> D32
   var r = d32_sub(a: me, b: you)
   if r.is_finite()
     return r
-  return d32_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw IEEE.
-routine D32.$mul(you: D32) -> D32
+routine D32.$mul!(you: D32) -> D32
   var r = d32_mul(a: me, b: you)
   if r.is_finite()
     return r
-  return d32_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow -> overflow.
 ### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
-routine D32.$truediv(you: D32) -> D32
+routine D32.$truediv!(you: D32) -> D32
   var r = d32_div(a: me, b: you)
   if r.is_finite()
     return r
   if you.is_zero() and not me.is_zero()
-    return d32_divzero_crash!()
-  return d32_nonfinite_crash!(r: r)
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "D32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D32.$add_unchecked(you: D32) -> D32
@@ -387,7 +381,9 @@ routine D32.$pow!(you: D32) -> D32
   var r = me.pow_unchecked(you: you)
   if r.is_finite()
     return r
-  return d32_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "D32: undefined operation with no real result.")
+  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
 
 routine D32.$represent() -> Text
   return d128_represent(p: d32parts_to_d128(p: me.decode()))

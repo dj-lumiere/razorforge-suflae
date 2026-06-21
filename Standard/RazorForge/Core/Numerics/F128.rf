@@ -170,11 +170,13 @@ routine F128.logb() -> F128
 ### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
-routine F128.scaleb(n: S64) -> F128
+routine F128.scaleb!(n: S64) -> F128
   var r = me.scalbn(n: n)
   if r.is_finite() or not me.is_finite()
     return r
-  return f128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
 
 ### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
 ### :param n: The power-of-two exponent to apply.
@@ -315,63 +317,57 @@ routine F128.$cmp(you: F128) -> ComparisonSign
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
-@crash_only
-routine f128_overflow_crash!() -> F128
-  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
-@crash_only
-routine f128_domain_crash!() -> F128
-  throw NumericDomainError(description: "F128: undefined operation with no real result (e.g. 0/0 or inf - inf).")
-@crash_only
-routine f128_divzero_crash!() -> F128
-  throw DivisionByZeroError()
-@crash_only
-routine f128_nonfinite_crash!(r: F128) -> F128
-  if r.is_nan()
-    return f128_domain_crash!()
-  return f128_overflow_crash!()
 
 ### Returns `me + you` (software IEEE 754, round-to-nearest-even). Checked: crashes if the result is
 ### non-finite. Use `$add_unchecked` for raw IEEE 754 propagation.
 ### :param you: The addend.
 ### :returns: The sum (always finite).
-routine F128.$add(you: F128) -> F128
+routine F128.$add!(you: F128) -> F128
   var r = F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: you.to_bits()))
   if r.is_finite()
     return r
-  return f128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
 
 ### Returns `me - you` (software IEEE 754). Checked: crashes if the result is non-finite.
 ### Use `$sub_unchecked` for raw IEEE 754 propagation.
 ### :param you: The value to subtract.
 ### :returns: The difference (always finite).
-routine F128.$sub(you: F128) -> F128
+routine F128.$sub!(you: F128) -> F128
   var yb = bit_xor[U128](a: you.to_bits(), b: f128_sign_mask())
   var r = F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: yb))
   if r.is_finite()
     return r
-  return f128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
 
 ### Returns `me * you` (software IEEE 754). Checked: crashes if the result is non-finite.
 ### Use `$mul_unchecked` for raw IEEE 754 propagation.
 ### :param you: The multiplier.
 ### :returns: The product (always finite).
-routine F128.$mul(you: F128) -> F128
+routine F128.$mul!(you: F128) -> F128
   var r = F128.from_bits(bits: f128_mul_bits(a: me.to_bits(), b: you.to_bits()))
   if r.is_finite()
     return r
-  return f128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
 
 ### Returns `me / you` (software IEEE 754). Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain,
 ### overflow -> overflow. Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 ### :param you: The divisor.
 ### :returns: The quotient (always finite).
-routine F128.$truediv(you: F128) -> F128
+routine F128.$truediv!(you: F128) -> F128
   var r = F128.from_bits(bits: f128_div_bits(a: me.to_bits(), b: you.to_bits()))
   if r.is_finite()
     return r
   if you.is_zero() and not me.is_zero()
-    return f128_divzero_crash!()
-  return f128_nonfinite_crash!(r: r)
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "F128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
 
 # ============================================================================
 # Rounding to integer and value selection (exact, on packed bits — no rounding
@@ -964,7 +960,7 @@ routine f128_isqrt256(n: U256) -> U256
     if int_ne[S64](a: signed_rem[S64](a: sh, b: 2_s64), b: 0_s64)
       sh = sub[S64](a: sh, b: 1_s64)
   var ntop = int_truncate[U256, U64](shift_right_unsigned[U256](n, uf_amt[U256](sh)))
-  var seed = float_to_unsigned[F64, U64](F64(from: ntop).sqrt())
+  var seed = float_to_unsigned[F64, U64](F64(from: ntop).sqrt_unchecked())
   var x = shift_left[U256](value: zero_extend[U64, U256](seed), bits: uf_amt[U256](signed_div[S64](a: sh, b: 2_s64)))
   if int_eq[U256](a: x, b: zero)
     x = one
@@ -986,11 +982,13 @@ routine f128_isqrt256(n: U256) -> U256
 ### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` -> NaN).
 ### Use `sqrt_unchecked` for raw IEEE 754 propagation.
 ### :returns: The quadruple-precision square root (always finite for finite non-negative input).
-routine F128.sqrt() -> F128
+routine F128.sqrt!() -> F128
   var r = me.sqrt_unchecked()
   if r.is_finite()
     return r
-  return f128_nonfinite_crash!(r: r)
+  if r.is_nan()
+    throw NumericDomainError(description: "F128: undefined operation with no real result.")
+  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
 
 ### Returns the correctly-rounded square root with raw IEEE 754 propagation (C `sqrt`):
 ### NaN for negatives, +inf for +inf, ±0 for ±0.
