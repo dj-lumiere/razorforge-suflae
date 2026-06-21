@@ -574,6 +574,16 @@ public sealed partial class SemanticVerifier
             teardownPass.Run(program: program);
         teardownPass.RunOnVariantBodies();
 
+        // Tear down owned RVALUE temporaries (heap-owning receiver/discarded producers) that the
+        // binding-only ScopeTeardownLoweringPass cannot see. Runs AFTER teardown so it never
+        // double-frees the temps' bindings, and BEFORE reachability so its $destroy calls drive
+        // liveness. Stdlib + variant bodies are already Phase-7 lowered here (when→if done); USER
+        // programs are lowered later (Phase 7 per-file), so they get this pass in RunPhase7Postprocessing.
+        var tempTeardownPass = new Compiler.Postprocessing.Passes.TemporaryTeardownPass(markerCtx);
+        foreach ((Program program, _, _) in _registry.StdlibPrograms)
+            tempTeardownPass.Run(program: program);
+        tempTeardownPass.RunOnBodies(markerCtx.VariantBodies);
+
         var markerPass = new MarkerProtocolDesugarPass(markerCtx);
         _markerPass = markerPass;
         markerPass.RewriteAllSignatures();
@@ -665,6 +675,12 @@ public sealed partial class SemanticVerifier
             target: _target,
             buildMode: _buildMode);
         new PostprocessingPipeline(ctx: ctx).Run(program: program);
+
+        // Owned rvalue-temporary teardown for user code, now that Phase 7 has lowered when→if so the
+        // producing calls sit in real statements. ScopeTeardownLoweringPass already ran (pre-lowering,
+        // step 4) and will not revisit this program, so the temps' bindings are freed exactly once by
+        // the $destroy calls this pass emits (codegen emit-on-demand resolves the concrete $destroy).
+        new Compiler.Postprocessing.Passes.TemporaryTeardownPass(ctx).Run(program: program);
     }
 
     /// <summary>

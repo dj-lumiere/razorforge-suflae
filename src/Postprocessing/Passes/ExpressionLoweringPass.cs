@@ -2091,12 +2091,18 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         List<Statement> hoisted, string name, TypeInfo? typeHint, SourceLocation loc)
     {
         if (typeHint == null) return; // can't emit without a type; leave to codegen fallback
+        // IsLateInit so codegen zero-inits the placeholder (entities get a calloc'd block, value/
+        // managed-leaf records get zeroinitializer). Each when/`??`/`?.` arm assigns this temp, and
+        // an owned-type assignment releases the OLD value first (entities via ScopeTeardownLoweringPass,
+        // managed-leaf records via TemporaryTeardownPass) — so the placeholder it tears down on the
+        // first assignment must be a null-safe zeroed value, not garbage.
         var decl = new VariableDeclaration(
             Name: name,
             Type: TypeInfoToExpr(typeHint, loc),
             Initializer: null,
             Visibility: VisibilityModifier.Secret,
-            Location: loc);
+            Location: loc,
+            IsLateInit: true);
         hoisted.Add(new DeclarationStatement(Declaration: decl, Location: loc));
     }
 
