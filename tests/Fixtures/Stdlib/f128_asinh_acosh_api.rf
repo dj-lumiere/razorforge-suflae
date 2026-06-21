@@ -22,11 +22,11 @@ routine start()
   # High-precision references (verified to ~1e-34 against the engine during development).
   ck(got: F128(from: 1_s64).asinh(), want: F128!("0.881373587019543025232609324979792"), label: "asinh(1)")
   ck(got: F128(from: 2_s64).asinh(), want: F128!("1.443635475178810342493276740273105"), label: "asinh(2)")
-  ck(got: F128(from: 2_s64).acosh(), want: F128!("1.316957896924816708625046347307969"), label: "acosh(2)")
+  ck(got: F128(from: 2_s64).acosh_unchecked(), want: F128!("1.316957896924816708625046347307969"), label: "acosh(2)")
 
   # Exact special points.
   bits_eq(got: F128(from: 0_s64).asinh(), want: F128(from: 0_s64), label: "asinh(0)==0")
-  bits_eq(got: F128(from: 1_s64).acosh(), want: F128(from: 0_s64), label: "acosh(1)==0")
+  bits_eq(got: F128(from: 1_s64).acosh_unchecked(), want: F128(from: 0_s64), label: "acosh(1)==0")
 
   # asinh is odd: asinh(-x) == -asinh(x), bit-exact.
   bits_eq(got: F128(from: -5_s64).asinh(), want: F128(from: 5_s64).asinh().$neg(), label: "asinh odd (-5)")
@@ -37,7 +37,7 @@ routine start()
   var all_exact = true
   while signed_le[S64](a: t, b: 12_s64)
     var tf = F128(from: t)
-    if int_ne[U128](a: tf.cosh().acosh().to_bits(), b: tf.to_bits())
+    if int_ne[U128](a: tf.cosh_unchecked().acosh_unchecked().to_bits(), b: tf.to_bits())
       all_exact = false
     t = add[S64](a: t, b: 1_s64)
   show("acosh(cosh(t))==t for t=1..12: " + f"{all_exact}")

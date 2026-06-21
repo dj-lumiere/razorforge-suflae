@@ -3,13 +3,13 @@ import IO/Console
 
 # Float math: sqrt/pow/log/exp/trig, rounding, classification, clamping.
 routine start()
-  show(f"sqrt(2): {(2.0_f64).sqrt()}")
-  show(f"sqrt(16): {(16.0_f64).sqrt()}")
+  show(f"sqrt(2): {(2.0_f64).sqrt_unchecked()}")
+  show(f"sqrt(16): {(16.0_f64).sqrt_unchecked()}")
   show(f"pow(2, 10): {2.0_f64 ** 10.0_f64}")
-  show(f"exp(0): {(0.0_f64).exp()}")
-  show(f"exp(1): {(1.0_f64).exp()}")
-  show(f"log(e): {(1.0_f64).exp().log()}")
-  show(f"log10(1000): {(1000.0_f64).log10()}")
+  show(f"exp(0): {(0.0_f64).exp_unchecked()}")
+  show(f"exp(1): {(1.0_f64).exp_unchecked()}")
+  show(f"log(e): {(1.0_f64).exp_unchecked().log_unchecked()}")
+  show(f"log10(1000): {(1000.0_f64).log10_unchecked()}")
 
   # Trig (radians)
   show(f"sin(0): {(0.0_f64).sin()}")
