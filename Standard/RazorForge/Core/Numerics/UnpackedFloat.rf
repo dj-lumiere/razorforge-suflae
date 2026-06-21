@@ -5,7 +5,6 @@ module Core
 # backs F128 / F256 / F512 and the decimal transcendental bridges.
 # See THIRD-PARTY-NOTICES.md.
 
-
 # ============================================================================
 # UnpackedFloat[M, L, W] — generic extended-precision unpacked float, a faithful
 # port of TLFloat's `UnpackedFloat<mant_t, longmant_t, 0, nbmant>` (nbexp = 0).
@@ -135,11 +134,13 @@ common routine UnpackedFloat[M, L, W].zero(sign: Bool) -> ?UnpackedFloat[M, L, W
 
 ### Positive or negative infinity.
 common routine UnpackedFloat[M, L, W].inf(sign: Bool) -> ?UnpackedFloat[M, L, W]
+  # mantissa = the leading bit at position W-2 (canonical normalized leading-bit slot).
   var lead = shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: reinterpret_bits[U64, S64](W), b: 2_s64)))
   return UnpackedFloat[M, L, W](mant: lead, exp: -1_s64, sign: sign, iszero: false, isinf: true, isnan: false)
 
 ### The canonical quiet NaN.
 common routine UnpackedFloat[M, L, W].nan() -> ?UnpackedFloat[M, L, W]
+  # mantissa = 0b11 at bit W-2 -> leading bit set plus the quiet bit just below it.
   var m = shift_left[M](value: 3, bits: uf_amt[M](sub[S64](a: reinterpret_bits[U64, S64](W), b: 3_s64)))
   return UnpackedFloat[M, L, W](mant: m, exp: -1_s64, sign: false, iszero: false, isinf: false, isnan: true)
 
@@ -220,6 +221,8 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
       return me
     if signed_lt[S64](a: ed, b: negwb)
       return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, sign: rsign, iszero: you.iszero, isinf: you.isinf, isnan: you.isnan)
+  # True subtraction iff the effective signs differ; align both mantissas into the
+  # wide L word so the larger keeps wb fraction bits and the smaller is shifted by ed.
   var subtract = me.sign != rsign
   var lsh = if signed_gt[S64](a: ed, b: 0_s64) then wb else add[S64](a: wb, b: ed)
   var rsh = if signed_gt[S64](a: ed, b: 0_s64) then sub[S64](a: wb, b: ed) else wb
@@ -230,9 +233,11 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
   var rsign2 = me.sign
   if not subtract
     am = add[L](a: lm, b: rm)
+    # carry out of the top bit -> renormalize right by one, bump exponent.
     if uf_bit[L](v: am, pos: carry)
       am = uf_sh[L](v: am, s: -1_s64)
       exp = add[S64](a: exp, b: 1_s64)
+    # round-half-even: base addend is all the low guard bits; +1 when the round bit (wb) is set.
     var addend = uf_lowmask[L](wm1)
     if uf_bit[L](v: am, pos: wb)
       addend = add[L](a: addend, b: uf_amt[L](1_s64))
@@ -241,14 +246,17 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
       am = uf_sh[L](v: am, s: -1_s64)
       exp = add[S64](a: exp, b: 1_s64)
   else
+    # magnitude subtraction: result takes the sign of the larger operand.
     if unsigned_lt[L](a: lm, b: rm)
       am = sub[L](a: rm, b: lm)
       rsign2 = rsign
     else
       am = sub[L](a: lm, b: rm)
       rsign2 = me.sign
+    # exact cancellation yields +0.
     if int_eq[L](a: am, b: 0)
       rsign2 = false
+    # renormalize: shift the leading set bit back up to its canonical position, adjust exp.
     var x = sub[S64](a: uf_clzL[M, L, W](am), b: 1_s64)
     am = uf_sh[L](v: am, s: x)
     exp = sub[S64](a: exp, b: x)
@@ -351,13 +359,16 @@ routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloa
   # remainder (only needed as a nonzero/sticky flag) comes from a cheap mul-back.
   var quo = num // den
   var rrem = sub[L](a: num, b: mul[L](a: quo, b: den))
+  # msbq = index of the quotient's top set bit; s = how many low bits to drop to nbmant.
   var msbq = sub[S64](a: sub[S64](a: mul[S64](a: 2_s64, b: wb), b: 1_s64), b: uf_clzL[M, L, W](quo))
   var s = sub[S64](a: msbq, b: nbm)
   var q = int_truncate[L, M](uf_sh[L](v: quo, s: sub[S64](a: 0_s64, b: s)))
+  # lost = the dropped low s bits; half = the round bit (2^(s-1)) for half-even decisions.
   var lost = int_truncate[L, M](bit_and[L](a: quo, b: uf_lowmask[L](s)))
   var half = uf_sh[M](v: uf_amt[M](1_s64), s: sub[S64](a: s, b: 1_s64))
   var rexp = sub[S64](a: add[S64](a: sub[S64](a: me.exp, b: you.exp), b: msbq), b: add[S64](a: wb, b: 1_s64))
   var roundup = false
+  # > half -> round up; == half -> sticky (nonzero remainder) breaks the tie, else even.
   if unsigned_gt[M](a: lost, b: half)
     roundup = true
   elseif int_eq[M](a: lost, b: half)
@@ -367,6 +378,7 @@ routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloa
       roundup = int_ne[M](a: bit_and[M](a: q, b: uf_amt[M](1_s64)), b: 0)
   if roundup
     q = add[M](a: q, b: uf_amt[M](1_s64))
+    # rounding may carry into bit W-1 -> renormalize down one and bump the exponent.
     if uf_bit[M](v: q, pos: wm1)
       q = uf_sh[M](v: q, s: -1_s64)
       rexp = add[S64](a: rexp, b: 1_s64)
@@ -551,6 +563,8 @@ routine UnpackedFloat[M, L, W].sqrt_newton() -> ?UnpackedFloat[M, L, W]
     j = add[S64](a: j, b: 1_s64)
   return v.mul(you: y).ldexp(e: k)
 
+### Returns the correctly-rounded square root (NaN-of-negative, ±0 and +inf pass through).
+### W>=256 routes to the quadratic Newton path; narrower W uses the bitwise `uf_isqrt`.
 routine UnpackedFloat[M, L, W].sqrt() -> ?UnpackedFloat[M, L, W]
   if me.isnan
     return me
@@ -724,18 +738,23 @@ routine UnpackedFloat[M, L, W].toward0() -> ?UnpackedFloat[M, L, W]
     m = uf_sh[M](v: m, s: 1_s64)
   return UnpackedFloat[M, L, W].make(mant: m, exp: exp, sign: me.sign, iszero: false, isinf: false, isnan: false)
 
+### Returns `true` when `me < you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].lt(you: UnpackedFloat[M, L, W]) -> Bool
   return signed_lt[S64](a: me.cmp(you: you), b: 0_s64)
 
+### Returns `true` when `me > you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].gt(you: UnpackedFloat[M, L, W]) -> Bool
   return signed_gt[S64](a: me.cmp(you: you), b: 0_s64)
 
+### Returns `true` when `me <= you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].le(you: UnpackedFloat[M, L, W]) -> Bool
   return not signed_gt[S64](a: me.cmp(you: you), b: 0_s64)
 
+### Returns `true` when `me >= you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].ge(you: UnpackedFloat[M, L, W]) -> Bool
   return not signed_lt[S64](a: me.cmp(you: you), b: 0_s64)
 
+### Returns `true` when `me == you`; NaN compares unequal to everything (incl. itself).
 routine UnpackedFloat[M, L, W].eq(you: UnpackedFloat[M, L, W]) -> Bool
   if me.isnan or you.isnan
     return false

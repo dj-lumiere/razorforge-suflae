@@ -12,7 +12,6 @@ module Core
 # present and external("C") libm bindings (incl. erf/tgamma) otherwise.
 # ============================================================================
 
-
 # Transcendentals delegate to F64's libm methods (Standard F64.rf, bound to the
 # rf_f64_* runtime passthroughs). The dec<->f64 conversions below are hand-rolled
 # on our BID parts (NOT the rf_d32_to_f64 FFI, which assumes decNumber's layout).
@@ -48,6 +47,7 @@ routine F64.$create(from: D32) -> F64
     return F64.from_bits(bits: ib)
   if unsigned_ge[U64](a: p.special, b: 2_u64)
     return F64.from_bits(bits: 0x7FF8000000000000_u64)
+  # value = coeff (exact, <=7 digits) * 10^exp; widen coeff to F64 then scale, apply sign
   var cf = p.coeff.F64()
   var v = float_mul[F64](a: cf, b: f64_pow10(e: p.exp))
   if p.sign
@@ -65,190 +65,359 @@ routine D32.$create(from: F64) -> D32
 # Transcendentals — F64 methods where present, external libm otherwise.
 # ============================================================================
 
+### e^me via hardware libm (F64). Crashes on a non-finite result.
+### :returns: The exponential of `me`.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.exp!() -> D32
   var r = me.exp_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### e^me via libm double, raw IEEE: may return ±inf or NaN. Never crashes.
+### :returns: The exponential of `me`, possibly non-finite.
 routine D32.exp_unchecked() -> D32
   return me.F64().exp_unchecked().D32()
+
+### e^me - 1 (accurate near 0) via libm. Crashes on a non-finite result.
+### :returns: `exp(me) - 1`.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.expm1!() -> D32
   var r = me.expm1_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `exp(me) - 1` via libm double, raw IEEE: may return ±inf or NaN. Never crashes.
+### :returns: `exp(me) - 1`, possibly non-finite.
 routine D32.expm1_unchecked() -> D32
   return me.F64().expm1_unchecked().D32()
+
+### 2^me via libm. Crashes on a non-finite result.
+### :returns: Two raised to the power `me`.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.exp2!() -> D32
   var r = me.exp2_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### 2^me via libm double, raw IEEE: may return ±inf or NaN. Never crashes.
+### :returns: Two raised to the power `me`, possibly non-finite.
 routine D32.exp2_unchecked() -> D32
   return me.F64().exp2_unchecked().D32()
+
+### 10^me via libm. Crashes on a non-finite result.
+### :returns: Ten raised to the power `me`.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.exp10!() -> D32
   var r = me.exp10_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### 10^me via libm pow(10, me), raw IEEE: may return ±inf or NaN. Never crashes.
+### :returns: Ten raised to the power `me`, possibly non-finite.
 routine D32.exp10_unchecked() -> D32
   return (10.0_f64).pow_unchecked(exp: me.F64()).D32()
+
+### Natural log ln(me) via libm. Crashes on a non-finite result (me<=0).
+### :returns: The natural logarithm of `me`.
+### :throws: {NumericDomainError} on NaN (me<0); {NumericOverflowError} on ±inf (me=0).
 routine D32.log!() -> D32
   var r = me.log_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### ln(me) via libm double, raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
+### :returns: The natural logarithm of `me`, possibly non-finite.
 routine D32.log_unchecked() -> D32
   return me.F64().log_unchecked().D32()
+
+### ln(1+me) (accurate near 0) via libm. Crashes on a non-finite result (me<=-1).
+### :returns: `ln(1 + me)`.
+### :throws: {NumericDomainError} on NaN (me<-1); {NumericOverflowError} on ±inf (me=-1).
 routine D32.log1p!() -> D32
   var r = me.log1p_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `ln(1 + me)` via libm double, raw IEEE: NaN for me<-1, -inf for me=-1. Never crashes.
+### :returns: `ln(1 + me)`, possibly non-finite.
 routine D32.log1p_unchecked() -> D32
   return me.F64().log1p_unchecked().D32()
+
+### Base-2 log log2(me) via libm. Crashes on a non-finite result (me<=0).
+### :returns: The base-2 logarithm of `me`.
+### :throws: {NumericDomainError} on NaN (me<0); {NumericOverflowError} on ±inf (me=0).
 routine D32.log2!() -> D32
   var r = me.log2_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### log2(me) via libm double, raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
+### :returns: The base-2 logarithm of `me`, possibly non-finite.
 routine D32.log2_unchecked() -> D32
   return me.F64().log2_unchecked().D32()
+
+### Base-10 log log10(me) via libm. Crashes on a non-finite result (me<=0).
+### :returns: The base-10 logarithm of `me`.
+### :throws: {NumericDomainError} on NaN (me<0); {NumericOverflowError} on ±inf (me=0).
 routine D32.log10!() -> D32
   var r = me.log10_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### log10(me) via libm double, raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
+### :returns: The base-10 logarithm of `me`, possibly non-finite.
 routine D32.log10_unchecked() -> D32
   return me.F64().log10_unchecked().D32()
+
+### Square root sqrt(me) via libm. Crashes on a non-finite result (me<0).
+### :returns: The square root of `me`.
+### :throws: {NumericDomainError} on NaN (me<0); {NumericOverflowError} on ±inf.
 routine D32.sqrt!() -> D32
   var r = me.sqrt_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### sqrt(me) via libm double, raw IEEE: NaN for me<0. Never crashes.
+### :returns: The square root of `me`, possibly NaN.
 routine D32.sqrt_unchecked() -> D32
   return me.F64().sqrt_unchecked().D32()
+
+### Cube root cbrt(me) via libm (defined for all reals). Never crashes.
+### :returns: The cube root of `me`.
 routine D32.cbrt() -> D32
   return me.F64().cbrt().D32()
+
+### me^you (general power) via libm, raw IEEE: may return ±inf or NaN. Never crashes.
+### :param you: The exponent.
+### :returns: `me` raised to the power `you`, possibly non-finite.
 routine D32.pow_unchecked(you: D32) -> D32
   return me.F64().pow_unchecked(exp: you.F64()).D32()
+
+### sqrt(me^2 + you^2) (without spurious overflow) via libm. Crashes if non-finite.
+### :param you: The second leg.
+### :returns: The Euclidean length `hypot(me, you)`.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.hypot!(you: D32) -> D32
   var r = me.hypot_unchecked(you: you)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `hypot(me, you)` via libm double, raw IEEE: may return +inf. Never crashes.
+### :param you: The second leg.
+### :returns: The Euclidean length, possibly +inf.
 routine D32.hypot_unchecked(you: D32) -> D32
   return me.F64().hypot_unchecked(you: you.F64()).D32()
+
+### Fused multiply-add me*b + c, single rounding, via libm. Crashes if non-finite.
+### :param b: The multiplier.
+### :param c: The addend.
+### :returns: `me * b + c` rounded once.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.fma!(b: D32, c: D32) -> D32
   var r = me.fma_unchecked(b: b, c: c)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `me * b + c` (single rounding) via libm, raw IEEE: may return ±inf or NaN. Never crashes.
+### :param b: The multiplier.
+### :param c: The addend.
+### :returns: `me * b + c`, possibly non-finite.
 routine D32.fma_unchecked(b: D32, c: D32) -> D32
   return me.F64().fma_unchecked(b: b.F64(), c: c.F64()).D32()
+
+### Sine sin(me) (radians) via libm. Never crashes (NaN for non-finite input).
+### :returns: The sine of `me`.
 routine D32.sin() -> D32
   return me.F64().sin().D32()
+
+### Cosine cos(me) (radians) via libm. Never crashes (NaN for non-finite input).
+### :returns: The cosine of `me`.
 routine D32.cos() -> D32
   return me.F64().cos().D32()
+
+### Tangent tan(me) (radians) via libm. Never crashes (NaN for non-finite input).
+### :returns: The tangent of `me`.
 routine D32.tan() -> D32
   return me.F64().tan().D32()
+
+### Arcsine asin(me) via libm. Crashes if non-finite (|me|>1).
+### :returns: The arcsine of `me` in radians.
+### :throws: {NumericDomainError} on NaN (|me|>1); {NumericOverflowError} on ±inf.
 routine D32.asin!() -> D32
   var r = me.asin_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### asin(me) via libm double, raw IEEE: NaN for |me|>1. Never crashes.
+### :returns: The arcsine of `me`, possibly NaN.
 routine D32.asin_unchecked() -> D32
   return me.F64().asin_unchecked().D32()
+
+### Arccosine acos(me) via libm. Crashes if non-finite (|me|>1).
+### :returns: The arccosine of `me` in radians.
+### :throws: {NumericDomainError} on NaN (|me|>1); {NumericOverflowError} on ±inf.
 routine D32.acos!() -> D32
   var r = me.acos_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### acos(me) via libm double, raw IEEE: NaN for |me|>1. Never crashes.
+### :returns: The arccosine of `me`, possibly NaN.
 routine D32.acos_unchecked() -> D32
   return me.F64().acos_unchecked().D32()
+
+### Arctangent atan(me) via libm (defined for all reals). Never crashes.
+### :returns: The arctangent of `me` in radians.
 routine D32.atan() -> D32
   return me.F64().atan().D32()
+
+### Two-argument arctangent atan2(me, x), quadrant-aware, via libm. Never crashes.
+### :param x: The x-coordinate (me is the y-coordinate).
+### :returns: The angle of (x, me) in radians, in (-pi, pi].
 routine D32.atan2(x: D32) -> D32
   return me.F64().atan2(x: x.F64()).D32()
+
+### Hyperbolic sine sinh(me) via libm. Crashes if non-finite (overflow for large |me|).
+### :returns: The hyperbolic sine of `me`.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.sinh!() -> D32
   var r = me.sinh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### sinh(me) via libm double, raw IEEE: ±inf on overflow. Never crashes.
+### :returns: The hyperbolic sine of `me`, possibly ±inf.
 routine D32.sinh_unchecked() -> D32
   return me.F64().sinh_unchecked().D32()
+
+### Hyperbolic cosine cosh(me) via libm. Crashes if non-finite (overflow for large |me|).
+### :returns: The hyperbolic cosine of `me`.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.cosh!() -> D32
   var r = me.cosh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### cosh(me) via libm double, raw IEEE: +inf on overflow. Never crashes.
+### :returns: The hyperbolic cosine of `me`, possibly +inf.
 routine D32.cosh_unchecked() -> D32
   return me.F64().cosh_unchecked().D32()
+
+### Hyperbolic tangent tanh(me) via libm (defined for all reals). Never crashes.
+### :returns: The hyperbolic tangent of `me`.
 routine D32.tanh() -> D32
   return me.F64().tanh().D32()
+
+### Inverse hyperbolic sine asinh(me) via libm (defined for all reals). Never crashes.
+### :returns: The inverse hyperbolic sine of `me`.
 routine D32.asinh() -> D32
   return me.F64().asinh().D32()
+
+### Inverse hyperbolic cosine acosh(me) via libm. Crashes if non-finite (me<1).
+### :returns: The inverse hyperbolic cosine of `me`.
+### :throws: {NumericDomainError} on NaN (me<1); {NumericOverflowError} on ±inf.
 routine D32.acosh!() -> D32
   var r = me.acosh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### acosh(me) via libm double, raw IEEE: NaN for me<1. Never crashes.
+### :returns: The inverse hyperbolic cosine of `me`, possibly NaN.
 routine D32.acosh_unchecked() -> D32
   return me.F64().acosh_unchecked().D32()
+
+### Inverse hyperbolic tangent atanh(me) via libm. Crashes if non-finite (|me|>=1).
+### :returns: The inverse hyperbolic tangent of `me`.
+### :throws: {NumericDomainError} on NaN (|me|>1); {NumericOverflowError} on ±inf (|me|=1).
 routine D32.atanh!() -> D32
   var r = me.atanh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### atanh(me) via libm double, raw IEEE: NaN for |me|>1, ±inf for |me|=1. Never crashes.
+### :returns: The inverse hyperbolic tangent of `me`, possibly non-finite.
 routine D32.atanh_unchecked() -> D32
   return me.F64().atanh_unchecked().D32()
+
+### Error function erf(me) via libm. Never crashes (saturates to ±1).
+### :returns: The error function of `me`.
 routine D32.erf() -> D32
   return me.F64().erf().D32()
+
+### Complementary error function erfc(me) = 1 - erf(me) via libm. Never crashes.
+### :returns: The complementary error function of `me`.
 routine D32.erfc() -> D32
   return me.F64().erfc().D32()
+
+### Gamma function tgamma(me) via libm. Crashes if non-finite (poles at 0 and neg ints).
+### :returns: The gamma function of `me`.
+### :throws: {NumericDomainError} on NaN (neg int poles); {NumericOverflowError} on ±inf.
 routine D32.tgamma!() -> D32
   var r = me.tgamma_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### tgamma(me) via libm, raw IEEE: ±inf at poles, NaN for neg-int poles, overflow. Never crashes.
+### :returns: The gamma function of `me`, possibly non-finite.
 routine D32.tgamma_unchecked() -> D32
   return me.F64().tgamma_unchecked().D32()
+
+### Log-gamma lgamma(me) = ln(|gamma(me)|) via libm. Never crashes (+inf at poles).
+### :returns: The natural log of the absolute gamma of `me`.
 routine D32.lgamma() -> D32
   return me.F64().lgamma().D32()
 
@@ -256,6 +425,8 @@ routine D32.lgamma() -> D32
 # libm manipulation / classification — decimal-native on D32Parts (coeff U64).
 # ============================================================================
 
+### IEEE 754 signBit: true when the sign bit is set (includes -0 and -NaN). Never crashes.
+### :returns: Whether `me`'s sign bit is set.
 routine D32.signbit() -> Bool
   return me.decode().sign
 
@@ -286,14 +457,20 @@ routine D32.modf() -> (D32, D32)
   var ip = me.trunc()
   return (ip, me - ip)
 
+### True if me is finite and nonzero (a normal or subnormal number, not zero/inf/NaN).
+### :returns: Whether `me` is a finite nonzero value.
 routine D32.is_normal() -> Bool
   var p = me.decode()
   return int_eq[U64](a: p.special, b: 0_u64) and int_ne[U64](a: p.coeff, b: 0_u64)
 
+### True if me is ±0 (finite with a zero coefficient).
+### :returns: Whether `me` is zero.
 routine D32.is_zero() -> Bool
   var p = me.decode()
   return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U64](a: p.coeff, b: 0_u64)
 
+### IEEE 754 fpClassify: bucket me into signaling/quiet NaN, infinite, zero, subnormal, normal.
+### :returns: The floating-point class of `me`.
 routine D32.fpclassify() -> FpClass
   var p = me.decode()
   if int_eq[U64](a: p.special, b: 3_u64)
@@ -308,6 +485,8 @@ routine D32.fpclassify() -> FpClass
     return SUBNORMAL
   return NORMAL
 
+### Absolute value |me| (clears the sign bit, cohort preserved). Never crashes.
+### :returns: The magnitude of `me`.
 routine D32.abs() -> D32
   var p = me.decode()
   return d32_of_parts(p: D32Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
@@ -336,10 +515,15 @@ routine D32.total_order(you: D32) -> Bool
 routine D32.total_order_mag(you: D32) -> Bool
   return me.abs().total_order(you: you.abs())
 
+### Unary negation -me (flips the sign bit, cohort preserved). Never crashes.
+### :returns: `me` with its sign flipped.
 routine D32.$neg() -> D32
   var p = me.decode()
   return d32_of_parts(p: D32Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
+### IEEE 754 copySign: me's magnitude with you's sign bit. Never crashes.
+### :param you: The value supplying the sign.
+### :returns: `|me|` carrying `you`'s sign.
 routine D32.copysign(you: D32) -> D32
   var p = me.decode()
   return d32_of_parts(p: D32Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
@@ -357,8 +541,8 @@ routine D32.signum() -> D32
 routine D32.finite!() -> D32
   if not me.is_finite()
     if me.is_nan()
-      throw NumericDomainError(description: "D32: undefined operation with no real result.")
-    throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+      throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
   return me
 
 ### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
@@ -372,6 +556,9 @@ routine D32.fmod(you: D32) -> D32
   var n = me.$truediv_unchecked(you: you).trunc()
   return me.$sub_unchecked(you: you.$mul_unchecked(you: n))
 
+### C99 fmax: the larger of me and you, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The larger operand, or the non-NaN one.
 routine D32.fmax(you: D32) -> D32
   if me.is_nan()
     return you
@@ -381,6 +568,9 @@ routine D32.fmax(you: D32) -> D32
     return you
   return me
 
+### C99 fmin: the smaller of me and you, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The smaller operand, or the non-NaN one.
 routine D32.fmin(you: D32) -> D32
   if me.is_nan()
     return you
@@ -390,6 +580,9 @@ routine D32.fmin(you: D32) -> D32
     return me
   return you
 
+### C99 fdim: the positive difference max(me - you, 0). NaN propagates. Never crashes.
+### :param you: The value to subtract.
+### :returns: `me - you` if positive, else +0.
 routine D32.fdim(you: D32) -> D32
   if me.is_nan() or you.is_nan()
     return D32.quiet_nan()
@@ -406,8 +599,8 @@ routine D32.scaleb!(n: S64) -> D32
   if r.is_finite() or not me.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me * 10^n` with raw propagation (overflow -> ±infinity, underflow -> 0).
 ### :param n: The power-of-ten exponent to apply.
@@ -614,17 +807,33 @@ routine d32_round_int(x: D32, mode: S64) -> D32
     qq = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
   return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: int_truncate[U256, U64](qq)))
 
+### Truncates toward zero to an integral value. Never crashes.
+### :returns: `me` with its fractional part discarded.
 routine D32.trunc() -> D32
   return d32_round_int(x: me, mode: 0_s64)
+
+### Rounds down (toward -inf) to an integral value. Never crashes.
+### :returns: The largest integer <= `me`.
 routine D32.floor() -> D32
   return d32_round_int(x: me, mode: 1_s64)
+
+### Rounds up (toward +inf) to an integral value. Never crashes.
+### :returns: The smallest integer >= `me`.
 routine D32.ceil() -> D32
   return d32_round_int(x: me, mode: 2_s64)
+
+### Rounds to nearest integer, ties away from zero. Never crashes.
+### :returns: `me` rounded with ties away.
 routine D32.round() -> D32
   return d32_round_int(x: me, mode: 3_s64)
+
+### IEEE 754 roundToIntegral, ties to even. Never crashes.
+### :returns: `me` rounded with ties to even.
 routine D32.rint() -> D32
   return d32_round_int(x: me, mode: 4_s64)
 
+### Fractional part me - trunc(me) (carries me's sign). NaN/inf -> NaN/±0. Never crashes.
+### :returns: The signed fractional part of `me`.
 routine D32.frac() -> D32
   if me.is_nan()
     return me

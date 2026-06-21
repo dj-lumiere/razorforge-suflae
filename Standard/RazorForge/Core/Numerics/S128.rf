@@ -164,21 +164,14 @@ routine S128.$create!(from: F128) -> S128
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {NumericOverflowError} if the integer part overflows S128.
 routine S128.$create!(from: D32) -> S128
-  return D128(from: from).to_s128!()
+  return S128(from: D128(from: from))
 
 ### Converts a `D64` to `S128`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {NumericOverflowError} if the integer part overflows S128.
 routine S128.$create!(from: D64) -> S128
-  return D128(from: from).to_s128!()
-
-### Converts a `D128` to `S128`, truncating toward zero.
-### :param from: The `D128` value to convert.
-### :returns: The integer part of `from` as an `S128`.
-### :throws: {NumericOverflowError} if the integer part overflows S128.
-routine S128.$create!(from: D128) -> S128
-  return from.to_s128!()
+  return S128(from: D128(from: from))
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
@@ -246,6 +239,10 @@ routine s128_abs_u128(x: S128) -> U128
     return reinterpret_bits[S128, U128](x)
   return reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: x))
 
+### Euclidean floor division of `me` by `you`.
+### :param you: The divisor.
+### :returns: The euclidean quotient (rounds toward negative infinity).
+### :throws: {DivisionByZeroError} if `you == 0`.
 routine S128.$floordiv!(you: S128) -> S128
   if you == 0
     throw DivisionByZeroError()
@@ -401,7 +398,7 @@ routine S128.$mul_clamp(you: S128) -> S128
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
   if exp < 0
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)
@@ -435,7 +432,7 @@ routine S128.$pow!(exp: S128) -> S128
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.$pow_wrap!(exp: S128) -> S128
   if exp < 0_s128
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)
@@ -453,7 +450,7 @@ routine S128.$pow_wrap!(exp: S128) -> S128
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.$pow_clamp!(exp: S128) -> S128
   if exp < 0
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)
@@ -687,6 +684,8 @@ routine S128.signum() -> S128
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine S128.$represent() -> Text
   if me == 0s128
     return "0"
@@ -697,6 +696,8 @@ routine S128.$represent() -> Text
   # yields |me| (works correctly even for S128.MIN, whose absolute value overflows S128).
   return "-" + (0u128 -% reinterpret_bits[S128, U128](me)).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine S128.$diagnose() -> Text
   return "S128(" + me.$represent() + ")"
 

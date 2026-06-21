@@ -21,7 +21,6 @@ module Core
 # is future work. Verified by exact identities + narrow-to-F128 cross-checks.
 # ============================================================================
 
-
 ### A software octuple-precision binary float backed by a raw 256-bit container.
 @llvm("i256")
 record F256 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible

@@ -590,9 +590,13 @@ routine U16.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U16.$represent() -> Text
   return U32(me).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U16.$diagnose() -> Text
   return "U16(" + me.$represent() + ")"
 

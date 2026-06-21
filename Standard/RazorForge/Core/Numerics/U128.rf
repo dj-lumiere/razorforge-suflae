@@ -1,6 +1,7 @@
 module Core
 
-### A 128-bit unsigned integer in the range 0 to 340,282,366,920,938,463,463,374,607,431,768,211,455.
+### A 128-bit unsigned integer in the range 0 to
+### 340,282,366,920,938,463,463,374,607,431,768,211,455.
 ###
 ### `U128` is used for cryptographic keys, UUIDs, very large counters, and
 ### other data that requires more than 64 bits. Note that `U128` does not
@@ -168,21 +169,14 @@ routine U128.$create!(from: F128) -> U128
 ### :returns: The integer part of `from` as a `U128`.
 ### :throws: {NumericOverflowError} if the integer part overflows U128.
 routine U128.$create!(from: D32) -> U128
-  return D128(from: from).to_u128!()
+  return U128(from: D128(from: from))
 
 ### Converts a `D64` to `U128`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
 ### :throws: {NumericOverflowError} if the integer part overflows U128.
 routine U128.$create!(from: D64) -> U128
-  return D128(from: from).to_u128!()
-
-### Converts a `D128` to `U128`, truncating toward zero.
-### :param from: The `D128` value to convert.
-### :returns: The integer part of `from` as a `U128`.
-### :throws: {NumericOverflowError} if the integer part overflows U128.
-routine U128.$create!(from: D128) -> U128
-  return from.to_u128!()
+  return U128(from: D128(from: from))
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
@@ -284,6 +278,10 @@ routine u128_mod(a: U128, b: U128) -> U128
     rhi = load_element_ref[Array[U64, 2], U64](rem.hijack(), 1_u64)
   return bit_or[U128](shift_left[U128](zero_extend[U64, U128](rhi), 64_u128), zero_extend[U64, U128](rlo))
 
+### Remainder of `me` divided by `you`.
+### :param you: The divisor.
+### :returns: The remainder.
+### :throws: {DivisionByZeroError} if `you == 0`.
 routine U128.$mod!(you: U128) -> U128
   if you == 0_u128
     throw DivisionByZeroError()
@@ -663,6 +661,8 @@ routine U128.low64() -> U64
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U128.$represent() -> Text
   if me == 0u128
     return "0"
@@ -674,6 +674,8 @@ routine U128.$represent() -> Text
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: steal digits)
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U128.$diagnose() -> Text
   return "U128(" + me.$represent() + ")"
 

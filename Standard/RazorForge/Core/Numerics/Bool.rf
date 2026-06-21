@@ -37,11 +37,15 @@ routine U8.$create(from: Bool) -> U8
 # Diagnostics and Hashing
 # ============================================================================
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine Bool.$diagnose() -> Text
   if me
     return "Bool(true)"
   return "Bool(false)"
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine Bool.$represent() -> Text
   if me
     return "true"

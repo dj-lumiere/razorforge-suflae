@@ -10,6 +10,9 @@ record C128 obeys Numeric, Equatable
   ### The imaginary part.
   imag: F128
 
+# Math routines use the component F128's `_unchecked` ops (raw IEEE, no overflow
+# checks); NaN/±inf therefore propagate through the complex result per IEEE 754.
+
 # Complex constants
 preset C128_ZERO: C128 = C128(real: 0.0_f128, imag: 0.0_f128)
 preset C128_ONE: C128 = C128(real: 1.0_f128, imag: 0.0_f128)
@@ -42,32 +45,88 @@ routine C128.$create(from: C64) -> C128
 ### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: S8) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `S16` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: S16) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `S32` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: S32) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `S64` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: S64) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `S128` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: S128) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `S256` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: S256) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `U8` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: U8) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `U16` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: U16) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `U32` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: U32) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `U64` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: U64) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `U128` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: U128) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `U256` scalar -> `C128` (imaginary part 0), value routed through `F128`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: U256) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `F16` scalar -> `C128` (imaginary part 0), value widened to `F128`.
+### :param from: A real float value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: F16) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `F32` scalar -> `C128` (imaginary part 0), value widened to `F128`.
+### :param from: A real float value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: F32) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
+
+### Real `F64` scalar -> `C128` (imaginary part 0), value widened to `F128`.
+### :param from: A real float value.
+### :returns: `from + 0i` in quadruple precision.
 routine C128.$create(from: F64) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
@@ -76,6 +135,7 @@ routine C128.$create(from: F64) -> C128
 ### :param theta: The argument (angle in radians).
 ### :returns: The complex value at that polar position.
 routine C128.from_polar(r: F128, theta: F128) -> C128
+  # Polar -> rectangular: z = r·e^(iθ) = r·cos θ + i·r·sin θ.
   return C128(real: r * theta.cos(), imag: r * theta.sin())
 
 # ============================================================================
@@ -98,6 +158,7 @@ routine C128.$sub(you: C128) -> C128
 ### :param you: The right operand.
 ### :returns: The Gaussian product.
 routine C128.$mul(you: C128) -> C128
+  # (a+bi)(c+di) = (ac − bd) + (ad + bc)i.
   return C128(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
 ### Returns the complex quotient `me / you`.
@@ -105,13 +166,16 @@ routine C128.$mul(you: C128) -> C128
 ### :param you: The divisor.
 ### :returns: The complex quotient.
 routine C128.$truediv(you: C128) -> C128
+  # (a+bi)/(c+di) = (a+bi)(c−di)/|c+di|², with d = |denom|² = c²+d².
   var d = you.real * you.real + you.imag * you.imag
+  # Real = (ac+bd)/d, imag = (bc−ad)/d.
   return C128(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
 
 ### Returns this complex value raised to the complex power `you` via `exp(you * log(me))`.
 ### :param you: The complex exponent.
 ### :returns: `me ** you` in quadruple precision.
 routine C128.$pow(you: C128) -> C128
+  # z^w = exp(w·log z); principal branch via log_unchecked.
   return (you * me.log_unchecked()).exp_unchecked()
 
 ### Returns the arithmetic negation of this value.
@@ -136,11 +200,13 @@ routine C128.$eq(you: C128) -> Bool
 ### Returns the modulus (absolute value) of this complex number.
 ### :returns: `√(real² + imag²)`.
 routine C128.abs() -> F128
+  # |z| = √(re² + im²); uses raw IEEE sqrt_unchecked on the F128 sum.
   return (me.real * me.real + me.imag * me.imag).sqrt_unchecked()
 
 ### Returns the phase angle of this complex value in radians.
 ### :returns: `atan2(imag, real)`, in the range (−π, π].
 routine C128.arg() -> F128
+  # arg(z) = atan2(im, re); two-arg atan2 picks the correct quadrant.
   return me.imag.atan2(me.real)
 
 ### Returns the complex conjugate (negates the imaginary part).
@@ -151,6 +217,7 @@ routine C128.conjugate() -> C128
 ### Returns the squared modulus (avoids the square root of `abs`).
 ### :returns: `real² + imag²`.
 routine C128.norm() -> F128
+  # norm = re² + im² = |z|²; skips the sqrt that abs() performs.
   return me.real * me.real + me.imag * me.imag
 
 # ============================================================================
@@ -160,43 +227,54 @@ routine C128.norm() -> F128
 ### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
 ### :returns: The complex sine of this value.
 routine C128.sin() -> C128
+  # sin(a+bi) = sin a·cosh b + i·cos a·sinh b (native F128 hyperbolics).
   return C128(real: me.real.sin() * me.imag.cosh_unchecked(), imag: me.real.cos() * me.imag.sinh_unchecked())
 
 ### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
 ### :returns: The complex cosine of this value.
 routine C128.cos() -> C128
+  # cos(a+bi) = cos a·cosh b − i·sin a·sinh b (native F128 hyperbolics).
   return C128(real: me.real.cos() * me.imag.cosh_unchecked(), imag: -(me.real.sin() * me.imag.sinh_unchecked()))
 
 ### Returns the complex tangent of this value.
 ### :returns: The complex tangent.
 routine C128.tan() -> C128
+  # Double-angle form: a2 = 2a, b2 = 2b.
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
+  # d = cos(2a) + cosh(2b) is the shared denominator.
   var d = a2.cos() + b2.cosh_unchecked()
+  # tan(a+bi) = sin(2a)/d + i·sinh(2b)/d.
   return C128(real: a2.sin() / d, imag: b2.sinh_unchecked() / d)
 
 ### Returns the complex arcsine of this value.
 ### :returns: The principal value of `arcsin(me)`.
 routine C128.asin() -> C128
+  # asin(z) = −i·log(iz + √(1 − z²)); iz = (−im, re).
   var iz = C128(real: -me.imag, imag: me.real)
   var w = iz + (C128_ONE - me * me).sqrt_unchecked()
   var v = w.log_unchecked()
+  # Multiply log(w) by −i: (re, im) -> (im, −re).
   return C128(real: v.imag, imag: -v.real)
 
 ### Returns the complex arccosine of this value.
 ### :returns: The principal value of `arccos(me)`.
 routine C128.acos() -> C128
+  # acos(z) = −i·log(z + i·√(1 − z²)); i·s = (−s.im, s.re).
   var s = (C128_ONE - me * me).sqrt_unchecked()
   var w = me + C128(real: -s.imag, imag: s.real)
   var v = w.log_unchecked()
+  # Multiply log(w) by −i: (re, im) -> (im, −re).
   return C128(real: v.imag, imag: -v.real)
 
 ### Returns the complex arctangent of this value.
 ### :returns: The principal value of `arctan(me)`.
 routine C128.atan() -> C128
+  # atan(z) = (i/2)·log((i+z)/(i−z)); num = z+i, den = i−z.
   var num = C128(real: me.real, imag: me.imag + 1.0_f128)
   var den = C128(real: -me.real, imag: 1.0_f128 - me.imag)
   var v = (num / den).log_unchecked()
+  # Multiply log by i/2: (re, im) -> (−im/2, re/2).
   return C128(real: -v.imag / 2.0_f128, imag: v.real / 2.0_f128)
 
 # ============================================================================
@@ -206,34 +284,42 @@ routine C128.atan() -> C128
 ### Returns the complex hyperbolic sine of this value.
 ### :returns: The complex hyperbolic sine.
 routine C128.sinh_unchecked() -> C128
+  # sinh(a+bi) = sinh a·cos b + i·cosh a·sin b (native F128 hyperbolics).
   return C128(real: me.real.sinh_unchecked() * me.imag.cos(), imag: me.real.cosh_unchecked() * me.imag.sin())
 
 ### Returns the complex hyperbolic cosine of this value.
 ### :returns: The complex hyperbolic cosine.
 routine C128.cosh_unchecked() -> C128
+  # cosh(a+bi) = cosh a·cos b + i·sinh a·sin b (native F128 hyperbolics).
   return C128(real: me.real.cosh_unchecked() * me.imag.cos(), imag: me.real.sinh_unchecked() * me.imag.sin())
 
 ### Returns the complex hyperbolic tangent of this value.
 ### :returns: The complex hyperbolic tangent.
 routine C128.tanh() -> C128
+  # Double-angle form: a2 = 2a, b2 = 2b.
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
+  # d = cosh(2a) + cos(2b) is the shared denominator.
   var d = a2.cosh_unchecked() + b2.cos()
+  # tanh(a+bi) = sinh(2a)/d + i·sin(2b)/d.
   return C128(real: a2.sinh_unchecked() / d, imag: b2.sin() / d)
 
 ### Returns the complex inverse hyperbolic sine of this value.
 ### :returns: The principal value of `arcsinh(me)`.
 routine C128.asinh() -> C128
+  # asinh(z) = log(z + √(z² + 1)).
   return (me + (me * me + C128_ONE).sqrt_unchecked()).log_unchecked()
 
 ### Returns the complex inverse hyperbolic cosine of this value.
 ### :returns: The principal value of `arccosh(me)`.
 routine C128.acosh() -> C128
+  # acosh(z) = log(z + √(z² − 1)).
   return (me + (me * me - C128_ONE).sqrt_unchecked()).log_unchecked()
 
 ### Returns the complex inverse hyperbolic tangent of this value.
 ### :returns: The principal value of `arctanh(me)`.
 routine C128.atanh() -> C128
+  # atanh(z) = ½·log((1 + z)/(1 − z)).
   var v = ((C128_ONE + me) / (C128_ONE - me)).log_unchecked()
   return C128(real: v.real / 2.0_f128, imag: v.imag / 2.0_f128)
 
@@ -244,28 +330,33 @@ routine C128.atanh() -> C128
 ### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
 ### :returns: The complex exponential.
 routine C128.exp_unchecked() -> C128
+  # exp(a+bi) = eᵃ·(cos b + i·sin b); ea = eᵃ scales the unit phasor.
   var ea = me.real.exp_unchecked()
   return C128(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
 
 ### Returns the principal natural logarithm of this complex value.
 ### :returns: `log(|me|) + i·arg(me)`.
 routine C128.log_unchecked() -> C128
+  # log(z) = ln|z| + i·arg(z); principal branch from atan2.
   return C128(real: me.abs().log_unchecked(), imag: me.arg())
 
 ### Returns the base-10 logarithm of this complex value.
 ### :returns: `log(me) / ln(10)`.
 routine C128.log10() -> C128
+  # log10(z) = ln(z)/ln(10); divide both components by the constant ln 10.
   var v = me.log_unchecked()
   return C128(real: v.real / F128_LN_10, imag: v.imag / F128_LN_10)
 
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
 routine C128.sqrt_unchecked() -> C128
+  # Half-magnitude formula: with r = |z|, re' = √((r+re)/2), im' = √((r−re)/2).
   var r = me.abs()
   if r == 0.0_f128
     return C128_ZERO
   var rp = ((r + me.real) / 2.0_f128).sqrt_unchecked()
   var ip = ((r - me.real) / 2.0_f128).sqrt_unchecked()
+  # Imag part takes the sign of the input's imag (principal root, re' ≥ 0).
   if me.imag < 0.0_f128
     ip = -ip
   return C128(real: rp, imag: ip)

@@ -158,21 +158,14 @@ routine S256.$create!(from: F128) -> S256
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if the integer part overflows S256.
 routine S256.$create!(from: D32) -> S256
-  return D128(from: from).to_s256!()
+  return S256(from: D128(from: from))
 
 ### Converts a `D64` to `S256`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if the integer part overflows S256.
 routine S256.$create!(from: D64) -> S256
-  return D128(from: from).to_s256!()
-
-### Converts a `D128` to `S256`, truncating toward zero.
-### :param from: The `D128` value to convert.
-### :returns: The integer part of `from` as an `S256`.
-### :throws: {NumericOverflowError} if the integer part overflows S256.
-routine S256.$create!(from: D128) -> S256
-  return from.to_s256!()
+  return S256(from: D128(from: from))
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
@@ -403,7 +396,7 @@ routine S256.$mul_clamp(you: S256) -> S256
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S256.pow_with_overflow!(exp: S256) -> (S256, Bool)
   if exp < 0
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S256 = 1
   var base: S256 = me
   var e: U32 = U32(exp)
@@ -437,7 +430,7 @@ routine S256.$pow!(exp: S256) -> S256
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S256.$pow_wrap!(exp: S256) -> S256
   if exp < 0_s256
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S256 = 1
   var base: S256 = me
   var e: U32 = U32(exp)
@@ -455,7 +448,7 @@ routine S256.$pow_wrap!(exp: S256) -> S256
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S256.$pow_clamp!(exp: S256) -> S256
   if exp < 0
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S256 = 1
   var base: S256 = me
   var e: U32 = U32(exp)
@@ -689,6 +682,8 @@ routine S256.signum() -> S256
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine S256.$represent() -> Text
   if me == 0s256
     return "0"
@@ -699,6 +694,8 @@ routine S256.$represent() -> Text
   # yields |me| (works correctly even for S256.MIN, whose absolute value overflows S256).
   return "-" + (0u256 -% reinterpret_bits[S256, U256](me)).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine S256.$diagnose() -> Text
   return "S256(" + me.$represent() + ")"
 

@@ -5,10 +5,11 @@ module Core
 # FMA-Horner in F512 (poly error 2^-299), scale by 2^k, round F512->F256.
 # Constants are F512 bit patterns from playground/remez/remez.py (run: remez.py 512 44).
 
-
+### ln(2) as an F512 constant (used for exp range-reduction). :returns: ln(2).
 routine expc512_ln2() -> F512
   return F512.from_bits(bits: asm512(q0: 8089177752226648611_u64, q1: 17597289815749716866_u64, q2: 15517487502794815125_u64, q3: 6193671936005652699_u64, q4: 3561321547239962391_u64, q5: 16568002516177276133_u64, q6: 11453594569550540807_u64, q7: 4611684244139274147_u64))
 
+### 1/ln(2) as an F512 constant (used for exp range-reduction). :returns: 1/ln(2).
 routine expc512_invln2() -> F512
   return F512.from_bits(bits: asm512(q0: 10745940045662652072_u64, q1: 15546821553746594840_u64, q2: 3375918828216052610_u64, q3: 4784106742739365546_u64, q4: 15182954953064634787_u64, q5: 4214544440044638650_u64, q6: 3450170168565407954_u64, q7: 4611685405664105144_u64))
 

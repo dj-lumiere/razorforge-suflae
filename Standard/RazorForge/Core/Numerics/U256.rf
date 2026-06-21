@@ -16,6 +16,8 @@ record UDR
   q: U64
   r: U64
 
+### (quotient, remainder) of the 128-bit value (hi:lo) divided by `d`, via one hardware
+### 128/64 divide. Caller must ensure `hi < d` (else the intrinsic overflows / traps).
 @inline
 routine udivrem128(hi: U64, lo: U64, d: U64) -> UDR
   var scratch = 0_u64
@@ -31,8 +33,13 @@ record KStep
   ujn2: U64
   q: U64
 
+### Performs one Knuth Algorithm-D quotient-digit step (D3-D6) for a normalized 2-limb
+### divisor (vn1:vn0), against the top dividend limbs (ujn:ujn1:ujn2). Estimates qhat,
+### corrects it, runs the multiply-subtract, and adds the divisor back if it went negative.
+### :returns: the updated top three dividend limbs and the final quotient digit `q`.
 @inline
 routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64) -> KStep
+  # D3: initial qhat estimate. ujn == vn1 would overflow the 128/64 divide, so cap at 2^64-1.
   var qhat = 0_u64
   var rhat = 0_u64
   if int_eq[U64](a: ujn, b: vn1)
@@ -42,6 +49,7 @@ routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64) -> KStep
     var dr = udivrem128(hi: ujn, lo: ujn1, d: vn1)
     qhat = dr.q
     rhat = dr.r
+  # D3 correction: while qhat*vn0 > (rhat:ujn2), decrement qhat (and grow rhat by vn1).
   var keep = true
   while keep
     var lhs = mul[U128](a: zero_extend[U64, U128](qhat), b: zero_extend[U64, U128](vn0))
@@ -196,6 +204,9 @@ record UDR256
   q: U256
   r: U256
 
+### (quotient, remainder) of `num // den` from one `knuth_divide[4]` call (base-2⁶⁴
+### Knuth-D over 4 U64 limbs). Caller guarantees `den != 0`.
+### :returns: a `UDR256` holding the quotient `q` and remainder `r`.
 routine udivrem256(num: U256, den: U256) -> UDR256
   var av = num
   var bv = den
@@ -367,21 +378,14 @@ routine U256.$create!(from: F128) -> U256
 ### :returns: The integer part of `from` as a `U256`.
 ### :throws: {NumericOverflowError} if the integer part overflows U256.
 routine U256.$create!(from: D32) -> U256
-  return D128(from: from).to_u256!()
+  return U256(from: D128(from: from))
 
 ### Converts a `D64` to `U256`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
 ### :throws: {NumericOverflowError} if the integer part overflows U256.
 routine U256.$create!(from: D64) -> U256
-  return D128(from: from).to_u256!()
-
-### Converts a `D128` to `U256`, truncating toward zero.
-### :param from: The `D128` value to convert.
-### :returns: The integer part of `from` as a `U256`.
-### :throws: {NumericOverflowError} if the integer part overflows U256.
-routine U256.$create!(from: D128) -> U256
-  return from.to_u256!()
+  return U256(from: D128(from: from))
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)

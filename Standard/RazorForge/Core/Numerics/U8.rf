@@ -524,6 +524,12 @@ routine U8.trailing_ones() -> U8
 routine U8.reverse_bits() -> U8
   return reverse_bits[U8](me)
 
+### Reverses the byte order. A single-byte value is its own byte-swap, so this returns `me`
+### unchanged — provided for parity with the wider unsigned types and `S8.swap_bytes`.
+### :returns: `me`.
+routine U8.swap_bytes() -> U8
+  return me
+
 ### Returns `true` if this value is an exact power of two.
 ### :returns: `true` if `me` is 1, 2, 4, 8, ..., 128; `false` otherwise (including zero).
 routine U8.is_power_of_two() -> Bool
@@ -637,9 +643,13 @@ routine U8.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U8.$represent() -> Text
   return U32(me).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U8.$diagnose() -> Text
   return "U8(" + me.$represent() + ")"
 

@@ -370,7 +370,7 @@ routine S8.$mul_clamp(you: S8) -> S8
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S8.pow_with_overflow!(exp: S8) -> (S8, Bool)
   if exp < 0
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S8 = 1
   var base: S8 = me
   var e: U32 = U32(exp)
@@ -404,7 +404,7 @@ routine S8.$pow!(exp: S8) -> S8
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S8.$pow_wrap!(exp: S8) -> S8
   if exp < 0_s8
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S8 = 1
   var base: S8 = me
   var e: U32 = U32(exp)
@@ -422,7 +422,7 @@ routine S8.$pow_wrap!(exp: S8) -> S8
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S8.$pow_clamp!(exp: S8) -> S8
   if exp < 0
-    throw NumericDomainError(description: "Negative exponent: an integer raised to a negative power has no integer result.")
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S8 = 1
   var base: S8 = me
   var e: U32 = U32(exp)
@@ -658,6 +658,8 @@ routine S8.signum() -> S8
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine S8.$represent() -> Text
   if me == 0s8
     return "0"
@@ -668,6 +670,8 @@ routine S8.$represent() -> Text
   # yields |me| (works correctly even for S8.MIN, whose absolute value overflows S8).
   return "-" + (0u8 -% reinterpret_bits[S8, U8](me)).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine S8.$diagnose() -> Text
   return "S8(" + me.$represent() + ")"
 

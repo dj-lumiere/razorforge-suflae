@@ -167,8 +167,8 @@ routine F32.$create(from: D128) -> F32
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
 
-
-### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `$add_unchecked` for raw IEEE.
+### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `$add_unchecked` for
+### raw IEEE.
 ### :param you: The addend.
 ### :returns: The single-precision sum (always finite).
 routine F32.$add!(you: F32) -> F32
@@ -176,10 +176,11 @@ routine F32.$add!(you: F32) -> F32
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me - you`. Checked: crashes if the IEEE result is non-finite. Use `$sub_unchecked` for raw IEEE.
+### Returns `me - you`. Checked: crashes if the IEEE result is non-finite. Use `$sub_unchecked` for
+### raw IEEE.
 ### :param you: The value to subtract.
 ### :returns: The single-precision difference (always finite).
 routine F32.$sub!(you: F32) -> F32
@@ -187,10 +188,11 @@ routine F32.$sub!(you: F32) -> F32
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me * you`. Checked: crashes if the IEEE result is non-finite. Use `$mul_unchecked` for raw IEEE.
+### Returns `me * you`. Checked: crashes if the IEEE result is non-finite. Use `$mul_unchecked` for
+### raw IEEE.
 ### :param you: The multiplier.
 ### :returns: The single-precision product (always finite).
 routine F32.$mul!(you: F32) -> F32
@@ -198,10 +200,11 @@ routine F32.$mul!(you: F32) -> F32
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow -> overflow.
+### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
+### overflow.
 ### Use `$truediv_unchecked` for raw IEEE 754, or `(a / b).finite!()` for recoverable handling.
 ### :param you: The divisor.
 ### :returns: The single-precision quotient (always finite).
@@ -212,8 +215,8 @@ routine F32.$truediv!(you: F32) -> F32
   if you.is_zero() and not me.is_zero()
     throw DivisionByZeroError()
   if r.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
 ### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
@@ -279,8 +282,10 @@ routine F32.sqrt!() -> F32
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Square root with raw IEEE 754 propagation (`sqrt(<0)` -> NaN). Thin wrapper over LLVM `sqrt`.
 routine F32.sqrt_unchecked() -> F32
   return sqrt[F32](me)
 
@@ -326,8 +331,10 @@ routine F32.exp!() -> F32
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Natural exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps LLVM `exp`.
 routine F32.exp_unchecked() -> F32
   return exp[F32](me)
 
@@ -338,8 +345,10 @@ routine F32.log!() -> F32
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Natural log, raw IEEE (`log(0)` -> -inf, `log(<0)` -> NaN). Thin wrapper over LLVM `log`.
 routine F32.log_unchecked() -> F32
   return log[F32](me)
 
@@ -350,11 +359,15 @@ routine F32.log10!() -> F32
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Base-10 logarithm with raw IEEE 754 propagation. Thin wrapper over LLVM `log10`.
 routine F32.log10_unchecked() -> F32
   return log10[F32](me)
 
+### `me` raised to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain). Wraps LLVM
+### `pow`.
 routine F32.pow_unchecked(exp: F32) -> F32
   return pow[F32](me, exp)
 
@@ -366,8 +379,8 @@ routine F32.$pow!(exp: F32) -> F32
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns this value with its sign bit replaced by the sign of `sign`.
 ### :param sign: The value supplying the sign bit.
@@ -591,273 +604,379 @@ routine F32.$hash(k0: U64, k1: U64) -> U64
 # Full libm parity (rf_f32_* runtime, TLFloat/libm-backed). Basic ops above use
 # LLVM intrinsics; the extended surface binds the single-precision runtime.
 # ============================================================================
+### C libm extern: tangent (radians).
 external("C") routine rf_f32_tan(value: F32) -> F32
+### C libm extern: arc sine.
 external("C") routine rf_f32_asin(value: F32) -> F32
+### C libm extern: arc cosine.
 external("C") routine rf_f32_acos(value: F32) -> F32
+### C libm extern: arc tangent.
 external("C") routine rf_f32_atan(value: F32) -> F32
+### C libm extern: two-argument arc tangent atan2(y, x).
 external("C") routine rf_f32_atan2(y: F32, x: F32) -> F32
+### C libm extern: hyperbolic sine.
 external("C") routine rf_f32_sinh(value: F32) -> F32
+### C libm extern: hyperbolic cosine.
 external("C") routine rf_f32_cosh(value: F32) -> F32
+### C libm extern: hyperbolic tangent.
 external("C") routine rf_f32_tanh(value: F32) -> F32
+### C libm extern: inverse hyperbolic sine.
 external("C") routine rf_f32_asinh(value: F32) -> F32
+### C libm extern: inverse hyperbolic cosine.
 external("C") routine rf_f32_acosh(value: F32) -> F32
+### C libm extern: inverse hyperbolic tangent.
 external("C") routine rf_f32_atanh(value: F32) -> F32
+### C libm extern: cube root.
 external("C") routine rf_f32_cbrt(value: F32) -> F32
+### C libm extern: base-2 exponential 2^x.
 external("C") routine rf_f32_exp2(value: F32) -> F32
+### C libm extern: exp(x) - 1, accurate near zero.
 external("C") routine rf_f32_expm1(value: F32) -> F32
+### C libm extern: log(1 + x), accurate near zero.
 external("C") routine rf_f32_log1p(value: F32) -> F32
+### C libm extern: base-2 logarithm.
 external("C") routine rf_f32_log2(value: F32) -> F32
+### C libm extern: hypotenuse sqrt(x^2 + y^2) without overflow.
 external("C") routine rf_f32_hypot(x: F32, y: F32) -> F32
+### C libm extern: fused multiply-add x*y + z with a single rounding.
 external("C") routine rf_f32_fma(x: F32, y: F32, z: F32) -> F32
+### C libm extern: floating-point remainder (C fmod).
 external("C") routine rf_f32_fmod(x: F32, y: F32) -> F32
+### C libm extern: IEEE remainder (C remainder).
 external("C") routine rf_f32_remainder(x: F32, y: F32) -> F32
+### C libm extern: positive difference max(x - y, 0) (C fdim).
 external("C") routine rf_f32_fdim(x: F32, y: F32) -> F32
+### C libm extern: larger of x and y (C fmax).
 external("C") routine rf_f32_fmax(x: F32, y: F32) -> F32
+### C libm extern: smaller of x and y (C fmin).
 external("C") routine rf_f32_fmin(x: F32, y: F32) -> F32
+### C libm extern: base-10 exponential 10^x.
 external("C") routine rf_f32_exp10(value: F32) -> F32
+### C libm extern: sin(pi*x).
 external("C") routine rf_f32_sinpi(value: F32) -> F32
+### C libm extern: cos(pi*x).
 external("C") routine rf_f32_cospi(value: F32) -> F32
+### C libm extern: tan(pi*x).
 external("C") routine rf_f32_tanpi(value: F32) -> F32
+### C libm extern: next representable value after x toward y.
 external("C") routine rf_f32_nextafter(x: F32, y: F32) -> F32
+### C libm extern: x * 2^n (C scalbn).
 external("C") routine rf_f32_scalbn(value: F32, n: S64) -> F32
+### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
 external("C") routine rf_f32_ilogb(value: F32) -> S64
+### C libm extern: round to nearest integer in the current rounding mode (C rint).
 external("C") routine rf_f32_rint(value: F32) -> F32
+### C libm extern: error function.
 external("C") routine rf_f32_erf(value: F32) -> F32
+### C libm extern: complementary error function.
 external("C") routine rf_f32_erfc(value: F32) -> F32
+### C libm extern: gamma function.
 external("C") routine rf_f32_tgamma(value: F32) -> F32
+### C libm extern: natural log of the absolute value of gamma.
 external("C") routine rf_f32_lgamma(value: F32) -> F32
 
 ### Tangent (radians).
 routine F32.tan() -> F32
   return rf_f32_tan(value: me)
+
 ### Arc sine.
 routine F32.asin!() -> F32
   var rr = me.asin_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_f32_asin`.
 routine F32.asin_unchecked() -> F32
   return rf_f32_asin(value: me)
+
 ### Arc cosine.
 routine F32.acos!() -> F32
   var rr = me.acos_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_f32_acos`.
 routine F32.acos_unchecked() -> F32
   return rf_f32_acos(value: me)
+
 ### Arc tangent.
 routine F32.atan() -> F32
   return rf_f32_atan(value: me)
+
 ### Two-argument arc tangent atan2(me, x).
 routine F32.atan2(x: F32) -> F32
   return rf_f32_atan2(y: me, x: x)
+
 ### Hyperbolic sine.
 routine F32.sinh!() -> F32
   var rr = me.sinh_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±inf). Wraps `rf_f32_sinh`.
 routine F32.sinh_unchecked() -> F32
   return rf_f32_sinh(value: me)
+
 ### Hyperbolic cosine.
 routine F32.cosh!() -> F32
   var rr = me.cosh_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f32_cosh`.
 routine F32.cosh_unchecked() -> F32
   return rf_f32_cosh(value: me)
+
 ### Hyperbolic tangent.
 routine F32.tanh() -> F32
   return rf_f32_tanh(value: me)
+
 ### Inverse hyperbolic sine.
 routine F32.asinh() -> F32
   return rf_f32_asinh(value: me)
+
 ### Inverse hyperbolic cosine.
 routine F32.acosh!() -> F32
   var rr = me.acosh_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Inverse hyperbolic cosine, raw IEEE 754 propagation (`me < 1` -> NaN). Wraps `rf_f32_acosh`.
 routine F32.acosh_unchecked() -> F32
   return rf_f32_acosh(value: me)
+
 ### Inverse hyperbolic tangent.
 routine F32.atanh!() -> F32
   var rr = me.atanh_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Inverse hyperbolic tangent, raw IEEE (`±1` -> ±inf, `|me| > 1` -> NaN). Wraps `rf_f32_atanh`.
 routine F32.atanh_unchecked() -> F32
   return rf_f32_atanh(value: me)
+
 ### Cube root.
 routine F32.cbrt() -> F32
   return rf_f32_cbrt(value: me)
+
 ### Base-2 exponential.
 routine F32.exp2!() -> F32
   var rr = me.exp2_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Base-2 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f32_exp2`.
 routine F32.exp2_unchecked() -> F32
   return rf_f32_exp2(value: me)
+
 ### exp(me) - 1, accurate near zero.
 routine F32.expm1!() -> F32
   var rr = me.expm1_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### exp(me) - 1 with raw IEEE 754 propagation. Thin wrapper over `rf_f32_expm1`.
 routine F32.expm1_unchecked() -> F32
   return rf_f32_expm1(value: me)
+
 ### log(1 + me), accurate near zero.
 routine F32.log1p!() -> F32
   var rr = me.log1p_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### log(1 + me) with raw IEEE 754 propagation. Thin wrapper over `rf_f32_log1p`.
 routine F32.log1p_unchecked() -> F32
   return rf_f32_log1p(value: me)
+
 ### Base-2 logarithm.
 routine F32.log2!() -> F32
   var rr = me.log2_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Base-2 logarithm with raw IEEE 754 propagation. Thin wrapper over `rf_f32_log2`.
 routine F32.log2_unchecked() -> F32
   return rf_f32_log2(value: me)
+
 ### Base-10 exponential 10**me.
 routine F32.exp10!() -> F32
   var rr = me.exp10_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Base-10 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f32_exp10`.
 routine F32.exp10_unchecked() -> F32
   return rf_f32_exp10(value: me)
+
 ### Hypotenuse sqrt(me^2 + you^2) without overflow.
 routine F32.hypot!(you: F32) -> F32
   var rr = me.hypot_unchecked(you: you)
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Thin wrapper over `rf_f32_hypot`.
 routine F32.hypot_unchecked(you: F32) -> F32
   return rf_f32_hypot(x: me, y: you)
+
 ### Fused multiply-add me*b + c with a single rounding.
 routine F32.fma!(b: F32, c: F32) -> F32
   var rr = me.fma_unchecked(b: b, c: c)
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Fused multiply-add me*b + c with raw IEEE 754 propagation. Thin wrapper over `rf_f32_fma`.
 routine F32.fma_unchecked(b: F32, c: F32) -> F32
   return rf_f32_fma(x: me, y: b, z: c)
+
 ### Floating-point remainder of me/you (C fmod).
 routine F32.fmod(you: F32) -> F32
   return rf_f32_fmod(x: me, y: you)
+
 ### IEEE remainder of me/you (C remainder).
 routine F32.remainder(you: F32) -> F32
   return rf_f32_remainder(x: me, y: you)
+
 ### Positive difference max(me - you, 0) (C fdim).
 routine F32.fdim(you: F32) -> F32
   return rf_f32_fdim(x: me, y: you)
+
 ### Larger of me and you (C fmax).
 routine F32.fmax(you: F32) -> F32
   return rf_f32_fmax(x: me, y: you)
+
 ### Smaller of me and you (C fmin).
 routine F32.fmin(you: F32) -> F32
   return rf_f32_fmin(x: me, y: you)
+
 ### sin(pi*me).
 routine F32.sinpi() -> F32
   return rf_f32_sinpi(value: me)
+
 ### cos(pi*me).
 routine F32.cospi() -> F32
   return rf_f32_cospi(value: me)
+
 ### tan(pi*me).
 routine F32.tanpi() -> F32
   return rf_f32_tanpi(value: me)
+
 ### Next representable value after me toward you.
 routine F32.nextafter(you: F32) -> F32
   return rf_f32_nextafter(x: me, y: you)
+
 ### me * 2^n (C scalbn).
 routine F32.scalbn(n: S64) -> F32
   return rf_f32_scalbn(value: me, n: n)
+
 ### Alias of scalbn (C ldexp).
 routine F32.ldexp(n: S64) -> F32
   return rf_f32_scalbn(value: me, n: n)
+
 ### Rounds to nearest integer in the current rounding mode (C rint).
 routine F32.rint() -> F32
   return rf_f32_rint(value: me)
+
 ### Error function.
 routine F32.erf() -> F32
   return rf_f32_erf(value: me)
+
 ### Complementary error function.
 routine F32.erfc() -> F32
   return rf_f32_erfc(value: me)
+
 ### Gamma function.
 routine F32.tgamma!() -> F32
   var rr = me.tgamma_unchecked()
   if rr.is_finite()
     return rr
   if rr.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±inf or NaN). Wraps
+### `rf_f32_tgamma`.
 routine F32.tgamma_unchecked() -> F32
   return rf_f32_tgamma(value: me)
+
 ### Natural log of |gamma(me)|.
 routine F32.lgamma() -> F32
   return rf_f32_lgamma(value: me)
+
 ### Truncates toward zero (C trunc; alias of int_truncate).
 routine F32.trunc() -> F32
   return float_truncate[F32](me)
+
 ### Fractional part me - trunc(me).
 routine F32.frac() -> F32
   return me - float_truncate[F32](me)
+
 ### Integer and fractional parts (C modf); both carry me's sign.
 routine F32.modf() -> (F32, F32)
   var ip = float_truncate[F32](me)
   return (ip, me - ip)
+
 ### Fraction in [0.5,1) and power-of-two exponent (C frexp).
 routine F32.frexp() -> (F32, S64)
   if me.is_zero() or me.is_infinite() or me.is_nan()
     return (me, 0_s64)
   var e = add[S64](a: rf_f32_ilogb(value: me), b: 1_s64)
   return (rf_f32_scalbn(value: me, n: sub[S64](a: 0_s64, b: e)), e)
+
 ### True if the sign bit is set (C signbit).
 routine F32.signbit() -> Bool
   return int_ne[U32](a: bit_and[U32](a: me.to_bits(), b: 0x80000000_u32), b: 0_u32)
+
 ### True for a subnormal (denormalized, nonzero) value.
 routine F32.is_subnormal() -> Bool
   var bits = me.to_bits()
   var exponent = bit_and[U32](a: bits, b: 0x7F800000_u32)
   var mantissa = bit_and[U32](a: bits, b: 0x007FFFFF_u32)
   return exponent == 0_u32 and mantissa != 0_u32
+
 ### True for a finite, normal value (nonzero and not subnormal).
 routine F32.is_normal() -> Bool
   return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
 ### C fpclassify: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
 routine F32.fpclassify() -> FpClass
   if me.is_signaling()
@@ -930,8 +1049,8 @@ routine F32.scaleb!(n: S64) -> F32
   if r.is_finite() or not me.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F32: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F32 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
 ### :param n: The power-of-two exponent to apply.

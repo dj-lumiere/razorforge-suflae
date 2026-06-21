@@ -6,7 +6,6 @@ import Collections
 # this decimal64 engine are a port and extension of Intel's Decimal Floating-Point
 # Math Library ("libbid", © Intel Corporation, BSD 3-Clause). See THIRD-PARTY-NOTICES.md.
 
-
 # ============================================================================
 # D64 — software IEEE 754-2008 decimal64 (BID). Operands are U64 (decimal64's
 # coefficient has <= 16 digits, < 2^54); products/sums widen to U128 only where
@@ -18,7 +17,6 @@ import Collections
 # cold special-value / formatter paths. (64-bit storage shifts use direct U64
 # literals — uf_amt[U64] is not width-safe.)
 # ============================================================================
-
 
 ### A software decimal64 value in BID storage.
 @llvm("i64")
@@ -49,19 +47,25 @@ routine p10_u64_d(k: S64) -> U64
   return int_truncate[U256, U64](pow10_tbl(k: k))
 
 # ---- raw bits ----
+### Reinterprets the 64-bit BID storage as a raw U64 (no decode).
 routine D64.to_bits() -> U64
   return reinterpret_bits[D64, U64](me)
 
+### Reinterprets a raw U64 as BID64 storage (no validation).
 common routine D64.from_bits(bits: U64) -> D64
   return reinterpret_bits[U64, D64](bits)
 
 ### BID64 decode -> narrow parts.
 routine D64.decode() -> D64Parts
   var bits = me.to_bits()
+  # sign = bit 63
   var sign = int_ne[U64](a: bit_and[U64](a: shift_right_unsigned[U64](bits, 63_u64), b: 1_u64), b: 0_u64)
+  # top5 = 5-bit combination prefix (bits 62:58) that selects form/special
   var top5 = bit_and[U64](a: shift_right_unsigned[U64](bits, 58_u64), b: 0x1F_u64)
+  # 11110 -> infinity (special 1)
   if int_eq[U64](a: top5, b: 0x1E_u64)
     return D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
+  # 11111 -> NaN; bit 57 distinguishes signaling (special 3) from quiet (special 2)
   if int_eq[U64](a: top5, b: 0x1F_u64)
     var sp = 2_u64
     if int_ne[U64](a: bit_and[U64](a: shift_right_unsigned[U64](bits, 57_u64), b: 1_u64), b: 0_u64)
@@ -69,6 +73,7 @@ routine D64.decode() -> D64Parts
     return D64Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64)
   var biased = 0_u64
   var c64 = 0_u64
+  # top5 >> 3 == 3 means combo prefix starts with 11 -> Form 2, else Form 1
   if int_eq[U64](a: shift_right_unsigned[U64](top5, 3_u64), b: 3_u64)
     # Form 2: exp bits 60:51, coeff = (bits 50:0) | 2^53
     biased = bit_and[U64](a: shift_right_unsigned[U64](bits, 51_u64), b: 0x3FF_u64)
@@ -77,27 +82,33 @@ routine D64.decode() -> D64Parts
     # Form 1: exp bits 62:53, coeff bits 52:0
     biased = bit_and[U64](a: shift_right_unsigned[U64](bits, 53_u64), b: 0x3FF_u64)
     c64 = bit_and[U64](a: bits, b: 0x1FFFFFFFFFFFFF_u64)
+  # unbias: stored exponent q = biased - 398 (bias=398)
   return D64Parts(sign: sign, special: 0_u64, exp: sub[S64](a: reinterpret_bits[U64, S64](biased), b: 398_s64), coeff: c64)
 
 ### Narrow parts -> BID64 (Form 1 / Form 2 / special). Finite parts must already be
 ### rounded to <= 16 digits and in the decimal64 exponent range (decfin64 guarantees it).
 routine d64_of_parts(p: D64Parts) -> D64
+  # sign into bit 63
   var sbit = shift_left[U64](value: if p.sign then 1_u64 else 0_u64, bits: 63_u64)
   if int_ne[U64](a: p.special, b: 0_u64)
+    # special: combo prefix 11110 (inf) or 11111 (NaN) into bits 62:58
     var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
     var bb = bit_or[U64](a: sbit, b: shift_left[U64](value: top5, bits: 58_u64))
+    # signaling NaN sets bit 57
     if int_eq[U64](a: p.special, b: 3_u64)
       bb = bit_or[U64](a: bb, b: shift_left[U64](value: 1_u64, bits: 57_u64))
     return D64.from_bits(bits: bb)
+  # rebias: biased = (q + 398) masked to 10 bits
   var biased = bit_and[U64](a: add[U64](a: reinterpret_bits[S64, U64](p.exp), b: 398_u64), b: 0x3FF_u64)
   var c64 = p.coeff
+  # coeff < 2^53 -> Form 1, else Form 2 (implicit leading 2^53)
   if unsigned_lt[U64](a: c64, b: 0x20000000000000_u64)
     # Form 1: exp bits 62:53, coeff bits 52:0
     return D64.from_bits(bits: bit_or[U64](a: bit_or[U64](a: sbit, b: shift_left[U64](value: biased, bits: 53_u64)), b: c64))
   # Form 2: bits 62:61 = 11, exp bits 60:51, coeff low 51 bits (implicit 2^53)
-  var g2 = shift_left[U64](value: 0x3_u64, bits: 61_u64)
+  var g2 = shift_left[U64](value: 0x3_u64, bits: 61_u64)  # the 11 prefix
   var ebits = shift_left[U64](value: biased, bits: 51_u64)
-  var clow = bit_and[U64](a: c64, b: 0x7FFFFFFFFFFFF_u64)
+  var clow = bit_and[U64](a: c64, b: 0x7FFFFFFFFFFFF_u64)  # low 51 coeff bits
   return D64.from_bits(bits: bit_or[U64](a: bit_or[U64](a: sbit, b: g2), b: bit_or[U64](a: ebits, b: clow)))
 
 ### Builds a finite D64 from a signed coefficient and base-10 exponent (rounded/ranged).
@@ -113,16 +124,24 @@ common routine D64.from_int64(value: S64) -> D64
 ### Infinity / quiet NaN.
 common routine D64.infinity(sign: Bool) -> D64
   return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+
+### Returns a quiet NaN.
 common routine D64.quiet_nan() -> D64
   return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
+
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
 common routine D64.signaling_nan() -> D64
   return d64_of_parts(p: D64Parts(sign: false, special: 3_u64, exp: 0_s64, coeff: 0_u64))
 
+### True when this is a finite value (special field == 0).
 routine D64.is_finite() -> Bool
   return int_eq[U64](a: me.decode().special, b: 0_u64)
+
+### True when this is ±infinity (special field == 1).
 routine D64.is_infinite() -> Bool
   return int_eq[U64](a: me.decode().special, b: 1_u64)
+
+### True when this is a NaN (special field >= 2: 2 quiet, 3 signaling).
 routine D64.is_nan() -> Bool
   return unsigned_ge[U64](a: me.decode().special, b: 2_u64)
 
@@ -140,7 +159,15 @@ routine D64.is_zero() -> Bool
 # (overflow -> inf, underflow -> round-off / zero), strip/pad toward pref; the
 # rounded result fits U64.
 # ============================================================================
+### Finalize a working (coeff, exp) into a valid decimal64 D64Parts: round to Pmax=16 digits,
+### clamp exponent to [-398, 369], round-half-even, then strip/pad toward pref. Result fits U64.
+### :param sign: result sign.
+### :param coeff: U128 working coefficient (unrounded; may exceed 16 digits).
+### :param exp: base-10 exponent of coeff.
+### :param pref: preferred (cohort) exponent; trailing-zero strip/pad targets this.
+### :returns: rounded, range-clamped D64Parts (special=1 if overflow to inf).
 routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
+  # zero coefficient: result is ±0 with the preferred exponent clamped into range
   if int_eq[U128](a: coeff, b: 0)
     var ez = pref
     if signed_lt[S64](a: ez, b: -398_s64)
@@ -150,19 +177,22 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
     return D64Parts(sign: sign, special: 0_u64, exp: ez, coeff: 0_u64)
   var c = coeff
   var e = exp
-  var nd = digits10_u128(c: c)
+  var nd = digits10_u128(c: c)  # current digit count
+  # too many digits: drop the excess and round half-even
   if signed_gt[S64](a: nd, b: 16_s64)
     var drop = sub[S64](a: nd, b: 16_s64)
-    var divv = p10_u128(k: drop)
-    var q = div_pow10_u128(x: c, k: drop)
-    var r = sub[U128](a: c, b: mul[U128](a: q, b: divv))
+    var divv = p10_u128(k: drop)  # 10^drop divisor
+    var q = div_pow10_u128(x: c, k: drop)  # kept high digits
+    var r = sub[U128](a: c, b: mul[U128](a: q, b: divv))  # dropped remainder
     var twice = mul[U128](a: r, b: 2)
+    # round up when remainder > half; on exact half (==) round to even (odd q)
     if unsigned_gt[U128](a: twice, b: divv)
       q = add[U128](a: q, b: 1)
     elseif int_eq[U128](a: twice, b: divv) and int_ne[U128](a: bit_and[U128](a: q, b: 1), b: 0)
       q = add[U128](a: q, b: 1)
     c = q
     e = add[S64](a: e, b: drop)
+    # rounding may have carried to a 17th digit -> renormalize one digit
     if unsigned_ge[U128](a: c, b: p10_u128(k: 16_s64))
       c = div_pow10_u128(x: c, k: 1_s64)
       e = add[S64](a: e, b: 1_s64)
@@ -194,21 +224,28 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
 # ============================================================================
 # Arithmetic (U64 operands, U128 intermediates)
 # ============================================================================
+### Raw IEEE 754 decimal64 multiply: coeff product, exponents add, finalized via decfin64.
+### Either operand non-finite -> shared special-value rules. May yield ±inf / NaN.
 routine d64_mul(a: D64, b: D64) -> D64
   var pa = a.decode()
   var pb = b.decode()
+  # any inf/NaN operand: delegate to the shared D128 special-value table
   if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
     return d64_of_parts(p: d128_to_d64parts(mul_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
-  var sign = pa.sign != pb.sign
+  var sign = pa.sign != pb.sign  # XOR signs
   # 64x64 -> 128 widening product (both operands fit U64).
   var prod = mul[U128](a: zero_extend[U64, U128](pa.coeff), b: zero_extend[U64, U128](pb.coeff))
   return d64_of_parts(p: decfin64(sign: sign, coeff: prod, exp: add[S64](a: pa.exp, b: pb.exp), pref: add[S64](a: pa.exp, b: pb.exp)))
 
+### Raw IEEE 754 decimal64 add: align to the smaller exponent, combine, finalize via decfin64.
+### Either operand non-finite -> shared special-value rules. May yield ±inf / NaN.
 routine d64_add(a: D64, b: D64) -> D64
   var pa = a.decode()
   var pb = b.decode()
+  # any inf/NaN operand: delegate to the shared D128 special-value table
   if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
     return d64_of_parts(p: d128_to_d64parts(add_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
+  # h = higher-exponent operand, l = lower; swap so eh >= el
   var eh = pa.exp
   var ch = pa.coeff
   var sh = pa.sign
@@ -222,28 +259,33 @@ routine d64_add(a: D64, b: D64) -> D64
     el = pa.exp
     cl = pa.coeff
     sl = pa.sign
-  var pref = el
-  var shift = sub[S64](a: eh, b: el)
-  var ew = el
-  var chw = zero_extend[U64, U128](0_u64)
-  var clw = zero_extend[U64, U128](0_u64)
+  var pref = el  # preferred exponent = the smaller input exponent
+  var shift = sub[S64](a: eh, b: el)  # decimal places to align l up to h
+  var ew = el  # working exponent of the aligned result
+  var chw = zero_extend[U64, U128](0_u64)  # high coeff scaled to working exp
+  var clw = zero_extend[U64, U128](0_u64)  # low coeff aligned (with sticky)
+  # shift <= 18: full U64-scale alignment fits the U128 product exactly
   if signed_le[S64](a: shift, b: 18_s64)
     # 64x64 -> 128 widening align (10^shift fits U64 for shift <= 18).
     chw = mul[U128](a: zero_extend[U64, U128](ch), b: zero_extend[U64, U128](p10_u64_d(k: shift)))
     clw = zero_extend[U64, U128](cl)
   else
+    # shift > 18: cap the high scale at 10^18, round the low operand into that window
     chw = mul[U128](a: zero_extend[U64, U128](ch), b: zero_extend[U64, U128](p10_u64_d(k: 18_s64)))
     ew = sub[S64](a: eh, b: 18_s64)
     # keep the low operand's in-window digits (down to ew) in U64; sticky only below.
     var drop = sub[S64](a: shift, b: 18_s64)
+    # drop >= 16: low operand vanishes entirely; collapse to a single sticky bit
     if signed_ge[S64](a: drop, b: 16_s64)
       clw = if int_ne[U64](a: cl, b: 0_u64) then zero_extend[U64, U128](1_u64) else zero_extend[U64, U128](0_u64)
     else
+      # divide off `drop` digits; OR a sticky 1 into bit 0 if anything was lost
       var q = div_pow10_u64(x: cl, k: drop)
       var rem = sub[U64](a: cl, b: mul[U64](a: q, b: p10_u64_d(k: drop)))
       clw = zero_extend[U64, U128](if int_ne[U64](a: rem, b: 0_u64) then bit_or[U64](a: q, b: 1_u64) else q)
-  var rc = zero_extend[U64, U128](0_u64)
+  var rc = zero_extend[U64, U128](0_u64)  # combined coefficient
   var rsign = sh
+  # same sign: add magnitudes; opposite sign: subtract smaller from larger, take its sign
   if sh == sl
     rc = add[U128](a: chw, b: clw)
   elseif unsigned_ge[U128](a: chw, b: clw)
@@ -261,29 +303,35 @@ routine d64_add(a: D64, b: D64) -> D64
 routine d64_neg(a: D64) -> D64
   return D64.from_bits(bits: bit_xor[U64](a: a.to_bits(), b: shift_left[U64](value: 1_u64, bits: 63_u64)))
 
+### Raw IEEE 754 decimal64 subtract: add the negation of b.
 routine d64_sub(a: D64, b: D64) -> D64
   return d64_add(a: a, b: d64_neg(a: b))
 
+### Raw IEEE 754 decimal64 divide: scale numerator, integer-divide with sticky, finalize.
+### Non-finite operands -> shared special rules; x/0 -> ±inf, 0/0 -> NaN. May yield ±inf / NaN.
 routine d64_div(a: D64, b: D64) -> D64
   var pa = a.decode()
   var pb = b.decode()
+  # any inf/NaN operand: delegate to the shared D128 special-value table
   if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
     return d64_of_parts(p: d128_to_d64parts(div_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
-  var sign = pa.sign != pb.sign
+  var sign = pa.sign != pb.sign  # XOR signs
   var azero = int_eq[U64](a: pa.coeff, b: 0_u64)
   var bzero = int_eq[U64](a: pb.coeff, b: 0_u64)
+  # divide by zero: 0/0 -> NaN (special 2), x/0 -> ±inf (special 1)
   if bzero
     if azero
       return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
     return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
-  var pref = sub[S64](a: pa.exp, b: pb.exp)
+  var pref = sub[S64](a: pa.exp, b: pb.exp)  # preferred exponent = ea - eb
+  # 0/x -> signed zero at the preferred exponent
   if azero
     return d64_of_parts(p: decfin64(sign: sign, coeff: zero_extend[U64, U128](0_u64), exp: pref, pref: pref))
   var num = zero_extend[U64, U128](pa.coeff)
   var den = zero_extend[U64, U128](pb.coeff)
   # scale numerator to ~Pmax+2 quotient digits, divide, sticky, round to 16
-  var target = add[S64](a: digits10_u128(c: den), b: 18_s64)
-  var shift = sub[S64](a: target, b: digits10_u128(c: num))
+  var target = add[S64](a: digits10_u128(c: den), b: 18_s64)  # want this many num digits
+  var shift = sub[S64](a: target, b: digits10_u128(c: num))  # extra 10^shift to apply
   if signed_lt[S64](a: shift, b: 0_s64)
     shift = 0_s64
   num = mul[U128](a: num, b: p10_u128(k: shift))
@@ -299,31 +347,38 @@ routine d64_div(a: D64, b: D64) -> D64
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
 
-### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw IEEE.
+### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw
+### IEEE.
 routine D64.$add!(you: D64) -> D64
   var r = d64_add(a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
-### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw IEEE.
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw
+### IEEE.
 routine D64.$sub!(you: D64) -> D64
   var r = d64_sub(a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
-### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw IEEE.
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw
+### IEEE.
 routine D64.$mul!(you: D64) -> D64
   var r = d64_mul(a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
-### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow -> overflow.
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
+### overflow.
 ### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 routine D64.$truediv!(you: D64) -> D64
   var r = d64_div(a: me, b: you)
@@ -332,18 +387,21 @@ routine D64.$truediv!(you: D64) -> D64
   if you.is_zero() and not me.is_zero()
     throw DivisionByZeroError()
   if r.is_nan()
-    throw NumericDomainError(description: "D64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D64.$add_unchecked(you: D64) -> D64
   return d64_add(a: me, b: you)
+
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D64.$sub_unchecked(you: D64) -> D64
   return d64_sub(a: me, b: you)
+
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D64.$mul_unchecked(you: D64) -> D64
   return d64_mul(a: me, b: you)
+
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
 routine D64.$truediv_unchecked(you: D64) -> D64
   return d64_div(a: me, b: you)
@@ -382,11 +440,14 @@ routine D64.$pow!(you: D64) -> D64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
+### Shortest decimal text (widens to D128Parts and reuses the shared formatter).
 routine D64.$represent() -> Text
   return d128_represent(p: d64parts_to_d128(p: me.decode()))
+
+### Debug form: `D64(<value>)`.
 routine D64.$diagnose() -> Text
   return "D64(" + me.$represent() + ")"
 
@@ -404,34 +465,61 @@ routine D64.$diagnose() -> Text
 
 preset D64_ZERO: D64 = 0.0_d64
 preset D64_ONE: D64 = 1.0_d64
+# IEEE 754 decimal64: 16 significant digits, emax = 384.
+preset D64_MAX: D64 = 9.999999999999999e384_d64
+preset D64_MIN: D64 = -9.999999999999999e384_d64
+preset D64_MIN_POSITIVE: D64 = 1e-383_d64
+preset D64_EPSILON: D64 = 1e-15_d64
 
 # ============================================================================
 # Creators — integers
 # ============================================================================
 
+### Converts an S8 to D64 (widen to S64, exponent 0).
 routine D64.$create(from: S8) -> D64
   return D64.from_int64(value: S64(from))
+
+### Converts an S16 to D64 (widen to S64, exponent 0).
 routine D64.$create(from: S16) -> D64
   return D64.from_int64(value: S64(from))
+
+### Converts an S32 to D64 (widen to S64, exponent 0).
 routine D64.$create(from: S32) -> D64
   return D64.from_int64(value: S64(from))
+
+### Converts an S64 to D64 (exponent 0; rounded to 16 digits).
 routine D64.$create(from: S64) -> D64
   return D64.from_int64(value: from)
+
+### Converts an S128 to D64 via D128 (rounded to 16 digits).
 routine D64.$create(from: S128) -> D64
   return D64(from: D128(from: from))
+
+### Converts an S256 to D64 via D128 (rounded to 16 digits).
 routine D64.$create(from: S256) -> D64
   return D64(from: D128(from: from))
 
+### Converts a U8 to D64 (exponent 0).
 routine D64.$create(from: U8) -> D64
   return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+
+### Converts a U16 to D64 (exponent 0).
 routine D64.$create(from: U16) -> D64
   return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+
+### Converts a U32 to D64 (exponent 0).
 routine D64.$create(from: U32) -> D64
   return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+
+### Converts a U64 to D64 (exponent 0; rounded to 16 digits).
 routine D64.$create(from: U64) -> D64
   return D64.from_components(sign: false, coeff: from, exp: 0_s64)
+
+### Converts a U128 to D64 via D128 (rounded to 16 digits).
 routine D64.$create(from: U128) -> D64
   return D64(from: D128(from: from))
+
+### Converts a U256 to D64 via D128 (rounded to 16 digits).
 routine D64.$create(from: U256) -> D64
   return D64(from: D128(from: from))
 
@@ -439,12 +527,19 @@ routine D64.$create(from: U256) -> D64
 # Creators — binary floats (matched width is F128)
 # ============================================================================
 
+### Converts an F16 to D64 (via F64, then F128 -> D64, correctly rounded).
 routine D64.$create(from: F16) -> D64
   return D64(from: F64(from))
+
+### Converts an F32 to D64 (via F64, then F128 -> D64, correctly rounded).
 routine D64.$create(from: F32) -> D64
   return D64(from: F64(from))
+
+### Converts an F64 to D64 (widened to F128 for correctly-rounded decimal conversion).
 routine D64.$create(from: F64) -> D64
   return f128_to_d64(x: F128(from: from))
+
+### Converts an F128 to D64 (correctly-rounded binary -> decimal).
 routine D64.$create(from: F128) -> D64
   return f128_to_d64(x: from)
 
@@ -452,10 +547,15 @@ routine D64.$create(from: F128) -> D64
 # Creators — decimal <-> decimal
 # ============================================================================
 
+### Converts a D32 to D64 (always exact — every decimal32 fits decimal64).
 routine D64.$create(from: D32) -> D64
   return d64_of_parts(p: d128_to_d64parts(p: d32parts_to_d128(p: from.decode())))
+
+### Identity conversion (D64 -> D64).
 routine D64.$create(from: D64) -> D64
   return from
+
+### Converts a D128 to D64 (rounded to 16 digits / decimal64 range).
 routine D64.$create(from: D128) -> D64
   return d64_of_parts(p: d128_to_d64parts(p: from.decode()))
 
@@ -501,4 +601,3 @@ routine D64.to_bytes_be() -> Array[Byte, 8]
     result = set_byte_at(array: result, index: i, value: b)
     i = add[U64](a: i, b: 1_u64)
   return result
-

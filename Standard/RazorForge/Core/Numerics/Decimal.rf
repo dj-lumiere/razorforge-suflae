@@ -33,7 +33,8 @@ record Decimal obeys Numeric, Ordered
 
 ### The mathematical constant pi (Archimedes' constant), correctly rounded to the 70 significant
 ### digits of `Decimal` precision. `Decimal` is a fixed 70-digit type, so pi is a constant value
-### rather than a precision-parameterized routine. The literal carries extra digits; the compile-time
+### rather than a precision-parameterized routine. The literal carries extra digits; the
+### compile-time
 ### BID encoder rounds it to 70 digits (round-half-to-even).
 preset DECIMAL_PI: Decimal = 3.141592653589793238462643383279502884197169399375105820974944592307816406286dn
 ### Euler's number e (the base of the natural logarithm), correctly rounded to the 70 significant
@@ -44,10 +45,14 @@ preset DECIMAL_E: Decimal = 2.71828182845904523536028747135266249775724709369995
 # Bit representation (raw i256 <-> value)
 # ============================================================================
 
+### Returns the raw i256 storage of this value (no decode; bit-for-bit reinterpret).
+### :returns: the BID encoding as a U256.
 @readonly
 routine Decimal.to_bits() -> U256
   return reinterpret_bits[Decimal, U256](me)
 
+### Reinterprets a raw U256 as a Decimal (bit-for-bit; assumes valid BID encoding).
+### :param bits: the BID-encoded i256 storage.
 common routine Decimal.from_bits(bits: U256) -> Decimal
   return reinterpret_bits[U256, Decimal](bits)
 
@@ -92,7 +97,8 @@ routine decimal_normalize_parts(p: DecimalParts) -> DecimalParts
   var e = p.exp
   # Batched fractional-trailing-zero strip toward exponent 0 (reciprocal divide, not a per-digit
   # loop — mirrors decfinA's strip): the most we can strip is room = -e (to reach exp 0); cap that
-  # by the binary trailing-zero count (decimal tz <= binary tz, one cttz), find the largest tz <= cap
+  # by the binary trailing-zero count (decimal tz <= binary tz, one cttz), find the largest tz <=
+  # cap
   # with 10^tz | cu via one exact-divide check + a binary-search fallback, then divide once.
   var room = sub[S64](a: 0_s64, b: e)
   if signed_gt[S64](a: room, b: 0_s64)
@@ -143,6 +149,9 @@ routine decimalfixed_of_parts(p: DecimalParts) -> Decimal
 ### Infinity with the given sign / a quiet NaN.
 common routine Decimal.infinity(sign: Bool) -> Decimal
   return decimalfixed_of_parts(p: DecimalParts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
+
+### Returns a quiet NaN (special field 2, zero coefficient).
+### :returns: A quiet-NaN `Decimal`.
 common routine Decimal.quiet_nan() -> Decimal
   return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 2_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
 
@@ -164,34 +173,59 @@ common routine Decimal.from_int64(value: S64) -> Decimal
   return Decimal.from_components(sign: neg, coeff: zero_extend[U64, U256](reinterpret_bits[S64, U64](mag)), exp: 0_s64)
 
 ### Signed integer -> Decimal.
+### S8 -> Decimal (widened to S64, exponent 0).
 routine Decimal.$create(from: S8) -> Decimal
   return Decimal.from_int64(value: S64(from))
+
+### S16 -> Decimal (widened to S64, exponent 0).
 routine Decimal.$create(from: S16) -> Decimal
   return Decimal.from_int64(value: S64(from))
+
+### S32 -> Decimal (widened to S64, exponent 0).
 routine Decimal.$create(from: S32) -> Decimal
   return Decimal.from_int64(value: S64(from))
+
+### S64 -> Decimal (exponent 0).
 routine Decimal.$create(from: S64) -> Decimal
   return Decimal.from_int64(value: from)
+
+### S128 -> Decimal (split sign / magnitude into a U256 coefficient, exponent 0).
 routine Decimal.$create(from: S128) -> Decimal
+  # negate via two's complement on the signed value, then reinterpret the magnitude as unsigned
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
   return Decimal.from_components(sign: neg, coeff: zero_extend[U128, U256](mag), exp: 0_s64)
+
+### S256 -> Decimal (split sign / magnitude into the U256 coefficient, exponent 0).
 routine Decimal.$create(from: S256) -> Decimal
+  # S256_MIN negates to itself in two's complement; its magnitude (2^255) still fits the 256-bit
+  # coeff
   var neg = signed_lt[S256](a: from, b: 0_s256)
   var mag = if neg then reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: from)) else reinterpret_bits[S256, U256](from)
   return Decimal.from_components(sign: neg, coeff: mag, exp: 0_s64)
 
 ### Unsigned integer -> Decimal.
+### U8 -> Decimal (zero-extend into the coefficient, exponent 0).
 routine Decimal.$create(from: U8) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U8, U256](from), exp: 0_s64)
+
+### U16 -> Decimal (zero-extend into the coefficient, exponent 0).
 routine Decimal.$create(from: U16) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U16, U256](from), exp: 0_s64)
+
+### U32 -> Decimal (zero-extend into the coefficient, exponent 0).
 routine Decimal.$create(from: U32) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U32, U256](from), exp: 0_s64)
+
+### U64 -> Decimal (zero-extend into the coefficient, exponent 0).
 routine Decimal.$create(from: U64) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U64, U256](from), exp: 0_s64)
+
+### U128 -> Decimal (zero-extend into the coefficient, exponent 0).
 routine Decimal.$create(from: U128) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U128, U256](from), exp: 0_s64)
+
+### U256 -> Decimal (coefficient stored directly, exponent 0).
 routine Decimal.$create(from: U256) -> Decimal
   return Decimal.from_components(sign: false, coeff: from, exp: 0_s64)
 
@@ -204,12 +238,19 @@ routine Decimal.$create(from: U256) -> Decimal
 # ============================================================================
 
 ### Binary float -> Decimal (correctly rounded via D128).
+### F16 -> Decimal via D128 (round-trip-exact: F16 fits well inside D128's 34 digits).
 routine Decimal.$create(from: F16) -> Decimal
   return Decimal(from: D128(from: from))
+
+### F32 -> Decimal via D128 (round-trip-exact).
 routine Decimal.$create(from: F32) -> Decimal
   return Decimal(from: D128(from: from))
+
+### F64 -> Decimal via D128 (round-trip-exact).
 routine Decimal.$create(from: F64) -> Decimal
   return Decimal(from: D128(from: from))
+
+### F128 -> Decimal via D128 (correctly rounded to 34 digits; full 70-digit path is future work).
 routine Decimal.$create(from: F128) -> Decimal
   return Decimal(from: D128(from: from))
 
@@ -229,23 +270,32 @@ common routine Decimal.from_decimal_parts(sign: Bool, special: U64, exp: S64, co
   return Decimal.from_components(sign: sign, coeff: coeff, exp: exp)
 
 ### IEEE decimal -> Decimal.
+### D32 -> Decimal (exact: decode parts, widen coefficient into the 70-digit cohort).
 routine Decimal.$create(from: D32) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U256](p.coeff))
+
+### D64 -> Decimal (exact: decode parts, widen coefficient into the 70-digit cohort).
 routine Decimal.$create(from: D64) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U256](p.coeff))
+
+### D128 -> Decimal (exact: decode parts, widen the 34-digit coefficient into the cohort).
 routine Decimal.$create(from: D128) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U128, U256](p.coeff))
 
-### Classification.
+### Classification. True when special == 0 (a finite value, including zero).
 @readonly
 routine Decimal.is_finite() -> Bool
   return int_eq[U64](a: me.decode().special, b: 0_u64)
+
+### True when the value is +-infinity (special == 1).
 @readonly
 routine Decimal.is_infinite() -> Bool
   return int_eq[U64](a: me.decode().special, b: 1_u64)
+
+### True when the value is NaN (special >= 2: 2 = quiet, 3 = signaling).
 @readonly
 routine Decimal.is_nan() -> Bool
   return unsigned_ge[U64](a: me.decode().special, b: 2_u64)
@@ -328,23 +378,29 @@ routine Decimal.$eq(you: Decimal) -> Bool
 # unconditional, so the wired operators that call them need not be failable.
 # ============================================================================
 
-
-
-
-
 # ============================================================================
 # Special-case arithmetic (inf / NaN / zero operands, on DecimalParts)
 # ============================================================================
 
 ### Special-arithmetic parts (coeff 0). NaN propagates; rules mirror D128 / IEEE 754.
+### Quiet-NaN parts (special 2, coeff 0).
 routine nan256() -> DecimalParts
   return DecimalParts(sign: false, special: 2_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+
+### Signed-infinity parts (special 1, coeff 0).
 routine inf256(sign: Bool) -> DecimalParts
   return DecimalParts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+
+### Signed-zero parts (special 0, coeff 0).
 routine zero256(sign: Bool) -> DecimalParts
   return DecimalParts(sign: sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
+
+### True if either operand is a NaN (special >= 2).
 routine has_nan256(pa: DecimalParts, pb: DecimalParts) -> Bool
   return unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+
+### Special-case result of a+b when at least one operand is non-finite.
+### inf+inf same sign = inf; inf-inf (opposite signs) = NaN; NaN propagates.
 routine add_special256(pa: DecimalParts, pb: DecimalParts) -> DecimalParts
   if has_nan256(pa: pa, pb: pb)
     return nan256()
@@ -355,6 +411,9 @@ routine add_special256(pa: DecimalParts, pb: DecimalParts) -> DecimalParts
   if int_eq[U64](a: pa.special, b: 1_u64)
     return inf256(sign: pa.sign)
   return inf256(sign: pb.sign)
+
+### Special-case result of a*b when at least one operand is non-finite.
+### NaN propagates; inf*0 = NaN; otherwise inf with the XOR of the signs.
 routine mul_special256(pa: DecimalParts, pb: DecimalParts) -> DecimalParts
   if has_nan256(pa: pa, pb: pb)
     return nan256()
@@ -363,6 +422,9 @@ routine mul_special256(pa: DecimalParts, pb: DecimalParts) -> DecimalParts
   if azero or bzero
     return nan256()
   return inf256(sign: pa.sign != pb.sign)
+
+### Special-case result of a/b when at least one operand is non-finite.
+### NaN propagates; inf/inf = NaN; inf/finite = inf; finite/inf = 0; sign is XOR of signs.
 routine div_special256(pa: DecimalParts, pb: DecimalParts) -> DecimalParts
   if has_nan256(pa: pa, pb: pb)
     return nan256()
@@ -491,9 +553,9 @@ routine Decimal.$mul!(you: Decimal) -> Decimal
     var __dchk0 = decimalfixed_of_parts(p: mul_special256(pa: pa, pb: pb))
     var __dp0 = __dchk0.decode()
     if int_eq[U64](a: __dp0.special, b: 1_u64)
-      throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+      throw NumericOverflowError(description: "overflow: out of range")
     if unsigned_ge[U64](a: __dp0.special, b: 2_u64)
-      throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+      throw NumericDomainError(description: "domain error: no real result")
     if int_eq[U256](a: __dp0.coeff, b: 0)
       return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp0.exp, coeff: zero_extend[U64, U256](0_u64)))
     return __dchk0
@@ -502,9 +564,9 @@ routine Decimal.$mul!(you: Decimal) -> Decimal
   var __dchk1 = decimalfixed_of_parts(p: decfinA(sign: sign, coeff: prod, exp: add[S64](a: pa.exp, b: pb.exp), pref: add[S64](a: pa.exp, b: pb.exp)))
   var __dp1 = __dchk1.decode()
   if int_eq[U64](a: __dp1.special, b: 1_u64)
-    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+    throw NumericOverflowError(description: "overflow: out of range")
   if unsigned_ge[U64](a: __dp1.special, b: 2_u64)
-    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+    throw NumericDomainError(description: "domain error: no real result")
   if int_eq[U256](a: __dp1.coeff, b: 0)
     return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp1.exp, coeff: zero_extend[U64, U256](0_u64)))
   return __dchk1
@@ -517,9 +579,9 @@ routine Decimal.$add!(you: Decimal) -> Decimal
     var __dchk2 = decimalfixed_of_parts(p: add_special256(pa: pa, pb: pb))
     var __dp2 = __dchk2.decode()
     if int_eq[U64](a: __dp2.special, b: 1_u64)
-      throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+      throw NumericOverflowError(description: "overflow: out of range")
     if unsigned_ge[U64](a: __dp2.special, b: 2_u64)
-      throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+      throw NumericDomainError(description: "domain error: no real result")
     if int_eq[U256](a: __dp2.coeff, b: 0)
       return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp2.exp, coeff: zero_extend[U64, U256](0_u64)))
     return __dchk2
@@ -561,9 +623,9 @@ routine Decimal.$add!(you: Decimal) -> Decimal
   var __dchk3 = decimalfixed_of_parts(p: decfinA(sign: rsign, coeff: rc, exp: ew, pref: pref))
   var __dp3 = __dchk3.decode()
   if int_eq[U64](a: __dp3.special, b: 1_u64)
-    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+    throw NumericOverflowError(description: "overflow: out of range")
   if unsigned_ge[U64](a: __dp3.special, b: 2_u64)
-    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+    throw NumericDomainError(description: "domain error: no real result")
   if int_eq[U256](a: __dp3.coeff, b: 0)
     return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp3.exp, coeff: zero_extend[U64, U256](0_u64)))
   return __dchk3
@@ -584,25 +646,25 @@ routine Decimal.$truediv!(you: Decimal) -> Decimal
     var __dchk4 = decimalfixed_of_parts(p: div_special256(pa: pa, pb: pb))
     var __dp4 = __dchk4.decode()
     if int_eq[U64](a: __dp4.special, b: 1_u64)
-      throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+      throw NumericOverflowError(description: "overflow: out of range")
     if unsigned_ge[U64](a: __dp4.special, b: 2_u64)
-      throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+      throw NumericDomainError(description: "domain error: no real result")
     if int_eq[U256](a: __dp4.coeff, b: 0)
       return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp4.exp, coeff: zero_extend[U64, U256](0_u64)))
     return __dchk4
   var sign = pa.sign != pb.sign
   if int_eq[U256](a: pb.coeff, b: 0)
     if int_eq[U256](a: pa.coeff, b: 0)
-      throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+      throw NumericDomainError(description: "domain error: no real result")
     throw DivisionByZeroError()
   var pref = sub[S64](a: pa.exp, b: pb.exp)
   if int_eq[U256](a: pa.coeff, b: 0)
     var __dchk5 = decimalfixed_of_parts(p: decfinA(sign: sign, coeff: zero_extend[U64, U512](0_u64), exp: pref, pref: pref))
     var __dp5 = __dchk5.decode()
     if int_eq[U64](a: __dp5.special, b: 1_u64)
-      throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+      throw NumericOverflowError(description: "overflow: out of range")
     if unsigned_ge[U64](a: __dp5.special, b: 2_u64)
-      throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+      throw NumericDomainError(description: "domain error: no real result")
     if int_eq[U256](a: __dp5.coeff, b: 0)
       return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp5.exp, coeff: zero_extend[U64, U256](0_u64)))
     return __dchk5
@@ -622,9 +684,9 @@ routine Decimal.$truediv!(you: Decimal) -> Decimal
   var __dchk6 = decimalfixed_of_parts(p: decfinA(sign: sign, coeff: q, exp: exp, pref: pref))
   var __dp6 = __dchk6.decode()
   if int_eq[U64](a: __dp6.special, b: 1_u64)
-    throw NumericOverflowError(description: "Decimal overflow: the result exceeds the representable range.")
+    throw NumericOverflowError(description: "overflow: out of range")
   if unsigned_ge[U64](a: __dp6.special, b: 2_u64)
-    throw NumericDomainError(description: "Decimal: undefined operation with no real result (out of domain, such as 0/0, sqrt of a negative, or acos outside [-1,1]).")
+    throw NumericDomainError(description: "domain error: no real result")
   if int_eq[U256](a: __dp6.coeff, b: 0)
     return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp6.exp, coeff: zero_extend[U64, U256](0_u64)))
   return __dchk6
@@ -687,3 +749,7 @@ routine d256b_represent(p: DecimalParts) -> Text
 ### Returns the decimal text of this value (full 70-digit formatter).
 routine Decimal.$represent() -> Text
   return d256b_represent(p: me.decode())
+
+### Returns a debug rendering of this value, e.g. `Decimal(3.5)`. Mirrors the D32/D64/D128 surface.
+routine Decimal.$diagnose() -> Text
+  return "Decimal(" + me.$represent() + ")"

@@ -13,7 +13,6 @@ module Core
 # digits, so no dedicated wide tables are needed here.
 # ============================================================================
 
-
 # ============================================================================
 # Radix adapters (dec <-> bin256)
 # ============================================================================
@@ -108,175 +107,280 @@ routine f256_to_d128(x: F256) -> D128
 # Transcendentals delegate to the internal F256 engine (propagating). The bare `op()` is CHECKED
 # (crashes if the result is non-finite — domain/overflow); `op_unchecked()` propagates inf/NaN.
 # Finite-preserving ops (cbrt, sin/cos/tan/atan/atan2, tanh, asinh) need no split.
+
+### e^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.exp!() -> D128
   var r = me.exp_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw e^me via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.exp_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).exp())
+
+### e^me - 1 (accurate near 0). Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.expm1!() -> D128
   var r = me.expm1_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw e^me - 1 via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.expm1_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).expm1())
+
+### 2^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.exp2!() -> D128
   var r = me.exp2_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw 2^me via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.exp2_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).exp2())
+
+### 10^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.exp10!() -> D128
   var r = me.exp10_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw 10^me via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.exp10_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).exp10())
+
+### Natural log ln(me). Crashes: NumericDomainError on NaN/domain (me<0), NumericOverflowError on
+### ±inf (e.g. log(0) = -inf).
 routine D128.log!() -> D128
   var r = me.log_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw ln(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.log_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).log())
+
+### ln(1 + me) (accurate near 0). Crashes: NumericDomainError on NaN/domain, NumericOverflowError
+### on ±inf.
 routine D128.log1p!() -> D128
   var r = me.log1p_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw ln(1 + me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.log1p_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).log1p())
+
+### Base-2 log log2(me). Crashes: NumericDomainError on NaN/domain, NumericOverflowError on ±inf.
 routine D128.log2!() -> D128
   var r = me.log2_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw log2(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.log2_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).log2())
+
+### Base-10 log log10(me). Crashes: NumericDomainError on NaN/domain, NumericOverflowError on ±inf.
 routine D128.log10!() -> D128
   var r = me.log10_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw log10(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.log10_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).log10())
+
+### Square root sqrt(me). Crashes: NumericDomainError on NaN/domain (me<0), NumericOverflowError
+### on ±inf.
 routine D128.sqrt!() -> D128
   var r = me.sqrt_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw sqrt(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.sqrt_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).sqrt())
+
+### Cube root cbrt(me). Finite-preserving (defined for all reals), so never non-finite for finite
+### input; never crashes.
 routine D128.cbrt() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).cbrt())
+
+### Raw me^you via the F256 core; may return ±inf or NaN; never crashes.
+### :param you: The exponent.
 routine D128.pow_unchecked(you: D128) -> D128
   return f256_to_d128(x: d128_to_f256(x: me).$pow(you: d128_to_f256(x: you)))
+
+### sqrt(me² + you²) without intermediate overflow/underflow. Crashes: NumericDomainError on NaN,
+### NumericOverflowError on ±inf.
+### :param you: The other leg.
 routine D128.hypot!(you: D128) -> D128
   var r = me.hypot_unchecked(you: you)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw sqrt(me² + you²) via the F256 core; may return ±inf or NaN; never crashes.
+### :param you: The other leg.
 routine D128.hypot_unchecked(you: D128) -> D128
   return f256_to_d128(x: d128_to_f256(x: me).hypot(you: d128_to_f256(x: you)))
+
+### Fused multiply-add me*b + c with a single F256 rounding. Crashes: NumericDomainError on NaN,
+### NumericOverflowError on ±inf.
+### :param b: The multiplier.
+### :param c: The addend.
 routine D128.fma!(b: D128, c: D128) -> D128
   var r = me.fma_unchecked(b: b, c: c)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw me*b + c via the F256 core; may return ±inf or NaN; never crashes.
+### :param b: The multiplier.
+### :param c: The addend.
 routine D128.fma_unchecked(b: D128, c: D128) -> D128
   return f256_to_d128(x: d128_to_f256(x: me).fma(b: d128_to_f256(x: b), c: d128_to_f256(x: c)))
+
+### Sine of me (radians). Finite-preserving for finite input; never crashes.
 routine D128.sin() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).sin())
+
+### Cosine of me (radians). Finite-preserving for finite input; never crashes.
 routine D128.cos() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).cos())
+
+### Tangent of me (radians). Finite-preserving for finite input; never crashes.
 routine D128.tan() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).tan())
+
+### Arcsine asin(me) in radians. Crashes: NumericDomainError on NaN/domain (|me|>1),
+### NumericOverflowError on ±inf.
 routine D128.asin!() -> D128
   var r = me.asin_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw asin(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.asin_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).asin())
+
+### Arccosine acos(me) in radians. Crashes: NumericDomainError on NaN/domain (|me|>1),
+### NumericOverflowError on ±inf.
 routine D128.acos!() -> D128
   var r = me.acos_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw acos(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.acos_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).acos())
+
+### Arctangent atan(me) in radians. Finite-preserving for finite input; never crashes.
 routine D128.atan() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).atan())
+
+### Two-argument arctangent atan2(me, x): angle of the point (x, me). Finite-preserving; never
+### crashes.
+### :param x: The x-coordinate (denominator).
 routine D128.atan2(x: D128) -> D128
   return f256_to_d128(x: d128_to_f256(x: me).atan2(x: d128_to_f256(x: x)))
+
+### Hyperbolic sine sinh(me). Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.sinh!() -> D128
   var r = me.sinh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw sinh(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.sinh_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).sinh())
+
+### Hyperbolic cosine cosh(me). Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.cosh!() -> D128
   var r = me.cosh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw cosh(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.cosh_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).cosh())
+
+### Hyperbolic tangent tanh(me). Finite-preserving for finite input; never crashes.
 routine D128.tanh() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).tanh())
+
+### Inverse hyperbolic sine asinh(me). Finite-preserving for finite input; never crashes.
 routine D128.asinh() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).asinh())
+
+### Inverse hyperbolic cosine acosh(me). Crashes: NumericDomainError on NaN/domain (me<1),
+### NumericOverflowError on ±inf.
 routine D128.acosh!() -> D128
   var r = me.acosh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw acosh(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.acosh_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).acosh())
+
+### Inverse hyperbolic tangent atanh(me). Crashes: NumericDomainError on NaN/domain (|me|>1),
+### NumericOverflowError on ±inf (e.g. atanh(±1) = ±inf).
 routine D128.atanh!() -> D128
   var r = me.atanh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw atanh(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.atanh_unchecked() -> D128
   return f256_to_d128(x: d128_to_f256(x: me).atanh())
 
@@ -286,6 +390,7 @@ routine D128.atanh_unchecked() -> D128
 # ============================================================================
 
 ### erf via the N=120 continued-fraction cores (erf_cf/erfc_cf) at W=256.
+### erf(-inf) = -1, erf(+inf) = 1. Threshold ±3.1 picks the erf vs 1-erfc continued fraction.
 routine f256_erf(x: F256) -> F256
   if x.is_nan()
     return F256.from_bits(bits: f256a_qnan())
@@ -301,6 +406,8 @@ routine f256_erf(x: F256) -> F256
     return a.erf_cf().to_f256a()
   return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf()).to_f256a()
 
+### Complementary error function erfc(x) = 1 - erf(x) via the N=120 CF cores at W=256.
+### erfc(-inf) = 2, erfc(+inf) = 0. Threshold ±3.1 selects erf vs erfc continued fraction.
 routine f256_erfc(x: F256) -> F256
   if x.is_nan()
     return F256.from_bits(bits: f256a_qnan())
@@ -333,11 +440,14 @@ routine f256_tgamma(x: F256) -> F256
   if x.is_negative() and zu.isint()
     return F256.from_bits(bits: f256a_qnan())
   var p = zu.lgamma_core()
+  # lgamma_core returns (sign, ln|gamma|); exponentiate to recover |gamma| then reapply sign.
   var r = p.item1.exp(n: 20_s64)
   if p.item0
     r = r.neg()
   return r.to_f256a()
 
+### Log-gamma ln|gamma(x)| via the generic Stirling lgamma_core. lgamma(0)=lgamma(±inf)=+inf, and
+### +inf at negative integers (poles). Returns the magnitude's log; the sign of gamma is dropped.
 routine f256_lgamma(x: F256) -> F256
   if x.is_nan()
     return F256.from_bits(bits: f256a_qnan())
@@ -349,12 +459,31 @@ routine f256_lgamma(x: F256) -> F256
   var p = zu.lgamma_core()
   return p.item1.to_f256a()
 
+### Error function erf(me), in [-1, 1]. Finite-preserving; never crashes.
 routine D128.erf() -> D128
   return f256_to_d128(x: f256_erf(x: d128_to_f256(x: me)))
+
+### Complementary error function erfc(me) = 1 - erf(me), in [0, 2]. Finite-preserving; never
+### crashes.
 routine D128.erfc() -> D128
   return f256_to_d128(x: f256_erfc(x: d128_to_f256(x: me)))
-routine D128.tgamma() -> D128
+
+### Gamma function. Checked: crashes if the result is non-finite (overflow or a pole at a
+### non-positive integer). Matches the tgamma!/tgamma_unchecked split on the other types.
+routine D128.tgamma!() -> D128
+  var r = me.tgamma_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw gamma(me) via the F256 special core; may return ±inf or NaN; never crashes.
+routine D128.tgamma_unchecked() -> D128
   return f256_to_d128(x: f256_tgamma(x: d128_to_f256(x: me)))
+
+### Log-gamma ln|gamma(me)|. Finite for non-pole inputs; +inf at 0 and non-positive integers.
+### Never crashes.
 routine D128.lgamma() -> D128
   return f256_to_d128(x: f256_lgamma(x: d128_to_f256(x: me)))
 
@@ -364,6 +493,7 @@ routine D128.lgamma() -> D128
 # fmod/remainder/remquo and binary-exponent ops omitted (scaleb = decimal ldexp).
 # ============================================================================
 
+### IEEE 754 signbit: the raw sign bit (true for negatives, -0, and -NaN). Never crashes.
 routine D128.signbit() -> Bool
   return me.decode().sign
 
@@ -394,14 +524,17 @@ routine D128.modf() -> (D128, D128)
   var ip = me.trunc()
   return (ip, me - ip)
 
+### True if me is finite and nonzero (special=0, coeff!=0). Note: includes subnormals.
 routine D128.is_normal() -> Bool
   var p = me.decode()
   return int_eq[U64](a: p.special, b: 0_u64) and int_ne[U128](a: p.coeff, b: 0_u128)
 
+### True if me is ±0 (finite with a zero coefficient).
 routine D128.is_zero() -> Bool
   var p = me.decode()
   return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U128](a: p.coeff, b: 0_u128)
 
+### C99 fpclassify: classifies me as SIGNALING_NAN, NAN, INFINITE, ZERO, SUBNORMAL, or NORMAL.
 routine D128.fpclassify() -> FpClass
   var p = me.decode()
   if int_eq[U64](a: p.special, b: 3_u64)
@@ -416,6 +549,7 @@ routine D128.fpclassify() -> FpClass
     return SUBNORMAL
   return NORMAL
 
+### Absolute value |me| (clears the sign bit; preserves specials and the cohort). Never crashes.
 routine D128.abs() -> D128
   var p = me.decode()
   return d128_of_parts(p: D128Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
@@ -460,10 +594,13 @@ routine D128.total_order(you: D128) -> Bool
 routine D128.total_order_mag(you: D128) -> Bool
   return me.abs().total_order(you: you.abs())
 
+### Negation -me (flips the sign bit; preserves specials and the cohort). Never crashes.
 routine D128.$neg() -> D128
   var p = me.decode()
   return d128_of_parts(p: D128Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
+### C99 copysign: me's magnitude with you's sign bit. Never crashes.
+### :param you: The value supplying the sign.
 routine D128.copysign(you: D128) -> D128
   var p = me.decode()
   return d128_of_parts(p: D128Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
@@ -481,8 +618,8 @@ routine D128.signum() -> D128
 routine D128.finite!() -> D128
   if not me.is_finite()
     if me.is_nan()
-      throw NumericDomainError(description: "D128: undefined operation with no real result.")
-    throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+      throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
   return me
 
 ### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
@@ -496,6 +633,8 @@ routine D128.fmod(you: D128) -> D128
   var n = (me / you).trunc()
   return me - n * you
 
+### C99 fmax: the larger of me and you, treating NaN as missing (returns the non-NaN operand).
+### :param you: The value to compare against.
 routine D128.fmax(you: D128) -> D128
   if me.is_nan()
     return you
@@ -505,6 +644,8 @@ routine D128.fmax(you: D128) -> D128
     return you
   return me
 
+### C99 fmin: the smaller of me and you, treating NaN as missing (returns the non-NaN operand).
+### :param you: The value to compare against.
 routine D128.fmin(you: D128) -> D128
   if me.is_nan()
     return you
@@ -514,6 +655,8 @@ routine D128.fmin(you: D128) -> D128
     return me
   return you
 
+### C99 fdim: the positive difference max(me - you, 0); NaN if either operand is NaN.
+### :param you: The value to subtract.
 routine D128.fdim(you: D128) -> D128
   if me.is_nan() or you.is_nan()
     return D128.quiet_nan()
@@ -530,8 +673,8 @@ routine D128.scaleb!(n: S64) -> D128
   if r.is_finite() or not me.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "D128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "D128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me * 10^n` with raw propagation (overflow -> ±infinity, underflow -> 0).
 ### :param n: The power-of-ten exponent to apply.
@@ -743,17 +886,27 @@ routine d128_round_int(x: D128, mode: S64) -> D128
     qq = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
   return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: int_truncate[U256, U128](qq)))
 
+### Truncates toward zero to an integral value. Specials pass through. Never crashes.
 routine D128.trunc() -> D128
   return d128_round_int(x: me, mode: 0_s64)
+
+### Rounds down toward -inf to an integral value. Specials pass through. Never crashes.
 routine D128.floor() -> D128
   return d128_round_int(x: me, mode: 1_s64)
+
+### Rounds up toward +inf to an integral value. Specials pass through. Never crashes.
 routine D128.ceil() -> D128
   return d128_round_int(x: me, mode: 2_s64)
+
+### Rounds to nearest integral value, ties away from zero. Specials pass through. Never crashes.
 routine D128.round() -> D128
   return d128_round_int(x: me, mode: 3_s64)
+
+### Rounds to nearest integral value, ties to even (IEEE roundTiesToEven). Never crashes.
 routine D128.rint() -> D128
   return d128_round_int(x: me, mode: 4_s64)
 
+### Fractional part me - trunc(me) (carries me's sign). NaN propagates; ±inf -> ±0. Never crashes.
 routine D128.frac() -> D128
   if me.is_nan()
     return me

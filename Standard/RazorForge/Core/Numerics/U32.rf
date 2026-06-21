@@ -599,6 +599,8 @@ routine U32.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U32.$represent() -> Text
   if me == 0u32
     return "0"
@@ -610,6 +612,8 @@ routine U32.$represent() -> Text
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: steal digits)
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U32.$diagnose() -> Text
   return "U32(" + me.$represent() + ")"
 

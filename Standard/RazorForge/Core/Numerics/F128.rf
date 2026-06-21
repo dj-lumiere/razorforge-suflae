@@ -7,7 +7,6 @@ import Collections
 # port and extension of TLFloat (© Naoki Shibata and contributors, Boost Software
 # License 1.0). See THIRD-PARTY-NOTICES.md.
 
-
 # ============================================================================
 # F128 — software IEEE 754 binary128 (pure-integer reinterpretation, TLFloat-style).
 # Storage: raw 128-bit container. Add/sub fit in U128 (113+3 bits); multiplication
@@ -16,7 +15,6 @@ import Collections
 #
 # Layout: sign(1) | exponent(15, bias 16383) | mantissa(112).
 # ============================================================================
-
 
 ### Represents a 128-bit IEEE 754 binary floating-point value (software binary128).
 ### `F128` provides quadruple precision for workloads that need far more range and
@@ -175,8 +173,8 @@ routine F128.scaleb!(n: S64) -> F128
   if r.is_finite() or not me.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
 ### :param n: The power-of-two exponent to apply.
@@ -239,6 +237,20 @@ routine F128.maximum(you: F128) -> F128
       return if me.signbit() then you else me
     return me
   return if me > you then me else you
+
+### C `fmax`: the larger operand, treating NaN as missing (alias of `max_num`). Provided for
+### parity with F16/F32/F64 and the decimal types. Never crashes.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, ignoring NaN.
+routine F128.fmax(you: F128) -> F128
+  return me.max_num(you: you)
+
+### C `fmin`: the smaller operand, treating NaN as missing (alias of `min_num`). Provided for
+### parity with F16/F32/F64 and the decimal types. Never crashes.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, ignoring NaN.
+routine F128.fmin(you: F128) -> F128
+  return me.min_num(you: you)
 
 ### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero.
 ### :returns: `me` rounded to an integral value with ties away from zero.
@@ -327,8 +339,8 @@ routine F128.$add!(you: F128) -> F128
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me - you` (software IEEE 754). Checked: crashes if the result is non-finite.
 ### Use `$sub_unchecked` for raw IEEE 754 propagation.
@@ -340,8 +352,8 @@ routine F128.$sub!(you: F128) -> F128
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me * you` (software IEEE 754). Checked: crashes if the result is non-finite.
 ### Use `$mul_unchecked` for raw IEEE 754 propagation.
@@ -352,8 +364,8 @@ routine F128.$mul!(you: F128) -> F128
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me / you` (software IEEE 754). Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain,
 ### overflow -> overflow. Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
@@ -366,8 +378,8 @@ routine F128.$truediv!(you: F128) -> F128
   if you.is_zero() and not me.is_zero()
     throw DivisionByZeroError()
   if r.is_nan()
-    throw NumericDomainError(description: "F128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 # ============================================================================
 # Rounding to integer and value selection (exact, on packed bits — no rounding
@@ -944,9 +956,13 @@ routine f128_finish_subnormal(sign: U64, sig: U128, under: S64) -> U128
 ### :returns: The integer square root.
 # Floor integer sqrt of a U256. An f64-seeded Newton iteration (the U256 `//` is the Knuth divide
 # via `udivrem256`, so each step is cheap) lands within a couple of ulp; an exact ±1 correction via
-# `x*x` comparison then pins the EXACT floor — which keeps F128 sqrt correctly-rounded. This replaces
+# `x*x` comparison then pins the EXACT floor — which keeps F128 sqrt correctly-rounded. This
+# replaces
 # the O(W) restoring-bitwise method (~128 wide-int iterations). Only F128.sqrt calls this; its input
 # `bigm < 2^237`, so `x*x` (x < 2^119) never overflows U256.
+### Integer floor square root of a U256 (restoring-bitwise); seeds the F128 sqrt Newton step.
+### :param n: The radicand.
+### :returns: floor(sqrt(n)).
 routine f128_isqrt256(n: U256) -> U256
   var zero = f128_u256(0_u128)
   var one = f128_u256(1_u128)
@@ -979,7 +995,8 @@ routine f128_isqrt256(n: U256) -> U256
     x1 = add[U256](a: x1, b: one)
   return x
 
-### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` -> NaN).
+### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` ->
+### NaN).
 ### Use `sqrt_unchecked` for raw IEEE 754 propagation.
 ### :returns: The quadruple-precision square root (always finite for finite non-negative input).
 routine F128.sqrt!() -> F128
@@ -987,8 +1004,8 @@ routine F128.sqrt!() -> F128
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F128: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F128 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns the correctly-rounded square root with raw IEEE 754 propagation (C `sqrt`):
 ### NaN for negatives, +inf for +inf, ±0 for ±0.
@@ -1449,7 +1466,6 @@ routine F128.to_oct() -> UnpackedFloat[U256, U512, 256]
   var mant = shift_left[U256](value: zero_extend[U128, U256](sig), bits: 142)
   return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 16384_s64), sign: sign, iszero: false, isinf: false, isnan: false)
 
-
 # ============================================================================
 # More exact members: nextafter, modf, frexp
 # ============================================================================
@@ -1694,7 +1710,8 @@ routine F128.finite!() -> F128
 
 # Unchecked variants — raw IEEE 754 propagation. They call the software engine DIRECTLY (not the
 # checked `+ - * /` operators, which would crash), so `x/0` -> ±inf and `0/0` -> NaN instead of a
-# crash. Plain (not `dangerous`): inf/NaN are valid IEEE values; the `_unchecked` spelling is the marker.
+# crash. Plain (not `dangerous`): inf/NaN are valid IEEE values; the `_unchecked` spelling is the
+# marker.
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
 routine F128.$truediv_unchecked(you: F128) -> F128

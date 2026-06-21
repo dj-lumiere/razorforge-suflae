@@ -170,10 +170,13 @@ routine F64.$create(from: D128) -> F64
 # ============================================================================
 
 # Checked arithmetic crashes with a SPECIFIC cause when a result is non-finite, mirroring the
-# `Decimal` contract: ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError.
+# `Decimal` contract: ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 ->
+# DivisionByZeroError.
 # `@crash_only` makes each crash unconditional, so the wired operators that call them stay
-# non-failable — a non-finite result is a bug surfaced loudly at its source, not a recoverable error.
-# Opt out with the `$*_unchecked` operators (raw IEEE 754 propagation) or `.finite!()` (recoverable).
+# non-failable — a non-finite result is a bug surfaced loudly at its source, not a recoverable
+# error.
+# Opt out with the `$*_unchecked` operators (raw IEEE 754 propagation) or `.finite!()`
+# (recoverable).
 
 ### Classifies a non-finite result: NaN -> domain crash, ±infinity -> overflow crash.
 
@@ -186,8 +189,8 @@ routine F64.$add!(you: F64) -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me - you`. Checked: crashes if the IEEE result is non-finite.
 ### Use `$sub_unchecked` for raw IEEE 754 propagation.
@@ -198,8 +201,8 @@ routine F64.$sub!(you: F64) -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me * you`. Checked: crashes if the IEEE result is non-finite.
 ### Use `$mul_unchecked` for raw IEEE 754 propagation.
@@ -210,8 +213,8 @@ routine F64.$mul!(you: F64) -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me / you`. Checked: `x / 0` crashes with DivisionByZeroError, `0 / 0` with a domain
 ### error, and an overflow to ±infinity with an overflow error. Use `$truediv_unchecked` for raw
@@ -225,8 +228,8 @@ routine F64.$truediv!(you: F64) -> F64
   if you.is_zero() and not me.is_zero()
     throw DivisionByZeroError()
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me` if it is finite; throws (RECOVERABLE) if it is ±infinity or NaN. The bridge from
 ### raw IEEE propagation back to a handled result: run the unchecked operators, then recover, e.g.
@@ -291,7 +294,8 @@ routine F64.$cmp(you: F64) -> ComparisonSign
 # Math Operations using intrinsics
 # ============================================================================
 
-### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` -> NaN).
+### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` ->
+### NaN).
 ### Use `sqrt_unchecked` for raw IEEE 754 propagation.
 ### :returns: The double-precision square root (always finite).
 routine F64.sqrt!() -> F64
@@ -299,8 +303,8 @@ routine F64.sqrt!() -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns the square root with raw IEEE 754 propagation (`sqrt(<0)` -> NaN).
 routine F64.sqrt_unchecked() -> F64
@@ -349,8 +353,8 @@ routine F64.exp!() -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `e` raised to this value with raw IEEE 754 propagation (overflow -> +infinity).
 routine F64.exp_unchecked() -> F64
@@ -364,10 +368,11 @@ routine F64.log!() -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns the natural logarithm with raw IEEE 754 propagation (`log(0)` -> -inf, `log(<0)` -> NaN).
+### Returns the natural logarithm with raw IEEE 754 propagation (`log(0)` -> -inf, `log(<0)` ->
+### NaN).
 routine F64.log_unchecked() -> F64
   return log[F64](me)
 
@@ -379,8 +384,8 @@ routine F64.log10!() -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns the base-10 logarithm with raw IEEE 754 propagation.
 routine F64.log10_unchecked() -> F64
@@ -407,8 +412,8 @@ routine F64.$pow!(exp: F64) -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns this value with its sign bit replaced by the sign of `sign`.
 ### :param sign: The value supplying the sign bit.
@@ -503,7 +508,8 @@ common routine F64.from_bits(bits: U64) -> F64
   return reinterpret_bits[U64, F64](bits)
 
 ### Returns a signaling NaN (exponent all-ones, quiet bit clear, nonzero payload). For interop /
-### testing; RazorForge arithmetic never produces one, and consuming it in checked arithmetic crashes.
+### testing; RazorForge arithmetic never produces one, and consuming it in checked arithmetic
+### crashes.
 common routine F64.signaling_nan() -> F64
   return F64.from_bits(bits: 0x7FF0000000000001_u64)
 
@@ -645,34 +651,63 @@ routine F64.$hash(k0: U64, k1: U64) -> U64
 # erf/erfc/tgamma/lgamma have no rf_f64_ passthrough but also no UnpackedFloat
 # twin, so their bare libm symbols bind fine.
 # ============================================================================
+### C libm extern (rf_f64_ passthrough): sine (radians).
 external("C") routine rf_f64_sin(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): cosine (radians).
 external("C") routine rf_f64_cos(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): tangent (radians).
 external("C") routine rf_f64_tan(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): arc sine.
 external("C") routine rf_f64_asin(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): arc cosine.
 external("C") routine rf_f64_acos(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): arc tangent.
 external("C") routine rf_f64_atan(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): two-argument arc tangent atan2(y, x).
 external("C") routine rf_f64_atan2(y: F64, x: F64) -> F64
+### C libm extern (rf_f64_ passthrough): hyperbolic sine.
 external("C") routine rf_f64_sinh(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): hyperbolic cosine.
 external("C") routine rf_f64_cosh(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): hyperbolic tangent.
 external("C") routine rf_f64_tanh(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): inverse hyperbolic sine.
 external("C") routine rf_f64_asinh(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): inverse hyperbolic cosine.
 external("C") routine rf_f64_acosh(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): inverse hyperbolic tangent.
 external("C") routine rf_f64_atanh(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): square root.
 external("C") routine rf_f64_sqrt(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): cube root.
 external("C") routine rf_f64_cbrt(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): natural exponential e^x.
 external("C") routine rf_f64_exp(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): base-2 exponential 2^x.
 external("C") routine rf_f64_exp2(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): exp(x) - 1, accurate near zero.
 external("C") routine rf_f64_expm1(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): natural logarithm.
 external("C") routine rf_f64_log(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): base-2 logarithm.
 external("C") routine rf_f64_log2(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): base-10 logarithm.
 external("C") routine rf_f64_log10(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): log(1 + x), accurate near zero.
 external("C") routine rf_f64_log1p(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): base raised to exp.
 external("C") routine rf_f64_pow(base: F64, exp: F64) -> F64
+### C libm extern (rf_f64_ passthrough): hypotenuse sqrt(x^2 + y^2) without overflow.
 external("C") routine rf_f64_hypot(x: F64, y: F64) -> F64
+### C libm extern (rf_f64_ passthrough): fused multiply-add x*y + z with a single rounding.
 external("C") routine rf_f64_fma(x: F64, y: F64, z: F64) -> F64
+### C libm extern (bare symbol, no UnpackedFloat twin): error function.
 external("C") routine erf(value: F64) -> F64
+### C libm extern (bare symbol): complementary error function.
 external("C") routine erfc(value: F64) -> F64
+### C libm extern (bare symbol): gamma function.
 external("C") routine tgamma(value: F64) -> F64
+### C libm extern (bare symbol): natural log of the absolute value of gamma.
 external("C") routine lgamma(value: F64) -> F64
 
 # ============================================================================
@@ -685,139 +720,173 @@ routine F64.expm1!() -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### exp(me) - 1 with raw IEEE 754 propagation.
 routine F64.expm1_unchecked() -> F64
   return rf_f64_expm1(value: me)
+
 ### 2 raised to me. Checked: crashes on overflow. Use `exp2_unchecked` for raw IEEE.
 routine F64.exp2!() -> F64
   var r = me.exp2_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### 2 raised to me with raw IEEE 754 propagation.
 routine F64.exp2_unchecked() -> F64
   return rf_f64_exp2(value: me)
-### log(1 + me), accurate near 0. Checked: crashes on a non-finite result. Use `log1p_unchecked` for raw IEEE.
+
+### log(1 + me), accurate near 0. Checked: crashes on a non-finite result. Use `log1p_unchecked` for
+### raw IEEE.
 routine F64.log1p!() -> F64
   var r = me.log1p_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### log(1 + me) with raw IEEE 754 propagation.
 routine F64.log1p_unchecked() -> F64
   return rf_f64_log1p(value: me)
+
 ### Base-2 logarithm. Checked: crashes on a non-finite result. Use `log2_unchecked` for raw IEEE.
 routine F64.log2!() -> F64
   var r = me.log2_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Base-2 logarithm with raw IEEE 754 propagation.
 routine F64.log2_unchecked() -> F64
   return rf_f64_log2(value: me)
-### Euclidean distance sqrt(me^2 + you^2). Checked: crashes on overflow. Use `hypot_unchecked` for raw IEEE.
+
+### Euclidean distance sqrt(me^2 + you^2). Checked: crashes on overflow. Use `hypot_unchecked` for
+### raw IEEE.
 routine F64.hypot!(you: F64) -> F64
   var r = me.hypot_unchecked(you)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Euclidean distance with raw IEEE 754 propagation (overflow -> +infinity).
 routine F64.hypot_unchecked(you: F64) -> F64
   return rf_f64_hypot(x: me, y: you)
-### Fused multiply-add me*b + c (single rounding). Checked: crashes on overflow. Use `fma_unchecked` for raw IEEE.
+
+### Fused multiply-add me*b + c (single rounding). Checked: crashes on overflow. Use `fma_unchecked`
+### for raw IEEE.
 routine F64.fma!(b: F64, c: F64) -> F64
   var r = me.fma_unchecked(b: b, c: c)
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Fused multiply-add with raw IEEE 754 propagation.
 routine F64.fma_unchecked(b: F64, c: F64) -> F64
   return rf_f64_fma(x: me, y: b, z: c)
+
 ### Cube root.
 routine F64.cbrt() -> F64
   return rf_f64_cbrt(value: me)
+
 ### Tangent (radians).
 routine F64.tan() -> F64
   return rf_f64_tan(value: me)
-### Arc sine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `asin_unchecked` for raw IEEE.
+
+### Arc sine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `asin_unchecked` for raw
+### IEEE.
 routine F64.asin!() -> F64
   var r = me.asin_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN).
 routine F64.asin_unchecked() -> F64
   return rf_f64_asin(value: me)
-### Arc cosine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `acos_unchecked` for raw IEEE.
+
+### Arc cosine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `acos_unchecked` for raw
+### IEEE.
 routine F64.acos!() -> F64
   var r = me.acos_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN).
 routine F64.acos_unchecked() -> F64
   return rf_f64_acos(value: me)
+
 ### Arc tangent.
 routine F64.atan() -> F64
   return rf_f64_atan(value: me)
+
 ### Two-argument arc tangent atan2(me, x).
 routine F64.atan2(x: F64) -> F64
   return rf_f64_atan2(y: me, x: x)
+
 ### Hyperbolic sine. Checked: crashes on overflow. Use `sinh_unchecked` for raw IEEE.
 routine F64.sinh!() -> F64
   var r = me.sinh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±infinity).
 routine F64.sinh_unchecked() -> F64
   return rf_f64_sinh(value: me)
+
 ### Hyperbolic cosine. Checked: crashes on overflow. Use `cosh_unchecked` for raw IEEE.
 routine F64.cosh!() -> F64
   var r = me.cosh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +infinity).
 routine F64.cosh_unchecked() -> F64
   return rf_f64_cosh(value: me)
+
 ### Hyperbolic tangent.
 routine F64.tanh() -> F64
   return rf_f64_tanh(value: me)
+
 ### Inverse hyperbolic sine.
 routine F64.asinh() -> F64
   return rf_f64_asinh(value: me)
-### Inverse hyperbolic cosine. Checked: crashes (domain) if `me < 1`. Use `acosh_unchecked` for raw IEEE.
+
+### Inverse hyperbolic cosine. Checked: crashes (domain) if `me < 1`. Use `acosh_unchecked` for raw
+### IEEE.
 routine F64.acosh!() -> F64
   var r = me.acosh_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Inverse hyperbolic cosine with raw IEEE 754 propagation (`me < 1` -> NaN).
 routine F64.acosh_unchecked() -> F64
   return rf_f64_acosh(value: me)
+
 ### Inverse hyperbolic tangent. Checked: crashes if `|me| >= 1` (`±1` -> ±inf, `|me| > 1` -> NaN).
 ### Use `atanh_unchecked` for raw IEEE.
 routine F64.atanh!() -> F64
@@ -825,28 +894,35 @@ routine F64.atanh!() -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Inverse hyperbolic tangent with raw IEEE 754 propagation (`±1` -> ±inf, `|me| > 1` -> NaN).
 routine F64.atanh_unchecked() -> F64
   return rf_f64_atanh(value: me)
+
 ### Error function.
 routine F64.erf() -> F64
   return erf(value: me)
+
 ### Complementary error function.
 routine F64.erfc() -> F64
   return erfc(value: me)
-### Gamma function. Checked: crashes on a non-finite result (overflow or pole). Use `tgamma_unchecked` for raw IEEE.
+
+### Gamma function. Checked: crashes on a non-finite result (overflow or pole). Use
+### `tgamma_unchecked` for raw IEEE.
 routine F64.tgamma!() -> F64
   var r = me.tgamma_unchecked()
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±infinity or NaN).
 routine F64.tgamma_unchecked() -> F64
   return tgamma(value: me)
+
 ### Natural log of |gamma(me)|.
 routine F64.lgamma() -> F64
   return lgamma(value: me)
@@ -856,18 +932,31 @@ routine F64.lgamma() -> F64
 # frexp, modf, rint, fdim, fmod, remainder, fmax/fmin, trunc, frac, and
 # classification (signbit/is_normal/is_subnormal/fpclassify).
 # ============================================================================
+### C libm extern (rf_f64_ passthrough): base-10 exponential 10^x.
 external("C") routine rf_f64_exp10(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): sin(pi*x).
 external("C") routine rf_f64_sinpi(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): cos(pi*x).
 external("C") routine rf_f64_cospi(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): tan(pi*x).
 external("C") routine rf_f64_tanpi(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): next representable value after x toward y.
 external("C") routine rf_f64_nextafter(x: F64, y: F64) -> F64
+### C libm extern (rf_f64_ passthrough): x * 2^n (C scalbn).
 external("C") routine rf_f64_scalbn(value: F64, n: S64) -> F64
+### C libm extern (rf_f64_ passthrough): unbiased radix-2 exponent as an integer (C ilogb).
 external("C") routine rf_f64_ilogb(value: F64) -> S64
+### C libm extern (rf_f64_ passthrough): round to nearest integer in the current mode (C rint).
 external("C") routine rf_f64_rint(value: F64) -> F64
+### C libm extern (rf_f64_ passthrough): positive difference max(x - y, 0) (C fdim).
 external("C") routine rf_f64_fdim(x: F64, y: F64) -> F64
+### C libm extern (rf_f64_ passthrough): floating-point remainder (C fmod).
 external("C") routine rf_f64_fmod(x: F64, y: F64) -> F64
+### C libm extern (rf_f64_ passthrough): IEEE remainder, ties to even (C remainder).
 external("C") routine rf_f64_remainder(x: F64, y: F64) -> F64
+### C libm extern (rf_f64_ passthrough): larger of x and y (C fmax).
 external("C") routine rf_f64_fmax(x: F64, y: F64) -> F64
+### C libm extern (rf_f64_ passthrough): smaller of x and y (C fmin).
 external("C") routine rf_f64_fmin(x: F64, y: F64) -> F64
 
 ### Base-10 exponential 10**me. Checked: crashes on overflow. Use `exp10_unchecked` for raw IEEE.
@@ -876,75 +965,96 @@ routine F64.exp10!() -> F64
   if r.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
 ### Base-10 exponential with raw IEEE 754 propagation (overflow -> +infinity).
 routine F64.exp10_unchecked() -> F64
   return rf_f64_exp10(value: me)
+
 ### sin(pi*me), exact at integers/half-integers.
 routine F64.sinpi() -> F64
   return rf_f64_sinpi(value: me)
+
 ### cos(pi*me).
 routine F64.cospi() -> F64
   return rf_f64_cospi(value: me)
+
 ### tan(pi*me).
 routine F64.tanpi() -> F64
   return rf_f64_tanpi(value: me)
+
 ### Next representable value after me toward you.
 routine F64.nextafter(you: F64) -> F64
   return rf_f64_nextafter(x: me, y: you)
+
 ### me * 2^n (C scalbn).
 routine F64.scalbn(n: S64) -> F64
   return rf_f64_scalbn(value: me, n: n)
+
 ### Alias of scalbn (C ldexp).
 routine F64.ldexp(n: S64) -> F64
   return rf_f64_scalbn(value: me, n: n)
+
 ### Rounds to nearest integer in the current rounding mode (C rint).
 routine F64.rint() -> F64
   return rf_f64_rint(value: me)
+
 ### Positive difference max(me - you, 0) (C fdim).
 routine F64.fdim(you: F64) -> F64
   return rf_f64_fdim(x: me, y: you)
+
 ### Floating-point remainder of me/you (C fmod).
 routine F64.fmod(you: F64) -> F64
   return rf_f64_fmod(x: me, y: you)
+
 ### IEEE remainder of me/you, ties to even (C remainder).
 routine F64.remainder(you: F64) -> F64
   return rf_f64_remainder(x: me, y: you)
+
 ### Larger of me and you (C fmax).
 routine F64.fmax(you: F64) -> F64
   return rf_f64_fmax(x: me, y: you)
+
 ### Smaller of me and you (C fmin).
 routine F64.fmin(you: F64) -> F64
   return rf_f64_fmin(x: me, y: you)
+
 ### Truncates toward zero (C trunc; alias of int_truncate).
 routine F64.trunc() -> F64
   return float_truncate[F64](me)
+
 ### Fractional part me - trunc(me).
 routine F64.frac() -> F64
   return me - float_truncate[F64](me)
+
 ### Integer and fractional parts (C modf); both carry me's sign.
 routine F64.modf() -> (F64, F64)
   var ip = float_truncate[F64](me)
   return (ip, me - ip)
+
 ### Fraction in [0.5,1) and power-of-two exponent (C frexp).
 routine F64.frexp() -> (F64, S64)
   if me.is_zero() or me.is_infinite() or me.is_nan()
     return (me, 0_s64)
   var e = add[S64](a: rf_f64_ilogb(value: me), b: 1_s64)
   return (rf_f64_scalbn(value: me, n: sub[S64](a: 0_s64, b: e)), e)
+
 ### True if the sign bit is set (C signbit; true for -0 and -NaN).
 routine F64.signbit() -> Bool
   return int_ne[U64](a: bit_and[U64](a: me.to_bits(), b: 0x8000000000000000_u64), b: 0_u64)
+
 ### True for a subnormal (denormalized, nonzero) value.
 routine F64.is_subnormal() -> Bool
   var bits = me.to_bits()
   var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000_u64)
   var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
   return exponent == 0_u64 and mantissa != 0_u64
+
 ### True for a finite, normal value (nonzero and not subnormal).
 routine F64.is_normal() -> Bool
   return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
 ### C fpclassify: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
 routine F64.fpclassify() -> FpClass
   if me.is_signaling()
@@ -1019,8 +1129,8 @@ routine F64.scaleb!(n: S64) -> F64
   if r.is_finite() or not me.is_finite()
     return r
   if r.is_nan()
-    throw NumericDomainError(description: "F64: undefined operation with no real result.")
-  throw NumericOverflowError(description: "F64 overflow: the result is infinite (out of range).")
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
 ### :param n: The power-of-two exponent to apply.
