@@ -296,6 +296,16 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         if (expr is StealExpression steal)
             return steal;
 
+        // TemporaryTeardownPass move-temps (`__rv_*` = a spilled reassignment RHS, `__tt_*` = a
+        // spilled owned receiver) hold a FRESH single-use owned value that is moved, never shared, so
+        // it must NOT be retaining-copied. Normally that pass runs after this one, but instantiated
+        // generic bodies are re-lowered here post-monomorphization (after the def already grew the
+        // temps), and copying `target = __rv` would leak the un-freed `__rv` every iteration.
+        if (expr is IdentifierExpression { Name: var tn }
+            && (tn.StartsWith(value: "__rv_", comparisonType: System.StringComparison.Ordinal)
+                || tn.StartsWith(value: "__tt_", comparisonType: System.StringComparison.Ordinal)))
+            return expr;
+
         if (expr is IdentifierExpression or MemberExpression
             && NeedsRetainingCopy(type: expr.ResolvedType, copyMethod: out RoutineInfo? copyMethod))
         {
