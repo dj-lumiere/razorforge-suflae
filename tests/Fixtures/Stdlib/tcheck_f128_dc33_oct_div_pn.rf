@@ -1,0 +1,9 @@
+module Tests/Stdlib/TcheckF128Dc33OctDivPn
+
+import IO/Console
+
+# Sign-matrix coverage for the macOS octuple sub=add miscompile: octuple (+A)/(-B) mixed-sign quotient.
+# Prints the U128 bit pattern of the result (bit-perfect).
+routine start()
+  show((9.876543210987654321098765432109876_f128).to_oct().div(you: (1.234567890123456789012345678901234_f128).to_oct().neg()).to_f128().to_bits())
+  return

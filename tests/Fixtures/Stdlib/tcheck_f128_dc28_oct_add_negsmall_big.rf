@@ -1,0 +1,9 @@
+module Tests/Stdlib/TcheckF128Dc28OctAddNegsmallBig
+
+import IO/Console
+
+# Sign-matrix coverage for the macOS octuple sub=add miscompile: octuple (-B)+(+A) sub-branch |me|<|you| positive result.
+# Prints the U128 bit pattern of the result (bit-perfect).
+routine start()
+  show((1.234567890123456789012345678901234_f128).to_oct().neg().add(you: (9.876543210987654321098765432109876_f128).to_oct()).to_f128().to_bits())
+  return
