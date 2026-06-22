@@ -1,0 +1,10 @@
+is_even(1234): true
+is_odd(1234): false
+is_power_of_two(1024): true
+is_power_of_two(1000): false
+bit_length(1234): 11
+min(1234,56): 56
+max(1234,56): 1234
+clamp(1234,0,100): 100
+modpow(7,13,100): 7
+DONE

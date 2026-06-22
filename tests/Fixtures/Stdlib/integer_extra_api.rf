@@ -1,0 +1,24 @@
+module Tests/Stdlib/IntegerExtraApi
+
+import IO/Console
+import Numerics.[Integer]
+
+# Regression coverage for the arbitrary-precision Integer API added in the numeric arc (commit
+# 3a021a9). NOTE: divmod! (tuple-of-Integer return) is intentionally NOT covered here — it triggers
+# a heap-corruption double-free at teardown when combined with other bigint churn; see the
+# tuple-of-arbitrary-entity teardown bug tracked for v0.1.1.
+routine start()
+  var a = Integer(from: 1234_s64)
+  var b = Integer(from: 56_s64)
+  show(f"is_even(1234): {a.is_even()}")
+  show(f"is_odd(1234): {a.is_odd()}")
+  show(f"is_power_of_two(1024): {Integer(from: 1024_s64).is_power_of_two()}")
+  show(f"is_power_of_two(1000): {Integer(from: 1000_s64).is_power_of_two()}")
+  show(f"bit_length(1234): {Integer(from: 1234_s64).bit_length()}")
+  show(f"min(1234,56): {a.min(other: b)}")
+  show(f"max(1234,56): {a.max(other: b)}")
+  show(f"clamp(1234,0,100): {a.clamp(low: Integer(from: 0_s64), high: Integer(from: 100_s64))}")
+  danger!
+    show(f"modpow(7,13,100): {Integer(from: 7_s64).modpow!(exp: Integer(from: 13_s64), modulus: Integer(from: 100_s64))}")
+  show("DONE")
+  return

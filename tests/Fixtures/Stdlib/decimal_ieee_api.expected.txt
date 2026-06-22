@@ -1,0 +1,8 @@
+is_subnormal: false
+round_ties_away: 123
+same_quantum(1): false
+remainder(7): -2.55
+logb: 2
+scaleb(2): 12345
+quantize(1): 123
+DONE
