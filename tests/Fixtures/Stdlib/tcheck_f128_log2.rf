@@ -1,0 +1,8 @@
+module Tests/Stdlib/TcheckF128Log2
+
+import IO/Console
+
+# Per-function cross-platform softfloat check (split out so CI shows each function's pass/fail).
+routine start()
+  show((2.0_f128).log2_unchecked().$represent())
+  return
