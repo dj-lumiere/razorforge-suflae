@@ -4,9 +4,9 @@ import IO/Console
 import Numerics.[Integer]
 
 # Regression coverage for the arbitrary-precision Integer API added in the numeric arc (commit
-# 3a021a9). NOTE: divmod! (tuple-of-Integer return) is intentionally NOT covered here — it triggers
-# a heap-corruption double-free at teardown when combined with other bigint churn; see the
-# tuple-of-arbitrary-entity teardown bug tracked for v0.1.1.
+# 3a021a9): is_even/is_odd/is_power_of_two, bit_length, min/max/clamp, divmod!, modpow!.
+# divmod! (tuple-of-Integer return inside a danger! block) regression-tests the RecordCopyLoweringPass
+# DangerStatement fix — before it, the failable-call argument missed its retaining $copy -> double-free.
 routine start()
   var a = Integer(from: 1234_s64)
   var b = Integer(from: 56_s64)
@@ -19,6 +19,8 @@ routine start()
   show(f"max(1234,56): {a.max(other: b)}")
   show(f"clamp(1234,0,100): {a.clamp(low: Integer(from: 0_s64), high: Integer(from: 100_s64))}")
   danger!
+    var qr = a.divmod!(other: b)
+    show(f"divmod(1234,56): q={qr.item0} r={qr.item1}")
     show(f"modpow(7,13,100): {Integer(from: 7_s64).modpow!(exp: Integer(from: 13_s64), modulus: Integer(from: 100_s64))}")
   show("DONE")
   return

@@ -273,6 +273,18 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                     : usingStmt with { Body = newBody };
             }
 
+            case DangerStatement danger:
+            {
+                // A `danger!` block is just a scoped block whose failable calls crash on failure.
+                // Without recursing into its body, call arguments inside it never get their
+                // retaining `$copy` — so the callee's by-value param `$destroy` frees the CALLER's
+                // value (e.g. `x.divmod!(other: b)` double-frees `b`). Recurse like any other block.
+                Statement newBody = LowerStatement(stmt: danger.Body);
+                return ReferenceEquals(newBody, danger.Body)
+                    ? stmt
+                    : danger with { Body = (BlockStatement)newBody };
+            }
+
             case ExpressionStatement es:
             {
                 Expression stripped = StripStealFromExpr(expr: es.Expression);
