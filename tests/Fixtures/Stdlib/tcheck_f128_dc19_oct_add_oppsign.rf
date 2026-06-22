@@ -1,0 +1,8 @@
+module Tests/Stdlib/TcheckF128Dc19OctAddOppsign
+
+import IO/Console
+
+# Discriminator for the macOS octuple-sub=add miscompile: octuple add of OPPOSITE-sign operands (internal subtract, negate=false) — should equal 9.876-1.234.
+routine start()
+  show((9.876543210987654321098765432109876_f128).to_oct().add(you: (1.234567890123456789012345678901234_f128).to_oct().neg()).to_f128().to_bits())
+  return
