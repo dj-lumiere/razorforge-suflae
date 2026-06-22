@@ -1740,15 +1740,6 @@ public partial class LlvmCodeGenerator
         }
 
         EmitLine(sb: _currentRoutineEntryAllocas, line: $"  {llvmName} = alloca {llvmType}");
-        // Zero-initialize every alloca. A read of a never-written local is UB: mem2reg/sroa (always
-        // run) promote the alloca and the read becomes an `undef` SSA value — benign-0 on x86 but
-        // arbitrary garbage on AArch64, which surfaced as non-deterministic NaN in the softfloat
-        // engine on macOS. A real `store zeroinitializer` (unlike a memset, which mem2reg ignores)
-        // is propagated by mem2reg/sroa as the initial value, so an uninitialized read yields a
-        // defined 0 on every target. Redundant stores (locals fully written before use) are removed
-        // by DSE, so the cost is limited to genuinely-uninitialized slots.
-        EmitLine(sb: _currentRoutineEntryAllocas,
-            line: $"  store {llvmType} zeroinitializer, ptr {llvmName}");
     }
 
     /// <summary>
