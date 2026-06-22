@@ -1,0 +1,21 @@
+module Tests/Stdlib/TcheckF128Transcendentals
+
+import IO/Console
+
+# Merged per-function softfloat transcendental checks (was tcheck_f128_{exp,sin,...}; consolidated
+# post macOS-fix to cut CI time). Each prints $represent() of the function at a known input.
+routine start()
+  show((1.0_f128).exp_unchecked().$represent())
+  show((1.0_f128).exp2_unchecked().$represent())
+  show((1.0_f128).sin().$represent())
+  show((1.0_f128).cos().$represent())
+  show((1.0_f128).tan().$represent())
+  show((1.0_f128).sinh_unchecked().$represent())
+  show((1.0_f128).cosh_unchecked().$represent())
+  show((1.0_f128).asinh().$represent())
+  show((1.0_f128).atan().$represent())
+  show((2.0_f128).sqrt_unchecked().$represent())
+  show((2.0_f128).cbrt().$represent())
+  show((2.0_f128).log_unchecked().$represent())
+  show((2.0_f128).log2_unchecked().$represent())
+  return

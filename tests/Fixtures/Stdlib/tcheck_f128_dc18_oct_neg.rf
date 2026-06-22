@@ -1,8 +1,0 @@
-module Tests/Stdlib/TcheckF128Dc18OctNeg
-
-import IO/Console
-
-# Discriminator for the macOS octuple-sub=add miscompile: octuple neg() round-trip — isolates sign-flip alone.
-routine start()
-  show((1.234567890123456789012345678901234_f128).to_oct().neg().to_f128().to_bits())
-  return

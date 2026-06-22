@@ -1,8 +1,0 @@
-module Tests/Stdlib/TcheckF128Dc17BoolNe
-
-import IO/Console
-
-# Discriminator for the macOS octuple-sub=add miscompile: Bool != — isolates the inequality used to derive the subtract flag.
-routine start()
-  show(if (false != true) then 1_s64 else 0_s64)
-  return

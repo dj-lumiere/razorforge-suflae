@@ -1,8 +1,0 @@
-module Tests/Stdlib/TcheckF128Dc16Ufbxor
-
-import IO/Console
-
-# Discriminator for the macOS octuple-sub=add miscompile: uf_bxor(false,true) — isolates the boolean XOR used to derive the subtract flag.
-routine start()
-  show(if uf_bxor(a: false, b: true) then 1_s64 else 0_s64)
-  return

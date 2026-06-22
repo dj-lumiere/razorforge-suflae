@@ -1,8 +1,0 @@
-module Tests/Stdlib/TcheckF128Dc20OctNegaddOppsign
-
-import IO/Console
-
-# Discriminator for the macOS octuple-sub=add miscompile: octuple (-9.876)+1.234 (internal subtract, negate=false) — should equal -8.64.
-routine start()
-  show((9.876543210987654321098765432109876_f128).to_oct().neg().add(you: (1.234567890123456789012345678901234_f128).to_oct()).to_f128().to_bits())
-  return

@@ -1,8 +1,0 @@
-module Tests/Stdlib/TcheckF128Atan
-
-import IO/Console
-
-# Per-function cross-platform softfloat check (split out so CI shows each function's pass/fail).
-routine start()
-  show((1.0_f128).atan().$represent())
-  return
