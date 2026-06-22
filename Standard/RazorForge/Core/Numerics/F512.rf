@@ -210,13 +210,13 @@ routine f512a_finish_subnormal(sign: U64, sig: U512, under: S64) -> U512
 ### The mantissa shift is `W - 490` (22 for the 512-bit engine).
 routine UnpackedFloat[M, L, W].to_f512a() -> F512
   var sign = 0_u64
-  if me.sign
+  if me.sign()
     sign = 1_u64
-  if me.isnan
+  if me.isnan()
     return F512.from_bits(bits: f512a_qnan())
-  if me.isinf
+  if me.isinf()
     return F512.from_bits(bits: f512a_inf(sign: sign))
-  if me.iszero
+  if me.iszero()
     return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64)))
   var biased = add[S64](a: me.exp, b: 4194304_s64)
   var sh = sub[S64](a: reinterpret_bits[U64, S64](W), b: 490_s64)

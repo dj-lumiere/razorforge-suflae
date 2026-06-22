@@ -26,14 +26,13 @@ needs W is U64
   mant: M
   ### Unbiased exponent offset (ilogb - 1).
   exp: S64
-  ### Sign bit.
-  sign: Bool
-  ### Whether the value is zero.
-  iszero: Bool
-  ### Whether the value is an infinity.
-  isinf: Bool
-  ### Whether the value is NaN.
-  isnan: Bool
+  ### Sign + zero/inf/nan state folded into ONE i32-backed field. Replaces the old
+  ### `sign`/`iszero`/`isinf`/`isnan` boolean quartet — four `i1` struct fields hit an aarch64
+  ### by-value calling-convention bug when they spill to the stack (the wide `U512` mantissa
+  ### exhausts the argument registers and pushes the flags out, where caller/callee disagree on
+  ### the stack layout). One integer field is laid out unambiguously on every target.
+  ### Read it through the `sign()`/`iszero()`/`isinf()`/`isnan()` accessors below.
+  fpclass: SignedFpClass
 
 ### No-op teardown: all fields are plain values (no owned entities).
 dangerous routine UnpackedFloat[M, L, W].$destroy()
@@ -124,25 +123,86 @@ routine uf_clzL[M, L, W](v: L) -> S64
 # Constructors
 # ============================================================================
 
-### Builds an unpacked value from its components.
+### Folds the (sign, zero, inf, nan) booleans into the single `SignedFpClass` state. The engine
+### never represents subnormals internally (it normalizes), so finite-nonzero is always NORMAL,
+### and engine-produced NaNs are always quiet.
+routine uf_class_of(sign: Bool, iszero: Bool, isinf: Bool, isnan: Bool) -> SignedFpClass
+  if isnan
+    return QUIET_NOT_A_NUMBER
+  if isinf
+    return if sign then NEGATIVE_INF else POSITIVE_INF
+  if iszero
+    return if sign then NEGATIVE_ZERO else POSITIVE_ZERO
+  return if sign then NEGATIVE_NORMAL else POSITIVE_NORMAL
+
+### Builds an unpacked value from its components (compatibility constructor: keeps the historical
+### sign/iszero/isinf/isnan parameter shape so the ~hundreds of call sites are unchanged).
 common routine UnpackedFloat[M, L, W].make(mant: M, exp: S64, sign: Bool, iszero: Bool, isinf: Bool, isnan: Bool) -> ?UnpackedFloat[M, L, W]
-  return UnpackedFloat[M, L, W](mant: mant, exp: exp, sign: sign, iszero: iszero, isinf: isinf, isnan: isnan)
+  return UnpackedFloat[M, L, W](mant: mant, exp: exp, fpclass: uf_class_of(sign: sign, iszero: iszero, isinf: isinf, isnan: isnan))
+
+# Non-generic class predicates. The `is` case-match must live OUTSIDE the generic record
+# methods: instantiated-generic codegen can't lower an `is` pattern, but a plain non-generic
+# routine codegens it fine. The generic accessors below just forward `me.fpclass` to these.
+routine sfp_negative(c: SignedFpClass) -> Bool
+  if c is NEGATIVE_NORMAL
+    return true
+  if c is NEGATIVE_SUBNORMAL
+    return true
+  if c is NEGATIVE_ZERO
+    return true
+  if c is NEGATIVE_INF
+    return true
+  return false
+routine sfp_zero(c: SignedFpClass) -> Bool
+  if c is POSITIVE_ZERO
+    return true
+  if c is NEGATIVE_ZERO
+    return true
+  return false
+routine sfp_inf(c: SignedFpClass) -> Bool
+  if c is POSITIVE_INF
+    return true
+  if c is NEGATIVE_INF
+    return true
+  return false
+routine sfp_nan(c: SignedFpClass) -> Bool
+  if c is QUIET_NOT_A_NUMBER
+    return true
+  if c is SIGNALING_NOT_A_NUMBER
+    return true
+  return false
+
+### True iff the value is negative (sign bit set). NaN is treated as unsigned (false).
+routine UnpackedFloat[M, L, W].sign() -> Bool
+  return sfp_negative(c: me.fpclass)
+
+### True iff the value is ±0.
+routine UnpackedFloat[M, L, W].iszero() -> Bool
+  return sfp_zero(c: me.fpclass)
+
+### True iff the value is ±infinity.
+routine UnpackedFloat[M, L, W].isinf() -> Bool
+  return sfp_inf(c: me.fpclass)
+
+### True iff the value is NaN (quiet or signaling).
+routine UnpackedFloat[M, L, W].isnan() -> Bool
+  return sfp_nan(c: me.fpclass)
 
 ### Positive or negative zero.
 common routine UnpackedFloat[M, L, W].zero(sign: Bool) -> ?UnpackedFloat[M, L, W]
-  return UnpackedFloat[M, L, W](mant: zero_extend[U64, M](0_u64), exp: 0_s64, sign: sign, iszero: true, isinf: false, isnan: false)
+  return UnpackedFloat[M, L, W].make(mant: zero_extend[U64, M](0_u64), exp: 0_s64, sign: sign, iszero: true, isinf: false, isnan: false)
 
 ### Positive or negative infinity.
 common routine UnpackedFloat[M, L, W].inf(sign: Bool) -> ?UnpackedFloat[M, L, W]
   # mantissa = the leading bit at position W-2 (canonical normalized leading-bit slot).
   var lead = shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: reinterpret_bits[U64, S64](W), b: 2_s64)))
-  return UnpackedFloat[M, L, W](mant: lead, exp: -1_s64, sign: sign, iszero: false, isinf: true, isnan: false)
+  return UnpackedFloat[M, L, W].make(mant: lead, exp: -1_s64, sign: sign, iszero: false, isinf: true, isnan: false)
 
 ### The canonical quiet NaN.
 common routine UnpackedFloat[M, L, W].nan() -> ?UnpackedFloat[M, L, W]
   # mantissa = 0b11 at bit W-2 -> leading bit set plus the quiet bit just below it.
   var m = shift_left[M](value: 3, bits: uf_amt[M](sub[S64](a: reinterpret_bits[U64, S64](W), b: 3_s64)))
-  return UnpackedFloat[M, L, W](mant: m, exp: -1_s64, sign: false, iszero: false, isinf: false, isnan: true)
+  return UnpackedFloat[M, L, W].make(mant: m, exp: -1_s64, sign: false, iszero: false, isinf: false, isnan: true)
 
 # ============================================================================
 # Sign, scaling, comparison
@@ -150,44 +210,44 @@ common routine UnpackedFloat[M, L, W].nan() -> ?UnpackedFloat[M, L, W]
 
 ### Arithmetic negation.
 routine UnpackedFloat[M, L, W].neg() -> ?UnpackedFloat[M, L, W]
-  return UnpackedFloat[M, L, W](mant: me.mant, exp: me.exp, sign: not me.sign, iszero: me.iszero, isinf: me.isinf, isnan: me.isnan)
+  return UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, sign: not me.sign(), iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan())
 
 ### Absolute value.
 routine UnpackedFloat[M, L, W].abs() -> ?UnpackedFloat[M, L, W]
-  return UnpackedFloat[M, L, W](mant: me.mant, exp: me.exp, sign: false, iszero: me.iszero, isinf: me.isinf, isnan: me.isnan)
+  return UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, sign: false, iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan())
 
 ### Multiplies by `2^e` by adjusting the exponent (TLFloat `ldexp_`).
 routine UnpackedFloat[M, L, W].ldexp(e: S64) -> ?UnpackedFloat[M, L, W]
-  if me.iszero
+  if me.iszero()
     return me
   var y = add[S64](a: me.exp, b: e)
   if signed_lt[S64](a: y, b: -2147483648_s64)
-    return UnpackedFloat[M, L, W].zero(sign: me.sign)
+    return UnpackedFloat[M, L, W].zero(sign: me.sign())
   if signed_gt[S64](a: y, b: 2147483647_s64)
-    return UnpackedFloat[M, L, W].inf(sign: me.sign)
-  return UnpackedFloat[M, L, W](mant: me.mant, exp: y, sign: me.sign, iszero: false, isinf: false, isnan: false)
+    return UnpackedFloat[M, L, W].inf(sign: me.sign())
+  return UnpackedFloat[M, L, W].make(mant: me.mant, exp: y, sign: me.sign(), iszero: false, isinf: false, isnan: false)
 
 ### Three-way comparison (TLFloat `cmp`): -1 if me<you, 0 if equal, +1 if me>you.
 ### NaN is not handled here (callers guard).
 routine UnpackedFloat[M, L, W].cmp(you: UnpackedFloat[M, L, W]) -> S64
-  if me.iszero and you.iszero
+  if me.iszero() and you.iszero()
     return 0_s64
-  if you.iszero
-    return if me.sign then -1_s64 else 1_s64
-  if me.iszero
-    return if you.sign then 1_s64 else -1_s64
-  if not me.sign and you.sign
+  if you.iszero()
+    return if me.sign() then -1_s64 else 1_s64
+  if me.iszero()
+    return if you.sign() then 1_s64 else -1_s64
+  if not me.sign() and you.sign()
     return 1_s64
-  if me.sign and not you.sign
+  if me.sign() and not you.sign()
     return -1_s64
   if signed_gt[S64](a: me.exp, b: you.exp)
-    return if me.sign then -1_s64 else 1_s64
+    return if me.sign() then -1_s64 else 1_s64
   if signed_lt[S64](a: me.exp, b: you.exp)
-    return if me.sign then 1_s64 else -1_s64
+    return if me.sign() then 1_s64 else -1_s64
   if unsigned_gt[M](a: me.mant, b: you.mant)
-    return if me.sign then -1_s64 else 1_s64
+    return if me.sign() then -1_s64 else 1_s64
   if unsigned_lt[M](a: me.mant, b: you.mant)
-    return if me.sign then 1_s64 else -1_s64
+    return if me.sign() then 1_s64 else -1_s64
   return 0_s64
 
 # ============================================================================
@@ -200,37 +260,37 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
   var carry = sub[S64](a: mul[S64](a: 2_s64, b: wb), b: 1_s64)
   var wm1 = sub[S64](a: wb, b: 1_s64)
   var negwb = sub[S64](a: 0_s64, b: wb)
-  var rsign = uf_bxor(a: you.sign, b: negate)
+  var rsign = uf_bxor(a: you.sign(), b: negate)
   var ed = sub[S64](a: me.exp, b: you.exp)
-  if me.iszero or me.isinf or me.isnan or you.iszero or you.isinf or you.isnan or signed_gt[S64](a: ed, b: wb) or signed_lt[S64](a: ed, b: negwb)
-    if me.iszero and you.iszero
-      return UnpackedFloat[M, L, W].make(mant: zero_extend[U64, M](0_u64), exp: 0_s64, sign: me.sign and rsign, iszero: true, isinf: false, isnan: false)
-    if me.isnan or you.iszero
+  if me.iszero() or me.isinf() or me.isnan() or you.iszero() or you.isinf() or you.isnan() or signed_gt[S64](a: ed, b: wb) or signed_lt[S64](a: ed, b: negwb)
+    if me.iszero() and you.iszero()
+      return UnpackedFloat[M, L, W].make(mant: zero_extend[U64, M](0_u64), exp: 0_s64, sign: me.sign() and rsign, iszero: true, isinf: false, isnan: false)
+    if me.isnan() or you.iszero()
       return me
-    if you.isnan or me.iszero
-      return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, sign: rsign, iszero: you.iszero, isinf: you.isinf, isnan: you.isnan)
-    if me.isinf or you.isinf
-      if me.isinf and you.isinf and (me.sign == rsign)
+    if you.isnan() or me.iszero()
+      return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, sign: rsign, iszero: you.iszero(), isinf: you.isinf(), isnan: you.isnan())
+    if me.isinf() or you.isinf()
+      if me.isinf() and you.isinf() and (me.sign() == rsign)
         return me
-      if me.isinf and you.isinf and (me.sign != rsign)
+      if me.isinf() and you.isinf() and (me.sign() != rsign)
         return UnpackedFloat[M, L, W].nan()
-      if me.isinf
+      if me.isinf()
         return me
-      return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, sign: rsign, iszero: you.iszero, isinf: you.isinf, isnan: you.isnan)
+      return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, sign: rsign, iszero: you.iszero(), isinf: you.isinf(), isnan: you.isnan())
     if signed_gt[S64](a: ed, b: wb)
       return me
     if signed_lt[S64](a: ed, b: negwb)
-      return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, sign: rsign, iszero: you.iszero, isinf: you.isinf, isnan: you.isnan)
+      return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, sign: rsign, iszero: you.iszero(), isinf: you.isinf(), isnan: you.isnan())
   # True subtraction iff the effective signs differ; align both mantissas into the
   # wide L word so the larger keeps wb fraction bits and the smaller is shifted by ed.
-  var subtract = me.sign != rsign
+  var subtract = me.sign() != rsign
   var lsh = if signed_gt[S64](a: ed, b: 0_s64) then wb else add[S64](a: wb, b: ed)
   var rsh = if signed_gt[S64](a: ed, b: 0_s64) then sub[S64](a: wb, b: ed) else wb
   var lm = uf_sh[L](v: zero_extend[M, L](me.mant), s: lsh)
   var rm = uf_sh[L](v: zero_extend[M, L](you.mant), s: rsh)
   var exp = if signed_gt[S64](a: ed, b: 0_s64) then me.exp else you.exp
   var am = uf_amt[L](0_s64)
-  var rsign2 = me.sign
+  var rsign2 = me.sign()
   if not subtract
     am = add[L](a: lm, b: rm)
     # carry out of the top bit -> renormalize right by one, bump exponent.
@@ -252,7 +312,7 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
       rsign2 = rsign
     else
       am = sub[L](a: lm, b: rm)
-      rsign2 = me.sign
+      rsign2 = me.sign()
     # exact cancellation yields +0.
     if int_eq[L](a: am, b: 0)
       rsign2 = false
@@ -292,14 +352,14 @@ routine UnpackedFloat[M, L, W].sub(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloa
 
 ### Returns `me * you`.
 routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
-  if me.isnan or you.isnan or (me.iszero and you.isinf) or (me.isinf and you.iszero) or me.isinf or you.isinf
-    if me.isnan
+  if me.isnan() or you.isnan() or (me.iszero() and you.isinf()) or (me.isinf() and you.iszero()) or me.isinf() or you.isinf()
+    if me.isnan()
       return me
-    if you.isnan
+    if you.isnan()
       return you
-    if (me.iszero and you.isinf) or (me.isinf and you.iszero)
+    if (me.iszero() and you.isinf()) or (me.isinf() and you.iszero())
       return UnpackedFloat[M, L, W].nan()
-    return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign, b: you.sign))
+    return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign(), b: you.sign()))
   var wb = reinterpret_bits[U64, S64](W)
   var carry = sub[S64](a: mul[S64](a: 2_s64, b: wb), b: 1_s64)
   var wm1 = sub[S64](a: wb, b: 1_s64)
@@ -320,10 +380,10 @@ routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloa
   if amz
     exp = 0_s64
   if signed_lt[S64](a: exp, b: -2147483648_s64)
-    return UnpackedFloat[M, L, W].zero(sign: uf_bxor(a: me.sign, b: you.sign))
+    return UnpackedFloat[M, L, W].zero(sign: uf_bxor(a: me.sign(), b: you.sign()))
   if signed_gt[S64](a: exp, b: 2147483647_s64)
-    return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign, b: you.sign))
-  return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, sign: uf_bxor(a: me.sign, b: you.sign), iszero: amz, isinf: false, isnan: false)
+    return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign(), b: you.sign()))
+  return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, sign: uf_bxor(a: me.sign(), b: you.sign()), iszero: amz, isinf: false, isnan: false)
 
 # ============================================================================
 # Division (correctly rounded to nbmant bits via the L numerator)
@@ -331,26 +391,26 @@ routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloa
 
 ### Returns `me / you`.
 routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
-  if you.isnan
+  if you.isnan()
     return you
-  if you.iszero
-    if me.iszero
+  if you.iszero()
+    if me.iszero()
       return UnpackedFloat[M, L, W].nan()
-    return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign, b: you.sign))
-  if you.isinf
-    if me.isinf
+    return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign(), b: you.sign()))
+  if you.isinf()
+    if me.isinf()
       return UnpackedFloat[M, L, W].nan()
-    return UnpackedFloat[M, L, W].zero(sign: uf_bxor(a: me.sign, b: you.sign))
-  if me.isinf
-    return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign, b: you.sign))
-  if me.iszero
-    return UnpackedFloat[M, L, W].zero(sign: uf_bxor(a: me.sign, b: you.sign))
+    return UnpackedFloat[M, L, W].zero(sign: uf_bxor(a: me.sign(), b: you.sign()))
+  if me.isinf()
+    return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign(), b: you.sign()))
+  if me.iszero()
+    return UnpackedFloat[M, L, W].zero(sign: uf_bxor(a: me.sign(), b: you.sign()))
   var wb = reinterpret_bits[U64, S64](W)
   var nbm = sub[S64](a: wb, b: 2_s64)
   var wm1 = sub[S64](a: wb, b: 1_s64)
-  var sign = uf_bxor(a: me.sign, b: you.sign)
+  var sign = uf_bxor(a: me.sign(), b: you.sign())
   var num = uf_sh[L](v: zero_extend[M, L](me.mant), s: wb)
   var den = zero_extend[M, L](you.mant)
   # Delegate to L's FloorDivisible `//` (knuth-based for the wide types) instead of the
@@ -446,19 +506,19 @@ routine uf_isqrt[L, W](n: L) -> ?L
 
 ### Returns `me*b + c` with a single rounding to nbmant bits.
 routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
-  if me.isnan or me.isinf or b.isnan or b.isinf or c.isnan or c.isinf
-    if me.isnan
+  if me.isnan() or me.isinf() or b.isnan() or b.isinf() or c.isnan() or c.isinf()
+    if me.isnan()
       return me
-    if b.isnan
+    if b.isnan()
       return b
-    if c.isnan
+    if c.isnan()
       return c
-    if (me.iszero and b.isinf) or (me.isinf and b.iszero)
+    if (me.iszero() and b.isinf()) or (me.isinf() and b.iszero())
       return UnpackedFloat[M, L, W].nan()
-    if not c.isinf
-      return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign, b: b.sign))
-    if not (me.isinf or b.isinf) or (uf_bxor(a: me.sign, b: b.sign) == c.sign)
-      return UnpackedFloat[M, L, W].inf(sign: c.sign)
+    if not c.isinf()
+      return UnpackedFloat[M, L, W].inf(sign: uf_bxor(a: me.sign(), b: b.sign()))
+    if not (me.isinf() or b.isinf()) or (uf_bxor(a: me.sign(), b: b.sign()) == c.sign())
+      return UnpackedFloat[M, L, W].inf(sign: c.sign())
     return UnpackedFloat[M, L, W].nan()
   var wb = reinterpret_bits[U64, S64](W)
   var twoW = mul[S64](a: 2_s64, b: wb)
@@ -473,14 +533,14 @@ routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M
   if amzero
     pexp = 0_s64
   var ed = sub[S64](a: pexp, b: c.exp)
-  if amzero and c.iszero
+  if amzero and c.iszero()
     ed = 0_s64
   elseif amzero
     ed = sub[S64](a: 0_s64, b: twoW)
-  elseif c.iszero
+  elseif c.iszero()
     ed = twoW
-  var subtract = uf_bxor(a: uf_bxor(a: me.sign, b: b.sign), b: c.sign)
-  var resultsign = uf_bxor(a: me.sign, b: b.sign)
+  var subtract = uf_bxor(a: uf_bxor(a: me.sign(), b: b.sign()), b: c.sign())
+  var resultsign = uf_bxor(a: me.sign(), b: b.sign())
   var amsb = false
   var zmsb = false
   var zm = uf_sh[L](v: zero_extend[M, L](c.mant), s: wb)
@@ -510,7 +570,7 @@ routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M
     var amge = unsigned_ge[L](a: am, b: zm)
     var psb = if amge then amsb else zmsb
     var nsb = if amge then zmsb else amsb
-    resultsign = if amge then resultsign else c.sign
+    resultsign = if amge then resultsign else c.sign()
     if amge
       am = sub[L](a: am, b: zm)
     else
@@ -566,14 +626,14 @@ routine UnpackedFloat[M, L, W].sqrt_newton() -> ?UnpackedFloat[M, L, W]
 ### Returns the correctly-rounded square root (NaN-of-negative, ±0 and +inf pass through).
 ### W>=256 routes to the quadratic Newton path; narrower W uses the bitwise `uf_isqrt`.
 routine UnpackedFloat[M, L, W].sqrt() -> ?UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
-  if me.iszero
+  if me.iszero()
     return me
   # sqrt of a negative value (including -inf) has no real result -> NaN.
-  if me.sign
+  if me.sign()
     return UnpackedFloat[M, L, W].nan()
-  if me.isinf
+  if me.isinf()
     return me
   # Newton's reciprocal-sqrt (10 iters, quadratic) is width-generic and ~O(W); the bitwise
   # `uf_isqrt` fallback below is O(W²). Only F256/F512 reach this engine (F128 has its own sqrt),
@@ -608,26 +668,26 @@ routine UnpackedFloat[M, L, W].sqrt() -> ?UnpackedFloat[M, L, W]
 
 ### Truncates toward zero to an integer.
 routine UnpackedFloat[M, L, W].trunc() -> ?UnpackedFloat[M, L, W]
-  if me.iszero or me.isinf or me.isnan
+  if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = reinterpret_bits[U64, S64](W)
   if signed_ge[S64](a: me.exp, b: sub[S64](a: wb, b: 2_s64))
     return me
   if signed_lt[S64](a: me.exp, b: -1_s64)
-    return UnpackedFloat[M, L, W].zero(sign: me.sign)
+    return UnpackedFloat[M, L, W].zero(sign: me.sign())
   var s = sub[S64](a: sub[S64](a: wb, b: 3_s64), b: me.exp)
   var mask = bit_xor[M](a: uf_lowmask[M](s), b: sub[M](a: 0, b: 1))
-  return UnpackedFloat[M, L, W].make(mant: bit_and[M](a: me.mant, b: mask), exp: me.exp, sign: me.sign, iszero: false, isinf: false, isnan: false)
+  return UnpackedFloat[M, L, W].make(mant: bit_and[M](a: me.mant, b: mask), exp: me.exp, sign: me.sign(), iszero: false, isinf: false, isnan: false)
 
 ### Rounds to nearest integer, ties away from zero (TLFloat `round`).
 routine UnpackedFloat[M, L, W].round() -> ?UnpackedFloat[M, L, W]
-  if me.iszero or me.isinf or me.isnan
+  if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = reinterpret_bits[U64, S64](W)
   if signed_ge[S64](a: me.exp, b: sub[S64](a: wb, b: 3_s64))
     return me
   if signed_lt[S64](a: me.exp, b: -2_s64)
-    return UnpackedFloat[M, L, W].zero(sign: me.sign)
+    return UnpackedFloat[M, L, W].zero(sign: me.sign())
   var s = sub[S64](a: sub[S64](a: wb, b: 3_s64), b: me.exp)
   var m = add[M](a: me.mant, b: shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: s, b: 1_s64))))
   m = bit_and[M](a: m, b: bit_xor[M](a: uf_lowmask[M](s), b: sub[M](a: 0, b: 1)))
@@ -636,18 +696,18 @@ routine UnpackedFloat[M, L, W].round() -> ?UnpackedFloat[M, L, W]
     m = uf_sh[M](v: m, s: -1_s64)
     exp = add[S64](a: exp, b: 1_s64)
   if int_eq[M](a: m, b: 0)
-    return UnpackedFloat[M, L, W].zero(sign: me.sign)
-  return UnpackedFloat[M, L, W].make(mant: m, exp: exp, sign: me.sign, iszero: false, isinf: false, isnan: false)
+    return UnpackedFloat[M, L, W].zero(sign: me.sign())
+  return UnpackedFloat[M, L, W].make(mant: m, exp: exp, sign: me.sign(), iszero: false, isinf: false, isnan: false)
 
 ### Rounds to nearest integer, ties to even (TLFloat `rint`).
 routine UnpackedFloat[M, L, W].rint() -> ?UnpackedFloat[M, L, W]
-  if me.iszero or me.isinf or me.isnan
+  if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = reinterpret_bits[U64, S64](W)
   if signed_ge[S64](a: me.exp, b: sub[S64](a: wb, b: 3_s64))
     return me
   if signed_lt[S64](a: me.exp, b: -2_s64)
-    return UnpackedFloat[M, L, W].zero(sign: me.sign)
+    return UnpackedFloat[M, L, W].zero(sign: me.sign())
   var s = sub[S64](a: sub[S64](a: wb, b: 3_s64), b: me.exp)
   var lsbit = bit_and[M](a: shift_right_unsigned[M](me.mant, uf_amt[M](s)), b: uf_amt[M](1_s64))
   var m = add[M](a: add[M](a: me.mant, b: lsbit), b: sub[M](a: shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: s, b: 1_s64))), b: 1))
@@ -657,8 +717,8 @@ routine UnpackedFloat[M, L, W].rint() -> ?UnpackedFloat[M, L, W]
     m = uf_sh[M](v: m, s: -1_s64)
     exp = add[S64](a: exp, b: 1_s64)
   if int_eq[M](a: m, b: 0)
-    return UnpackedFloat[M, L, W].zero(sign: me.sign)
-  return UnpackedFloat[M, L, W].make(mant: m, exp: exp, sign: me.sign, iszero: false, isinf: false, isnan: false)
+    return UnpackedFloat[M, L, W].zero(sign: me.sign())
+  return UnpackedFloat[M, L, W].make(mant: m, exp: exp, sign: me.sign(), iszero: false, isinf: false, isnan: false)
 
 # ============================================================================
 # Integer <-> unpacked conversion
@@ -690,7 +750,7 @@ common routine UnpackedFloat[M, L, W].from_s64(src: S64) -> ?UnpackedFloat[M, L,
   var sign = signed_lt[S64](a: src, b: 0_s64)
   var v = if sign then sub[S64](a: 0_s64, b: src) else src
   var r = UnpackedFloat[M, L, W].from_u64(v: reinterpret_bits[S64, U64](v))
-  return UnpackedFloat[M, L, W].make(mant: r.mant, exp: r.exp, sign: sign, iszero: r.iszero, isinf: false, isnan: false)
+  return UnpackedFloat[M, L, W].make(mant: r.mant, exp: r.exp, sign: sign, iszero: r.iszero(), isinf: false, isnan: false)
 
 ### Truncates toward zero into a signed 64-bit integer (castToInt).
 routine UnpackedFloat[M, L, W].to_s64() -> S64
@@ -701,7 +761,7 @@ routine UnpackedFloat[M, L, W].to_s64() -> S64
   var wb = reinterpret_bits[U64, S64](W)
   var s = sub[S64](a: sub[S64](a: wb, b: 3_s64), b: me.exp)
   var r = reinterpret_bits[U64, S64](int_truncate[M, U64](shift_right_unsigned[M](me.mant, uf_amt[M](s))))
-  if me.sign
+  if me.sign()
     return sub[S64](a: 0_s64, b: r)
   return r
 
@@ -717,7 +777,7 @@ routine UnpackedFloat[M, L, W].ilogb() -> S64
 
 ### Returns `true` when integer-valued.
 routine UnpackedFloat[M, L, W].isint() -> Bool
-  if me.isinf or me.isnan
+  if me.isinf() or me.isnan()
     return false
   var t = me.trunc()
   return int_eq[M](a: t.mant, b: me.mant) and (t.exp == me.exp)
@@ -728,7 +788,7 @@ routine UnpackedFloat[M, L, W].iseven() -> Bool
 
 ### Nudges the magnitude down by one ULP (toward zero) — TLFloat `toward0`.
 routine UnpackedFloat[M, L, W].toward0() -> ?UnpackedFloat[M, L, W]
-  if me.iszero or me.isinf or me.isnan
+  if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = reinterpret_bits[U64, S64](W)
   var m = sub[M](a: me.mant, b: uf_amt[M](1_s64))
@@ -736,7 +796,7 @@ routine UnpackedFloat[M, L, W].toward0() -> ?UnpackedFloat[M, L, W]
   if not uf_bit[M](v: m, pos: sub[S64](a: wb, b: 2_s64))
     exp = sub[S64](a: exp, b: 1_s64)
     m = uf_sh[M](v: m, s: 1_s64)
-  return UnpackedFloat[M, L, W].make(mant: m, exp: exp, sign: me.sign, iszero: false, isinf: false, isnan: false)
+  return UnpackedFloat[M, L, W].make(mant: m, exp: exp, sign: me.sign(), iszero: false, isinf: false, isnan: false)
 
 ### Returns `true` when `me < you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].lt(you: UnpackedFloat[M, L, W]) -> Bool
@@ -756,7 +816,7 @@ routine UnpackedFloat[M, L, W].ge(you: UnpackedFloat[M, L, W]) -> Bool
 
 ### Returns `true` when `me == you`; NaN compares unequal to everything (incl. itself).
 routine UnpackedFloat[M, L, W].eq(you: UnpackedFloat[M, L, W]) -> Bool
-  if me.isnan or you.isnan
+  if me.isnan() or you.isnan()
     return false
   return me.cmp(you: you) == 0_s64
 
@@ -782,7 +842,7 @@ common routine UnpackedFloat[M, L, W].exp10i(a: S64) -> ?UnpackedFloat[M, L, W]
 ### Splits into a fraction in [0.5,1) and a power-of-two exponent (TLFloat `frexp_`):
 ### returns (fraction, exp) with me = fraction * 2^exp.
 routine UnpackedFloat[M, L, W].frexp() -> UFExp[M, L, W]
-  var fr = UnpackedFloat[M, L, W].make(mant: me.mant, exp: -2_s64, sign: me.sign, iszero: me.iszero, isinf: me.isinf, isnan: me.isnan)
+  var fr = UnpackedFloat[M, L, W].make(mant: me.mant, exp: -2_s64, sign: me.sign(), iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan())
   return UFExp[M, L, W](item0: fr, item1: add[S64](a: me.exp, b: 2_s64))
 
 ### Builds an `M`-typed value from two U64 halves (low, then high<<64).

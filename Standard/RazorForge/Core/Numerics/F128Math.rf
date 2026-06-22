@@ -16,7 +16,7 @@ routine UnpackedFloat[M, L, W].exp(n: S64) -> UnpackedFloat[M, L, W]
     n = 36_s64
   # |me| > ~2^28 over/underflows: +inf for positive, +0 for negative.
   if signed_gt[S64](a: me.exp, b: 28_s64)
-    if me.sign
+    if me.sign()
       return UnpackedFloat[M, L, W].zero(sign: false)
     return UnpackedFloat[M, L, W].inf(sign: false)
   # Range reduction: q = round(me / ln2); reduced d = (me - q*ln2)/2 via two-part
@@ -41,11 +41,11 @@ routine UnpackedFloat[M, L, W].expm1(n: S64) -> UnpackedFloat[M, L, W]
   # W=512 overrides the degree to 36 for 70+ digit accuracy.
   if int_eq[U64](a: W, b: 512_u64)
     n = 36_s64
-  if me.iszero
+  if me.iszero()
     return me
   # |me| > ~2^28: -1 for large-negative (e^x -> 0), +inf for large-positive.
   if signed_gt[S64](a: me.exp, b: 28_s64)
-    if me.sign
+    if me.sign()
       return UnpackedFloat[M, L, W].from_s64(src: -1_s64)
     return UnpackedFloat[M, L, W].inf(sign: false)
   # Same q = round(me/ln2) + two-part-ln2 reduction + half-angle as exp.
@@ -163,7 +163,7 @@ routine UnpackedFloat[M, L, W].cbrt() -> UnpackedFloat[M, L, W]
   if r == 2_s64
     q = UnpackedFloat[M, L, W].cbrt_4()
   q = q.ldexp(e: sub[S64](a: signed_div[S64](a: eo3, b: 3_s64), b: 1048576_s64))
-  if d.sign
+  if d.sign()
     q = q.neg()
   d = d.abs()
   # Polynomial seed of d^(1/3) about d=1 (Horner in d-1), then refine.
@@ -198,9 +198,9 @@ routine UnpackedFloat[M, L, W].atan2(x0: UnpackedFloat[M, L, W]) -> UnpackedFloa
     var tmp = x
     x = y
     y = tmp.neg()
-    q = if x.sign then -1_s64 else 1_s64
-  elseif x.sign
-    q = if y.sign then -2_s64 else 2_s64
+    q = if x.sign() then -1_s64 else 1_s64
+  elseif x.sign()
+    q = if y.sign() then -2_s64 else 2_s64
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var d = y.div(you: x)
   # W=512 needs deeper half-angle reduction + higher poly degree for 70+ digits;
@@ -225,29 +225,29 @@ routine UnpackedFloat[M, L, W].atan2(x0: UnpackedFloat[M, L, W]) -> UnpackedFloa
   r = r.mul(you: d)
   var qu = UnpackedFloat[M, L, W].from_s64(src: q)
   if q == 0_s64
-    qu = UnpackedFloat[M, L, W].zero(sign: r.sign)
-  if x.iszero
-    r = UnpackedFloat[M, L, W].zero(sign: y.sign)
+    qu = UnpackedFloat[M, L, W].zero(sign: r.sign())
+  if x.iszero()
+    r = UnpackedFloat[M, L, W].zero(sign: y.sign())
     var qa = qu.abs()
-    qu = if y.sign then qa.neg() else qa
+    qu = if y.sign() then qa.neg() else qa
   # Reconstruct: q*(pi/2) + 2^depth * atan(reduced d).
   return qu.fma(b: UnpackedFloat[M, L, W].pi().ldexp(e: -1_s64), c: r.ldexp(e: depth))
 
 ### atan on the unpacked engine.
 routine UnpackedFloat[M, L, W].atan() -> UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var negone = one.neg()
-  var yinf = if me.sign then negone else one
-  var y = if me.isinf then yinf else me
+  var yinf = if me.sign() then negone else one
+  var y = if me.isinf() then yinf else me
   var zero = UnpackedFloat[M, L, W].zero(sign: false)
-  var x = if me.isinf then zero else one
+  var x = if me.isinf() then zero else one
   return y.atan2(x0: x)
 
 ### asin on the unpacked engine.
 routine UnpackedFloat[M, L, W].asin() -> UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   if me.abs().gt(you: one)
@@ -258,7 +258,7 @@ routine UnpackedFloat[M, L, W].asin() -> UnpackedFloat[M, L, W]
 
 ### acos on the unpacked engine.
 routine UnpackedFloat[M, L, W].acos() -> UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   if me.abs().gt(you: one)
@@ -269,27 +269,27 @@ routine UnpackedFloat[M, L, W].acos() -> UnpackedFloat[M, L, W]
 
 ### sinh on the unpacked engine (expm1_ N=20).
 routine UnpackedFloat[M, L, W].sinh() -> UnpackedFloat[M, L, W]
-  if me.isnan or me.isinf
+  if me.isnan() or me.isinf()
     return me
   if me.abs().gt(you: UnpackedFloat[M, L, W].from_s64(src: 1048576_s64))
-    return UnpackedFloat[M, L, W].inf(sign: me.sign)
+    return UnpackedFloat[M, L, W].inf(sign: me.sign())
   # sinh via expm1 to avoid cancellation near 0: let t = expm1(|x|), then
   # sinh = (t*(t+2)/(t+1))/2; sign reapplied (sinh is odd).
   var d = me.abs().expm1(n: 20_s64)
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var two = UnpackedFloat[M, L, W].from_s64(src: 2_s64)
   d = d.mul(you: d.add(you: two)).div(you: d.add(you: one)).ldexp(e: -1_s64)
-  if me.sign
+  if me.sign()
     d = d.neg()
   return d
 
 ### cosh on the unpacked engine (exp_ N=20).
 routine UnpackedFloat[M, L, W].cosh() -> UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
-  if me.isinf
+  if me.isinf()
     return UnpackedFloat[M, L, W].inf(sign: false)
-  if me.iszero
+  if me.iszero()
     return UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   if me.abs().gt(you: UnpackedFloat[M, L, W].from_s64(src: 1048576_s64))
     return UnpackedFloat[M, L, W].inf(sign: false)
@@ -300,45 +300,45 @@ routine UnpackedFloat[M, L, W].cosh() -> UnpackedFloat[M, L, W]
 
 ### tanh on the unpacked engine (expm1_ N=20).
 routine UnpackedFloat[M, L, W].tanh() -> UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
   var y = me.abs()
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
-  if y.isinf or y.gt(you: UnpackedFloat[M, L, W].from_s64(src: 1048576_s64))
+  if y.isinf() or y.gt(you: UnpackedFloat[M, L, W].from_s64(src: 1048576_s64))
     var res = one
-    if me.sign
+    if me.sign()
       res = one.neg()
     return res
   # tanh via expm1(2|x|): t = expm1(2|x|), tanh = t/(t+2); sign reapplied (tanh is odd).
   var d = y.ldexp(e: 1_s64).expm1(n: 20_s64)
   d = d.div(you: d.add(you: UnpackedFloat[M, L, W].from_s64(src: 2_s64)))
-  if me.sign
+  if me.sign()
     d = d.neg()
   return d
 
 ### atanh on the unpacked engine (log1p_ N=21, M=0).
 routine UnpackedFloat[M, L, W].atanh() -> UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
-  if me.isinf
+  if me.isinf()
     return UnpackedFloat[M, L, W].nan()
   var y = me.abs()
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   if y.gt(you: one)
     return UnpackedFloat[M, L, W].nan()
   if y.eq(you: one)
-    return UnpackedFloat[M, L, W].inf(sign: me.sign)
+    return UnpackedFloat[M, L, W].inf(sign: me.sign())
   # atanh(x) = (1/2)*log1p(2y/(1-y)) with y=|x|; m=0 (the small frexp range needs no
   # reduction sqrt); sign reapplied (atanh is odd).
   var d = y.ldexp(e: 1_s64).div(you: one.sub(you: y)).log1p(n: 21_s64, m: 0_s64).ldexp(e: -1_s64)
-  if me.sign
+  if me.sign()
     d = d.neg()
   return d
 
 ### asinh on the unpacked engine (log_/log1p_ N=24, M=0 — no reduction sqrt).
 routine UnpackedFloat[M, L, W].asinh() -> UnpackedFloat[M, L, W]
   var y = me.abs()
-  if me.isnan or y.isinf
+  if me.isnan() or y.isinf()
     return me
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var ygt1 = y.gt(you: one)
@@ -351,18 +351,18 @@ routine UnpackedFloat[M, L, W].asinh() -> UnpackedFloat[M, L, W]
   # sqrt. The old m=1 paid a SECOND F256 sqrt (~1126 ns) on top of the inherent
   # sqrt(x^2+1) for precision nothing downstream uses. atanh already runs m=0 here.
   var res = if ygt1 then d.fma(b: y, c: y).log(n: 24_s64, m: 0_s64, t: -10_s64) else d.sub(you: one).add(you: y).log1p(n: 24_s64, m: 0_s64)
-  if me.sign
+  if me.sign()
     res = res.neg()
   return res
 
 ### acosh on the unpacked engine (log_ N=24, M=0 — no reduction sqrt).
 routine UnpackedFloat[M, L, W].acosh() -> UnpackedFloat[M, L, W]
-  if me.isnan
+  if me.isnan()
     return me
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   if me.lt(you: one)
     return UnpackedFloat[M, L, W].nan()
-  if me.isinf
+  if me.isinf()
     return UnpackedFloat[M, L, W].inf(sign: false)
   var s = me.add(you: one).mul(you: me.sub(you: one)).sqrt().add(you: me)
   # m=0: drop the second (reduction) sqrt; n=24 (~2^-130) covers the F128/D128 target.
@@ -755,8 +755,8 @@ routine UnpackedFloat[M, L, W].ph(p: S64) -> UFExp[M, L, W]
   var nbytes = signed_div[S64](a: wb, b: 8_s64)
   var nbmant = sub[S64](a: wb, b: 2_s64)
   # Tiny arguments (|me| < ~2^-5) need no reduction: return unchanged, quadrant 0.
-  if me.iszero or signed_lt[S64](a: me.exp, b: -5_s64)
-    var asis = UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, sign: me.sign, iszero: me.iszero, isinf: me.isinf, isnan: me.isnan)
+  if me.iszero() or signed_lt[S64](a: me.exp, b: -5_s64)
+    var asis = UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, sign: me.sign(), iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan())
     return UFExp[M, L, W](item0: asis, item1: 0_s64)
   # Pick the byte window of the 1/(2pi) table aligned to the input's binary exponent so
   # only the bits of 1/(2pi) that overlap me's significance are multiplied.
@@ -795,7 +795,7 @@ routine UnpackedFloat[M, L, W].ph(p: S64) -> UFExp[M, L, W]
     j = add[S64](a: j, b: nbytes)
   # If the fraction is in the upper half (>= 1/2 turn) negate it (and q, sign) so the
   # reduced value lies in [0, 1/2) and the quadrant accounting stays consistent.
-  var sign = me.sign
+  var sign = me.sign()
   if uf_bit[L](v: rm, pos: sub[S64](a: w2, b: 1_s64))
     rm = sub[L](a: uf_amt[L](0_s64), b: rm)
     q = sub[S64](a: 0_s64, b: q)
@@ -984,9 +984,9 @@ routine F128.hypot!(you: F128) -> F128
 routine F128.hypot_unchecked(you: F128) -> F128
   var xx = me.to_uf()
   var yy = you.to_uf()
-  if xx.isinf or yy.isinf
+  if xx.isinf() or yy.isinf()
     return F128.from_bits(bits: f128_inf(sign: 0_u64))
-  if xx.isnan or yy.isnan
+  if xx.isnan() or yy.isnan()
     return F128.from_bits(bits: f128_qnan())
   return xx.mul(you: xx).add(you: yy.mul(you: yy)).sqrt().to_f128()
 
@@ -996,7 +996,7 @@ routine F128.hypot_unchecked(you: F128) -> F128
 
 ### Low 16 bits of the integer value (TLFloat `intlsb`).
 routine UnpackedFloat[M, L, W].intlsb() -> S64
-  if me.iszero or me.isinf or me.isnan
+  if me.iszero() or me.isinf() or me.isnan()
     return 0_s64
   var wb = reinterpret_bits[U64, S64](W)
   var nbmant = sub[S64](a: wb, b: 2_s64)
@@ -1009,7 +1009,7 @@ routine UnpackedFloat[M, L, W].intlsb() -> S64
   else
     mm = int_truncate[M, S64](shift_left[M](value: me.mant, bits: uf_amt[M](sub[S64](a: 0_s64, b: s))))
   mm = bit_and[S64](a: mm, b: 0xffff_s64)
-  if me.sign
+  if me.sign()
     return sub[S64](a: sub[S64](a: 0_s64, b: mm), b: 1_s64)
   return mm
 
@@ -1052,7 +1052,7 @@ routine F128.sinpi() -> F128
   var lx3 = bit_and[S64](a: lx, b: 3_s64)
   # Exact zeros at integer arguments (sin(pi*integer) = 0), preserving the signed zero.
   if ((signed_ge[S64](a: lx, b: 0_s64) and lx3 == 0_s64) or (signed_lt[S64](a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
-    return UnpackedFloat[U128, U256, 128].zero(sign: x.sign).to_f128()
+    return UnpackedFloat[U128, U256, 128].zero(sign: x.sign()).to_f128()
   # Quadrant selects cospi vs sinpi polynomial; a further bit flips the sign.
   var z = y.cospi_poly()
   if int_ne[S64](a: bit_and[S64](a: add[S64](a: lx, b: 3_s64), b: 2_s64), b: 0_s64)
@@ -1072,7 +1072,7 @@ routine F128.cospi() -> F128
   var y = x.sub(you: x.round()).ldexp(e: -1_s64)
   var lx = x.ldexp(e: 1_s64).intlsb()
   var lx3and2 = bit_and[S64](a: add[S64](a: lx, b: 3_s64), b: 2_s64)
-  if lx3and2 == 0_s64 and y.iszero
+  if lx3and2 == 0_s64 and y.iszero()
     return UnpackedFloat[U128, U256, 128].zero(sign: false).to_f128()
   var z = y.sinpi_poly()
   if int_ne[S64](a: lx3and2, b: 0_s64)
@@ -1100,8 +1100,8 @@ routine F128.tanpi() -> F128
   var z = pr.item0.div(you: pr.item1)
   if int_ne[S64](a: lx1and2, b: 0_s64)
     z = pr.item1.div(you: pr.item0)
-  if z.isinf
-    z = UnpackedFloat[U128, U256, 128].make(mant: z.mant, exp: z.exp, sign: int_eq[S64](a: lx4, b: 0_s64), iszero: z.iszero, isinf: z.isinf, isnan: z.isnan)
+  if z.isinf()
+    z = UnpackedFloat[U128, U256, 128].make(mant: z.mant, exp: z.exp, sign: int_eq[S64](a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan())
   if int_ne[S64](a: lx1and2, b: 0_s64)
     z = z.neg()
   return z.to_f128()
@@ -1217,12 +1217,12 @@ routine UnpackedFloat[M, L, W].lgamma_core() -> UFSign[M, L, W]
   var loga = a.log(n: 23_s64, m: 0_s64, t: 0_s64)
   y = y.div(you: a).add(you: a.sub(you: p5).mul(you: loga)).sub(you: a).add(you: p5.mul(you: UnpackedFloat[M, L, W].ln_2pi()))
   y = y.sub(you: w.abs().log(n: 23_s64, m: 0_s64, t: 0_s64))
-  var sign = w.sign
+  var sign = w.sign()
   if reflect
     # Reflection: lgamma(me) = ln(pi) - ln|sin(pi*fr)| - lgamma(1-me); sign from sin and parity.
     var s = UnpackedFloat[M, L, W].pi().mul(you: fr).sin(n: 15_s64)
     y = UnpackedFloat[M, L, W].ln_pi().sub(you: s.abs().log(n: 23_s64, m: 0_s64, t: 0_s64)).sub(you: y)
-    sign = uf_bxor(a: sign, b: s.sign)
+    sign = uf_bxor(a: sign, b: s.sign())
     sign = sign == inv.iseven()
   return UFSign[M, L, W](item0: sign, item1: y)
 
