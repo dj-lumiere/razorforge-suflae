@@ -41,6 +41,19 @@ preset DECIMAL_PI: Decimal = 3.1415926535897932384626433832795028841971693993751
 ### digits of `Decimal` precision.
 preset DECIMAL_E: Decimal = 2.718281828459045235360287471352662497757247093699959574966967627724076630354dn
 
+### Zero.
+preset DECIMAL_ZERO: Decimal = 0dn
+### One.
+preset DECIMAL_ONE: Decimal = 1dn
+### The largest finite `Decimal`: 70 nines at the maximum quantum exponent (1572795).
+preset DECIMAL_MAX: Decimal = 9.999999999999999999999999999999999999999999999999999999999999999999999e1572864dn
+### The most-negative finite `Decimal` (negative `DECIMAL_MAX`).
+preset DECIMAL_MIN: Decimal = -9.999999999999999999999999999999999999999999999999999999999999999999999e1572864dn
+### The smallest positive `Decimal` (coefficient 1 at the minimum quantum exponent).
+preset DECIMAL_MIN_POSITIVE: Decimal = 1e-1572932dn
+### The unit in the last place at exponent 0: `10^-(70-1)`, the gap from 1 to the next `Decimal`.
+preset DECIMAL_EPSILON: Decimal = 1e-69dn
+
 # ============================================================================
 # Bit representation (raw i256 <-> value)
 # ============================================================================
@@ -55,6 +68,114 @@ routine Decimal.to_bits() -> U256
 ### :param bits: the BID-encoded i256 storage.
 common routine Decimal.from_bits(bits: U256) -> Decimal
   return reinterpret_bits[U256, Decimal](bits)
+
+# ============================================================================
+# Hashing & byte representation
+# ============================================================================
+
+### Returns a hash of the raw decimal256 encoding by folding its two 128-bit halves.
+### Canonicalization (trailing-zero stripping) keeps equal values bit-identical, so equal
+### `Decimal`s hash equally.
+### :returns: A `U64` hash of `me`.
+routine Decimal.$fast_hash() -> U64
+  var raw = me.to_bits()
+  var lo = __hash_u128(v: raw.low128())
+  var hi = __hash_u128(v: raw.high128())
+  return lo ^ hi
+
+### Returns the raw 32 bytes of this value in little-endian order.
+### :returns: The BID-256 encoding, least-significant byte first.
+routine Decimal.to_bytes_le() -> Array[Byte, 32]
+  var raw = me.to_bits()
+  var result = Array[Byte, 32]()
+  var i = 0_u64
+  while unsigned_lt[U64](a: i, b: 32_u64)
+    var b = int_truncate[U256, U8](shift_right_unsigned[U256](raw, zero_extend[U64, U256](mul[U64](a: i, b: 8_u64))))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = add[U64](a: i, b: 1_u64)
+  return result
+
+### Returns the raw 32 bytes of this value in big-endian order.
+### :returns: The BID-256 encoding, most-significant byte first.
+routine Decimal.to_bytes_be() -> Array[Byte, 32]
+  var raw = me.to_bits()
+  var result = Array[Byte, 32]()
+  var i = 0_u64
+  while unsigned_lt[U64](a: i, b: 32_u64)
+    var b = int_truncate[U256, U8](shift_right_unsigned[U256](raw, zero_extend[U64, U256](mul[U64](a: sub[U64](a: 31_u64, b: i), b: 8_u64))))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = add[U64](a: i, b: 1_u64)
+  return result
+
+# ============================================================================
+# Text parsing — full 70-digit coefficient scan (the U256 analog of D128's
+# scan_decimal_parts!; `Decimal` is finite-only, so inf/NaN text is rejected).
+# ============================================================================
+
+### Scans decimal text into sign / coefficient (U256) / base-10 exponent, accumulating the
+### full coefficient so `Decimal`'s 70 digits are captured exactly.
+### :throws: {InvalidValueError} on malformed input or inf/NaN (unrepresentable in `Decimal`).
+routine scan_decimal_parts256!(from_text: Text) -> DecimalParts
+  var len = from_text.count()
+  if len == 0u64
+    throw InvalidValueError(input: from_text, target: "decimal number")
+  var i = 0u64
+  var neg = false
+  var first = from_text[0u64]
+  if first == Character(0x002Bu32) or first == Character(0x002Du32)
+    neg = first == Character(0x002Du32)
+    i = 1u64
+    if i >= len
+      throw InvalidValueError(input: from_text, target: "decimal number")
+  var coeff = zero_extend[U64, U256](0_u64)
+  var ten = zero_extend[U64, U256](10_u64)
+  var exp10 = 0_s64
+  var seen_dot = false
+  var has_digit = false
+  while i < len
+    var ch = from_text[i]
+    if ch.is_numeric()
+      coeff = add[U256](a: mul[U256](a: coeff, b: ten), b: zero_extend[U32, U256](reinterpret_bits[S32, U32](ch.digit_value())))
+      if seen_dot
+        exp10 = sub[S64](a: exp10, b: 1_s64)
+      has_digit = true
+    elseif ch == Character(0x002Eu32)
+      if seen_dot
+        throw InvalidValueError(input: from_text, target: "decimal number")
+      seen_dot = true
+    elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
+      if not has_digit
+        throw InvalidValueError(input: from_text, target: "decimal number")
+      i = i + 1u64
+      var esign = false
+      if i < len and (from_text[i] == Character(0x002Bu32) or from_text[i] == Character(0x002Du32))
+        esign = from_text[i] == Character(0x002Du32)
+        i = i + 1u64
+      var eval = 0_s64
+      var has_edigit = false
+      while i < len
+        var ec = from_text[i]
+        if not ec.is_numeric()
+          throw InvalidValueError(input: from_text, target: "decimal number")
+        eval = add[S64](a: mul[S64](a: eval, b: 10_s64), b: S64(ec.digit_value()))
+        has_edigit = true
+        i = i + 1u64
+      if not has_edigit
+        throw InvalidValueError(input: from_text, target: "decimal number")
+      exp10 = add[S64](a: exp10, b: if esign then sub[S64](a: 0_s64, b: eval) else eval)
+      break
+    else
+      throw InvalidValueError(input: from_text, target: "decimal number")
+    i = i + 1u64
+  if not has_digit
+    throw InvalidValueError(input: from_text, target: "decimal number")
+  return DecimalParts(sign: neg, special: 0_u64, exp: exp10, coeff: coeff)
+
+### Parses a decimal literal into a `Decimal` (scans the full 70-digit coefficient).
+### :throws: {InvalidValueError} if the text is not a valid finite decimal literal.
+routine Decimal.$create!(from_text: Text) -> Decimal
+  var p = scan_decimal_parts256!(from_text: from_text)
+  return Decimal.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
 
 # ============================================================================
 # Decode / encode — value <-> DecimalParts (sign / special / exp / coeff)
@@ -634,9 +755,11 @@ routine Decimal.$add!(you: Decimal) -> Decimal
 routine decimalfixed_neg(a: Decimal) -> Decimal
   return Decimal.from_bits(bits: bit_xor[U256](a: a.to_bits(), b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](255_s64))))
 
-### Returns me - you.
-routine Decimal.$sub(you: Decimal) -> Decimal
-  return me + decimalfixed_neg(a: you)
+### Returns me - you. Failable like `$add!`/`$mul!`/`$truediv!`: subtraction can overflow the
+### `Decimal` range (e.g. MAX - (-MAX)), so the throw propagates through `$add!` (the `-` operator
+### crashes on it in non-failable context; `try_$sub!` recovers).
+routine Decimal.$sub!(you: Decimal) -> Decimal
+  return me.$add!(you: decimalfixed_neg(a: you))
 
 ### Returns me / you (scale numerator ~74 digits past, divide, sticky, round).
 routine Decimal.$truediv!(you: Decimal) -> Decimal

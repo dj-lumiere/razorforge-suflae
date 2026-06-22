@@ -375,6 +375,105 @@ routine Integer.signum() -> S32
     me.is_negative() => -1
     else => 0
 
+### Returns `true` when this value is even (divisible by two).
+### :returns: The resulting `Bool` value.
+@readonly
+routine Integer.is_even() -> Bool
+  return me.$bitand(other: Integer.one()).is_zero()
+
+### Returns `true` when this value is odd.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Integer.is_odd() -> Bool
+  return not me.is_even()
+
+### Returns `true` when this value is a positive power of two (1, 2, 4, 8, ...).
+### :returns: The resulting `Bool` value.
+@readonly
+routine Integer.is_power_of_two() -> Bool
+  if not me.is_positive()
+    return false
+  return me.$bitand(other: me.$sub(other: Integer.one())).is_zero()
+
+### Returns the bitwise complement `~me`, defined in the two's-complement sense as `-me - 1`.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$bitnot() -> Integer
+  return me.$add(other: Integer.one()).$neg()
+
+### Returns the number of bits in the magnitude of this value (0 for zero).
+### :returns: The resulting `U64` value.
+@readonly
+routine Integer.bit_length() -> U64
+  if me.is_zero()
+    return 0_u64
+  return me.abs().represent_radix(radix: 2_s32).count()
+
+### Returns the smaller of this value and `other`.
+### :param other: The value to compare against.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.min(other: Integer) -> Integer
+  if me.$cmp(you: other) is ME_LARGE
+    return other.$copy()
+  return me.$copy()
+
+### Returns the larger of this value and `other`.
+### :param other: The value to compare against.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.max(other: Integer) -> Integer
+  if me.$cmp(you: other) is ME_SMALL
+    return other.$copy()
+  return me.$copy()
+
+### Clamps this value into the inclusive range `[low, high]`.
+### :param low: The lower bound.
+### :param high: The upper bound.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.clamp(low: Integer, high: Integer) -> Integer
+  if me.$cmp(you: low) is ME_SMALL
+    return low.$copy()
+  if me.$cmp(you: high) is ME_LARGE
+    return high.$copy()
+  return me.$copy()
+
+### Divides by `other`, returning the Euclidean quotient and remainder together.
+### :param other: The non-zero divisor.
+### :returns: A tuple `(quotient, remainder)`.
+### :throws: {DivisionByZeroError} when `other` is zero.
+@readonly
+routine Integer.divmod!(other: Integer) -> (Integer, Integer)
+  if other.is_zero()
+    throw DivisionByZeroError()
+  var quotient = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var remainder = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
+  return (quotient, remainder)
+
+### Modular exponentiation `me^exp mod modulus` via right-to-left binary exponentiation
+### (each step reduced modulo `modulus`, so intermediates never blow up).
+### :param exp: The non-negative exponent.
+### :param modulus: The non-zero modulus.
+### :returns: The resulting `Integer` value in `[0, modulus)`.
+### :throws: {DivisionByZeroError} when `modulus` is zero; {NumericDomainError} when `exp` is negative.
+@readonly
+routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
+  if modulus.is_zero()
+    throw DivisionByZeroError()
+  if exp.is_negative()
+    throw NumericDomainError(description: "modpow: negative exponent")
+  var result = Integer.one()
+  var base = me.$mod!(other: modulus)
+  var e = exp.$copy()
+  while not e.is_zero()
+    if e.is_odd()
+      result = result.$mul(other: base).$mod!(other: modulus)
+    e = e.$shr(bits: 1_s32)
+    base = base.$mul(other: base).$mod!(other: modulus)
+  return result
+
 # ============================================================================
 # Conversions
 # ============================================================================

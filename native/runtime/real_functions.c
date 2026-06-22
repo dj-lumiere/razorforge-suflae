@@ -78,6 +78,13 @@ void rf_real_pow(void *r, void *a, void *b) { bf_pow((bf_t *)r, (bf_t *)a, (bf_t
 void rf_real_sin(void *r, void *a)          { bf_sin((bf_t *)r, (bf_t *)a, RF_REAL_PREC, BF_RNDN); }
 void rf_real_cos(void *r, void *a)          { bf_cos((bf_t *)r, (bf_t *)a, RF_REAL_PREC, BF_RNDN); }
 
+/* --- round-to-integral (bf_rint rounds in place; copy then round) --- */
+void rf_real_floor(void *r, void *a) { bf_set((bf_t *)r, (bf_t *)a); bf_rint((bf_t *)r, BF_RNDD);  }
+void rf_real_ceil(void *r, void *a)  { bf_set((bf_t *)r, (bf_t *)a); bf_rint((bf_t *)r, BF_RNDU);  }
+void rf_real_trunc(void *r, void *a) { bf_set((bf_t *)r, (bf_t *)a); bf_rint((bf_t *)r, BF_RNDZ);  }
+void rf_real_round(void *r, void *a) { bf_set((bf_t *)r, (bf_t *)a); bf_rint((bf_t *)r, BF_RNDNA); }
+void rf_real_rint(void *r, void *a)  { bf_set((bf_t *)r, (bf_t *)a); bf_rint((bf_t *)r, BF_RNDN);  }
+
 /* ------------------------------------------------------------------------- *
  * Extended transcendental surface (precision-aware).
  *

@@ -363,6 +363,23 @@ routine C64.log10() -> C64
   var v = me.log_unchecked()
   return C64(real: v.real / 2.302585092994046_f64, imag: v.imag / 2.302585092994046_f64)
 
+### Returns the base-2 logarithm of this complex value.
+### :returns: `log(me) / ln(2)`.
+routine C64.log2() -> C64
+  var v = me.log_unchecked()
+  return C64(real: v.real / F64_LN_2, imag: v.imag / F64_LN_2)
+
+### Returns the multiplicative inverse `1/me` (conjugate over the squared modulus).
+### :returns: `conj(me) / |me|²`.
+routine C64.reciprocal() -> C64
+  var d = me.real * me.real + me.imag * me.imag
+  return C64(real: me.real / d, imag: -me.imag / d)
+
+### Returns the polar form `(magnitude, angle-in-radians)` — the inverse of `from_polar`.
+### :returns: A tuple `(abs, arg)`.
+routine C64.to_polar() -> (F64, F64)
+  return (me.abs(), me.arg())
+
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
 routine C64.sqrt_unchecked() -> C64
@@ -417,6 +434,22 @@ routine C64.$represent() -> Text
   if me.imag < 0.0_f64
     return real_text + "-" + imag_abs + "j"
   return real_text + "+" + imag_abs + "j"
+
+### Returns the real component (mirrors `Complex.real_part`; the `real` field is also public).
+### :returns: The real part as `F64`.
+routine C64.real_part() -> F64
+  return me.real
+
+### Returns the imaginary component (mirrors `Complex.imag_part`; the `imag` field is also public).
+### :returns: The imaginary part as `F64`.
+routine C64.imag_part() -> F64
+  return me.imag
+
+### Returns a diagnostic string wrapping the value with its type name (e.g. `C64(1.5+2j)`).
+### Standard `$diagnose` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+routine C64.$diagnose() -> Text
+  return "C64(" + me.$represent() + ")"
 
 # ============================================================================
 # Hashing

@@ -42,6 +42,19 @@ routine Complex.$create(real: Real) -> Complex
 routine Complex.$create(real: Real, imag: Real) -> Complex
   return Complex(real: real, imag: imag)
 
+### Creates a purely real complex value from a signed 64-bit integer (imaginary part zero).
+### Uses the `from:` label (not `real:`) so the call routes to `$create`, not a record literal.
+### :param from: The real-axis integer value.
+### :returns: The resulting `Complex` value.
+routine Complex.$create(from: S64) -> Complex
+  return Complex(real: Real(value: from), imag: Real.zero())
+
+### Creates a purely real complex value from an `F64` (imaginary part zero).
+### :param from: The real-axis double value.
+### :returns: The resulting `Complex` value.
+routine Complex.$create(from: F64) -> Complex
+  return Complex(real: Real(value: from), imag: Real.zero())
+
 ### Creates a complex value from polar coordinates.
 ### `r` is the radius and `theta` is the angle in radians.
 ### :param r: The radius value.
@@ -336,6 +349,31 @@ routine Complex.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var v = me.log(precision)
   var ln10 = Real(value: 10_s64).log(precision)
   return Complex(real: v.real_part().divide(other: ln10, precision: precision), imag: v.imag_part().divide(other: ln10, precision: precision))
+
+### Computes the principal base-2 logarithm of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.log2(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+  var v = me.log(precision)
+  var ln2 = Real(value: 2_s64).log(precision)
+  return Complex(real: v.real_part().divide(other: ln2, precision: precision), imag: v.imag_part().divide(other: ln2, precision: precision))
+
+### Returns the multiplicative inverse `1/me` (conjugate divided by the squared magnitude).
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.reciprocal(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+  var d = me.norm()
+  return Complex(real: me.real.divide(other: d, precision: precision), imag: (-me.imag).divide(other: d, precision: precision))
+
+### Returns the polar form of this value as `(radius, angle-in-radians)` — the inverse of
+### `from_polar`.
+### :param precision: The decimal precision to use for the angle.
+### :returns: A tuple `(magnitude, argument)`.
+@readonly
+routine Complex.to_polar(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> (Real, Real)
+  return (me.abs(), me.arg(precision))
 
 # ============================================================================
 # Query Routines

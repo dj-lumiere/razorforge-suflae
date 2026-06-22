@@ -499,6 +499,140 @@ routine Real.cbrt(precision: S32) -> Real
   return result
 
 # ============================================================================
+# Sign predicates, selection, extra exponentials, and constants
+# (pure RazorForge — no new native surface)
+# ============================================================================
+
+### Returns `true` when this value is strictly greater than zero.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Real.is_positive() -> Bool
+  return rf_real_cmp(a: me.handle, b: Real().handle) > 0_s32
+
+### Returns the sign of this value as a `Real` -1, 0, or +1.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.signum() -> Real
+  if me.is_negative()
+    return Real(value: -1_s64)
+  if me.is_zero()
+    return Real.zero()
+  return Real(value: 1_s64)
+
+### Returns the smaller of this value and `other`.
+### :param other: The value to compare against.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.min(other: Real) -> Real
+  if me.$cmp(you: other) is ME_LARGE
+    return other.$copy()
+  return me.$copy()
+
+### Returns the larger of this value and `other`.
+### :param other: The value to compare against.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.max(other: Real) -> Real
+  if me.$cmp(you: other) is ME_SMALL
+    return other.$copy()
+  return me.$copy()
+
+### Returns this value's magnitude carrying the sign of `you`.
+### :param you: The value supplying the sign.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.copysign(you: Real) -> Real
+  if you.is_negative()
+    return me.abs().$neg()
+  return me.abs()
+
+### Rounds toward negative infinity (the largest integer not greater than `me`).
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.floor() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_floor(result: result.handle, a: me.handle)
+  return result
+
+### Rounds toward positive infinity (the smallest integer not less than `me`).
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.ceil() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_ceil(result: result.handle, a: me.handle)
+  return result
+
+### Truncates toward zero (drops the fractional part).
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.trunc() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_trunc(result: result.handle, a: me.handle)
+  return result
+
+### Rounds to the nearest integer, ties away from zero.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.round() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_round(result: result.handle, a: me.handle)
+  return result
+
+### Rounds to the nearest integer, ties to even (banker's rounding).
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.rint() -> Real
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_rint(result: result.handle, a: me.handle)
+  return result
+
+### Returns the fractional part `me - trunc(me)` (same sign as `me`).
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.frac() -> Real
+  return me - me.trunc()
+
+### Base-2 exponential `2^me`, rounded to the working precision.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.exp2() -> Real
+  var base = Real(value: 2_s64)
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_pow(result: result.handle, a: base.handle, b: me.handle)
+  return result
+
+### Base-10 exponential `10^me`, rounded to the working precision.
+### :returns: The resulting `Real` value.
+@readonly
+routine Real.exp10() -> Real
+  var base = Real(value: 10_s64)
+  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  rf_real_pow(result: result.handle, a: base.handle, b: me.handle)
+  return result
+
+### The constant e (base of the natural logarithm), at the working precision.
+### :returns: The resulting `Real` value.
+common routine Real.e() -> Real
+  return Real.one().exp()
+
+### The constant e to `precision` decimal digits.
+### :param precision: The number of decimal significant digits.
+### :returns: The resulting `Real` value.
+common routine Real.e(precision: S32) -> Real
+  return Real.one().exp(precision: precision)
+
+### The constant pi (computed as `4 * atan(1)`), at the working precision.
+### :returns: The resulting `Real` value.
+common routine Real.pi() -> Real
+  return Real.one().atan() * Real(value: 4_s64)
+
+### The constant pi to `precision` decimal digits.
+### :param precision: The number of decimal significant digits.
+### :returns: The resulting `Real` value.
+common routine Real.pi(precision: S32) -> Real
+  return Real.one().atan(precision: precision) * Real(value: 4_s64)
+
+# ============================================================================
 # Conversion / representation / hashing
 # ============================================================================
 

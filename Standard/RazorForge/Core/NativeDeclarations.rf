@@ -866,6 +866,16 @@ external("C") routine rf_real_log10(result: CPtr, a: CPtr)
 external("C") routine rf_real_hypot(result: CPtr, a: CPtr, b: CPtr)
 ### Stores cbrt(a) into result.
 external("C") routine rf_real_cbrt(result: CPtr, a: CPtr)
+### Stores floor(a) (round toward -inf) into result.
+external("C") routine rf_real_floor(result: CPtr, a: CPtr)
+### Stores ceil(a) (round toward +inf) into result.
+external("C") routine rf_real_ceil(result: CPtr, a: CPtr)
+### Stores trunc(a) (round toward zero) into result.
+external("C") routine rf_real_trunc(result: CPtr, a: CPtr)
+### Stores round(a) (round to nearest, ties away from zero) into result.
+external("C") routine rf_real_round(result: CPtr, a: CPtr)
+### Stores rint(a) (round to nearest, ties to even) into result.
+external("C") routine rf_real_rint(result: CPtr, a: CPtr)
 ### Precision-aware variants (prec = decimal significant digits).
 external("C") routine rf_real_div_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
 external("C") routine rf_real_sqrt_p(result: CPtr, a: CPtr, prec: S32)
