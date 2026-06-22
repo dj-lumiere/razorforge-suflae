@@ -520,13 +520,13 @@ routine f512_lgamma_core(z: UnpackedFloat[U512, U1024, 512]) -> UFSign[U512, U10
   y = y.div(you: a).add(you: a.sub(you: p5).mul(you: loga)).sub(you: a).add(you: p5.mul(you: UnpackedFloat[U512, U1024, 512].ln_2pi()))
   # subtract log of the augmentation product to undo the recurrence shift
   y = y.sub(you: w.abs().log(n: 23_s64, m: 0_s64, t: 0_s64))
-  var sign = w.sign
+  var sign = w.sign()
   if reflect
     # Euler reflection: ln|gamma(z)| = ln(pi) - ln|sin(pi*fr)| - ln|gamma(1-z)|; sign from sin &
     # parity
     var s = UnpackedFloat[U512, U1024, 512].pi().mul(you: fr).sin(n: 26_s64)
     y = UnpackedFloat[U512, U1024, 512].ln_pi().sub(you: s.abs().log(n: 23_s64, m: 0_s64, t: 0_s64)).sub(you: y)
-    sign = uf_bxor(a: sign, b: s.sign)
+    sign = uf_bxor(a: sign, b: s.sign())
     sign = sign == inv.iseven()
   return UFSign[U512, U1024, 512](item0: sign, item1: y)
 
