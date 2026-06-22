@@ -104,7 +104,7 @@ routine Bytes.$create(ptr: CStr) -> Bytes
     return Bytes()
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * len))
-    rf_copy_bytes_at(dest: buf.address(), src: ptr.ptr.address(), size: Byte.data_size() * len)
+    rf_copy_bytes_at(dest: buf.address(), src: ptr.ptr().address(), size: Byte.data_size() * len)
     return Bytes(data: buf, count: len, ctrl: ImmutableSharedController().hijack())
 
 ### Creates a byte sequence by copying `count` bytes from an address.
