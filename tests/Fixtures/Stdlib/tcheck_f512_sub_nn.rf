@@ -1,0 +1,11 @@
+module Tests/Stdlib/TcheckF512SubNn
+
+import IO/Console
+
+# Direct U512 softfloat-engine regression (deepest i512 mantissa = worst register-spill case
+# for the aarch64 i1-stack bug, now fixed by the SignedFpClass fold): U512 engine (-A)-(-B)=-8642 — worst-case i512 spill, the octuple sub=add case at 512 width.
+routine start()
+  var a = UnpackedFloat[U512, U1024, 512].from_s64(src: 9876_s64)
+  var b = UnpackedFloat[U512, U1024, 512].from_s64(src: 1234_s64)
+  show(a.neg().sub(you: b.neg()).to_f512a().to_bits())
+  return
