@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Compiler.Targeting;
 
@@ -487,6 +488,32 @@ internal static class NativeToolchain
     /// libm/pthread/dl, and the bundled runtime in <paramref name="runtimeLibDir"/>. Returns 0 on
     /// success or 1 if linking fails.
     /// </summary>
+    /// <summary>
+    /// Target-architecture codegen feature flags for the clang codegen/link step.
+    ///
+    /// On x86-64, `F16` (LLVM `half`) requires the F16C hardware conversion instructions
+    /// (vcvtph2ps / vcvtps2ph). Without `+f16c` the backend falls back to a soft-promotion
+    /// path that MISCOMPILES half values crossing a call ABI boundary at -O3 — a half return
+    /// value or a half spilled across a call decays to 0 (verified: an F16 transcendental loop
+    /// accumulated 0 instead of the correct sum without the flag, correct with it). F16C is
+    /// present on every x86-64 CPU since ~2012 (Intel Ivy Bridge, AMD Piledriver/Jaguar), which
+    /// is well within the supported hardware floor.
+    ///
+    /// On AArch64 `half` is a first-class hardware type (mandatory FCVT half↔float conversion,
+    /// native FP16 arithmetic on ARMv8.2+ / all Apple Silicon), so no extra flag is needed.
+    ///
+    /// Host-compilation only for now, so this keys on the machine architecture; when explicit
+    /// cross-compilation targets land, this should key on the requested target triple instead.
+    /// </summary>
+    private static string TargetCodegenFlags()
+    {
+        return RuntimeInformation.OSArchitecture switch
+        {
+            Architecture.X64 => " -mf16c",
+            _ => "" // AArch64: native half; other arches fall back to clang defaults.
+        };
+    }
+
     internal static int LinkExecutable(string optFile, string exeFile, string runtimeLibDir,
         RfBuildMode buildMode)
     {
@@ -563,7 +590,7 @@ internal static class NativeToolchain
             ? $" -isysroot \"{MacSdkPath.Value}\""
             : "";
         string clangArgs =
-            $"{clangOptLevel}{framePointerFlag}{lldFlag}{macSysrootArg} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{unixRuntimeLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
+            $"{clangOptLevel}{framePointerFlag}{TargetCodegenFlags()}{lldFlag}{macSysrootArg} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{unixRuntimeLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
 
         var clangPsi = new ProcessStartInfo
         {
