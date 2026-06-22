@@ -1,0 +1,26 @@
+module Tests/Stdlib/TcheckRec12S64
+import IO/Console
+
+record Rec12
+  f0: S64
+  f1: S64
+  f2: S64
+  f3: S64
+  f4: S64
+  f5: S64
+  f6: S64
+  f7: S64
+  f8: S64
+  f9: S64
+  f10: S64
+  f11: S64
+
+# Takes the 12xS64 record BY VALUE (non-me arg) -> LLVM splats it across arg regs + stack.
+# The trailing fields spill, but as full 8-byte slots, so caller/callee agree (unlike i1).
+routine sum12(r: Rec12) -> S64
+  return r.f0 +% r.f1 +% r.f2 +% r.f3 +% r.f4 +% r.f5 +% r.f6 +% r.f7 +% r.f8 +% r.f9 +% r.f10 +% r.f11
+
+routine start()
+  var r = Rec12(f0: 100_s64, f1: 2_s64, f2: 3_s64, f3: 4_s64, f4: 5_s64, f5: 6_s64, f6: 7_s64, f7: 8_s64, f8: 9_s64, f9: 10_s64, f10: 11_s64, f11: 200_s64)
+  show(sum12(r: r))
+  return
