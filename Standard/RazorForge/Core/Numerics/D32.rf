@@ -32,9 +32,37 @@ record D32Parts
 routine d32parts_to_d128(p: D32Parts) -> D128Parts
   return D128Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U128](p.coeff))
 
-### Narrow a D128Parts back (special-rule results are inf/NaN/zero, coeff 0 — lossless).
+### Narrow a D128Parts to D32. The D128 coefficient can carry up to 34 significant digits (and
+### exceed U64); a plain `int_truncate[U128, U64]` would keep the low bits — garbage — for any value
+### wider than ~19 digits (e.g. an F64-derived `0.8414709999999999689990204387868289`). So first round
+### the coefficient down to D32's 7 digits (round-half-even) in U128 — where it still fits — adjusting
+### the exponent; the result then fits U64 and `decfin32` applies the final cohort normalization and
+### over/underflow clamping. Specials (inf/NaN) carry through unchanged.
 routine d128_to_d32parts(p: D128Parts) -> D32Parts
-  return D32Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: int_truncate[U128, U64](p.coeff))
+  if int_ne[U64](a: p.special, b: 0_u64)
+    return D32Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: 0_u64)
+  var c = p.coeff
+  var e = p.exp
+  var nd = digits10_u128(c: c)
+  if signed_gt[S64](a: nd, b: 7_s64)
+    var drop = sub[S64](a: nd, b: 7_s64)
+    var divv = p10_u128(k: drop)
+    var q = unsigned_div[U128](a: c, b: divv)
+    var r = sub[U128](a: c, b: mul[U128](a: q, b: divv))
+    var twice = mul[U128](a: r, b: zero_extend[U64, U128](2_u64))
+    if unsigned_gt[U128](a: twice, b: divv)
+      q = add[U128](a: q, b: zero_extend[U64, U128](1_u64))
+    elseif int_eq[U128](a: twice, b: divv) and int_ne[U128](a: bit_and[U128](a: q, b: zero_extend[U64, U128](1_u64)), b: zero_extend[U64, U128](0_u64))
+      q = add[U128](a: q, b: zero_extend[U64, U128](1_u64))
+    c = q
+    e = add[S64](a: e, b: drop)
+    # half-even rounding can carry 9999999 -> 10000000 (8 digits); renormalize one digit.
+    if unsigned_ge[U128](a: c, b: p10_u128(k: 7_s64))
+      c = unsigned_div[U128](a: c, b: zero_extend[U64, U128](10_u64))
+      e = add[S64](a: e, b: 1_s64)
+  # pref = 90 (qmax) strips trailing zeros so the result is the simplest cohort member (matches the
+  # other float->decimal converters: 0.8414710 -> 0.841471).
+  return decfin32(sign: p.sign, coeff: int_truncate[U128, U64](c), exp: e, pref: 90_s64)
 
 ### 10^k as a U64 (k <= 19), via the U256 pow10 table truncated.
 routine p10_u64(k: S64) -> U64
