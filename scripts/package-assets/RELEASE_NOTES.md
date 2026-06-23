@@ -1,75 +1,80 @@
-## What's new in v0.0.4-alpha
+# RazorForge v0.1.0
 
-This release makes **value types mutate in place**. A method on a storage-backed
-record now receives its `me` receiver **by reference**, so it can change the
-caller's storage instead of a throwaway copy. It's a small surface change with a
-large consequence: it's the foundation the upcoming concurrency tier (lock-free
-atomics) and C FFI out-parameters are built on.
+The first release with **threaded routines** and a ground-up overhaul of the numeric stack. This is
+the largest release since the initial alphas (134 commits since v0.0.4-alpha).
 
-### Language
+## ✨ Highlights
 
-- **Storage-backed record methods now take `me` by reference.** A method on a
-  value-type record can mutate its fields and the change is visible to the caller.
-  Previously the receiver arrived as a hidden copy, so `me.field = …` (and
-  `me.field.hijack()`) operated on a temporary that was discarded the moment the
-  method returned — the mutation silently vanished. Now those operations reach the
-  caller's real storage, so in-place mutation works. This applies to every
-  storage-backed record:
-  - **struct records** (records with no `@llvm` backend type), and
-  - **inline aggregate records** — `Array[T, N]` and `BitArray[N]`, whose backend
-    is an inline `[N x T]` buffer.
+- **Threaded routines (Phase 1–3).** Concurrency with safety enforced at compile time: a
+  readers-writers conflict checker (RF-S630) that tracks controller identity across `.share()`
+  aliases, a thread-argument shareability gate (RF-S632), and a re-entrant exclusive-lock guard that
+  fails fast instead of deadlocking.
+- **Numerics rebuilt.** Dropped the `decNumber`/`TLFloat` dependencies in favor of an in-house
+  softfloat engine plus `libbf`. Checked arithmetic is failable by default — overflow, divide-by-zero,
+  and domain errors are now typed and must be handled, so numeric failure is explicit at the call
+  site rather than silent.
+- **IEEE 754 surface.** `total_order`/`total_order_mag`, signaling vs quiet NaN, `nextUp`/`nextDown`,
+  decimal `normalize`, and domain-vs-overflow separation in division across the floating-point and
+  decimal types.
+- **Wider numeric API.** `Decimal` (full IEEE surface + 70-digit text parse), `Integer`
+  (`modpow`/`divmod`/bit ops), `Real` (rounding + selection via `libbf`), and `Complex`/`Cxx`
+  (`log2`/`reciprocal`/`to_polar`).
+- **Faster softfloat (measured, x86-64):** F128 multiply 14.9 → 10.1 ns, D64 true-division
+  119.6 → 39 ns (~3×), and `sqrt` ~3.3× faster — speedups that carry into the transcendentals built
+  on them. F16 now works correctly on x86-64.
 
-  The rule is purely type-level — there is no per-method or per-name special case.
-  `Array.$setitem!` is by-reference because `Array` is storage-backed, exactly like
-  every other `Array` method.
+## 🛡️ Correctness & robustness
 
-  - **Behavioral note:** any code that relied on the old "mutation is a no-op"
-    behavior will now see the mutation take effect. In practice that pattern was a
-    latent bug (a value-type method that appeared to mutate but didn't).
+- Fixed several double-free and memory-leak paths in record-copy lowering, synthesized destructors,
+  and owned-temporary teardown.
+- Codegen now emits only reachable routines, backed by an over-prune tripwire and a declare/define
+  signature-match invariant.
+- Deterministic, OS-independent method resolution (fixes Linux/macOS-only resolution differences).
+- Bare member access (`x.name`) now reads a field and no longer silently auto-calls a zero-arg method
+  — write `x.name()` to call.
 
-- **Nested and indexed in-place mutation now works.** Assigning through a field or
-  element chain mutates the target directly:
-  - `me.inner.field = …` and `me.inner.field += 1` (nested struct fields)
-  - `arr[i] = x` and `a.b[i] = x` (index assignment, including through a field)
+## 📦 Packaging
 
-  `Array` / `BitArray` index assignment writes the single element in place — it no
-  longer rebuilds the whole buffer on every write.
+- Tests moved to a dedicated project; the shipped compiler no longer carries test code or
+  test/tooling assemblies, slimming the distribution.
 
-- **`@llvm`-primitive (scalar) records are unchanged.** The numeric types
-  (`S8`…`U128`, `F16`…`F128`, the decimals and complexes), `Bool`, `Hijacked`,
-  `Retained`, and friends keep value-passing semantics — their value *is* the
-  machine register their operators feed to intrinsics, so they were never affected
-  by the copy problem and are untouched here. (Such types are pure values and never
-  mutate `me` in place, so "needs by-value" and "mutates in place" never overlap.)
-  Use `with` when you want a fresh, independent copy of a value record.
+## ⚠️ Upgrading from v0.0.4-alpha (source-breaking)
 
-### Compiler fixes
+Code written against v0.0.4-alpha may need these adjustments:
 
-- **Address-of an rvalue receiver now works.** Taking the address of (or calling a
-  by-reference method on) a temporary — a call result, a constructor expression, a
-  literal — now spills the value to a temporary and uses its address, instead of
-  failing with "cannot take address of expression".
-- **Address-of through a crashable's fields** is now supported (it previously
-  rejected crashable parents), so returning or copying a `Text`/record field of a
-  crashable from `crash_message`/`$diagnose` works.
-- **Address-of on inline aggregate records** (`Array`/`BitArray`) now generates
-  valid IR for the universal `get_address`/`hijack` machinery, where it previously
-  emitted an illegal `[N x T] → ptr` cast.
+1. **Checked numeric ops are now failable (`!`).** Checked fixed-width arithmetic, division, and the
+   overflow/domain-prone methods (e.g. `divmod`, `modpow`, `logb`/`quantize`/`scaleb`, `tgamma`) now
+   throw typed errors (`NumericOverflow` / `DivisionByZero` / `NumericDomain`). Callers must be
+   failable themselves, handle with `when`, or call the generated `try_`/`check_` variants.
+   Arbitrary-precision `Integer` add/sub/mul stay non-failable (they cannot overflow); their division
+   family does not.
+   ```
+   # before
+   var q = a.divmod(other: b)
+   # after — handle the failure
+   var q = a.divmod!(other: b)        # in a failable routine
+   var q = a.try_divmod(other: b)     # or recover explicitly
+   ```
 
-### Internal
+2. **Bare member access no longer auto-calls a zero-arg method (RF-S450).** `x.name` reads a member
+   *variable*; call methods explicitly with `()`.
+   ```
+   var p = cstr.ptr      # before (silently called ptr())
+   var p = cstr.ptr()    # after
+   ```
 
-- The dead `set_element_at` intrinsic — superseded by the new in-place element
-  store path — was removed.
-- Storing an owned value through the in-place element store is now correctly
-  treated as an ownership move, so the stored value is no longer torn down twice.
+3. **Error type rename:** `ValueError` / `ParseError` → `InvalidValueError`. Update `when` arms and
+   any explicit references.
 
-### Groundwork
+4. **`Decimal.$sub` is now `$sub!`** (subtraction can overflow). Decimal subtraction in non-failable
+   contexts must be handled.
 
-- This is the prerequisite for two v0.1.0 features: **value-representation atomics**
-  (`AtomicS64` is one machine word like `S64`, differing only in its atomic-only
-  API) and **C FFI out-parameters** (passing a struct's address to a C function).
-  Both require a method to reach its receiver's real storage, which is exactly what
-  by-reference `me` provides.
+5. **New concurrency static checks may reject previously-accepted code:** RXW conflicts (RF-S630),
+   unshareable thread arguments (RF-S632). These reject data-racing patterns that compiled before but
+   were unsafe; re-entrant exclusive-lock acquisition now crashes (`ReentrantLockError`) rather than
+   deadlocking. The fix is usually to share through `Atomic`/`Shared`/`Watched` or restructure the
+   `using` scopes.
 
-The change is locked by the full end-to-end fixture suite and the analyzer test
-suite (1382 tests), all green, with every generated module verified by LLVM.
+## ✅ Platforms
+
+Verified in CI on Linux x86-64, Windows x86-64, and macOS arm64 (Apple Silicon).
