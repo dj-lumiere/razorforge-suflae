@@ -92,9 +92,9 @@ routine FileHandle.read_bytes(count: U64) -> Bytes
 ### :param end: The trailing text to append after `value`.
 routine FileHandle.write(value: Text, end: Text = "\n")
   var cstr = CStr(from: value)
-  rf_file_write(me.fd, cstr.ptr, cstr.count())
+  rf_file_write(me.fd, cstr.ptr(), cstr.count())
   var end_cstr = CStr(from: end)
-  rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
+  rf_file_write(me.fd, end_cstr.ptr(), end_cstr.count())
   return
 
 ### Writes a value using its textual representation, then appends `end`.
@@ -112,10 +112,10 @@ routine FileHandle.write[T](value: T, end: Text = "\n")
 ### :param end: The trailing text to append after `value`.
 routine FileHandle.write(value: Bytes, end: Text = "")
   var val_cstr = CStr(from: value)
-  rf_file_write(me.fd, val_cstr.ptr, val_cstr.count())
+  rf_file_write(me.fd, val_cstr.ptr(), val_cstr.count())
   if end.count() > 0
     var end_cstr = CStr(from: end)
-    rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
+    rf_file_write(me.fd, end_cstr.ptr(), end_cstr.count())
   return
 
 ### Flushes buffered file output.

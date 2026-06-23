@@ -509,7 +509,7 @@ routine Integer.$represent() -> Text
 routine Integer.represent_radix(radix: S32) -> Text
   var CStr = rf_bigint_get_str(handle: me.handle, radix: radix)
   var text = Text(from: CStr)
-  rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
+  rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr()))
   return text
 
 # ============================================================================

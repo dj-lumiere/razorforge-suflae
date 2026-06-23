@@ -648,7 +648,7 @@ routine Real.to_f64() -> F64
 routine Real.$represent() -> Text
   var CStr = rf_real_to_str(handle: me.handle)
   var text = Text(from: CStr)
-  rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
+  rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr()))
   return text
 
 ### Hashes the canonical decimal representation, so equal reals hash equally.
