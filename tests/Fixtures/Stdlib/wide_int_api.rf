@@ -1,0 +1,35 @@
+module Tests/Stdlib/WideIntApi
+import IO/Console
+
+# 256-bit integers: U256 (0 .. 2^256-1) and S256 (-2^255 .. 2^255-1). Literals use the
+# `_u256` / `_s256` suffixes; values larger than 64 bits round-trip exactly.
+routine start()
+  # --- U256 ---
+  var a: U256 = 123_u256
+  var big: U256 = 1000000000000000000000000000000_u256
+  show(f"U256 a: {a}")
+  show(f"U256 big: {big}")
+  show(f"U256 a + 1: {a + 1_u256}")
+  show(f"U256 big * 2: {big * 2_u256}")
+  show(f"U256 big // a: {big // a}")
+  show(f"U256 MAX: {U256_MAX}")
+  show(f"U256 a == 123: {a == 123_u256}")
+  show(f"U256 a < big: {a < big}")
+
+  # widen from smaller
+  var w: U256 = U256(from: 4_000_000_000_u64)
+  show(f"U256 from U64: {w}")
+
+  # --- S256 ---
+  var s: S256 = -42_s256
+  var sbig: S256 = -1000000000000000000000000000000_s256
+  show(f"S256 s: {s}")
+  show(f"S256 sbig: {sbig}")
+  show(f"S256 s.abs: {s.abs!()}")
+  show(f"S256 s + 100: {s + 100_s256}")
+  show(f"S256 MIN: {S256_MIN}")
+  show(f"S256 MAX: {S256_MAX}")
+  show(f"S256 s < 0: {s < 0_s256}")
+
+  show("DONE")
+  return

@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Tests are never packed or shipped; this assembly stays out of every publish. -->
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- This is the test project (the compiler project sets this false). -->
+    <SonarQubeTestProject>true</SonarQubeTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RazorForge.csproj" />
+  </ItemGroup>
+
+  <!-- Test/tooling packages live ONLY here so they never reach the compiler publish. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.6.6" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6" />
+  </ItemGroup>
+
+  <!-- StdlibApiTests spawns `RazorForge.dll buildandrun` from this project's output
+       directory (AppContext.BaseDirectory). ProjectReference copies RazorForge.dll but
+       NOT the compiler's Content items, so mirror the native-runtime + Standard copies
+       here to reproduce the compiler's runtime layout next to the referenced DLL. -->
+  <ItemGroup>
+    <Content Include="..\native\build\bin\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\native\build\bin')" />
+    <Content Include="..\native\build\lib\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\native\build\lib')" />
+    <Content Include="..\Standard\**\*" LinkBase="Standard" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

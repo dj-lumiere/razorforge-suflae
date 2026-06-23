@@ -1,0 +1,10 @@
+module Tests/Stdlib/TcheckD64Transcendentals
+
+import IO/Console
+
+# Merged D64 softfloat checks (was tcheck_d64_{sin,cos,exp}; consolidated post-fix).
+routine start()
+  show((1.0_d64).sin().$represent())
+  show((1.0_d64).cos().$represent())
+  show((1.0_d64).exp_unchecked().$represent())
+  return

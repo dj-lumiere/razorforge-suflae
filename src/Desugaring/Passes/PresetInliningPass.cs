@@ -245,6 +245,13 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
             VariableInfo? v = ctx.Registry.LookupVariable(id.Name);
             if (v is { IsPreset: true, PresetValue: not null })
             {
+                // Aggregate (Array[T,N]) presets are NOT inlined: substituting the whole list
+                // literal at every use site rebuilds the array per reference (codegen lowered it to
+                // a heap List rebuilt element-by-element — the fun_bench OOM). Keep the identifier so
+                // codegen emits a single `@preset.*` constant global and indexes into it.
+                if (v.IsPresettableAggregate)
+                    return expr;
+
                 // Carry the Phase-5 ResolvedType from the identifier onto the inlined value.
                 // This ensures operator-lowering and other subsequent passes see the correct type.
                 TypeInfo? resolvedType = id.ResolvedType ?? v.PresetValue.ResolvedType;

@@ -539,6 +539,32 @@ public partial class LlvmCodeGenerator
                     innerPtr = target;
                 }
             }
+            else if (wrapperRecord.HasDirectBackendType &&
+                (wrapBaseName == "Inspecting" || wrapBaseName == "Claiming") &&
+                wrapperRecord.TypeArguments is { Count: > 1 })
+            {
+                // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets
+                // the shared ShareController[T, P], NOT the entity. The entity ptr lives in the
+                // controller's `data` field (offset after the two atomic counts). Project through it,
+                // exactly like Retained/Tracked, so `v.value` reads the guarded entity rather than
+                // controller.strong_count (offset 0).
+                string policyName = wrapperRecord.TypeArguments[index: 1].FullName;
+                TypeInfo? controllerType = _registry.LookupType(
+                    name: $"ShareController[{innerEntity.FullName}, {policyName}]")
+                    ?? _registry.LookupType(
+                        name: $"Core.ShareController[{innerEntity.FullName}, {policyName}]");
+                if (controllerType is EntityTypeInfo controllerEntity)
+                {
+                    innerPtr = EmitEntityMemberVariableRead(sb: sb,
+                        entityPtr: target,
+                        entity: controllerEntity,
+                        memberVariableName: "data");
+                }
+                else
+                {
+                    innerPtr = target;
+                }
+            }
             else if (wrapperRecord.HasDirectBackendType)
             {
                 innerPtr = target;

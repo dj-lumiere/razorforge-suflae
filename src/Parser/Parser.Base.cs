@@ -726,6 +726,11 @@ _ => GrammarDiagnosticCode.UnexpectedToken
             TokenType.U64Literal => ParseTypedInteger<ulong>(text: text, suffix: "u64"),
             TokenType.U128Literal => ParseTypedInteger<UInt128>(text: text, suffix: "u128"),
 
+            // 256-bit integers have no .NET equivalent — defer the raw digits to the semantic
+            // analyzer (BigInteger range check) and codegen (emits the LLVM i256 constant).
+            TokenType.S256Literal => CleanNumericSuffix(text: text, suffix: "s256"),
+            TokenType.U256Literal => CleanNumericSuffix(text: text, suffix: "u256"),
+
             // Fixed-width floats with C# equivalents - parse immediately
             TokenType.F16Literal => ParseTypedFloat<Half>(text: text, suffix: "f16"),
             TokenType.F32Literal => ParseTypedFloat<float>(text: text, suffix: "f32"),

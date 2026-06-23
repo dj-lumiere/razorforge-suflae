@@ -202,57 +202,18 @@ public sealed partial class SemanticVerifier
         RoutineInfo? method = _registry.LookupMethod(type: lookupType, methodName: lookupName);
         if (method != null)
         {
-            if (hasTransparentTarget && IsReadOnlyTransparentProtocol(type: objectType) &&
-                !method.IsReadOnly)
-            {
-                ReportError(code: SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
-                    message:
-                    $"Cannot call writable member '{method.Name}' through read-only protocol '{objectType.Name}'. " +
-                    "Use Controlling[T] or a writable token instead.",
-                    location: member.Location);
-            }
-
-            // Validate method access
-            ValidateRoutineAccess(routine: method, accessLocation: member.Location);
-
-            TypeSymbol? returnType = method.ReturnType;
-
-            // Substitute return-type generic params with concrete types from the receiver
-            if (returnType != null)
-            {
-                var substitutions = new Dictionary<string, TypeSymbol>();
-
-                // GenericParameterTypeInfo owner -> map param name to receiver type
-                if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
-                {
-                    substitutions[key: genParamOwner.Name] = lookupType;
-                }
-
-                // Protocol owner -> map protocol generic params to receiver's type args
-                if (method.OwnerType is ProtocolTypeInfo protoOwner &&
-                    lookupType is { IsGenericResolution: true, TypeArguments: not null })
-                {
-                    ProtocolTypeInfo protoGenDef = protoOwner.GenericDefinition ?? protoOwner;
-                    if (protoGenDef.GenericParameters is { Count: > 0 })
-                    {
-                        for (int i = 0; i < protoGenDef.GenericParameters.Count &&
-                                        i < lookupType.TypeArguments.Count; i++)
-                        {
-                            substitutions[key: protoGenDef.GenericParameters[index: i]] =
-                                lookupType.TypeArguments[index: i];
-                        }
-                    }
-                }
-
-                if (substitutions.Count > 0)
-                {
-                    returnType = SubstituteWithMapping(type: returnType,
-                        substitutions: substitutions);
-                }
-            }
-
-            member.IsInFlight = method.IsInFlightReturn;
-            return returnType ?? _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+            // A BARE member access (`x.name`, no `()`) reads a member VARIABLE — it must not silently
+            // invoke a zero-arg method. (Method calls `x.name()` are resolved in AnalyzeCallExpression,
+            // which never routes through here.) Auto-calling masked real bugs: e.g. after a record drops
+            // a `sign` field but keeps a `sign()` accessor, `var s = w.sign` typechecked as the call
+            // result here, so validate-stdlib passed code that only failed at codegen
+            // ("Member variable 'sign' not found"). Keep `.name` (field) and `.name()` (call) distinct.
+            ReportError(code: SemanticDiagnosticCode.MemberNotFound,
+                message:
+                $"'{lookupName}' is a method on '{objectType.Name}', not a member variable. " +
+                $"Bare `.{lookupName}` reads a member variable; call the method as `{member.PropertyName}()`.",
+                location: member.Location);
+            return ErrorTypeInfo.Instance;
         }
 
         // For-loop destructuring lowering produces item0, item1, ... accesses on the element type.
@@ -1033,13 +994,18 @@ public sealed partial class SemanticVerifier
             .Select(selector: g => g.First())
             .ToList();
 
-        // The all-args creator `T(fields)` written *inside* T's own `$create` is the primitive
-        // field-init base case — it must NOT route back to `$create` (infinite recursion).
-        // Detect that self-reference and fall through to inline field-init.
+        // `T(...)` written *inside* T's own `$create` is the field-init base case ONLY when it
+        // resolves back to the SAME `$create` we are compiling (genuine self-recursion). A call to
+        // a *different* `$create` overload (e.g. `F128(from: hi)` -> `$create(from: U64)` inside
+        // `$create(from: U128)`) is an ordinary conversion and must route to that overload;
+        // otherwise codegen falls back to inline field-init and mis-lowers bit-carrier types like
+        // F128 to a raw integer reinterpret of the IEEE storage.
         bool insideOwnCreate = _currentRoutine is { Name: "$create" or "$create!" } currentCreate
             && currentCreate.OwnerType != null
             && (currentCreate.OwnerType.FullName == type.FullName
-                || currentCreate.OwnerType.Name == type.Name);
+                || currentCreate.OwnerType.Name == type.Name)
+            && userMatches.Count == 1
+            && ReferenceEquals(objA: userMatches[index: 0], objB: currentCreate);
 
         // Route through a unique user-defined `$create` (so its body runs). Otherwise — no
         // user match, ambiguous user overloads, or self-reference inside the creator — fall back

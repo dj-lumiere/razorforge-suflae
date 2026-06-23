@@ -1,0 +1,629 @@
+module Core
+
+# CREDITS: this software binary256 engine is a port and extension of TLFloat (© Naoki
+# Shibata and contributors, Boost Software License 1.0). See THIRD-PARTY-NOTICES.md.
+
+# ============================================================================
+# F256 — software IEEE 754 binary256 (octuple precision), pure-integer.
+# Storage: raw 256-bit container. Arithmetic, members and transcendentals all
+# run on the proven generic UnpackedFloat[U256, U512, 256] engine (the same
+# octuple engine TLFloat/F128 already validate); F256 only adds the packed
+# binary256 bit layout and the cast adapters.
+#
+# Layout: sign(1) | exponent(19, bias 262143) | mantissa(236).
+#   significand = 237 bits (236 stored + implicit). Engine nbmant = 254, so the
+#   round-out shift is W-238 = 18 (cf. F128's W-114 = 14 for 112-bit binary128).
+#
+# NOTE: there is no Core.F256 oracle (Core stops at F128). Arithmetic/sqrt/
+# rounding are correctly rounded to binary256 via the engine. Transcendentals
+# reuse the octuple cores at the same polynomial degrees F128's octuple path
+# uses (≈binary128-accurate, often more); deepening them to full binary256 ULP
+# is future work. Verified by exact identities + narrow-to-F128 cross-checks.
+# ============================================================================
+
+### A software octuple-precision binary float backed by a raw 256-bit container.
+@llvm("i256")
+record F256 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible
+  pass
+
+# ============================================================================
+# Width constants / bit masks (binary256)
+# ============================================================================
+
+### The implicit-bit mask `1 << 236`.
+routine f256a_implicit() -> U256
+  return shift_left[U256](value: 1, bits: uf_amt[U256](236_s64))
+
+### The 236-bit mantissa mask `(1 << 236) - 1`.
+routine f256a_mant_mask() -> U256
+  return sub[U256](a: f256a_implicit(), b: 1)
+
+### The sign-bit mask `1 << 255`.
+routine f256a_sign_mask() -> U256
+  return shift_left[U256](value: 1, bits: uf_amt[U256](255_s64))
+
+### The magnitude mask `~(1 << 255)` (all but the sign bit).
+routine f256a_abs_mask() -> U256
+  return sub[U256](a: f256a_sign_mask(), b: 1)
+
+### The infinity encoding `0x7FFFF << 236` for the given sign bit.
+routine f256a_inf(sign: U64) -> U256
+  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: uf_amt[U256](255_s64))
+  var e = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: uf_amt[U256](236_s64))
+  return bit_or[U256](a: s, b: e)
+
+### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
+routine f256a_qnan() -> U256
+  var e = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: uf_amt[U256](236_s64))
+  var q = shift_left[U256](value: 1, bits: uf_amt[U256](235_s64))
+  return bit_or[U256](a: e, b: q)
+
+### Sign-magnitude total-order key for comparison.
+routine f256a_order_key(bits: U256) -> U256
+  if int_ne[U256](a: bit_and[U256](a: bits, b: f256a_sign_mask()), b: 0)
+    return bit_xor[U256](a: bits, b: sub[U256](a: 0, b: 1))
+  return bit_or[U256](a: bits, b: f256a_sign_mask())
+
+# ============================================================================
+# Raw bit access
+# ============================================================================
+
+### Reinterprets this value as its raw IEEE 754 bit pattern.
+routine F256.to_bits() -> U256
+  return reinterpret_bits[F256, U256](me)
+
+### Builds a value directly from a raw IEEE 754 bit pattern.
+common routine F256.from_bits(bits: U256) -> F256
+  return reinterpret_bits[U256, F256](bits)
+
+### Widens a quad-precision `F128` to octuple `F256` (exact, pure bit surgery).
+### F128 (1+15+112, bias 16383) re-encodes into F256 (1+19+236, bias 262144). Always exact;
+### F128 subnormals normalize into the vast F256 normal range. Mirrors the F64->F128 widening
+### in `Numerics/F128.rf`. Used by decimal<-binary conversions, which round a binary value into
+### a decimal via `f256_to_d128`.
+routine F256.$create(from: F128) -> F256
+  var bits = from.to_bits()
+  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: 1, bits: uf_amt[U128](127_s64))), b: 0)
+  var e = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, uf_amt[U128](112_s64)), b: zero_extend[U64, U128](0x7FFF_u64)))
+  var f = bit_and[U128](a: bits, b: sub[U128](a: shift_left[U128](value: 1, bits: uf_amt[U128](112_s64)), b: 1))
+  var s256 = shift_left[U256](value: zero_extend[U64, U256](if sign then 1_u64 else 0_u64), bits: uf_amt[U256](255_s64))
+  # inf / nan: exponent all ones; carry the 112-bit payload up (quiet bit preserved).
+  if int_eq[U64](a: e, b: 0x7FFF_u64)
+    var m = shift_left[U256](value: zero_extend[U128, U256](f), bits: uf_amt[U256](124_s64))
+    var ew = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: uf_amt[U256](236_s64))
+    return F256.from_bits(bits: bit_or[U256](a: bit_or[U256](a: s256, b: ew), b: m))
+  # signed zero.
+  if int_eq[U64](a: e, b: 0_u64) and int_eq[U128](a: f, b: 0)
+    return F256.from_bits(bits: s256)
+  lateinit var e256: U64
+  lateinit var mant: U128
+  if int_eq[U64](a: e, b: 0_u64)
+    # subnormal F128: value = f * 2^-16494; normalize so the implicit bit lands at bit 112.
+    var msb = sub[U64](a: 127_u64, b: int_truncate[U128, U64](leading_zeros[U128](f)))
+    var shift = sub[U64](a: 112_u64, b: msb)
+    mant = bit_and[U128](a: shift_left[U128](value: f, bits: uf_amt[U128](reinterpret_bits[U64, S64](shift))), b: sub[U128](a: shift_left[U128](value: 1, bits: uf_amt[U128](112_s64)), b: 1))
+    # F256 exponent bias is 262143 (19-bit IEEE). subnormal: biased = (msb - 16494) + 262143.
+    e256 = add[U64](a: msb, b: 245649_u64)
+  else
+    mant = f
+    # normal: biased = (e - 16383) + 262143 = e + 245760.
+    e256 = add[U64](a: e, b: 245760_u64)
+  var ew = shift_left[U256](value: zero_extend[U64, U256](e256), bits: uf_amt[U256](236_s64))
+  var mw = shift_left[U256](value: zero_extend[U128, U256](mant), bits: uf_amt[U256](124_s64))
+  return F256.from_bits(bits: bit_or[U256](a: bit_or[U256](a: s256, b: ew), b: mw))
+
+### Returns the raw biased exponent field (0..524287).
+routine F256.raw_exponent() -> U64
+  return int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](me.to_bits(), uf_amt[U256](236_s64)), b: zero_extend[U64, U256](0x7FFFF_u64)))
+
+### Returns the raw 236-bit mantissa field (no implicit bit).
+routine F256.raw_mantissa() -> U256
+  return bit_and[U256](a: me.to_bits(), b: f256a_mant_mask())
+
+# ============================================================================
+# Classification
+# ============================================================================
+
+### Returns `true` when the value is negative (sign bit set).
+routine F256.is_negative() -> Bool
+  return int_ne[U256](a: bit_and[U256](a: me.to_bits(), b: f256a_sign_mask()), b: 0)
+
+### Returns `true` when the value is strictly positive.
+routine F256.is_positive() -> Bool
+  return not me.is_negative() and not me.is_zero()
+
+### Returns `true` when the value encodes a NaN.
+routine F256.is_nan() -> Bool
+  return me.raw_exponent() == 0x7FFFF_u64 and int_ne[U256](a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the value encodes positive or negative infinity.
+routine F256.is_infinite() -> Bool
+  return me.raw_exponent() == 0x7FFFF_u64 and int_eq[U256](a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the value is neither NaN nor infinity.
+routine F256.is_finite() -> Bool
+  return me.raw_exponent() != 0x7FFFF_u64
+
+### Returns `true` when the value is zero (either sign).
+routine F256.is_zero() -> Bool
+  return me.raw_exponent() == 0_u64 and int_eq[U256](a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the value is subnormal (denormalized, nonzero).
+routine F256.is_subnormal() -> Bool
+  return me.raw_exponent() == 0_u64 and int_ne[U256](a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the sign bit is set (C `signbit`; true for -0 and -NaN too).
+routine F256.signbit() -> Bool
+  return int_ne[U256](a: bit_and[U256](a: me.to_bits(), b: f256a_sign_mask()), b: 0)
+
+### Returns `true` for a finite, normal value (nonzero and not subnormal).
+routine F256.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
+### C `fpclassify`: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
+routine F256.fpclassify() -> FpClass
+  if me.is_nan()
+    return NAN
+  if me.is_infinite()
+    return INFINITE
+  if me.is_zero()
+    return ZERO
+  if me.is_subnormal()
+    return SUBNORMAL
+  return NORMAL
+
+### Returns the fractional part `me - trunc(me)`, preserving sign (frac(±inf) = ±0).
+routine F256.frac() -> F256
+  if me.is_nan()
+    return me
+  if me.is_infinite()
+    return F256.from_bits(bits: bit_and[U256](a: me.to_bits(), b: f256a_sign_mask()))
+  return me - me.trunc()
+
+# ============================================================================
+# Sign operations
+# ============================================================================
+
+### Returns the arithmetic negation (sign bit flipped).
+routine F256.$neg() -> F256
+  return F256.from_bits(bits: bit_xor[U256](a: me.to_bits(), b: f256a_sign_mask()))
+
+### Returns the absolute value (sign bit cleared).
+routine F256.abs() -> F256
+  return F256.from_bits(bits: bit_and[U256](a: me.to_bits(), b: f256a_abs_mask()))
+
+### Returns this magnitude carrying the sign of `sign`.
+routine F256.copysign(sign: F256) -> F256
+  var mag = bit_and[U256](a: me.to_bits(), b: f256a_abs_mask())
+  var sgn = bit_and[U256](a: sign.to_bits(), b: f256a_sign_mask())
+  return F256.from_bits(bits: bit_or[U256](a: mag, b: sgn))
+
+# ============================================================================
+# Comparison (pure sign-magnitude bit logic)
+# ============================================================================
+
+### Returns whether two values compare equal (NaN unequal; +0 == -0).
+routine F256.$eq(you: F256) -> Bool
+  if me.is_nan() or you.is_nan()
+    return false
+  if me.is_zero() and you.is_zero()
+    return true
+  return int_eq[U256](a: me.to_bits(), b: you.to_bits())
+
+### Compares this value with `you` under IEEE ordered semantics.
+routine F256.$cmp(you: F256) -> ComparisonSign
+  if me.is_nan() or you.is_nan()
+    return SAME
+  if me.is_zero() and you.is_zero()
+    return SAME
+  var ka = f256a_order_key(bits: me.to_bits())
+  var kb = f256a_order_key(bits: you.to_bits())
+  if unsigned_lt[U256](a: ka, b: kb)
+    return ME_SMALL
+  if unsigned_gt[U256](a: ka, b: kb)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Packed F256 <-> octuple UnpackedFloat[U256, U512, 256] casts
+# ============================================================================
+
+### Decodes this `F256` into the octuple unpacked engine value (exact).
+routine F256.to_uf() -> UnpackedFloat[U256, U512, 256]
+  var bits = me.to_bits()
+  var sign = int_ne[U256](a: bit_and[U256](a: bits, b: f256a_sign_mask()), b: 0)
+  var e = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, uf_amt[U256](236_s64)), b: zero_extend[U64, U256](0x7FFFF_u64)))
+  var f = bit_and[U256](a: bits, b: f256a_mant_mask())
+  if e == 0x7FFFF_u64
+    if int_ne[U256](a: f, b: 0)
+      return UnpackedFloat[U256, U512, 256].nan()
+    return UnpackedFloat[U256, U512, 256].inf(sign: sign)
+  if e == 0_u64 and int_eq[U256](a: f, b: 0)
+    return UnpackedFloat[U256, U512, 256].zero(sign: sign)
+  if e == 0_u64
+    var msbf = int_truncate[U256, S64](sub[U256](a: zero_extend[U64, U256](255_u64), b: leading_zeros[U256](f)))
+    var shift = sub[S64](a: 254_s64, b: msbf)
+    var mant = shift_left[U256](value: f, bits: uf_amt[U256](shift))
+    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: msbf, b: 262379_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  var sig = bit_or[U256](a: f, b: f256a_implicit())
+  var mant = shift_left[U256](value: sig, bits: uf_amt[U256](18_s64))
+  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 262144_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+
+### Packs the implicit-stripped significand and exponent into binary256 bits.
+routine f256a_pack(sign: U64, biased: U64, sig: U256) -> U256
+  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: uf_amt[U256](255_s64))
+  var e = shift_left[U256](value: zero_extend[U64, U256](biased), bits: uf_amt[U256](236_s64))
+  var f = bit_and[U256](a: sig, b: f256a_mant_mask())
+  return bit_or[U256](a: bit_or[U256](a: s, b: e), b: f)
+
+### Builds a subnormal binary256 encoding by shifting the significand down.
+routine f256a_finish_subnormal(sign: U64, sig: U256, under: S64) -> U256
+  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: uf_amt[U256](255_s64))
+  if signed_gt[S64](a: under, b: 236_s64)
+    return s
+  var lost = bit_and[U256](a: sig, b: uf_lowmask[U256](under))
+  var half = shift_left[U256](value: 1, bits: uf_amt[U256](sub[S64](a: under, b: 1_s64)))
+  var q = shift_right_unsigned[U256](sig, uf_amt[U256](under))
+  if unsigned_gt[U256](a: lost, b: half)
+    q = add[U256](a: q, b: 1)
+  elseif int_eq[U256](a: lost, b: half) and int_ne[U256](a: bit_and[U256](a: q, b: 1), b: 0)
+    q = add[U256](a: q, b: 1)
+  return bit_or[U256](a: s, b: q)
+
+### Rounds any octuple engine value back to an `F256` (round-to-nearest-even).
+### The mantissa shift is `W - 238` (18 for the 256-bit octuple engine).
+routine UnpackedFloat[M, L, W].to_f256a() -> F256
+  var sign = 0_u64
+  if me.sign()
+    sign = 1_u64
+  if me.isnan()
+    return F256.from_bits(bits: f256a_qnan())
+  if me.isinf()
+    return F256.from_bits(bits: f256a_inf(sign: sign))
+  if me.iszero()
+    return F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](sign), bits: uf_amt[U256](255_s64)))
+  var biased = add[S64](a: me.exp, b: 262144_s64)
+  var sh = sub[S64](a: reinterpret_bits[U64, S64](W), b: 238_s64)
+  var lost = bit_and[M](a: me.mant, b: uf_lowmask[M](sh))
+  var half = shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: sh, b: 1_s64)))
+  var sig = int_truncate[L, U256](zero_extend[M, L](shift_right_unsigned[M](me.mant, uf_amt[M](sh))))
+  if unsigned_gt[M](a: lost, b: half)
+    sig = add[U256](a: sig, b: 1)
+  elseif int_eq[M](a: lost, b: half) and int_ne[U256](a: bit_and[U256](a: sig, b: 1), b: 0)
+    sig = add[U256](a: sig, b: 1)
+  if int_ne[U256](a: bit_and[U256](a: sig, b: shift_left[U256](value: 1, bits: uf_amt[U256](237_s64))), b: 0)
+    sig = shift_right_unsigned[U256](sig, uf_amt[U256](1_s64))
+    biased = add[S64](a: biased, b: 1_s64)
+  if signed_ge[S64](a: biased, b: 524287_s64)
+    return F256.from_bits(bits: f256a_inf(sign: sign))
+  if signed_lt[S64](a: biased, b: 1_s64)
+    return F256.from_bits(bits: f256a_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased)))
+  return F256.from_bits(bits: f256a_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig))
+
+# ============================================================================
+# Software arithmetic (delegated to the octuple engine)
+# ============================================================================
+
+### Returns `me + you`.
+routine F256.$add(you: F256) -> F256
+  return me.to_uf().add(you: you.to_uf()).to_f256a()
+
+### Returns `me - you`.
+routine F256.$sub(you: F256) -> F256
+  return me.to_uf().sub(you: you.to_uf()).to_f256a()
+
+### Returns `me * you`.
+routine F256.$mul(you: F256) -> F256
+  return me.to_uf().mul(you: you.to_uf()).to_f256a()
+
+### Returns `me / you`.
+routine F256.$truediv(you: F256) -> F256
+  return me.to_uf().div(you: you.to_uf()).to_f256a()
+
+# ============================================================================
+# Exact members
+# ============================================================================
+
+### The constant 1.0 as an F256.
+routine f256a_one() -> F256
+  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a()
+
+### Returns the smaller of two values (NaN-propagating like the engine).
+routine F256.min(you: F256) -> F256
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  return if me <= you then me else you
+
+### Returns the larger of two values.
+routine F256.max(you: F256) -> F256
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  return if me >= you then me else you
+
+### Returns the positive difference `max(me - you, +0)` (C `fdim`).
+routine F256.fdim(you: F256) -> F256
+  if me.is_nan() or you.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if me > you
+    return me - you
+  return F256.from_bits(bits: zero_extend[U64, U256](0_u64))
+
+### Truncates toward zero to an integer value.
+routine F256.trunc() -> F256
+  return me.to_uf().trunc().to_f256a()
+
+### Rounds to nearest integer, ties away from zero.
+routine F256.round() -> F256
+  return me.to_uf().round().to_f256a()
+
+### Rounds to nearest integer, ties to even.
+routine F256.rint() -> F256
+  return me.to_uf().rint().to_f256a()
+
+### Largest integer <= me (C `floor`).
+routine F256.floor() -> F256
+  var t = me.trunc()
+  if me.is_negative() and t != me
+    return t - f256a_one()
+  return t
+
+### Smallest integer >= me (C `ceil`).
+routine F256.ceil() -> F256
+  var t = me.trunc()
+  if me.is_positive() and t != me
+    return t + f256a_one()
+  return t
+
+### Returns the correctly-rounded square root.
+routine F256.sqrt() -> F256
+  return me.to_uf().sqrt().to_f256a()
+
+# ============================================================================
+# Transcendentals (octuple engine cores; degrees per F128's octuple path)
+# ============================================================================
+
+### e raised to this value.
+routine F256.exp() -> F256
+  return me.to_uf().exp(n: 20_s64).to_f256a()
+
+### Natural logarithm.
+routine F256.log() -> F256
+  return me.to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).to_f256a()
+
+### exp(me) - 1.
+routine F256.expm1() -> F256
+  return me.to_uf().expm1(n: 21_s64).to_f256a()
+
+### log(1 + me).
+routine F256.log1p() -> F256
+  return me.to_uf().log1p(n: 23_s64, m: 0_s64).to_f256a()
+
+### Base-2 logarithm.
+routine F256.log2() -> F256
+  return me.to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).div(you: UnpackedFloat[U256, U512, 256].ln2()).to_f256a()
+
+### Base-10 logarithm.
+routine F256.log10() -> F256
+  return me.to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).div(you: UnpackedFloat[U256, U512, 256].ln10()).to_f256a()
+
+### 2 raised to this value.
+routine F256.exp2() -> F256
+  return me.to_uf().mul(you: UnpackedFloat[U256, U512, 256].ln2()).exp(n: 20_s64).to_f256a()
+
+### 10 raised to this value.
+routine F256.exp10() -> F256
+  return me.to_uf().mul(you: UnpackedFloat[U256, U512, 256].ln10()).exp(n: 20_s64).to_f256a()
+
+### me raised to the power `you`.
+### me ** you with the full C99 / IEEE pow special-case matrix (mirrors F128.pow):
+### odd-integer exponent sign rules, the pow(-1,±inf)=1 / pow(1,NaN)=1 carve-outs, and
+### pow(negative, non-integer) = NaN. Finite results go through exp(you*log|me|).
+routine F256.$pow(you: F256) -> F256
+  var one = UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a()
+  var poszero = F256.from_bits(bits: zero_extend[U64, U256](0_u64))
+  var negzero = F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](255_s64)))
+  var posinf = F256.from_bits(bits: f256a_inf(sign: 0_u64))
+  var neginf = F256.from_bits(bits: f256a_inf(sign: 1_u64))
+  var negone = poszero - one
+  var mefin = not me.is_nan() and not me.is_infinite()
+  var youfin = not you.is_nan() and not you.is_infinite()
+  var yo = you.to_uf()
+  var yisint = yo.isint()
+  var yisoddint = yisint and not yo.iseven()
+  var iseqone = int_eq[U256](a: me.to_bits(), b: one.to_bits())
+  var iseqnegone = int_eq[U256](a: me.to_bits(), b: negone.to_bits())
+  var xs = 0_u64
+  if me.is_negative()
+    xs = 1_u64
+  if me.is_negative() and mefin and not me.is_zero() and youfin and not yisint
+    return F256.from_bits(bits: f256a_qnan())
+  if iseqone or you.is_zero()
+    return one
+  if me.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if you.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if not you.is_negative() and not you.is_zero() and me.is_zero() and yisoddint
+    return me
+  if me.is_zero() and not you.is_negative() and not you.is_zero() and not yisoddint
+    return poszero
+  if you.is_infinite() and iseqnegone
+    return one
+  var absxlt1 = unsigned_lt[U256](a: me.abs().to_bits(), b: one.to_bits())
+  var absxgt1 = unsigned_gt[U256](a: me.abs().to_bits(), b: one.to_bits())
+  if you.is_infinite() and you.is_negative() and absxlt1
+    return posinf
+  if you.is_infinite() and you.is_negative() and absxgt1
+    return poszero
+  if you.is_infinite() and not you.is_negative() and absxlt1
+    return poszero
+  if you.is_infinite() and not you.is_negative() and absxgt1
+    return posinf
+  if me.is_infinite() and me.is_negative() and you.is_negative() and yisoddint
+    return negzero
+  if me.is_infinite() and me.is_negative() and you.is_negative() and not you.is_zero() and not yisoddint
+    return poszero
+  if me.is_infinite() and me.is_negative() and not you.is_negative() and yisoddint
+    return neginf
+  if me.is_infinite() and me.is_negative() and not you.is_negative() and not you.is_zero() and not yisoddint
+    return posinf
+  if me.is_infinite() and not me.is_negative() and you.is_negative() and not you.is_zero()
+    return poszero
+  if me.is_infinite() and not me.is_negative() and not you.is_negative() and not you.is_zero()
+    return posinf
+  if me.is_zero() and yisoddint and you.is_negative()
+    return F256.from_bits(bits: f256a_inf(sign: xs))
+  if me.is_zero() and you.is_negative() and not you.is_zero() and not yisoddint
+    return posinf
+  var z = me.abs().to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).mul(you: yo).exp(n: 20_s64)
+  if me.is_negative() and yisoddint
+    z = z.neg()
+  return z.to_f256a()
+
+### Cube root.
+routine F256.cbrt() -> F256
+  return me.to_uf().cbrt().to_f256a()
+
+### Hypotenuse sqrt(me^2 + you^2) (engine arithmetic).
+routine F256.hypot(you: F256) -> F256
+  var a = me.abs()
+  var b = you.abs()
+  return (a * a + b * b).sqrt()
+
+### Fused multiply-add me*b + c with a single rounding.
+routine F256.fma(b: F256, c: F256) -> F256
+  return me.to_uf().fma(b: b.to_uf(), c: c.to_uf()).to_f256a()
+
+### Sine.
+routine F256.sin() -> F256
+  return me.to_uf().sin(n: 16_s64).to_f256a()
+
+### Cosine.
+routine F256.cos() -> F256
+  return me.to_uf().cos().to_f256a()
+
+### Tangent.
+routine F256.tan() -> F256
+  return me.to_uf().tan().to_f256a()
+
+### Arcsine.
+routine F256.asin() -> F256
+  return me.to_uf().asin().to_f256a()
+
+### Arccosine.
+routine F256.acos() -> F256
+  return me.to_uf().acos().to_f256a()
+
+### Arctangent.
+routine F256.atan() -> F256
+  return me.to_uf().atan().to_f256a()
+
+### Two-argument arctangent atan2(me, x).
+routine F256.atan2(x: F256) -> F256
+  return me.to_uf().atan2(x0: x.to_uf()).to_f256a()
+
+### Hyperbolic sine.
+routine F256.sinh() -> F256
+  return me.to_uf().sinh().to_f256a()
+
+### Hyperbolic cosine.
+routine F256.cosh() -> F256
+  return me.to_uf().cosh().to_f256a()
+
+### Hyperbolic tangent.
+routine F256.tanh() -> F256
+  return me.to_uf().tanh().to_f256a()
+
+### Inverse hyperbolic sine.
+routine F256.asinh() -> F256
+  return me.to_uf().asinh().to_f256a()
+
+### Inverse hyperbolic cosine.
+routine F256.acosh() -> F256
+  return me.to_uf().acosh().to_f256a()
+
+### Inverse hyperbolic tangent.
+routine F256.atanh() -> F256
+  return me.to_uf().atanh().to_f256a()
+
+# ============================================================================
+# Error / gamma functions (W=256 generic cores, shared with D128's f256_* surface)
+# ============================================================================
+
+### Error function erf(me).
+routine F256.erf() -> F256
+  return f256_erf(x: me)
+
+### Complementary error function erfc(me) = 1 - erf(me).
+routine F256.erfc() -> F256
+  return f256_erfc(x: me)
+
+### Gamma function tgamma(me).
+routine F256.tgamma() -> F256
+  return f256_tgamma(x: me)
+
+### Natural log of |gamma(me)|.
+routine F256.lgamma() -> F256
+  return f256_lgamma(x: me)
+
+# ============================================================================
+# Scaling / decomposition (engine-exact, no rounding)
+# ============================================================================
+
+### Multiplies by 2^n exactly when representable (C `scalbn` / `ldexp`).
+routine F256.scalbn(n: S64) -> F256
+  if not me.is_finite() or me.is_zero()
+    return me
+  return me.to_uf().ldexp(e: n).to_f256a()
+
+### Alias of `scalbn` (C `ldexp`).
+routine F256.ldexp(n: S64) -> F256
+  return me.scalbn(n: n)
+
+### Splits into a fraction in [0.5,1) and a power-of-two exponent (C `frexp`).
+routine F256.frexp() -> (F256, S64)
+  if me.is_zero() or me.is_infinite() or me.is_nan()
+    return (F256.from_bits(bits: me.to_bits()), 0_s64)
+  var p = me.to_uf().frexp()
+  return (p.item0.to_f256a(), p.item1)
+
+### Splits into integer and fractional parts (C `modf`); both carry me's sign.
+routine F256.modf() -> (F256, F256)
+  if me.is_nan()
+    return (me, me)
+  if me.is_infinite()
+    return (me, F256.from_bits(bits: bit_and[U256](a: me.to_bits(), b: f256a_sign_mask())))
+  var ip = me.trunc()
+  return (ip, me - ip)
+
+### Larger of me and you (C `fmax`; NaN-quieting alias of `max`).
+routine F256.fmax(you: F256) -> F256
+  return me.max(you: you)
+
+### Smaller of me and you (C `fmin`; NaN-quieting alias of `min`).
+routine F256.fmin(you: F256) -> F256
+  return me.min(you: you)
+
+# ============================================================================
+# Text — narrow to F128 for a readable decimal (full binary256 %g is TODO).
+# ============================================================================
+
+### Narrows this value to F128 (binary128) by re-rounding through the engine.
+routine F256.to_f128() -> F128
+  return me.to_uf().to_f128()
+
+### Returns the decimal text (narrowed to binary128 precision for display).
+routine F256.$represent() -> Text
+  if me.is_nan()
+    return "NaN"
+  if me.is_infinite()
+    return if me.is_negative() then "-inf" else "inf"
+  return me.to_f128().$represent()
+
+### Returns a diagnostic representation tagged with the type name.
+routine F256.$diagnose() -> Text
+  return "F256(" + me.$represent() + ")"

@@ -1,0 +1,38 @@
+module Tests/Stdlib/F128SoftfloatApi
+import IO/Console
+
+# Covers the software F128 engine: arithmetic, comparison, and libm all run through
+# the pure-integer UnpackedFloat engine (no TLFloat FFI, no LLVM fp128). Integer
+# constructors (S64/U64/S128/U128) and float widen/narrow are pure-RF too.
+
+routine start()
+  var a = F128(from: 2_s64)
+  var b = F128(from: 3_s64)
+  show(f"2+3 = {a + b}")
+  show(f"2-3 = {a - b}")
+  show(f"2*3 = {a * b}")
+  show(f"3/2 = {b / a}")
+  show(f"sqrt(2) = {a.sqrt_unchecked()}")
+  show(f"exp(1) = {F128(from: 1_s64).exp_unchecked()}")
+  show(f"log(2) = {a.log_unchecked()}")
+  show(f"2<3 = {a < b}")
+  show(f"2==2 = {a == F128(from: 2_s64)}")
+  show(f"max(2,3) = {a.max(you: b)}")
+  show(f"clamp(3,0,2) = {b.clamp(min_val: F128(from: 0_s64), max_val: a)}")
+
+  # Integer constructors through the engine.
+  var big = F128(from: 1000000000000000000_s64)
+  show(f"from s64 1e18 = {big}")
+  var u = F128(from: 18446744073709551615_u64)
+  show(f"from u64 max = {u}")
+  var s128v = F128(from: 170141183460469231731687303715884105727_s128)
+  show(f"from s128 max = {s128v}")
+
+  # Float widen (F64 -> F128, exact) and narrow (F128 -> F64, correctly rounded).
+  var w = F128(from: 1.5_f64)
+  show(f"from f64 1.5 = {w}")
+  show(f"to f64 1.5 = {w.F64()}")
+  show(f"3/2 to f64 = {(b / a).F64()}")
+  show(f"pi to f64 = {F128_PI.F64()}")
+  show(f"to f32 = {w.F32()}")
+  return

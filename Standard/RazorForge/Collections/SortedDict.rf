@@ -427,7 +427,7 @@ routine SortedDict[K, V].$getitem!(key: Referring[K]) -> ?V
     throw KeyNotFoundError(key: key.$represent())
   danger!
     var root_ref = me.root!!.as_entity()
-    return me.get_from_node(node: root_ref, key: key)
+    return me.get_from_node!(node: root_ref, key: key)
 
 ### Descends `node` to retrieve the value for `key`, throwing if not found.
 ### :param node: The subtree root to search.
@@ -441,7 +441,7 @@ dangerous routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[
     return node.value_get(i)
   if node.is_leaf
     throw KeyNotFoundError(key: key.$represent())
-  return me.get_from_node(node: node.children_get(i).as_entity(), key: key)
+  return me.get_from_node!(node: node.children_get(i).as_entity(), key: key)
 
 ### Updates the value associated with `key`.
 ### :param key: The key to update.

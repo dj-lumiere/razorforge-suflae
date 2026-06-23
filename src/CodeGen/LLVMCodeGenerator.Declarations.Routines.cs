@@ -15,6 +15,12 @@ public partial class LlvmCodeGenerator
 {
     private void GenerateRoutineDeclaration(RoutineInfo routine, string? nameOverride = null)
     {
+        // Record the reference: if we are emitting a routine body, this routine is a real callee and
+        // must itself be emitted. Gated on _emittingRoutineBody so the broad declaration pre-pass
+        // (which declares much of the registry up front) does not mark everything referenced.
+        if (_emittingRoutineBody)
+            _referencedKeys.Add(item: routine.RegistryKey);
+
         string funcName = nameOverride ?? MangleRoutineName(routine: routine);
 
         // Skip if already generated
@@ -62,6 +68,8 @@ public partial class LlvmCodeGenerator
         bool isCExtern = routine.CallingConvention == "C";
         paramTypes.AddRange(collection: routine.Parameters.Select(selector: param =>
         {
+            // By-ref struct-record thread arg: the worker receives a pointer to the spawner's cell.
+            if (IsByRefThreadArg(routine: routine, param: param)) return "ptr";
             string t = GetParameterLlvmType(type: param.Type);
             if (isCExtern && t == "half") return "i16";
             string attrs = GetExplicitParameterAttributes(type: param.Type);
@@ -126,6 +134,18 @@ public partial class LlvmCodeGenerator
             _rfRoutineDeclarations[key: funcName] =
                 $"declare {returnPrefix}{returnType} @{funcName}({parameters})";
         }
+
+        // Over-prune tripwire: this declare was emitted because an emitted body references the
+        // routine, and it is a real RF routine (not a bodyless C extern), so it MUST also be
+        // defined. Record it so the post-fixpoint check in GenerateRoutineDefinitions can catch a
+        // reachability over-prune (a called routine whose body got dropped) as a located codegen
+        // error rather than a downstream linker "undefined symbol". Gated on _emittingRoutineBody
+        // so the broad declaration pre-pass — which declares much of the registry but references
+        // nothing — does not enroll dead routines.
+        if (_emittingRoutineBody && !isCExtern)
+        {
+            _expectedBodyNames.Add(item: funcName);
+        }
     }
 
     /// <summary>
@@ -169,9 +189,23 @@ public partial class LlvmCodeGenerator
                 int dotIdx = baseName.IndexOf(value: '.');
                 if (dotIdx > 0)
                 {
+                    // Member declaration (e.g. "UnpackedFloat[M, L, W].cbrt"). Resolve scoped
+                    // to the owner type FIRST: the owner-qualified LookupRoutine above can miss
+                    // when the AST name carries generic params (BaseName drops them), and a bare
+                    // short-name lookup could otherwise bind this method's body to a same-named
+                    // free/external routine of a DIFFERENT owner. That mis-binds a generic method
+                    // (e.g. UnpackedFloat.cbrt) to a concrete routine, bypassing the generic-def
+                    // skip below and emitting its body with unbound generics ("Unresolved generic
+                    // method ... reached LLVM codegen").
+                    string ownerPart = baseName[..dotIdx];
+                    int bracketIdx = ownerPart.IndexOf(value: '[');
+                    if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
                     string shortName = baseName[(dotIdx + 1)..];
-                    routineInfo = _registry.LookupRoutine(fullName: shortName) ??
-                                  _registry.LookupRoutineByName(name: shortName);
+                    TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                    if (ownerType != null)
+                        routineInfo = _registry.LookupMethod(type: ownerType, methodName: shortName);
+                    routineInfo ??= _registry.LookupRoutine(fullName: shortName) ??
+                                    _registry.LookupRoutineByName(name: shortName);
                 }
                 else
                 {
@@ -205,7 +239,30 @@ public partial class LlvmCodeGenerator
 
                 if (astParamTypes.Count == routine.Parameters.Count)
                 {
-                    RoutineInfo? overload =
+                    RoutineInfo? overload = null;
+
+                    // Member declaration (Owner.method): disambiguate OWNER-SCOPED. The base-name
+                    // path below fails here — routineInfo.BaseName for a member routine is the bare
+                    // "F64.$create" (no module prefix), but overloads register under
+                    // "Core.F64.$create#…", and LookupRoutineOverload's Core-prefix fallback is
+                    // disabled whenever the base name contains a '.' (which member names always do).
+                    // So it would silently fall back to the first-registered overload, ignoring the
+                    // arg types we just computed. LookupMethodOverload collects the owner type's
+                    // member candidates and matches positionally by arg type instead.
+                    int dotIdx = routine.Name.IndexOf(value: '.');
+                    if (dotIdx > 0)
+                    {
+                        string ownerPart = routine.Name[..dotIdx];
+                        int bracketIdx = ownerPart.IndexOf(value: '[');
+                        if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
+                        string shortName = routine.Name[(dotIdx + 1)..];
+                        TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                        if (ownerType != null)
+                            overload = _registry.LookupMethodOverload(type: ownerType,
+                                methodName: shortName, argTypes: astParamTypes);
+                    }
+
+                    overload ??=
                         _registry.LookupRoutineOverload(baseName: routineInfo.BaseName,
                             argTypes: astParamTypes);
                     if (overload != null)
@@ -288,9 +345,13 @@ public partial class LlvmCodeGenerator
         // Sanitize names that conflict with LLVM's reserved block label "entry"
         paramList.AddRange(collection:
             from param in routineInfo.Parameters
-            let paramType = GetParameterLlvmType(type: param.Type)
-            let paramAttrs = GetExplicitParameterAttributes(type: param.Type)
-            let emittedName = param.Name == "entry" ? "entry_" : param.Name
+            let byRefThreadArg = IsByRefThreadArg(routine: routineInfo, param: param)
+            let paramType = byRefThreadArg ? "ptr" : GetParameterLlvmType(type: param.Type)
+            let paramAttrs = byRefThreadArg ? string.Empty : GetExplicitParameterAttributes(type: param.Type)
+            // By-ref thread arg: name the parameter `%<name>.addr` so it doubles as the cell's
+            // lvalue address (mirrors by-ref `me`); the prologue then skips the alloca/store copy.
+            let emittedName = byRefThreadArg ? $"{param.Name}.addr"
+                : param.Name == "entry" ? "entry_" : param.Name
             select string.IsNullOrEmpty(paramAttrs)
                 ? $"{paramType} %{emittedName}"
                 : $"{paramType} {paramAttrs} %{emittedName}");
@@ -320,8 +381,10 @@ public partial class LlvmCodeGenerator
         bool isInline = routineInfo.Annotations.Contains(value: "inline");
         string returnPrefix = isCreator && returnType == "ptr" ? "noalias " : "";
         string funcAttrs = isInline ? " alwaysinline" : "";
-        EmitLine(sb: _functionDefinitions,
-            line: $"define {returnPrefix}{returnType} @{funcName}({parameters}){funcAttrs} {{");
+        string defineHeader =
+            $"define {returnPrefix}{returnType} @{funcName}({parameters}){funcAttrs} {{";
+        _generatedRoutineDefHeaders[key: funcName] = defineHeader;
+        EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();
 
@@ -359,6 +422,7 @@ public partial class LlvmCodeGenerator
             _functionDefinitions.Length = savedLength;
             _tempCounter = savedTempCounter;
             _generatedRoutineDefs.Remove(item: funcName);
+            _generatedRoutineDefHeaders.Remove(key: funcName);
             _generatedRoutines.Remove(item: funcName);
             throw;
         }
@@ -374,6 +438,13 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void GenerateRoutineBody(StringBuilder sb, Statement body, RoutineInfo routine) // NOSONAR S3776
     {
+        // Mark that we are emitting a body: every routine declared (referenced) from here on is a
+        // real callee of an emitted routine, so it must itself be emitted. Save/restore in case a
+        // body's emission ever re-enters this method.
+        bool prevEmittingBody = _emittingRoutineBody;
+        _emittingRoutineBody = true;
+        try
+        {
         // Clear local variables for this function
         _localVariables.Clear();
         _localVarLlvmNames.Clear();
@@ -430,6 +501,15 @@ public partial class LlvmCodeGenerator
         // Register parameters as local variables
         foreach (ParameterInfo param in routine.Parameters)
         {
+            // By-ref struct-record thread arg: `%<name>.addr` IS the parameter (a pointer to the
+            // spawner's cell), exactly like a by-ref `me`. No alloca/store — field/method access
+            // resolves through the address and reaches the shared cell directly.
+            if (IsByRefThreadArg(routine: routine, param: param))
+            {
+                _localVariables[key: param.Name] = param.Type;
+                continue;
+            }
+
             // Parameters are passed as value, create a local copy
             // Use "entry_" instead of "entry" to avoid conflict with the entry: block label
             string emittedParamName = param.Name == "entry" ? "entry_" : param.Name;
@@ -536,6 +616,11 @@ public partial class LlvmCodeGenerator
         {
             string zeroValue = GetZeroValue(type: routine.ReturnType!);
             EmitLine(sb: sb, line: $"  ret {retType} {zeroValue}");
+        }
+        }
+        finally
+        {
+            _emittingRoutineBody = prevEmittingBody;
         }
     }
 
@@ -868,6 +953,36 @@ public partial class LlvmCodeGenerator
 
     private static bool IsByRefMeReceiver(RoutineInfo routine) =>
         IsByRefMeRecord(ownerType: routine.OwnerType);
+
+    /// <summary>
+    /// A <b>thread-shareable</b> record argument to a <c>threaded routine</c> is passed BY
+    /// REFERENCE: the worker's parameter is a pointer to the spawner's storage, so every worker
+    /// that receives the same cell operates on one address (the basis of <c>Atomic[T]</c>
+    /// cross-thread sharing). This mirrors the by-ref <c>me</c> convention — the parameter doubles
+    /// as the field/method-access base, no alloca/store copy.
+    /// <para>
+    /// Only types that carry their own synchronization (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>)
+    /// are shared this way. Every OTHER record falls through to the normal by-value parameter path
+    /// (an independent copy is materialised in the worker's prologue), so unsynchronized state can
+    /// never silently alias across the thread boundary. Plain scalar value types
+    /// (numerics, <c>Hijacked</c>, ...) were always by value. SA (RF-S632) rejects by-ref records
+    /// that are neither shareable nor trivially copyable, so they never reach codegen.
+    /// </para>
+    /// </summary>
+    private static bool IsByRefThreadArg(RoutineInfo routine, ParameterInfo param) =>
+        routine.AsyncStatus == AsyncStatus.Threaded &&
+        IsByRefMeRecord(ownerType: param.Type) &&
+        IsThreadShareableType(type: param.Type);
+
+    /// <summary>
+    /// True when a type carries its own cross-thread synchronization — the atomic / shared-ownership
+    /// wrappers <c>Atomic[T]</c>, <c>Shared[T,P]</c>, <c>Watched[T,P]</c>. These may be passed by
+    /// reference across a thread boundary; everything else is copied. Mirrors the SA-side
+    /// <c>IsThreadShareable</c>.
+    /// </summary>
+    private static bool IsThreadShareableType(TypeInfo? type) =>
+        type != null &&
+        GetGenericBaseNameStatic(type: type) is "Atomic" or "Shared" or "Watched";
 
     /// <summary>
     /// Gets the zero/default value for a type.

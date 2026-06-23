@@ -619,9 +619,14 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 // D-AST-6: hoist to var _cif_N: T; if cond { _cif_N = a } else { _cif_N = b }
                 // ResolvedType must be set -- SA annotates user ternaries, and synthesized
                 // ConditionalExpression nodes (from DerivedOperatorPass) are explicitly typed.
-                TypeInfo? resultType = cond.ResolvedType
-                    ?? cond.TrueExpression.ResolvedType
-                    ?? cond.FalseExpression.ResolvedType;
+                // Prefer a concrete (non-generic-definition) candidate: SA types a conditional from
+                // its TRUE branch, and in a monomorphized body `if e==0 then me else …` the cond node's
+                // own ResolvedType can keep the generic self-type `UnpackedFloat[M,L,W]` (the
+                // rewriter concretizes the `me` IDENTIFIER but not the conditional node it feeds). A
+                // generic-definition record lowers to `ptr` (GetLlvmType), mistyping the `_cif` slot —
+                // so fall through to a branch type that the rewriter DID concretize.
+                TypeInfo? resultType = FirstConcrete(cond.ResolvedType,
+                    cond.TrueExpression.ResolvedType, cond.FalseExpression.ResolvedType);
                 if (resultType == null)
                     throw new InvalidOperationException(
                         $"ConditionalExpression reached ExpressionLoweringPass without a resolved type " +
@@ -950,11 +955,13 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     "S16"     => TokenType.S16Literal,
                     "S32"     => TokenType.S32Literal,
                     "S128"    => TokenType.S128Literal,
+                    "S256"    => TokenType.S256Literal,
                     "U8"      => TokenType.U8Literal,
                     "U16"     => TokenType.U16Literal,
                     "U32"     => TokenType.U32Literal,
                     "U64"     => TokenType.U64Literal,
                     "U128"    => TokenType.U128Literal,
+                    "U256"    => TokenType.U256Literal,
                     "Address" => TokenType.AddressLiteral,
                     "Integer" => TokenType.IntegerLiteral,
                     _         => TokenType.S64Literal  // This should be language specific: Suflae should use IntegerLiteral
@@ -2062,16 +2069,40 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Adds <c>var name: T</c> (no initializer) to <paramref name="hoisted"/>.</summary>
+    /// <summary>
+    /// Picks the first candidate type that is concrete (not a generic-definition record/entity,
+    /// which would lower to <c>ptr</c>), falling back to the first non-null candidate. Used to type
+    /// a hoisted result temp from a conditional/when whose own ResolvedType may carry a stale generic
+    /// self-type even when a branch was concretized during monomorphization.
+    /// </summary>
+    private static TypeInfo? FirstConcrete(params TypeInfo?[] candidates)
+    {
+        TypeInfo? firstNonNull = null;
+        foreach (TypeInfo? c in candidates)
+        {
+            if (c == null) continue;
+            firstNonNull ??= c;
+            if (!c.IsGenericDefinition) return c;
+        }
+        return firstNonNull;
+    }
+
     private static void AddTempVarUninit(
         List<Statement> hoisted, string name, TypeInfo? typeHint, SourceLocation loc)
     {
         if (typeHint == null) return; // can't emit without a type; leave to codegen fallback
+        // IsLateInit so codegen zero-inits the placeholder (entities get a calloc'd block, value/
+        // managed-leaf records get zeroinitializer). Each when/`??`/`?.` arm assigns this temp, and
+        // an owned-type assignment releases the OLD value first (entities via ScopeTeardownLoweringPass,
+        // managed-leaf records via TemporaryTeardownPass) — so the placeholder it tears down on the
+        // first assignment must be a null-safe zeroed value, not garbage.
         var decl = new VariableDeclaration(
             Name: name,
             Type: TypeInfoToExpr(typeHint, loc),
             Initializer: null,
             Visibility: VisibilityModifier.Secret,
-            Location: loc);
+            Location: loc,
+            IsLateInit: true);
         hoisted.Add(new DeclarationStatement(Declaration: decl, Location: loc));
     }
 

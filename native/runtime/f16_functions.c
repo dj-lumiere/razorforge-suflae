@@ -464,3 +464,33 @@ uint16_t rf_f16_remainder(uint16_t x, uint16_t y)
 {
     return rf_f16_from_f32(remainderf(rf_f16_to_f32(x), rf_f16_to_f32(y)));
 }
+// ============================================================================
+// Extended libm for binary16: erf/erfc/tgamma/lgamma, sinpi/cospi/tanpi, exp10,
+// scalbn, ilogb, rint, fdim (all via the f32 path), plus a 16-bit nextafter.
+// ============================================================================
+
+uint16_t rf_f16_erf(uint16_t x)    { return rf_f16_from_f32(erff(rf_f16_to_f32(x))); }
+uint16_t rf_f16_erfc(uint16_t x)   { return rf_f16_from_f32(erfcf(rf_f16_to_f32(x))); }
+uint16_t rf_f16_tgamma(uint16_t x) { return rf_f16_from_f32(tgammaf(rf_f16_to_f32(x))); }
+uint16_t rf_f16_lgamma(uint16_t x) { return rf_f16_from_f32(lgammaf(rf_f16_to_f32(x))); }
+uint16_t rf_f16_exp10(uint16_t x)  { return rf_f16_from_f32(powf(10.0f, rf_f16_to_f32(x))); }
+uint16_t rf_f16_sinpi(uint16_t x)  { return rf_f16_from_f32(rf_f32_sinpi(rf_f16_to_f32(x))); }
+uint16_t rf_f16_cospi(uint16_t x)  { return rf_f16_from_f32(rf_f32_cospi(rf_f16_to_f32(x))); }
+uint16_t rf_f16_tanpi(uint16_t x)  { return rf_f16_from_f32(rf_f32_tanpi(rf_f16_to_f32(x))); }
+uint16_t rf_f16_rint(uint16_t x)   { return rf_f16_from_f32(rintf(rf_f16_to_f32(x))); }
+uint16_t rf_f16_fdim(uint16_t x, uint16_t y) { return rf_f16_from_f32(fdimf(rf_f16_to_f32(x), rf_f16_to_f32(y))); }
+uint16_t rf_f16_scalbn(uint16_t x, int64_t n) { return rf_f16_from_f32(scalbnf(rf_f16_to_f32(x), (int)n)); }
+int64_t  rf_f16_ilogb(uint16_t x)  { return (int64_t)ilogbf(rf_f16_to_f32(x)); }
+
+// Adjacent binary16 value toward y, walking the 16-bit sign-magnitude pattern.
+uint16_t rf_f16_nextafter(uint16_t x, uint16_t y) {
+    if (rf_f16_isnan(x)) return x;
+    if (rf_f16_isnan(y)) return y;
+    float fx = rf_f16_to_f32(x), fy = rf_f16_to_f32(y);
+    if (fx == fy) return y;
+    uint16_t mag = x & 0x7FFF, sgn = x & 0x8000;
+    if (mag == 0) return (uint16_t)((fy > 0.0f ? 0x0000 : 0x8000) | 1); // ±0 -> smallest subnormal toward y
+    int larger_mag = (fx > 0.0f && fy > fx) || (fx < 0.0f && fy < fx);
+    mag = (uint16_t)(larger_mag ? mag + 1 : mag - 1);
+    return (uint16_t)(sgn | mag);
+}

@@ -63,11 +63,6 @@
           "match": "\\b(using)\\b"
         },
         {
-          "comment": "Async",
-          "name": "keyword.control.razorforge",
-          "match": "\\b(waitfor|within|after)\\b"
-        },
-        {
           "comment": "Generic constraints and associated types",
           "name": "keyword.other.razorforge",
           "match": "\\b(needs|relates)\\b"

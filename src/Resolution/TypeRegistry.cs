@@ -160,6 +160,17 @@ public sealed partial class TypeRegistry
     private readonly Dictionary<string, string> _moduleNames =
         new(comparer: StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Maps already-registered source files (by normalized full path) to their declared
+    /// module name. Used to dedup module loading by RESOLVED FILE PATH rather than by
+    /// import-path alias: a bare <c>module Fun2</c> shared across files means
+    /// <c>import Fun2.A</c>, <c>import Fun2/A</c>, and <c>import Fun2</c> can all resolve to
+    /// the same file, and each must be served from the existing registration instead of
+    /// re-parsing/re-registering it (which produces duplicate-definition errors).
+    /// </summary>
+    private readonly Dictionary<string, string> _loadedFilePaths =
+        new(comparer: StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The module resolver for finding module files.</summary>
     private ModuleResolver? _moduleResolver;
 
@@ -182,12 +193,22 @@ public sealed partial class TypeRegistry
     /// duplicate-definition errors.
     /// </summary>
     /// <param name="modulePath">The declared module path, verbatim (e.g. "MathUtils", "Geo/Shapes").</param>
-    public void MarkModuleProvided(string modulePath)
+    /// <param name="filePath">
+    /// The source file that declared the module, if known. Recorded so a later import that
+    /// resolves to this same file (by any import-path alias) is served from the existing
+    /// registration instead of re-loading the file. See <see cref="_loadedFilePaths"/>.
+    /// </param>
+    public void MarkModuleProvided(string modulePath, string? filePath = null)
     {
         string moduleId = modulePath.Replace(oldChar: '/', newChar: '.')
                                     .Replace(oldChar: '\\', newChar: '.');
         _loadedModules.Add(item: moduleId);
         _moduleNames.TryAdd(key: moduleId, value: modulePath);
+
+        if (filePath != null)
+        {
+            _loadedFilePaths.TryAdd(key: Path.GetFullPath(path: filePath), value: modulePath);
+        }
     }
 
     #endregion
@@ -421,6 +442,20 @@ public sealed partial class TypeRegistry
             return false;
         }
 
+        // Dedup by RESOLVED FILE PATH: the file may already be registered under a different
+        // import-path alias (e.g. the build pipeline pre-marked `module Fun2` from Fun2/A.rf,
+        // and we're now serving `import Fun2.A` which resolves back to that same file). Serve
+        // it from the existing registration instead of re-parsing/re-registering it, which
+        // would raise duplicate-definition errors.
+        string fullResolvedPath = Path.GetFullPath(path: resolvedPath);
+        if (_loadedFilePaths.TryGetValue(key: fullResolvedPath, value: out string? alreadyLoadedModule))
+        {
+            _loadedModules.Add(item: moduleId);
+            effectiveModule = alreadyLoadedModule;
+            _moduleNames[key: moduleId] = alreadyLoadedModule;
+            return true;
+        }
+
         // Mark as loaded before parsing to prevent infinite recursion
         _loadedModules.Add(item: moduleId);
 
@@ -431,6 +466,7 @@ public sealed partial class TypeRegistry
         if (effectiveModule != null)
         {
             _moduleNames[key: moduleId] = effectiveModule;
+            _loadedFilePaths.TryAdd(key: fullResolvedPath, value: effectiveModule);
         }
 
         return effectiveModule != null;

@@ -21,15 +21,15 @@ routine Bool.$eq(you: Bool) -> Bool
 
 ### Converts this boolean to an `S32` integer.
 ### :returns: `1` if `me` is `true`; `0` if `me` is `false`.
-routine Bool.S32() -> S32
-  if me
+routine S32.$create(from: Bool) -> S32
+  if from
     return 1_s32
   return 0_s32
 
 ### Converts this boolean to a `U8` byte.
 ### :returns: `1u8` if `me` is `true`; `0u8` if `me` is `false`.
-routine Bool.U8() -> U8
-  if me
+routine U8.$create(from: Bool) -> U8
+  if from
     return U8(1)
   return U8(0)
 
@@ -37,11 +37,15 @@ routine Bool.U8() -> U8
 # Diagnostics and Hashing
 # ============================================================================
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine Bool.$diagnose() -> Text
   if me
     return "Bool(true)"
   return "Bool(false)"
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine Bool.$represent() -> Text
   if me
     return "true"

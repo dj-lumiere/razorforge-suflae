@@ -583,18 +583,18 @@ internal sealed class SignatureResolver
             }
         }
 
-        // Check failable matches
-        if (typeMethod.IsFailable != protoMethod.IsFailable)
+        // Failability is COVARIANT: a NON-failable implementation may satisfy a FAILABLE (`!`)
+        // protocol requirement — never failing is a stronger contract than may-fail, so it is always
+        // a safe substitute (a `using` resource whose `$enter!` can fail is satisfied by a `$enter`
+        // that never does). The REVERSE is unsound: a failable implementation cannot satisfy a
+        // non-failable requirement, because its failures would escape unhandled at call sites that
+        // assume the method cannot fail.
+        if (typeMethod.IsFailable && !protoMethod.IsFailable)
         {
-            string expected = protoMethod.IsFailable
-                ? "failable (!)"
-                : "non-failable";
-            string actual = typeMethod.IsFailable
-                ? "failable (!)"
-                : "non-failable";
             _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                 message:
-                $"Method '{typeMethod.Name}' should be {expected} to match protocol '{protocol.Name}', but is {actual}.",
+                $"Method '{typeMethod.Name}' should be non-failable to match protocol '{protocol.Name}', " +
+                "but is failable (!).",
                 location: location ?? new SourceLocation("", 0, 0, 0));
             return;
         }

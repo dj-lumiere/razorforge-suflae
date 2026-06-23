@@ -1,22 +1,1517 @@
 module Core
 
 import Collections
-# Core F128 type definition - carries IEEE binary128 bits as LLVM i128.
-#
-# Deliberately NOT mapped to LLVM `fp128`: native fp128 instructions lower to
-# compiler-rt `__*tf*` libcalls whose availability and ABI differ per platform
-# (Windows lacks them entirely; Apple passes them in vector registers). Every
-# F128 operation instead routes through the ABI-stable `rf_f128_*_parts`
-# runtime bridges backed by TLFloat soft-float, making results bit-identical
-# on every platform.
 
-### Represents a 128-bit IEEE 754 binary floating-point value.
-### `F128` provides quadruple precision for workloads that need far more range
-### and significand precision than `F64`, such as numerical analysis, symbolic
-### support code, and high-accuracy scientific routines.
+# CREDITS: this software binary128 engine — arithmetic cores, transcendental
+# polynomials, Payne-Hanek range-reduction tables, and %g decimal formatting — is a
+# port and extension of TLFloat (© Naoki Shibata and contributors, Boost Software
+# License 1.0). See THIRD-PARTY-NOTICES.md.
+
+# ============================================================================
+# F128 — software IEEE 754 binary128 (pure-integer reinterpretation, TLFloat-style).
+# Storage: raw 128-bit container. Add/sub fit in U128 (113+3 bits); multiplication
+# and division use U256 wide intermediates. No @llvm float instructions; no native
+# delegation (comparison is pure bit logic).
+#
+# Layout: sign(1) | exponent(15, bias 16383) | mantissa(112).
+# ============================================================================
+
+### Represents a 128-bit IEEE 754 binary floating-point value (software binary128).
+### `F128` provides quadruple precision for workloads that need far more range and
+### significand precision than `F64`. It is a pure-integer software implementation
+### (raw 128-bit container, no LLVM `fp128`), so results are bit-identical on every
+### platform without relying on compiler-rt `__*tf*` libcalls.
 @llvm("i128")
 record F128 obeys Numeric, Ordered
   pass
+
+# ============================================================================
+# Raw bit access
+# ============================================================================
+
+### Reinterprets this value as its raw IEEE 754 bit pattern.
+### :returns: The underlying 128-bit encoding.
+routine F128.to_bits() -> U128
+  return reinterpret_bits[F128, U128](me)
+
+### Builds a value directly from a raw IEEE 754 bit pattern.
+### :param bits: The exact 128-bit encoding.
+### :returns: The decoded `F128`.
+common routine F128.from_bits(bits: U128) -> F128
+  return reinterpret_bits[U128, F128](bits)
+
+### Returns the raw biased exponent field (0..32767).
+### :returns: The 15-bit exponent field.
+routine F128.raw_exponent() -> U64
+  return int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](me.to_bits(), 112_u128), b: 32767_u128))
+
+### Returns the raw 112-bit mantissa field (no implicit bit).
+### :returns: The stored fraction bits.
+routine F128.raw_mantissa() -> U128
+  return bit_and[U128](a: me.to_bits(), b: f128_mant_mask())
+
+# ============================================================================
+# Classification (pure bit inspection)
+# ============================================================================
+
+### Returns `true` when the value is negative (sign bit set).
+### :returns: Whether the sign bit is set.
+routine F128.is_negative() -> Bool
+  return int_ne[U128](a: bit_and[U128](a: me.to_bits(), b: f128_sign_mask()), b: 0_u128)
+
+### Returns `true` when the value is strictly positive.
+### :returns: Whether the value is greater than zero.
+routine F128.is_positive() -> Bool
+  return not me.is_negative() and not me.is_zero()
+
+### Returns `true` when the value encodes a NaN.
+### :returns: Whether the bit pattern is not-a-number.
+routine F128.is_nan() -> Bool
+  return me.raw_exponent() == 0x7FFF_u64 and int_ne[U128](a: me.raw_mantissa(), b: 0_u128)
+
+### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
+routine F128.is_signaling() -> Bool
+  return me.is_nan() and int_eq[U128](a: bit_and[U128](a: me.raw_mantissa(), b: shift_left[U128](value: 1_u128, bits: 111_u128)), b: 0_u128)
+
+### Returns `true` when the value encodes positive or negative infinity.
+### :returns: Whether the bit pattern is an infinity.
+routine F128.is_infinite() -> Bool
+  return me.raw_exponent() == 0x7FFF_u64 and int_eq[U128](a: me.raw_mantissa(), b: 0_u128)
+
+### Returns `true` when the value is neither NaN nor infinity.
+### :returns: Whether the value is finite.
+routine F128.is_finite() -> Bool
+  return me.raw_exponent() != 0x7FFF_u64
+
+### Returns `true` when the value is zero (either sign).
+### :returns: Whether the value is +0 or -0.
+routine F128.is_zero() -> Bool
+  return me.raw_exponent() == 0_u64 and int_eq[U128](a: me.raw_mantissa(), b: 0_u128)
+
+### Returns `true` when the value is subnormal (denormalized, nonzero).
+### :returns: Whether the value is subnormal.
+routine F128.is_subnormal() -> Bool
+  return me.raw_exponent() == 0_u64 and int_ne[U128](a: me.raw_mantissa(), b: 0_u128)
+
+### Returns `true` when the sign bit is set (C `signbit`; true for -0 and -NaN too).
+routine F128.signbit() -> Bool
+  return int_ne[U128](a: bit_and[U128](a: me.to_bits(), b: f128_sign_mask()), b: 0_u128)
+
+### Returns `true` for a finite, normal value (nonzero and not subnormal).
+routine F128.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
+### C `fpclassify`: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
+routine F128.fpclassify() -> FpClass
+  if me.is_signaling()
+    return SIGNALING_NAN
+  if me.is_nan()
+    return NAN
+  if me.is_infinite()
+    return INFINITE
+  if me.is_zero()
+    return ZERO
+  if me.is_subnormal()
+    return SUBNORMAL
+  return NORMAL
+
+# ============================================================================
+# IEEE 754 Tier 1 — total ordering predicates
+# ============================================================================
+
+### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
+### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
+routine f128_order_key(bits: U128) -> U128
+  if int_ne[U128](a: bit_and[U128](a: bits, b: f128_sign_mask()), b: 0_u128)
+    return bit_xor[U128](a: bits, b: bit_or[U128](a: f128_sign_mask(), b: f128_abs_mask()))
+  return bit_or[U128](a: bits, b: f128_sign_mask())
+
+### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
+### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
+### :param you: The value to compare against.
+### :returns: Whether `me` precedes or equals `you` in the total order.
+routine F128.total_order(you: F128) -> Bool
+  return f128_order_key(bits: me.to_bits()) <= f128_order_key(bits: you.to_bits())
+
+### IEEE 754 totalOrderMag: `total_order` applied to the magnitudes (sign bit cleared).
+### :param you: The value whose magnitude to compare against.
+### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
+routine F128.total_order_mag(you: F128) -> Bool
+  return bit_and[U128](a: me.to_bits(), b: f128_abs_mask()) <= bit_and[U128](a: you.to_bits(), b: f128_abs_mask())
+
+# ============================================================================
+# IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding
+# ============================================================================
+
+### IEEE 754 nextUp: the least value greater than `me`. Propagating; never crashes.
+### :returns: The next representable value toward +infinity.
+routine F128.next_up() -> F128
+  return me.nextafter(you: F128.from_bits(bits: f128_inf(sign: 0_u64)))
+
+### IEEE 754 nextDown: the greatest value less than `me`. Never crashes.
+### :returns: The next representable value toward -infinity.
+routine F128.next_down() -> F128
+  return me.nextafter(you: F128.from_bits(bits: f128_inf(sign: 1_u64)))
+
+### IEEE 754 logb: the unbiased exponent of `me` as a floating value (logb(0)=-inf,
+### logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
+### :returns: The radix-2 exponent of `me`.
+routine F128.logb() -> F128
+  if me.is_nan()
+    return me
+  if me.is_infinite()
+    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+  if me.is_zero()
+    return F128.from_bits(bits: f128_inf(sign: 1_u64))
+  return F128(from: f128_ilogb(v: me))
+
+### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
+### :param n: The power-of-two exponent to apply.
+### :returns: `me` scaled by `2^n`.
+routine F128.scaleb!(n: S64) -> F128
+  var r = me.scalbn(n: n)
+  if r.is_finite() or not me.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
+### :param n: The power-of-two exponent to apply.
+### :returns: `me` scaled by `2^n`.
+routine F128.scaleb_unchecked(n: S64) -> F128
+  return me.scalbn(n: n)
+
+### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, ignoring NaN.
+routine F128.min_num(you: F128) -> F128
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then me else you
+    return me
+  return if me < you then me else you
+
+### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, ignoring NaN.
+routine F128.max_num(you: F128) -> F128
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then you else me
+    return me
+  return if me > you then me else you
+
+### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, NaN if either is NaN.
+routine F128.minimum(you: F128) -> F128
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then me else you
+    return me
+  return if me < you then me else you
+
+### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, NaN if either is NaN.
+routine F128.maximum(you: F128) -> F128
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then you else me
+    return me
+  return if me > you then me else you
+
+### C `fmax`: the larger operand, treating NaN as missing (alias of `max_num`). Provided for
+### parity with F16/F32/F64 and the decimal types. Never crashes.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, ignoring NaN.
+routine F128.fmax(you: F128) -> F128
+  return me.max_num(you: you)
+
+### C `fmin`: the smaller operand, treating NaN as missing (alias of `min_num`). Provided for
+### parity with F16/F32/F64 and the decimal types. Never crashes.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, ignoring NaN.
+routine F128.fmin(you: F128) -> F128
+  return me.min_num(you: you)
+
+### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero.
+### :returns: `me` rounded to an integral value with ties away from zero.
+routine F128.round_ties_away() -> F128
+  if not me.is_finite()
+    return me
+  var a = me.abs()
+  var t = a.trunc()
+  var rounded = if a - t >= 0.5_f128 then t + 1.0_f128 else t
+  return rounded.copysign(sign: me)
+
+### Returns the fractional part `me - trunc(me)`, preserving sign (frac(±inf) = ±0).
+routine F128.frac() -> F128
+  if me.is_nan()
+    return me
+  if me.is_infinite()
+    return F128.from_bits(bits: bit_and[U128](a: me.to_bits(), b: f128_sign_mask()))
+  return me - me.trunc()
+
+# ============================================================================
+# Sign operations (pure bit manipulation)
+# ============================================================================
+
+### Returns the arithmetic negation (sign bit flipped).
+### :returns: The negated value.
+routine F128.$neg() -> F128
+  return F128.from_bits(bits: bit_xor[U128](a: me.to_bits(), b: f128_sign_mask()))
+
+### Returns the absolute value (sign bit cleared).
+### :returns: The magnitude of this value.
+routine F128.abs() -> F128
+  return F128.from_bits(bits: bit_and[U128](a: me.to_bits(), b: f128_abs_mask()))
+
+### Returns this magnitude carrying the sign of `sign`.
+### :param sign: The value supplying the sign bit.
+### :returns: A value combining this magnitude with the sign of `sign`.
+routine F128.copysign(sign: F128) -> F128
+  var mag = bit_and[U128](a: me.to_bits(), b: f128_abs_mask())
+  var sgn = bit_and[U128](a: sign.to_bits(), b: f128_sign_mask())
+  return F128.from_bits(bits: bit_or[U128](a: mag, b: sgn))
+
+# ============================================================================
+# Ordered comparison (pure — sign-magnitude bit logic, no native delegation)
+# ============================================================================
+
+### Returns whether two values compare equal (NaN compares unequal; +0 == -0).
+### :param you: The value to compare against.
+### :returns: Whether the values are ordered-equal.
+routine F128.$eq(you: F128) -> Bool
+  if me.is_nan() or you.is_nan()
+    return false
+  if me.is_zero() and you.is_zero()
+    return true
+  return int_eq[U128](a: me.to_bits(), b: you.to_bits())
+
+### Compares this value with `you` under IEEE ordered semantics (pure bit logic).
+### :param you: The value to compare against.
+### :returns: The comparison sign (SAME for unordered/NaN).
+routine F128.$cmp(you: F128) -> ComparisonSign
+  if me.is_nan() or you.is_nan()
+    return SAME
+  if me.is_zero() and you.is_zero()
+    return SAME
+  var ka = f128_order_key(bits: me.to_bits())
+  var kb = f128_order_key(bits: you.to_bits())
+  if unsigned_lt[U128](a: ka, b: kb)
+    return ME_SMALL
+  if unsigned_gt[U128](a: ka, b: kb)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Software arithmetic
+# ============================================================================
+
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
+# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+
+### Returns `me + you` (software IEEE 754, round-to-nearest-even). Checked: crashes if the result is
+### non-finite. Use `$add_unchecked` for raw IEEE 754 propagation.
+### :param you: The addend.
+### :returns: The sum (always finite).
+routine F128.$add!(you: F128) -> F128
+  var r = F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: you.to_bits()))
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me - you` (software IEEE 754). Checked: crashes if the result is non-finite.
+### Use `$sub_unchecked` for raw IEEE 754 propagation.
+### :param you: The value to subtract.
+### :returns: The difference (always finite).
+routine F128.$sub!(you: F128) -> F128
+  var yb = bit_xor[U128](a: you.to_bits(), b: f128_sign_mask())
+  var r = F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: yb))
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me * you` (software IEEE 754). Checked: crashes if the result is non-finite.
+### Use `$mul_unchecked` for raw IEEE 754 propagation.
+### :param you: The multiplier.
+### :returns: The product (always finite).
+routine F128.$mul!(you: F128) -> F128
+  var r = F128.from_bits(bits: f128_mul_bits(a: me.to_bits(), b: you.to_bits()))
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me / you` (software IEEE 754). Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain,
+### overflow -> overflow. Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+### :param you: The divisor.
+### :returns: The quotient (always finite).
+routine F128.$truediv!(you: F128) -> F128
+  var r = F128.from_bits(bits: f128_div_bits(a: me.to_bits(), b: you.to_bits()))
+  if r.is_finite()
+    return r
+  if you.is_zero() and not me.is_zero()
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+# ============================================================================
+# Rounding to integer and value selection (exact, on packed bits — no rounding
+# error introduced; faithful to TLFloat / C99 semantics).
+# ============================================================================
+
+### Truncates toward zero to an integer value (C `trunc`).
+### :returns: The integer part, preserving sign (NaN/inf returned unchanged).
+routine F128.trunc() -> F128
+  if not me.is_finite()
+    return me
+  var e = me.raw_exponent()
+  if e == 0_u64
+    return F128.from_bits(bits: bit_and[U128](a: me.to_bits(), b: f128_sign_mask()))
+  var eu = sub[S64](a: reinterpret_bits[U64, S64](e), b: 16383_s64)
+  if signed_ge[S64](a: eu, b: 112_s64)
+    return me
+  if signed_lt[S64](a: eu, b: 0_s64)
+    return F128.from_bits(bits: bit_and[U128](a: me.to_bits(), b: f128_sign_mask()))
+  var fbu = zero_extend[U32, U128](int_truncate[S64, U32](sub[S64](a: 112_s64, b: eu)))
+  var fracmask = sub[U128](a: shift_left[U128](value: 1_u128, bits: fbu), b: 1_u128)
+  var keepmask = bit_xor[U128](a: fracmask, b: sub[U128](a: 0_u128, b: 1_u128))
+  return F128.from_bits(bits: bit_and[U128](a: me.to_bits(), b: keepmask))
+
+### Rounds toward negative infinity (C `floor`).
+### :returns: The largest integer not greater than this value.
+routine F128.floor() -> F128
+  if not me.is_finite()
+    return me
+  var t = me.trunc()
+  if me.is_negative() and not t.$eq(me)
+    return t - f128_from_int(1_u64)
+  return t
+
+### Rounds toward positive infinity (C `ceil`).
+### :returns: The smallest integer not less than this value.
+routine F128.ceil() -> F128
+  if not me.is_finite()
+    return me
+  var t = me.trunc()
+  if me.is_positive() and not t.$eq(me)
+    return t + f128_from_int(1_u64)
+  return t
+
+### Rounds to nearest integer, ties away from zero (C `round`).
+### :returns: The rounded integer value.
+routine F128.round() -> F128
+  if not me.is_finite()
+    return me
+  return F128.from_bits(bits: f128_round_to_int(bits: me.to_bits(), half_even: false))
+
+### Rounds to nearest integer, ties to even (C `rint` under the default mode).
+### :returns: The rounded integer value.
+routine F128.rint() -> F128
+  if not me.is_finite()
+    return me
+  return F128.from_bits(bits: f128_round_to_int(bits: me.to_bits(), half_even: true))
+
+### Shared round-to-integer core for round/rint over packed (finite) bits.
+### :param bits: The raw encoding (assumed finite).
+### :param half_even: Break ties to even when `true`, else away from zero.
+### :returns: The rounded encoding.
+routine f128_round_to_int(bits: U128, half_even: Bool) -> U128
+  var sign_bit = bit_and[U128](a: bits, b: f128_sign_mask())
+  var e = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var frac0 = bit_and[U128](a: bits, b: f128_mant_mask())
+  if e == 0_u64
+    return sign_bit
+  var eu = sub[S64](a: reinterpret_bits[U64, S64](e), b: 16383_s64)
+  if signed_ge[S64](a: eu, b: 112_s64)
+    return bits
+  var one_mag = shift_left[U128](value: 16383_u128, bits: 112_u128)
+  if signed_lt[S64](a: eu, b: 0_s64)
+    if eu == -1_s64
+      if half_even and int_eq[U128](a: frac0, b: 0_u128)
+        return sign_bit
+      return bit_or[U128](a: sign_bit, b: one_mag)
+    return sign_bit
+  var fbu = zero_extend[U32, U128](int_truncate[S64, U32](sub[S64](a: 112_s64, b: eu)))
+  var sig = bit_or[U128](a: frac0, b: f128_implicit())
+  var fracmask = sub[U128](a: shift_left[U128](value: 1_u128, bits: fbu), b: 1_u128)
+  var frac = bit_and[U128](a: sig, b: fracmask)
+  var half = shift_left[U128](value: 1_u128, bits: sub[U128](a: fbu, b: 1_u128))
+  var intsig = bit_and[U128](a: sig, b: bit_xor[U128](a: fracmask, b: sub[U128](a: 0_u128, b: 1_u128)))
+  var roundup = false
+  if unsigned_gt[U128](a: frac, b: half)
+    roundup = true
+  elseif int_eq[U128](a: frac, b: half)
+    if half_even
+      roundup = int_ne[U128](a: bit_and[U128](a: shift_right_unsigned[U128](sig, fbu), b: 1_u128), b: 0_u128)
+    else
+      roundup = true
+  if roundup
+    intsig = add[U128](a: intsig, b: shift_left[U128](value: 1_u128, bits: fbu))
+  if int_ne[U128](a: bit_and[U128](a: intsig, b: shift_left[U128](value: 1_u128, bits: 113_u128)), b: 0_u128)
+    intsig = shift_right_unsigned[U128](intsig, 1_u128)
+    e = add[U64](a: e, b: 1_u64)
+  var packed = bit_or[U128](a: sign_bit, b: shift_left[U128](value: zero_extend[U64, U128](e), bits: 112_u128))
+  return bit_or[U128](a: packed, b: bit_and[U128](a: intsig, b: f128_mant_mask()))
+
+### Returns the smaller of two values (C `fmin`: NaN-agnostic, -0 < +0).
+### :param you: The value to compare against.
+### :returns: The minimum.
+routine F128.min(you: F128) -> F128
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if me.is_zero() and you.is_zero()
+    if me.is_negative()
+      return me
+    return you
+  if me < you
+    return me
+  return you
+
+### Returns the larger of two values (C `fmax`: NaN-agnostic, -0 < +0).
+### :param you: The value to compare against.
+### :returns: The maximum.
+routine F128.max(you: F128) -> F128
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if me.is_zero() and you.is_zero()
+    if me.is_negative()
+      return you
+    return me
+  if me > you
+    return me
+  return you
+
+### Returns the positive difference `max(me - you, 0)` (C `fdim`).
+### :param you: The value to subtract.
+### :returns: The positive difference, or +0.
+routine F128.fdim(you: F128) -> F128
+  if me.is_nan() or you.is_nan()
+    return F128.from_bits(bits: f128_qnan())
+  if me > you
+    return me - you
+  return f128_from_int(0_u64)
+
+### Multiplies by `2^n` exactly when representable (C `scalbn` / `ldexp`).
+### :param n: The power-of-two exponent adjustment.
+### :returns: `me * 2^n`, with overflow to infinity and underflow to subnormal/zero.
+routine F128.scalbn(n: S64) -> F128
+  if not me.is_finite()
+    return me
+  if me.is_zero()
+    return me
+  var e = me.raw_exponent()
+  var sig = me.raw_mantissa()
+  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](me.to_bits(), 127_u128))
+  var eu = 0_s64
+  if e == 0_u64
+    eu = -16382_s64
+    while int_eq[U128](a: bit_and[U128](a: sig, b: f128_implicit()), b: 0_u128)
+      sig = shift_left[U128](value: sig, bits: 1_u128)
+      eu = sub[S64](a: eu, b: 1_s64)
+  else
+    sig = bit_or[U128](a: sig, b: f128_implicit())
+    eu = sub[S64](a: reinterpret_bits[U64, S64](e), b: 16383_s64)
+  var biased = add[S64](a: add[S64](a: eu, b: n), b: 16383_s64)
+  if signed_ge[S64](a: biased, b: 32767_s64)
+    return F128.from_bits(bits: f128_inf(sign: sign))
+  if signed_lt[S64](a: biased, b: 1_s64)
+    return F128.from_bits(bits: f128_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased)))
+  return F128.from_bits(bits: f128_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig))
+
+### Alias of `scalbn` (C `ldexp`).
+### :param n: The power-of-two exponent adjustment.
+### :returns: `me * 2^n`.
+routine F128.ldexp(n: S64) -> F128
+  return me.scalbn(n: n)
+
+# ============================================================================
+# Bit-pattern constants (built via shifts to avoid 128-bit literal typos)
+# ============================================================================
+
+### The implicit-bit mask `1 << 112`.
+routine f128_implicit() -> U128
+  return shift_left[U128](value: 1_u128, bits: 112_u128)
+
+### The 112-bit mantissa mask `(1 << 112) - 1`.
+routine f128_mant_mask() -> U128
+  return sub[U128](a: f128_implicit(), b: 1_u128)
+
+### The sign-bit mask `1 << 127`.
+routine f128_sign_mask() -> U128
+  return shift_left[U128](value: 1_u128, bits: 127_u128)
+
+### The magnitude mask `~(1 << 127)` (all but the sign bit).
+routine f128_abs_mask() -> U128
+  return sub[U128](a: f128_sign_mask(), b: 1_u128)
+
+### The infinity encoding `0x7FFF << 112` for the given sign bit.
+routine f128_inf(sign: U64) -> U128
+  var s = shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128)
+  var e = shift_left[U128](value: 32767_u128, bits: 112_u128)
+  return bit_or[U128](a: s, b: e)
+
+### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
+routine f128_qnan() -> U128
+  var e = shift_left[U128](value: 32767_u128, bits: 112_u128)
+  var q = shift_left[U128](value: 1_u128, bits: 111_u128)
+  return bit_or[U128](a: e, b: q)
+
+### Forces the quiet bit on a NaN encoding (top mantissa bit).
+routine f128_quiet(bits: U128) -> U128
+  return bit_or[U128](a: bits, b: shift_left[U128](value: 1_u128, bits: 111_u128))
+
+### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+common routine F128.signaling_nan() -> F128
+  return F128.from_bits(bits: bit_or[U128](a: shift_left[U128](value: 32767_u128, bits: 112_u128), b: 1_u128))
+
+### Sign-magnitude total-order key for comparison: negatives are bit-inverted,
+### non-negatives get the sign bit set, so an unsigned compare orders the floats.
+### :param bits: The raw encoding.
+### :returns: The order key.
+routine f128_order_key(bits: U128) -> U128
+  if int_ne[U128](a: bit_and[U128](a: bits, b: f128_sign_mask()), b: 0_u128)
+    return bit_xor[U128](a: bits, b: sub[U128](a: 0_u128, b: 1_u128))
+  return bit_or[U128](a: bits, b: f128_sign_mask())
+
+# ============================================================================
+# U256 helpers (wide intermediates for mul / div)
+# ============================================================================
+
+### Widens a `U128` into a `U256`.
+routine f128_u256(x: U128) -> U256
+  return zero_extend[U128, U256](x)
+
+### Narrows a `U256` to its low 128 bits.
+routine f128_u256_to128(x: U256) -> U128
+  return int_truncate[U256, U128](x)
+
+### Logical left shift of a `U256` by a `U128` amount.
+routine f128_u256_shl(v: U256, n: U128) -> U256
+  return shift_left[U256](value: v, bits: zero_extend[U128, U256](n))
+
+### Logical right shift of a `U256` by a `U128` amount.
+routine f128_u256_shr(v: U256, n: U128) -> U256
+  return shift_right_unsigned[U256](v, zero_extend[U128, U256](n))
+
+### The wide bit mask `1 << n` as a `U256`.
+routine f128_u256_bit(n: U128) -> U256
+  return f128_u256_shl(v: f128_u256(1_u128), n: n)
+
+### The wide low mask `(1 << n) - 1` as a `U256`.
+routine f128_u256_lowmask(n: U128) -> U256
+  return sub[U256](a: f128_u256_bit(n), b: f128_u256(1_u128))
+
+# ============================================================================
+# Soft-float kernels
+# ============================================================================
+
+### Shifts a 128-bit significand right by `amount`, folding all bits shifted out
+### into a sticky bit (bit 0). Used for exponent alignment and rounding.
+### :param value: The significand to shift.
+### :param amount: The right-shift distance.
+### :returns: The shifted significand with sticky bit folded in.
+routine f128_shr_sticky(value: U128, amount: U128) -> U128
+  if int_eq[U128](a: amount, b: 0_u128)
+    return value
+  if unsigned_ge[U128](a: amount, b: 128_u128)
+    if int_ne[U128](a: value, b: 0_u128)
+      return 1_u128
+    return 0_u128
+  var mask = sub[U128](a: shift_left[U128](value: 1_u128, bits: amount), b: 1_u128)
+  var lost = bit_and[U128](a: value, b: mask)
+  var shifted = shift_right_unsigned[U128](value, amount)
+  if int_ne[U128](a: lost, b: 0_u128)
+    shifted = bit_or[U128](a: shifted, b: 1_u128)
+  return shifted
+
+### Packs a sign / 113-bit significand (implicit at bit 112) / biased exponent into
+### a final binary128 encoding, applying overflow and the normal vs. subnormal rule.
+### :param sign: The sign bit (0 or 1).
+### :param biased: The biased exponent.
+### :param sig: The 113-bit significand (no guard bits).
+### :returns: The packed encoding.
+routine f128_pack(sign: U64, biased: U64, sig: U128) -> U128
+  var sign_bit = shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128)
+  if int_ne[U128](a: bit_and[U128](a: sig, b: f128_implicit()), b: 0_u128)
+    if biased >= 0x7FFF_u64
+      return f128_inf(sign: sign)
+    var frac = bit_and[U128](a: sig, b: f128_mant_mask())
+    var packed = bit_or[U128](a: sign_bit, b: shift_left[U128](value: zero_extend[U64, U128](biased), bits: 112_u128))
+    return bit_or[U128](a: packed, b: frac)
+  return bit_or[U128](a: sign_bit, b: bit_and[U128](a: sig, b: f128_mant_mask()))
+
+### Software binary128 addition over raw encodings.
+routine f128_add_bits(a: U128, b: U128) -> U128
+  var sa = int_truncate[U128, U64](shift_right_unsigned[U128](a, 127_u128))
+  var sb = int_truncate[U128, U64](shift_right_unsigned[U128](b, 127_u128))
+  var ea = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](a, 112_u128), b: 32767_u128))
+  var eb = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](b, 112_u128), b: 32767_u128))
+  var fa = bit_and[U128](a: a, b: f128_mant_mask())
+  var fb = bit_and[U128](a: b, b: f128_mant_mask())
+  if ea == 0x7FFF_u64
+    if int_ne[U128](a: fa, b: 0_u128)
+      return f128_quiet(bits: a)
+    if eb == 0x7FFF_u64
+      if int_ne[U128](a: fb, b: 0_u128)
+        return f128_quiet(bits: b)
+      if sa == sb
+        return a
+      return f128_qnan()
+    return a
+  if eb == 0x7FFF_u64
+    if int_ne[U128](a: fb, b: 0_u128)
+      return f128_quiet(bits: b)
+    return b
+  var a_zero = ea == 0_u64 and int_eq[U128](a: fa, b: 0_u128)
+  var b_zero = eb == 0_u64 and int_eq[U128](a: fb, b: 0_u128)
+  if a_zero and b_zero
+    if sa == 1_u64 and sb == 1_u64
+      return f128_sign_mask()
+    return 0_u128
+  if a_zero
+    return b
+  if b_zero
+    return a
+  var ma = fa
+  var ea_w = ea
+  if ea == 0_u64
+    ea_w = 1_u64
+  else
+    ma = bit_or[U128](a: ma, b: f128_implicit())
+  var mb = fb
+  var eb_w = eb
+  if eb == 0_u64
+    eb_w = 1_u64
+  else
+    mb = bit_or[U128](a: mb, b: f128_implicit())
+  ma = shift_left[U128](value: ma, bits: 3_u128)
+  mb = shift_left[U128](value: mb, bits: 3_u128)
+  var large_sig = ma
+  var small_sig = mb
+  var large_sign = sa
+  var small_sign = sb
+  var large_exp = ea_w
+  var small_exp = eb_w
+  if ea_w < eb_w
+    large_sig = mb
+    small_sig = ma
+    large_sign = sb
+    small_sign = sa
+    large_exp = eb_w
+    small_exp = ea_w
+  var diff = zero_extend[U64, U128](sub[U64](a: large_exp, b: small_exp))
+  small_sig = f128_shr_sticky(value: small_sig, amount: diff)
+  var exp = large_exp
+  var sign = large_sign
+  var m = 0_u128
+  var carry_mask = shift_left[U128](value: 1_u128, bits: 116_u128)
+  var implicit_grs = shift_left[U128](value: 1_u128, bits: 115_u128)
+  if large_sign == small_sign
+    m = add[U128](a: large_sig, b: small_sig)
+    if int_ne[U128](a: bit_and[U128](a: m, b: carry_mask), b: 0_u128)
+      var carry_lost = bit_and[U128](a: m, b: 1_u128)
+      m = shift_right_unsigned[U128](m, 1_u128)
+      m = bit_or[U128](a: m, b: carry_lost)
+      exp = add[U64](a: exp, b: 1_u64)
+  else
+    if unsigned_ge[U128](a: large_sig, b: small_sig)
+      m = sub[U128](a: large_sig, b: small_sig)
+      sign = large_sign
+    else
+      m = sub[U128](a: small_sig, b: large_sig)
+      sign = small_sign
+    if int_eq[U128](a: m, b: 0_u128)
+      return 0_u128
+    while int_eq[U128](a: bit_and[U128](a: m, b: implicit_grs), b: 0_u128) and exp > 1_u64
+      m = shift_left[U128](value: m, bits: 1_u128)
+      exp = sub[U64](a: exp, b: 1_u64)
+  var guard = bit_and[U128](a: m, b: 4_u128)
+  var roundbit = bit_and[U128](a: m, b: 2_u128)
+  var sticky = bit_and[U128](a: m, b: 1_u128)
+  var sig = shift_right_unsigned[U128](m, 3_u128)
+  if int_ne[U128](a: guard, b: 0_u128)
+    var lsb = bit_and[U128](a: sig, b: 1_u128)
+    if int_ne[U128](a: roundbit, b: 0_u128) or int_ne[U128](a: sticky, b: 0_u128) or int_ne[U128](a: lsb, b: 0_u128)
+      sig = add[U128](a: sig, b: 1_u128)
+  var round_carry = shift_left[U128](value: 1_u128, bits: 113_u128)
+  if int_ne[U128](a: bit_and[U128](a: sig, b: round_carry), b: 0_u128)
+    sig = shift_right_unsigned[U128](sig, 1_u128)
+    exp = add[U64](a: exp, b: 1_u64)
+  return f128_pack(sign: sign, biased: exp, sig: sig)
+
+### Software binary128 multiplication over raw encodings (U256 product).
+routine f128_mul_bits(a: U128, b: U128) -> U128
+  var sa = int_truncate[U128, U64](shift_right_unsigned[U128](a, 127_u128))
+  var sb = int_truncate[U128, U64](shift_right_unsigned[U128](b, 127_u128))
+  var sign = bit_xor[U64](a: sa, b: sb)
+  var ea = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](a, 112_u128), b: 32767_u128))
+  var eb = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](b, 112_u128), b: 32767_u128))
+  var fa = bit_and[U128](a: a, b: f128_mant_mask())
+  var fb = bit_and[U128](a: b, b: f128_mant_mask())
+  if ea == 0x7FFF_u64
+    if int_ne[U128](a: fa, b: 0_u128)
+      return f128_quiet(bits: a)
+    if eb == 0x7FFF_u64 and int_ne[U128](a: fb, b: 0_u128)
+      return f128_quiet(bits: b)
+    if eb == 0_u64 and int_eq[U128](a: fb, b: 0_u128)
+      return f128_qnan()
+    return f128_inf(sign: sign)
+  if eb == 0x7FFF_u64
+    if int_ne[U128](a: fb, b: 0_u128)
+      return f128_quiet(bits: b)
+    if ea == 0_u64 and int_eq[U128](a: fa, b: 0_u128)
+      return f128_qnan()
+    return f128_inf(sign: sign)
+  if ea == 0_u64 and int_eq[U128](a: fa, b: 0_u128)
+    return shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128)
+  if eb == 0_u64 and int_eq[U128](a: fb, b: 0_u128)
+    return shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128)
+  var ma = fa
+  var ea_unb = 0_s64
+  if ea == 0_u64
+    ea_unb = -16382_s64
+    while int_eq[U128](a: bit_and[U128](a: ma, b: f128_implicit()), b: 0_u128)
+      ma = shift_left[U128](value: ma, bits: 1_u128)
+      ea_unb = sub[S64](a: ea_unb, b: 1_s64)
+  else
+    ma = bit_or[U128](a: ma, b: f128_implicit())
+    ea_unb = sub[S64](a: reinterpret_bits[U64, S64](ea), b: 16383_s64)
+  var mb = fb
+  var eb_unb = 0_s64
+  if eb == 0_u64
+    eb_unb = -16382_s64
+    while int_eq[U128](a: bit_and[U128](a: mb, b: f128_implicit()), b: 0_u128)
+      mb = shift_left[U128](value: mb, bits: 1_u128)
+      eb_unb = sub[S64](a: eb_unb, b: 1_s64)
+  else
+    mb = bit_or[U128](a: mb, b: f128_implicit())
+    eb_unb = sub[S64](a: reinterpret_bits[U64, S64](eb), b: 16383_s64)
+  var prod = mul[U256](a: f128_u256(ma), b: f128_u256(mb))
+  var exp = add[S64](a: ea_unb, b: eb_unb)
+  var topadj = 224_s64
+  var shu = 112_u128
+  if int_ne[U256](a: bit_and[U256](a: prod, b: f128_u256_bit(225_u128)), b: f128_u256(0_u128))
+    topadj = 225_s64
+    shu = 113_u128
+  var biased = add[S64](a: add[S64](a: sub[S64](a: exp, b: 224_s64), b: topadj), b: 16383_s64)
+  var sig = f128_u256_to128(f128_u256_shr(v: prod, n: shu))
+  var rem = bit_and[U256](a: prod, b: f128_u256_lowmask(shu))
+  var half = f128_u256_bit(sub[U128](a: shu, b: 1_u128))
+  if unsigned_gt[U256](a: rem, b: half)
+    sig = add[U128](a: sig, b: 1_u128)
+  elseif int_eq[U256](a: rem, b: half) and int_ne[U128](a: bit_and[U128](a: sig, b: 1_u128), b: 0_u128)
+    sig = add[U128](a: sig, b: 1_u128)
+  var round_carry = shift_left[U128](value: 1_u128, bits: 113_u128)
+  if int_ne[U128](a: bit_and[U128](a: sig, b: round_carry), b: 0_u128)
+    sig = shift_right_unsigned[U128](sig, 1_u128)
+    biased = add[S64](a: biased, b: 1_s64)
+  if biased >= 32767_s64
+    return f128_inf(sign: sign)
+  if biased <= 0_s64
+    return f128_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased))
+  return f128_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig)
+
+### Software binary128 division over raw encodings (U256 numerator).
+routine f128_div_bits(a: U128, b: U128) -> U128
+  var sa = int_truncate[U128, U64](shift_right_unsigned[U128](a, 127_u128))
+  var sb = int_truncate[U128, U64](shift_right_unsigned[U128](b, 127_u128))
+  var sign = bit_xor[U64](a: sa, b: sb)
+  var ea = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](a, 112_u128), b: 32767_u128))
+  var eb = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](b, 112_u128), b: 32767_u128))
+  var fa = bit_and[U128](a: a, b: f128_mant_mask())
+  var fb = bit_and[U128](a: b, b: f128_mant_mask())
+  if ea == 0x7FFF_u64
+    if int_ne[U128](a: fa, b: 0_u128)
+      return f128_quiet(bits: a)
+    if eb == 0x7FFF_u64 and int_ne[U128](a: fb, b: 0_u128)
+      return f128_quiet(bits: b)
+    if eb == 0x7FFF_u64
+      return f128_qnan()
+    return f128_inf(sign: sign)
+  if eb == 0x7FFF_u64
+    if int_ne[U128](a: fb, b: 0_u128)
+      return f128_quiet(bits: b)
+    return shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128)
+  if eb == 0_u64 and int_eq[U128](a: fb, b: 0_u128)
+    if ea == 0_u64 and int_eq[U128](a: fa, b: 0_u128)
+      return f128_qnan()
+    return f128_inf(sign: sign)
+  if ea == 0_u64 and int_eq[U128](a: fa, b: 0_u128)
+    return shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128)
+  var ma = fa
+  var ea_unb = 0_s64
+  if ea == 0_u64
+    ea_unb = -16382_s64
+    while int_eq[U128](a: bit_and[U128](a: ma, b: f128_implicit()), b: 0_u128)
+      ma = shift_left[U128](value: ma, bits: 1_u128)
+      ea_unb = sub[S64](a: ea_unb, b: 1_s64)
+  else
+    ma = bit_or[U128](a: ma, b: f128_implicit())
+    ea_unb = sub[S64](a: reinterpret_bits[U64, S64](ea), b: 16383_s64)
+  var mb = fb
+  var eb_unb = 0_s64
+  if eb == 0_u64
+    eb_unb = -16382_s64
+    while int_eq[U128](a: bit_and[U128](a: mb, b: f128_implicit()), b: 0_u128)
+      mb = shift_left[U128](value: mb, bits: 1_u128)
+      eb_unb = sub[S64](a: eb_unb, b: 1_s64)
+  else
+    mb = bit_or[U128](a: mb, b: f128_implicit())
+    eb_unb = sub[S64](a: reinterpret_bits[U64, S64](eb), b: 16383_s64)
+  var numerator = f128_u256_shl(v: f128_u256(ma), n: 115_u128)
+  var divisor = f128_u256(mb)
+  # Knuth divide (mb is a normalized >=113-bit mantissa, never zero): returns quotient
+  # AND remainder in one call, replacing the slow inline `udiv i256` plus a mul-back.
+  var dr = udivrem256(num: numerator, den: divisor)
+  var q256 = dr.q
+  var r256 = dr.r
+  var q = f128_u256_to128(q256)
+  var topadj = 114_s64
+  var shu = 2_u128
+  if int_ne[U128](a: bit_and[U128](a: q, b: shift_left[U128](value: 1_u128, bits: 115_u128)), b: 0_u128)
+    topadj = 115_s64
+    shu = 3_u128
+  var biased = add[S64](a: add[S64](a: sub[S64](a: sub[S64](a: ea_unb, b: eb_unb), b: 115_s64), b: topadj), b: 16383_s64)
+  var sig = shift_right_unsigned[U128](q, shu)
+  var mask = sub[U128](a: shift_left[U128](value: 1_u128, bits: shu), b: 1_u128)
+  var rem_low = bit_and[U128](a: q, b: mask)
+  var half = shift_left[U128](value: 1_u128, bits: sub[U128](a: shu, b: 1_u128))
+  if unsigned_gt[U128](a: rem_low, b: half)
+    sig = add[U128](a: sig, b: 1_u128)
+  elseif int_eq[U128](a: rem_low, b: half)
+    if int_ne[U256](a: r256, b: f128_u256(0_u128)) or int_ne[U128](a: bit_and[U128](a: sig, b: 1_u128), b: 0_u128)
+      sig = add[U128](a: sig, b: 1_u128)
+  var round_carry = shift_left[U128](value: 1_u128, bits: 113_u128)
+  if int_ne[U128](a: bit_and[U128](a: sig, b: round_carry), b: 0_u128)
+    sig = shift_right_unsigned[U128](sig, 1_u128)
+    biased = add[S64](a: biased, b: 1_s64)
+  if biased >= 32767_s64
+    return f128_inf(sign: sign)
+  if biased <= 0_s64
+    return f128_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased))
+  return f128_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig)
+
+### Denormalizes a normalized significand into the subnormal range by shifting right
+### `under` places with round-to-nearest-even, then packs the result.
+### :param sign: The sign bit.
+### :param sig: The 113-bit significand to denormalize.
+### :param under: The number of right shifts needed (>= 1).
+### :returns: The packed subnormal (or zero) encoding.
+routine f128_finish_subnormal(sign: U64, sig: U128, under: S64) -> U128
+  var sign_bit = shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128)
+  if under >= 114_s64
+    return sign_bit
+  var shiftu = zero_extend[U32, U128](int_truncate[S64, U32](under))
+  var mask = sub[U128](a: shift_left[U128](value: 1_u128, bits: shiftu), b: 1_u128)
+  var rem = bit_and[U128](a: sig, b: mask)
+  var sigd = shift_right_unsigned[U128](sig, shiftu)
+  var half = shift_left[U128](value: 1_u128, bits: sub[U128](a: shiftu, b: 1_u128))
+  if unsigned_gt[U128](a: rem, b: half)
+    sigd = add[U128](a: sigd, b: 1_u128)
+  elseif int_eq[U128](a: rem, b: half) and int_ne[U128](a: bit_and[U128](a: sigd, b: 1_u128), b: 0_u128)
+    sigd = add[U128](a: sigd, b: 1_u128)
+  if int_ne[U128](a: bit_and[U128](a: sigd, b: f128_implicit()), b: 0_u128)
+    var packed = bit_or[U128](a: sign_bit, b: shift_left[U128](value: 1_u128, bits: 112_u128))
+    return bit_or[U128](a: packed, b: bit_and[U128](a: sigd, b: f128_mant_mask()))
+  return bit_or[U128](a: sign_bit, b: bit_and[U128](a: sigd, b: f128_mant_mask()))
+
+# ============================================================================
+# Square root — correctly-rounded (round-to-nearest-even) via an integer
+# significand sqrt over U256. Exact; no @llvm float instructions.
+# ============================================================================
+
+### Returns `floor(sqrt(n))` for a wide integer via the restoring bitwise method.
+### :param n: The radicand.
+### :returns: The integer square root.
+# Floor integer sqrt of a U256. An f64-seeded Newton iteration (the U256 `//` is the Knuth divide
+# via `udivrem256`, so each step is cheap) lands within a couple of ulp; an exact ±1 correction via
+# `x*x` comparison then pins the EXACT floor — which keeps F128 sqrt correctly-rounded. This
+# replaces
+# the O(W) restoring-bitwise method (~128 wide-int iterations). Only F128.sqrt calls this; its input
+# `bigm < 2^237`, so `x*x` (x < 2^119) never overflows U256.
+### Integer floor square root of a U256 (restoring-bitwise); seeds the F128 sqrt Newton step.
+### :param n: The radicand.
+### :returns: floor(sqrt(n)).
+routine f128_isqrt256(n: U256) -> U256
+  var zero = f128_u256(0_u128)
+  var one = f128_u256(1_u128)
+  if int_eq[U256](a: n, b: zero)
+    return zero
+  # Seed: hardware f64 sqrt of the top <=53 bits, scaled back by 2^(sh/2).
+  var bl = sub[S64](a: 256_s64, b: int_truncate[U256, S64](leading_zeros[U256](n)))
+  var sh = 0_s64
+  if signed_gt[S64](a: bl, b: 52_s64)
+    sh = sub[S64](a: bl, b: 52_s64)
+    if int_ne[S64](a: signed_rem[S64](a: sh, b: 2_s64), b: 0_s64)
+      sh = sub[S64](a: sh, b: 1_s64)
+  var ntop = int_truncate[U256, U64](shift_right_unsigned[U256](n, uf_amt[U256](sh)))
+  var seed = float_to_unsigned[F64, U64](F64(from: ntop).sqrt_unchecked())
+  var x = shift_left[U256](value: zero_extend[U64, U256](seed), bits: uf_amt[U256](signed_div[S64](a: sh, b: 2_s64)))
+  if int_eq[U256](a: x, b: zero)
+    x = one
+  # Newton: x <- (x + n/x)/2. Quadratic; 4 iterations from a ~52-bit seed is ample.
+  var j = 0_s64
+  while signed_lt[S64](a: j, b: 4_s64)
+    var q = udivrem256(num: n, den: x).q
+    x = shift_right_unsigned[U256](add[U256](a: x, b: q), uf_amt[U256](1_s64))
+    j = add[S64](a: j, b: 1_s64)
+  # Exact correction to floor(sqrt(n)).
+  while unsigned_gt[U256](a: mul[U256](a: x, b: x), b: n)
+    x = sub[U256](a: x, b: one)
+  var x1 = add[U256](a: x, b: one)
+  while unsigned_le[U256](a: mul[U256](a: x1, b: x1), b: n)
+    x = x1
+    x1 = add[U256](a: x1, b: one)
+  return x
+
+### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` ->
+### NaN).
+### Use `sqrt_unchecked` for raw IEEE 754 propagation.
+### :returns: The quadruple-precision square root (always finite for finite non-negative input).
+routine F128.sqrt!() -> F128
+  var r = me.sqrt_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the correctly-rounded square root with raw IEEE 754 propagation (C `sqrt`):
+### NaN for negatives, +inf for +inf, ±0 for ±0.
+routine F128.sqrt_unchecked() -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_zero()
+    return me
+  if me.is_negative()
+    return F128.from_bits(bits: f128_qnan())
+  if me.is_infinite()
+    return me
+  var e = me.raw_exponent()
+  var m = me.raw_mantissa()
+  var emsb = 0_s64
+  if e == 0_u64
+    emsb = -16382_s64
+    while int_eq[U128](a: bit_and[U128](a: m, b: f128_implicit()), b: 0_u128)
+      m = shift_left[U128](value: m, bits: 1_u128)
+      emsb = sub[S64](a: emsb, b: 1_s64)
+  else
+    m = bit_or[U128](a: m, b: f128_implicit())
+    emsb = sub[S64](a: reinterpret_bits[U64, S64](e), b: 16383_s64)
+  var p = sub[S64](a: emsb, b: 112_s64)
+  if signed_rem[S64](a: p, b: 2_s64) != 0_s64
+    m = shift_left[U128](value: m, bits: 1_u128)
+    p = sub[S64](a: p, b: 1_s64)
+  var e2 = signed_div[S64](a: p, b: 2_s64)
+  var bigm = f128_u256_shl(v: f128_u256(m), n: 124_u128)
+  var root = f128_isqrt256(bigm)
+  var inexact = int_ne[U256](a: mul[U256](a: root, b: root), b: bigm)
+  var r128 = f128_u256_to128(root)
+  var msbi = sub[U128](a: 127_u128, b: leading_zeros[U128](r128))
+  var shiftc = sub[U128](a: msbi, b: 112_u128)
+  var sqexp = add[S64](a: sub[S64](a: e2, b: 62_s64), b: int_truncate[U128, S64](msbi))
+  var sig = shift_right_unsigned[U128](r128, shiftc)
+  var lost = bit_and[U128](a: r128, b: sub[U128](a: shift_left[U128](value: 1_u128, bits: shiftc), b: 1_u128))
+  var guard = shift_left[U128](value: 1_u128, bits: sub[U128](a: shiftc, b: 1_u128))
+  var roundup = false
+  if unsigned_gt[U128](a: lost, b: guard)
+    roundup = true
+  elseif int_eq[U128](a: lost, b: guard)
+    if inexact
+      roundup = true
+    else
+      roundup = int_ne[U128](a: bit_and[U128](a: sig, b: 1_u128), b: 0_u128)
+  if roundup
+    sig = add[U128](a: sig, b: 1_u128)
+    if int_ne[U128](a: bit_and[U128](a: sig, b: shift_left[U128](value: 1_u128, bits: 113_u128)), b: 0_u128)
+      sig = shift_right_unsigned[U128](sig, 1_u128)
+      sqexp = add[S64](a: sqexp, b: 1_s64)
+  var biased = add[S64](a: sqexp, b: 16383_s64)
+  return F128.from_bits(bits: f128_pack(sign: 0_u64, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig))
+
+# ============================================================================
+# Remainder operators — fmod (truncated) and IEEE remainder (round-to-even),
+# computed exactly by integer long division on the significands.
+# ============================================================================
+
+### Normalizes a positive integer significand `sig * 2^exp_lsb` into packed bits.
+### Exact: assumes the value is representable (true for fmod/remainder results).
+### :param sign: The sign bit (0 or 1).
+### :param sig: The nonzero integer significand (<= 127 bits).
+### :param exp_lsb: The binary exponent of `sig`'s least-significant bit.
+### :returns: The packed `F128` encoding.
+routine f128_norm_pack(sign: U64, sig: U128, exp_lsb: S64) -> U128
+  var msbi = sub[U128](a: 127_u128, b: leading_zeros[U128](sig))
+  var biased = add[S64](a: add[S64](a: exp_lsb, b: int_truncate[U128, S64](msbi)), b: 16383_s64)
+  var shift = sub[S64](a: 112_s64, b: int_truncate[U128, S64](msbi))
+  var nsig = sig
+  if signed_ge[S64](a: shift, b: 0_s64)
+    nsig = shift_left[U128](value: sig, bits: zero_extend[U32, U128](int_truncate[S64, U32](shift)))
+  else
+    nsig = shift_right_unsigned[U128](sig, zero_extend[U32, U128](int_truncate[S64, U32](sub[S64](a: 0_s64, b: shift))))
+  if signed_ge[S64](a: biased, b: 32767_s64)
+    return f128_inf(sign: sign)
+  if signed_lt[S64](a: biased, b: 1_s64)
+    return f128_finish_subnormal(sign: sign, sig: nsig, under: sub[S64](a: 1_s64, b: biased))
+  return f128_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: nsig)
+
+### Long-division core: for nonzero finite magnitudes, returns the truncated
+### remainder `|a| mod |b|` (as packed bits) and the parity of `floor(|a|/|b|)`.
+### :param abits: Magnitude bits of the dividend.
+### :param bbits: Magnitude bits of the divisor.
+### :returns: A pair `(remainder-bits, quotient-is-odd)`.
+routine f128_fmod_core(abits: U128, bbits: U128) -> (U128, Bool)
+  var ea = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](abits, 112_u128), b: 32767_u128))
+  var ma = bit_and[U128](a: abits, b: f128_mant_mask())
+  var emsba = 0_s64
+  if ea == 0_u64
+    emsba = -16382_s64
+    while int_eq[U128](a: bit_and[U128](a: ma, b: f128_implicit()), b: 0_u128)
+      ma = shift_left[U128](value: ma, bits: 1_u128)
+      emsba = sub[S64](a: emsba, b: 1_s64)
+  else
+    ma = bit_or[U128](a: ma, b: f128_implicit())
+    emsba = sub[S64](a: reinterpret_bits[U64, S64](ea), b: 16383_s64)
+  var eb = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bbits, 112_u128), b: 32767_u128))
+  var mb = bit_and[U128](a: bbits, b: f128_mant_mask())
+  var emsbb = 0_s64
+  if eb == 0_u64
+    emsbb = -16382_s64
+    while int_eq[U128](a: bit_and[U128](a: mb, b: f128_implicit()), b: 0_u128)
+      mb = shift_left[U128](value: mb, bits: 1_u128)
+      emsbb = sub[S64](a: emsbb, b: 1_s64)
+  else
+    mb = bit_or[U128](a: mb, b: f128_implicit())
+    emsbb = sub[S64](a: reinterpret_bits[U64, S64](eb), b: 16383_s64)
+  if signed_lt[S64](a: emsba, b: emsbb) or (emsba == emsbb and unsigned_lt[U128](a: ma, b: mb))
+    return (abits, false)
+  var ed = sub[S64](a: emsba, b: emsbb)
+  var x = ma
+  var i = 0_s64
+  while signed_lt[S64](a: i, b: ed)
+    if unsigned_ge[U128](a: x, b: mb)
+      x = sub[U128](a: x, b: mb)
+    x = shift_left[U128](value: x, bits: 1_u128)
+    i = add[S64](a: i, b: 1_s64)
+  var qodd = false
+  if unsigned_ge[U128](a: x, b: mb)
+    x = sub[U128](a: x, b: mb)
+    qodd = true
+  if int_eq[U128](a: x, b: 0_u128)
+    return (0_u128, qodd)
+  return (f128_norm_pack(sign: 0_u64, sig: x, exp_lsb: sub[S64](a: emsbb, b: 112_s64)), qodd)
+
+### Returns `me mod you` truncated toward zero (C `fmod`): result has the sign of
+### `me` and magnitude strictly less than `|you|`.
+### :param you: The divisor.
+### :returns: The truncated remainder.
+routine F128.fmod(you: F128) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if you.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: you.to_bits()))
+  if me.is_infinite() or you.is_zero()
+    return F128.from_bits(bits: f128_qnan())
+  if you.is_infinite() or me.is_zero()
+    return me
+  var amag = bit_and[U128](a: me.to_bits(), b: f128_abs_mask())
+  var bmag = bit_and[U128](a: you.to_bits(), b: f128_abs_mask())
+  var pr = f128_fmod_core(abits: amag, bbits: bmag)
+  var rbits = pr.item0
+  if me.is_negative()
+    rbits = bit_or[U128](a: rbits, b: f128_sign_mask())
+  return F128.from_bits(bits: rbits)
+
+### Returns the IEEE 754 remainder `me - n*you` where `n` is `me/you` rounded to
+### the nearest integer, ties to even (C `remainder`).
+### :param you: The divisor.
+### :returns: The remainder in `[-|you|/2, |you|/2]`.
+routine F128.remainder(you: F128) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if you.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: you.to_bits()))
+  if me.is_infinite() or you.is_zero()
+    return F128.from_bits(bits: f128_qnan())
+  if you.is_infinite() or me.is_zero()
+    return me
+  var amag = bit_and[U128](a: me.to_bits(), b: f128_abs_mask())
+  var bmag = bit_and[U128](a: you.to_bits(), b: f128_abs_mask())
+  var pr = f128_fmod_core(abits: amag, bbits: bmag)
+  var r = F128.from_bits(bits: pr.item0)
+  var b = you.abs()
+  var two_r = r + r
+  var sub_b = false
+  if two_r > b
+    sub_b = true
+  elseif two_r == b and pr.item1
+    sub_b = true
+  if sub_b
+    r = r - b
+  if me.is_negative()
+    r = r.$neg()
+  return r
+
+# ============================================================================
+# Decimal text conversion — a faithful port of TLFloat's `snprint` (%g, 6 sig
+# figs), built entirely on the software F128 arithmetic. No native delegation.
+# ============================================================================
+
+### Returns the decimal text of this value (%g with 6 significant digits).
+### :returns: The formatted representation.
+routine F128.$represent() -> Text
+  if me.is_signaling()
+    return "snan"
+  return f128_represent(bits: me.to_bits())
+
+### Returns a diagnostic representation tagged with the type name.
+### :returns: The formatted representation.
+routine F128.$diagnose() -> Text
+  return "F128(" + f128_represent(bits: me.to_bits()) + ")"
+
+### Builds the `F128` value of a small non-negative integer (castFromInt).
+### :param n: The integer to convert.
+### :returns: The corresponding `F128`.
+routine f128_from_int(n: U64) -> F128
+  if n == 0_u64
+    return F128.from_bits(bits: 0_u128)
+  var p = sub[U64](a: 63_u64, b: leading_zeros[U64](n))
+  var biased = add[U64](a: p, b: 16383_u64)
+  var n128 = zero_extend[U64, U128](n)
+  var sig = shift_left[U128](value: n128, bits: zero_extend[U64, U128](sub[U64](a: 112_u64, b: p)))
+  var frac = bit_and[U128](a: sig, b: f128_mant_mask())
+  var packed = bit_or[U128](a: shift_left[U128](value: zero_extend[U64, U128](biased), bits: 112_u128), b: frac)
+  return F128.from_bits(bits: packed)
+
+### Returns the unbiased binary exponent (floor log2 |v|), TLFloat's `ilogb`.
+### :param v: The value (assumed nonzero).
+### :returns: The binary exponent.
+routine f128_ilogb(v: F128) -> S64
+  var e = v.raw_exponent()
+  if e == 0_u64
+    var m = v.raw_mantissa()
+    if int_eq[U128](a: m, b: 0_u128)
+      return 0_s64
+    var msb = sub[U128](a: 127_u128, b: leading_zeros[U128](m))
+    return sub[S64](a: int_truncate[U128, S64](msb), b: 16494_s64)
+  return sub[S64](a: sign_extend[S32, S64](int_truncate[U64, S32](e)), b: 16383_s64)
+
+### Returns `10^a` as an `F128` via exponentiation by squaring (TLFloat's `exp10i`).
+### :param a: The integer power.
+### :returns: The corresponding power of ten.
+routine f128_exp10i(a: S64) -> F128
+  var neg = signed_lt[S64](a: a, b: 0_s64)
+  var n = a
+  if neg
+    n = sub[S64](a: 0_s64, b: a)
+  var r = f128_from_int(1_u64)
+  var d = f128_from_int(10_u64)
+  while signed_gt[S64](a: n, b: 0_s64)
+    if signed_rem[S64](a: n, b: 2_s64) == 1_s64
+      r = r * d
+    d = d * d
+    n = shift_right_signed[S64](n, 1_s64)
+  if neg
+    return f128_from_int(1_u64) / r
+  return r
+
+### Returns `floor(log10(v))` (TLFloat's `ilog10`): estimate then correct by +/- 1.
+### :param v: The value (assumed positive, nonzero).
+### :returns: The decimal exponent.
+routine f128_ilog10(v: F128) -> S64
+  var ib = f128_ilogb(v)
+  var bias_round = 50000_s64
+  if signed_lt[S64](a: ib, b: 0_s64)
+    bias_round = sub[S64](a: 0_s64, b: 50000_s64)
+  var ret = signed_div[S64](a: add[S64](a: mul[S64](a: ib, b: 30103_s64), b: bias_round), b: 100000_s64)
+  var e = f128_exp10i(ret)
+  if e > v
+    ret = sub[S64](a: ret, b: 1_s64)
+  elseif (e * f128_from_int(10_u64)) < v
+    ret = add[S64](a: ret, b: 1_s64)
+  return ret
+
+### Returns the integer part of a non-negative value (TLFloat's `castToInt`, floor).
+### :param v: The value (assumed in roughly [0, 2^63)).
+### :returns: The integer part.
+routine f128_floor_int(v: F128) -> U64
+  var ib = f128_ilogb(v)
+  if signed_lt[S64](a: ib, b: 0_s64)
+    return 0_u64
+  var sig = bit_or[U128](a: v.raw_mantissa(), b: f128_implicit())
+  var shift = sub[S64](a: 112_s64, b: ib)
+  if signed_lt[S64](a: shift, b: 0_s64)
+    return 0_u64
+  var shu = zero_extend[U32, U128](int_truncate[S64, U32](shift))
+  return int_truncate[U128, U64](shift_right_unsigned[U128](sig, shu))
+
+### Returns the single-character text for a decimal digit 0..9. Clamps to 9 so any
+### residual drift in the high-digit extraction can never emit a non-digit character.
+### :param d: The digit value.
+### :returns: The digit character as text.
+routine f128_digit(d: U64) -> Text
+  var dd = if unsigned_gt[U64](a: d, b: 9_u64) then 9_u64 else d
+  return Text(from_character: Character(from: add[U32](a: 0x30u32, b: int_truncate[U64, U32](dd))))
+
+### Returns the unsigned decimal text of `n` (recursive).
+### :param n: The value to format.
+### :returns: The decimal digits.
+routine f128_u64_dec(n: U64) -> Text
+  if unsigned_lt[U64](a: n, b: 10_u64)
+    return f128_digit(n)
+  return f128_u64_dec(unsigned_div[U64](a: n, b: 10_u64)) + f128_digit(unsigned_rem[U64](a: n, b: 10_u64))
+
+### Formats a scientific-notation exponent as `e±NN` (at least two digits).
+### :param exp: The decimal exponent.
+### :returns: The exponent suffix text.
+routine f128_exp_str(exp: S64) -> Text
+  var s = "+"
+  var m = exp
+  if signed_lt[S64](a: exp, b: 0_s64)
+    s = "-"
+    m = sub[S64](a: 0_s64, b: exp)
+  var mu = zero_extend[U32, U64](int_truncate[S64, U32](m))
+  var body = f128_u64_dec(mu)
+  if unsigned_lt[U64](a: mu, b: 10_u64)
+    body = "0" + body
+  return "e" + s + body
+
+### Strips trailing zeros (and a dangling decimal point) from a fraction string.
+### :param s: The text to trim.
+### :returns: The trimmed text.
+routine f128_strip(s: Text) -> Text
+  var r = s
+  while r.ends_with(suffix: "0")
+    r = r.remove_suffix(suffix: "0")
+  if r.ends_with(suffix: ".")
+    r = r.remove_suffix(suffix: ".")
+  return r
+
+### `%g`-style decimal conversion at 34 significant digits (`FLT128_DIG`) — the digits
+### F128 carries reliably. Extraction runs in F128 arithmetic, so it CANNOT exceed ~34
+### digits (the residual drifts past [0,10) and emits garbage); a bit-exact 36-digit
+### round-trip would need F256-precision digit extraction here AND a 36-digit parser
+### (the current `$create!` narrows through 34-digit D128). Trailing zeros are stripped.
+### :param bits: The raw `F128` encoding.
+### :returns: The decimal text.
+routine f128_represent(bits: U128) -> Text
+  var x = F128.from_bits(bits: bits)
+  if x.is_nan()
+    return "NaN"
+  var sgn = ""
+  if x.is_negative()
+    sgn = "-"
+  if x.is_infinite()
+    return sgn + "inf"
+  if x.is_zero()
+    return sgn + "0"
+  var value = x.abs()
+  # 34 significant digits = FLT128_DIG (precision+1 are printed). This is the most
+  # F128-arithmetic extraction can reliably produce; higher counts drift into garbage.
+  var precision = 33_s64
+  var rounder = f128_exp10i(sub[S64](a: 0_s64, b: precision)) / f128_from_int(2_u64)
+  var exp = f128_ilog10(value)
+  value = value * f128_exp10i(sub[S64](a: 0_s64, b: exp))
+  value = value + rounder
+  if value >= f128_from_int(10_u64)
+    value = value / f128_from_int(10_u64)
+    exp = add[S64](a: exp, b: 1_s64)
+  elseif value < f128_from_int(1_u64)
+    value = value * f128_from_int(10_u64)
+    exp = sub[S64](a: exp, b: 1_s64)
+  var scientific = signed_lt[S64](a: exp, b: -4_s64) or signed_gt[S64](a: exp, b: precision)
+  var e2 = 0_s64
+  if not scientific
+    precision = sub[S64](a: precision, b: exp)
+    e2 = exp
+  var result = sgn
+  if signed_lt[S64](a: e2, b: 0_s64)
+    result = result + "0"
+  else
+    while signed_ge[S64](a: e2, b: 0_s64)
+      var d = f128_floor_int(value)
+      result = result + f128_digit(d)
+      value = (value - f128_from_int(d)) * f128_from_int(10_u64)
+      e2 = sub[S64](a: e2, b: 1_s64)
+  var flag_dp = signed_gt[S64](a: precision, b: 0_s64)
+  if flag_dp
+    result = result + "."
+  e2 = add[S64](a: e2, b: 1_s64)
+  while signed_lt[S64](a: e2, b: 0_s64) and signed_gt[S64](a: precision, b: 0_s64)
+    result = result + "0"
+    precision = sub[S64](a: precision, b: 1_s64)
+    e2 = add[S64](a: e2, b: 1_s64)
+  while signed_gt[S64](a: precision, b: 0_s64)
+    var d2 = f128_floor_int(value)
+    result = result + f128_digit(d2)
+    value = (value - f128_from_int(d2)) * f128_from_int(10_u64)
+    precision = sub[S64](a: precision, b: 1_s64)
+  if flag_dp
+    result = f128_strip(s: result)
+  if scientific
+    result = result + f128_exp_str(exp: exp)
+  return result
+
+# ============================================================================
+# Packed F128 <-> generic UnpackedFloat[U128, U256, 128] casts (concrete; the
+# entry points the transcendentals and external tests use).
+# ============================================================================
+
+### Decodes this `F128` into the quad unpacked engine value (exact).
+routine F128.to_uf() -> UnpackedFloat[U128, U256, 128]
+  var bits = me.to_bits()
+  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: f128_sign_mask()), b: 0_u128)
+  var e = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var f = bit_and[U128](a: bits, b: f128_mant_mask())
+  if e == 0x7FFF_u64
+    if int_ne[U128](a: f, b: 0_u128)
+      return UnpackedFloat[U128, U256, 128].nan()
+    return UnpackedFloat[U128, U256, 128].inf(sign: sign)
+  if e == 0_u64 and int_eq[U128](a: f, b: 0_u128)
+    return UnpackedFloat[U128, U256, 128].zero(sign: sign)
+  if e == 0_u64
+    var msbf = int_truncate[U128, S64](sub[U128](a: 127_u128, b: leading_zeros[U128](f)))
+    var shift = sub[S64](a: 126_s64, b: msbf)
+    var mant = shift_left[U128](value: f, bits: uf_amt[U128](shift))
+    return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: sub[S64](a: msbf, b: 16495_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  var sig = bit_or[U128](a: f, b: f128_implicit())
+  var mant = shift_left[U128](value: sig, bits: 14_u128)
+  return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 16384_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+
+### Rounds any unpacked engine value (quad or octuple) back to an `F128`
+### (round-to-nearest-even). Width-generic: the mantissa shift is `W - 114`
+### (14 for the 128-bit quad engine, 142 for the 256-bit octuple engine).
+routine UnpackedFloat[M, L, W].to_f128() -> F128
+  var sign = 0_u64
+  if me.sign()
+    sign = 1_u64
+  if me.isnan()
+    return F128.from_bits(bits: f128_qnan())
+  if me.isinf()
+    return F128.from_bits(bits: f128_inf(sign: sign))
+  if me.iszero()
+    return F128.from_bits(bits: shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128))
+  var biased = add[S64](a: me.exp, b: 16384_s64)
+  var sh = sub[S64](a: reinterpret_bits[U64, S64](W), b: 114_s64)
+  var lost = bit_and[M](a: me.mant, b: uf_lowmask[M](sh))
+  var half = shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: sh, b: 1_s64)))
+  var sig = int_truncate[L, U128](zero_extend[M, L](shift_right_unsigned[M](me.mant, uf_amt[M](sh))))
+  if unsigned_gt[M](a: lost, b: half)
+    sig = add[U128](a: sig, b: 1_u128)
+  elseif int_eq[M](a: lost, b: half) and int_ne[U128](a: bit_and[U128](a: sig, b: 1_u128), b: 0_u128)
+    sig = add[U128](a: sig, b: 1_u128)
+  if int_ne[U128](a: bit_and[U128](a: sig, b: shift_left[U128](value: 1_u128, bits: 113_u128)), b: 0_u128)
+    sig = shift_right_unsigned[U128](sig, 1_u128)
+    biased = add[S64](a: biased, b: 1_s64)
+  if signed_ge[S64](a: biased, b: 32767_s64)
+    return F128.from_bits(bits: f128_inf(sign: sign))
+  if signed_lt[S64](a: biased, b: 1_s64)
+    return F128.from_bits(bits: f128_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased)))
+  return F128.from_bits(bits: f128_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig))
+
+# ============================================================================
+# Packed F128 <-> octuple UnpackedFloat[U256, U512, 256] casts (for the
+# functions TLFloat computes in octuple precision: exp2/exp10/pow/asinh/acosh).
+# ============================================================================
+
+### Decodes this `F128` into the octuple unpacked engine value (exact).
+routine F128.to_oct() -> UnpackedFloat[U256, U512, 256]
+  var bits = me.to_bits()
+  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: f128_sign_mask()), b: 0_u128)
+  var e = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var f = bit_and[U128](a: bits, b: f128_mant_mask())
+  if e == 0x7FFF_u64
+    if int_ne[U128](a: f, b: 0_u128)
+      return UnpackedFloat[U256, U512, 256].nan()
+    return UnpackedFloat[U256, U512, 256].inf(sign: sign)
+  if e == 0_u64 and int_eq[U128](a: f, b: 0_u128)
+    return UnpackedFloat[U256, U512, 256].zero(sign: sign)
+  if e == 0_u64
+    var msbf = int_truncate[U128, S64](sub[U128](a: 127_u128, b: leading_zeros[U128](f)))
+    var shift = sub[S64](a: 254_s64, b: msbf)
+    var mant = shift_left[U256](value: zero_extend[U128, U256](f), bits: uf_amt[U256](shift))
+    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: msbf, b: 16495_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  var sig = bit_or[U128](a: f, b: f128_implicit())
+  var mant = shift_left[U256](value: zero_extend[U128, U256](sig), bits: 142)
+  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 16384_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+
+# ============================================================================
+# More exact members: nextafter, modf, frexp
+# ============================================================================
+
+### Returns the next representable value after `me` toward `you` (C `nextafter`).
+routine F128.nextafter(you: F128) -> F128
+  if me.is_nan() or you.is_nan()
+    return F128.from_bits(bits: f128_qnan())
+  if me == you
+    return you
+  if me.is_zero()
+    var ys = bit_and[U128](a: you.to_bits(), b: f128_sign_mask())
+    return F128.from_bits(bits: bit_or[U128](a: ys, b: 1_u128))
+  var mag = bit_and[U128](a: me.to_bits(), b: f128_abs_mask())
+  var ispos = not me.is_negative()
+  var valup = me < you
+  if ispos == valup
+    mag = add[U128](a: mag, b: 1_u128)
+  else
+    mag = sub[U128](a: mag, b: 1_u128)
+  var sgn = bit_and[U128](a: me.to_bits(), b: f128_sign_mask())
+  return F128.from_bits(bits: bit_or[U128](a: sgn, b: mag))
+
+### Splits into integer and fractional parts (C `modf`): returns (intpart, fracpart).
+routine F128.modf() -> (F128, F128)
+  if me.is_nan()
+    return (me, me)
+  if me.is_infinite()
+    var z = F128.from_bits(bits: bit_and[U128](a: me.to_bits(), b: f128_sign_mask()))
+    return (me, z)
+  var ip = me.trunc()
+  var fp = me - ip
+  return (ip, fp)
+
+### Splits into a fraction in [0.5,1) and a power-of-two exponent (C `frexp`).
+routine F128.frexp() -> (F128, S64)
+  if me.is_zero() or me.is_infinite() or me.is_nan()
+    var asis = F128.from_bits(bits: me.to_bits())
+    return (asis, 0_s64)
+  var p = me.to_uf().frexp()
+  var fr = p.item0.to_f128()
+  return (fr, p.item1)
+
+# ============================================================================
+# Public surface — creators / presets / parser / hash / bytes
+# ============================================================================
 
 # IEEE 754 quadruple precision constants
 preset F128_EPSILON: F128 = 1.925929944387235853055977942584927319e-34_f128
@@ -55,22 +1550,25 @@ routine F128.$create(from: S32) -> F128
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: S64) -> F128
-  lateinit var result: F128
-  danger!
-    rf_s64_to_f128_parts(x: from, out: result.hijack())
-  return result
+  return UnpackedFloat[U128, U256, 128].from_s64(src: from).to_f128()
 
 ### Converts an `S128` into quadruple-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: S128) -> F128
-  var bits = reinterpret_bits[S128, U128](from)
-  var lo = int_truncate[U128, U64](bits)
-  var hi = int_truncate[U128, U64](bits >>> 64u32)
-  lateinit var result: F128
-  danger!
-    rf_s128_to_f128_parts(low: lo, high: hi, out: result.hijack())
-  return result
+  var neg = signed_lt[S128](a: from, b: 0_s128)
+  var mag = if neg then reinterpret_bits[S128, U128](0_s128 - from) else reinterpret_bits[S128, U128](from)
+  var r = F128(from: mag)
+  return if neg then r.$neg() else r
+
+### Converts an `S256` into quadruple-precision floating-point form.
+### :param from: The signed 256-bit integer to convert.
+### :returns: The closest representable `F128` value.
+routine F128.$create(from: S256) -> F128
+  var neg = signed_lt[S256](a: from, b: 0_s256)
+  var mag = if neg then reinterpret_bits[S256, U256](0_s256 - from) else reinterpret_bits[S256, U256](from)
+  var r = F128(from: mag)
+  return if neg then r.$neg() else r
 
 ### Converts a `U8` into quadruple-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
@@ -94,45 +1592,84 @@ routine F128.$create(from: U32) -> F128
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: U64) -> F128
-  lateinit var result: F128
-  danger!
-    rf_u64_to_f128_parts(x: from, out: result.hijack())
-  return result
+  return UnpackedFloat[U128, U256, 128].from_u64(v: from).to_f128()
 
 ### Converts a `U128` into quadruple-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: U128) -> F128
-  var lo = int_truncate[U128, U64](from)
+  # value = hi * 2^64 + lo, evaluated in correctly-rounded F128 arithmetic
+  # (2^64 = 2^63 * 2, since 2^64 itself does not fit a U64 literal).
   var hi = int_truncate[U128, U64](from >>> 64u32)
-  lateinit var result: F128
-  danger!
-    rf_u128_to_f128_parts(low: lo, high: hi, out: result.hijack())
+  var lo = int_truncate[U128, U64](from)
+  var fhi = F128(from: hi)
+  var flo = F128(from: lo)
+  var two63 = F128(from: 9223372036854775808_u64)
+  var two = F128(from: 2_s64)
+  var two64 = two63 * two
+  var hipart = fhi * two64
+  var result = hipart + flo
   return result
+
+### Converts a `U256` into quadruple-precision floating-point form.
+### value = hi * 2^128 + lo, evaluated in correctly-rounded F128 arithmetic (2^256 is
+### far inside F128's range, so the checked `*`/`+` never overflow).
+### :param from: The unsigned 256-bit integer to convert.
+### :returns: The closest representable `F128` value.
+routine F128.$create(from: U256) -> F128
+  var hi = int_truncate[U256, U128](from >>> 128u32)
+  var lo = int_truncate[U256, U128](from)
+  var two63 = F128(from: 9223372036854775808_u64)
+  var two = F128(from: 2_s64)
+  var two64 = two63 * two
+  var two128 = two64 * two64
+  return F128(from: hi) * two128 + F128(from: lo)
 
 ### Widens a half-precision float to quadruple precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F128` carrying the same numeric value when representable.
 routine F128.$create(from: F16) -> F128
-  return F128(from: float_extend[F16, F32](from))
+  return F128(from: float_extend[F32, F64](float_extend[F16, F32](from)))
 
 ### Widens a single-precision float to quadruple precision.
 ### :param from: The `F32` value to widen.
 ### :returns: An `F128` carrying the same numeric value when representable.
 routine F128.$create(from: F32) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f32_to_f128_parts(x: from, out: result.hijack())
-  return result
+  return F128(from: float_extend[F32, F64](from))
 
-### Widens a double-precision float to quadruple precision.
+### Widens a double-precision float to quadruple precision (exact, pure bit surgery).
+### F64 (1+11+52, bias 1023) re-encodes into F128 (1+15+112, bias 16383). Widening is
+### always exact; F64 subnormals normalize into the vast F128 normal range.
 ### :param from: The `F64` value to widen.
-### :returns: An `F128` carrying the same numeric value when representable.
+### :returns: An `F128` carrying the same numeric value.
 routine F128.$create(from: F64) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f64_to_f128_parts(x: from, out: result.hijack())
-  return result
+  var bits = reinterpret_bits[F64, U64](from)
+  var sign = shift_right_unsigned[U64](bits, 63_u64)
+  var e = bit_and[U64](a: shift_right_unsigned[U64](bits, 52_u64), b: 0x7FF_u64)
+  var f = bit_and[U64](a: bits, b: 0x000F_FFFF_FFFF_FFFF_u64)
+  var sign128 = shift_left[U128](zero_extend[U64, U128](sign), 127_u128)
+  # inf / nan: exponent all ones; carry the 52-bit payload up (quiet bit preserved).
+  if e == 0x7FF_u64
+    var m = shift_left[U128](zero_extend[U64, U128](f), 60_u128)
+    var ew = shift_left[U128](32767_u128, 112_u128)
+    return F128.from_bits(bits: bit_or[U128](a: bit_or[U128](a: sign128, b: ew), b: m))
+  # signed zero.
+  if e == 0_u64 and f == 0_u64
+    return F128.from_bits(bits: sign128)
+  lateinit var e128: U64
+  lateinit var mant52: U64
+  if e == 0_u64
+    # subnormal F64: value = f * 2^-1074. Normalize so the implicit bit lands at bit 52.
+    var msb = sub[U64](a: 63_u64, b: leading_zeros[U64](f))
+    var shift = sub[U64](a: 52_u64, b: msb)
+    mant52 = bit_and[U64](a: shift_left[U64](f, shift), b: 0x000F_FFFF_FFFF_FFFF_u64)
+    e128 = add[U64](a: msb, b: 15309_u64)
+  else
+    mant52 = f
+    e128 = add[U64](a: e, b: 15360_u64)
+  var ew = shift_left[U128](zero_extend[U64, U128](e128), 112_u128)
+  var mw = shift_left[U128](zero_extend[U64, U128](mant52), 60_u128)
+  return F128.from_bits(bits: bit_or[U128](a: bit_or[U128](a: sign128, b: ew), b: mw))
 
 ### Returns an existing `F128` unchanged.
 ### :param from: The quadruple-precision value to forward.
@@ -144,418 +1681,86 @@ routine F128.$create(from: F128) -> F128
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: D32) -> F128
-  lateinit var result: F128
-  danger!
-    rf_d32_to_f128_parts(bits: from.to_bits(), out: result.hijack())
-  return result
+  return F128(from: F64(from))
 
 ### Converts a decimal64 value to quadruple-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: D64) -> F128
-  lateinit var result: F128
-  danger!
-    rf_d64_to_f128_parts(bits: from.to_bits(), out: result.hijack())
-  return result
+  return d64_to_f128(x: from)
 
 ### Converts a decimal128 value to quadruple-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: D128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_d128_to_f128_parts(low: from.low_bits(), high: from.high_bits(), out: result.hijack())
-  return result
+  return d128_to_f256(x: from).to_f128()
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
-### Returns the sum of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
-routine F128.$add!(you: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_add_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F128 addition produced non-finite result: {me} + {you}")
-  return result
+### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
+### :returns: `me`, when finite.
+### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
+routine F128.finite!() -> F128
+  if not me.is_finite()
+    throw NumericOverflowError(description: f"F128 value is non-finite: {me}")
+  return me
 
-### Returns the difference between this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
-routine F128.$sub!(you: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_sub_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F128 subtraction produced non-finite result: {me} - {you}")
-  return result
+# Unchecked variants — raw IEEE 754 propagation. They call the software engine DIRECTLY (not the
+# checked `+ - * /` operators, which would crash), so `x/0` -> ±inf and `0/0` -> NaN instead of a
+# crash. Plain (not `dangerous`): inf/NaN are valid IEEE values; the `_unchecked` spelling is the
+# marker.
 
-### Returns the product of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
-routine F128.$mul!(you: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_mul_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F128 multiplication produced non-finite result: {me} * {you}")
-  return result
+### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+routine F128.$truediv_unchecked(you: F128) -> F128
+  return F128.from_bits(bits: f128_div_bits(a: me.to_bits(), b: you.to_bits()))
 
-### Returns the quotient of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
-routine F128.$truediv!(you: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_div_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F128 division produced non-finite result: {me} / {you}")
-  return result
+### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine F128.$add_unchecked(you: F128) -> F128
+  return F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: you.to_bits()))
 
-### Returns the negated value.
-### :returns: The resulting `F128` value.
-routine F128.$neg() -> F128
-  # Sign-bit flip on the raw encoding (IEEE negation is a pure bit operation).
-  var sign_mask = shift_left[U128](zero_extend[U64, U128](0x8000000000000000u64), 64_u128)
-  return F128.from_bits(bits: bit_xor[U128](a: me.to_bits(), b: sign_mask))
+### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine F128.$sub_unchecked(you: F128) -> F128
+  return F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: bit_xor[U128](a: you.to_bits(), b: f128_sign_mask())))
 
-### Divides `me` by `you` without overflow checking.
-### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
-### :param you: The divisor.
-### :returns: The quadruple-precision quotient, possibly infinity or NaN.
-dangerous routine F128.$truediv_unchecked(you: F128) -> F128
-  lateinit var result: F128
-  rf_f128_div_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
-  return result
-
-### Adds `me + you` without finiteness checking (raw IEEE 754).
-dangerous routine F128.$add_unchecked(you: F128) -> F128
-  lateinit var result: F128
-  rf_f128_add_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
-  return result
-
-### Subtracts `me - you` without finiteness checking (raw IEEE 754).
-dangerous routine F128.$sub_unchecked(you: F128) -> F128
-  lateinit var result: F128
-  rf_f128_sub_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
-  return result
-
-### Multiplies `me * you` without finiteness checking (raw IEEE 754).
-dangerous routine F128.$mul_unchecked(you: F128) -> F128
-  lateinit var result: F128
-  rf_f128_mul_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
-  return result
+### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine F128.$mul_unchecked(you: F128) -> F128
+  return F128.from_bits(bits: f128_mul_bits(a: me.to_bits(), b: you.to_bits()))
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================
 
-### Returns whether both values are equal.
-### :param you: The other value to compare against.
-### :returns: The resulting `Bool` value.
-routine F128.$eq(you: F128) -> Bool
-  return rf_f128_eq_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits()) != 0_s32
-
-### Compares this value with the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `ComparisonSign` value.
-routine F128.$cmp(you: F128) -> ComparisonSign
-  if rf_f128_lt_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits()) != 0_s32
-    return ME_SMALL
-  if rf_f128_gt_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits()) != 0_s32
-    return ME_LARGE
-  return SAME
-
 # ============================================================================
 # Math Operations (via TLFloat native runtime)
 # ============================================================================
 
-### Returns the square root of this value in quadruple precision.
-### :returns: The square-root result for `me`.
-routine F128.sqrt() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_sqrt_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the absolute value.
-### :returns: The resulting `F128` value.
-routine F128.abs() -> F128
-  # Sign-bit clear on the raw encoding (IEEE abs is a pure bit operation).
-  var sign_mask = shift_left[U128](zero_extend[U64, U128](0x8000000000000000u64), 64_u128)
-  return F128.from_bits(bits: bit_and[U128](a: me.to_bits(), b: sign_mask -% 1))
-
-### Rounds this value toward negative infinity.
-### :returns: The greatest integral-valued `F128` not larger than `me`.
-routine F128.floor() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_floor_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Rounds this value toward positive infinity.
-### :returns: The smallest integral-valued `F128` not smaller than `me`.
-routine F128.ceil() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_ceil_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Rounds this value to the nearest integral-valued `F128`.
-### :returns: The rounded result in quadruple precision.
-routine F128.round() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_round_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
 ### Discards the fractional part of this value toward zero.
 ### :returns: The truncated result in quadruple precision.
 routine F128.int_truncate() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_trunc_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
+  return me.trunc()
 
 # ============================================================================
 # Trigonometric Functions (via LibBF native runtime)
 # ============================================================================
 
-### Returns the sine of this value, interpreting it as radians.
-### :returns: The quadruple-precision sine result.
-routine F128.sin() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_sin_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the cosine of this value, interpreting it as radians.
-### :returns: The quadruple-precision cosine result.
-routine F128.cos() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_cos_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the tangent of this value, interpreting it as radians.
-### :returns: The quadruple-precision tangent result.
-routine F128.tan() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_tan_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the inverse sine of this value.
-### :returns: The quadruple-precision arcsine result.
-routine F128.asin() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_asin_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the inverse cosine of this value.
-### :returns: The quadruple-precision arccosine result.
-routine F128.acos() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_acos_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the inverse tangent of this value.
-### :returns: The quadruple-precision arctangent result.
-routine F128.atan() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_atan_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the polar angle of the point `(x, me)`.
-### :param x: The x-coordinate paired with this y-coordinate.
-### :returns: The quadrant-aware arctangent result.
-routine F128.atan2(x: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_atan2_parts(y_low: me.low_bits(), y_high: me.high_bits(), x_low: x.low_bits(), x_high: x.high_bits(), out: result.hijack())
-  return result
-
 # ============================================================================
 # Hyperbolic Functions (via LibBF native runtime)
 # ============================================================================
-
-### Returns the hyperbolic sine of this value.
-### :returns: The quadruple-precision hyperbolic-sine result.
-routine F128.sinh() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_sinh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the hyperbolic cosine of this value.
-### :returns: The quadruple-precision hyperbolic-cosine result.
-routine F128.cosh() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_cosh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the hyperbolic tangent of this value.
-### :returns: The quadruple-precision hyperbolic-tangent result.
-routine F128.tanh() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_tanh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the inverse hyperbolic sine of this value.
-### :returns: The quadruple-precision inverse-hyperbolic-sine result.
-routine F128.asinh() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_asinh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the inverse hyperbolic cosine of this value.
-### :returns: The quadruple-precision inverse-hyperbolic-cosine result.
-routine F128.acosh() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_acosh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the inverse hyperbolic tangent of this value.
-### :returns: The quadruple-precision inverse-hyperbolic-tangent result.
-routine F128.atanh() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_atanh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
 
 # ============================================================================
 # Exponential and Logarithmic Functions (via LibBF native runtime)
 # ============================================================================
 
-### Returns `e` raised to this value.
-### :returns: The quadruple-precision exponential result.
-routine F128.exp() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_exp_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns `2` raised to this value.
-### :returns: The quadruple-precision base-2 exponential result.
-routine F128.exp2() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_exp2_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns `exp(me) - 1` with precision suitable for very small inputs.
-### :returns: The quadruple-precision exponential-minus-one result.
-routine F128.expm1() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_expm1_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the natural logarithm of this value.
-### :returns: The quadruple-precision natural-log result.
-routine F128.log() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_log_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the base-2 logarithm of this value.
-### :returns: The quadruple-precision binary-log result.
-routine F128.log2() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_log2_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the base-10 logarithm of this value.
-### :returns: The quadruple-precision common-log result.
-routine F128.log10() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_log10_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns `log(1 + me)` with precision suitable for very small inputs.
-### :returns: The quadruple-precision log-one-plus result.
-routine F128.log1p() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_log1p_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
 # ============================================================================
 # Power Functions (via LibBF native runtime)
 # ============================================================================
 
-### Raises this value to the floating-point power `exp`.
-### :param exp: The exponent applied to `me`.
-### :returns: `me` raised to `exp` in quadruple precision.
-routine F128.pow(exp: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_pow_parts(base_low: me.low_bits(), base_high: me.high_bits(), exp_low: exp.low_bits(), exp_high: exp.high_bits(), out: result.hijack())
-  return result
-
-### Raises this value to `exp` and rejects non-finite results.
-### :param exp: The exponent applied to `me`.
-### :returns: `me` raised to `exp` in quadruple precision.
-routine F128.$pow!(exp: F128) -> F128
-  var result = me.pow(exp)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"F128 power produced non-finite result: {me} ** {exp}")
-  return result
-
-### Returns the real cube root of this value.
-### :returns: The quadruple-precision cube-root result.
-routine F128.cbrt() -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_cbrt_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
-  return result
-
-### Returns the Euclidean length of the vector `(me, y)`.
-### :param y: The second coordinate.
-### :returns: `sqrt(me * me + y * y)` computed by the runtime helper.
-routine F128.hypot(y: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_hypot_parts(x_low: me.low_bits(), x_high: me.high_bits(), y_low: y.low_bits(), y_high: y.high_bits(), out: result.hijack())
-  return result
-
-### Returns this value with its sign bit replaced by the sign of `sign`.
-### :param sign: The value supplying the sign bit.
-### :returns: A value with the magnitude of `me` and the sign of `sign`.
-routine F128.copysign(sign: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_copysign_parts(value_low: me.low_bits(), value_high: me.high_bits(), sign_low: sign.low_bits(), sign_high: sign.high_bits(), out: result.hijack())
-  return result
-
 # ============================================================================
 # Utility Methods
 # ============================================================================
-
-### Returns the smaller of this value and `you`.
-### :param you: The value to compare against.
-### :returns: The lower of the two values under the ordered comparison rules.
-routine F128.min(you: F128) -> F128
-  return if me <= you then me else you
-
-### Returns the larger of this value and `you`.
-### :param you: The value to compare against.
-### :returns: The greater of the two values under the ordered comparison rules.
-routine F128.max(you: F128) -> F128
-  return if me >= you then me else you
 
 ### Restricts this value to the closed interval `[min_val, max_val]`.
 ### :param min_val: The lower bound to enforce.
@@ -565,21 +1770,6 @@ routine F128.max(you: F128) -> F128
 routine F128.clamp(min_val: F128, max_val: F128) -> F128
   return me.min(max_val).max(min_val)
 
-### Returns `true` if this value is strictly positive (greater than zero).
-### :returns: `true` if `me > 0.0`.
-routine F128.is_positive() -> Bool
-  return me > 0.0_f128
-
-### Returns `true` if this value is strictly negative (less than zero).
-### :returns: `true` if `me < 0.0`.
-routine F128.is_negative() -> Bool
-  return me < 0.0_f128
-
-### Returns `true` if this value compares equal to zero.
-### :returns: `true` if `me == 0.0`.
-routine F128.is_zero() -> Bool
-  return me == 0.0_f128
-
 ### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
 ### :returns: A unit-sign value describing the sign of `me`.
 routine F128.signum() -> F128
@@ -587,11 +1777,6 @@ routine F128.signum() -> F128
     me > 0.0_f128 => 1.0_f128
     me < 0.0_f128 => -1.0_f128
     else => 0.0_f128
-
-### Reinterprets this float as its raw IEEE 754 bit pattern.
-### :returns: The underlying `U128` encoding of this value.
-routine F128.to_bits() -> U128
-  return reinterpret_bits[F128, U128](me)
 
 ### Returns the low 64 bits of the raw `F128` encoding.
 ### :returns: The least-significant half of the bit pattern.
@@ -603,57 +1788,9 @@ routine F128.low_bits() -> U64
 routine F128.high_bits() -> U64
   return int_truncate[U128, U64](me.to_bits() >>> 64u32)
 
-### Reinterprets a raw IEEE 754 bit pattern as an `F128`.
-### :param bits: The exact quadruple-precision encoding to decode.
-### :returns: The `F128` value with that bit pattern.
-common routine F128.from_bits(bits: U128) -> F128
-  return reinterpret_bits[U128, F128](bits)
-
 # ============================================================================
 # Classification
 # ============================================================================
-
-### Returns `true` when this value encodes an IEEE 754 NaN.
-### :returns: Whether the bit pattern represents a not-a-number payload.
-routine F128.is_nan() -> Bool
-  # F128: bit 127=sign, bits 126-112=exponent (15 bits), bits 111-0=mantissa (112 bits)
-  # NaN = exponent all-ones (0x7FFF) AND mantissa != 0
-  var bits = me.to_bits()
-  var hi = int_truncate[U128, U64](bits >>> 64u32)
-  var lo = int_truncate[U128, U64](bits)
-  var exponent = bit_and[U64](shift_right_unsigned[U64](hi, 48_u32), 0x7FFF_u64)
-  var hi_mantissa = bit_and[U64](a: hi, b: 0x0000_FFFF_FFFF_FFFF_u64)
-  return exponent == 0x7FFF_u64 and (hi_mantissa != 0u64 or lo != 0u64)
-
-### Returns `true` when this value encodes positive or negative infinity.
-### :returns: Whether the bit pattern represents an infinity.
-routine F128.is_infinite() -> Bool
-  # F128: bit 127=sign, bits 126-112=exponent (15 bits), bits 111-0=mantissa (112 bits)
-  # Infinity = exponent all-ones (0x7FFF) AND mantissa == 0
-  var bits = me.to_bits()
-  var hi = int_truncate[U128, U64](bits >>> 64u32)
-  var lo = int_truncate[U128, U64](bits)
-  var exponent = bit_and[U64](shift_right_unsigned[U64](hi, 48_u32), 0x7FFF_u64)
-  var hi_mantissa = bit_and[U64](a: hi, b: 0x0000_FFFF_FFFF_FFFF_u64)
-  return exponent == 0x7FFF_u64 and hi_mantissa == 0u64 and lo == 0u64
-
-### Returns `true` when this value is neither NaN nor infinity.
-### :returns: Whether the value is finite.
-routine F128.is_finite() -> Bool
-  return not me.is_nan() and not me.is_infinite()
-
-### Returns `true` when this is a finite, non-zero, non-subnormal value.
-### :returns: Whether the value is a normal IEEE 754 number.
-routine F128.is_normal() -> Bool
-  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
-
-### Returns `true` when this value is finite, non-zero, and encoded with an exponent of zero.
-### :returns: Whether the value is subnormal.
-routine F128.is_subnormal() -> Bool
-  var bits = me.to_bits()
-  var hi = int_truncate[U128, U64](bits >>> 64u32)
-  var exponent = bit_and[U64](shift_right_unsigned[U64](hi, 48_u32), 0x7FFF_u64)
-  return exponent == 0u64 and not me.is_zero()
 
 # ============================================================================
 # Clamping Arithmetic
@@ -663,9 +1800,7 @@ routine F128.is_subnormal() -> Bool
 ### :param you: The addend.
 ### :returns: The sum, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$add_clamp(you: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_add_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
+  var result = me + you
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
   return result
@@ -674,9 +1809,7 @@ routine F128.$add_clamp(you: F128) -> F128
 ### :param you: The value to subtract.
 ### :returns: The difference, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$sub_clamp(you: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_sub_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
+  var result = me - you
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
   return result
@@ -685,9 +1818,7 @@ routine F128.$sub_clamp(you: F128) -> F128
 ### :param you: The multiplier.
 ### :returns: The product, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$mul_clamp(you: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_mul_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
+  var result = me * you
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
   return result
@@ -696,9 +1827,7 @@ routine F128.$mul_clamp(you: F128) -> F128
 ### :param you: The divisor.
 ### :returns: The quotient, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$truediv_clamp(you: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_div_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
+  var result = me / you
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
   return result
@@ -707,9 +1836,7 @@ routine F128.$truediv_clamp(you: F128) -> F128
 ### :param exp: The exponent applied to `me`.
 ### :returns: The power, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$pow_clamp(exp: F128) -> F128
-  lateinit var result: F128
-  danger!
-    rf_f128_pow_parts(base_low: me.low_bits(), base_high: me.high_bits(), exp_low: exp.low_bits(), exp_high: exp.high_bits(), out: result.hijack())
+  var result = me ** exp
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
   return result
@@ -734,24 +1861,80 @@ routine F128.S128!() -> S128
 # Float Precision Conversions
 # ============================================================================
 
+### Shifts `sig` right by `drop` bits, rounding to nearest with ties to even.
+### Used by the `F128 -> F64` narrowing to discard the low significand bits.
+### :param sig: The significand to round (up to 113 significant bits).
+### :param drop: The count of low bits to discard.
+### :returns: The rounded, right-shifted magnitude.
+routine f128_rshift_rne(sig: U128, drop: U64) -> U64
+  if drop == 0_u64
+    return int_truncate[U128, U64](sig)
+  if drop >= 128_u64
+    return 0_u64
+  var dm1 = zero_extend[U64, U128](sub[U64](a: drop, b: 1_u64))
+  var keep = int_truncate[U128, U64](shift_right_unsigned[U128](sig, zero_extend[U64, U128](drop)))
+  var roundbit = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](sig, dm1), b: 1_u128))
+  var stickymask = sub[U128](a: shift_left[U128](1_u128, dm1), b: 1_u128)
+  var sticky = int_ne[U128](a: bit_and[U128](a: sig, b: stickymask), b: 0_u128)
+  if roundbit == 1_u64 and (sticky or bit_and[U64](a: keep, b: 1_u64) == 1_u64)
+    return add[U64](a: keep, b: 1_u64)
+  return keep
+
 ### Narrows this quadruple-precision value to single precision.
 ### :returns: The nearest representable `F32` value.
-routine F128.F32() -> F32
-  return rf_f128_to_f32_parts(low: me.low_bits(), high: me.high_bits())
+routine F32.$create(from: F128) -> F32
+  # F128 -> F64 (correctly rounded) -> F32 (native fptrunc). The wide F64 slack
+  # makes the second rounding faithful for all but pathological double-round ties.
+  return float_narrow[F64, F32](F64(from: from))
 
-### Narrows this quadruple-precision value to double precision.
-### :returns: The nearest representable `F64` value.
-routine F128.F64() -> F64
-  return rf_f128_to_f64_parts(low: me.low_bits(), high: me.high_bits())
+### Narrows this quadruple-precision value to double precision (correctly rounded,
+### pure bit surgery — F128 is an i128 carrier, so no LLVM `fptrunc` is available).
+### Handles inf/NaN, overflow to ±inf, the F64 subnormal range, and underflow to ±0.
+### :returns: The nearest representable `F64` value (round-to-nearest-ties-to-even).
+routine F64.$create(from: F128) -> F64
+  var raw = from.to_bits()
+  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](raw, 127_u128))
+  var E = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](raw, 112_u128), b: 32767_u128))
+  var M = bit_and[U128](a: raw, b: sub[U128](a: shift_left[U128](1_u128, 112_u128), b: 1_u128))
+  var sbit = shift_left[U64](sign, 63_u64)
+  var inf64 = bit_or[U64](a: sbit, b: 0x7FF0000000000000_u64)
+  # inf / NaN: exponent all ones.
+  if E == 0x7FFF_u64
+    if int_eq[U128](a: M, b: 0_u128)
+      return reinterpret_bits[U64, F64](inf64)
+    return reinterpret_bits[U64, F64](bit_or[U64](a: sbit, b: 0x7FF8000000000000_u64))
+  # F128 zero or F128-subnormal: far below the F64 minimum -> signed zero.
+  if E == 0_u64
+    return reinterpret_bits[U64, F64](sbit)
+  var sig = bit_or[U128](a: shift_left[U128](1_u128, 112_u128), b: M)
+  var e64s = sub[S64](a: reinterpret_bits[U64, S64](E), b: 15360_s64)
+  # overflow.
+  if signed_ge[S64](a: e64s, b: 2047_s64)
+    return reinterpret_bits[U64, F64](inf64)
+  # normal F64 result.
+  if signed_ge[S64](a: e64s, b: 1_s64)
+    var r = f128_rshift_rne(sig: sig, drop: 60_u64)
+    var exp = reinterpret_bits[S64, U64](e64s)
+    if r >= shift_left[U64](1_u64, 53_u64)
+      exp = add[U64](a: exp, b: 1_u64)
+      r = shift_right_unsigned[U64](r, 1_u64)
+      if exp >= 2047_u64
+        return reinterpret_bits[U64, F64](inf64)
+    var mant = bit_and[U64](a: r, b: sub[U64](a: shift_left[U64](1_u64, 52_u64), b: 1_u64))
+    return reinterpret_bits[U64, F64](bit_or[U64](a: bit_or[U64](a: sbit, b: shift_left[U64](exp, 52_u64)), b: mant))
+  # subnormal F64 result or underflow to zero.
+  var drop = sub[S64](a: 61_s64, b: e64s)
+  var rs = f128_rshift_rne(sig: sig, drop: reinterpret_bits[S64, U64](drop))
+  if rs == 0_u64
+    return reinterpret_bits[U64, F64](sbit)
+  # rounding up across the subnormal/normal boundary yields the smallest normal.
+  if rs >= shift_left[U64](1_u64, 52_u64)
+    return reinterpret_bits[U64, F64](bit_or[U64](a: sbit, b: shift_left[U64](1_u64, 52_u64)))
+  return reinterpret_bits[U64, F64](bit_or[U64](a: sbit, b: rs))
 
 # ============================================================================
 # Diagnostics and Hashing
 # ============================================================================
-
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
-routine F128.$diagnose() -> Text
-  return Text(from: me)
 
 ### Returns a stable hash derived from the raw floating-point encoding.
 ### NaN payloads and negative zero are normalized so equal numeric values hash
@@ -773,75 +1956,41 @@ routine F128.hash() -> U64
 # Text Representation and Parsing
 # ============================================================================
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
-routine F128.$represent() -> Text
-  var cstr_result = rf_format_F128_parts(low: me.low_bits(), high: me.high_bits())
-  return Text(from: CStr(from_ptr: cstr_result))
+### Returns `5^k` as a U256 (exact for `k <= 110`). Used to detect/resolve exact-tie
+### decimal inputs during parsing (a negative-exponent tie needs `5^|exp|` to divide the
+### coefficient). Cheap: at most ~56 multiplies, only on the rare tie path.
+### :param k: The non-negative power.
+### :returns: `5^k`.
+routine f128_pow5(k: S64) -> U256
+  var r = zero_extend[U64, U256](1_u64)
+  var five = zero_extend[U64, U256](5_u64)
+  var i = 0_s64
+  while signed_lt[S64](a: i, b: k)
+    r = mul[U256](a: r, b: five)
+    i = add[S64](a: i, b: 1_s64)
+  return r
 
-### Implements the wired routine behavior for this value.
-### :param from_text: The `from_text` value.
-### :returns: The resulting `F128` value.
-### :throws: May throw {InvalidValueError}.
+### Parses decimal text into the correctly-rounded `F128` (provably, round-to-nearest-even).
+### :param from_text: The decimal literal.
+### :returns: The correctly-rounded `F128` value.
+### :throws: {InvalidValueError} on malformed input.
 routine F128.$create!(from_text: Text) -> F128
-  var len = from_text.count()
-  if len == 0u64
-    throw InvalidValueError(input: from_text, target: "F128")
-  var i = 0u64
-  var first = from_text[0u64]
-  if first == Character(0x002Bu32) or first == Character(0x002Du32)
-    i = 1u64
-    if i >= len
-      throw InvalidValueError(input: from_text, target: "F128")
-  var special = false
-  var rest = len - i
-  if rest >= 3u64
-    var c0 = from_text[i].to_lowercase()
-    var c1 = from_text[i + 1u64].to_lowercase()
-    var c2 = from_text[i + 2u64].to_lowercase()
-    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
-      special = true
-    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      special = true
-    if not special and rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      var c3 = from_text[i + 3u64].to_lowercase()
-      var c4 = from_text[i + 4u64].to_lowercase()
-      var c5 = from_text[i + 5u64].to_lowercase()
-      var c6 = from_text[i + 6u64].to_lowercase()
-      var c7 = from_text[i + 7u64].to_lowercase()
-      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
-        special = true
-  if not special
-    var has_digit = false
-    var has_dot = false
-    var has_exp = false
-    while i < len
-      var ch = from_text[i]
-      if ch.is_numeric()
-        has_digit = true
-      elseif ch == Character(0x002Eu32)
-        if has_dot or has_exp
-          throw InvalidValueError(input: from_text, target: "F128")
-        has_dot = true
-      elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
-        if has_exp or not has_digit
-          throw InvalidValueError(input: from_text, target: "F128")
-        has_exp = true
-        has_digit = false
-        if i + 1u64 < len
-          var next_ch = from_text[i + 1u64]
-          if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
-            i = i + 1u64
-      else
-        throw InvalidValueError(input: from_text, target: "F128")
-      i = i + 1u64
-    if not has_digit
-      throw InvalidValueError(input: from_text, target: "F128")
-  var cstr_val = CStr(from: from_text)
-  lateinit var result: F128
-  danger!
-    rf_parse_F128(cstr: cstr_val, out: result.hijack())
-  return result
+  # PROVABLY-CORRECT decimal->binary128. FAST PATH: `coeff x 10^exp` in F512 (489-bit
+  # significand) is correctly-rounded for EVERY non-tie input — its ~2^-475 error is far
+  # below the ~2^-239 worst-case decimal->F128 separation. EXACT TIES (the round-half-even
+  # cases a fast path can't see) provably need exp in [-56,55]; for exp>=0 the F512 product
+  # is exact anyway, and for exp<0 a tie requires 5^|exp| | coeff, in which case
+  # V = (coeff / 5^|exp|) x 2^exp is EXACT in F512 via ldexp and resolved with bounded U256.
+  # No bignum, no module-Numerics dependency, no table beyond the existing f512_pow10.
+  var p = scan_decimal_parts!(from_text: from_text)
+  if int_eq[U64](a: p.special, b: 0_u64) and int_ne[U128](a: p.coeff, b: 0_u128) and signed_lt[S64](a: p.exp, b: 0_s64) and signed_ge[S64](a: p.exp, b: -56_s64)
+    var p5 = f128_pow5(k: sub[S64](a: 0_s64, b: p.exp))
+    var cw = zero_extend[U128, U256](p.coeff)
+    if int_eq[U256](a: unsigned_rem[U256](a: cw, b: p5), b: zero_extend[U64, U256](0_u64))
+      var m = unsigned_div[U256](a: cw, b: p5)
+      var r = uf512_from_u256(c: m).ldexp(e: p.exp).to_f128()
+      return if p.sign then r.$neg() else r
+  return d128parts_to_f512(p: p).to_uf().to_f128()
 
 # ============================================================================
 # Hashing

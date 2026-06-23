@@ -143,25 +143,19 @@ public partial class LlvmCodeGenerator
 
     private void EmitEntityCleanup(StringBuilder sb, string? returnedVarName)
     {
-        // Scope-exit teardown of owned locals is now lowered into the AST as explicit
+        // Scope-exit teardown of owned locals is lowered into the AST as explicit
         // `local.$destroy()` calls by ScopeTeardownLoweringPass (Phase 7), so codegen emits none.
+        //
+        // The entity self-free (freeing the heap allocation backing `me`) is ALSO lowered into the
+        // synthesized `$destroy` body as `me.hijack().invalidate()` (see
+        // WiredRoutinePass.BuildEntitySelfFree). Codegen used to additionally emit a raw
+        // `rf_invalidate(me)` here for synthesized entity `$destroy`, but that DUPLICATED the
+        // AST-level free → every synthesized entity `$destroy` double-freed `me` (ASan: "double-free"
+        // / glibc "double free in tcache"), crashing programs that destroy an owned entity at scope
+        // exit (e.g. `using x.modify() as g`). The AST free is the single source of truth, so this is
+        // now a no-op; the parameters are kept for call-site compatibility.
+        _ = sb;
         _ = returnedVarName;
-
-        // The ONE thing that can't be expressed in `.rf`: a synthesized (auto-derived) entity
-        // `$destroy` is the sole free for its own `me`, so after its field-recursion body runs we
-        // free the backing allocation here. User-written `$destroy`s own their free (e.g.
-        // RetainController.$destroy calls `me.hijack().invalidate()`), so they are gated out to
-        // avoid a double-free. Runs at every exit of such a routine (its body has one return).
-        if (_currentEmittingRoutine is
-                { Name: "$destroy", IsSynthesized: true, OwnerType: EntityTypeInfo }
-            && _localVariables.ContainsKey(key: "me"))
-        {
-            string meLoaded = NextTemp();
-            EmitLine(sb: sb, line: $"  {meLoaded} = load ptr, ptr %me.addr");
-            string asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {meLoaded} to i64");
-            EmitLine(sb: sb, line: $"  call void @rf_invalidate(i64 {asInt})");
-        }
     }
 
     #endregion

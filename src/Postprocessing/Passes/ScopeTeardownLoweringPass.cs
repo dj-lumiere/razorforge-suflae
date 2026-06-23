@@ -234,10 +234,12 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             stmts.Add(item: LowerStatement(s, live, loopBoundary));
         }
 
-        // Fall-through end-of-block: destroy this block's own locals in declaration order. Codegen
-        // drops these as dead code if the block always terminates (same as UsingLoweringPass's
-        // normal-exit exit).
-        for (int i = blockStart; i < live.Count; i++)
+        // Fall-through end-of-block: destroy this block's own locals in REVERSE declaration order
+        // (LIFO) — a later-declared local may reference an earlier one, so destroying dependents
+        // before dependencies is the safe RAII order (and matches this pass's documented contract).
+        // Codegen drops these as dead code if the block always terminates (same as
+        // UsingLoweringPass's normal-exit exit).
+        for (int i = live.Count - 1; i >= blockStart; i--)
             stmts.Add(item: MakeDestroyStmt(live[index: i], block.Location));
 
         return block with { Statements = stmts };
@@ -271,6 +273,12 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         if (retVal is not null and not IdentifierExpression && WillDestroyAny(live, from, skip))
         {
             string tmp = $"__td_ret_{_spillCounter++}";
+            // Leave the slot type to be inferred from EXPR — codegen emits the spilled value with its
+            // own resolved type, so the slot must match THAT, not the declared routine return type
+            // (they can disagree, e.g. a synthesized $diagnose whose AST return type lags the body, or
+            // a return that codegen wraps). The failable-passthrough case (node says S64, emits
+            // Maybe[S64]) is handled at the source: ErrorHandlingVariantPass stamps the passthrough
+            // call's ResolvedType with the variant carrier, so EXPR inference already sees Maybe[S64].
             var decl = new VariableDeclaration(Name: tmp, Type: null, Initializer: retVal,
                 Visibility: VisibilityModifier.Secret, Location: exit.Location);
             stmts.Add(item: new DeclarationStatement(Declaration: decl, Location: exit.Location));
@@ -285,7 +293,9 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             skip = tmp; // the spilled value is moved out — never tear it down
         }
 
-        for (int i = from; i < live.Count; i++)
+        // Destroy in REVERSE declaration order (LIFO) — the safe RAII order, matching this pass's
+        // documented contract and the fall-through end-of-block teardown above.
+        for (int i = live.Count - 1; i >= from; i--)
         {
             if (skip != null && live[index: i].Name == skip) continue;
             stmts.Add(item: MakeDestroyStmt(live[index: i], exit.Location));

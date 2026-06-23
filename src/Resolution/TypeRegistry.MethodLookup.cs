@@ -27,9 +27,11 @@ public sealed partial class TypeRegistry
         // Never let a synthesized (builder-generated) routine overwrite a user-written one:
         // explicit user routines override synthetic same-signature defaults (e.g., a user
         // `T.$create(field: Foo)` overrides the auto-generated record field constructor).
-        if (_routines.TryGetValue(key: registryKey, value: out RoutineInfo? existingByKey))
+        bool keyExisted =
+            _routines.TryGetValue(key: registryKey, value: out RoutineInfo? existingByKey);
+        if (keyExisted)
         {
-            bool existingIsUser = !existingByKey.IsSynthesized;
+            bool existingIsUser = !existingByKey!.IsSynthesized;
             bool incomingIsSynthetic = routine.IsSynthesized;
             if (!(existingIsUser && incomingIsSynthetic))
                 _routines[key: registryKey] = routine;
@@ -62,7 +64,28 @@ public sealed partial class TypeRegistry
                 _routinesByOwner[key: ownerKey] = list;
             }
 
-            list.Add(item: routine);
+            // Dedup by (RegistryKey, IsFailable): a re-registered routine (same owner, signature,
+            // and failability) REPLACES its prior list entry instead of appending. Appending
+            // duplicates here let method resolution iterate stale-and-fresh copies of the same
+            // overload and pick order-dependently — a non-determinism that manifested as
+            // platform-specific codegen. Failability is part of the identity because `$mul` and
+            // `$mul!` share a RegistryKey (the `!` is not in it) yet are distinct overloads that
+            // must coexist. The dedup scan only runs when the RegistryKey was already present
+            // (`keyExisted`); a key's first registration stays an O(1) append. User-written
+            // routines are never replaced by a synthesized same-identity routine.
+            if (keyExisted)
+            {
+                int existingIdx = list.FindIndex(match: r =>
+                    r.IsFailable == routine.IsFailable && r.RegistryKey == registryKey);
+                if (existingIdx < 0)
+                    list.Add(item: routine);
+                else if (!(!list[index: existingIdx].IsSynthesized && routine.IsSynthesized))
+                    list[index: existingIdx] = routine;
+            }
+            else
+            {
+                list.Add(item: routine);
+            }
 
             // Index universal methods (on GenericParameterTypeInfo owners) by name for O(1) lookup
             if (routine.OwnerType is GenericParameterTypeInfo)
@@ -668,6 +691,19 @@ public sealed partial class TypeRegistry
                     return SynthesizeProtocolMethod(proto: protoInfo,
                         protoMethod: protoMethod,
                         ownerType: param);
+
+                // Extension methods (default implementations) declared as
+                // `routine Iterable[T].List()` are registered against the protocol's owner
+                // table, NOT in `protoInfo.Methods` (which holds only the abstract signatures).
+                // Resolve them through the protocol's generic definition so a generic-parameter
+                // receiver (`S obeys Iterable[T]`) can call them. The returned routine keeps the
+                // protocol's element params and `Me` in its signature; the caller's member-call
+                // substitution block binds them (the obeys constraint maps `Iterable[T]`'s element
+                // → the receiver's element, and `Me` → the receiver `param`).
+                RoutineInfo? extensionMethod =
+                    LookupMethod(type: protoInfo, methodName: methodName, isFailable: isFailable);
+                if (extensionMethod is { OwnerType: not GenericParameterTypeInfo })
+                    return extensionMethod;
             }
         }
 
@@ -885,8 +921,15 @@ public sealed partial class TypeRegistry
             if (methodOnlyGenericParams?.Count == 0)
                 methodOnlyGenericParams = null;
 
+            // Keep constraints on the method's own generic params, PLUS `in [...]` (TypeEquality)
+            // constraints on the OWNER's params (e.g. `Shared[T, P].claim() needs P in [...]`). The
+            // owner param is already substituted on the resolved instance, but the constraint is not
+            // validated here — it is preserved so the call-site verifier can check it against the
+            // receiver's bound argument (otherwise a method constraint on an inherited param vanishes
+            // unchecked).
             List<GenericConstraintDeclaration>? methodOnlyConstraints = method.GenericConstraints?
-                .Where(c => methodOnlyGenericParams?.Contains(c.ParameterName) == true)
+                .Where(c => methodOnlyGenericParams?.Contains(c.ParameterName) == true
+                    || c.ConstraintType == ConstraintKind.TypeEquality)
                 .ToList();
             if (methodOnlyConstraints?.Count == 0)
                 methodOnlyConstraints = null;
@@ -1052,10 +1095,13 @@ public sealed partial class TypeRegistry
         if (methodOnlyGenericParams2?.Count == 0)
             methodOnlyGenericParams2 = null;
 
-        // Only keep constraints on method-level generic parameters
+        // Keep method-level constraints PLUS owner-param `in [...]` (TypeEquality) constraints, so a
+        // method constraint on an inherited param (e.g. `Shared[T, P].claim() needs P in [...]`)
+        // survives to be validated at the call site against the receiver's bound argument.
         List<GenericConstraintDeclaration>? methodOnlyConstraints2 = method
             .GenericConstraints?
-            .Where(c => methodOnlyGenericParams2?.Contains(c.ParameterName) == true)
+            .Where(c => methodOnlyGenericParams2?.Contains(c.ParameterName) == true
+                || c.ConstraintType == ConstraintKind.TypeEquality)
             .ToList();
         if (methodOnlyConstraints2?.Count == 0)
             methodOnlyConstraints2 = null;
@@ -1240,9 +1286,14 @@ public sealed partial class TypeRegistry
     /// <returns>An enumerable of all registered routines.</returns>
     public IEnumerable<RoutineInfo> GetAllRoutines()
     {
+        // `_routines` indexes each first-overload routine under BOTH its RegistryKey and its
+        // (owner-qualified) BaseName, so `.Values` yields that object twice. Dedup by reference so
+        // every consumer (codegen, synthesis passes, the registered-count) sees each routine once
+        // instead of ~2x — the inflated count that made a trivial program look like it had 12k
+        // routines when it actually has ~6.6k.
         IEnumerable<RoutineInfo> all = _prunedGenericBases.Count == 0
-            ? _routines.Values
-            : _routines.Values.Where(r => !_prunedGenericBases.Contains(r.BaseName));
+            ? _routines.Values.Distinct()
+            : _routines.Values.Distinct().Where(r => !_prunedGenericBases.Contains(r.BaseName));
         // Exclude:
         // - @innate routines: compile-time-only stubs (type_name, module_name, etc.) that
         //   BuilderServiceInliningPass folds to literals; they have no body and must never reach codegen.

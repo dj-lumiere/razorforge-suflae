@@ -1,0 +1,51 @@
+module Tests/Stdlib/ThreadedApi
+import IO/Console
+import BuilderService
+
+# v0.1 concurrency, Phase 1: `threaded routine` spawns an OS thread; calling it yields a
+# Task[T] handle; `.waitfor()` joins (-> T) and `.waitfor(timeout)` joins with a deadline
+# (-> Lookup[T], None on timeout/cancel).
+
+threaded routine compute(x: S64, y: S64) -> S64
+  return x * y + 1
+
+# Record return — exercises by-value aggregate handoff across the thread boundary.
+record Point
+  x: S64
+  y: S64
+
+threaded routine make_point(a: S64, b: S64) -> Point
+  return Point(x: a, y: b)
+
+threaded routine excessive_compute(a: S64) -> S64
+  for i in 0 til 1000000000000000  # Magic big number to guarantee failure
+    a *%= i
+  return a
+
+routine start()
+  # 1. spawn, hold the handle, then join.
+  var t = compute(x: 6, y: 7)
+  var r = t.retrieve!()
+  show(f"compute => {r}")
+
+  # 2. fused spawn + join.
+  var r2 = compute(x: 2, y: 5).retrieve!()
+  show(f"fused => {r2}")
+
+  # 3. record result.
+  var p = make_point(a: 3, b: 4).retrieve!()
+  show(f"point => x={p.x} y={p.y}")
+
+  # 4. bounded join via the graceful variant — `retrieve!` throws on timeout, whereas
+  #    `try_retrieve` yields Maybe[T] (None on timeout). Generous window -> the value.
+  var r3 = compute(x: 3, y: 4).waitfor(5s).try_retrieve()
+  when r3
+    is None => show("within => none")
+    is S64 v => show(f"within => {v}")
+
+  var r4 = excessive_compute(a: 1).waitfor(500ms).try_retrieve()
+  when r4
+    is None => show("within => none")
+    is S64 v => show(f"within => {v}")
+
+  return

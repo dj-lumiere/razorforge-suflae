@@ -1,689 +1,603 @@
-module Core
+﻿module Core
 
 import Collections
 
-### Represents a 64-bit IEEE 754 decimal floating-point value.
-### `D64` is the general-purpose decimal type for calculations that need more
-### range and precision than `D32` while preserving decimal semantics.
+# CREDITS: the BID (Binary-Integer-Decimal) encoding, rounding, and exponent rules of
+# this decimal64 engine are a port and extension of Intel's Decimal Floating-Point
+# Math Library ("libbid", © Intel Corporation, BSD 3-Clause). See THIRD-PARTY-NOTICES.md.
+
+# ============================================================================
+# D64 — software IEEE 754-2008 decimal64 (BID). Operands are U64 (decimal64's
+# coefficient has <= 16 digits, < 2^54); products/sums widen to U128 only where
+# needed. Real BID64 storage: Form 1 (coeff < 2^53), Form 2 (large coeff, implicit
+# 2^53), plus inf/NaN via the combination prefix.
+#
+# Pmax=16, Emax=384, Emin=-383, bias=398, stored exponent q in [-398, 369].
+# Decodes to a narrow U64-coefficient D64Parts; converts to D128Parts only for the
+# cold special-value / formatter paths. (64-bit storage shifts use direct U64
+# literals — uf_amt[U64] is not width-safe.)
+# ============================================================================
+
+### A software decimal64 value in BID storage.
 @llvm("i64")
 record D64 obeys Numeric, Ordered
   pass
 
-# Constants for D64
-preset D64_ZERO: D64 = 0.0_d64
-preset D64_ONE: D64 = 1.0_d64
-
-# ============================================================================
-# Creators
-# ============================================================================
-
-### Converts an `S8` into decimal64 form.
-### :param from: The signed 8-bit integer to convert.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: S8) -> D64
-  var bits = rf_d64_from_s32(S32(from))
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts an `S16` into decimal64 form.
-### :param from: The signed 16-bit integer to convert.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: S16) -> D64
-  var bits = rf_d64_from_s32(S32(from))
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts an `S32` into decimal64 form.
-### :param from: The signed 32-bit integer to convert.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: S32) -> D64
-  var bits = rf_d64_from_s32(from)
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts an `S64` into decimal64 form.
-### :param from: The signed 64-bit integer to convert.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: S64) -> D64
-  var bits = rf_d64_from_s64(from)
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts an `S128` into decimal64 form through the supported integer path.
-### :param from: The signed 128-bit integer to convert.
-### :returns: The closest representable `D64` value.
-routine D64.$create(from: S128) -> D64
-  # Convert through S64 - may lose precision
-  return from.S64!().D64()
-
-### Converts a `U8` into decimal64 form.
-### :param from: The unsigned 8-bit integer to convert.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: U8) -> D64
-  var bits = rf_d64_from_u32(U32(from))
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts a `U16` into decimal64 form.
-### :param from: The unsigned 16-bit integer to convert.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: U16) -> D64
-  var bits = rf_d64_from_u32(U32(from))
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts a `U32` into decimal64 form.
-### :param from: The unsigned 32-bit integer to convert.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: U32) -> D64
-  var bits = rf_d64_from_u32(from)
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts a `U64` into decimal64 form.
-### :param from: The unsigned 64-bit integer to convert.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: U64) -> D64
-  var bits = rf_d64_from_u64(from)
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts a `U128` into decimal64 form through the supported integer path.
-### :param from: The unsigned 128-bit integer to convert.
-### :returns: The closest representable `D64` value.
-routine D64.$create(from: U128) -> D64
-  # Convert through U64 - may lose precision
-  return from.U64!().D64()
-
-### Converts a half-precision binary float to decimal64.
-### :param from: The binary floating-point input.
-### :returns: The closest representable `D64` value.
-routine D64.$create(from: F16) -> D64
-  return from.F32().D64()
-
-### Converts a single-precision binary float to decimal64.
-### :param from: The binary floating-point input.
-### :returns: The closest representable `D64` value.
-routine D64.$create(from: F32) -> D64
-  var bits = rf_f32_to_d64(from)
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts a double-precision binary float to decimal64.
-### :param from: The binary floating-point input.
-### :returns: The closest representable `D64` value.
-routine D64.$create(from: F64) -> D64
-  var bits = rf_f64_to_d64(from)
-  return reinterpret_bits[U64, D64](bits)
-
-### Converts a quadruple-precision binary float to decimal64 through the supported runtime path.
-### :param from: The binary floating-point input.
-### :returns: The closest representable `D64` value.
-routine D64.$create(from: F128) -> D64
-  return from.F64!().D64()
-
-### Widens a decimal32 value to decimal64.
-### :param from: The decimal floating-point input.
-### :returns: The corresponding `D64` value.
-routine D64.$create(from: D32) -> D64
-  var bits = from.to_bits()
-  var result_bits = rf_d32_to_d64(bits)
-  return reinterpret_bits[U64, D64](result_bits)
-
-### Returns an existing `D64` unchanged.
-### :param from: The decimal64 value to forward.
-### :returns: `from`.
-routine D64.$create(from: D64) -> D64
-  return from
-
-### Narrows a decimal128 value to decimal64.
-### :param from: The decimal floating-point input.
-### :returns: The closest representable `D64` value.
-routine D64.$create(from: D128) -> D64
-  var result_bits = rf_d128_to_d64(low: from.low_bits(), high: from.high_bits())
-  return reinterpret_bits[U64, D64](result_bits)
-
-# ============================================================================
-# Arithmetic Operations
-# ============================================================================
-
-### Returns the decimal sum `me + you`, throwing if the result is non-finite.
-### :param you: The addend.
-### :returns: The resulting `D64` value.
-### :throws: {NumericOverflowError} if the result is non-finite.
-routine D64.$add!(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  var result = rf_d64_add(a: a_bits, b: b_bits)
-  if rf_d64_isfinite(result) == 0_s32
-    throw NumericOverflowError(description: f"D64 addition produced non-finite result: {me} + {you}")
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the decimal difference `me - you`, throwing if the result is non-finite.
-### :param you: The value to subtract.
-### :returns: The resulting `D64` value.
-### :throws: {NumericOverflowError} if the result is non-finite.
-routine D64.$sub!(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  var result = rf_d64_sub(a: a_bits, b: b_bits)
-  if rf_d64_isfinite(result) == 0_s32
-    throw NumericOverflowError(description: f"D64 subtraction produced non-finite result: {me} - {you}")
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the decimal product `me * you`, throwing if the result is non-finite.
-### :param you: The multiplier.
-### :returns: The resulting `D64` value.
-### :throws: {NumericOverflowError} if the result is non-finite.
-routine D64.$mul!(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  var result = rf_d64_mul(a: a_bits, b: b_bits)
-  if rf_d64_isfinite(result) == 0_s32
-    throw NumericOverflowError(description: f"D64 multiplication produced non-finite result: {me} * {you}")
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the decimal quotient `me / you`, throwing if the result is non-finite.
-### :param you: The divisor.
-### :returns: The resulting `D64` value.
-### :throws: {NumericOverflowError} if the result is non-finite (including division by zero).
-routine D64.$truediv!(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  var result = rf_d64_div(a: a_bits, b: b_bits)
-  if rf_d64_isfinite(result) == 0_s32
-    throw NumericOverflowError(description: f"D64 division produced non-finite result: {me} / {you}")
-  return reinterpret_bits[U64, D64](result)
-
-### Adds `me + you` without finiteness checking (raw IEEE 754-2008 decimal).
-dangerous routine D64.$add_unchecked(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  return reinterpret_bits[U64, D64](rf_d64_add(a: a_bits, b: b_bits))
-
-### Subtracts `me - you` without finiteness checking (raw IEEE 754-2008 decimal).
-dangerous routine D64.$sub_unchecked(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  return reinterpret_bits[U64, D64](rf_d64_sub(a: a_bits, b: b_bits))
-
-### Multiplies `me * you` without finiteness checking (raw IEEE 754-2008 decimal).
-dangerous routine D64.$mul_unchecked(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  return reinterpret_bits[U64, D64](rf_d64_mul(a: a_bits, b: b_bits))
-
-### Divides `me / you` without finiteness checking (raw IEEE 754-2008 decimal).
-dangerous routine D64.$truediv_unchecked(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  return reinterpret_bits[U64, D64](rf_d64_div(a: a_bits, b: b_bits))
-
-### Returns `true` when this decimal value is finite.
-### :returns: Whether the runtime encoding represents a finite number.
-routine D64.is_finite() -> Bool
-  return rf_d64_isfinite(me.to_bits()) != 0_s32
-
-### Returns the additive inverse of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.$neg() -> D64
-  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
-  var me_bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_sub(a: zero_bits, b: me_bits)
-  return reinterpret_bits[U64, D64](result)
-
-# ============================================================================
-# Comparison Operations
-# ============================================================================
-
-### Returns whether both values are equal.
-### :param you: The other value to compare against.
-### :returns: The resulting `Bool` value.
-routine D64.$eq(you: D64) -> Bool
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  return rf_d64_cmp(a: a_bits, b: b_bits) == 0
-
-### Compares this value with the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `ComparisonSign` value.
-routine D64.$cmp(you: D64) -> ComparisonSign
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  var cmp = rf_d64_cmp(a: a_bits, b: b_bits)
-  if cmp < 0
-    return ME_SMALL
-  if cmp > 0
-    return ME_LARGE
-  return SAME
-
-# ============================================================================
-# Math Operations
-# ============================================================================
-
-### Returns the decimal square root of this value.
-### :returns: The resulting `D64` value.
-routine D64.sqrt() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_sqrt(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the absolute value.
-### :returns: The resulting `D64` value.
-routine D64.abs() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_abs(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Rounds this decimal value toward positive infinity.
-### :returns: The resulting `D64` value.
-routine D64.ceil() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_ceil(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Rounds this decimal value toward negative infinity.
-### :returns: The resulting `D64` value.
-routine D64.floor() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_floor(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Rounds this decimal value to the nearest integral decimal value.
-### :returns: The resulting `D64` value.
-routine D64.round() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_round(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Truncates this decimal value toward zero.
-### :returns: The resulting `D64` value.
-routine D64.int_truncate() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_trunc(bits)
-  return reinterpret_bits[U64, D64](result)
-
-# ============================================================================
-# Trigonometric Functions (via TLFloat quad routing)
-# ============================================================================
-
-### Returns the sine of this decimal value, interpreting it as radians.
-### :returns: The resulting `D64` value.
-routine D64.sin() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_sin(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the cosine of this decimal value, interpreting it as radians.
-### :returns: The resulting `D64` value.
-routine D64.cos() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_cos(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the tangent of this decimal value, interpreting it as radians.
-### :returns: The resulting `D64` value.
-routine D64.tan() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_tan(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the inverse sine of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.asin() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_asin(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the inverse cosine of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.acos() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_acos(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the inverse tangent of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.atan() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_atan(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the quadrant-aware angle of the point `(x, me)`.
-### :param x: The x-coordinate paired with this y-coordinate.
-### :returns: The resulting `D64` value.
-routine D64.atan2(x: D64) -> D64
-  var y_bits = reinterpret_bits[D64, U64](me)
-  var x_bits = reinterpret_bits[D64, U64](x)
-  var result = rf_d64_atan2(y: y_bits, x: x_bits)
-  return reinterpret_bits[U64, D64](result)
-
-# ============================================================================
-# Hyperbolic Functions (via TLFloat quad routing)
-# ============================================================================
-
-### Returns the hyperbolic sine of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.sinh() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_sinh(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the hyperbolic cosine of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.cosh() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_cosh(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the hyperbolic tangent of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.tanh() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_tanh(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the inverse hyperbolic sine of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.asinh() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_asinh(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the inverse hyperbolic cosine of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.acosh() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_acosh(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the inverse hyperbolic tangent of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.atanh() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_atanh(bits)
-  return reinterpret_bits[U64, D64](result)
-
-# ============================================================================
-# Exponential and Logarithmic Functions (via TLFloat quad routing)
-# ============================================================================
-
-### Returns `e` raised to this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.exp() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_exp(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns `2` raised to this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.exp2() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_exp2(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns `e` raised to this decimal value, minus one (accurate near zero).
-### :returns: The resulting `D64` value.
-routine D64.expm1() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_expm1(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the natural logarithm of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.log() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_log(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the base-2 logarithm of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.log2() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_log2(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the base-10 logarithm of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.log10() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_log10(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the natural logarithm of one plus this decimal value (accurate near zero).
-### :returns: The resulting `D64` value.
-routine D64.log1p() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_log1p(bits)
-  return reinterpret_bits[U64, D64](result)
-
-# ============================================================================
-# Power Functions (via TLFloat quad routing)
-# ============================================================================
-
-### Raises this decimal value to the decimal exponent `exp`.
-### :param exp: The exponent value.
-### :returns: The resulting `D64` value.
-routine D64.pow(exp: D64) -> D64
-  var base_bits = reinterpret_bits[D64, U64](me)
-  var exp_bits = reinterpret_bits[D64, U64](exp)
-  var result = rf_d64_pow(base: base_bits, exp: exp_bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Raises this decimal value to `exp` and rejects non-finite results.
-### :param exp: The exponent value.
-### :returns: The resulting `D64` value.
-### :throws: {NumericOverflowError} if the result is non-finite.
-routine D64.$pow!(exp: D64) -> D64
-  var result = me.pow(exp)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"D64 power produced non-finite result: {me} ** {exp}")
-  return result
-
-### Returns the real cube root of this decimal value.
-### :returns: The resulting `D64` value.
-routine D64.cbrt() -> D64
-  var bits = reinterpret_bits[D64, U64](me)
-  var result = rf_d64_cbrt(bits)
-  return reinterpret_bits[U64, D64](result)
-
-### Returns the Euclidean length of the vector `(me, y)`.
-### :param y: The second coordinate.
-### :returns: The resulting `D64` value.
-routine D64.hypot(y: D64) -> D64
-  var x_bits = reinterpret_bits[D64, U64](me)
-  var y_bits = reinterpret_bits[D64, U64](y)
-  var result = rf_d64_hypot(x: x_bits, y: y_bits)
-  return reinterpret_bits[U64, D64](result)
-
-# ============================================================================
-# Utility Methods
-# ============================================================================
-
-### Returns the smaller of this value and `you`.
-### :param you: The other value to compare against.
-### :returns: The resulting `D64` value.
-routine D64.min(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  return (if rf_d64_cmp(a: a_bits, b: b_bits) <= 0 then me else you)
-
-### Returns the larger of this value and `you`.
-### :param you: The other value to compare against.
-### :returns: The resulting `D64` value.
-routine D64.max(you: D64) -> D64
-  var a_bits = reinterpret_bits[D64, U64](me)
-  var b_bits = reinterpret_bits[D64, U64](you)
-  return (if rf_d64_cmp(a: a_bits, b: b_bits) >= 0 then me else you)
-
-### Restricts this value to the closed interval `[min_val, max_val]`.
-### :param min_val: The lower bound to enforce.
-### :param max_val: The upper bound to enforce.
-### :returns: The resulting `D64` value.
-@positional
-routine D64.clamp(min_val: D64, max_val: D64) -> D64
-  return me.min(max_val).max(min_val)
-
-### Returns `true` when this decimal value is greater than zero.
-### :returns: The resulting `Bool` value.
-routine D64.is_positive() -> Bool
-  var me_bits = reinterpret_bits[D64, U64](me)
-  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
-  return rf_d64_cmp(a: me_bits, b: zero_bits) > 0
-
-### Returns `true` when this decimal value is less than zero.
-### :returns: The resulting `Bool` value.
-routine D64.is_negative() -> Bool
-  var me_bits = reinterpret_bits[D64, U64](me)
-  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
-  return rf_d64_cmp(a: me_bits, b: zero_bits) < 0
-
-### Returns `true` when this decimal value compares equal to zero.
-### :returns: The resulting `Bool` value.
-routine D64.is_zero() -> Bool
-  var me_bits = reinterpret_bits[D64, U64](me)
-  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
-  return rf_d64_cmp(a: me_bits, b: zero_bits) == 0
-
-### Returns the sign of this value as `-1d64`, `0d64`, or `1d64`.
-### :returns: The resulting `D64` value.
-routine D64.signum() -> D64
-  var me_bits = reinterpret_bits[D64, U64](me)
-  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
-  var cmp = rf_d64_cmp(a: me_bits, b: zero_bits)
-  return when
-    cmp > 0 => D64_ONE
-    cmp < 0 => me.$neg()
-    else => D64_ZERO
-
-### Returns the raw decimal64 encoding of this value.
-### :returns: The resulting `U64` value.
+### Narrow decoded fields (U64 coefficient — decimal64 has <= 16 digits).
+record D64Parts
+  sign: Bool
+  special: U64
+  exp: S64
+  coeff: U64
+
+### Widen to D128Parts for the shared special-value rules / decimal formatter.
+routine d64parts_to_d128(p: D64Parts) -> D128Parts
+  return D128Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U128](p.coeff))
+
+### Narrow a D128Parts back (special-rule results are inf/NaN/zero, coeff 0 — lossless).
+routine d128_to_d64parts(p: D128Parts) -> D64Parts
+  return D64Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: int_truncate[U128, U64](p.coeff))
+
+### 10^k as a U128 (k <= 38), via the U256 pow10 table truncated.
+routine p10_u128(k: S64) -> U128
+  return int_truncate[U256, U128](pow10_tbl(k: k))
+
+### 10^k as a U64 (k <= 19).
+routine p10_u64_d(k: S64) -> U64
+  return int_truncate[U256, U64](pow10_tbl(k: k))
+
+# ---- raw bits ----
+### Reinterprets the 64-bit BID storage as a raw U64 (no decode).
 routine D64.to_bits() -> U64
   return reinterpret_bits[D64, U64](me)
 
-### Reinterprets a raw decimal64 bit pattern as `D64`.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `D64` value.
+### Reinterprets a raw U64 as BID64 storage (no validation).
 common routine D64.from_bits(bits: U64) -> D64
   return reinterpret_bits[U64, D64](bits)
 
-# ============================================================================
-# Text Representation and Parsing
-# ============================================================================
+### BID64 decode -> narrow parts.
+routine D64.decode() -> D64Parts
+  var bits = me.to_bits()
+  # sign = bit 63
+  var sign = int_ne[U64](a: bit_and[U64](a: shift_right_unsigned[U64](bits, 63_u64), b: 1_u64), b: 0_u64)
+  # top5 = 5-bit combination prefix (bits 62:58) that selects form/special
+  var top5 = bit_and[U64](a: shift_right_unsigned[U64](bits, 58_u64), b: 0x1F_u64)
+  # 11110 -> infinity (special 1)
+  if int_eq[U64](a: top5, b: 0x1E_u64)
+    return D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
+  # 11111 -> NaN; bit 57 distinguishes signaling (special 3) from quiet (special 2)
+  if int_eq[U64](a: top5, b: 0x1F_u64)
+    var sp = 2_u64
+    if int_ne[U64](a: bit_and[U64](a: shift_right_unsigned[U64](bits, 57_u64), b: 1_u64), b: 0_u64)
+      sp = 3_u64
+    return D64Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64)
+  var biased = 0_u64
+  var c64 = 0_u64
+  # top5 >> 3 == 3 means combo prefix starts with 11 -> Form 2, else Form 1
+  if int_eq[U64](a: shift_right_unsigned[U64](top5, 3_u64), b: 3_u64)
+    # Form 2: exp bits 60:51, coeff = (bits 50:0) | 2^53
+    biased = bit_and[U64](a: shift_right_unsigned[U64](bits, 51_u64), b: 0x3FF_u64)
+    c64 = bit_or[U64](a: bit_and[U64](a: bits, b: 0x7FFFFFFFFFFFF_u64), b: 0x20000000000000_u64)
+  else
+    # Form 1: exp bits 62:53, coeff bits 52:0
+    biased = bit_and[U64](a: shift_right_unsigned[U64](bits, 53_u64), b: 0x3FF_u64)
+    c64 = bit_and[U64](a: bits, b: 0x1FFFFFFFFFFFFF_u64)
+  # unbias: stored exponent q = biased - 398 (bias=398)
+  return D64Parts(sign: sign, special: 0_u64, exp: sub[S64](a: reinterpret_bits[U64, S64](biased), b: 398_s64), coeff: c64)
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
+### Narrow parts -> BID64 (Form 1 / Form 2 / special). Finite parts must already be
+### rounded to <= 16 digits and in the decimal64 exponent range (decfin64 guarantees it).
+routine d64_of_parts(p: D64Parts) -> D64
+  # sign into bit 63
+  var sbit = shift_left[U64](value: if p.sign then 1_u64 else 0_u64, bits: 63_u64)
+  if int_ne[U64](a: p.special, b: 0_u64)
+    # special: combo prefix 11110 (inf) or 11111 (NaN) into bits 62:58
+    var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+    var bb = bit_or[U64](a: sbit, b: shift_left[U64](value: top5, bits: 58_u64))
+    # signaling NaN sets bit 57
+    if int_eq[U64](a: p.special, b: 3_u64)
+      bb = bit_or[U64](a: bb, b: shift_left[U64](value: 1_u64, bits: 57_u64))
+    return D64.from_bits(bits: bb)
+  # rebias: biased = (q + 398) masked to 10 bits
+  var biased = bit_and[U64](a: add[U64](a: reinterpret_bits[S64, U64](p.exp), b: 398_u64), b: 0x3FF_u64)
+  var c64 = p.coeff
+  # coeff < 2^53 -> Form 1, else Form 2 (implicit leading 2^53)
+  if unsigned_lt[U64](a: c64, b: 0x20000000000000_u64)
+    # Form 1: exp bits 62:53, coeff bits 52:0
+    return D64.from_bits(bits: bit_or[U64](a: bit_or[U64](a: sbit, b: shift_left[U64](value: biased, bits: 53_u64)), b: c64))
+  # Form 2: bits 62:61 = 11, exp bits 60:51, coeff low 51 bits (implicit 2^53)
+  var g2 = shift_left[U64](value: 0x3_u64, bits: 61_u64)  # the 11 prefix
+  var ebits = shift_left[U64](value: biased, bits: 51_u64)
+  var clow = bit_and[U64](a: c64, b: 0x7FFFFFFFFFFFF_u64)  # low 51 coeff bits
+  return D64.from_bits(bits: bit_or[U64](a: bit_or[U64](a: sbit, b: g2), b: bit_or[U64](a: ebits, b: clow)))
+
+### Builds a finite D64 from a signed coefficient and base-10 exponent (rounded/ranged).
+common routine D64.from_components(sign: Bool, coeff: U64, exp: S64) -> D64
+  return d64_of_parts(p: decfin64(sign: sign, coeff: zero_extend[U64, U128](coeff), exp: exp, pref: exp))
+
+### Builds a D64 from a 64-bit signed integer (exponent 0).
+common routine D64.from_int64(value: S64) -> D64
+  var neg = signed_lt[S64](a: value, b: 0_s64)
+  var mag = if neg then sub[S64](a: 0_s64, b: value) else value
+  return D64.from_components(sign: neg, coeff: reinterpret_bits[S64, U64](mag), exp: 0_s64)
+
+### Infinity / quiet NaN.
+common routine D64.infinity(sign: Bool) -> D64
+  return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+
+### Returns a quiet NaN.
+common routine D64.quiet_nan() -> D64
+  return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
+
+### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+common routine D64.signaling_nan() -> D64
+  return d64_of_parts(p: D64Parts(sign: false, special: 3_u64, exp: 0_s64, coeff: 0_u64))
+
+### True when this is a finite value (special field == 0).
+routine D64.is_finite() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 0_u64)
+
+### True when this is ±infinity (special field == 1).
+routine D64.is_infinite() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 1_u64)
+
+### True when this is a NaN (special field >= 2: 2 quiet, 3 signaling).
+routine D64.is_nan() -> Bool
+  return unsigned_ge[U64](a: me.decode().special, b: 2_u64)
+
+### True when this is a SIGNALING NaN (special field == 3).
+routine D64.is_signaling() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 3_u64)
+
+### True when this is a finite zero (±0).
+routine D64.is_zero() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U64](a: p.coeff, b: 0_u64)
+
+# ============================================================================
+# Finalize: round a U128 working coeff to Pmax=16, clamp exponent to [-398, 369]
+# (overflow -> inf, underflow -> round-off / zero), strip/pad toward pref; the
+# rounded result fits U64.
+# ============================================================================
+### Finalize a working (coeff, exp) into a valid decimal64 D64Parts: round to Pmax=16 digits,
+### clamp exponent to [-398, 369], round-half-even, then strip/pad toward pref. Result fits U64.
+### :param sign: result sign.
+### :param coeff: U128 working coefficient (unrounded; may exceed 16 digits).
+### :param exp: base-10 exponent of coeff.
+### :param pref: preferred (cohort) exponent; trailing-zero strip/pad targets this.
+### :returns: rounded, range-clamped D64Parts (special=1 if overflow to inf).
+routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
+  # zero coefficient: result is ±0 with the preferred exponent clamped into range
+  if int_eq[U128](a: coeff, b: 0)
+    var ez = pref
+    if signed_lt[S64](a: ez, b: -398_s64)
+      ez = -398_s64
+    if signed_gt[S64](a: ez, b: 369_s64)
+      ez = 369_s64
+    return D64Parts(sign: sign, special: 0_u64, exp: ez, coeff: 0_u64)
+  var c = coeff
+  var e = exp
+  var nd = digits10_u128(c: c)  # current digit count
+  # too many digits: drop the excess and round half-even
+  if signed_gt[S64](a: nd, b: 16_s64)
+    var drop = sub[S64](a: nd, b: 16_s64)
+    var divv = p10_u128(k: drop)  # 10^drop divisor
+    var q = div_pow10_u128(x: c, k: drop)  # kept high digits
+    var r = sub[U128](a: c, b: mul[U128](a: q, b: divv))  # dropped remainder
+    var twice = mul[U128](a: r, b: 2)
+    # round up when remainder > half; on exact half (==) round to even (odd q)
+    if unsigned_gt[U128](a: twice, b: divv)
+      q = add[U128](a: q, b: 1)
+    elseif int_eq[U128](a: twice, b: divv) and int_ne[U128](a: bit_and[U128](a: q, b: 1), b: 0)
+      q = add[U128](a: q, b: 1)
+    c = q
+    e = add[S64](a: e, b: drop)
+    # rounding may have carried to a 17th digit -> renormalize one digit
+    if unsigned_ge[U128](a: c, b: p10_u128(k: 16_s64))
+      c = div_pow10_u128(x: c, k: 1_s64)
+      e = add[S64](a: e, b: 1_s64)
+  # overflow: pad up to 16 digits, then saturate to inf
+  while signed_gt[S64](a: e, b: 369_s64) and unsigned_lt[U128](a: c, b: p10_u128(k: 15_s64))
+    c = mul[U128](a: c, b: 10_u128)
+    e = sub[S64](a: e, b: 1_s64)
+  if signed_gt[S64](a: e, b: 369_s64)
+    return D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
+  # underflow: round off low digits until e reaches the minimum
+  while signed_lt[S64](a: e, b: -398_s64) and int_ne[U128](a: c, b: 0)
+    var rd = unsigned_rem[U128](a: c, b: 10_u128)
+    c = unsigned_div[U128](a: c, b: 10_u128)
+    e = add[S64](a: e, b: 1_s64)
+    if unsigned_gt[U128](a: rd, b: 5) or (int_eq[U128](a: rd, b: 5) and int_ne[U128](a: bit_and[U128](a: c, b: 1), b: 0))
+      c = add[U128](a: c, b: 1)
+  if int_eq[U128](a: c, b: 0)
+    var ez2 = if signed_lt[S64](a: e, b: -398_s64) then -398_s64 else e
+    return D64Parts(sign: sign, special: 0_u64, exp: ez2, coeff: 0_u64)
+  # strip trailing zeros toward pref (raise e); pad toward pref (lower e) within 16 digits
+  while signed_lt[S64](a: e, b: pref) and int_eq[U128](a: unsigned_rem[U128](a: c, b: 10_u128), b: 0)
+    c = unsigned_div[U128](a: c, b: 10_u128)
+    e = add[S64](a: e, b: 1_s64)
+  while signed_gt[S64](a: e, b: pref) and unsigned_lt[U128](a: c, b: p10_u128(k: 15_s64)) and signed_le[S64](a: e, b: 369_s64)
+    c = mul[U128](a: c, b: 10_u128)
+    e = sub[S64](a: e, b: 1_s64)
+  return D64Parts(sign: sign, special: 0_u64, exp: e, coeff: int_truncate[U128, U64](c))
+
+# ============================================================================
+# Arithmetic (U64 operands, U128 intermediates)
+# ============================================================================
+### Raw IEEE 754 decimal64 multiply: coeff product, exponents add, finalized via decfin64.
+### Either operand non-finite -> shared special-value rules. May yield ±inf / NaN.
+routine d64_mul(a: D64, b: D64) -> D64
+  var pa = a.decode()
+  var pb = b.decode()
+  # any inf/NaN operand: delegate to the shared D128 special-value table
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return d64_of_parts(p: d128_to_d64parts(mul_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
+  var sign = pa.sign != pb.sign  # XOR signs
+  # 64x64 -> 128 widening product (both operands fit U64).
+  var prod = mul[U128](a: zero_extend[U64, U128](pa.coeff), b: zero_extend[U64, U128](pb.coeff))
+  return d64_of_parts(p: decfin64(sign: sign, coeff: prod, exp: add[S64](a: pa.exp, b: pb.exp), pref: add[S64](a: pa.exp, b: pb.exp)))
+
+### Raw IEEE 754 decimal64 add: align to the smaller exponent, combine, finalize via decfin64.
+### Either operand non-finite -> shared special-value rules. May yield ±inf / NaN.
+routine d64_add(a: D64, b: D64) -> D64
+  var pa = a.decode()
+  var pb = b.decode()
+  # any inf/NaN operand: delegate to the shared D128 special-value table
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return d64_of_parts(p: d128_to_d64parts(add_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
+  # h = higher-exponent operand, l = lower; swap so eh >= el
+  var eh = pa.exp
+  var ch = pa.coeff
+  var sh = pa.sign
+  var el = pb.exp
+  var cl = pb.coeff
+  var sl = pb.sign
+  if signed_lt[S64](a: pa.exp, b: pb.exp)
+    eh = pb.exp
+    ch = pb.coeff
+    sh = pb.sign
+    el = pa.exp
+    cl = pa.coeff
+    sl = pa.sign
+  var pref = el  # preferred exponent = the smaller input exponent
+  var shift = sub[S64](a: eh, b: el)  # decimal places to align l up to h
+  var ew = el  # working exponent of the aligned result
+  var chw = zero_extend[U64, U128](0_u64)  # high coeff scaled to working exp
+  var clw = zero_extend[U64, U128](0_u64)  # low coeff aligned (with sticky)
+  # shift <= 18: full U64-scale alignment fits the U128 product exactly
+  if signed_le[S64](a: shift, b: 18_s64)
+    # 64x64 -> 128 widening align (10^shift fits U64 for shift <= 18).
+    chw = mul[U128](a: zero_extend[U64, U128](ch), b: zero_extend[U64, U128](p10_u64_d(k: shift)))
+    clw = zero_extend[U64, U128](cl)
+  else
+    # shift > 18: cap the high scale at 10^18, round the low operand into that window
+    chw = mul[U128](a: zero_extend[U64, U128](ch), b: zero_extend[U64, U128](p10_u64_d(k: 18_s64)))
+    ew = sub[S64](a: eh, b: 18_s64)
+    # keep the low operand's in-window digits (down to ew) in U64; sticky only below.
+    var drop = sub[S64](a: shift, b: 18_s64)
+    # drop >= 16: low operand vanishes entirely; collapse to a single sticky bit
+    if signed_ge[S64](a: drop, b: 16_s64)
+      clw = if int_ne[U64](a: cl, b: 0_u64) then zero_extend[U64, U128](1_u64) else zero_extend[U64, U128](0_u64)
+    else
+      # divide off `drop` digits; OR a sticky 1 into bit 0 if anything was lost
+      var q = div_pow10_u64(x: cl, k: drop)
+      var rem = sub[U64](a: cl, b: mul[U64](a: q, b: p10_u64_d(k: drop)))
+      clw = zero_extend[U64, U128](if int_ne[U64](a: rem, b: 0_u64) then bit_or[U64](a: q, b: 1_u64) else q)
+  var rc = zero_extend[U64, U128](0_u64)  # combined coefficient
+  var rsign = sh
+  # same sign: add magnitudes; opposite sign: subtract smaller from larger, take its sign
+  if sh == sl
+    rc = add[U128](a: chw, b: clw)
+  elseif unsigned_ge[U128](a: chw, b: clw)
+    rc = sub[U128](a: chw, b: clw)
+  else
+    rc = sub[U128](a: clw, b: chw)
+    rsign = sl
+  if int_eq[U128](a: rc, b: 0)
+    # IEEE 754: a zero sum keeps the common sign ((-0)+(-0) = -0); opposite-sign
+    # cancellation gives +0 (roundTiesToEven).
+    rsign = if sh == sl then sh else false
+  return d64_of_parts(p: decfin64(sign: rsign, coeff: rc, exp: ew, pref: pref))
+
+### Negation: flip the sign bit.
+routine d64_neg(a: D64) -> D64
+  return D64.from_bits(bits: bit_xor[U64](a: a.to_bits(), b: shift_left[U64](value: 1_u64, bits: 63_u64)))
+
+### Raw IEEE 754 decimal64 subtract: add the negation of b.
+routine d64_sub(a: D64, b: D64) -> D64
+  return d64_add(a: a, b: d64_neg(a: b))
+
+### Raw IEEE 754 decimal64 divide: scale numerator, integer-divide with sticky, finalize.
+### Non-finite operands -> shared special rules; x/0 -> ±inf, 0/0 -> NaN. May yield ±inf / NaN.
+routine d64_div(a: D64, b: D64) -> D64
+  var pa = a.decode()
+  var pb = b.decode()
+  # any inf/NaN operand: delegate to the shared D128 special-value table
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return d64_of_parts(p: d128_to_d64parts(div_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
+  var sign = pa.sign != pb.sign  # XOR signs
+  var azero = int_eq[U64](a: pa.coeff, b: 0_u64)
+  var bzero = int_eq[U64](a: pb.coeff, b: 0_u64)
+  # divide by zero: 0/0 -> NaN (special 2), x/0 -> ±inf (special 1)
+  if bzero
+    if azero
+      return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
+    return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+  var pref = sub[S64](a: pa.exp, b: pb.exp)  # preferred exponent = ea - eb
+  # 0/x -> signed zero at the preferred exponent
+  if azero
+    return d64_of_parts(p: decfin64(sign: sign, coeff: zero_extend[U64, U128](0_u64), exp: pref, pref: pref))
+  var num = zero_extend[U64, U128](pa.coeff)
+  var den = zero_extend[U64, U128](pb.coeff)
+  # scale numerator to ~Pmax+2 quotient digits, divide, sticky, round to 16
+  var target = add[S64](a: digits10_u128(c: den), b: 18_s64)  # want this many num digits
+  var shift = sub[S64](a: target, b: digits10_u128(c: num))  # extra 10^shift to apply
+  if signed_lt[S64](a: shift, b: 0_s64)
+    shift = 0_s64
+  num = mul[U128](a: num, b: p10_u128(k: shift))
+  # The divisor is always a single U64 limb (zero-extended coeff), so the whole U128/U64
+  # divide is two hardware 128/64 divides with the sticky in bit 0 — far cheaper than the
+  # generic `num // den` U128 libcall plus a `q*den` multiply-back to recover the remainder.
+  var q = udiv128_by_u64_sticky(num: num, den: pb.coeff)
+  var exp = sub[S64](a: sub[S64](a: pa.exp, b: pb.exp), b: shift)
+  return d64_of_parts(p: decfin64(sign: sign, coeff: q, exp: exp, pref: pref))
+
+# ---- wired operators + represent ----
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
+# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+
+### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw
+### IEEE.
+routine D64.$add!(you: D64) -> D64
+  var r = d64_add(a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw
+### IEEE.
+routine D64.$sub!(you: D64) -> D64
+  var r = d64_sub(a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw
+### IEEE.
+routine D64.$mul!(you: D64) -> D64
+  var r = d64_mul(a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
+### overflow.
+### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+routine D64.$truediv!(you: D64) -> D64
+  var r = d64_div(a: me, b: you)
+  if r.is_finite()
+    return r
+  if you.is_zero() and not me.is_zero()
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D64.$add_unchecked(you: D64) -> D64
+  return d64_add(a: me, b: you)
+
+### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D64.$sub_unchecked(you: D64) -> D64
+  return d64_sub(a: me, b: you)
+
+### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D64.$mul_unchecked(you: D64) -> D64
+  return d64_mul(a: me, b: you)
+
+### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+routine D64.$truediv_unchecked(you: D64) -> D64
+  return d64_div(a: me, b: you)
+
+### Decimal value equality (NaN never equal; infinities equal only with the same sign;
+### finite values compare by value, so different cohorts of the same number are equal).
+routine D64.$eq(you: D64) -> Bool
+  if me.is_nan() or you.is_nan()
+    return false
+  if me.is_infinite() or you.is_infinite()
+    var pa = me.decode()
+    var pb = you.decode()
+    return int_eq[U64](a: pa.special, b: pb.special) and pa.sign == pb.sign
+  return int_eq[U64](a: d64_sub(a: me, b: you).decode().coeff, b: 0_u64)
+
+### Three-way decimal comparison (NaN unordered -> SAME; finite by sign of me - you).
+routine D64.$cmp(you: D64) -> ComparisonSign
+  if me.is_nan() or you.is_nan()
+    return SAME
+  if me.is_infinite() or you.is_infinite()
+    var pa = me.decode()
+    var pb = you.decode()
+    if int_eq[U64](a: pa.special, b: pb.special) and pa.sign == pb.sign
+      return SAME
+    if int_eq[U64](a: pa.special, b: 1_u64)
+      return if pa.sign then ME_SMALL else ME_LARGE
+    return if pb.sign then ME_LARGE else ME_SMALL
+  var d = d64_sub(a: me, b: you).decode()
+  if int_eq[U64](a: d.coeff, b: 0_u64)
+    return SAME
+  return if d.sign then ME_SMALL else ME_LARGE
+
+### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
+routine D64.$pow!(you: D64) -> D64
+  var r = me.pow_unchecked(you: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Shortest decimal text (widens to D128Parts and reuses the shared formatter).
 routine D64.$represent() -> Text
-  var bits = reinterpret_bits[D64, U64](me)
-  var cstr_result = rf_d64_to_string(bits)
-  return Text(from: CStr(from_ptr: cstr_result))
+  return d128_represent(p: d64parts_to_d128(p: me.decode()))
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
+### Debug form: `D64(<value>)`.
 routine D64.$diagnose() -> Text
   return "D64(" + me.$represent() + ")"
 
+# ============================================================================
+# Public surface — creators / presets / parser / hash / bytes
+#
+# The construction/conversion web, presets, byte/hash views, and the decimal-text
+# parser. Storage, arithmetic, comparison, libm, and formatting are the software BID
+# engine above (`@llvm("i64") record D64 obeys Numeric, Ordered`). Pure RF.
+# ============================================================================
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+preset D64_ZERO: D64 = 0.0_d64
+preset D64_ONE: D64 = 1.0_d64
+# IEEE 754 decimal64: 16 significant digits, emax = 384.
+preset D64_MAX: D64 = 9.999999999999999e384_d64
+preset D64_MIN: D64 = -9.999999999999999e384_d64
+preset D64_MIN_POSITIVE: D64 = 1e-383_d64
+preset D64_EPSILON: D64 = 1e-15_d64
+
+# ============================================================================
+# Creators — integers
+# ============================================================================
+
+### Converts an S8 to D64 (widen to S64, exponent 0).
+routine D64.$create(from: S8) -> D64
+  return D64.from_int64(value: S64(from))
+
+### Converts an S16 to D64 (widen to S64, exponent 0).
+routine D64.$create(from: S16) -> D64
+  return D64.from_int64(value: S64(from))
+
+### Converts an S32 to D64 (widen to S64, exponent 0).
+routine D64.$create(from: S32) -> D64
+  return D64.from_int64(value: S64(from))
+
+### Converts an S64 to D64 (exponent 0; rounded to 16 digits).
+routine D64.$create(from: S64) -> D64
+  return D64.from_int64(value: from)
+
+### Converts an S128 to D64 via D128 (rounded to 16 digits).
+routine D64.$create(from: S128) -> D64
+  return D64(from: D128(from: from))
+
+### Converts an S256 to D64 via D128 (rounded to 16 digits).
+routine D64.$create(from: S256) -> D64
+  return D64(from: D128(from: from))
+
+### Converts a U8 to D64 (exponent 0).
+routine D64.$create(from: U8) -> D64
+  return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+
+### Converts a U16 to D64 (exponent 0).
+routine D64.$create(from: U16) -> D64
+  return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+
+### Converts a U32 to D64 (exponent 0).
+routine D64.$create(from: U32) -> D64
+  return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+
+### Converts a U64 to D64 (exponent 0; rounded to 16 digits).
+routine D64.$create(from: U64) -> D64
+  return D64.from_components(sign: false, coeff: from, exp: 0_s64)
+
+### Converts a U128 to D64 via D128 (rounded to 16 digits).
+routine D64.$create(from: U128) -> D64
+  return D64(from: D128(from: from))
+
+### Converts a U256 to D64 via D128 (rounded to 16 digits).
+routine D64.$create(from: U256) -> D64
+  return D64(from: D128(from: from))
+
+# ============================================================================
+# Creators — binary floats (matched width is F128)
+# ============================================================================
+
+### Converts an F16 to D64 (via F64, then F128 -> D64, correctly rounded).
+routine D64.$create(from: F16) -> D64
+  return D64(from: F64(from))
+
+### Converts an F32 to D64 (via F64, then F128 -> D64, correctly rounded).
+routine D64.$create(from: F32) -> D64
+  return D64(from: F64(from))
+
+### Converts an F64 to D64 (widened to F128 for correctly-rounded decimal conversion).
+routine D64.$create(from: F64) -> D64
+  return f128_to_d64(x: F128(from: from))
+
+### Converts an F128 to D64 (correctly-rounded binary -> decimal).
+routine D64.$create(from: F128) -> D64
+  return f128_to_d64(x: from)
+
+# ============================================================================
+# Creators — decimal <-> decimal
+# ============================================================================
+
+### Converts a D32 to D64 (always exact — every decimal32 fits decimal64).
+routine D64.$create(from: D32) -> D64
+  return d64_of_parts(p: d128_to_d64parts(p: d32parts_to_d128(p: from.decode())))
+
+### Identity conversion (D64 -> D64).
+routine D64.$create(from: D64) -> D64
+  return from
+
+### Converts a D128 to D64 (rounded to 16 digits / decimal64 range).
+routine D64.$create(from: D128) -> D64
+  return d64_of_parts(p: d128_to_d64parts(p: from.decode()))
+
+# ============================================================================
+# Text parsing — shared D128 scanner, narrowed to D64.
+# ============================================================================
+
 ### Parses a decimal literal into a `D64`.
-### :param from_text: The text to parse. Accepts standard decimal notation and
-###   the special values `nan`, `inf`, and `infinity` (case-insensitive, with
-###   optional leading sign).
-### :returns: The `D64` value parsed from the input.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 routine D64.$create!(from_text: Text) -> D64
-  var len = from_text.count()
-  if len == 0u64
-    throw InvalidValueError(input: from_text, target: "D64")
-  var i = 0u64
-  var first = from_text[0u64]
-  if first == Character(0x002Bu32) or first == Character(0x002Du32)
-    i = 1u64
-    if i >= len
-      throw InvalidValueError(input: from_text, target: "D64")
-  var special = false
-  var rest = len - i
-  if rest >= 3u64
-    var c0 = from_text[i].to_lowercase()
-    var c1 = from_text[i + 1u64].to_lowercase()
-    var c2 = from_text[i + 2u64].to_lowercase()
-    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
-      special = true
-    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      special = true
-    if not special and rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      var c3 = from_text[i + 3u64].to_lowercase()
-      var c4 = from_text[i + 4u64].to_lowercase()
-      var c5 = from_text[i + 5u64].to_lowercase()
-      var c6 = from_text[i + 6u64].to_lowercase()
-      var c7 = from_text[i + 7u64].to_lowercase()
-      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
-        special = true
-  if not special
-    var has_digit = false
-    var has_dot = false
-    var has_exp = false
-    while i < len
-      var ch = from_text[i]
-      if ch.is_numeric()
-        has_digit = true
-      elseif ch == Character(0x002Eu32)
-        if has_dot or has_exp
-          throw InvalidValueError(input: from_text, target: "D64")
-        has_dot = true
-      elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
-        if has_exp or not has_digit
-          throw InvalidValueError(input: from_text, target: "D64")
-        has_exp = true
-        has_digit = false
-        if i + 1u64 < len
-          var next_ch = from_text[i + 1u64]
-          if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
-            i = i + 1u64
-      else
-        throw InvalidValueError(input: from_text, target: "D64")
-      i = i + 1u64
-    if not has_digit
-      throw InvalidValueError(input: from_text, target: "D64")
-  var cstr_val = CStr(from: from_text)
-  var bits = rf_d64_from_string(cstr_val)
-  return reinterpret_bits[U64, D64](bits)
+  return D64(from: parse_decimal_d128!(from_text: from_text))
 
 # ============================================================================
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
-### :returns: A `U64` hash of the decimal64 encoding.
+### Returns an xxHash64-based hash of the raw decimal64 encoding.
 routine D64.$fast_hash() -> U64
-  return __hash_leaf(v: reinterpret_bits[D64, U64](me))
+  return __hash_u128(v: zero_extend[U64, U128](me.to_bits()))
 
 # ============================================================================
 # Byte Representation
 # ============================================================================
 
 ### Returns the raw bytes of this value in little-endian order.
-### :returns: The resulting `Array[Byte, 8]` value.
 routine D64.to_bytes_le() -> Array[Byte, 8]
-  var raw = reinterpret_bits[D64, U64](me)
+  var raw = me.to_bits()
   var result = Array[Byte, 8]()
-  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
-  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
-  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
-  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 40u64)))
-  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
-  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
+  var i = 0_u64
+  while unsigned_lt[U64](a: i, b: 8_u64)
+    var b = int_truncate[U64, U8](shift_right_unsigned[U64](raw, mul[U64](a: i, b: 8_u64)))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = add[U64](a: i, b: 1_u64)
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
-### :returns: The resulting `Array[Byte, 8]` value.
 routine D64.to_bytes_be() -> Array[Byte, 8]
-  var raw = byte_swap[U64](reinterpret_bits[D64, U64](me))
+  var raw = me.to_bits()
   var result = Array[Byte, 8]()
-  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
-  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
-  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
-  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 40u64)))
-  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
-  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
+  var i = 0_u64
+  while unsigned_lt[U64](a: i, b: 8_u64)
+    var b = int_truncate[U64, U8](shift_right_unsigned[U64](raw, mul[U64](a: sub[U64](a: 7_u64, b: i), b: 8_u64)))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = add[U64](a: i, b: 1_u64)
   return result
-
-### Returns a keyed hash of this value using SipHash-2-4.
-### :param k0: The first 64-bit key word.
-### :param k1: The second 64-bit key word.
-### :returns: The resulting `U64` value.
-routine D64.$hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: reinterpret_bits[D64, U64](me), k0: k0, k1: k1)

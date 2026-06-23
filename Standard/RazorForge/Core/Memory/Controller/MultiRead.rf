@@ -1,0 +1,103 @@
+module Core
+
+### Readers-XOR-writer discipline — many concurrent readers (`Inspecting[T]`) OR one exclusive
+### writer (`Claiming[T]`). A spinlock read-write lock: readers bump an atomic count after checking
+### no writer is active (rechecking to close the race); a writer claims a flag then waits for the
+### reader count to drain. Spin-based, like {Exclusive}.
+### :see: {LockPolicy}, {Exclusive}, {Shared}, {Atomic}
+record MultiRead obeys LockPolicy
+  ### Number of active readers.
+  secret readers: Atomic[S32]
+  ### `1` while a writer holds (or is acquiring) the lock.
+  secret writer: Atomic[U8]
+  ### Thread id of the current writer, `0` when no writer. Tracked to detect self-deadlock: a thread
+  ### asking for the write lock (or a read lock) while it already holds the write lock.
+  secret writer_owner: Atomic[U64]
+
+### Creates an unlocked reader-writer policy.
+### :returns: The resulting `MultiRead` value.
+routine MultiRead.$create() -> MultiRead
+  return MultiRead(
+    readers: Atomic[S32](initial: 0_s32),
+    writer: Atomic[U8](initial: 0_u8),
+    writer_owner: Atomic[U64](initial: 0_u64)
+  )
+
+### Acquires a shared read lock; multiple readers may hold it simultaneously. Spins while a writer
+### is active. Crashes with {ReentrantLockError} if the CALLING thread already holds the WRITE lock
+### (the read would wait for a writer that is itself — a self-deadlock).
+routine MultiRead.acquire_read()
+  var tid = rf_current_thread_id()
+  loop
+    if me.writer.load() == 0_u8
+      discard me.readers.fetch_add(delta: 1_s32)
+      if me.writer.load() == 0_u8
+        break
+      # A writer slipped in between the check and the bump — back out and retry.
+      discard me.readers.fetch_sub(delta: 1_s32)
+    if me.writer_owner.load() == tid
+      crash_reentrant_lock!()
+  return
+
+### Releases a shared read lock.
+routine MultiRead.release_read()
+  discard me.readers.fetch_sub(delta: 1_s32)
+  return
+
+### Acquires the exclusive write lock: claims the writer flag, then waits for all readers to drain.
+### Crashes with {ReentrantLockError} on a re-entrant write acquire (the calling thread already
+### holds the write lock).
+routine MultiRead.acquire_write()
+  var tid = rf_current_thread_id()
+  loop
+    if me.writer.compare_exchange(expected: 0_u8, desired: 1_u8)
+      me.writer_owner.store(desired: tid)
+      break
+    if me.writer_owner.load() == tid
+      crash_reentrant_lock!()
+  loop
+    if me.readers.load() == 0_s32
+      break
+  return
+
+### Releases the exclusive write lock. Clears the owner before the flag (mirrors {Exclusive}).
+routine MultiRead.release_write()
+  me.writer_owner.store(desired: 0_u64)
+  me.writer.store(desired: 0_u8)
+  return
+
+### Returns the current active-reader count. Snapshot only.
+### :returns: The number of readers currently holding the lock.
+@readonly
+routine MultiRead.reader_count() -> S32
+  return me.readers.load()
+
+### Returns whether a writer currently holds the lock. Snapshot only.
+### :returns: `true` if write-locked.
+@readonly
+routine MultiRead.is_write_locked() -> Bool
+  return me.writer.load() != 0_u8
+
+# ============================================================================
+# Uniform LockPolicy interface — inspector = reader lock, claimer = writer lock.
+# ============================================================================
+
+### Admits an inspector to the reader set (shared read lock).
+routine MultiRead.add_inspector()
+  me.acquire_read()
+  return
+
+### Removes an inspector from the reader set.
+routine MultiRead.remove_inspector()
+  me.release_read()
+  return
+
+### Admits the claimer (exclusive writer lock; drains readers first).
+routine MultiRead.add_claimer()
+  me.acquire_write()
+  return
+
+### Removes the claimer (releases the writer lock).
+routine MultiRead.remove_claimer()
+  me.release_write()
+  return

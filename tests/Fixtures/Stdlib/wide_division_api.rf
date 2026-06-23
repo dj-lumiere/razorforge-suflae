@@ -1,0 +1,60 @@
+module Tests/Stdlib/WideDivisionApi
+
+import IO/Console
+
+# Cross-checks the Knuth-D-backed U128/S128 division operators against the raw
+# intrinsics over deterministic LCG cases. Exercises single-limb and multi-limb
+# divisors (U128) and all four sign combinations + floor rounding (S128).
+
+routine s128_floor_ref(a: S128, b: S128) -> S128
+  var q = signed_div[S128](a: a, b: b)
+  var r = signed_rem[S128](a: a, b: b)
+  if r < 0_s128
+    if b > 0_s128
+      return q - 1_s128
+    return q + 1_s128
+  return q
+
+routine s128_mod_ref(a: S128, b: S128) -> S128
+  var r = signed_rem[S128](a: a, b: b)
+  if r < 0_s128
+    if b > 0_s128
+      return r + b
+    return r - b
+  return r
+
+routine start()
+  var s = 0x2545F4914F6CDD1D_u64
+  var u_mis = 0_s64
+  var s_mis = 0_s64
+  var i = 0_s64
+  while signed_lt[S64](a: i, b: 50000_s64)
+    s = s *% 6364136223846793005_u64 +% 1442695040888963407_u64
+    var ah = s
+    s = s *% 6364136223846793005_u64 +% 1442695040888963407_u64
+    var al = s
+    s = s *% 6364136223846793005_u64 +% 1442695040888963407_u64
+    var bh = s
+    s = s *% 6364136223846793005_u64 +% 1442695040888963407_u64
+    var bl = s
+    # half the time use a single-limb divisor
+    if int_eq[U64](a: bit_and[U64](a: s, b: 1_u64), b: 0_u64)
+      bh = 0_u64
+    if int_eq[U64](a: bit_or[U64](a: bh, b: bl), b: 0_u64)
+      bl = 1_u64
+    var au = bit_or[U128](a: shift_left[U128](zero_extend[U64, U128](ah), 64_u128), b: zero_extend[U64, U128](al))
+    var bu = bit_or[U128](a: shift_left[U128](zero_extend[U64, U128](bh), 64_u128), b: zero_extend[U64, U128](bl))
+    if int_ne[U128](a: au // bu, b: unsigned_div[U128](a: au, b: bu))
+      u_mis = add[S64](a: u_mis, b: 1_s64)
+    if int_ne[U128](a: au % bu, b: unsigned_rem[U128](a: au, b: bu))
+      u_mis = add[S64](a: u_mis, b: 1_s64)
+    var asg = reinterpret_bits[U128, S128](au)
+    var bsg = reinterpret_bits[U128, S128](bu)
+    if int_ne[S128](a: asg // bsg, b: s128_floor_ref(a: asg, b: bsg))
+      s_mis = add[S64](a: s_mis, b: 1_s64)
+    if int_ne[S128](a: asg % bsg, b: s128_mod_ref(a: asg, b: bsg))
+      s_mis = add[S64](a: s_mis, b: 1_s64)
+    i = add[S64](a: i, b: 1_s64)
+  show("U128 //,%: " + f"{u_mis}" + " mismatch")
+  show("S128 //,%: " + f"{s_mis}" + " mismatch")
+  return

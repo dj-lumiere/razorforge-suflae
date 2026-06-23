@@ -129,40 +129,14 @@ internal sealed class AutoWiredRegistrationPass
                                      WrapperForwardingPass.WrapperTypeNames.Contains(
                                          item: (type as RecordTypeInfo)?.GenericDefinition?.Name
                                                ?? type.Name);
-                    // @llvm("ptr")-backed opaque handles (BigIntHandle, BigDecHandle, etc.)
-                    // have no semantic equality / hash — they're raw pointers. Skip auto-derivation.
-                    bool isOpaqueBackend = type is RecordTypeInfo { HasDirectBackendType: true };
-                    if (!type.IsBlank && !isWrapper && !isOpaqueBackend)
-                    {
-                        // $hash / $eq are opt-in: only auto-derived when the record explicitly
-                        // declares `obeys Hashable` / `obeys Equatable`. This avoids fanning out
-                        // synthesized bodies (and corresponding LLVM defs) for every record in
-                        // scope, and gives users an explicit place to override semantics.
-                        if (u64Type != null && ObeysProtocol(type: type, protocolName: "FastHashable"))
-                        {
-                            MaybeRegisterWired(owner: type,
-                                name: "$hash",
-                                returnType: u64Type,
-                                existingMethods: existingMethods);
-                        }
-
-                        if (u64Type != null && ObeysProtocol(type: type, protocolName: "Hashable"))
-                        {
-                            MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
-                                existingMethods: existingMethods);
-                        }
-
-                        if (boolType != null && ObeysProtocol(type: type, protocolName: EquatableProtocolName))
-                        {
-                            MaybeRegisterWiredWithParam(owner: type,
-                                name: "$eq",
-                                paramName: "you",
-                                paramType: type,
-                                returnType: boolType,
-                                existingMethods: existingMethods);
-                        }
-
-                    }
+                    // DECISION (2026-06-14): records do NOT auto-derive $eq / $hash. `obeys Equatable`
+                    // / `Hashable` on a record is a PROMISE the author fulfils by HAND-WRITING the
+                    // method — field-delegated synthesis is fragile (breaks when a field type lacks the
+                    // method, e.g. an Atomic / lock-flag field) and is semantically wrong for opaque /
+                    // container types whose logical value is not their field tuple. Auto $eq / $hash is
+                    // reserved for tuple / choice / flags (simple, unambiguous tag/element compare). The
+                    // stdlib's equatable/hashable struct records (Complex, Integer, Decimal, C32/64/128)
+                    // already hand-write these. $copy (below) + $represent / $diagnose stay auto-derived.
 
                     // `$copy` / `clone` (Assignable): their bodies are `return me` /
                     // `return me.$copy()` — NOT field-based — so they are safe even for @llvm-backed
@@ -183,26 +157,11 @@ internal sealed class AutoWiredRegistrationPass
                     break;
 
                 case TypeCategory.Entity:
-                    // Only synthesize `$eq` when every member field's type also has an
-                    // accessible `$eq`. Otherwise the auto-derived body would emit calls
-                    // like `me.children == you.children` for non-equatable element types
-                    // (e.g. `Array[T, 64]`), and the cascade dead-ends at link time.
-                    // Entities that genuinely need equality but hold non-equatable fields
-                    // should declare `$eq` explicitly with the right semantics.
-                    // Only synthesize `$eq` when every member field's type also has an
-                    // accessible `$eq`. Otherwise the auto-derived body would emit calls
-                    // like `me.children == you.children` for non-equatable element types
-                    // (e.g. `Array[T, 64]`), and the cascade dead-ends at link time.
-                    if (boolType != null && ObeysProtocol(type: type, protocolName: EquatableProtocolName) &&
-                        AllFieldsHaveEquality(type: type))
-                    {
-                        MaybeRegisterWiredWithParam(owner: type,
-                            name: "$eq",
-                            paramName: "you",
-                            paramType: type,
-                            returnType: boolType,
-                            existingMethods: existingMethods);
-                    }
+                    // DECISION (2026-06-14): entities do NOT auto-derive $eq either. An entity is an
+                    // identity/reference type whose logical value is rarely its field tuple (e.g. a
+                    // collection's value is its elements, not its buffer pointer + counts), so
+                    // field-delegated equality is the wrong default. Entities that want equality declare
+                    // `$eq` explicitly with the right semantics. (No stdlib entity obeys Equatable.)
 
                     // Synthesize $create(field1: T1, ...) -> EntityType for field construction.
                     // Always synthesize the all-fields overload unless an exact match already exists,

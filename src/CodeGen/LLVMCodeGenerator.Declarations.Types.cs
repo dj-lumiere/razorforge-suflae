@@ -15,7 +15,7 @@ public partial class LlvmCodeGenerator
 {
     private void GenerateEntityType(EntityTypeInfo entity) // NOSONAR S3776
     {
-        string typeName = GetEntityTypeName(entity: entity);
+        string typeName = RawEntityTypeName(entity: entity);
 
         // For generic resolutions with stale empty member variables (created before the generic
         // definition's members were populated), re-create from the now-complete definition.
@@ -96,7 +96,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void GenerateCrashableType(CrashableTypeInfo crashable)
     {
-        string typeName = GetCrashableTypeName(crashable: crashable);
+        string typeName = RawCrashableTypeName(crashable: crashable);
 
         if (_generatedTypes.Contains(item: typeName))
             return;
@@ -271,10 +271,12 @@ public partial class LlvmCodeGenerator
 
         switch (type)
         {
-            case EntityTypeInfo { IsGenericDefinition: false } nestedEntity
-                when !hasUnboundTypeArg:
-                GenerateEntityType(entity: nestedEntity);
-                break;
+            // NOTE: no Entity/Crashable case. Those are reference types — they appear as `ptr` in a
+            // containing struct's layout, so an enclosing record/entity never needs their struct
+            // emitted. Their structs are emitted on-demand at the actual use sites (alloc /
+            // field-access / size GEP) via GetEntityTypeName / GetCrashableTypeName. Recursing into
+            // them here would drag the whole reference-type graph (BTreeNode, SortedList, ...) into
+            // every build.
             case RecordTypeInfo
             {
                 IsGenericDefinition: false, HasDirectBackendType: false
@@ -304,7 +306,7 @@ public partial class LlvmCodeGenerator
     /// <param name="variant">The variant type info.</param>
     private void GenerateVariantType(VariantTypeInfo variant)
     {
-        string typeName = GetVariantTypeName(variant: variant);
+        string typeName = RawVariantTypeName(variant: variant);
 
         // Skip if already generated
         if (!_generatedTypes.Add(item: typeName))

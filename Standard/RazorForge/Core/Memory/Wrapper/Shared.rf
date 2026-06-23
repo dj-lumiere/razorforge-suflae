@@ -1,0 +1,130 @@
+module Core
+
+import BuilderService
+
+### Multi-threaded strong reference to shared data under an access discipline `P`. Thin pointer to
+### {ShareController[T, P]}. The atomic-refcount twin of {Retained[T]} — equivalent to `Arc[T]` in Rust.
+### Cloning bumps the strong count atomically (`.share()`); dropping decrements it. Safe across threads.
+###
+### The discipline `P` (a {LockPolicy}: {ReadOnly} / {Exclusive} / {MultiRead}) is part of the type, so
+### it is fixed at compile time and selected by monomorphization — no runtime dispatch. Unlike
+### {Retained[T]}, `Shared` does NOT obey `Controlling[T]`: multi-threaded access to the guarded data is
+### granted exclusively through the `Claiming[T]` / `Inspecting[T]` tokens (a later phase), whose legality
+### the readers-XOR-writer borrow checker derives from `P`. A `Shared` is therefore an ownership handle —
+### it refcounts and hands out weak references; reaching the inner value goes through a token.
+### :typeparam T: The exclusively owned entity type.
+### :typeparam P: The access-discipline lock policy.
+@llvm("ptr")
+record Shared[T, P]
+needs T is EntityType, P obeys LockPolicy
+  pass
+
+# ============================================================================
+# Construction
+# ============================================================================
+
+### Wraps this entity in an atomically reference-counted {Shared[T, P]} under discipline `P`.
+### Ownership transfers to the RC system; the original binding is invalidated.
+### :returns: The resulting `Shared[T, P]` value.
+routine T.share[P]() -> Shared[T, P]
+needs T is EntityType, P obeys LockPolicy
+  danger!
+    var ctrl = ShareController[T, P](data: me.hijack()).hijack()
+    return Shared[T, P](ctrl)
+
+# ============================================================================
+# Reference counting
+# ============================================================================
+
+### Returns a new strong reference to the same entity, atomically incrementing the strong count.
+### :returns: A new strong handle sharing the same underlying entity.
+routine Shared[T, P].share() -> Shared[T, P]
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    ctrl.increase_strong_count()
+  return me
+
+### Decrements the strong count, destroying the entity when it reaches zero.
+### Destroys the controller when both strong and weak counts reach zero.
+dangerous routine Shared[T, P].release()
+  var ctrl_ptr = Hijacked[ShareController[T, P]](me)
+  var ctrl = ctrl_ptr.as_entity()
+  ctrl.decrease_strong_count()
+  return
+
+### Creates a weak reference to the same entity.
+### :returns: A new weak handle to the same entity's controller.
+routine Shared[T, P].watch() -> Watched[T, P]
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    ctrl.increase_weak_count()
+    return Watched[T, P](me)
+
+# ============================================================================
+# Access — open a scoped token over the guarded entity (use with `using`)
+# ============================================================================
+
+### Opens shared (multi-reader) access to the guarded entity. The returned {Inspecting[T]} must be
+### opened with `using`: entering the scope acquires the reader hold, leaving it releases. Legal only
+### when `P` admits readers (`ReadOnly` / `MultiRead`); the borrow checker rejects it otherwise.
+### :returns: A scoped `Inspecting[T, P]` read token.
+### :note: Use as `using s.inspect() as v` — a bare `inspect()` never acquires the lock.
+routine Shared[T, P].inspect() -> Inspecting[T, P]
+needs P in [MultiRead, ReadOnly]
+  danger!
+    return Inspecting[T, P](me)
+
+### Opens exclusive (read/write) access to the guarded entity. The returned {Claiming[T]} must be
+### opened with `using`: entering the scope acquires the exclusive claimer hold, leaving it releases.
+### Legal only when `P` admits a writer (`Exclusive` / `MultiRead`); the borrow checker rejects it on
+### `ReadOnly`.
+### :returns: A scoped `Claiming[T, P]` write token.
+### :note: Use as `using s.claim() as c` — a bare `claim()` never acquires the lock.
+routine Shared[T, P].claim() -> Claiming[T, P]
+needs P in [Exclusive, MultiRead]
+  danger!
+    return Claiming[T, P](me)
+
+# ============================================================================
+# Inspection
+# ============================================================================
+
+### Returns the current strong reference count.
+### :returns: The number of live strong handles to this entity.
+routine Shared[T, P].strong_count() -> U64
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    return ctrl.strong_count()
+
+### Returns the current weak reference count.
+### :returns: The number of live weak handles to this entity's controller.
+routine Shared[T, P].weak_count() -> U64
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    return ctrl.weak_count()
+
+# ============================================================================
+# Display (opaque — the inner value is reachable only through an access token)
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Shared[T, P].$represent() -> Text
+  danger!
+    return me.type_name()
+
+### Returns the diagnostic representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Shared[T, P].$diagnose() -> Text
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var rc = ctrl.strong_count()
+    var weak = ctrl.weak_count()
+    var addr = ctrl.borrow_data().get_address()
+    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ")"
+
+dangerous routine Shared[T, P].$destroy()
+  me.release()
+  return

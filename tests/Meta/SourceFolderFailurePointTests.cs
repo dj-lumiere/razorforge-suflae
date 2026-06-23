@@ -18,8 +18,8 @@ public sealed partial class SourceFolderFailurePointTests
     {
         {
             "BuildSystem",
-            "manifest parsing validates required fields and indexes modules",
-            ["ReadRequiredString", "BuildModuleIndex", "ExtractModuleName"]
+            "manifest parsing validates required fields, indexes modules, and the native toolchain detects linker failures",
+            ["ReadRequiredString", "BuildModuleIndex", "ExtractModuleName", "DetectLinkerFromStderr"]
         },
         {
             "Declaration",
@@ -73,8 +73,8 @@ public sealed partial class SourceFolderFailurePointTests
         },
         {
             "Execution",
-            "CLI paths handle file, grammar, native build, and toolchain failures",
-            ["File.Exists", "catch (GrammarException", "BuildNativeRuntime", "DetectLinkerFromStderr"]
+            "CLI paths handle file, grammar, and native build failures",
+            ["File.Exists", "catch (GrammarException", "BuildNativeRuntime"]
         },
         {
             "Targeting",

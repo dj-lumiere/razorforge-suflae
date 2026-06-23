@@ -1,0 +1,44 @@
+module Tests/Stdlib/F128AsinhAcosh
+import IO/Console
+
+# Regression coverage for the F128 asinh/acosh fix (dropped the hidden m=1 sqrt-reduction in
+# log/log1p -> m=0, n=24). Uses ONLY references verified to ~1e-34 during development plus
+# self-verifying identities (exact round-trips, odd symmetry, special points) so nothing
+# depends on a hand-written value that can't be stood behind. All checks are booleans.
+
+# True when |got - want| / |want| < 1e-30 (comfortably inside F128's ~1e-34 precision).
+routine close(got: F128, want: F128) -> Bool
+  return (got - want).abs() / want.abs() < 1.0e-30_f128
+
+routine ck(got: F128, want: F128, label: Text)
+  show(label + ": " + f"{close(got: got, want: want)}")
+  return
+
+routine bits_eq(got: F128, want: F128, label: Text)
+  show(label + ": " + f"{int_eq[U128](a: got.to_bits(), b: want.to_bits())}")
+  return
+
+routine start()
+  # High-precision references (verified to ~1e-34 against the engine during development).
+  ck(got: F128(from: 1_s64).asinh(), want: F128!("0.881373587019543025232609324979792"), label: "asinh(1)")
+  ck(got: F128(from: 2_s64).asinh(), want: F128!("1.443635475178810342493276740273105"), label: "asinh(2)")
+  ck(got: F128(from: 2_s64).acosh_unchecked(), want: F128!("1.316957896924816708625046347307969"), label: "acosh(2)")
+
+  # Exact special points.
+  bits_eq(got: F128(from: 0_s64).asinh(), want: F128(from: 0_s64), label: "asinh(0)==0")
+  bits_eq(got: F128(from: 1_s64).acosh_unchecked(), want: F128(from: 0_s64), label: "acosh(1)==0")
+
+  # asinh is odd: asinh(-x) == -asinh(x), bit-exact.
+  bits_eq(got: F128(from: -5_s64).asinh(), want: F128(from: 5_s64).asinh().$neg(), label: "asinh odd (-5)")
+
+  # acosh(cosh(t)) == t EXACTLY for integer t, including large arguments (the case that
+  # exposed the original disproportionate-cost path). Bit-exact across t=1..12.
+  var t = 1_s64
+  var all_exact = true
+  while signed_le[S64](a: t, b: 12_s64)
+    var tf = F128(from: t)
+    if int_ne[U128](a: tf.cosh_unchecked().acosh_unchecked().to_bits(), b: tf.to_bits())
+      all_exact = false
+    t = add[S64](a: t, b: 1_s64)
+  show("acosh(cosh(t))==t for t=1..12: " + f"{all_exact}")
+  return

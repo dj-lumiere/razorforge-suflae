@@ -1,0 +1,37 @@
+module Core
+
+### Marker protocol for the access-synchronization discipline of a {Shared[T, P]}.
+###
+### A policy carries the lock STATE (if any) and provides the acquire/release primitives that
+### `Shared.inspect()` / `Shared.claim!()` drive. The discipline ALSO determines, at compile time,
+### which access tokens are legal — `ReadOnly` grants only `Inspecting`, `Exclusive` only `Claiming`,
+### `MultiRead` both — enforced statically by the readers-XOR-writer borrow checker.
+###
+### `P` is a type parameter of `Shared`/`ShareController`, so each discipline is selected by
+### monomorphization (no runtime dispatch): the controller's `lock` field is laid out per `P`
+### (`ReadOnly` is zero-sized → no overhead) and the acquire/release calls are statically inlined.
+### :see: {ReadOnly}, {Exclusive}, {MultiRead}, {Shared}
+protocol LockPolicy
+  ### Admits an inspector (shared reader). Many inspectors may hold concurrently. Blocking, not
+  ### failing: a contended lock waits. `ReadOnly` treats this as a no-op (immutable data);
+  ### `Exclusive` maps it to its single lock; `MultiRead` admits the holder to the reader set.
+  routine Me.add_inspector()
+
+  ### Removes an inspector previously admitted with `add_inspector`.
+  routine Me.remove_inspector()
+
+  ### Admits the claimer (exclusive writer). At most one claimer, with no concurrent inspectors.
+  ### Blocking, not failing. `ReadOnly` has no legal claimer (the borrow checker rejects `claim`
+  ### on `ReadOnly`); the method exists only to complete the uniform interface.
+  routine Me.add_claimer()
+
+  ### Removes the claimer previously admitted with `add_claimer`.
+  routine Me.remove_claimer()
+
+### Aborts the program for a re-entrant exclusive lock acquisition (the calling thread already
+### holds the lock — the spin would never end). Called by the lock policies when owner-thread
+### tracking detects self-deadlock; infallible-acquire callers stay plain (`@crash_only` does not
+### propagate failability). :throws: always {ReentrantLockError}.
+@crash_only
+routine crash_reentrant_lock!()
+  throw ReentrantLockError()

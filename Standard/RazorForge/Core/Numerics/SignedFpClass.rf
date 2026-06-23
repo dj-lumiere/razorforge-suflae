@@ -1,0 +1,33 @@
+module Core
+
+### The full, SIGN-AWARE floating-point classification — `FpClass` split by sign. This is the
+### single-field state used by the `UnpackedFloat` softfloat engine in place of the old
+### `sign`/`iszero`/`isinf`/`isnan` boolean quartet. Folding all of that into one `i32`-backed
+### `choice` is deliberate: a struct of four separate `i1` (`Bool`) fields, when passed by value
+### and spilled onto the stack, hits an aarch64 calling-convention bug (caller packs the `i1`s as
+### bytes, callee reads them at 4-byte spacing) that corrupts the flags. One integer field has an
+### unambiguous stack layout on every target. Pair with `is`/`when`: `if c is POSITIVE_ZERO`.
+###
+### Lives under `Numerics/` (not `Types/`) so it sorts ahead of `UnpackedFloat.rf` in the
+### ordinal stdlib load order — the field-type must register before the record that uses it.
+choice SignedFpClass
+  ### Negative infinity.
+  NEGATIVE_INF
+  ### A finite, normal negative value.
+  NEGATIVE_NORMAL
+  ### A subnormal (denormalized) negative nonzero value.
+  NEGATIVE_SUBNORMAL
+  ### Negative zero.
+  NEGATIVE_ZERO
+  ### Positive zero.
+  POSITIVE_ZERO
+  ### A subnormal (denormalized) positive nonzero value.
+  POSITIVE_SUBNORMAL
+  ### A finite, normal positive value (the common case).
+  POSITIVE_NORMAL
+  ### Positive infinity.
+  POSITIVE_INF
+  ### A signaling NaN (arises only from raw bits, never from RazorForge's own arithmetic).
+  SIGNALING_NOT_A_NUMBER
+  ### A quiet NaN (the kind RazorForge arithmetic produces).
+  QUIET_NOT_A_NUMBER

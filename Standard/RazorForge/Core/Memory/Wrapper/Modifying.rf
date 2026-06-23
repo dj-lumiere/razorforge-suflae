@@ -7,7 +7,7 @@ import BuilderService
 ### :typeparam T: The entity type being accessed.
 ### :see: {Viewing[T]}, {Hijacked[T]}, {Access-Types}
 @llvm("ptr")
-record Modifying[T] obeys Controlling[T]
+record Modifying[T] obeys Controlling[T], Enterable
   pass
 
 ### Produces a temporary unmanaged mutable view of `me`.
@@ -28,9 +28,11 @@ needs T is EntityType
 # Resource management — enables `using entity.modify() as h`
 # ============================================================================
 
-### Called on entry to a `using` block; no-op for a modify (access is already established).
-routine Modifying[T].$enter()
-  return
+### Called on entry to a `using` block; passes the modify through as the bound value (access is
+### already established by `.modify()`).
+### :returns: This modify token as `Modifying[T]`.
+routine Modifying[T].$enter() -> Modifying[T]
+  return me
 
 ### Called on exit from a `using` block; no-op for a modify (the compiler handles scope cleanup).
 routine Modifying[T].$exit()

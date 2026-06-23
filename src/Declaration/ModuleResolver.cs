@@ -104,12 +104,7 @@ public sealed class ModuleResolver
     /// <param name="location">Source location for error reporting.</param>
     public string? ResolveImport(string importPath, string currentFile, SourceLocation location)
     {
-        if (_index.TryGetValue(key: importPath, value: out string? resolved))
-        {
-            return resolved;
-        }
-
-        resolved = TryFilesystemFallback(importPath: importPath);
+        string? resolved = TryResolveImport(importPath: importPath);
 
         if (resolved is null)
         {
@@ -120,6 +115,71 @@ public sealed class ModuleResolver
         }
 
         return resolved;
+    }
+
+    /// <summary>
+    /// Resolves an import path to a single source file without recording a not-found error.
+    /// Returns null when no single file matches — the caller decides whether to try a
+    /// directory-as-module fallback (see <see cref="EnumerateProjectModuleDirectory"/>) before
+    /// reporting the import as unresolved.
+    /// </summary>
+    public string? TryResolveImport(string importPath)
+    {
+        return _index.TryGetValue(key: importPath, value: out string? resolved)
+            ? resolved
+            : TryFilesystemFallback(importPath: importPath);
+    }
+
+    /// <summary>
+    /// Lists candidate source files in a project (or library) directory whose relative path
+    /// matches a bare/slash module name — e.g. <c>import Fun2</c> maps to <c>&lt;root&gt;/Fun2/</c>.
+    /// This is the directory-as-module case: several files in one directory that all declare the
+    /// same <c>module Fun2</c>, which no single-file resolution can gather. Stdlib is intentionally
+    /// excluded — its multi-file modules are loaded by <c>StdlibLoader</c>, not the build driver.
+    /// The caller must parse each candidate and keep only those whose <c>module</c> declaration
+    /// equals <paramref name="moduleName"/>; an unrelated file that merely lives in the directory
+    /// is not part of the module.
+    /// </summary>
+    /// <param name="moduleName">The dot-free import path (e.g. "Fun2", "Geo/Shapes").</param>
+    public IReadOnlyList<string> EnumerateProjectModuleDirectory(string moduleName)
+    {
+        if (moduleName.Contains(value: '.'))
+        {
+            return [];
+        }
+
+        string relPath = moduleName.Replace(oldChar: '/', newChar: Path.DirectorySeparatorChar);
+
+        // Project root first, then external library roots (manifest [target] library). Stdlib is
+        // deliberately omitted — StdlibLoader already gathers multi-file stdlib modules.
+        var roots = new List<string>(capacity: 1 + _libraryRoots.Count) { _projectRoot };
+        roots.AddRange(collection: _libraryRoots);
+
+        foreach (string root in roots)
+        {
+            string dir = Path.Combine(path1: root, path2: relPath);
+            if (!Directory.Exists(path: dir))
+            {
+                continue;
+            }
+
+            // Sort by ordinal path for OS-independent registration order (see BuildDriver/StdlibLoader).
+            var files = new List<string>();
+            files.AddRange(collection: Directory.GetFiles(path: dir,
+                searchPattern: "*.rf",
+                searchOption: SearchOption.TopDirectoryOnly));
+            files.AddRange(collection: Directory.GetFiles(path: dir,
+                searchPattern: "*.sf",
+                searchOption: SearchOption.TopDirectoryOnly));
+            files.Sort(comparer: StringComparer.Ordinal);
+
+            if (files.Count > 0)
+            {
+                return files;
+            }
+        }
+
+        return [];
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 module Core
 
-### A 128-bit unsigned integer in the range 0 to 340,282,366,920,938,463,463,374,607,431,768,211,455.
+### A 128-bit unsigned integer in the range 0 to
+### 340,282,366,920,938,463,463,374,607,431,768,211,455.
 ###
 ### `U128` is used for cryptographic keys, UUIDs, very large counters, and
 ### other data that requires more than 64 bits. Note that `U128` does not
@@ -95,54 +96,87 @@ routine U128.$create(from: U64) -> U128
 routine U128.$create(from: U128) -> U128
   return from
 
-### Converts an `F16` to `U128` via `U64` conversion.
+### Converts an `S256` to `U128`, throwing if the value is negative or exceeds U128_MAX.
+### :param from: The `S256` value to convert.
+### :returns: The lower 128 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..340282366920938463463374607431768211455.
+routine U128.$create!(from: S256) -> U128
+  if not (0_s256 <= from <= 340282366920938463463374607431768211455_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U128](from)
+
+### Converts a `U256` to `U128`, throwing if the value exceeds U128_MAX.
+### :param from: The `U256` value to convert.
+### :returns: The lower 128 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 340282366920938463463374607431768211455`.
+routine U128.$create!(from: U256) -> U128
+  if from > 340282366920938463463374607431768211455_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U128](from)
+
+### Converts an `F16` to `U128`, truncating toward zero.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the integer part exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
 routine U128.$create!(from: F16) -> U128
-  return from.U64!().U128()
+  return from.F32().U128!()
 
-### Converts an `F32` to `U128` via `U64` conversion.
+### Converts an `F32` to `U128`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
 routine U128.$create!(from: F32) -> U128
-  return from.U64!().U128()
+  if not from.is_finite() or from < 0.0_f32
+    throw IntegerOverflowError()
+  return float_to_unsigned[F32, U128](from)
 
-### Converts an `F64` to `U128` via `U64` conversion.
+### Converts an `F64` to `U128`, truncating toward zero.
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, negative, or >= 2^128.
 routine U128.$create!(from: F64) -> U128
-  return from.U64!().U128()
+  if from.is_nan() or from < 0.0_f64 or from >= 340282366920938463463374607431768211456.0_f64
+    throw IntegerOverflowError()
+  return float_to_unsigned[F64, U128](from)
 
-### Converts an `F128` to `U128` via `U64` conversion.
+### Converts an `F128` to `U128`, truncating toward zero.
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if negative or >= 2^128; {NumericDomainError} if NaN.
 routine U128.$create!(from: F128) -> U128
-  return from.U64!().U128()
+  var bits = from.to_bits()
+  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
+  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var frac = bit_and[U128](a: bits, b: f128_mant_mask())
+  if biased == 0x7FFF_u64
+    if int_eq[U128](a: frac, b: 0_u128)
+      throw NumericOverflowError(description: "cannot convert infinite F128 to U128")
+    throw NumericDomainError(description: "cannot convert NaN F128 to U128")
+  if sign == 1_u64 and (int_ne[U64](a: biased, b: 0_u64) or int_ne[U128](a: frac, b: 0_u128))
+    throw NumericOverflowError(description: "cannot convert negative F128 to U128")
+  if biased < 16383_u64
+    return 0_u128
+  var actual_exp = sub[U64](a: biased, b: 16383_u64)
+  if actual_exp >= 128_u64
+    throw NumericOverflowError(description: "F128 value out of range for U128")
+  var sig = bit_or[U128](a: f128_implicit(), b: frac)
+  if actual_exp <= 112_u64
+    return shift_right_unsigned[U128](sig, zero_extend[U64, U128](sub[U64](a: 112_u64, b: actual_exp)))
+  return shift_left[U128](sig, zero_extend[U64, U128](sub[U64](a: actual_exp, b: 112_u64)))
 
-### Converts a `D32` to `U128` via `U64` conversion.
+### Converts a `D32` to `U128`, truncating toward zero.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if the integer part overflows U128.
 routine U128.$create!(from: D32) -> U128
-  return from.U64!().U128()
+  return U128(from: D128(from: from))
 
-### Converts a `D64` to `U128` via `U64` conversion.
+### Converts a `D64` to `U128`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+### :throws: {NumericOverflowError} if the integer part overflows U128.
 routine U128.$create!(from: D64) -> U128
-  return from.U64!().U128()
-
-### Converts a `D128` to `U128` via `U64` conversion.
-### :param from: The `D128` value to convert.
-### :returns: The integer part of `from` as a `U128`.
-### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
-routine U128.$create!(from: D128) -> U128
-  return from.U64!().U128()
+  return U128(from: D128(from: from))
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
@@ -196,6 +230,26 @@ routine U128.$mul!(you: U128) -> U128
     throw IntegerOverflowError()
   return result.item0
 
+### Unsigned 128/128 floor division via the generic base-2⁶⁴ Knuth-D kernel
+### (`knuth_divide[2]`), which bottoms out on hardware `DIV r64` for every estimation
+### step — avoiding the slow soft `__udivti3`/inline-expansion at every divisor size.
+### The `i128` storage is reinterpreted in place as two little-endian U64 limbs.
+### PRECONDITION: `b != 0`.
+routine u128_floordiv(a: U128, b: U128) -> U128
+  var av = a
+  var bv = b
+  var rem = Array[U64, 2]()
+  var qlo = 0_u64
+  var qhi = 0_u64
+  danger!
+    var q = knuth_divide[2](
+      a: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
+      b: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
+      rem: rem.hijack())
+    qlo = load_element_ref[Array[U64, 2], U64](q.hijack(), 0_u64)
+    qhi = load_element_ref[Array[U64, 2], U64](q.hijack(), 1_u64)
+  return bit_or[U128](shift_left[U128](zero_extend[U64, U128](qhi), 64_u128), zero_extend[U64, U128](qlo))
+
 ### Returns `me // you` (integer division), throwing if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient `me // you`.
@@ -203,15 +257,35 @@ routine U128.$mul!(you: U128) -> U128
 routine U128.$floordiv!(you: U128) -> U128
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U128](a: me, b: you)
+  return u128_floordiv(a: me, b: you)
 
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
 ### :returns: The remainder `me % you`. Behavior is undefined if `you == 0`.
+### Unsigned 128-bit remainder via the Knuth-D kernel. PRECONDITION: `b != 0`.
+routine u128_mod(a: U128, b: U128) -> U128
+  var av = a
+  var bv = b
+  var rem = Array[U64, 2]()
+  var rlo = 0_u64
+  var rhi = 0_u64
+  danger!
+    var q = knuth_divide[2](
+      a: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
+      b: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
+      rem: rem.hijack())
+    rlo = load_element_ref[Array[U64, 2], U64](rem.hijack(), 0_u64)
+    rhi = load_element_ref[Array[U64, 2], U64](rem.hijack(), 1_u64)
+  return bit_or[U128](shift_left[U128](zero_extend[U64, U128](rhi), 64_u128), zero_extend[U64, U128](rlo))
+
+### Remainder of `me` divided by `you`.
+### :param you: The divisor.
+### :returns: The remainder.
+### :throws: {DivisionByZeroError} if `you == 0`.
 routine U128.$mod!(you: U128) -> U128
   if you == 0_u128
     throw DivisionByZeroError()
-  return unsigned_rem[U128](a: me, b: you)
+  return u128_mod(a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -305,10 +379,7 @@ routine U128.$mul_clamp(you: U128) -> U128
 ### Returns `me ** exp` and a flag indicating whether the result wrapped around.
 ### :param exp: The exponent.
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U128.pow_with_overflow!(exp: U128) -> (U128, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U128.pow_with_overflow(exp: U128) -> (U128, Bool)
   var result: U128 = 1
   var base: U128 = me
   var e: U32 = U32(exp)
@@ -329,9 +400,8 @@ routine U128.pow_with_overflow!(exp: U128) -> (U128, Bool)
 ### :param exp: The exponent.
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U128_MAX`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U128.$pow!(exp: U128) -> U128
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -339,10 +409,7 @@ routine U128.$pow!(exp: U128) -> U128
 ### Returns `me ** exp` with wrapping arithmetic (mod 2¹²⁸).
 ### :param exp: The exponent.
 ### :returns: The result modulo 2¹²⁸.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U128.$pow_wrap!(exp: U128) -> U128
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U128.$pow_wrap(exp: U128) -> U128
   var result: U128 = 1
   var base: U128 = me
   var e: U32 = U32(exp)
@@ -357,10 +424,7 @@ routine U128.$pow_wrap!(exp: U128) -> U128
 ### Returns `me ** exp`, clamped to `U128_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `U128_MAX` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U128.$pow_clamp!(exp: U128) -> U128
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U128.$pow_clamp(exp: U128) -> U128
   var result: U128 = 1
   var base: U128 = me
   var e: U32 = U32(exp)
@@ -520,6 +584,48 @@ routine U128.swap_bytes() -> U128
 routine U128.is_power_of_two() -> Bool
   return me != 0_u128 and (me & (me - 1_u128)) == 0_u128
 
+### Returns this value rotated left by `bits` positions.
+routine U128.rotate_left(bits: U32) -> U128
+  var n = bits % 128_u32
+  if n == 0_u32
+    return me
+  return bit_or[U128](a: shift_left[U128](me, U128(n)), b: shift_right_unsigned[U128](me, U128(128_u32 -% n)))
+
+### Returns this value rotated right by `bits` positions.
+routine U128.rotate_right(bits: U32) -> U128
+  var n = bits % 128_u32
+  if n == 0_u32
+    return me
+  return bit_or[U128](a: shift_right_unsigned[U128](me, U128(n)), b: shift_left[U128](me, U128(128_u32 -% n)))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U128.to_bytes_le() -> Array[Byte, 16]
+  var result = Array[Byte, 16]()
+  var i = 0_u64
+  while i < 16_u64
+    var b = int_truncate[U128, U8](shift_right_unsigned[U128](me, U128(i * 8_u64)))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = i + 1_u64
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U128.to_bytes_be() -> Array[Byte, 16]
+  return me.swap_bytes().to_bytes_le()
+
+### Builds a `U128` from its little-endian raw byte representation.
+common routine U128.from_bytes_le(bytes: Array[Byte, 16]) -> U128
+  var result = 0_u128
+  var i = 0_u64
+  while i < 16_u64
+    var part = shift_left[U128](zero_extend[U8, U128](byte_at(array: bytes, index: i)), U128(i * 8_u64))
+    result = bit_or[U128](a: result, b: part)
+    i = i + 1_u64
+  return result
+
+### Builds a `U128` from its big-endian raw byte representation.
+common routine U128.from_bytes_be(bytes: Array[Byte, 16]) -> U128
+  return U128.from_bytes_le(bytes: bytes).swap_bytes()
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -555,6 +661,8 @@ routine U128.low64() -> U64
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U128.$represent() -> Text
   if me == 0u128
     return "0"
@@ -566,6 +674,8 @@ routine U128.$represent() -> Text
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: steal digits)
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U128.$diagnose() -> Text
   return "U128(" + me.$represent() + ")"
 

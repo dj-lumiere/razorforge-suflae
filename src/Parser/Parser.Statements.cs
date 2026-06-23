@@ -959,18 +959,9 @@ public partial class Parser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
         Expression expression = ParseExpression();
 
-        // Discard must be followed by a call expression
-        if (expression is not CallExpression)
-        {
-            throw new GrammarException(code: GrammarDiagnosticCode.DiscardRequiresCall,
-                message: "The 'discard' keyword must be followed by a routine call. " +
-                         "Use 'discard routine_call()' to explicitly ignore a return value.",
-                fileName: FileName,
-                line: location.Line,
-                column: location.Column,
-                language: _language);
-        }
-
+        // Whether the discarded expression is actually a routine call is a SEMANTIC check, not a
+        // grammatical one — the semantic verifier reports it (RF-S421). The parser just records the
+        // discarded expression, whatever its shape.
         ConsumeStatementTerminator();
         return new DiscardStatement(Expression: expression, Location: location);
     }

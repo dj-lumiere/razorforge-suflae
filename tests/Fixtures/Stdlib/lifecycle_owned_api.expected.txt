@@ -3,8 +3,8 @@
   create(10)
   create(11)
  inner body
-  destroy(10)
   destroy(11)
+  destroy(10)
 --- after inner() ---
   create(1)
 --- start body ---

@@ -6,6 +6,7 @@ using System.Text;
 using Compiler.Tokenizer;
 using Verification;
 using SyntaxTree;
+using TypeModel.Symbols;
 using TypeModel.Types;
 
 namespace Compiler.CodeGen;
@@ -16,6 +17,122 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    /// <summary>Module-level constant globals emitted for aggregate (Array[T,N]) presets,
+    /// keyed by the preset's qualified name so the table is emitted once and shared.</summary>
+    private readonly Dictionary<string, string> _presetGlobals = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Looks up <paramref name="name"/> as an aggregate (Array[T,N]) preset, trying the bare name
+    /// and the current routine's module prefix. Returns null for non-presets and scalar presets
+    /// (which are inlined before codegen). See <see cref="VariableInfo.IsPresettableAggregate"/>.
+    /// </summary>
+    private VariableInfo? ResolveAggregatePreset(string name)
+    {
+        if (_registry.LookupVariable(name: name) is { IsPresettableAggregate: true } direct)
+            return direct;
+
+        string? module = _currentEmittingRoutine?.OwnerType?.Module ??
+                         _currentEmittingRoutine?.Module;
+        if (module != null && !name.Contains(value: '.') &&
+            _registry.LookupVariable(name: $"{module}.{name}") is
+                { IsPresettableAggregate: true } qualified)
+            return qualified;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Emits (once) a <c>private unnamed_addr constant</c> global for an aggregate preset and
+    /// returns its symbol. The global holds the whole <c>[N x T]</c> array, so references become a
+    /// pointer to it (indexing = one gep+load) instead of rebuilding the array at each use site.
+    /// </summary>
+    private string EmitOrGetPresetGlobal(VariableInfo preset)
+    {
+        string key = preset.QualifiedName;
+        if (_presetGlobals.TryGetValue(key: key, value: out string? existing))
+            return existing;
+
+        var list = (ListLiteralExpression)preset.PresetValue!;
+        string arrLlvm = GetLlvmType(type: preset.Type);          // "[1000 x i16]" / "[8 x i8]"
+        string symbol = $"@\"preset.{key}\"";
+
+        // BitArray[N] packs its `N` bool elements into `[(N+7)/8 x i8]`; Array[T,N] stores one
+        // element per slot. Both reduce to a constant `[M x T]` initializer.
+        string initializer = GetGenericBaseName(type: preset.Type) == "BitArray"
+            ? BuildBitArrayPresetInitializer(key: key, list: list, arrLlvm: arrLlvm)
+            : BuildArrayPresetInitializer(key: key, list: list, arrLlvm: arrLlvm);
+
+        EmitLine(sb: _globalDeclarations,
+            line: $"{symbol} = private unnamed_addr constant {arrLlvm} {initializer}");
+        _presetGlobals[key: key] = symbol;
+        return symbol;
+    }
+
+    /// <summary>Builds the <c>[N x T] [...]</c> constant initializer for an <c>Array[T,N]</c> preset.</summary>
+    private string BuildArrayPresetInitializer(string key, ListLiteralExpression list, string arrLlvm)
+    {
+        if (list.Elements.Count == 0)
+            return "zeroinitializer";
+
+        string elemLlvm = ArrayElementLlvmType(arrLlvm: arrLlvm);  // e.g. "i16"
+        var scratch = new StringBuilder();
+        var parts = new List<string>(capacity: list.Elements.Count);
+        foreach (Expression element in list.Elements)
+        {
+            if (element is not LiteralExpression lit)
+                throw new NotImplementedException(
+                    message:
+                    $"Aggregate preset '{key}' element must be a scalar literal; got {element.GetType().Name}.");
+            // Numeric/bool/char literals render to a pure constant with no IR side effects.
+            parts.Add(item: $"{elemLlvm} {EmitLiteral(sb: scratch, literal: lit)}");
+        }
+
+        return $"[{string.Join(separator: ", ", values: parts)}]";
+    }
+
+    /// <summary>
+    /// Builds the <c>[(N+7)/8 x i8] [...]</c> constant initializer for a <c>BitArray[N]</c> preset by
+    /// packing 8 bool literals per byte (bit 0 = LSB), mirroring the inline literal bit-packing.
+    /// </summary>
+    private static string BuildBitArrayPresetInitializer(string key, ListLiteralExpression list,
+        string arrLlvm)
+    {
+        int bitCount = list.Elements.Count;
+        if (bitCount == 0)
+            return "zeroinitializer";
+
+        int byteCount = (bitCount + 7) / 8;
+        var parts = new List<string>(capacity: byteCount);
+        for (int byteIdx = 0; byteIdx < byteCount; byteIdx++)
+        {
+            int byteVal = 0;
+            for (int bitIdx = 0; bitIdx < 8 && byteIdx * 8 + bitIdx < bitCount; bitIdx++)
+            {
+                Expression bit = list.Elements[index: byteIdx * 8 + bitIdx];
+                if (bit is not LiteralExpression { Value: bool b })
+                    throw new NotImplementedException(
+                        message:
+                        $"BitArray preset '{key}' element must be a bool literal; got {bit.GetType().Name}.");
+                if (b)
+                    byteVal |= 1 << bitIdx;
+            }
+
+            parts.Add(item: $"i8 {byteVal}");
+        }
+
+        return $"[{string.Join(separator: ", ", values: parts)}]";
+    }
+
+    /// <summary>Extracts the element type from an array LLVM type (<c>"[N x ELEM]"</c> -&gt; <c>"ELEM"</c>).</summary>
+    private static string ArrayElementLlvmType(string arrLlvm)
+    {
+        int x = arrLlvm.IndexOf(value: " x ", comparisonType: StringComparison.Ordinal);
+        if (arrLlvm.StartsWith(value: '[') && x > 0 && arrLlvm.EndsWith(value: ']'))
+            return arrLlvm[(x + 3)..^1];
+        throw new InvalidOperationException(
+            message: $"Expected an array LLVM type for an aggregate preset, got '{arrLlvm}'.");
+    }
+
     /// <summary>
     /// Emit literal as part of this compiler phase.
     /// </summary>
@@ -70,9 +187,11 @@ public partial class LlvmCodeGenerator
         return type is TokenType.IntegerLiteral or TokenType.S8Literal
             or TokenType.S16Literal or TokenType.S32Literal
             or TokenType.S64Literal or TokenType.S128Literal
+            or TokenType.S256Literal
             or TokenType.U8Literal or TokenType.U16Literal
             or TokenType.U32Literal or TokenType.U64Literal
-            or TokenType.U128Literal or TokenType.AddressLiteral;
+            or TokenType.U128Literal or TokenType.U256Literal
+            or TokenType.AddressLiteral;
     }
 
     /// <summary>
@@ -80,7 +199,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static bool IsFloatLiteralType(TokenType type)
     {
-        return type is TokenType.DecimalLiteral or TokenType.F16Literal
+        return type is TokenType.F16Literal
             or TokenType.F32Literal or TokenType.F64Literal
             or TokenType.F128Literal;
     }
@@ -91,7 +210,7 @@ public partial class LlvmCodeGenerator
     private static bool IsDecimalFloatLiteralType(TokenType type)
     {
         return type is TokenType.D32Literal or TokenType.D64Literal
-            or TokenType.D128Literal;
+            or TokenType.D128Literal or TokenType.DecimalLiteral;
     }
 
     /// <summary>
@@ -207,7 +326,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static readonly string[] NumericSuffixes =
     [
-        "addr", "s128", "u128", "s64", "u64", "s32", "u32",
+        "addr", "s256", "u256", "s128", "u128", "s64", "u64", "s32", "u32",
         "s16", "u16", "s8", "u8", "f128", "f64", "f32", "f16",
         "d128", "d64", "d32"
     ];
@@ -302,6 +421,16 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string EmitDoubleAsLlvmHex(double d, TokenType literalType)
     {
+        if (literalType == TokenType.F16Literal)
+        {
+            // half constants use LLVM's 16-bit hex form `0xH<4 hex digits>` — NOT the 64-bit
+            // double form (`0x...16 hex...`) the float/double branches below emit. Without this,
+            // every F16 literal (incl. inf/nan, which also route here) emits invalid IR that
+            // llvm-as rejects. Round the value to IEEE binary16 and emit its bit pattern.
+            ushort halfBits = BitConverter.HalfToUInt16Bits(value: (Half)d);
+            return $"0xH{halfBits:X4}";
+        }
+
         if (literalType == TokenType.F32Literal)
         {
             // F32: promote to double for LLVM's float hex format
@@ -410,14 +539,16 @@ public partial class LlvmCodeGenerator
                     return (isNan ? 0x7C00000000000000UL : 0x7800000000000000UL).ToString();
                 case TokenType.D128Literal:
                 {
+                    // D128 is now @llvm("i128") BID; emit a single i128 constant. The combination
+                    // prefix (0x78.. inf / 0x7C.. nan) lives in the high 64 bits, low bits zero.
                     ulong hi = isNan ? 0x7C00000000000000UL : 0x7800000000000000UL;
-                    string tmp1 = NextTemp();
-                    string tmp2 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {tmp1} = insertvalue %Record.D128 zeroinitializer, i64 0, 0");
-                    EmitLine(sb: sb,
-                        line: $"  {tmp2} = insertvalue %Record.D128 {tmp1}, i64 {hi}, 1");
-                    return tmp2;
+                    return $"u0x{hi:X16}0000000000000000";
+                }
+                case TokenType.DecimalLiteral:
+                {
+                    // Decimal is @llvm("i256") BID; combination prefix in the top byte, rest zero.
+                    ulong top = isNan ? 0x7C00000000000000UL : 0x7800000000000000UL;
+                    return $"u0x{top:X16}000000000000000000000000000000000000000000000000";
                 }
             }
         }
@@ -425,25 +556,27 @@ public partial class LlvmCodeGenerator
         {
             case TokenType.D32Literal:
                 return NumericLiteralParser
-                                       .ParseD32(str: numericValue)
+                                       .EncodeD32Bid(str: numericValue)
                                        .Value
                                        .ToString();
             case TokenType.D64Literal:
                 return NumericLiteralParser
-                                       .ParseD64(str: numericValue)
+                                       .EncodeD64Bid(str: numericValue)
                                        .Value
                                        .ToString();
             case TokenType.D128Literal:
             {
+                // D128 is now @llvm("i128") BID; emit a single i128 constant (like F128).
                 NumericLiteralParser.D128 d128 =
-                    NumericLiteralParser.ParseD128(str: numericValue);
-                string tmp1 = NextTemp();
-                string tmp2 = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {tmp1} = insertvalue %Record.D128 zeroinitializer, i64 {d128.Lo}, 0");
-                EmitLine(sb: sb,
-                    line: $"  {tmp2} = insertvalue %Record.D128 {tmp1}, i64 {d128.Hi}, 1");
-                return tmp2;
+                    NumericLiteralParser.EncodeD128Bid(str: numericValue);
+                return $"u0x{d128.Hi:X16}{d128.Lo:X16}";
+            }
+            case TokenType.DecimalLiteral:
+            {
+                // Decimal is @llvm("i256") BID; emit a single i256 constant (4 words, big-endian).
+                NumericLiteralParser.Decimal256 d =
+                    NumericLiteralParser.EncodeDecimal(str: numericValue);
+                return $"u0x{d.W3:X16}{d.W2:X16}{d.W1:X16}{d.W0:X16}";
             }
             default:
                 return numericValue;

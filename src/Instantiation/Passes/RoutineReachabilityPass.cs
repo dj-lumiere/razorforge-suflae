@@ -96,6 +96,21 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (string wiredName in WiredRoutineNames)
             {
+                // Only seed a wired routine the concrete type can actually host. For a generic
+                // instantiation like List[Person], List[T].$eq/$contains carry `needs T obeys
+                // Equatable`; if Person doesn't obey Equatable the routine is not instantiable —
+                // its body would call the abstract `Equatable.$eq`/`$ne` (no concrete impl) →
+                // LINKERR. The user program can't legally call it either (SA rejects the // constraint violation), so skipping is safe. Derived siblings ($ne, $notcontains,
+                // $lt/$le/$gt/$ge) aren't in the wired-capability map themselves — gate them on
+                // their base capability so seeding $ne doesn't drag in $eq (whose body LINKERRs).
+                string capabilityName = wiredName switch
+                {
+                    "$ne" => "$eq",
+                    "$notcontains" => "$contains",
+                    "$lt" or "$le" or "$gt" or "$ge" => "$cmp",
+                    _ => wiredName
+                };
+                if (!ctx.Registry.TypeHasWiredRoutine(type: type, wiredName: capabilityName)) continue;
                 RoutineInfo? routine = ctx.Registry.LookupMethod(type: type, methodName: wiredName);
                 if (routine != null) EnqueueCallee(callee: routine);
             }
@@ -707,15 +722,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Compute substitution map for the callee from owner-type generics.
         var subs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
 
-        // Free generic functions (e.g. `show[T]`) carry their type arguments on the
-        // RoutineInfo when instantiated by SubstituteRoutine. Their body references the
-        // generic params as receiver/argument types — e.g. `show[T]`'s body has
-        // `value.$represent()` where value: T. Without `T → ConcreteType` in the frame's
-        // TypeSubs, the body walker can't resolve `T.$represent` to `ConcreteType.$represent`,
-        // leaving the concrete method out of the live set. Codegen then emits a call to it
-        // but never the definition → linker error.
-        if (callee.OwnerType == null && callee is { GenericDefinition: { GenericParameters: { Count: > 0 } freeParams }, TypeArguments: { Count: > 0 } freeArgs }
-                                     && freeParams.Count == freeArgs.Count)
+        // Method-level generic params carry their type arguments on the RoutineInfo when
+        // instantiated by SubstituteRoutine. The body references the params as receiver/argument
+        // types — e.g. free `show[T]`'s body has `value.$represent()` where value: T, and
+        // `T.share[P]()`'s body constructs `ShareController[T, P](...)`. Without `T → ConcreteType`
+        // / `P → ConcretePolicy` in the frame's TypeSubs, the body walker can't resolve those
+        // types, leaving the concrete method/constructor out of the live set. Codegen then emits a
+        // call to it but never the definition → linker error. This applies to BOTH free functions
+        // and member methods with method-level generics (the owner-type params are bound below).
+        if (callee is { GenericDefinition: { GenericParameters: { Count: > 0 } freeParams }, TypeArguments: { Count: > 0 } freeArgs }
+                && freeParams.Count == freeArgs.Count)
         {
             for (int i = 0; i < freeParams.Count; i++)
             {
@@ -958,6 +974,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         TypeInfo? ct = cre.ConstructedType;
         if (ct == null) return null;
+        // In a monomorphized frame the constructed type may be a generic parameter (e.g. `P()`
+        // inside `ShareController[T, P].$create`'s body, with P bound to a concrete LockPolicy).
+        // Substitute through the active frame subs so we enqueue the concrete policy's `$create`
+        // (and emit its body) rather than a bogus `P.$create`.
+        ct = RoutineInfo.SubstituteType(type: ct, substitution: _currentFrameSubs);
         // Match overload by parameter count — Text() (no args) and Text(from: CStr) are
         // distinct $create overloads on the same type. LookupMethod alone returns the
         // first-registered one and misses the no-arg variant when callers use it.
@@ -1036,7 +1057,20 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         if (ce.Arguments.Count != 0) return null;
         TypeInfo? ct = ce.ConstructedType;
+        // A no-arg construction of a generic parameter (e.g. `P()` inside `ShareController[T, P]
+        // .$create`'s body) is parsed as a CallExpression whose callee is an IdentifierExpression
+        // naming the param, and SA leaves ConstructedType null (the param has no concrete type yet).
+        // In a monomorphized frame the param is bound, so recover the concrete type from the frame
+        // subs — otherwise the concrete policy's `$create` body is never enqueued (LINKERR).
+        if (ct == null && ce.Callee is IdentifierExpression idCalleeForParam
+            && _currentFrameSubs.TryGetValue(key: idCalleeForParam.Name, value: out TypeInfo? boundParamType))
+        {
+            ct = boundParamType;
+        }
         if (ct == null) return null;
+        // Substitute through the active frame subs so a constructed type that is itself a generic
+        // parameter (or carries one) resolves to its concrete binding.
+        ct = RoutineInfo.SubstituteType(type: ct, substitution: _currentFrameSubs);
         foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
         {
             if (m is { Name: CreateMethodName, Parameters.Count: 0 }) return m;
@@ -1356,12 +1390,24 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             if (_userByName.TryGetValue(key: genericKey, value: out List<RoutineDeclaration>? gdu2))
                 return MatchOverload(decls: gdu2, callee: callee);
         }
-        // Concrete owner: e.g. "S32.$add" or "Bytes.split".
+        // Concrete owner: e.g. "S32.$add" or "Bytes.split". Match over BOTH stdlib AND user decls
+        // combined: a user program may define a NEW overload of a stdlib-type method (e.g.
+        // `routine F64.$create(from: D32B)` in playground code, against Core.F64's many numeric
+        // `$create` overloads). Checking stdlib alone first lets MatchOverload's count-only
+        // fallback bind to the wrong overload (`$create(S8)`) and walk ITS body — so the real
+        // D32B body's callees (`F64.from_bits`, `coeff.F64()`) never reach the live set. Merging
+        // lets the exact type-signature match (Pass 1) pick the user D32B overload.
         string concreteKey = $"{owner.Name}.{callee.Name}";
-        if (_stdlibByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? c))
-            return MatchOverload(decls: c, callee: callee);
-        if (_userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu))
-            return MatchOverload(decls: cu, callee: callee);
+        bool hasStdlib = _stdlibByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? c);
+        bool hasUser = _userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu);
+        if (hasStdlib && hasUser)
+        {
+            var combined = new List<RoutineDeclaration>(collection: c!);
+            combined.AddRange(collection: cu!);
+            return MatchOverload(decls: combined, callee: callee);
+        }
+        if (hasStdlib) return MatchOverload(decls: c!, callee: callee);
+        if (hasUser) return MatchOverload(decls: cu!, callee: callee);
 
         // Universal-method instance: callee was produced by SubstituteMethodForOwner from a
         // routine whose receiver is a bare generic parameter (e.g. `T.hijack()` substituted to

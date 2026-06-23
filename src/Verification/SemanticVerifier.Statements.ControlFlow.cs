@@ -466,8 +466,9 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void AnalyzeDiscardStatement(DiscardStatement discard)
     {
-        // discard must target a routine call, not an arbitrary expression like a literal or variable
-        if (discard.Expression is not CallExpression)
+        // discard must target a routine call, not an arbitrary expression like a literal or variable.
+        // Explicit-generic calls (`f[T](...)`) parse to GenericMethodCallExpression — also a call.
+        if (discard.Expression is not (CallExpression or GenericMethodCallExpression))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidDiscardTarget,
                 message: "'discard' can only be used with routine calls. " +
@@ -516,32 +517,84 @@ public sealed partial class SemanticVerifier
 
     private void AnalyzeUsingStatement(UsingStatement usingStmt)
     {
+        // Mark the resource node so a multi-threaded access token (Inspecting/Claiming) produced
+        // directly here is accepted; the same token produced anywhere else is rejected (RF-S629),
+        // keeping its lock strictly `using`-scoped. Save/restore to support nested `using`.
+        ISyntaxTreeNode? previousUsingResource = _usingResourceNode;
+        _usingResourceNode = usingStmt.Resource;
         // Analyze the resource expression to get its type
         TypeSymbol resourceType = AnalyzeExpression(expression: usingStmt.Resource);
+        _usingResourceNode = previousUsingResource;
+
+        // Readers-XOR-writer (RF-S630): if this `using` opens an MT access token on a named Shared
+        // handle, check it against the holds already live in the enclosing `using` scopes on the SAME
+        // handle. A writer (`claim`) conflicts with any other hold; readers (`inspect`) coexist.
+        // The hold is pushed for the duration of the body and popped on exit, so only OVERLAPPING
+        // scopes conflict (sequential `using`s on the same handle are fine).
+        string accessBase = GetBaseTypeName(typeName: resourceType.Name);
+        bool opensAccessToken = accessBase is "Inspecting" or "Claiming";
+        string? accessHandle = opensAccessToken
+            ? ExtractAccessReceiverName(resource: usingStmt.Resource)
+            : null;
+        if (accessHandle != null)
+        {
+            bool isWriter = accessBase == "Claiming";
+            int accessIdentity = GetOrAssignHandleIdentity(path: accessHandle);
+            foreach ((string Handle, int Identity, bool IsWriter, SourceLocation Location) hold
+                     in _activeAccessHolds)
+            {
+                // Two holds touch the same memory when they resolve to the same controller identity
+                // (aliased handles — `s` and `s2 = s.share()`) OR when their syntactic paths overlap
+                // on a field boundary (a parent handle and one of its sub-handles).
+                bool sameMemory = hold.Identity == accessIdentity ||
+                                  PathsOverlap(a: hold.Handle, b: accessHandle);
+                if (!sameMemory || (!isWriter && !hold.IsWriter))
+                    continue;
+                string newKind = isWriter ? "claim()" : "inspect()";
+                string heldKind = hold.IsWriter ? "claim()" : "inspect()";
+                string overlapNote = hold.Handle == accessHandle
+                    ? "the same shared handle"
+                    : hold.Identity == accessIdentity
+                        ? $"the aliased handle '{hold.Handle}' (same shared data)"
+                        : $"the overlapping handle '{hold.Handle}'";
+                ReportError(code: SemanticDiagnosticCode.ReadersXorWriter,
+                    message:
+                    $"'{newKind}' on '{accessHandle}' conflicts with an active '{heldKind}' on " +
+                    $"{overlapNote} in an enclosing 'using' scope. A writer ('claim') excludes all other " +
+                    "access; readers ('inspect') may coexist only with other readers.",
+                    location: usingStmt.Location);
+                break;
+            }
+
+            _activeAccessHolds.Add(
+                item: (accessHandle, accessIdentity, isWriter, usingStmt.Location));
+        }
 
         // The bound variable type defaults to the resource type, but may be overridden
         // by $enter's return type when it returns non-void.
         TypeSymbol boundType = resourceType;
 
-        // All using targets (tokens and resources alike) require $enter/$exit
+        // A `using` target must obey `Enterable` — the protocol that declares the `$enter`/`$exit`
+        // scope-management contract. Conformance (not just the presence of `$enter`/`$exit` by name)
+        // is the gate, so being `using`-able is an explicit, checked capability.
         if (_registry.Language == Language.RazorForge)
         {
-            // LookupMethod handles generic type fallback (e.g., Viewing[Point].$enter -> Viewing.$enter)
-            RoutineInfo? enterMethod =
-                _registry.LookupMethod(type: resourceType, methodName: "$enter");
-            RoutineInfo? exitMethod =
-                _registry.LookupMethod(type: resourceType, methodName: "$exit");
-
-            if (enterMethod == null || exitMethod == null)
+            if (!ImplementsProtocol(type: resourceType, protocolName: "Enterable"))
             {
                 ReportError(code: SemanticDiagnosticCode.UsingTargetMissingEnterExit,
                     message:
-                    $"Using target of type '{resourceType.Name}' must implement '$enter' and '$exit' for resource management.",
+                    $"Using target of type '{resourceType.Name}' must obey 'Enterable' (which provides " +
+                    "'$enter'/'$exit') for scope-managed resource access.",
                     location: usingStmt.Location);
             }
-            else if (enterMethod.ReturnType is { IsBlank: false })
+            else
             {
-                boundType = enterMethod.ReturnType;
+                // The bound variable's type is `$enter`'s return type when non-void (pass-through).
+                // LookupMethod handles generic fallback (Viewing[Point].$enter -> Viewing.$enter).
+                RoutineInfo? enterMethod =
+                    _registry.LookupMethod(type: resourceType, methodName: "$enter");
+                if (enterMethod?.ReturnType is { IsBlank: false } enterReturn)
+                    boundType = enterReturn;
             }
         }
 
@@ -559,5 +612,94 @@ public sealed partial class SemanticVerifier
         // for tokens, and conceptually enforced by scope exit for resources)
 
         _registry.ExitScope();
+
+        // Pop the MT access hold now that the scope has closed (readers-XOR-writer, RF-S630).
+        if (accessHandle != null)
+            _activeAccessHolds.RemoveAt(index: _activeAccessHolds.Count - 1);
+    }
+
+    /// <summary>
+    /// Extracts a path key for the Shared handle of an `inspect`/`claim` access expression — the
+    /// receiver of `s.inspect()` / `s.claim()`, as a dotted path so distinct fields are distinct
+    /// handles: `s` → "s", `s.a` → "s.a". This makes `s.a.claim()` and `s.b.claim()` independent
+    /// (both claimable in one scope) while `s.a` claimed twice still conflicts. Returns null for
+    /// receivers that aren't a pure identifier/field path (indexing, call results), which the
+    /// readers-XOR-writer check conservatively skips (no false positives).
+    /// </summary>
+    private static string? ExtractAccessReceiverName(Expression resource)
+    {
+        return resource is CallExpression { Callee: MemberExpression { Object: var receiver } }
+            ? BuildAccessPath(expr: receiver)
+            : null;
+    }
+
+    /// <summary>Whether two access paths overlap — equal, or one a prefix of the other on a field
+    /// boundary (`s.a` overlaps `s.a.x` and `s`, but not `s.b` or `s.ab`). Overlapping paths name
+    /// memory where one contains the other, so concurrent access to them conflicts.</summary>
+    private static bool PathsOverlap(string a, string b)
+    {
+        return a == b || a.StartsWith(value: b + ".") || b.StartsWith(value: a + ".");
+    }
+
+    /// <summary>Builds a dotted path for an identifier/field-access chain (`s.a.b` → "s.a.b"), or
+    /// null if the chain bottoms out on anything else (indexing, a call, a literal).</summary>
+    private static string? BuildAccessPath(Expression expr)
+    {
+        return expr switch
+        {
+            IdentifierExpression id => id.Name,
+            MemberExpression { Object: var inner, PropertyName: var prop } =>
+                BuildAccessPath(expr: inner) is { } prefix ? $"{prefix}.{prop}" : null,
+            _ => null
+        };
+    }
+
+    /// <summary>Returns the controller identity for a Shared/Watched handle path. A path bound to a
+    /// tracked handle (recorded at its <c>var</c> declaration, see
+    /// <see cref="RecordSharedHandleIdentity"/>) reuses its identity; an untracked path is assigned a
+    /// fresh unique identity on first use and remembered, so repeated uses of the same path match
+    /// (the readers-XOR-writer check then degrades to per-path keying — the pre-aliasing behaviour —
+    /// for handles whose origin it can't see).</summary>
+    private int GetOrAssignHandleIdentity(string path)
+    {
+        if (_sharedHandleIdentity.TryGetValue(key: path, out int id))
+            return id;
+        id = _nextSharedHandleIdentity++;
+        _sharedHandleIdentity[key: path] = id;
+        return id;
+    }
+
+    /// <summary>Records the controller identity of a freshly declared Shared/Watched handle from its
+    /// initializer, so later aliases and access-token receivers resolve to the same controller:
+    /// <list type="bullet">
+    /// <item>a fresh Arc (<c>node.share[P]()</c> — a generic-call) mints a NEW identity;</item>
+    /// <item>a clone (<c>s.share()</c>/<c>s.watch()</c>) or a plain copy (<c>var s2 = s</c>)
+    /// INHERITS the source handle's identity;</item>
+    /// <item>anything else gets a fresh identity (conservative — a missed alias only weakens the
+    /// check, never a false positive).</item>
+    /// </list></summary>
+    private void RecordSharedHandleIdentity(string name, Expression? initializer)
+    {
+        int identity = initializer switch
+        {
+            // Fresh Arc: `node.share[P]()` / `node.watch[P]()` — an explicit-generic call.
+            GenericMethodCallExpression { MethodName: "share" or "watch" } =>
+                _nextSharedHandleIdentity++,
+            // Clone: `s.share()` / `s.watch()` — inherit the receiver handle's identity.
+            CallExpression
+                {
+                    Callee: MemberExpression
+                    {
+                        Object: var receiver, PropertyName: "share" or "watch"
+                    }
+                } when BuildAccessPath(expr: receiver) is { } recvPath =>
+                GetOrAssignHandleIdentity(path: recvPath),
+            // Plain copy: `var s2 = s` — inherit (usually blocked by the copy-verb rule, handled
+            // here for completeness).
+            IdentifierExpression copySource =>
+                GetOrAssignHandleIdentity(path: copySource.Name),
+            _ => _nextSharedHandleIdentity++
+        };
+        _sharedHandleIdentity[key: name] = identity;
     }
 }

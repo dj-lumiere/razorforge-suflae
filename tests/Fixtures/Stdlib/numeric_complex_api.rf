@@ -9,8 +9,8 @@ routine start()
   show(f"c32: {c32}")
   show(f"c64: {c64}")
 
-  show(f"c64 real: {c64.real()}")
-  show(f"c64 imag: {c64.imag()}")
+  show(f"c64 real: {c64.real}")
+  show(f"c64 imag: {c64.imag}")
   show(f"c64 abs: {c64.abs()}")
 
   # Arithmetic

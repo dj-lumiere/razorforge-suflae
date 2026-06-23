@@ -238,6 +238,12 @@ public sealed partial class SemanticVerifier
                 fullName: $"{_currentModuleName}.{routineLookupName}");
         }
 
+        // Generic free routines are indexed only in the generic-overload table, not under a plain
+        // name key, so LookupRoutine misses them. A bare reference — e.g. the receiver identifier of
+        // an explicit `gen_id[T](...)` call — must consult it too, or a generic free routine reads as
+        // an unknown identifier when called from another module (concrete free routines resolve fine).
+        routine ??= _registry.LookupGenericOverload(name: routineLookupName);
+
         if (routine != null)
         {
             // Return the function type for first-class function references

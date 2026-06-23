@@ -5,7 +5,7 @@ module Core
 ### `U16` is commonly used for Unicode code units (UTF-16), audio samples,
 ### and other data that fits in 16 bits.
 @llvm("i16")
-record U16 obeys UnsignedIntegral, Ordered, ConstCompatible
+record U16 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for U16 limits
@@ -101,6 +101,24 @@ routine U16.$create!(from: U128) -> U16
   if from > 65535_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U16](from)
+
+### Converts an `S256` to `U16`, throwing if the value is negative or exceeds 65535.
+### :param from: The `S256` value to convert.
+### :returns: The lower 16 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..65535.
+routine U16.$create!(from: S256) -> U16
+  if not (0_s256 <= from <= 65535_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U16](from)
+
+### Converts a `U256` to `U16`, throwing if the value exceeds 65535.
+### :param from: The `U256` value to convert.
+### :returns: The lower 16 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 65535`.
+routine U16.$create!(from: U256) -> U16
+  if from > 65535_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U16](from)
 
 ### Converts an `F16` to `U16` by first converting to `U32`, then truncating.
 ### :param from: The `F16` value to convert.
@@ -202,13 +220,6 @@ routine U16.$mul!(you: U16) -> U16
   if result.item1
     throw IntegerOverflowError()
   return result.item0
-
-### Returns `me * you`, throwing on overflow (alias for `$mul!`).
-### :param you: The right operand.
-### :returns: The product `me * you`.
-### :throws: {IntegerOverflowError} if the result exceeds `U16_MAX`.
-routine U16.$mul(you: U16) -> U16
-  return me.$mul!(you)
 
 ### Returns `me // you` (integer division), throwing if `you` is zero.
 ### :param you: The divisor.
@@ -315,10 +326,7 @@ routine U16.$mul_clamp(you: U16) -> U16
 ### Returns `me ** exp` and a flag indicating whether the result wrapped around.
 ### :param exp: The exponent.
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U16.pow_with_overflow!(exp: U16) -> (U16, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U16.pow_with_overflow(exp: U16) -> (U16, Bool)
   var result: U16 = 1
   var base: U16 = me
   var e: U32 = U32(exp)
@@ -339,9 +347,8 @@ routine U16.pow_with_overflow!(exp: U16) -> (U16, Bool)
 ### :param exp: The exponent.
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U16_MAX`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U16.$pow!(exp: U16) -> U16
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -349,10 +356,7 @@ routine U16.$pow!(exp: U16) -> U16
 ### Returns `me ** exp` with wrapping arithmetic (mod 65536).
 ### :param exp: The exponent.
 ### :returns: The result modulo 65536.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U16.$pow_wrap!(exp: U16) -> U16
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U16.$pow_wrap(exp: U16) -> U16
   var result: U16 = 1
   var base: U16 = me
   var e: U32 = U32(exp)
@@ -367,10 +371,7 @@ routine U16.$pow_wrap!(exp: U16) -> U16
 ### Returns `me ** exp`, clamped to `U16_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `65535` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U16.$pow_clamp!(exp: U16) -> U16
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U16.$pow_clamp(exp: U16) -> U16
   var result: U16 = 1
   var base: U16 = me
   var e: U32 = U32(exp)
@@ -530,6 +531,41 @@ routine U16.swap_bytes() -> U16
 routine U16.is_power_of_two() -> Bool
   return me != 0_u16 and (me & (me - 1_u16)) == 0_u16
 
+### Returns this value rotated left by `bits` positions.
+routine U16.rotate_left(bits: U32) -> U16
+  var n = bits % 16_u32
+  if n == 0_u32
+    return me
+  return bit_or[U16](a: shift_left[U16](me, U16(n)), b: shift_right_unsigned[U16](me, U16(16_u32 -% n)))
+
+### Returns this value rotated right by `bits` positions.
+routine U16.rotate_right(bits: U32) -> U16
+  var n = bits % 16_u32
+  if n == 0_u32
+    return me
+  return bit_or[U16](a: shift_right_unsigned[U16](me, U16(n)), b: shift_left[U16](me, U16(16_u32 -% n)))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U16.to_bytes_le() -> Array[Byte, 2]
+  var result = Array[Byte, 2]()
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U16, U8](me))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](me, 8_u16)))
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U16.to_bytes_be() -> Array[Byte, 2]
+  return me.swap_bytes().to_bytes_le()
+
+### Builds a `U16` from its little-endian raw byte representation.
+common routine U16.from_bytes_le(bytes: Array[Byte, 2]) -> U16
+  var lo = zero_extend[U8, U16](byte_at(array: bytes, index: 0_u64))
+  var hi = shift_left[U16](zero_extend[U8, U16](byte_at(array: bytes, index: 1_u64)), 8_u16)
+  return bit_or[U16](a: lo, b: hi)
+
+### Builds a `U16` from its big-endian raw byte representation.
+common routine U16.from_bytes_be(bytes: Array[Byte, 2]) -> U16
+  return U16.from_bytes_le(bytes: bytes).swap_bytes()
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -554,9 +590,13 @@ routine U16.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U16.$represent() -> Text
   return U32(me).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U16.$diagnose() -> Text
   return "U16(" + me.$represent() + ")"
 

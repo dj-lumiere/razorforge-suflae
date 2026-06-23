@@ -58,8 +58,11 @@ public class TextBytesInteropTests
                                            var bad: Bool = ch.is_letter()
                                            return
                                          """);
+        // `is_letter()` calls a routine that does not exist on Character (the API is
+        // `is_alphabetic`), so it is a MethodNotFound — `.name()` is a routine call, distinct
+        // from `.name` member access, and an unresolved routine call is RF-S458.
         Assert.Contains(invalid.Errors,
-            e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+            e => e.Code == SemanticDiagnosticCode.MethodNotFound);
     }
 
     /// <summary>
@@ -68,11 +71,13 @@ public class TextBytesInteropTests
     [Fact]
     public void TextEncodeAndBytesDecodeUtf8_Analyze()
     {
+        // decode_as_utf8 is failable (strict validation) → `decode_as_utf8!()` from a failable
+        // routine; the non-failable counterpart is `decode_as_utf8_lossy()`. RF-S458 otherwise.
         AnalysisResult result = AnalyzeSa("""
-                                        routine test()
+                                        routine test!()
                                           var text: Text = "Hello, 계"
                                           var bytes: Bytes = text.encode_as_utf8()
-                                          var roundtrip: Text = bytes.decode_as_utf8()
+                                          var roundtrip: Text = bytes.decode_as_utf8!()
                                           return
                                         """);
 
@@ -85,10 +90,13 @@ public class TextBytesInteropTests
     [Fact]
     public void BytesInterpretAsUtf8_ProducesCharacters()
     {
+        // interpret_as_utf8 is failable (strict UTF-8 validation), so it must be called as
+        // `interpret_as_utf8!()` from a failable routine — the non-failable `interpret_as_utf8()`
+        // form does not exist (the lossy counterpart is `interpret_as_utf8_lossy()`). RF-S458.
         AnalysisResult result = AnalyzeSa("""
-                                        routine test()
+                                        routine test!()
                                           var bytes: Bytes = "Hi".encode_as_utf8()
-                                          for ch in bytes.interpret_as_utf8()
+                                          for ch in bytes.interpret_as_utf8!()
                                             var cp: U32 = ch.codepoint()
                                           return
                                         """);

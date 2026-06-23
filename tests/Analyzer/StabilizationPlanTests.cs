@@ -201,13 +201,13 @@ public class StabilizationPlanTests
     [Fact]
     public void P3_UsingWithGenericResource_BindsCorrectType()
     {
-        // using on a generic type with $enter/$exit
+        // using on a generic Enterable type (self pass-through binds the resource itself)
         string source = """
-                        record Guard[T]
+                        record Guard[T] obeys Enterable
                           resource: T
 
-                        routine Guard[T].$enter() -> ?T
-                          return me.resource
+                        routine Guard[T].$enter() -> Guard[T]
+                          return me
 
                         routine Guard[T].$exit()
                           return
@@ -215,7 +215,7 @@ public class StabilizationPlanTests
                         routine test()
                           var g = Guard[S32](resource: 42)
                           using g as val
-                            show(val)
+                            var x: S32 = val.resource
                           return
                         """;
 
@@ -234,11 +234,11 @@ public class StabilizationPlanTests
                         record Box[T]
                           value: T
 
-                        record Guard[T]
+                        record Guard[T] obeys Enterable
                           resource: T
 
-                        routine Guard[T].$enter() -> ?T
-                          return me.resource
+                        routine Guard[T].$enter() -> Guard[T]
+                          return me
 
                         routine Guard[T].$exit()
                           return
@@ -246,7 +246,7 @@ public class StabilizationPlanTests
                         routine test()
                           var g = Guard[Box[S32]](resource: Box[S32](value: 42))
                           using g as value_box
-                            var n: S32 = value_box.value
+                            var n: S32 = value_box.resource.value
                           return
                         """;
 

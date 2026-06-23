@@ -253,9 +253,17 @@ public static class ManifestLoader
     /// Scans all .rf and .sf files under <paramref name="projectDir"/> and builds a
     /// map of module name -> file path by reading module declarations.
     /// </summary>
+    /// <remarks>
+    /// A module may legally span several files (e.g. one <c>module Fun</c> across many files in a
+    /// directory), so a shared module name is NOT an error. This index exists only to resolve a
+    /// <c>[target] executable</c> module to its entry file, so when files share a module name the
+    /// one declaring <c>routine start()</c> wins. Two entry points for the same module is the only
+    /// genuine ambiguity and is reported.
+    /// </remarks>
     private static Dictionary<string, string> BuildModuleIndex(string projectDir)
     {
         var index = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var entryModules = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         if (!Directory.Exists(path: projectDir))
         {
@@ -279,20 +287,72 @@ public static class ManifestLoader
                     continue;
 
                 string? moduleName = ExtractModuleName(filePath: filePath);
-                if (moduleName != null)
+                if (moduleName == null)
                 {
-                    string fullPath = Path.GetFullPath(path: filePath);
-                    if (!index.TryAdd(key: moduleName, value: fullPath))
-                    {
-                        throw new InvalidOperationException(
-                            message: $"{ManifestFileName}: duplicate module name '{moduleName}' " +
-                                     $"resolved to both '{index[moduleName]}' and '{fullPath}'.");
-                    }
+                    continue;
                 }
+
+                string fullPath = Path.GetFullPath(path: filePath);
+                bool hasEntryPoint = FileDeclaresEntryPoint(filePath: filePath);
+
+                if (!index.ContainsKey(key: moduleName))
+                {
+                    index[key: moduleName] = fullPath;
+                    if (hasEntryPoint)
+                    {
+                        entryModules.Add(item: moduleName);
+                    }
+
+                    continue;
+                }
+
+                // Module name already seen in another file. A library/module file (no entry point)
+                // sharing the name is fine — keep whichever entry candidate we already have.
+                if (!hasEntryPoint)
+                {
+                    continue;
+                }
+
+                if (entryModules.Contains(item: moduleName))
+                {
+                    throw new InvalidOperationException(
+                        message: $"{ManifestFileName}: module '{moduleName}' declares " +
+                                 $"'routine start()' in both '{index[moduleName]}' and '{fullPath}'.");
+                }
+
+                // Promote the entry-bearing file over a previously-indexed library file.
+                index[key: moduleName] = fullPath;
+                entryModules.Add(item: moduleName);
             }
         }
 
         return index;
+    }
+
+    /// <summary>
+    /// Returns true if the file declares the program entry point <c>routine start()</c>.
+    /// Member routines (<c>routine Type.start()</c>) are excluded — only the bare, module-level
+    /// <c>start</c> is an entry point.
+    /// </summary>
+    private static bool FileDeclaresEntryPoint(string filePath)
+    {
+        try
+        {
+            foreach (string line in File.ReadLines(path: filePath))
+            {
+                if (line.Trim()
+                        .StartsWith(value: "routine start(", comparisonType: StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // Unreadable file contributes no entry point.
+        }
+
+        return false;
     }
 
     /// <summary>

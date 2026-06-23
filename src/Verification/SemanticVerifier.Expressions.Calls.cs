@@ -288,14 +288,20 @@ public sealed partial class SemanticVerifier
                         call.LoweringKind = ClassifyConstruction(type: callableType,
                             isCollectionLiteral: call.IsCollectionLiteral);
 
-                        // `Type(fields)` written *inside* Type's own `$create` is the memberwise
-                        // primitive base case — it must inline, never route back to `$create`
-                        // (infinite recursion). Mirrors the CreatorExpression path's guard.
+                        // `Type(...)` written *inside* Type's own `$create` only needs the
+                        // inline base case when it resolves back to the SAME `$create` we are
+                        // compiling — that is the genuine self-recursion to break. A call to a
+                        // *different* overload (e.g. `F128(from: hi)` resolving to
+                        // `$create(from: U64)` inside `$create(from: U128)`) is an ordinary
+                        // conversion and must keep its resolved routine; otherwise codegen is left
+                        // to guess and, for bit-carrier types like F128, mis-lowers it to a raw
+                        // `sext`/reinterpret of the integer into the i128 IEEE carrier.
                         bool insideOwnCreate =
                             _currentRoutine is { Name: "$create" or "$create!" } currentCreate
                             && currentCreate.OwnerType != null
                             && (currentCreate.OwnerType.FullName == callableType.FullName
-                                || currentCreate.OwnerType.Name == callableType.Name);
+                                || currentCreate.OwnerType.Name == callableType.Name)
+                            && ReferenceEquals(objA: creator, objB: currentCreate);
 
                         // Route through a *user-declared* `$create` so its body/side-effects run.
                         // The synthesized memberwise creator (IsSynthesized) is pure field-init and
@@ -381,6 +387,21 @@ public sealed partial class SemanticVerifier
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
                     call.IsInFlight = routine.IsInFlightReturn;
+
+                    // A `threaded routine` call spawns an OS thread and yields a `Task[T]`
+                    // handle (T = the routine's own return type). The handle is awaited via the
+                    // stdlib `Task[T].retrieve!()` / `.waitfor(deadline)` methods. (v0.1.)
+                    if (routine.AsyncStatus == AsyncStatus.Threaded)
+                    {
+                        ValidateThreadedRoutineArguments(routine: routine,
+                            location: call.Location);
+                        TypeSymbol? taskDef = _registry.LookupType(name: "Task");
+                        return taskDef != null
+                            ? _registry.GetOrCreateResolution(genericDef: taskDef,
+                                typeArguments: [returnType])
+                            : returnType;
+                    }
+
                     return returnType;
                 }
 
@@ -1013,50 +1034,37 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #100/#101: inspect!/claim! only valid on Shared entity handles
-                    if (member.PropertyName is InspectMethodName or "claim" &&
-                        !IsSharedType(type: objectType) && objectType is not ErrorTypeInfo)
+                    // NOTE: `inspect()` / `claim()` are ordinary `Shared[T, P]` methods now —
+                    // resolution + the `needs P in [...]` type-equality constraint (RF-S160) enforce
+                    // policy legality (inspect not on Exclusive, claim not on ReadOnly), and the
+                    // scoped-token / `using`-binding rules enforce lifetime. The earlier ad-hoc
+                    // inspect!/claim! validation (a variable→policy side-table that did not recognize
+                    // the 2-arg `Shared[T, P]`) was removed in favour of the type system.
+
+                    // Enforce a method's `needs P in [...]` (TypeEquality) constraint when the
+                    // constrained parameter is INHERITED FROM THE RECEIVER (e.g.
+                    // `Shared[T, P].claim() needs P in [Exclusive, MultiRead]`, with P bound by the
+                    // receiver `Shared[Counter, ReadOnly]`). The general constraint validator only
+                    // fires for explicitly-instantiated generics, so a receiver-bound param — which
+                    // carries no explicit type args at the call site — is validated here instead.
+                    ValidateReceiverInheritedTypeEqualityConstraints(method: method,
+                        receiverType: objectType, member: member, location: call.Location);
+
+                    // A multi-threaded access token (Inspecting/Claiming, produced by
+                    // inspect()/claim()) is only legal as the immediate resource of a `using` block,
+                    // so its lock spans exactly that scope. Reject every other position — inline use,
+                    // a function argument, an unbound statement — with RF-S629. (The "cannot bind to a
+                    // var" half is already enforced for inline-only tokens at var-declaration sites.)
+                    if (method.ReturnType is { } mtReturn &&
+                        GetBaseTypeName(typeName: mtReturn.Name) is "Inspecting" or "Claiming" &&
+                        !ReferenceEquals(objA: call, objB: _usingResourceNode))
                     {
-                        ReportError(code: member.PropertyName == InspectMethodName
-                                ? SemanticDiagnosticCode.InspectRequiresMultiRead
-                                : SemanticDiagnosticCode.ReadOnlyRejectsLocking,
-                            message: $"'{member.PropertyName}!()' is only valid on Shared handles. " +
-                                     $"'{objectType.Name}' is not a Shared handle.",
+                        ReportError(code: SemanticDiagnosticCode.MtTokenRequiresUsing,
+                            message:
+                            $"'{member.PropertyName}()' returns a scope-bound access token and must be " +
+                            $"opened with 'using' (e.g. 'using …{member.PropertyName}() as v'). It " +
+                            "cannot be used inline, passed as an argument, or stored.",
                             location: call.Location);
-                    }
-
-                    // #19: Lock policy validation — inspect!/claim! must match the lock policy
-                    if (member.PropertyName is InspectMethodName or "claim" &&
-                        member.Object is IdentifierExpression lockPolicyTarget &&
-                        _variableLockPolicies.TryGetValue(key: lockPolicyTarget.Name,
-                            value: out string? policy))
-                    {
-                        if (member.PropertyName == InspectMethodName && policy == "Exclusive")
-                        {
-                            ReportError(code: SemanticDiagnosticCode.InspectRequiresMultiRead,
-                                message:
-                                $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses Exclusive lock policy. " +
-                                "Exclusive locks do not support concurrent readers. Use 'claim!()' instead.",
-                                location: call.Location);
-                        }
-
-                        if (member.PropertyName == "claim" && policy == "ReadOnly")
-                        {
-                            ReportError(code: SemanticDiagnosticCode.ReadOnlyRejectsLocking,
-                                message:
-                                $"Cannot use 'claim!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
-                                "ReadOnly does not support exclusive write access. Use 'inspect!()' instead.",
-                                location: call.Location);
-                        }
-
-                        if (member.PropertyName == InspectMethodName && policy == "ReadOnly")
-                        {
-                            ReportError(code: SemanticDiagnosticCode.ReadOnlyRejectsLocking,
-                                message:
-                                $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
-                                "ReadOnly data does not need locking — use '.view()' instead.",
-                                location: call.Location);
-                        }
                     }
 
                     // #22: Reject migratable operations on collection being iterated
@@ -1210,6 +1218,10 @@ public sealed partial class SemanticVerifier
                     {
                         call.ConstructedType = targetType;
                         call.LoweringKind = CallLoweringKind.TypeConstructor;
+                        // Stamp the resolved creator so codegen calls it directly rather than
+                        // rediscovering intent from a null ResolvedRoutine (task #23). The receiver
+                        // is the conversion source — codegen passes it as the `from:` argument.
+                        call.ResolvedRoutine = creator;
 
                         // Validate single non-me parameter
                         var nonMeParams = creator.Parameters
@@ -1237,15 +1249,21 @@ public sealed partial class SemanticVerifier
                             return ErrorTypeInfo.Instance;
                         }
 
-                        // Type-check the object expression against the constructor parameter
+                        // Type-check the object expression against the constructor parameter.
+                        // We only reach the failure branch when LookupMethodOverload found no
+                        // $create overload accepting objectType and the fallback above returned
+                        // an arbitrary overload (e.g. $create(from: S8)). Report the real problem
+                        // — the missing conversion routine — rather than a misleading mismatch
+                        // against that arbitrary overload's parameter type.
                         if (!IsAssignableTo(source: objectType,
                                 target: nonMeParams[index: 0].Type))
                         {
                             ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
                                 message:
-                                $"Cannot convert '{objectType.Name}' to '{nonMeParams[index: 0].Type.Name}' " +
-                                $"for method-chain constructor '{potentialTypeName}'.",
+                                $"Type '{objectType.Name}' has no conversion to '{potentialTypeName}': " +
+                                $"no '{potentialTypeName}.$create(from: {objectType.Name})' is defined.",
                                 location: call.Location);
+                            return ErrorTypeInfo.Instance;
                         }
 
                         if (creator.IsFailable && _currentRoutine != null)
@@ -1265,6 +1283,57 @@ public sealed partial class SemanticVerifier
                         }
 
                         return targetType;
+                    }
+                }
+
+                // Unresolved member call on a concrete field-bearing receiver. `.field` (member
+                // variable access) and `.field()` (routine call) are DISTINCT forms that may
+                // coexist on the same name; the parentheses pick the routine. So a `.name()` that
+                // resolved to no routine is an error — EXCEPT the genuine dynamic call through a
+                // Routine-typed field (a `ptr` closure, e.g. `me.predicate(item)`), which is
+                // dispatched indirectly and must fall through to the dynamic-call path below.
+                // Without this guard such calls silently became DynamicCall and only "worked" via
+                // a codegen fallback that read the field or re-resolved a failable variant — the
+                // intent-rediscovery task #23 removes. Restricted to Entity/Record receivers so
+                // generic-parameter / protocol / wrapper receivers keep their deferred resolution.
+                if (objectType is EntityTypeInfo or RecordTypeInfo)
+                {
+                    List<MemberVariableInfo> receiverFields = objectType switch
+                    {
+                        EntityTypeInfo e => e.MemberVariables,
+                        RecordTypeInfo r => r.MemberVariables,
+                        _ => []
+                    };
+                    MemberVariableInfo? namedField =
+                        receiverFields.FirstOrDefault(predicate: mv => mv.Name == callLookupName);
+
+                    // A Routine-typed field is the only legitimate "method == null" member call:
+                    // it is invoked indirectly through the stored closure pointer.
+                    if (namedField is not { Type: RoutineTypeInfo })
+                    {
+                        string hint;
+                        if (namedField != null)
+                        {
+                            hint =
+                                $" '{callLookupName}' is a field — access it as '.{callLookupName}' " +
+                                "(no parentheses), or define a routine of that name.";
+                        }
+                        else if (!isFailableMethodCall &&
+                                 _registry.LookupMethod(type: objectType,
+                                     methodName: callLookupName, isFailable: true) != null)
+                        {
+                            hint = $" Did you mean the failable form '.{callLookupName}!()'?";
+                        }
+                        else
+                        {
+                            hint = "";
+                        }
+
+                        ReportError(code: SemanticDiagnosticCode.MethodNotFound,
+                            message:
+                            $"No routine '{member.PropertyName}()' is defined on '{objectType.Name}'.{hint}",
+                            location: call.Location);
+                        return ErrorTypeInfo.Instance;
                     }
                 }
 
@@ -1326,6 +1395,60 @@ public sealed partial class SemanticVerifier
         return type is WrapperTypeInfo
             ? CallLoweringKind.WrapperConstruction
             : CallLoweringKind.TypeConstructor;
+    }
+
+    /// <summary>
+    /// Validates a called method's <c>needs P in [...]</c> (<see cref="ConstraintKind.TypeEquality"/>)
+    /// constraints when the constrained parameter is inherited from the receiver type rather than
+    /// supplied as an explicit type argument — e.g. <c>Shared[T, P].claim() needs P in [Exclusive,
+    /// MultiRead]</c> called on a <c>Shared[Counter, ReadOnly]</c>. The standard constraint validator
+    /// (<c>TypeResolver.ValidateTypeEqualityConstraint</c>) only fires when a generic type/method is
+    /// explicitly instantiated, so receiver-bound parameters would otherwise go unchecked.
+    /// </summary>
+    private void ValidateReceiverInheritedTypeEqualityConstraints(RoutineInfo method,
+        TypeSymbol receiverType, MemberExpression member, SourceLocation location)
+    {
+        if (method.GenericConstraints is not { Count: > 0 } constraints)
+            return;
+
+        // Map the receiver's generic parameter names to its bound type arguments. The names live on
+        // the generic definition; the bindings on the resolved instance.
+        List<string>? paramNames = receiverType.GenericParameters
+            ?? (receiverType as RecordTypeInfo)?.GenericDefinition?.GenericParameters;
+        List<TypeInfo>? boundArgs = receiverType.TypeArguments;
+        if (paramNames is not { Count: > 0 } || boundArgs is not { Count: > 0 })
+            return;
+
+        foreach (GenericConstraintDeclaration constraint in constraints)
+        {
+            if (constraint.ConstraintType != ConstraintKind.TypeEquality ||
+                constraint.ConstraintTypes is not { Count: > 0 } allowed)
+                continue;
+
+            int paramIndex = paramNames.IndexOf(item: constraint.ParameterName);
+            if (paramIndex < 0 || paramIndex >= boundArgs.Count)
+                continue;
+
+            TypeInfo bound = boundArgs[index: paramIndex];
+            string boundBase = GetBaseTypeName(typeName: bound.Name);
+            string boundShort = boundBase.Contains(value: '.')
+                ? boundBase[(boundBase.LastIndexOf(value: '.') + 1)..]
+                : boundBase;
+
+            bool inSet = allowed.Any(predicate: ce =>
+                ce.Name == bound.Name || ce.Name == boundBase || ce.Name == boundShort);
+            if (inSet)
+                continue;
+
+            string allowedList = string.Join(separator: ", ",
+                values: allowed.Select(selector: t => t.Name));
+            ReportError(code: SemanticDiagnosticCode.TypeEqualityConstraintViolation,
+                message:
+                $"'{member.PropertyName}()' is not available on '{receiverType.Name}': " +
+                $"'{boundShort}' is not in [{allowedList}] " +
+                $"(constraint on '{constraint.ParameterName}').",
+                location: location);
+        }
     }
 
 }

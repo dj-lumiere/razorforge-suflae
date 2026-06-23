@@ -719,6 +719,15 @@ public sealed partial class SemanticVerifier
             _lastSharePolicy = null;
         }
 
+        // RF-S630: track the controller identity of a Shared/Watched handle so the
+        // readers-XOR-writer check keys on the shared DATA, not the variable name — a clone
+        // (`var s2 = s.share()`) inherits `s`'s identity and so conflicts with it.
+        if (_registry.Language == Language.RazorForge &&
+            GetBaseTypeName(typeName: varType.Name) is "Shared" or "Watched")
+        {
+            RecordSharedHandleIdentity(name: varDecl.Name, initializer: varDecl.Initializer);
+        }
+
         // #161: Track Lookup variables that must be dismantled before scope exit
         if (GetCarrierBaseName(type: varType) == "Lookup" &&
             varDecl.Initializer is not IdentifierExpression)

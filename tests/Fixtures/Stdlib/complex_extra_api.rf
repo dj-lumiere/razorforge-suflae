@@ -1,0 +1,13 @@
+module Tests/Stdlib/ComplexExtraApi
+
+import IO/Console
+import Numerics.[Real, Complex]
+
+# Regression coverage for the Complex API added in the numeric arc (commit 3a021a9): log2, reciprocal.
+# (to_polar — tuple-of-Real return — is omitted pending the tuple-of-arbitrary-entity teardown fix.)
+routine start()
+  var c = Complex(real: Real(3_s64), imag: Real(4_s64))
+  show(f"log2: {c.log2(precision: 20_s32)}")
+  show(f"reciprocal: {c.reciprocal(precision: 20_s32)}")
+  show("DONE")
+  return

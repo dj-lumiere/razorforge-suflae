@@ -822,6 +822,43 @@ void rf_d32_to_f128_parts(uint32_t bits, f128_t* out);
 void rf_d64_to_f128_parts(uint64_t bits, f128_t* out);
 void rf_d128_to_f128_parts(uint64_t low, uint64_t high, f128_t* out);
 
+// Extended C99/C23 libm (added for full F16/F32/F64 parity).
+double rf_f64_exp10(double x);
+double rf_f64_scalbn(double x, int64_t n);
+int64_t rf_f64_ilogb(double x);
+double rf_f64_nextafter(double x, double y);
+double rf_f64_rint(double x);
+double rf_f64_fdim(double x, double y);
+double rf_f64_sinpi(double x);
+double rf_f64_cospi(double x);
+double rf_f64_tanpi(double x);
+float rf_f32_erf(float x);
+float rf_f32_erfc(float x);
+float rf_f32_tgamma(float x);
+float rf_f32_lgamma(float x);
+float rf_f32_exp10(float x);
+float rf_f32_scalbn(float x, int64_t n);
+int64_t rf_f32_ilogb(float x);
+float rf_f32_nextafter(float x, float y);
+float rf_f32_rint(float x);
+float rf_f32_fdim(float x, float y);
+float rf_f32_sinpi(float x);
+float rf_f32_cospi(float x);
+float rf_f32_tanpi(float x);
+uint16_t rf_f16_erf(uint16_t x);
+uint16_t rf_f16_erfc(uint16_t x);
+uint16_t rf_f16_tgamma(uint16_t x);
+uint16_t rf_f16_lgamma(uint16_t x);
+uint16_t rf_f16_exp10(uint16_t x);
+uint16_t rf_f16_sinpi(uint16_t x);
+uint16_t rf_f16_cospi(uint16_t x);
+uint16_t rf_f16_tanpi(uint16_t x);
+uint16_t rf_f16_rint(uint16_t x);
+uint16_t rf_f16_fdim(uint16_t x, uint16_t y);
+uint16_t rf_f16_scalbn(uint16_t x, int64_t n);
+int64_t rf_f16_ilogb(uint16_t x);
+uint16_t rf_f16_nextafter(uint16_t x, uint16_t y);
+
 #ifdef __cplusplus
 }
 #endif
