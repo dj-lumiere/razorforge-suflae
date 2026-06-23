@@ -154,7 +154,7 @@ public partial class LlvmCodeGenerator
     {
         if (routine.TypeArguments is { Count: > 0 })
         {
-            return routine.TypeArguments.Select(selector: GetLlvmType).ToList();
+            return routine.TypeArguments.Select(selector: GetLlvmIntrinsicTypeArgument).ToList();
         }
 
         List<string>? genericParameters =
@@ -197,7 +197,7 @@ public partial class LlvmCodeGenerator
         {
             if (inferred.TryGetValue(key: genericParam, value: out TypeInfo? concreteType))
             {
-                llvmTypeArgs.Add(GetLlvmType(type: concreteType));
+                llvmTypeArgs.Add(GetLlvmIntrinsicTypeArgument(type: concreteType));
                 continue;
             }
 
@@ -212,6 +212,11 @@ public partial class LlvmCodeGenerator
 
         return llvmTypeArgs;
     }
+
+    private string GetLlvmIntrinsicTypeArgument(TypeInfo type) =>
+        type is ConstGenericValueTypeInfo constValue
+            ? constValue.Value.ToString()
+            : GetLlvmType(type: type);
 
     private static void InferGenericBindings(TypeInfo pattern, TypeInfo concrete,
         Dictionary<string, TypeInfo> inferred) // NOSONAR S3776

@@ -6,7 +6,7 @@ module Core
 ### Unicode code points, IPv4 addresses, pixel colours, and shift amounts
 ### (the shift operators expect `U32` for their count argument).
 @llvm("i32")
-record U32 obeys UnsignedIntegral, Ordered, ConstCompatible
+record U32 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for U32 limits
@@ -99,6 +99,24 @@ routine U32.$create!(from: U128) -> U32
   if from > 4294967295_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U32](from)
+
+### Converts an `S256` to `U32`, throwing if the value is negative or exceeds 4294967295.
+### :param from: The `S256` value to convert.
+### :returns: The lower 32 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..4294967295.
+routine U32.$create!(from: S256) -> U32
+  if not (0_s256 <= from <= 4294967295_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U32](from)
+
+### Converts a `U256` to `U32`, throwing if the value exceeds 4294967295.
+### :param from: The `U256` value to convert.
+### :returns: The lower 32 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 4294967295`.
+routine U32.$create!(from: U256) -> U32
+  if from > 4294967295_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U32](from)
 
 ### Converts an `F16` to `U32` by widening to `F32` first, then truncating.
 ### :param from: The `F16` value to convert.
@@ -205,13 +223,6 @@ routine U32.$mul!(you: U32) -> U32
     throw IntegerOverflowError()
   return result.item0
 
-### Returns `me * you`, throwing on overflow (alias for `$mul!`).
-### :param you: The right operand.
-### :returns: The product `me * you`.
-### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
-routine U32.$mul(you: U32) -> U32
-  return me.$mul!(you)
-
 ### Returns `me // you` (integer division), throwing if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient `me // you`.
@@ -317,14 +328,11 @@ routine U32.$mul_clamp(you: U32) -> U32
 ### Returns `me ** exp` and a flag indicating whether the result wrapped around.
 ### :param exp: The exponent.
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U32.pow_with_overflow!(exp: U32) -> (U32, Bool)
+routine U32.pow_with_overflow(exp: U32) -> (U32, Bool)
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
   var overflow = false
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -341,9 +349,8 @@ routine U32.pow_with_overflow!(exp: U32) -> (U32, Bool)
 ### :param exp: The exponent.
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U32.$pow!(exp: U32) -> U32
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -351,13 +358,10 @@ routine U32.$pow!(exp: U32) -> U32
 ### Returns `me ** exp` with wrapping arithmetic (mod 2³²).
 ### :param exp: The exponent.
 ### :returns: The result modulo 4294967296.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U32.$pow_wrap!(exp: U32) -> U32
+routine U32.$pow_wrap(exp: U32) -> U32
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -369,13 +373,10 @@ routine U32.$pow_wrap!(exp: U32) -> U32
 ### Returns `me ** exp`, clamped to `U32_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `4294967295` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U32.$pow_clamp!(exp: U32) -> U32
+routine U32.$pow_clamp(exp: U32) -> U32
   var result: U32 = 1
   var base: U32 = me
   var e: U32 = exp
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)
@@ -532,6 +533,48 @@ routine U32.swap_bytes() -> U32
 routine U32.is_power_of_two() -> Bool
   return me != 0_u32 and (me & (me -% 1_u32)) == 0_u32
 
+### Returns this value rotated left by `bits` positions.
+routine U32.rotate_left(bits: U32) -> U32
+  var n = bits % 32_u32
+  if n == 0_u32
+    return me
+  return bit_or[U32](a: shift_left[U32](me, n), b: shift_right_unsigned[U32](me, 32_u32 -% n))
+
+### Returns this value rotated right by `bits` positions.
+routine U32.rotate_right(bits: U32) -> U32
+  var n = bits % 32_u32
+  if n == 0_u32
+    return me
+  return bit_or[U32](a: shift_right_unsigned[U32](me, n), b: shift_left[U32](me, 32_u32 -% n))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U32.to_bytes_le() -> Array[Byte, 4]
+  var result = Array[Byte, 4]()
+  var i = 0_u64
+  while i < 4_u64
+    var b = int_truncate[U32, U8](shift_right_unsigned[U32](me, U32(i * 8_u64)))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = i + 1_u64
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U32.to_bytes_be() -> Array[Byte, 4]
+  return me.swap_bytes().to_bytes_le()
+
+### Builds a `U32` from its little-endian raw byte representation.
+common routine U32.from_bytes_le(bytes: Array[Byte, 4]) -> U32
+  var result = 0_u32
+  var i = 0_u64
+  while i < 4_u64
+    var part = shift_left[U32](zero_extend[U8, U32](byte_at(array: bytes, index: i)), U32(i * 8_u64))
+    result = bit_or[U32](a: result, b: part)
+    i = i + 1_u64
+  return result
+
+### Builds a `U32` from its big-endian raw byte representation.
+common routine U32.from_bytes_be(bytes: Array[Byte, 4]) -> U32
+  return U32.from_bytes_le(bytes: bytes).swap_bytes()
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -556,6 +599,8 @@ routine U32.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U32.$represent() -> Text
   if me == 0u32
     return "0"
@@ -567,6 +612,8 @@ routine U32.$represent() -> Text
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: steal digits)
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U32.$diagnose() -> Text
   return "U32(" + me.$represent() + ")"
 

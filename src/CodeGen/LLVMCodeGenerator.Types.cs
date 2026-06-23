@@ -205,28 +205,67 @@ public partial class LlvmCodeGenerator
         return $"%{Q(name: $"Record.{record.Name}")}";
     }
 
+    /// <summary>The bare LLVM struct name for an entity — no generation side effect. Used INSIDE
+    /// GenerateEntityType (where ensuring would re-enter) and other name-only contexts.</summary>
+    private static string RawEntityTypeName(EntityTypeInfo entity)
+        => $"%{Q(name: $"Entity.{entity.Name}")}";
+
+    /// <summary>The bare LLVM struct name for a crashable — no generation side effect.</summary>
+    private static string RawCrashableTypeName(CrashableTypeInfo crashable)
+        => $"%{Q(name: $"Crashable.{crashable.Name}")}";
+
     /// <summary>
-    /// Gets the LLVM struct type name for an entity.
+    /// Gets the LLVM struct type name for an entity, ensuring its struct definition is emitted on
+    /// first use. Entity structs are referenced only at use sites (alloc / field-access / size GEP),
+    /// never as a by-value field (entity fields are `ptr`), so on-demand emission here lets the broad
+    /// registry sweep be skipped — pruning entities the program never touches.
     /// </summary>
-    private static string GetEntityTypeName(EntityTypeInfo entity)
+    private string GetEntityTypeName(EntityTypeInfo entity)
     {
-        return $"%{Q(name: $"Entity.{entity.Name}")}";
+        string name = RawEntityTypeName(entity: entity);
+        if (!_generatedTypes.Contains(item: name)
+            && !entity.IsGenericDefinition
+            && !(entity.TypeArguments is { Count: > 0 } a && a.Any(predicate: ContainsGenericParameter)))
+        {
+            GenerateEntityType(entity: entity);
+        }
+        return name;
     }
 
     /// <summary>
-    /// Gets the LLVM struct type name for a crashable type.
+    /// Gets the LLVM struct type name for a crashable type, ensuring its struct definition is emitted
+    /// on first use (crashables are referenced opaquely in size GEPs and field access).
     /// </summary>
-    private static string GetCrashableTypeName(CrashableTypeInfo crashable)
+    private string GetCrashableTypeName(CrashableTypeInfo crashable)
     {
-        return $"%{Q(name: $"Crashable.{crashable.Name}")}";
+        string name = RawCrashableTypeName(crashable: crashable);
+        if (!_generatedTypes.Contains(item: name)
+            && !crashable.IsGenericDefinition
+            && !(crashable.TypeArguments is { Count: > 0 } a && a.Any(predicate: ContainsGenericParameter)))
+        {
+            GenerateCrashableType(crashable: crashable);
+        }
+        return name;
     }
 
+    /// <summary>The bare LLVM struct name for a variant — no generation side effect.</summary>
+    private static string RawVariantTypeName(VariantTypeInfo variant)
+        => $"%{Q(name: $"Variant.{variant.Name}")}";
+
     /// <summary>
-    /// Gets the LLVM struct type name for a variant.
+    /// Gets the LLVM struct type name for a variant, ensuring its struct (tag + payload) is emitted
+    /// on first use — variants are passed/returned by value, so the def must exist.
     /// </summary>
-    private static string GetVariantTypeName(VariantTypeInfo variant)
+    private string GetVariantTypeName(VariantTypeInfo variant)
     {
-        return $"%{Q(name: $"Variant.{variant.Name}")}";
+        string name = RawVariantTypeName(variant: variant);
+        if (!_generatedTypes.Contains(item: name)
+            && !variant.IsGenericDefinition
+            && !(variant.TypeArguments is { Count: > 0 } a && a.Any(predicate: ContainsGenericParameter)))
+        {
+            GenerateVariantType(variant: variant);
+        }
+        return name;
     }
 
     /// <summary>

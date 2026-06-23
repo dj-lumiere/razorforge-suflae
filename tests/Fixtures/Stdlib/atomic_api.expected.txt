@@ -1,0 +1,12 @@
+after add: 15
+after sub: 12
+swapped from: 12
+now: 100
+stored: 7
+cas ok: true val: 42
+cas2 ok: false val: 42
+bits: 5
+flag: 0
+flag: 1
+was: 1 flag: 0
+caso: true flag: 1

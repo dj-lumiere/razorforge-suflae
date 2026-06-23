@@ -10,6 +10,9 @@ record C32 obeys Numeric, Equatable
   ### The imaginary part.
   imag: F32
 
+# Math routines use the component F32's `_unchecked` ops (raw IEEE, no overflow
+# checks); NaN/±inf therefore propagate through the complex result per IEEE 754.
+
 # Complex constants
 preset C32_ZERO: C32 = C32(real: 0.0_f32, imag: 0.0_f32)
 preset C32_ONE: C32 = C32(real: 1.0_f32, imag: 0.0_f32)
@@ -37,11 +40,102 @@ routine C32.$create(from: C64) -> C32
 routine C32.$create(from: C128) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
+### Real scalar -> `C32` (imaginary part 0), routing the value through `F32`.
+### :param from: A real integer or float value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: S8) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `S16` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: S16) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `S32` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: S32) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `S64` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: S64) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `S128` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: S128) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `S256` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: S256) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `U8` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: U8) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `U16` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: U16) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `U32` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: U32) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `U64` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: U64) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `U128` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: U128) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `U256` scalar -> `C32` (imaginary part 0), value routed through `F32`.
+### :param from: A real integer value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: U256) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `F16` scalar -> `C32` (imaginary part 0), value widened to `F32`.
+### :param from: A real float value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: F16) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `F64` scalar -> `C32` (imaginary part 0), value narrowed to `F32`.
+### :param from: A real float value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: F64) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
+### Real `F128` scalar -> `C32` (imaginary part 0), value narrowed to `F32`.
+### :param from: A real float value.
+### :returns: `from + 0i` in single precision.
+routine C32.$create(from: F128) -> C32
+  return C32(real: F32(from: from), imag: 0.0_f32)
+
 ### Constructs a `C32` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
 ### :param r: The modulus (distance from origin).
 ### :param theta: The argument (angle in radians).
 ### :returns: The complex value at that polar position.
 routine C32.from_polar(r: F32, theta: F32) -> C32
+  # Polar -> rectangular: z = r·e^(iθ) = r·cos θ + i·r·sin θ.
   return C32(real: r * theta.cos(), imag: r * theta.sin())
 
 # ============================================================================
@@ -64,6 +158,7 @@ routine C32.$sub(you: C32) -> C32
 ### :param you: The right operand.
 ### :returns: The Gaussian product.
 routine C32.$mul(you: C32) -> C32
+  # (a+bi)(c+di) = (ac − bd) + (ad + bc)i.
   return C32(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
 ### Returns the complex quotient `me / you`.
@@ -71,7 +166,9 @@ routine C32.$mul(you: C32) -> C32
 ### :param you: The divisor.
 ### :returns: The complex quotient.
 routine C32.$truediv(you: C32) -> C32
+  # (a+bi)/(c+di) = (a+bi)(c−di)/|c+di|², with d = |denom|² = c²+d².
   var d = you.real * you.real + you.imag * you.imag
+  # Real = (ac+bd)/d, imag = (bc−ad)/d.
   return C32(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
 
 ### Returns the arithmetic negation of this value.
@@ -96,7 +193,14 @@ routine C32.$eq(you: C32) -> Bool
 ### Returns the modulus (absolute value) of this complex number.
 ### :returns: `√(real² + imag²)`.
 routine C32.abs() -> F32
-  return (me.real * me.real + me.imag * me.imag).sqrt()
+  # |z| = √(re² + im²); uses raw IEEE sqrt_unchecked on the F32 sum.
+  return (me.real * me.real + me.imag * me.imag).sqrt_unchecked()
+
+### Returns the phase angle of this complex value in radians.
+### :returns: `atan2(imag, real)`, in the range (−π, π].
+routine C32.arg() -> F32
+  # arg(z) = atan2(im, re); two-arg atan2 picks the correct quadrant.
+  return me.imag.atan2(me.real)
 
 ### Returns the complex conjugate (negates the imaginary part).
 ### :returns: `real - imag·i`.
@@ -106,6 +210,7 @@ routine C32.conjugate() -> C32
 ### Returns the squared modulus (avoids the square root of `abs`).
 ### :returns: `real² + imag²`.
 routine C32.norm() -> F32
+  # norm = re² + im² = |z|²; skips the sqrt that abs() performs.
   return me.real * me.real + me.imag * me.imag
 
 # ============================================================================
@@ -115,30 +220,67 @@ routine C32.norm() -> F32
 ### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
 ### :returns: The complex sine of this value.
 routine C32.sin() -> C32
-  var ep = me.imag.exp()
-  var em = (-me.imag).exp()
+  # cosh(b)=(eᵇ+e⁻ᵇ)/2, sinh(b)=(eᵇ−e⁻ᵇ)/2 from raw exp (F32 has no native hyperbolics).
+  var ep = me.imag.exp_unchecked()
+  var em = (-me.imag).exp_unchecked()
   var ch = (ep + em) / 2.0_f32
   var sh = (ep - em) / 2.0_f32
+  # sin(a+bi) = sin a·cosh b + i·cos a·sinh b.
   return C32(real: me.real.sin() * ch, imag: me.real.cos() * sh)
 
 ### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
 ### :returns: The complex cosine of this value.
 routine C32.cos() -> C32
-  var ep = me.imag.exp()
-  var em = (-me.imag).exp()
+  # cosh(b)=(eᵇ+e⁻ᵇ)/2, sinh(b)=(eᵇ−e⁻ᵇ)/2 from raw exp (F32 has no native hyperbolics).
+  var ep = me.imag.exp_unchecked()
+  var em = (-me.imag).exp_unchecked()
   var ch = (ep + em) / 2.0_f32
   var sh = (ep - em) / 2.0_f32
+  # cos(a+bi) = cos a·cosh b − i·sin a·sinh b.
   return C32(real: me.real.cos() * ch, imag: -(me.real.sin() * sh))
 
 ### Returns the complex tangent of this value.
 ### :returns: The complex tangent.
 routine C32.tan() -> C32
+  # Double-angle form: a2 = 2a, b2 = 2b.
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
-  var ep = b2.exp()
-  var em = (-b2).exp()
+  var ep = b2.exp_unchecked()
+  var em = (-b2).exp_unchecked()
+  # d = cos(2a) + cosh(2b) is the shared denominator.
   var d = a2.cos() + (ep + em) / 2.0_f32
+  # tan(a+bi) = sin(2a)/d + i·sinh(2b)/d.
   return C32(real: a2.sin() / d, imag: (ep - em) / 2.0_f32 / d)
+
+### Returns the complex arcsine of this value.
+### :returns: The principal value of `arcsin(me)`.
+routine C32.asin() -> C32
+  # asin(z) = −i·log(iz + √(1 − z²)); iz = (−im, re).
+  var iz = C32(real: -me.imag, imag: me.real)
+  var w = iz + (C32_ONE - me * me).sqrt_unchecked()
+  var v = w.log_unchecked()
+  # Multiply log(w) by −i: (re, im) -> (im, −re).
+  return C32(real: v.imag, imag: -v.real)
+
+### Returns the complex arccosine of this value.
+### :returns: The principal value of `arccos(me)`.
+routine C32.acos() -> C32
+  # acos(z) = −i·log(z + i·√(1 − z²)); i·s = (−s.im, s.re).
+  var s = (C32_ONE - me * me).sqrt_unchecked()
+  var w = me + C32(real: -s.imag, imag: s.real)
+  var v = w.log_unchecked()
+  # Multiply log(w) by −i: (re, im) -> (im, −re).
+  return C32(real: v.imag, imag: -v.real)
+
+### Returns the complex arctangent of this value.
+### :returns: The principal value of `arctan(me)`.
+routine C32.atan() -> C32
+  # atan(z) = (i/2)·log((i+z)/(i−z)); num = z+i, den = i−z.
+  var num = C32(real: me.real, imag: me.imag + 1.0_f32)
+  var den = C32(real: -me.real, imag: 1.0_f32 - me.imag)
+  var v = (num / den).log_unchecked()
+  # Multiply log by i/2: (re, im) -> (−im/2, re/2).
+  return C32(real: -v.imag / 2.0_f32, imag: v.real / 2.0_f32)
 
 # ============================================================================
 # Hyperbolic (sinh/cosh computed from exp since F32 lacks native versions)
@@ -146,53 +288,119 @@ routine C32.tan() -> C32
 
 ### Returns the complex hyperbolic sine of this value.
 ### :returns: The complex hyperbolic sine.
-routine C32.sinh() -> C32
-  var ep = me.real.exp()
-  var em = (-me.real).exp()
+routine C32.sinh_unchecked() -> C32
+  # sinh(a)=(eᵃ−e⁻ᵃ)/2, cosh(a)=(eᵃ+e⁻ᵃ)/2 from raw exp on the real part.
+  var ep = me.real.exp_unchecked()
+  var em = (-me.real).exp_unchecked()
   var sh = (ep - em) / 2.0_f32
   var ch = (ep + em) / 2.0_f32
+  # sinh(a+bi) = sinh a·cos b + i·cosh a·sin b.
   return C32(real: sh * me.imag.cos(), imag: ch * me.imag.sin())
 
 ### Returns the complex hyperbolic cosine of this value.
 ### :returns: The complex hyperbolic cosine.
-routine C32.cosh() -> C32
-  var ep = me.real.exp()
-  var em = (-me.real).exp()
+routine C32.cosh_unchecked() -> C32
+  # sinh(a)=(eᵃ−e⁻ᵃ)/2, cosh(a)=(eᵃ+e⁻ᵃ)/2 from raw exp on the real part.
+  var ep = me.real.exp_unchecked()
+  var em = (-me.real).exp_unchecked()
   var sh = (ep - em) / 2.0_f32
   var ch = (ep + em) / 2.0_f32
+  # cosh(a+bi) = cosh a·cos b + i·sinh a·sin b.
   return C32(real: ch * me.imag.cos(), imag: sh * me.imag.sin())
 
 ### Returns the complex hyperbolic tangent of this value.
 ### :returns: The complex hyperbolic tangent.
 routine C32.tanh() -> C32
+  # Double-angle form: a2 = 2a, b2 = 2b.
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
-  var ep = a2.exp()
-  var em = (-a2).exp()
+  var ep = a2.exp_unchecked()
+  var em = (-a2).exp_unchecked()
+  # d = cosh(2a) + cos(2b) is the shared denominator.
   var d = (ep + em) / 2.0_f32 + b2.cos()
+  # tanh(a+bi) = sinh(2a)/d + i·sin(2b)/d.
   return C32(real: (ep - em) / 2.0_f32 / d, imag: b2.sin() / d)
 
+### Returns the complex inverse hyperbolic sine of this value.
+### :returns: The principal value of `arcsinh(me)`.
+routine C32.asinh() -> C32
+  # asinh(z) = log(z + √(z² + 1)).
+  return (me + (me * me + C32_ONE).sqrt_unchecked()).log_unchecked()
+
+### Returns the complex inverse hyperbolic cosine of this value.
+### :returns: The principal value of `arccosh(me)`.
+routine C32.acosh() -> C32
+  # acosh(z) = log(z + √(z² − 1)).
+  return (me + (me * me - C32_ONE).sqrt_unchecked()).log_unchecked()
+
+### Returns the complex inverse hyperbolic tangent of this value.
+### :returns: The principal value of `arctanh(me)`.
+routine C32.atanh() -> C32
+  # atanh(z) = ½·log((1 + z)/(1 − z)).
+  var v = ((C32_ONE + me) / (C32_ONE - me)).log_unchecked()
+  return C32(real: v.real / 2.0_f32, imag: v.imag / 2.0_f32)
+
 # ============================================================================
-# Exponential and Square Root
+# Exponential, Logarithmic, and Square Root
 # ============================================================================
 
 ### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
 ### :returns: The complex exponential.
-routine C32.exp() -> C32
-  var ea = me.real.exp()
+routine C32.exp_unchecked() -> C32
+  # exp(a+bi) = eᵃ·(cos b + i·sin b); ea = eᵃ scales the unit phasor.
+  var ea = me.real.exp_unchecked()
   return C32(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+
+### Returns the principal natural logarithm of this complex value.
+### :returns: `log(|me|) + i·arg(me)`.
+routine C32.log_unchecked() -> C32
+  # log(z) = ln|z| + i·arg(z); principal branch from atan2.
+  return C32(real: me.abs().log_unchecked(), imag: me.arg())
+
+### Returns the base-10 logarithm of this complex value.
+### :returns: `log(me) / ln(10)`.
+routine C32.log10() -> C32
+  # log10(z) = ln(z)/ln(10); divide both components by the constant ln 10.
+  var v = me.log_unchecked()
+  return C32(real: v.real / F32_LN_10, imag: v.imag / F32_LN_10)
+
+### Returns the base-2 logarithm of this complex value.
+### :returns: `log(me) / ln(2)`.
+routine C32.log2() -> C32
+  var v = me.log_unchecked()
+  return C32(real: v.real / F32_LN_2, imag: v.imag / F32_LN_2)
+
+### Returns the multiplicative inverse `1/me` (conjugate over the squared modulus).
+### :returns: `conj(me) / |me|²`.
+routine C32.reciprocal() -> C32
+  var d = me.real * me.real + me.imag * me.imag
+  return C32(real: me.real / d, imag: -me.imag / d)
+
+### Returns the polar form `(magnitude, angle-in-radians)` — the inverse of `from_polar`.
+### :returns: A tuple `(abs, arg)`.
+routine C32.to_polar() -> (F32, F32)
+  return (me.abs(), me.arg())
 
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
-routine C32.sqrt() -> C32
+routine C32.sqrt_unchecked() -> C32
+  # Half-magnitude formula: with r = |z|, re' = √((r+re)/2), im' = √((r−re)/2).
   var r = me.abs()
   if r == 0.0_f32
     return C32_ZERO
-  var rp = ((r + me.real) / 2.0_f32).sqrt()
-  var ip = ((r - me.real) / 2.0_f32).sqrt()
+  var rp = ((r + me.real) / 2.0_f32).sqrt_unchecked()
+  var ip = ((r - me.real) / 2.0_f32).sqrt_unchecked()
+  # Imag part takes the sign of the input's imag (principal root, re' ≥ 0).
   if me.imag < 0.0_f32
     ip = -ip
   return C32(real: rp, imag: ip)
+
+### Returns this complex value raised to the complex power `you`.
+### :param you: The complex exponent.
+### :returns: `me ** you`, computed as `exp(you · log(me))`.
+routine C32.$pow(you: C32) -> C32
+  # z^w = exp(w·log z); principal branch via log_unchecked.
+  return (you * me.log_unchecked()).exp_unchecked()
 
 # ============================================================================
 # Query Routines
@@ -227,6 +435,22 @@ routine C32.$represent() -> Text
   if me.imag < 0.0_f32
     return real_text + "-" + imag_abs + "j"
   return real_text + "+" + imag_abs + "j"
+
+### Returns the real component (mirrors `Complex.real_part`; the `real` field is also public).
+### :returns: The real part as `F32`.
+routine C32.real_part() -> F32
+  return me.real
+
+### Returns the imaginary component (mirrors `Complex.imag_part`; the `imag` field is also public).
+### :returns: The imaginary part as `F32`.
+routine C32.imag_part() -> F32
+  return me.imag
+
+### Returns a diagnostic string wrapping the value with its type name (e.g. `C32(1.5+2j)`).
+### Standard `$diagnose` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+routine C32.$diagnose() -> Text
+  return "C32(" + me.$represent() + ")"
 
 # ============================================================================
 # Hashing

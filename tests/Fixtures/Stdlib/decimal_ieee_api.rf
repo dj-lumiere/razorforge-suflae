@@ -1,0 +1,19 @@
+module Tests/Stdlib/DecimalIeeeApi
+
+import IO/Console
+import Numerics.[Decimal]
+
+# Regression coverage for the IEEE-754 Decimal surface added in the numeric arc (commit 3a021a9):
+# is_subnormal, round_ties_away, same_quantum, remainder, and the failable logb!/scaleb!/quantize!.
+routine start()
+  var d = Decimal(from: 12345_s64) / Decimal(from: 100_s64)
+  show(f"is_subnormal: {d.is_subnormal()}")
+  show(f"round_ties_away: {d.round_ties_away()}")
+  show(f"same_quantum(1): {d.same_quantum(other: Decimal(from: 1_s64))}")
+  show(f"remainder(7): {d.remainder(other: Decimal(from: 7_s64))}")
+  danger!
+    show(f"logb: {d.logb!()}")
+    show(f"scaleb(2): {d.scaleb!(n: 2_s64)}")
+    show(f"quantize(1): {d.quantize!(other: Decimal(from: 1_s64))}")
+  show("DONE")
+  return

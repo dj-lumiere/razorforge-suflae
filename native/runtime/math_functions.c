@@ -103,3 +103,106 @@ int32_t rf_f64_signbit(double x) { return signbit(x) ? 1 : 0; }
 
 double rf_f32_to_f64(float x) { return (double)x; }
 float rf_f64_to_f32(double x) { return (float)x; }
+
+// ============================================================================
+// Extended C99/C23 libm: sinpi/cospi/tanpi, exp10, scalbn, ilogb, nextafter,
+// rint, fdim (f64 + f32), plus f32 erf/erfc/tgamma/lgamma. frexp/modf are
+// composed RF-side (from ilogb+scalbn / trunc) to avoid pointer-return ABI.
+// ============================================================================
+
+#define RF_PI 3.14159265358979323846
+
+// --- f64 ---
+double rf_f64_exp10(double x) { return pow(10.0, x); }
+double rf_f64_scalbn(double x, int64_t n) { return scalbn(x, (int)n); }
+int64_t rf_f64_ilogb(double x) { return (int64_t)ilogb(x); }
+double rf_f64_nextafter(double x, double y) { return nextafter(x, y); }
+double rf_f64_rint(double x) { return rint(x); }
+double rf_f64_fdim(double x, double y) { return fdim(x, y); }
+// sinpi/cospi/tanpi: argument reduction via floor/fmod (no integer cast -> no
+// overflow for large x), exact zeros at integers/half-integers, [0,0.5]
+// reflection for accuracy, and poles (cospi == 0) handled in tanpi.
+double rf_f64_sinpi(double x) {
+    if (isnan(x)) return x;
+    if (isinf(x)) return (double)NAN;
+    double s = 1.0;
+    if (signbit(x)) { x = -x; s = -1.0; }            // sinpi is odd (keeps -0 sign)
+    double n = floor(x);
+    double f = x - n;                                // f in [0,1)
+    if (f == 0.0) return copysign(0.0, s);           // exact zero at integers (odd-function sign only)
+    double sign = (fmod(n, 2.0) == 1.0) ? -1.0 : 1.0; // (-1)^n, overflow-safe
+    double r = (f == 0.5) ? 1.0
+             : (f < 0.5)  ? sin(RF_PI * f)
+                          : sin(RF_PI * (1.0 - f));
+    return s * sign * r;
+}
+double rf_f64_cospi(double x) {
+    if (isnan(x)) return x;
+    if (isinf(x)) return (double)NAN;
+    x = fabs(x);                                     // cospi is even
+    double n = floor(x);
+    double f = x - n;
+    double sign = (fmod(n, 2.0) == 1.0) ? -1.0 : 1.0;
+    double r;
+    if (f == 0.0) r = 1.0;
+    else if (f == 0.5) r = 0.0;
+    else if (f < 0.5) r = cos(RF_PI * f);
+    else r = -cos(RF_PI * (1.0 - f));
+    return sign * r;
+}
+double rf_f64_tanpi(double x) {
+    if (isnan(x)) return x;
+    if (isinf(x)) return (double)NAN;
+    double sp = rf_f64_sinpi(x);
+    double cp = rf_f64_cospi(x);
+    if (cp == 0.0) return copysign((double)INFINITY, sp); // pole: blow up toward sinpi's sign
+    return sp / cp;
+}
+
+// --- f32 ---
+float rf_f32_erf(float x) { return erff(x); }
+float rf_f32_erfc(float x) { return erfcf(x); }
+float rf_f32_tgamma(float x) { return tgammaf(x); }
+float rf_f32_lgamma(float x) { return lgammaf(x); }
+float rf_f32_exp10(float x) { return powf(10.0f, x); }
+float rf_f32_scalbn(float x, int64_t n) { return scalbnf(x, (int)n); }
+int64_t rf_f32_ilogb(float x) { return (int64_t)ilogbf(x); }
+float rf_f32_nextafter(float x, float y) { return nextafterf(x, y); }
+float rf_f32_rint(float x) { return rintf(x); }
+float rf_f32_fdim(float x, float y) { return fdimf(x, y); }
+float rf_f32_sinpi(float x) {
+    if (isnan(x)) return x;
+    if (isinf(x)) return (float)NAN;
+    float s = 1.0f;
+    if (signbit(x)) { x = -x; s = -1.0f; }
+    float n = floorf(x);
+    float f = x - n;
+    if (f == 0.0f) return copysignf(0.0f, s);
+    float sign = (fmodf(n, 2.0f) == 1.0f) ? -1.0f : 1.0f;
+    float r = (f == 0.5f) ? 1.0f
+            : (f < 0.5f)  ? sinf((float)RF_PI * f)
+                          : sinf((float)RF_PI * (1.0f - f));
+    return s * sign * r;
+}
+float rf_f32_cospi(float x) {
+    if (isnan(x)) return x;
+    if (isinf(x)) return (float)NAN;
+    x = fabsf(x);
+    float n = floorf(x);
+    float f = x - n;
+    float sign = (fmodf(n, 2.0f) == 1.0f) ? -1.0f : 1.0f;
+    float r;
+    if (f == 0.0f) r = 1.0f;
+    else if (f == 0.5f) r = 0.0f;
+    else if (f < 0.5f) r = cosf((float)RF_PI * f);
+    else r = -cosf((float)RF_PI * (1.0f - f));
+    return sign * r;
+}
+float rf_f32_tanpi(float x) {
+    if (isnan(x)) return x;
+    if (isinf(x)) return (float)NAN;
+    float sp = rf_f32_sinpi(x);
+    float cp = rf_f32_cospi(x);
+    if (cp == 0.0f) return copysignf((float)INFINITY, sp);
+    return sp / cp;
+}

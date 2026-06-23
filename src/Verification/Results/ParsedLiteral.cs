@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using SyntaxTree;
 
 namespace Verification.Results;
@@ -122,6 +123,22 @@ public sealed record ParsedSignedInt(SourceLocation Location, string TypeName, I
 /// Parsed fixed-width unsigned integer value (U8, U16, U32, U64, U128).
 /// </summary>
 public sealed record ParsedUnsignedInt(SourceLocation Location, string TypeName, UInt128 Value)
+    : ParsedLiteral(Location: Location)
+{
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return $"{TypeName}({Value})";
+    }
+}
+
+/// <summary>
+/// Parsed fixed-width wide integer value (S256, U256) — wider than any .NET native integer,
+/// so the magnitude is carried as a <see cref="BigInteger"/>. Codegen emits the literal from the
+/// raw decimal string (LLVM accepts arbitrary-width integer constants); this record only carries
+/// the validated value for the semantic phase.
+/// </summary>
+public sealed record ParsedWideInt(SourceLocation Location, string TypeName, BigInteger Value)
     : ParsedLiteral(Location: Location)
 {
     /// <inheritdoc/>

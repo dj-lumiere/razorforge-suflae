@@ -295,6 +295,11 @@ public enum SemanticDiagnosticCode
     /// <summary>Type does not support the given operator (missing wired routine).</summary>
     TypeDoesNotSupportOperator = 259,
 
+    /// <summary>A collection-literal preset must be a fixed-size <c>Array[T, N]</c> or
+    /// <c>BitArray[N]</c>. Heap collections (List/Set/Dict/...) would rebuild the whole
+    /// collection on every use.</summary>
+    NonPresettableCollectionPreset = 260,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -655,11 +660,18 @@ public enum SemanticDiagnosticCode
     /// <summary>.hijack() on Shared/Watched requires danger! block.</summary>
     SnatchRequiresDanger = 628,
 
-    /// <summary>inspect!() only valid with MultiRead lock policy.</summary>
-    InspectRequiresMultiRead = 629,
+    /// <summary>A multi-threaded access token (Inspecting/Claiming from inspect()/claim()) must be
+    /// opened with a `using` block — it cannot be used inline or stored.</summary>
+    MtTokenRequiresUsing = 629,
 
-    /// <summary>ReadOnly lock policy does not support claim!() or inspect!().</summary>
-    ReadOnlyRejectsLocking = 630,
+    /// <summary>Readers-XOR-writer violation: a `claim()` (writer) coexists with another `claim()`
+    /// or an `inspect()` (reader) on the same Shared handle in an overlapping `using` scope.</summary>
+    ReadersXorWriter = 630,
+
+    /// <summary>A `threaded routine` parameter is neither trivially copyable (passed by value) nor a
+    /// thread-shareable wrapper (Atomic/Shared/Watched); passing it would silently alias
+    /// unsynchronized state across the thread boundary.</summary>
+    ThreadArgNotShareable = 632,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
@@ -744,7 +756,9 @@ public enum SemanticDiagnosticCode
 /// <summary>Variant member cannot be Result[T], Lookup[T], a token, or a duplicate type.</summary>
     VariantCaseContainsInvalidType = 764,
 
-    /// <summary>Index operators ($getitem/$setitem) are only valid on entities.</summary>
+    /// <summary>RETIRED: index-operator legality is governed by protocol conformance
+    /// (Indexable/MutableIndexable, enforced by RF-S411 OperatorWithoutProtocol), not by type kind.
+    /// Code number reserved to avoid reuse.</summary>
     IndexOperatorTypeKindRestriction = 765,
 
     /// <summary>Cannot use compound assignment on a read-only token (Viewing or Inspecting).</summary>

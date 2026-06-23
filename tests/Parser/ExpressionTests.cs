@@ -119,6 +119,39 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that a static call on a generic type with multiple type arguments parses —
+    /// <c>Type[A, B, C].method(arg: x)</c>. The top-level commas mark type arguments (indexing
+    /// has none), so this must not be misparsed as a single-index expression.
+    /// </summary>
+
+    [Fact]
+    public void Parse_GenericTypeStaticMethodCall()
+    {
+        string source = """
+                        routine test()
+                          var v = UnpackedFloat[M, L, W].zero(sign: me.sign)
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+    /// <summary>
+    /// Verifies a generic-type static access with no call arguments still parses —
+    /// <c>Type[A, B].member</c>.
+    /// </summary>
+
+    [Fact]
+    public void Parse_GenericTypeStaticMemberAccess()
+    {
+        string source = """
+                        routine test()
+                          var v = Pair[A, B].default
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
 
     #endregion
 

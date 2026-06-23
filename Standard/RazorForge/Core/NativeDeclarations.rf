@@ -7,6 +7,17 @@ module Core
 ### Initializes the RazorForge runtime.
 ### This routine must run before runtime services that depend on global runtime state.
 external("C") routine rf_runtime_init()
+
+### Hardware 128/64 -> 64 unsigned divide: computes (hi:lo) / d, returns the quotient
+### and writes the remainder through `rem`. PRECONDITION: hi < d (so the 64-bit quotient
+### cannot overflow). The base-2^64 estimation primitive for Knuth-D wide division — one
+### x86-64 `DIV r64` (or MSVC `_udiv128`), with a portable fallback on arm64/wasm.
+### :param hi: High 64 bits of the dividend.
+### :param lo: Low 64 bits of the dividend.
+### :param d: The 64-bit divisor (must exceed `hi`).
+### :param rem: Pointer to a `U64` slot that receives the remainder.
+### :returns: The 64-bit quotient.
+dangerous external("C") routine rf_udivrem_128_64(hi: U64, lo: U64, d: U64, rem: Hijacked[U64]) -> U64
 ### Allocates zero-initialized dynamic memory.
 ### :param size: The number of bytes to allocate.
 ### :returns: The resulting `Address` value.
@@ -39,6 +50,30 @@ dangerous routine rf_reallocate_dynamic(ptr: Address, size: ByteSize) -> Address
 ### Frees a dynamic memory block previously returned by the runtime allocator.
 ### :param ptr: The allocation to release.
 dangerous external("C") routine rf_invalidate(ptr: Address)
+
+# ============================================================================
+# Threaded tasks (v0.1 concurrency)
+# ============================================================================
+
+### Creates a task control block. `kind` is 1 for an OS thread (RF_TASK_THREADED).
+### :returns: The `rf_task*` handle as an `Address` (null on allocation failure).
+dangerous external("C") routine rf_task_create(kind: U32) -> Address
+### Spawns an OS thread running `entry(task, userdata)`.
+### :returns: 0 on success, non-zero on failure.
+dangerous external("C") routine rf_task_spawn_threaded(task: Address, entry: Address, userdata: Address) -> S32
+### Blocks until the task completes. :returns: the completion kind (1 = value).
+dangerous external("C") routine rf_task_wait(task: Address) -> S32
+### Blocks until the task completes or the deadline elapses.
+### :returns: the completion kind (1 = value, 4 = timeout).
+dangerous external("C") routine rf_task_wait_within(task: Address, secs: S64, ns: U32) -> S32
+### :returns: the boxed result payload pointer set by the task's entry thunk.
+dangerous external("C") routine rf_task_result_payload(task: Address) -> Address
+### Releases a task control block.
+dangerous external("C") routine rf_task_destroy(task: Address)
+### Opaque, stable identifier for the calling OS thread (lock re-entrancy detection). Safe: takes
+### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
+### the same thread.
+external("C") routine rf_current_thread_id() -> U64
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
@@ -64,639 +99,6 @@ dangerous routine rf_set_bytes_at(dest: Address, value: U8, size: ByteSize)
   rf_set_bytes_at(dest: dest, value: value, size: size.byte_size())
   return
 
-# ============================================================================
-# D32 (Decimal32) - Intel DFP Library
-# All functions operate on U32 BID-encoded bits
-# ============================================================================
-
-### Encodes an `S32` as a BID-form decimal32 bit pattern.
-### :param value: The integer value to encode.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_d32_from_s32(value: S32) -> U32
-### Encodes an `S64` as a BID-form decimal32 bit pattern.
-### :param value: The integer value to encode.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_d32_from_s64(value: S64) -> U32
-### Encodes a `U32` as a BID-form decimal32 bit pattern.
-### :param value: The integer value to encode.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_d32_from_u32(value: U32) -> U32
-### Encodes a `U64` as a BID-form decimal32 bit pattern.
-### :param value: The integer value to encode.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_d32_from_u64(value: U64) -> U32
-
-### Adds two BID-form decimal32 values.
-### :param a: The left-hand decimal32 bit pattern.
-### :param b: The right-hand decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the sum.
-external("C") routine rf_d32_add(a: U32, b: U32) -> U32
-### Subtracts one BID-form decimal32 value from another.
-### :param a: The left-hand decimal32 bit pattern.
-### :param b: The right-hand decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the difference.
-external("C") routine rf_d32_sub(a: U32, b: U32) -> U32
-### Multiplies two BID-form decimal32 values.
-### :param a: The left-hand decimal32 bit pattern.
-### :param b: The right-hand decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the product.
-external("C") routine rf_d32_mul(a: U32, b: U32) -> U32
-### Divides one BID-form decimal32 value by another.
-### :param a: The dividend bit pattern.
-### :param b: The divisor bit pattern.
-### :returns: The raw decimal32 bits for the quotient.
-external("C") routine rf_d32_div(a: U32, b: U32) -> U32
-
-### Compares two BID-form decimal32 values.
-### :param a: The left-hand decimal32 bit pattern.
-### :param b: The right-hand decimal32 bit pattern.
-### :returns: The runtime comparison code for the two values.
-external("C") routine rf_d32_cmp(a: U32, b: U32) -> S32
-external("C") routine rf_d32_isfinite(bits: U32) -> S32
-
-### Returns the decimal32 square root of `value`.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the square root result.
-external("C") routine rf_d32_sqrt(value: U32) -> U32
-### Returns the decimal32 absolute value of `value`.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the absolute-value result.
-external("C") routine rf_d32_abs(value: U32) -> U32
-### Rounds a decimal32 value toward positive infinity.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the rounded result.
-external("C") routine rf_d32_ceil(value: U32) -> U32
-### Rounds a decimal32 value toward negative infinity.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the rounded result.
-external("C") routine rf_d32_floor(value: U32) -> U32
-### Rounds a decimal32 value to the nearest integral decimal value.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the rounded result.
-external("C") routine rf_d32_round(value: U32) -> U32
-### Truncates a decimal32 value toward zero.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The raw decimal32 bits for the truncated result.
-external("C") routine rf_d32_trunc(value: U32) -> U32
-
-# Decimal32 transcendentals — correctly rounded via TLFloat binary64 routing.
-# All take/return BID-form decimal32 bit patterns.
-
-### Returns the sine of a decimal32 value interpreted as radians.
-external("C") routine rf_d32_sin(value: U32) -> U32
-### Returns the cosine of a decimal32 value interpreted as radians.
-external("C") routine rf_d32_cos(value: U32) -> U32
-### Returns the tangent of a decimal32 value interpreted as radians.
-external("C") routine rf_d32_tan(value: U32) -> U32
-### Returns the inverse sine of a decimal32 value.
-external("C") routine rf_d32_asin(value: U32) -> U32
-### Returns the inverse cosine of a decimal32 value.
-external("C") routine rf_d32_acos(value: U32) -> U32
-### Returns the inverse tangent of a decimal32 value.
-external("C") routine rf_d32_atan(value: U32) -> U32
-### Returns the quadrant-aware angle of the point `(x, y)` in decimal32 precision.
-external("C") routine rf_d32_atan2(y: U32, x: U32) -> U32
-### Returns the hyperbolic sine of a decimal32 value.
-external("C") routine rf_d32_sinh(value: U32) -> U32
-### Returns the hyperbolic cosine of a decimal32 value.
-external("C") routine rf_d32_cosh(value: U32) -> U32
-### Returns the hyperbolic tangent of a decimal32 value.
-external("C") routine rf_d32_tanh(value: U32) -> U32
-### Returns the inverse hyperbolic sine of a decimal32 value.
-external("C") routine rf_d32_asinh(value: U32) -> U32
-### Returns the inverse hyperbolic cosine of a decimal32 value.
-external("C") routine rf_d32_acosh(value: U32) -> U32
-### Returns the inverse hyperbolic tangent of a decimal32 value.
-external("C") routine rf_d32_atanh(value: U32) -> U32
-### Returns `e` raised to a decimal32 value.
-external("C") routine rf_d32_exp(value: U32) -> U32
-### Returns `2` raised to a decimal32 value.
-external("C") routine rf_d32_exp2(value: U32) -> U32
-### Returns `e` raised to a decimal32 value, minus one (accurate near zero).
-external("C") routine rf_d32_expm1(value: U32) -> U32
-### Returns the natural logarithm of a decimal32 value.
-external("C") routine rf_d32_log(value: U32) -> U32
-### Returns the base-2 logarithm of a decimal32 value.
-external("C") routine rf_d32_log2(value: U32) -> U32
-### Returns the base-10 logarithm of a decimal32 value.
-external("C") routine rf_d32_log10(value: U32) -> U32
-### Returns the natural logarithm of one plus a decimal32 value (accurate near zero).
-external("C") routine rf_d32_log1p(value: U32) -> U32
-### Raises a decimal32 base to a decimal32 exponent.
-external("C") routine rf_d32_pow(base: U32, exp: U32) -> U32
-### Returns the real cube root of a decimal32 value.
-external("C") routine rf_d32_cbrt(value: U32) -> U32
-### Returns the Euclidean length of the decimal32 vector `(x, y)`.
-external("C") routine rf_d32_hypot(x: U32, y: U32) -> U32
-
-### Widens a decimal32 value to decimal64 encoding.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_d32_to_d64(value: U32) -> U64
-### Widens a decimal32 value to decimal128 encoding.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The decoded `D128` value.
-external("C") routine rf_d32_to_d128(value: U32) -> D128
-
-### Converts a decimal32 value to binary single precision.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The closest representable `F32` value.
-external("C") routine rf_d32_to_f32(value: U32) -> F32
-### Converts a decimal32 value to binary double precision.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The closest representable `F64` value.
-external("C") routine rf_d32_to_f64(value: U32) -> F64
-### Converts a decimal32 value to binary quadruple precision.
-### :param bits: The BID-form decimal32 bit pattern.
-### :param out: Storage receiving the converted `F128` value.
-### :note: Out-param ABI — returning the 16-byte `f128_t` by value does not
-###        match the scalar `fp128` ABI emitted for `F128` returns.
-external("C") routine rf_d32_to_f128_parts(bits: U32, out: Hijacked[F128])
-
-### Converts a binary single-precision float to decimal32 encoding.
-### :param value: The binary floating-point input.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_f32_to_d32(value: F32) -> U32
-### Converts a binary double-precision float to decimal32 encoding.
-### :param value: The binary floating-point input.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_f64_to_d32(value: F64) -> U32
-
-### Formats a decimal32 value as a null-terminated C string.
-### The returned address points to runtime-managed text storage.
-### :param bits: The BID-form decimal32 bit pattern.
-### :returns: A pointer to the formatted string.
-external("C") routine rf_d32_to_string(bits: U32) -> Address
-### Parses a null-terminated C string as decimal32.
-### :param cstr: The decimal text to parse.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_d32_from_string(cstr: CStr) -> U32
-
-# ============================================================================
-# D64 (Decimal64) - Intel DFP Library
-# All functions operate on U64 BID-encoded bits
-# ============================================================================
-
-### Encodes an `S32` as a BID-form decimal64 bit pattern.
-### :param value: The integer value to encode.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_d64_from_s32(value: S32) -> U64
-### Encodes an `S64` as a BID-form decimal64 bit pattern.
-### :param value: The integer value to encode.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_d64_from_s64(value: S64) -> U64
-### Encodes a `U32` as a BID-form decimal64 bit pattern.
-### :param value: The integer value to encode.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_d64_from_u32(value: U32) -> U64
-### Encodes a `U64` as a BID-form decimal64 bit pattern.
-### :param value: The integer value to encode.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_d64_from_u64(value: U64) -> U64
-
-### Adds two BID-form decimal64 values.
-### :param a: The left-hand decimal64 bit pattern.
-### :param b: The right-hand decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the sum.
-external("C") routine rf_d64_add(a: U64, b: U64) -> U64
-### Subtracts one BID-form decimal64 value from another.
-### :param a: The left-hand decimal64 bit pattern.
-### :param b: The right-hand decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the difference.
-external("C") routine rf_d64_sub(a: U64, b: U64) -> U64
-### Multiplies two BID-form decimal64 values.
-### :param a: The left-hand decimal64 bit pattern.
-### :param b: The right-hand decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the product.
-external("C") routine rf_d64_mul(a: U64, b: U64) -> U64
-### Divides one BID-form decimal64 value by another.
-### :param a: The dividend bit pattern.
-### :param b: The divisor bit pattern.
-### :returns: The raw decimal64 bits for the quotient.
-external("C") routine rf_d64_div(a: U64, b: U64) -> U64
-
-### Compares two BID-form decimal64 values.
-### :param a: The left-hand decimal64 bit pattern.
-### :param b: The right-hand decimal64 bit pattern.
-### :returns: The runtime comparison code for the two values.
-external("C") routine rf_d64_cmp(a: U64, b: U64) -> S32
-external("C") routine rf_d64_isfinite(bits: U64) -> S32
-
-### Returns the decimal64 square root of `value`.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the square root result.
-external("C") routine rf_d64_sqrt(value: U64) -> U64
-### Returns the decimal64 absolute value of `value`.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the absolute-value result.
-external("C") routine rf_d64_abs(value: U64) -> U64
-### Rounds a decimal64 value toward positive infinity.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the rounded result.
-external("C") routine rf_d64_ceil(value: U64) -> U64
-### Rounds a decimal64 value toward negative infinity.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the rounded result.
-external("C") routine rf_d64_floor(value: U64) -> U64
-### Rounds a decimal64 value to the nearest integral decimal value.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the rounded result.
-external("C") routine rf_d64_round(value: U64) -> U64
-### Truncates a decimal64 value toward zero.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The raw decimal64 bits for the truncated result.
-external("C") routine rf_d64_trunc(value: U64) -> U64
-
-# Decimal64 transcendentals — correctly rounded via TLFloat quad routing.
-# All take/return BID-form decimal64 bit patterns.
-
-### Returns the sine of a decimal64 value interpreted as radians.
-external("C") routine rf_d64_sin(value: U64) -> U64
-### Returns the cosine of a decimal64 value interpreted as radians.
-external("C") routine rf_d64_cos(value: U64) -> U64
-### Returns the tangent of a decimal64 value interpreted as radians.
-external("C") routine rf_d64_tan(value: U64) -> U64
-### Returns the inverse sine of a decimal64 value.
-external("C") routine rf_d64_asin(value: U64) -> U64
-### Returns the inverse cosine of a decimal64 value.
-external("C") routine rf_d64_acos(value: U64) -> U64
-### Returns the inverse tangent of a decimal64 value.
-external("C") routine rf_d64_atan(value: U64) -> U64
-### Returns the quadrant-aware angle of the point `(x, y)` in decimal64 precision.
-external("C") routine rf_d64_atan2(y: U64, x: U64) -> U64
-### Returns the hyperbolic sine of a decimal64 value.
-external("C") routine rf_d64_sinh(value: U64) -> U64
-### Returns the hyperbolic cosine of a decimal64 value.
-external("C") routine rf_d64_cosh(value: U64) -> U64
-### Returns the hyperbolic tangent of a decimal64 value.
-external("C") routine rf_d64_tanh(value: U64) -> U64
-### Returns the inverse hyperbolic sine of a decimal64 value.
-external("C") routine rf_d64_asinh(value: U64) -> U64
-### Returns the inverse hyperbolic cosine of a decimal64 value.
-external("C") routine rf_d64_acosh(value: U64) -> U64
-### Returns the inverse hyperbolic tangent of a decimal64 value.
-external("C") routine rf_d64_atanh(value: U64) -> U64
-### Returns `e` raised to a decimal64 value.
-external("C") routine rf_d64_exp(value: U64) -> U64
-### Returns `2` raised to a decimal64 value.
-external("C") routine rf_d64_exp2(value: U64) -> U64
-### Returns `e` raised to a decimal64 value, minus one (accurate near zero).
-external("C") routine rf_d64_expm1(value: U64) -> U64
-### Returns the natural logarithm of a decimal64 value.
-external("C") routine rf_d64_log(value: U64) -> U64
-### Returns the base-2 logarithm of a decimal64 value.
-external("C") routine rf_d64_log2(value: U64) -> U64
-### Returns the base-10 logarithm of a decimal64 value.
-external("C") routine rf_d64_log10(value: U64) -> U64
-### Returns the natural logarithm of one plus a decimal64 value (accurate near zero).
-external("C") routine rf_d64_log1p(value: U64) -> U64
-### Raises a decimal64 base to a decimal64 exponent.
-external("C") routine rf_d64_pow(base: U64, exp: U64) -> U64
-### Returns the real cube root of a decimal64 value.
-external("C") routine rf_d64_cbrt(value: U64) -> U64
-### Returns the Euclidean length of the decimal64 vector `(x, y)`.
-external("C") routine rf_d64_hypot(x: U64, y: U64) -> U64
-
-### Narrows a decimal64 value to decimal32 encoding.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_d64_to_d32(value: U64) -> U32
-### Widens a decimal64 value to decimal128 encoding.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The decoded `D128` value.
-external("C") routine rf_d64_to_d128(value: U64) -> D128
-
-### Converts a decimal64 value to binary single precision.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The closest representable `F32` value.
-external("C") routine rf_d64_to_f32(value: U64) -> F32
-### Converts a decimal64 value to binary double precision.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The closest representable `F64` value.
-external("C") routine rf_d64_to_f64(value: U64) -> F64
-### Converts a decimal64 value to binary quadruple precision.
-### :param bits: The BID-form decimal64 bit pattern.
-### :param out: Storage receiving the converted `F128` value.
-### :note: Out-param ABI — returning the 16-byte `f128_t` by value does not
-###        match the scalar `fp128` ABI emitted for `F128` returns.
-external("C") routine rf_d64_to_f128_parts(bits: U64, out: Hijacked[F128])
-
-### Converts a binary single-precision float to decimal64 encoding.
-### :param value: The binary floating-point input.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_f32_to_d64(value: F32) -> U64
-### Converts a binary double-precision float to decimal64 encoding.
-### :param value: The binary floating-point input.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_f64_to_d64(value: F64) -> U64
-
-### Formats a decimal64 value as a null-terminated C string.
-### The returned address points to runtime-managed text storage.
-### :param bits: The BID-form decimal64 bit pattern.
-### :returns: A pointer to the formatted string.
-external("C") routine rf_d64_to_string(bits: U64) -> Address
-### Parses a null-terminated C string as decimal64.
-### :param cstr: The decimal text to parse.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_d64_from_string(cstr: CStr) -> U64
-
-# ============================================================================
-# D128 (Decimal128) - Intel DFP Library
-# D128 functions take (low: U64, high: U64) pairs and return D128
-# ============================================================================
-
-### Encodes an `S32` as decimal128.
-### :param value: The integer value to encode.
-### :returns: The decoded `D128` value.
-external("C") routine rf_d128_from_s32(value: S32) -> D128
-### Encodes an `S64` as decimal128.
-### :param value: The integer value to encode.
-### :returns: The decoded `D128` value.
-external("C") routine rf_d128_from_s64(value: S64) -> D128
-### Encodes a `U32` as decimal128.
-### :param value: The integer value to encode.
-### :returns: The decoded `D128` value.
-external("C") routine rf_d128_from_u32(value: U32) -> D128
-### Encodes a `U64` as decimal128.
-### :param value: The integer value to encode.
-### :returns: The decoded `D128` value.
-external("C") routine rf_d128_from_u64(value: U64) -> D128
-
-### Adds two decimal128 values expressed as low/high word pairs.
-### :param a_low: The low 64 bits of the left-hand operand.
-### :param a_high: The high 64 bits of the left-hand operand.
-### :param b_low: The low 64 bits of the right-hand operand.
-### :param b_high: The high 64 bits of the right-hand operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_add(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> D128
-### Subtracts one decimal128 value from another.
-### :param a_low: The low 64 bits of the left-hand operand.
-### :param a_high: The high 64 bits of the left-hand operand.
-### :param b_low: The low 64 bits of the right-hand operand.
-### :param b_high: The high 64 bits of the right-hand operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_sub(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> D128
-### Multiplies two decimal128 values.
-### :param a_low: The low 64 bits of the left-hand operand.
-### :param a_high: The high 64 bits of the left-hand operand.
-### :param b_low: The low 64 bits of the right-hand operand.
-### :param b_high: The high 64 bits of the right-hand operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_mul(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> D128
-### Divides one decimal128 value by another.
-### :param a_low: The low 64 bits of the dividend.
-### :param a_high: The high 64 bits of the dividend.
-### :param b_low: The low 64 bits of the divisor.
-### :param b_high: The high 64 bits of the divisor.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_div(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> D128
-
-### Compares two decimal128 values.
-### :param a_low: The low 64 bits of the left-hand operand.
-### :param a_high: The high 64 bits of the left-hand operand.
-### :param b_low: The low 64 bits of the right-hand operand.
-### :param b_high: The high 64 bits of the right-hand operand.
-### :returns: The runtime comparison code for the two values.
-external("C") routine rf_d128_cmp(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
-external("C") routine rf_d128_isfinite(low: U64, high: U64) -> S32
-
-### Returns the decimal128 square root of the supplied value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_sqrt(low: U64, high: U64) -> D128
-### Returns the decimal128 absolute value of the supplied operand.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_abs(low: U64, high: U64) -> D128
-### Rounds a decimal128 value toward positive infinity.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_ceil(low: U64, high: U64) -> D128
-### Rounds a decimal128 value toward negative infinity.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_floor(low: U64, high: U64) -> D128
-### Rounds a decimal128 value to the nearest integral decimal value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_round(low: U64, high: U64) -> D128
-### Truncates a decimal128 value toward zero.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_trunc(low: U64, high: U64) -> D128
-
-### Returns the sine of a decimal128 value interpreted as radians.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_sin(low: U64, high: U64) -> D128
-### Returns the cosine of a decimal128 value interpreted as radians.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_cos(low: U64, high: U64) -> D128
-### Returns the tangent of a decimal128 value interpreted as radians.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_tan(low: U64, high: U64) -> D128
-### Returns the inverse sine of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_asin(low: U64, high: U64) -> D128
-### Returns the inverse cosine of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_acos(low: U64, high: U64) -> D128
-### Returns the inverse tangent of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_atan(low: U64, high: U64) -> D128
-### Returns the quadrant-aware angle of the point `(x, y)` in decimal128 precision.
-### :param y_low: The low 64 bits of the y-coordinate.
-### :param y_high: The high 64 bits of the y-coordinate.
-### :param x_low: The low 64 bits of the x-coordinate.
-### :param x_high: The high 64 bits of the x-coordinate.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_atan2(y_low: U64, y_high: U64, x_low: U64, x_high: U64) -> D128
-
-### Returns the hyperbolic sine of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_sinh(low: U64, high: U64) -> D128
-### Returns the hyperbolic cosine of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_cosh(low: U64, high: U64) -> D128
-### Returns the hyperbolic tangent of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_tanh(low: U64, high: U64) -> D128
-### Returns the inverse hyperbolic sine of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_asinh(low: U64, high: U64) -> D128
-### Returns the inverse hyperbolic cosine of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_acosh(low: U64, high: U64) -> D128
-### Returns the inverse hyperbolic tangent of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_atanh(low: U64, high: U64) -> D128
-
-### Returns `e` raised to a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_exp(low: U64, high: U64) -> D128
-### Returns `2` raised to a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_exp2(low: U64, high: U64) -> D128
-### Returns `e` raised to a decimal128 value, minus one (accurate near zero).
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_expm1(low: U64, high: U64) -> D128
-### Returns the natural logarithm of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_log(low: U64, high: U64) -> D128
-### Returns the base-2 logarithm of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_log2(low: U64, high: U64) -> D128
-### Returns the base-10 logarithm of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_log10(low: U64, high: U64) -> D128
-### Returns the natural logarithm of one plus a decimal128 value (accurate near zero).
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_log1p(low: U64, high: U64) -> D128
-
-### Raises a decimal128 base to a decimal128 exponent.
-### :param base_low: The low 64 bits of the base.
-### :param base_high: The high 64 bits of the base.
-### :param exp_low: The low 64 bits of the exponent.
-### :param exp_high: The high 64 bits of the exponent.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_pow(base_low: U64, base_high: U64, exp_low: U64, exp_high: U64) -> D128
-### Returns the real cube root of a decimal128 value.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_cbrt(low: U64, high: U64) -> D128
-### Returns the Euclidean length of the decimal128 vector `(x, y)`.
-### :param x_low: The low 64 bits of the x-coordinate.
-### :param x_high: The high 64 bits of the x-coordinate.
-### :param y_low: The low 64 bits of the y-coordinate.
-### :param y_high: The high 64 bits of the y-coordinate.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_hypot(x_low: U64, x_high: U64, y_low: U64, y_high: U64) -> D128
-
-### Narrows a decimal128 value to decimal32 encoding.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The raw decimal32 bits.
-external("C") routine rf_d128_to_d32(low: U64, high: U64) -> U32
-### Narrows a decimal128 value to decimal64 encoding.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The raw decimal64 bits.
-external("C") routine rf_d128_to_d64(low: U64, high: U64) -> U64
-
-### Converts a decimal128 value to binary single precision.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The closest representable `F32` value.
-external("C") routine rf_d128_to_f32(low: U64, high: U64) -> F32
-### Converts a decimal128 value to binary double precision.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The closest representable `F64` value.
-external("C") routine rf_d128_to_f64(low: U64, high: U64) -> F64
-### Converts a decimal128 value to binary quadruple precision.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :param out: Storage receiving the converted `F128` value.
-### :note: Out-param ABI — returning the 16-byte `f128_t` by value does not
-###        match the scalar `fp128` ABI emitted for `F128` returns.
-external("C") routine rf_d128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
-
-### Converts a binary single-precision float to decimal128.
-### :param value: The binary floating-point input.
-### :returns: The resulting `D128` value.
-external("C") routine rf_f32_to_d128(value: F32) -> D128
-### Converts a binary double-precision float to decimal128.
-### :param value: The binary floating-point input.
-### :returns: The resulting `D128` value.
-external("C") routine rf_f64_to_d128(value: F64) -> D128
-
-### Formats a decimal128 value as a null-terminated C string.
-### The returned address points to runtime-managed text storage.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: A pointer to the formatted string.
-external("C") routine rf_d128_to_string(low: U64, high: U64) -> Address
-### Parses a null-terminated C string as decimal128.
-### :param cstr: The decimal text to parse.
-### :returns: The resulting `D128` value.
-external("C") routine rf_d128_from_string(cstr: CStr) -> D128
-
-# ============================================================================
-# Decimal-to-integer conversion (non-rf_ prefixed C functions)
-# Used by S32.rf and S64.rf for D32/D64/D128 -> integer conversion
-# ============================================================================
-
-### Converts a decimal32 bit pattern to `S32`.
-### :param bits: The BID-form decimal32 bit pattern.
-### :returns: The converted `S32` value.
-external("C") routine d32_to_s32(bits: U32) -> S32
-### Converts a decimal64 bit pattern to `S32`.
-### :param bits: The BID-form decimal64 bit pattern.
-### :returns: The converted `S32` value.
-external("C") routine d64_to_s32(bits: U64) -> S32
-### Converts a decimal128 value to `S32`.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The converted `S32` value.
-external("C") routine d128_to_s32(low: U64, high: U64) -> S32
-
-### Converts a decimal32 bit pattern to `S64`.
-### :param bits: The BID-form decimal32 bit pattern.
-### :returns: The converted `S64` value.
-external("C") routine d32_to_s64(bits: U32) -> S64
-### Converts a decimal64 bit pattern to `S64`.
-### :param bits: The BID-form decimal64 bit pattern.
-### :returns: The converted `S64` value.
-external("C") routine d64_to_s64(bits: U64) -> S64
-### Converts a decimal128 value to `S64`.
-### :param low: The low 64 bits of the operand.
-### :param high: The high 64 bits of the operand.
-### :returns: The converted `S64` value.
-external("C") routine d128_to_s64(low: U64, high: U64) -> S64
 
 # ============================================================================
 # F128 (Quadruple Precision) - LibBF Runtime
@@ -1183,204 +585,6 @@ external("C") routine rf_bigint_is_zero(handle: CPtr) -> S32
 external("C") routine rf_bigint_is_neg(handle: CPtr) -> S32
 
 # ============================================================================
-# Decimal (Arbitrary Precision) - decNumber library
-# All functions use opaque handles to decNumber structures.
-# ============================================================================
-
-### Sets the global working precision (digits) for operations that don't take
-### an explicit per-call precision argument. Clamped to a safe range internally.
-### :param digits: The desired number of decimal digits.
-external("C") routine rf_bigdec_set_precision(digits: S32)
-### Reads the current global working precision in digits.
-### :returns: The current default precision used by add/sub/mul/etc.
-external("C") routine rf_bigdec_get_precision() -> S32
-
-### Allocates and initializes a new arbitrary-precision decimal handle.
-### :returns: A live `CPtr` ready for use with the big-decimal runtime.
-external("C") routine rf_bigdec_new() -> CPtr
-### Releases the storage owned by an arbitrary-precision decimal handle.
-### :param handle: The decimal handle to destroy.
-external("C") routine rf_bigdec_free(handle: CPtr)
-### Creates a duplicate decimal handle with the same numeric value as `src`.
-### :param src: The source decimal handle.
-### :returns: A newly allocated copy of `src`.
-external("C") routine rf_bigdec_copy(src: CPtr) -> CPtr
-
-### Replaces a decimal handle with the signed 64-bit value `value`.
-### :param handle: The decimal handle to update.
-### :param value: The signed integer value to assign.
-external("C") routine rf_bigdec_set_s64(handle: CPtr, value: S64)
-### Replaces a decimal handle with the binary floating-point value `value`.
-### :param handle: The decimal handle to update.
-### :param value: The `F64` value to assign.
-external("C") routine rf_bigdec_set_f64(handle: CPtr, value: F64)
-### Parses a decimal string and stores the result in `handle`.
-### :param handle: The decimal handle to update.
-### :param str: The null-terminated decimal text to parse.
-external("C") routine rf_bigdec_set_str(handle: CPtr, str: CStr)
-
-### Converts a decimal handle to `S64`.
-### :param handle: The decimal handle to read.
-### :returns: The converted `S64` value.
-external("C") routine rf_bigdec_get_s64(handle: CPtr) -> S64
-### Converts a decimal handle to `F64`.
-### :param handle: The decimal handle to read.
-### :returns: The converted `F64` value.
-external("C") routine rf_bigdec_get_f64(handle: CPtr) -> F64
-### Formats a decimal handle as a null-terminated string.
-### :param handle: The decimal handle to render.
-### :param decimal_places: The number of decimal places to include in the output.
-### :returns: A pointer to the formatted C string.
-external("C") routine rf_bigdec_get_str(handle: CPtr, decimal_places: S32) -> CStr
-
-### Stores the sum of `a` and `b` into `result`.
-### :param result: The destination decimal handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-external("C") routine rf_bigdec_add(result: CPtr, a: CPtr, b: CPtr)
-### Stores the difference `a - b` into `result`.
-### :param result: The destination decimal handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-external("C") routine rf_bigdec_sub(result: CPtr, a: CPtr, b: CPtr)
-### Stores the product of `a` and `b` into `result`.
-### :param result: The destination decimal handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-external("C") routine rf_bigdec_mul(result: CPtr, a: CPtr, b: CPtr)
-### Divides `a` by `b` and stores the quotient at the requested decimal precision.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The dividend.
-### :param b: The divisor.
-external("C") routine rf_bigdec_div(result: CPtr, precision: S32, a: CPtr, b: CPtr)
-### Stores the arithmetic negation of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param a: The source operand.
-external("C") routine rf_bigdec_neg(result: CPtr, a: CPtr)
-
-### Compares two arbitrary-precision decimal handles numerically.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-### :returns: A negative, zero, or positive comparison result.
-external("C") routine rf_bigdec_cmp(a: CPtr, b: CPtr) -> S32
-
-### Stores the absolute value of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param a: The source operand.
-external("C") routine rf_bigdec_abs(result: CPtr, a: CPtr)
-### Stores the square root of `a` into `result` using the requested precision.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_sqrt(result: CPtr, precision: S32, a: CPtr)
-### Raises `base` to `exp` and stores the result with the requested precision.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param base: The base value.
-### :param exp: The exponent value.
-external("C") routine rf_bigdec_pow(result: CPtr, precision: S32, base: CPtr, exp: CPtr)
-### Stores `e` raised to `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_exp(result: CPtr, precision: S32, a: CPtr)
-### Stores the natural logarithm of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_log(result: CPtr, precision: S32, a: CPtr)
-### Stores the base-10 logarithm of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_log10(result: CPtr, precision: S32, a: CPtr)
-
-### Stores the sine of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_sin(result: CPtr, precision: S32, a: CPtr)
-### Stores the cosine of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_cos(result: CPtr, precision: S32, a: CPtr)
-### Stores the tangent of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_tan(result: CPtr, precision: S32, a: CPtr)
-### Stores the inverse sine of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_asin(result: CPtr, precision: S32, a: CPtr)
-### Stores the inverse cosine of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_acos(result: CPtr, precision: S32, a: CPtr)
-### Stores the inverse tangent of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_atan(result: CPtr, precision: S32, a: CPtr)
-
-### Stores the hyperbolic sine of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_sinh(result: CPtr, precision: S32, a: CPtr)
-### Stores the hyperbolic cosine of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_cosh(result: CPtr, precision: S32, a: CPtr)
-### Stores the hyperbolic tangent of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-### :param a: The source operand.
-external("C") routine rf_bigdec_tanh(result: CPtr, precision: S32, a: CPtr)
-
-### Stores the ceiling of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param a: The source operand.
-external("C") routine rf_bigdec_ceil(result: CPtr, a: CPtr)
-### Stores the floor of `a` into `result`.
-### :param result: The destination decimal handle.
-### :param a: The source operand.
-external("C") routine rf_bigdec_floor(result: CPtr, a: CPtr)
-### Rounds `a` to the requested number of decimal places and stores the result.
-### :param result: The destination decimal handle.
-### :param decimal_places: The number of decimal places to preserve.
-### :param a: The source operand.
-external("C") routine rf_bigdec_round(result: CPtr, decimal_places: S32, a: CPtr)
-### Truncates `a` to the requested number of decimal places and stores the result.
-### :param result: The destination decimal handle.
-### :param decimal_places: The number of decimal places to preserve.
-### :param a: The source operand.
-external("C") routine rf_bigdec_trunc(result: CPtr, decimal_places: S32, a: CPtr)
-
-### Returns whether the decimal handle currently stores zero.
-### :param handle: The decimal handle to inspect.
-### :returns: A non-zero runtime truth value when the number is zero.
-external("C") routine rf_bigdec_is_zero(handle: CPtr) -> S32
-### Returns whether the decimal handle currently stores a negative value.
-### :param handle: The decimal handle to inspect.
-### :returns: A non-zero runtime truth value when the number is negative.
-external("C") routine rf_bigdec_is_neg(handle: CPtr) -> S32
-
-### Stores the mathematical constant pi at the requested precision.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-external("C") routine rf_bigdec_pi(result: CPtr, precision: S32)
-### Stores the mathematical constant e at the requested precision.
-### :param result: The destination decimal handle.
-### :param precision: The working precision used by the runtime.
-external("C") routine rf_bigdec_e(result: CPtr, precision: S32)
-
-# ============================================================================
 # Text Parsing (CStr -> primitive values)
 # Native C functions that parse null-terminated UTF-8 strings
 # Integer parsing is pure RazorForge (in each type's .rf file)
@@ -1591,3 +795,109 @@ external("C") routine rf_fs_can_execute(path: CStr, len: S32) -> Bool
 ### :param readonly_flag: `true` to mark readonly, `false` to clear it.
 ### :returns: A runtime status code.
 external("C") routine rf_fs_set_readonly(path: CStr, len: S32, readonly_flag: Bool) -> S32
+
+# ============================================================================
+# Real (arbitrary-precision binary float, libbf-backed) — handle lifecycle +
+# operations. Mirrors the rf_bigint_* surface; handles are heap bf_t pointers.
+# ============================================================================
+### Allocates a new zero-initialized Real handle.
+external("C") routine rf_real_new() -> CPtr
+### Frees a Real handle and its backing storage.
+external("C") routine rf_real_clear(handle: CPtr)
+### Sets the handle to a signed 64-bit integer value.
+external("C") routine rf_real_set_i64(handle: CPtr, value: S64)
+### Sets the handle to an F64 value (exact).
+external("C") routine rf_real_set_f64(handle: CPtr, value: F64)
+### Parses a decimal string into the handle (radix 10). Returns a libbf status.
+external("C") routine rf_real_set_str(handle: CPtr, str: CPtr, radix: S32) -> S32
+### Rounds the value to the nearest F64.
+external("C") routine rf_real_get_f64(handle: CPtr) -> F64
+### Formats the value as a freshly-allocated decimal C string (free with rf_invalidate).
+external("C") routine rf_real_to_str(handle: CPtr) -> CStr
+### Stores a + b (exact) into result.
+external("C") routine rf_real_add(result: CPtr, a: CPtr, b: CPtr)
+### Stores a - b (exact) into result.
+external("C") routine rf_real_sub(result: CPtr, a: CPtr, b: CPtr)
+### Stores a * b (exact) into result.
+external("C") routine rf_real_mul(result: CPtr, a: CPtr, b: CPtr)
+### Stores a / b (rounded to the working precision) into result.
+external("C") routine rf_real_div(result: CPtr, a: CPtr, b: CPtr)
+### Stores -a into result.
+external("C") routine rf_real_neg(result: CPtr, a: CPtr)
+### Stores sqrt(a) into result.
+external("C") routine rf_real_sqrt(result: CPtr, a: CPtr)
+### Stores exp(a) into result.
+external("C") routine rf_real_exp(result: CPtr, a: CPtr)
+### Stores log(a) into result.
+external("C") routine rf_real_log(result: CPtr, a: CPtr)
+### Stores a ** b into result.
+external("C") routine rf_real_pow(result: CPtr, a: CPtr, b: CPtr)
+### Stores sin(a) into result.
+external("C") routine rf_real_sin(result: CPtr, a: CPtr)
+### Stores cos(a) into result.
+external("C") routine rf_real_cos(result: CPtr, a: CPtr)
+### Stores tan(a) into result.
+external("C") routine rf_real_tan(result: CPtr, a: CPtr)
+### Stores asin(a) into result.
+external("C") routine rf_real_asin(result: CPtr, a: CPtr)
+### Stores acos(a) into result.
+external("C") routine rf_real_acos(result: CPtr, a: CPtr)
+### Stores atan(a) into result.
+external("C") routine rf_real_atan(result: CPtr, a: CPtr)
+### Stores atan2(y, x) into result.
+external("C") routine rf_real_atan2(result: CPtr, y: CPtr, x: CPtr)
+### Stores sinh(a) into result.
+external("C") routine rf_real_sinh(result: CPtr, a: CPtr)
+### Stores cosh(a) into result.
+external("C") routine rf_real_cosh(result: CPtr, a: CPtr)
+### Stores tanh(a) into result.
+external("C") routine rf_real_tanh(result: CPtr, a: CPtr)
+### Stores asinh(a) into result.
+external("C") routine rf_real_asinh(result: CPtr, a: CPtr)
+### Stores acosh(a) into result.
+external("C") routine rf_real_acosh(result: CPtr, a: CPtr)
+### Stores atanh(a) into result.
+external("C") routine rf_real_atanh(result: CPtr, a: CPtr)
+### Stores log2(a) into result.
+external("C") routine rf_real_log2(result: CPtr, a: CPtr)
+### Stores log10(a) into result.
+external("C") routine rf_real_log10(result: CPtr, a: CPtr)
+### Stores hypot(a, b) into result.
+external("C") routine rf_real_hypot(result: CPtr, a: CPtr, b: CPtr)
+### Stores cbrt(a) into result.
+external("C") routine rf_real_cbrt(result: CPtr, a: CPtr)
+### Stores floor(a) (round toward -inf) into result.
+external("C") routine rf_real_floor(result: CPtr, a: CPtr)
+### Stores ceil(a) (round toward +inf) into result.
+external("C") routine rf_real_ceil(result: CPtr, a: CPtr)
+### Stores trunc(a) (round toward zero) into result.
+external("C") routine rf_real_trunc(result: CPtr, a: CPtr)
+### Stores round(a) (round to nearest, ties away from zero) into result.
+external("C") routine rf_real_round(result: CPtr, a: CPtr)
+### Stores rint(a) (round to nearest, ties to even) into result.
+external("C") routine rf_real_rint(result: CPtr, a: CPtr)
+### Precision-aware variants (prec = decimal significant digits).
+external("C") routine rf_real_div_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+external("C") routine rf_real_sqrt_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_exp_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_log_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_pow_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+external("C") routine rf_real_sin_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_cos_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_tan_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_asin_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_acos_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_atan_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_atan2_p(result: CPtr, y: CPtr, x: CPtr, prec: S32)
+external("C") routine rf_real_sinh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_cosh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_tanh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_asinh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_acosh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_atanh_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_log2_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_log10_p(result: CPtr, a: CPtr, prec: S32)
+external("C") routine rf_real_hypot_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+external("C") routine rf_real_cbrt_p(result: CPtr, a: CPtr, prec: S32)
+### Compares two Real handles: -1 / 0 / 1 (2 = unordered/NaN).
+external("C") routine rf_real_cmp(a: CPtr, b: CPtr) -> S32

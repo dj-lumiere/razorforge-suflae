@@ -1,0 +1,33 @@
+module Tests/Stdlib/DecimalLiteralApi
+import IO/Console
+import Numerics.[Decimal]
+
+# Arbitrary-precision Decimal LITERALS (the `dn` suffix). These bake to a compile-time
+# i256 BID constant via the managed EncodeDecimal encoder — no runtime from-string call.
+# Exercises fraction, large integer (within the 70-digit coefficient), small magnitude,
+# scientific notation, negatives, presets, and arithmetic.
+routine start()
+  var a: Decimal = 3.14159dn
+  var big: Decimal = 1234567890123456789012345678901234567890dn
+  var small: Decimal = 0.001dn
+  var sci: Decimal = 6.02214076e23dn
+  var neg: Decimal = -2.5dn
+
+  show(f"a: {a}")
+  show(f"big: {big}")
+  show(f"small: {small}")
+  show(f"sci: {sci}")
+  show(f"neg: {neg}")
+
+  # Presets (fixed 70-digit constants)
+  show(f"PI: {DECIMAL_PI}")
+  show(f"E: {DECIMAL_E}")
+
+  # Arithmetic on literals (Decimal obeys the arithmetic protocols)
+  show(f"a + small: {a + small}")
+  show(f"a - small: {a - small}")
+  show(f"neg * neg: {neg * neg}")
+  show(f"a / neg: {a / neg}")
+
+  show("DONE")
+  return

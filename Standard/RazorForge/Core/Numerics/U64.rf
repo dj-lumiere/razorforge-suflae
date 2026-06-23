@@ -3,7 +3,7 @@ module Core
 ### A 64-bit unsigned integer in the range 0 to 18,446,744,073,709,551,615.
 ### `U64` is the default word-sized counter and index type in RazorForge.
 @llvm("i64")
-record U64 obeys UnsignedIntegral, Ordered, ConstCompatible
+record U64 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for U64 limits
@@ -93,6 +93,24 @@ routine U64.$create!(from: U128) -> U64
   if from > 18446744073709551615_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U64](from)
+
+### Converts an `S256` to `U64`, throwing if the value is negative or exceeds U64_MAX.
+### :param from: The `S256` value to convert.
+### :returns: The lower 64 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..18446744073709551615.
+routine U64.$create!(from: S256) -> U64
+  if not (0_s256 <= from <= 18446744073709551615_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U64](from)
+
+### Converts a `U256` to `U64`, throwing if the value exceeds U64_MAX.
+### :param from: The `U256` value to convert.
+### :returns: The lower 64 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 18446744073709551615`.
+routine U64.$create!(from: U256) -> U64
+  if from > 18446744073709551615_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U64](from)
 
 ### Truncates a 16-bit float to `U64` by first widening to `F32`.
 ### :param from: The source float value.
@@ -191,13 +209,6 @@ routine U64.$mul!(you: U64) -> U64
   if result.item1
     throw IntegerOverflowError()
   return result.item0
-
-### Returns `me * you`, throwing on overflow (alias for `$mul!`).
-### :param you: The right operand.
-### :returns: The product.
-### :throws: {IntegerOverflowError} on overflow.
-routine U64.$mul(you: U64) -> U64
-  return me.$mul!(you)
 
 ### Returns `me // you` (floor division), throwing if `you` is zero.
 ### :param you: The divisor.
@@ -303,13 +314,10 @@ routine U64.$mul_clamp(you: U64) -> U64
 # ============================================================================
 
 ### Returns `me ** exp` and an overflow flag.
-### Uses repeated squaring. `0 ** 0` is considered indeterminate.
+### Uses repeated squaring. `0 ** 0 == 1` (the empty product).
 ### :param exp: The exponent.
 ### :returns: A tuple of `(result, overflow_flag)`.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
-routine U64.pow_with_overflow!(exp: U64) -> (U64, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U64.pow_with_overflow(exp: U64) -> (U64, Bool)
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = U32(exp)
@@ -329,10 +337,9 @@ routine U64.pow_with_overflow!(exp: U64) -> (U64, Bool)
 ### Returns `me ** exp`, throwing on overflow.
 ### :param exp: The exponent.
 ### :returns: The result.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U64_MAX`.
 routine U64.$pow!(exp: U64) -> U64
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -340,10 +347,7 @@ routine U64.$pow!(exp: U64) -> U64
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent.
 ### :returns: The result modulo 2⁶⁴.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
-routine U64.$pow_wrap!(exp: U64) -> U64
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U64.$pow_wrap(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = U32(exp)
@@ -358,10 +362,7 @@ routine U64.$pow_wrap!(exp: U64) -> U64
 ### Returns `me ** exp` clamped to `U64_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The clamped result.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
-routine U64.$pow_clamp!(exp: U64) -> U64
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U64.$pow_clamp(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = U32(exp)
@@ -525,17 +526,51 @@ routine U64.is_power_of_two() -> Bool
 ### :param bits: The number of bit positions to rotate.
 ### :returns: The rotated value.
 routine U64.rotate_left(bits: U32) -> U64
-  var left = shift_left[U64](me, bits)
-  var right = shift_right_unsigned[U64](me, 64_u32 -% bits)
+  var n = bits % 64_u32
+  if n == 0_u32
+    return me
+  var left = shift_left[U64](me, U64(n))
+  var right = shift_right_unsigned[U64](me, U64(64_u32 -% n))
   return bit_or[U64](a: left, b: right)
 
 ### Returns this value rotated right by `bits` positions.
 ### :param bits: The number of bit positions to rotate.
 ### :returns: The rotated value.
 routine U64.rotate_right(bits: U32) -> U64
-  var right = shift_right_unsigned[U64](me, bits)
-  var left = shift_left[U64](me, 64_u32 -% bits)
+  var n = bits % 64_u32
+  if n == 0_u32
+    return me
+  var right = shift_right_unsigned[U64](me, U64(n))
+  var left = shift_left[U64](me, U64(64_u32 -% n))
   return bit_or[U64](a: right, b: left)
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U64.to_bytes_le() -> Array[Byte, 8]
+  var result = Array[Byte, 8]()
+  var i = 0_u64
+  while i < 8_u64
+    var b = int_truncate[U64, U8](shift_right_unsigned[U64](me, i * 8_u64))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = i + 1_u64
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U64.to_bytes_be() -> Array[Byte, 8]
+  return me.swap_bytes().to_bytes_le()
+
+### Builds a `U64` from its little-endian raw byte representation.
+common routine U64.from_bytes_le(bytes: Array[Byte, 8]) -> U64
+  var result = 0_u64
+  var i = 0_u64
+  while i < 8_u64
+    var part = shift_left[U64](zero_extend[U8, U64](byte_at(array: bytes, index: i)), i * 8_u64)
+    result = bit_or[U64](a: result, b: part)
+    i = i + 1_u64
+  return result
+
+### Builds a `U64` from its big-endian raw byte representation.
+common routine U64.from_bytes_be(bytes: Array[Byte, 8]) -> U64
+  return U64.from_bytes_le(bytes: bytes).swap_bytes()
 
 # ============================================================================
 # Utility Methods
@@ -557,15 +592,12 @@ routine U64.is_even() -> Bool
 routine U64.is_odd() -> Bool
   return not me.is_even()
 
-### Wraps this value in a `ByteSize` so it can be used as a storage measurement.
-### :returns: A `ByteSize` representing `me` bytes.
-routine U64.bytes() -> ByteSize
-  return ByteSize(me)
-
 # ============================================================================
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U64.$represent() -> Text
   if me == 0u64
     return "0"
@@ -577,6 +609,8 @@ routine U64.$represent() -> Text
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: steal digits)
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U64.$diagnose() -> Text
   return "U64(" + me.$represent() + ")"
 

@@ -149,11 +149,13 @@ public partial class Parser
                 TokenType.S32Literal,
                 TokenType.S64Literal,
                 TokenType.S128Literal,
+                TokenType.S256Literal,
                 TokenType.U8Literal,
                 TokenType.U16Literal,
                 TokenType.U32Literal,
                 TokenType.U64Literal,
                 TokenType.U128Literal,
+                TokenType.U256Literal,
                 TokenType.AddressLiteral))
         {
             return Advance()

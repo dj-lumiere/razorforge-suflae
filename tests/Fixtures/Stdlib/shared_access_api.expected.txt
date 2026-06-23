@@ -1,0 +1,3 @@
+inspect value: 10
+after bump: 15
+DONE

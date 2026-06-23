@@ -862,7 +862,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>RC wrapper base names that require copy/release on var binding.</summary>
     private static readonly HashSet<string> RcWrapperBaseNames =
-        ["Retained", "Tracked"];
+        ["Retained", "Tracked", "Shared", "Watched"];
 
     /// <summary>
     /// Emits retain calls for all RC wrapper fields in a record.
@@ -979,6 +979,8 @@ public partial class LlvmCodeGenerator
     {
         "Retained" => "retain",
         "Tracked" => "track",
+        "Shared" => "share",
+        "Watched" => "watch",
         _ => null
     };
 

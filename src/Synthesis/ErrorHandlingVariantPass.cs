@@ -675,7 +675,10 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             RoutineInfo? variant = FindVariant(original: callee, prefix: prefix);
             if (variant == null) return false;
 
-            CallExpression newCall = call with { ResolvedRoutine = variant };
+            // The passthrough value IS the variant's carrier (e.g. Maybe[S64]); record that type so
+            // downstream (teardown return-spill, codegen) sizes slots from the carrier, not the
+            // original unwrapped payload (S64) — a mismatch otherwise yields `store i64 %maybeVal`.
+            CallExpression newCall = call with { ResolvedRoutine = variant, ResolvedType = variant.ReturnType };
             newCall = newCall.Callee switch
             {
                 IdentifierExpression idCallee => newCall with { Callee = idCallee with { Name = variant.Name } },
@@ -699,7 +702,8 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 .ToList();
             var newCall = new CallExpression(Callee: member, Arguments: args, Location: creator.Location)
             {
-                ResolvedRoutine = variant
+                ResolvedRoutine = variant,
+                ResolvedType = variant.ReturnType
             };
             rewritten = newCall;
             return true;

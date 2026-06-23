@@ -34,7 +34,9 @@ public partial class LlvmCodeGenerator
 
         int savedLength = _functionDefinitions.Length;
         int savedTempCounter = _tempCounter;
-        EmitLine(sb: _functionDefinitions, line: $"define {returnType} @{funcName}({parameters}) {{");
+        string defineHeader = $"define {returnType} @{funcName}({parameters}) {{";
+        _generatedRoutineDefHeaders[key: funcName] = defineHeader;
+        EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();
         try
@@ -48,6 +50,7 @@ public partial class LlvmCodeGenerator
             _functionDefinitions.Length = savedLength;
             _tempCounter = savedTempCounter;
             _generatedRoutineDefs.Remove(item: funcName);
+            _generatedRoutineDefHeaders.Remove(key: funcName);
             throw;
         }
         EmitLine(sb: _functionDefinitions, line: "}");

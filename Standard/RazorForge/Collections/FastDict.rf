@@ -543,6 +543,7 @@ routine FastDict[K, V].$diagnose() -> Text
 ### :returns: `true` if both have the same count and every key-value pair is equal.
 @readonly
 routine FastDict[K, V].$eq(other: Referring[FastDict[K, V]]) -> Bool
+needs V obeys Equatable
   if me.count != other.count
     return false
   var i = 0u64

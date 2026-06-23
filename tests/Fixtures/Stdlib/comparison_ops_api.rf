@@ -5,6 +5,9 @@ import IO/Console
 record Score obeys Comparable
   value: S64
 
+routine Score.$eq(you: Score) -> Bool
+  return me.value == you.value
+
 # Score auto-derives Equatable/Hashable; we expose $cmp manually so $lt/$le/$gt/$ge
 # can be derived from it.
 routine Score.$cmp(you: Score) -> ComparisonSign

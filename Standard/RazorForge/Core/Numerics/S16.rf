@@ -6,7 +6,7 @@ module Core
 ### `S16` is used for audio samples (PCM 16-bit), compact numeric data,
 ### and other values that fit in 16 bits with a sign.
 @llvm("i16")
-record S16 obeys SignedIntegral, Ordered, ConstCompatible
+record S16 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for S16 limits
@@ -99,6 +99,24 @@ routine S16.$create!(from: U128) -> S16
   if from > 32767_u128
     throw IntegerOverflowError()
   return int_truncate[U128, S16](from)
+
+### Converts an `S256` to `S16`, throwing if outside −32768..32767.
+### :param from: The `S256` value to convert.
+### :returns: The lower 16 bits reinterpreted as an `S16`.
+### :throws: {IntegerOverflowError} if `from` is outside −32768..32767.
+routine S16.$create!(from: S256) -> S16
+  if not (-32768_s256 <= from <= 32767_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, S16](from)
+
+### Converts a `U256` to `S16`, throwing if the value exceeds 32767.
+### :param from: The `U256` value to convert.
+### :returns: The lower 16 bits reinterpreted as an `S16`.
+### :throws: {IntegerOverflowError} if `from > 32767`.
+routine S16.$create!(from: U256) -> S16
+  if from > 32767_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, S16](from)
 
 ### Converts an `F16` to `S16` by first converting to `S32`, then truncating.
 ### :param from: The `F16` value to convert.
@@ -201,11 +219,11 @@ routine S16.$mul!(you: S16) -> S16
     throw IntegerOverflowError()
   return result.item0
 
-### Returns `me // you` (floor division), throwing on errors.
-### Floor division rounds toward negative infinity (unlike truncating division).
+### Returns `me // you` (euclidean division), throwing on errors.
+### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `$mod!`.
 ### The special case `S16_MIN // -1` would overflow and throws.
 ### :param you: The divisor.
-### :returns: The floor quotient `me // you`.
+### :returns: The euclidean quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S16_MIN` and `you == -1`.
 routine S16.$floordiv!(you: S16) -> S16
@@ -221,9 +239,9 @@ routine S16.$floordiv!(you: S16) -> S16
     return quotient + 1_s16
   return quotient
 
-### Returns `me % you` (floor modulo), where the result sign matches `you`.
+### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
 ### :param you: The divisor.
-### :returns: The floor modulo — result has the same sign as `you`.
+### :returns: The euclidean remainder — always non-negative.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S16.$mod!(you: S16) -> S16
   if you == 0
@@ -235,10 +253,13 @@ routine S16.$mod!(you: S16) -> S16
     return remainder - you
   return remainder
 
-### Returns `-me` (arithmetic negation), with wrapping behavior on `S16_MIN`.
-### :returns: The negated value. `-S16_MIN` wraps to `S16_MIN` (−32768).
-routine S16.$neg() -> S16
-  return sub[S16](a: 0, b: me)
+### Returns `-me` (arithmetic negation), throwing on overflow.
+### :returns: The negated value.
+### :throws: {IntegerOverflowError} when `me` is `S16_MIN` (its negation is not representable).
+routine S16.$neg!() -> S16
+  if me == -32768_s16
+    throw IntegerOverflowError()
+  return sub[S16](a: 0_s16, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -284,9 +305,9 @@ dangerous routine S16.$sub_unchecked(you: S16) -> S16
 dangerous routine S16.$mul_unchecked(you: S16) -> S16
   return signed_mul_exact[S16](a: me, b: you)
 
-### Returns `me // you` (floor division) with undefined behavior if `you == 0` or overflow.
+### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
-### :returns: The floor quotient, assuming `you != 0` and no overflow.
+### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
 dangerous routine S16.$floordiv_unchecked(you: S16) -> S16
   var quotient = signed_div[S16](a: me, b: you)
   var remainder = signed_rem[S16](a: me, b: you)
@@ -296,9 +317,9 @@ dangerous routine S16.$floordiv_unchecked(you: S16) -> S16
     return quotient + 1_s16
   return quotient
 
-### Returns `me % you` (floor modulo) with undefined behavior if `you == 0`.
+### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
-### :returns: The floor modulo, assuming `you != 0`.
+### :returns: The euclidean remainder, assuming `you != 0`.
 dangerous routine S16.$mod_unchecked(you: S16) -> S16
   var remainder = signed_rem[S16](a: me, b: you)
   if remainder < 0_s16
@@ -341,13 +362,10 @@ routine S16.$mul_clamp(you: S16) -> S16
 ### Returns `me ** exp` and a flag indicating whether the result overflowed.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S16.pow_with_overflow!(exp: S16) -> (S16, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S16 = 1
   var base: S16 = me
   var e: U32 = U32(exp)
@@ -368,8 +386,7 @@ routine S16.pow_with_overflow!(exp: S16) -> (S16, Bool)
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result is outside −32768..32767.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S16.$pow!(exp: S16) -> S16
   var result = me.pow_with_overflow!(exp)
   if result.item1
@@ -379,13 +396,10 @@ routine S16.$pow!(exp: S16) -> S16
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result modulo 65536 (signed wrap).
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S16.$pow_wrap!(exp: S16) -> S16
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0_s16
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S16 = 1
   var base: S16 = me
   var e: U32 = U32(exp)
@@ -400,13 +414,10 @@ routine S16.$pow_wrap!(exp: S16) -> S16
 ### Returns `me ** exp`, clamped to `S16_MAX` or `S16_MIN` on overflow.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result, or `32767` / `−32768` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S16.$pow_clamp!(exp: S16) -> S16
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S16 = 1
   var base: S16 = me
   var e: U32 = U32(exp)
@@ -569,6 +580,30 @@ routine S16.reverse_bits() -> S16
 routine S16.swap_bytes() -> S16
   return byte_swap[S16](me)
 
+### Returns this value rotated left by `bits` positions.
+routine S16.rotate_left(bits: U32) -> S16
+  return reinterpret_bits[U16, S16](reinterpret_bits[S16, U16](me).rotate_left(bits: bits))
+
+### Returns this value rotated right by `bits` positions.
+routine S16.rotate_right(bits: U32) -> S16
+  return reinterpret_bits[U16, S16](reinterpret_bits[S16, U16](me).rotate_right(bits: bits))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine S16.to_bytes_le() -> Array[Byte, 2]
+  return reinterpret_bits[S16, U16](me).to_bytes_le()
+
+### Returns the raw byte representation of this value in big-endian order.
+routine S16.to_bytes_be() -> Array[Byte, 2]
+  return reinterpret_bits[S16, U16](me).to_bytes_be()
+
+### Builds an `S16` from its little-endian raw byte representation.
+common routine S16.from_bytes_le(bytes: Array[Byte, 2]) -> S16
+  return reinterpret_bits[U16, S16](U16.from_bytes_le(bytes: bytes))
+
+### Builds an `S16` from its big-endian raw byte representation.
+common routine S16.from_bytes_be(bytes: Array[Byte, 2]) -> S16
+  return reinterpret_bits[U16, S16](U16.from_bytes_be(bytes: bytes))
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -599,6 +634,12 @@ routine S16.is_even() -> Bool
 routine S16.is_odd() -> Bool
   return not me.is_even()
 
+### Returns true if this value is an exact power of two.
+### Negative values always return `false`.
+### :returns: `true` if `me > 0 and (me & (me - 1)) == 0`.
+routine S16.is_power_of_two() -> Bool
+  return me > 0_s16 and (me & (me -% 1_s16)) == 0_s16
+
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
 routine S16.signum() -> S16
@@ -611,6 +652,8 @@ routine S16.signum() -> S16
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine S16.$represent() -> Text
   if me == 0s16
     return "0"
@@ -621,6 +664,8 @@ routine S16.$represent() -> Text
   # yields |me| (works correctly even for S16.MIN, whose absolute value overflows S16).
   return "-" + (0u16 -% reinterpret_bits[S16, U16](me)).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine S16.$diagnose() -> Text
   return "S16(" + me.$represent() + ")"
 

@@ -899,16 +899,50 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Checks if a type supports a specific binary operator by looking up the operator method.
     /// </summary>
+    /// <summary>
+    /// Unwraps a transparent borrow protocol (<c>Referring[T]</c> / <c>Controlling[T]</c>) to its
+    /// referent <c>T</c>; returns the type unchanged otherwise. Used so comparison operands that are
+    /// borrows are treated as their referent (the operator auto-dispatches <c>$refer</c>/<c>$control</c>).
+    /// </summary>
+    private static TypeSymbol UnwrapBorrowProtocol(TypeSymbol type)
+    {
+        if (type.Category == TypeCategory.Protocol &&
+            GetBaseTypeName(typeName: type.Name) is "Referring" or "Controlling" &&
+            type.TypeArguments is { Count: > 0 } args)
+        {
+            return args[index: 0];
+        }
+
+        return type;
+    }
+
     private bool SupportsOperator(TypeSymbol type, BinaryOperator op)
     {
-        string? methodName = op.GetMethodName();
+        // Check the BASE wired method, not the derived one: `!=`/`==` are both backed by `$eq`
+        // ($ne is auto-derived from $eq), and all ordering operators are backed by `$cmp`
+        // ($lt/$le/$gt/$ge are auto-derived). Protocols (Equatable/Comparable) declare only the
+        // base method, so checking the derived name would spuriously fail for constrained generics
+        // (e.g. `me[i] != other[i]` inside `List[T].$eq needs T obeys Equatable`).
+        string? methodName = op switch
+        {
+            BinaryOperator.Equal or BinaryOperator.NotEqual => "$eq",
+            BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
+                or BinaryOperator.GreaterEqual or BinaryOperator.ThreeWayComparator => "$cmp",
+            _ => op.GetMethodName()
+        };
         if (methodName == null)
         {
             return false;
         }
 
-        // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].$eq)
-        if (_registry.LookupMethod(type: type, methodName: methodName) != null)
+        // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].$eq).
+        // A resolution whose owner is a ProtocolTypeInfo is the ABSTRACT protocol declaration
+        // (RF protocols have no default implementations) — for a CONCRETE receiver it would link
+        // to nothing (e.g. `record Cat` with no `$eq` resolving `==` to `Equatable.$eq`). Only a
+        // concrete implementation counts as support here; generic-parameter receivers get their
+        // constraint-based support from the dedicated branch below.
+        RoutineInfo? resolved = _registry.LookupMethod(type: type, methodName: methodName);
+        if (resolved != null && resolved.OwnerType is not ProtocolTypeInfo)
             return true;
 
         // Phase D: transparent wrappers (T, etc.) forward operator wired methods
@@ -1070,6 +1104,13 @@ public sealed partial class SemanticVerifier
     private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op,
         SourceLocation location)
     {
+        // A `Referring[T]` / `Controlling[T]` operand is a borrow that transparently forwards to its
+        // referent: comparing it auto-dispatches `$refer()` / `$control()` to the inner `T`. Compare
+        // against that referent so e.g. `me[i] == value` (with `value: Referring[T]`) type-checks as
+        // `T == T` and resolves operator support on `T`.
+        left = UnwrapBorrowProtocol(type: left);
+        right = UnwrapBorrowProtocol(type: right);
+
         // Variants cannot use equality or ordering operators (only 'is' and 'isnot')
         if (left.Category == TypeCategory.Variant || right.Category == TypeCategory.Variant)
         {
@@ -1110,11 +1151,14 @@ public sealed partial class SemanticVerifier
                 location: location);
         }
 
-        // For ordering/equality operators in chained comparisons, verify the type supports them
-        // Note: For single comparisons, these are desugared to method calls in the parser.
-        // This validation only runs for chained comparisons (a < b < c) where operators are NOT desugared.
+        // For overloadable ordering/equality operators, verify the type actually implements the
+        // backing wired method ($eq for ==/!=, $cmp for </<=/>/>=). These are desugared to method
+        // calls by OperatorLoweringPass (after SA), so without this check an unsupported operator
+        // would slip past SA and surface as an undefined-symbol LINKERR at codegen — e.g. a record
+        // with no $eq whose `==` resolves to the abstract `Equatable.$eq`. A LINKERR on SA-passing
+        // code is a compiler bug; catch it here with a clean diagnostic.
         if (op is not (BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
-            or BinaryOperator.GreaterEqual or BinaryOperator.Equal))
+            or BinaryOperator.GreaterEqual or BinaryOperator.Equal or BinaryOperator.NotEqual))
         {
             return;
         }

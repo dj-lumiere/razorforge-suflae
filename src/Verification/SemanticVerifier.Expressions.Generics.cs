@@ -297,8 +297,13 @@ public sealed partial class SemanticVerifier
         // The object is an identifier that resolves to a routine, not a type or variable
         if (generic.Object is IdentifierExpression funcId)
         {
+            // LookupGenericOverload covers generic free routines, which register only in the
+            // generic-overload index — without it an explicit `gen_id[T](...)` call to a generic
+            // routine in another module fails to resolve (concrete free routines resolve fine).
             RoutineInfo? routine = _registry.LookupRoutine(fullName: funcId.Name) ??
-                                   _registry.LookupRoutineByName(name: funcId.Name);
+                                   _registry.LookupRoutineByName(name: funcId.Name) ??
+                                   _registry.LookupGenericOverload(name: funcId.Name,
+                                       preferredArity: generic.Arguments.Count);
             if (routine != null)
             {
                 // Capture the generic-def shape BEFORE swapping to the resolution: explicit

@@ -38,26 +38,26 @@ public static class DiagnosticRenderer
     /// </summary>
     private const int MaxRenderedPerBatch = 20;
 
-    /// <summary>Renders a semantic error (header + excerpt) to standard output.</summary>
+    /// <summary>Renders a semantic error (header + excerpt) to standard error.</summary>
     public static void Print(SemanticError error, string indent = "  ") =>
-        PrintDiagnostic(writer: Console.Out, severity: "error", severityColor: ConsoleColor.Red,
+        PrintDiagnostic(writer: Console.Error, severity: "error", severityColor: ConsoleColor.Red,
             header: error.FormattedMessage, location: error.Location, indent: indent);
 
-    /// <summary>Renders a semantic warning (header + excerpt) to standard output.</summary>
+    /// <summary>Renders a semantic warning (header + excerpt) to standard error.</summary>
     public static void Print(SemanticWarning warning, string indent = "  ") =>
-        PrintDiagnostic(writer: Console.Out, severity: "warning",
+        PrintDiagnostic(writer: Console.Error, severity: "warning",
             severityColor: ConsoleColor.Yellow,
             header: warning.FormattedMessage, location: warning.Location, indent: indent);
 
     /// <summary>
     /// Renders a grammar (lexer/parser) error with excerpt + caret. The exception's message
     /// is already in standard <c>error[RF-G###]: file:line:col: …</c> form.
-    /// Pass <paramref name="writer"/> = <see cref="Console.Error"/> for the parser's
-    /// mid-parse recovery reports; defaults to standard output.
+    /// Pass <paramref name="writer"/> to override the stream; defaults to standard error
+    /// (diagnostics go to stderr, leaving stdout for program / requested output).
     /// </summary>
     public static void Print(GrammarException ex, TextWriter? writer = null, string indent = "")
     {
-        PrintDiagnostic(writer: writer ?? Console.Out, severity: "error",
+        PrintDiagnostic(writer: writer ?? Console.Error, severity: "error",
             severityColor: ConsoleColor.Red,
             header: ex.Message,
             location: new SourceLocation(FileName: ex.FileName, Line: ex.Line, Column: ex.Column,
@@ -71,7 +71,7 @@ public static class DiagnosticRenderer
         string location = string.IsNullOrEmpty(value: warning.FileName)
             ? $"{warning.Line}:{warning.Column}"
             : $"{warning.FileName}:{warning.Line}:{warning.Column}";
-        PrintDiagnostic(writer: Console.Out, severity: "warning",
+        PrintDiagnostic(writer: Console.Error, severity: "warning",
             severityColor: ConsoleColor.Yellow,
             header: $"warning[{warning.WarningCode}]: {location}: {warning.Message}",
             location: new SourceLocation(FileName: warning.FileName, Line: warning.Line,
@@ -91,7 +91,7 @@ public static class DiagnosticRenderer
 
         if (errors.Count > shown)
         {
-            Console.WriteLine(
+            Console.Error.WriteLine(
                 value:
                 $"{indent}... and {errors.Count - shown} more errors not shown. Fix the first batch and rebuild.");
         }
@@ -109,7 +109,7 @@ public static class DiagnosticRenderer
 
         if (warnings.Count > shown)
         {
-            Console.WriteLine(
+            Console.Error.WriteLine(
                 value: $"{indent}... and {warnings.Count - shown} more warnings not shown.");
         }
     }

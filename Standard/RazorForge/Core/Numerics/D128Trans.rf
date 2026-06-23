@@ -1,0 +1,916 @@
+module Core
+
+# ============================================================================
+# D128Trans — decimal128 (Pmax=34) transcendentals + libm surface via the
+# binary256 engine (F256, 237-bit significand ~71 decimal digits). A D128
+# value widened to F256, run through the (already 34-digit-correct) F256
+# transcendental, and rounded back to 34 digits is correctly rounded: the F256
+# error lands near digit ~71, far below the 34-digit boundary.
+#
+# Mirrors DecimalTrans (which bridges Decimal<->F512) at half the width. The
+# special funcs erf/erfc/tgamma/lgamma use the GENERIC W=256 engine cores — the
+# octuple-tuned coefficient tables (gamma_coef, erf CF N=120) already exceed 34
+# digits, so no dedicated wide tables are needed here.
+# ============================================================================
+
+# ============================================================================
+# Radix adapters (dec <-> bin256)
+# ============================================================================
+
+### Builds the engine value of a U128 integer with the given sign (exact; coeff
+### <= 113 bits fits the 237-bit significand). value = mant * 2^(exp-253), MSB at
+### bit 254 (W-2). Width constants mirror uf512_from_u256 with W=256.
+routine uf256_from_u128(c: U128, sign: Bool) -> ?UnpackedFloat[U256, U512, 256]
+  if int_eq[U128](a: c, b: 0_u128)
+    return UnpackedFloat[U256, U512, 256].zero(sign: sign)
+  var cw = zero_extend[U128, U256](c)
+  var x = sub[S64](a: 256_s64, b: int_truncate[U256, S64](leading_zeros[U256](cw)))
+  var mant = shift_left[U256](value: cw, bits: uf_amt[U256](sub[S64](a: 255_s64, b: x)))
+  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: x, b: 2_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+
+### Rounds the engine value (assumed a positive ~integer) to a U256, round-half-even.
+### shift = 253 - exp (positive in the ~10^40 range).
+routine uf256_to_u256_round(u: UnpackedFloat[U256, U512, 256]) -> U256
+  var shift = sub[S64](a: 253_s64, b: u.exp)
+  if signed_le[S64](a: shift, b: 0_s64)
+    return shift_left[U256](value: u.mant, bits: uf_amt[U256](sub[S64](a: 0_s64, b: shift)))
+  if signed_ge[S64](a: shift, b: 256_s64)
+    return zero_extend[U64, U256](0_u64)
+  var q = shift_right_unsigned[U256](u.mant, uf_amt[U256](shift))
+  var lost = bit_and[U256](a: u.mant, b: uf_lowmask[U256](shift))
+  var half = shift_left[U256](value: 1, bits: uf_amt[U256](sub[S64](a: shift, b: 1_s64)))
+  if unsigned_gt[U256](a: lost, b: half)
+    q = add[U256](a: q, b: 1)
+  elseif int_eq[U256](a: lost, b: half) and int_ne[U256](a: bit_and[U256](a: q, b: 1), b: 0)
+    q = add[U256](a: q, b: 1)
+  return q
+
+### 10^e as an F256 via binary exponentiation of 10.0 (faithful ~few ULP; ample
+### for 34-digit D128). No table — F256 covers the full D128 exponent range.
+routine f256_pow10(e: S64) -> F256
+  var neg = signed_lt[S64](a: e, b: 0_s64)
+  var n = if neg then sub[S64](a: 0_s64, b: e) else e
+  var result = UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a()
+  var base = UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64).to_f256a()
+  while signed_gt[S64](a: n, b: 0_s64)
+    if int_ne[S64](a: bit_and[S64](a: n, b: 1_s64), b: 0_s64)
+      result = result * base
+    base = base * base
+    n = shift_right_unsigned[S64](n, 1_u32)
+  if neg
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a() / result
+  return result
+
+### dec -> bin: decimal parts (sign, coeff, exp10) as an F256 (coeff exact, scaled by
+### 10^exp). Takes raw parts so the binary parsers (F128/F64) can convert the FULL scanned
+### coefficient directly and round once, instead of double-rounding through 34-digit D128.
+### The coeff may carry up to 38 digits (<= 126 bits); the 237-bit significand holds it exactly.
+routine d128parts_to_f256(p: D128Parts) -> F256
+  var s = if p.sign then 1_u64 else 0_u64
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return F256.from_bits(bits: f256a_inf(sign: s))
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return F256.from_bits(bits: f256a_qnan())
+  if int_eq[U128](a: p.coeff, b: 0_u128)
+    return F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](s), bits: uf_amt[U256](255_s64)))
+  return uf256_from_u128(c: p.coeff, sign: p.sign).to_f256a() * f256_pow10(e: p.exp)
+
+### dec -> bin: D128 value as an F256 (coeff exact, scaled by 10^exp).
+routine d128_to_f256(x: D128) -> F256
+  return d128parts_to_f256(p: x.decode())
+
+### bin -> dec: F256 value as a D128, correctly rounded to <=34 digits.
+routine f256_to_d128(x: F256) -> D128
+  if x.is_nan()
+    return D128.quiet_nan()
+  if x.is_infinite()
+    return D128.infinity(sign: x.is_negative())
+  if x.is_zero()
+    return d128_of_parts(p: D128Parts(sign: x.is_negative(), special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+  var sign = x.is_negative()
+  var e_bin = x.to_uf().ilogb()
+  # decexp ~ floor(e_bin * log10(2)); log10(2) ~ 315653 / 2^20. +-1 absorbed by decfinB.
+  var decexp = signed_div[S64](a: mul[S64](a: e_bin, b: 315653_s64), b: 1048576_s64)
+  var q = sub[S64](a: 40_s64, b: decexp)
+  var scaled = x.abs() * f256_pow10(e: q)
+  var coeff = uf256_to_u256_round(u: scaled.to_uf())
+  # Normalize the result cohort: pref = qmax (6111) makes decfinB strip ALL trailing zeros
+  # after rounding to 34 digits, so a float->decimal result is stored reduced (e.g. exp2(10)
+  # is 1024×10^0, not 1024×10^-30) rather than padded to a fixed ~34-digit fraction.
+  return d128_of_parts(p: decfinB(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: 6111_s64))
+
+# ============================================================================
+# Transcendentals — decode to F256, run the F256 core, round back to D128.
+# F256 already carries the full method surface (exp/log/trig/hyperbolic/...).
+# ============================================================================
+
+# Transcendentals delegate to the internal F256 engine (propagating). The bare `op()` is CHECKED
+# (crashes if the result is non-finite — domain/overflow); `op_unchecked()` propagates inf/NaN.
+# Finite-preserving ops (cbrt, sin/cos/tan/atan/atan2, tanh, asinh) need no split.
+
+### e^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
+routine D128.exp!() -> D128
+  var r = me.exp_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw e^me via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.exp_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).exp())
+
+### e^me - 1 (accurate near 0). Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
+routine D128.expm1!() -> D128
+  var r = me.expm1_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw e^me - 1 via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.expm1_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).expm1())
+
+### 2^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
+routine D128.exp2!() -> D128
+  var r = me.exp2_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw 2^me via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.exp2_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).exp2())
+
+### 10^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
+routine D128.exp10!() -> D128
+  var r = me.exp10_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw 10^me via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.exp10_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).exp10())
+
+### Natural log ln(me). Crashes: NumericDomainError on NaN/domain (me<0), NumericOverflowError on
+### ±inf (e.g. log(0) = -inf).
+routine D128.log!() -> D128
+  var r = me.log_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw ln(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.log_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).log())
+
+### ln(1 + me) (accurate near 0). Crashes: NumericDomainError on NaN/domain, NumericOverflowError
+### on ±inf.
+routine D128.log1p!() -> D128
+  var r = me.log1p_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw ln(1 + me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.log1p_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).log1p())
+
+### Base-2 log log2(me). Crashes: NumericDomainError on NaN/domain, NumericOverflowError on ±inf.
+routine D128.log2!() -> D128
+  var r = me.log2_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw log2(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.log2_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).log2())
+
+### Base-10 log log10(me). Crashes: NumericDomainError on NaN/domain, NumericOverflowError on ±inf.
+routine D128.log10!() -> D128
+  var r = me.log10_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw log10(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.log10_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).log10())
+
+### Square root sqrt(me). Crashes: NumericDomainError on NaN/domain (me<0), NumericOverflowError
+### on ±inf.
+routine D128.sqrt!() -> D128
+  var r = me.sqrt_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw sqrt(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.sqrt_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).sqrt())
+
+### Cube root cbrt(me). Finite-preserving (defined for all reals), so never non-finite for finite
+### input; never crashes.
+routine D128.cbrt() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).cbrt())
+
+### Raw me^you via the F256 core; may return ±inf or NaN; never crashes.
+### :param you: The exponent.
+routine D128.pow_unchecked(you: D128) -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).$pow(you: d128_to_f256(x: you)))
+
+### sqrt(me² + you²) without intermediate overflow/underflow. Crashes: NumericDomainError on NaN,
+### NumericOverflowError on ±inf.
+### :param you: The other leg.
+routine D128.hypot!(you: D128) -> D128
+  var r = me.hypot_unchecked(you: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw sqrt(me² + you²) via the F256 core; may return ±inf or NaN; never crashes.
+### :param you: The other leg.
+routine D128.hypot_unchecked(you: D128) -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).hypot(you: d128_to_f256(x: you)))
+
+### Fused multiply-add me*b + c with a single F256 rounding. Crashes: NumericDomainError on NaN,
+### NumericOverflowError on ±inf.
+### :param b: The multiplier.
+### :param c: The addend.
+routine D128.fma!(b: D128, c: D128) -> D128
+  var r = me.fma_unchecked(b: b, c: c)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw me*b + c via the F256 core; may return ±inf or NaN; never crashes.
+### :param b: The multiplier.
+### :param c: The addend.
+routine D128.fma_unchecked(b: D128, c: D128) -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).fma(b: d128_to_f256(x: b), c: d128_to_f256(x: c)))
+
+### Sine of me (radians). Finite-preserving for finite input; never crashes.
+routine D128.sin() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).sin())
+
+### Cosine of me (radians). Finite-preserving for finite input; never crashes.
+routine D128.cos() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).cos())
+
+### Tangent of me (radians). Finite-preserving for finite input; never crashes.
+routine D128.tan() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).tan())
+
+### Arcsine asin(me) in radians. Crashes: NumericDomainError on NaN/domain (|me|>1),
+### NumericOverflowError on ±inf.
+routine D128.asin!() -> D128
+  var r = me.asin_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw asin(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.asin_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).asin())
+
+### Arccosine acos(me) in radians. Crashes: NumericDomainError on NaN/domain (|me|>1),
+### NumericOverflowError on ±inf.
+routine D128.acos!() -> D128
+  var r = me.acos_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw acos(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.acos_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).acos())
+
+### Arctangent atan(me) in radians. Finite-preserving for finite input; never crashes.
+routine D128.atan() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).atan())
+
+### Two-argument arctangent atan2(me, x): angle of the point (x, me). Finite-preserving; never
+### crashes.
+### :param x: The x-coordinate (denominator).
+routine D128.atan2(x: D128) -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).atan2(x: d128_to_f256(x: x)))
+
+### Hyperbolic sine sinh(me). Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
+routine D128.sinh!() -> D128
+  var r = me.sinh_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw sinh(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.sinh_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).sinh())
+
+### Hyperbolic cosine cosh(me). Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
+routine D128.cosh!() -> D128
+  var r = me.cosh_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw cosh(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.cosh_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).cosh())
+
+### Hyperbolic tangent tanh(me). Finite-preserving for finite input; never crashes.
+routine D128.tanh() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).tanh())
+
+### Inverse hyperbolic sine asinh(me). Finite-preserving for finite input; never crashes.
+routine D128.asinh() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).asinh())
+
+### Inverse hyperbolic cosine acosh(me). Crashes: NumericDomainError on NaN/domain (me<1),
+### NumericOverflowError on ±inf.
+routine D128.acosh!() -> D128
+  var r = me.acosh_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw acosh(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.acosh_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).acosh())
+
+### Inverse hyperbolic tangent atanh(me). Crashes: NumericDomainError on NaN/domain (|me|>1),
+### NumericOverflowError on ±inf (e.g. atanh(±1) = ±inf).
+routine D128.atanh!() -> D128
+  var r = me.atanh_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw atanh(me) via the F256 core; may return ±inf or NaN; never crashes.
+routine D128.atanh_unchecked() -> D128
+  return f256_to_d128(x: d128_to_f256(x: me).atanh())
+
+# ============================================================================
+# Special functions via generic W=256 engine cores (octuple-tuned tables give
+# ~49-71 digits >> D128's 34). Mirrors F128.erf/tgamma at half the bias width.
+# ============================================================================
+
+### erf via the N=120 continued-fraction cores (erf_cf/erfc_cf) at W=256.
+### erf(-inf) = -1, erf(+inf) = 1. Threshold ±3.1 picks the erf vs 1-erfc continued fraction.
+routine f256_erf(x: F256) -> F256
+  if x.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return f256_intval(n: -1_s64)
+    return f256_intval(n: 1_s64)
+  var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
+  var a = x.to_uf()
+  if a.lt(you: thr.neg())
+    return UnpackedFloat[U256, U512, 256].from_s64(src: -1_s64).sub(you: a.erfc_cf()).to_f256a()
+  if a.lt(you: thr)
+    return a.erf_cf().to_f256a()
+  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf()).to_f256a()
+
+### Complementary error function erfc(x) = 1 - erf(x) via the N=120 CF cores at W=256.
+### erfc(-inf) = 2, erfc(+inf) = 0. Threshold ±3.1 selects erf vs erfc continued fraction.
+routine f256_erfc(x: F256) -> F256
+  if x.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return f256_intval(n: 2_s64)
+    return f256_intval(n: 0_s64)
+  var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
+  var a = x.to_uf()
+  if a.lt(you: thr.neg())
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 2_s64).add(you: a.erfc_cf()).to_f256a()
+  if a.lt(you: thr)
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf()).to_f256a()
+  return a.erfc_cf().to_f256a()
+
+### gamma via the generic Stirling lgamma_core (octuple gamma_coef ~49 digits >> 34).
+routine f256_tgamma(x: F256) -> F256
+  if x.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return F256.from_bits(bits: f256a_qnan())
+    return x
+  if x.is_zero()
+    var sg = 0_u64
+    if x.is_negative()
+      sg = 1_u64
+    return F256.from_bits(bits: f256a_inf(sign: sg))
+  var zu = x.to_uf()
+  if x.is_negative() and zu.isint()
+    return F256.from_bits(bits: f256a_qnan())
+  var p = zu.lgamma_core()
+  # lgamma_core returns (sign, ln|gamma|); exponentiate to recover |gamma| then reapply sign.
+  var r = p.item1.exp(n: 20_s64)
+  if p.item0
+    r = r.neg()
+  return r.to_f256a()
+
+### Log-gamma ln|gamma(x)| via the generic Stirling lgamma_core. lgamma(0)=lgamma(±inf)=+inf, and
+### +inf at negative integers (poles). Returns the magnitude's log; the sign of gamma is dropped.
+routine f256_lgamma(x: F256) -> F256
+  if x.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if x.is_zero() or x.is_infinite()
+    return F256.from_bits(bits: f256a_inf(sign: 0_u64))
+  var zu = x.to_uf()
+  if x.is_negative() and zu.isint()
+    return F256.from_bits(bits: f256a_inf(sign: 0_u64))
+  var p = zu.lgamma_core()
+  return p.item1.to_f256a()
+
+### Error function erf(me), in [-1, 1]. Finite-preserving; never crashes.
+routine D128.erf() -> D128
+  return f256_to_d128(x: f256_erf(x: d128_to_f256(x: me)))
+
+### Complementary error function erfc(me) = 1 - erf(me), in [0, 2]. Finite-preserving; never
+### crashes.
+routine D128.erfc() -> D128
+  return f256_to_d128(x: f256_erfc(x: d128_to_f256(x: me)))
+
+### Gamma function. Checked: crashes if the result is non-finite (overflow or a pole at a
+### non-positive integer). Matches the tgamma!/tgamma_unchecked split on the other types.
+routine D128.tgamma!() -> D128
+  var r = me.tgamma_unchecked()
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw gamma(me) via the F256 special core; may return ±inf or NaN; never crashes.
+routine D128.tgamma_unchecked() -> D128
+  return f256_to_d128(x: f256_tgamma(x: d128_to_f256(x: me)))
+
+### Log-gamma ln|gamma(me)|. Finite for non-pole inputs; +inf at 0 and non-positive integers.
+### Never crashes.
+routine D128.lgamma() -> D128
+  return f256_to_d128(x: f256_lgamma(x: d128_to_f256(x: me)))
+
+# ============================================================================
+# libm manipulation / classification — decimal-native on D128Parts (value =
+# (-1)^sign * coeff * 10^exp). Mirrors the Decimal surface at Pmax=34.
+# fmod/remainder/remquo and binary-exponent ops omitted (scaleb = decimal ldexp).
+# ============================================================================
+
+### IEEE 754 signbit: the raw sign bit (true for negatives, -0, and -NaN). Never crashes.
+routine D128.signbit() -> Bool
+  return me.decode().sign
+
+### True if me is negative (sign bit set; includes -0 and -NaN).
+routine D128.is_negative() -> Bool
+  return me.decode().sign
+
+### True if me is strictly positive (not signed, not zero).
+routine D128.is_positive() -> Bool
+  var p = me.decode()
+  return not p.sign and int_eq[U64](a: p.special, b: 0_u64) and int_ne[U128](a: p.coeff, b: 0_u128)
+
+### True if me is a finite, nonzero subnormal: quantum exponent at the minimum (-6176)
+### with a coefficient below 10^33 (fewer than the full 34 significant digits).
+routine D128.is_subnormal() -> Bool
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64) or int_eq[U128](a: p.coeff, b: 0_u128)
+    return false
+  return int_eq[S64](a: p.exp, b: -6176_s64) and unsigned_lt[U128](a: p.coeff, b: int_truncate[U256, U128](pow10_tbl(k: 33_s64)))
+
+### Splits into integer and fractional parts (C modf); both carry me's sign.
+routine D128.modf() -> (D128, D128)
+  if me.is_nan()
+    return (me, me)
+  var p = me.decode()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return (me, d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))))
+  var ip = me.trunc()
+  return (ip, me - ip)
+
+### True if me is finite and nonzero (special=0, coeff!=0). Note: includes subnormals.
+routine D128.is_normal() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_ne[U128](a: p.coeff, b: 0_u128)
+
+### True if me is ±0 (finite with a zero coefficient).
+routine D128.is_zero() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U128](a: p.coeff, b: 0_u128)
+
+### C99 fpclassify: classifies me as SIGNALING_NAN, NAN, INFINITE, ZERO, SUBNORMAL, or NORMAL.
+routine D128.fpclassify() -> FpClass
+  var p = me.decode()
+  if int_eq[U64](a: p.special, b: 3_u64)
+    return SIGNALING_NAN
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return NAN
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return INFINITE
+  if int_eq[U128](a: p.coeff, b: 0_u128)
+    return ZERO
+  if me.is_subnormal()
+    return SUBNORMAL
+  return NORMAL
+
+### Absolute value |me| (clears the sign bit; preserves specials and the cohort). Never crashes.
+routine D128.abs() -> D128
+  var p = me.decode()
+  return d128_of_parts(p: D128Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
+
+# ============================================================================
+# IEEE 754 Tier 1 — total ordering predicates (shared decimal band helper)
+# ============================================================================
+
+### Signed total-order band for a decoded decimal class (sign + special). Ordered so that a
+### plain `<=` ranks cross-class operands per IEEE 754 totalOrder:
+### -qNaN < -sNaN < -inf < -finite < +finite < +inf < +sNaN < +qNaN.
+routine decimal_order_band(sign: Bool, special: U64) -> S64
+  var rank = when
+    int_eq[U64](a: special, b: 1_u64) => 1_s64
+    int_eq[U64](a: special, b: 3_u64) => 2_s64
+    int_eq[U64](a: special, b: 2_u64) => 3_s64
+    else => 0_s64
+  return if sign then sub[S64](a: 0_s64, b: add[S64](a: 1_s64, b: rank)) else add[S64](a: 1_s64, b: rank)
+
+### IEEE 754 totalOrder for decimals: a total order over all values including signed zeros,
+### cohorts (equal value with differing exponents), and NaNs. For finite operands of equal
+### value the smaller-exponent member precedes when positive (the reverse when negative).
+### :param you: The value to compare against.
+### :returns: Whether `me` precedes or equals `you` in the total order.
+routine D128.total_order(you: D128) -> Bool
+  var pa = me.decode()
+  var pb = you.decode()
+  if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+    return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
+  var c = me.$cmp(you: you)
+  if c isnot SAME
+    return c is ME_SMALL
+  if pa.sign != pb.sign
+    return pa.sign
+  if pa.sign
+    return signed_ge[S64](a: pa.exp, b: pb.exp)
+  return signed_le[S64](a: pa.exp, b: pb.exp)
+
+### IEEE 754 totalOrderMag for decimals: `total_order` applied to the magnitudes.
+### :param you: The value whose magnitude to compare against.
+### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
+routine D128.total_order_mag(you: D128) -> Bool
+  return me.abs().total_order(you: you.abs())
+
+### Negation -me (flips the sign bit; preserves specials and the cohort). Never crashes.
+routine D128.$neg() -> D128
+  var p = me.decode()
+  return d128_of_parts(p: D128Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
+
+### C99 copysign: me's magnitude with you's sign bit. Never crashes.
+### :param you: The value supplying the sign.
+routine D128.copysign(you: D128) -> D128
+  var p = me.decode()
+  return d128_of_parts(p: D128Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
+
+### Returns -1, 0, or +1 indicating the sign of `me`; NaN propagates; ±0 -> +0.
+routine D128.signum() -> D128
+  if me.is_nan()
+    return D128.quiet_nan()
+  if me.is_zero()
+    return d128_of_parts(p: D128Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u128))
+  return if me.decode().sign then D128(from: -1_s64) else D128(from: 1_s64)
+
+### Throws when `me` is non-finite (inf or NaN).
+@crash_only
+routine D128.finite!() -> D128
+  if not me.is_finite()
+    if me.is_nan()
+      throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+  return me
+
+### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
+routine D128.fmod(you: D128) -> D128
+  if me.is_nan() or you.is_nan()
+    return D128.quiet_nan()
+  if me.is_infinite() or you.is_zero()
+    return D128.quiet_nan()
+  if you.is_infinite()
+    return me
+  var n = (me / you).trunc()
+  return me - n * you
+
+### C99 fmax: the larger of me and you, treating NaN as missing (returns the non-NaN operand).
+### :param you: The value to compare against.
+routine D128.fmax(you: D128) -> D128
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if (me - you).decode().sign
+    return you
+  return me
+
+### C99 fmin: the smaller of me and you, treating NaN as missing (returns the non-NaN operand).
+### :param you: The value to compare against.
+routine D128.fmin(you: D128) -> D128
+  if me.is_nan()
+    return you
+  if you.is_nan()
+    return me
+  if (me - you).decode().sign
+    return me
+  return you
+
+### C99 fdim: the positive difference max(me - you, 0); NaN if either operand is NaN.
+### :param you: The value to subtract.
+routine D128.fdim(you: D128) -> D128
+  if me.is_nan() or you.is_nan()
+    return D128.quiet_nan()
+  var d = me - you
+  if d.decode().sign
+    return d128_of_parts(p: D128Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+  return d
+
+### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
+### :param n: The power-of-ten exponent to apply.
+### :returns: `me` scaled by `10^n`.
+routine D128.scaleb!(n: S64) -> D128
+  var r = me.scaleb_unchecked(n: n)
+  if r.is_finite() or not me.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `me * 10^n` with raw propagation (overflow -> ±infinity, underflow -> 0).
+### :param n: The power-of-ten exponent to apply.
+### :returns: `me` scaled by `10^n`.
+routine D128.scaleb_unchecked(n: S64) -> D128
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64) or int_eq[U128](a: p.coeff, b: 0_u128)
+    return me
+  var ne = add[S64](a: p.exp, b: n)
+  if signed_gt[S64](a: ne, b: 6111_s64)
+    return D128.infinity(sign: p.sign)
+  if signed_lt[S64](a: ne, b: -6176_s64)
+    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+  return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: ne, coeff: p.coeff))
+
+# ============================================================================
+# IEEE 754 Tier 2 — exponent extraction, selection, rounding
+# (decimal next_up/next_down deferred — cohort/ULP stepping not yet implemented)
+# ============================================================================
+
+### IEEE 754 logb: the base-10 exponent `e` with `10^e <= |me| < 10^(e+1)`, as a decimal integer
+### (logb(0)=-inf, logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
+### :returns: The radix-10 exponent of `me`.
+routine D128.logb() -> D128
+  var p = me.decode()
+  if int_eq[U64](a: p.special, b: 2_u64) or int_eq[U64](a: p.special, b: 3_u64)
+    return D128.quiet_nan()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return D128.infinity(sign: false)
+  if int_eq[U128](a: p.coeff, b: 0_u128)
+    return D128.infinity(sign: true)
+  return D128(from: add[S64](a: p.exp, b: sub[S64](a: digits10_u128(c: p.coeff), b: 1_s64)))
+
+### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, ignoring NaN.
+routine D128.min_num(you: D128) -> D128
+  return me.fmin(you: you)
+
+### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, ignoring NaN.
+routine D128.max_num(you: D128) -> D128
+  return me.fmax(you: you)
+
+### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, NaN if either is NaN.
+routine D128.minimum(you: D128) -> D128
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  var c = me.$cmp(you: you)
+  if c is ME_SMALL
+    return me
+  if c is ME_LARGE
+    return you
+  if me.is_zero()
+    return if me.signbit() then me else you
+  return me
+
+### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, NaN if either is NaN.
+routine D128.maximum(you: D128) -> D128
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  var c = me.$cmp(you: you)
+  if c is ME_LARGE
+    return me
+  if c is ME_SMALL
+    return you
+  if me.is_zero()
+    return if me.signbit() then you else me
+  return me
+
+### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero
+### (alias of `round`). Never crashes.
+### :returns: `me` rounded to an integral value with ties away from zero.
+routine D128.round_ties_away() -> D128
+  return me.round()
+
+# ============================================================================
+# IEEE 754 Tier 3 — decimal-specific (quantize, same_quantum, remainder)
+# ============================================================================
+
+### IEEE 754 sameQuantum: `true` when `me` and `other` have the same exponent (quantum), or are
+### both infinities, or both NaNs. Never crashes.
+### :param other: The value whose quantum to compare against.
+### :returns: Whether the two share a quantum.
+routine D128.same_quantum(other: D128) -> Bool
+  var pa = me.decode()
+  var pb = other.decode()
+  if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+    return unsigned_ge[U64](a: pa.special, b: 2_u64) and unsigned_ge[U64](a: pb.special, b: 2_u64)
+  if int_eq[U64](a: pa.special, b: 1_u64) or int_eq[U64](a: pb.special, b: 1_u64)
+    return int_eq[U64](a: pa.special, b: 1_u64) and int_eq[U64](a: pb.special, b: 1_u64)
+  return int_eq[S64](a: pa.exp, b: pb.exp)
+
+### IEEE 754 quantize: returns `me`'s value re-expressed with the exponent of `other` (rounding
+### half-even when digits are dropped). Returns NaN when the result needs more than 34 significand
+### digits, or for incompatible specials. The canonical money-formatting / fixed-scale operation.
+### :param other: The value supplying the target exponent.
+### :returns: `me` quantized to `other`'s exponent, or NaN if not representable.
+routine D128.quantize(other: D128) -> D128
+  var pa = me.decode()
+  var pb = other.decode()
+  if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+    return D128.quiet_nan()
+  var ainf = int_eq[U64](a: pa.special, b: 1_u64)
+  var binf = int_eq[U64](a: pb.special, b: 1_u64)
+  if ainf or binf
+    if ainf and binf
+      return me
+    return D128.quiet_nan()
+  var target = pb.exp
+  if int_eq[S64](a: pa.exp, b: target)
+    return me
+  if signed_gt[S64](a: pa.exp, b: target)
+    # Scale the coefficient UP by 10^(pa.exp - target); exact, but NaN if it needs > 34 digits.
+    var shift = sub[S64](a: pa.exp, b: target)
+    if int_ne[U128](a: pa.coeff, b: 0_u128) and signed_gt[S64](a: add[S64](a: digits10_u128(c: pa.coeff), b: shift), b: 34_s64)
+      return D128.quiet_nan()
+    var scaled = mul[U256](a: zero_extend[U128, U256](pa.coeff), b: pow10b(k: shift))
+    return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: int_truncate[U256, U128](scaled)))
+  # pa.exp < target: drop (target - pa.exp) digits with half-even rounding.
+  var drop = sub[S64](a: target, b: pa.exp)
+  if signed_gt[S64](a: drop, b: 34_s64)
+    return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: zero_extend[U64, U128](0_u64)))
+  var cw = zero_extend[U128, U256](pa.coeff)
+  var divp = pow10b(k: drop)
+  var q = div_pow10b(x: cw, k: drop)
+  var r = sub[U256](a: cw, b: mul[U256](a: q, b: divp))
+  var twice = mul[U256](a: r, b: zero_extend[U64, U256](2_u64))
+  if unsigned_gt[U256](a: twice, b: divp)
+    q = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  elseif int_eq[U256](a: twice, b: divp) and int_ne[U256](a: bit_and[U256](a: q, b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
+    q = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: int_truncate[U256, U128](q)))
+
+### IEEE 754 remainder: `me - other * n`, where `n` is the integer nearest `me / other` (ties to
+### even). Result satisfies `|r| <= |other| / 2`. Returns NaN if `me` is infinite or `other` is
+### zero; returns `me` if `other` is infinite. Never crashes.
+### :param other: The divisor.
+### :returns: The IEEE remainder of `me / other`.
+routine D128.remainder(other: D128) -> D128
+  if me.is_nan() or other.is_nan()
+    return D128.quiet_nan()
+  if me.is_infinite() or other.is_zero()
+    return D128.quiet_nan()
+  if other.is_infinite()
+    return me
+  var n = me.$truediv_unchecked(you: other).rint()
+  return me.$sub_unchecked(you: other.$mul_unchecked(you: n))
+
+### IEEE 754 normalize (the `reduce` operation): the value with trailing zeros stripped to the
+### simplest member of its cohort (e.g. `3.00` -> `3`, `1.50` -> `1.5`, `100` -> `1E+2`,
+### `0.00` -> `0`). Specials pass through unchanged. Never crashes. Arithmetic stays
+### cohort-preserving (IEEE); this is the explicit opt-in to the shortest representation.
+### :returns: `me` normalized to its simplest cohort member.
+routine D128.normalize() -> D128
+  var p = me.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    return me
+  if int_eq[U128](a: p.coeff, b: 0_u128)
+    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+  return d128_of_parts(p: decfinB(sign: p.sign, coeff: zero_extend[U128, U256](p.coeff), exp: p.exp, pref: 6111_s64))
+
+### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 round (half away), 4 rint (half even).
+routine d128_round_int(x: D128, mode: S64) -> D128
+  var p = x.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    return x
+  if int_eq[U128](a: p.coeff, b: 0_u128)
+    return x
+  if signed_ge[S64](a: p.exp, b: 0_s64)
+    return x
+  var ndrop = sub[S64](a: 0_s64, b: p.exp)
+  var cw = zero_extend[U128, U256](p.coeff)
+  var q = zero_extend[U64, U256](0_u64)
+  var rnz = true
+  var half = false
+  var gthalf = false
+  if signed_le[S64](a: ndrop, b: 34_s64)
+    var divp = pow10b(k: ndrop)
+    q = div_pow10b(x: cw, k: ndrop)
+    var r = sub[U256](a: cw, b: mul[U256](a: q, b: divp))
+    rnz = int_ne[U256](a: r, b: 0)
+    var twice = mul[U256](a: r, b: zero_extend[U64, U256](2_u64))
+    half = int_eq[U256](a: twice, b: divp)
+    gthalf = unsigned_gt[U256](a: twice, b: divp)
+  var inc = false
+  if int_eq[S64](a: mode, b: 1_s64)
+    inc = p.sign and rnz
+  elseif int_eq[S64](a: mode, b: 2_s64)
+    inc = (not p.sign) and rnz
+  elseif int_eq[S64](a: mode, b: 3_s64)
+    inc = gthalf or half
+  elseif int_eq[S64](a: mode, b: 4_s64)
+    if gthalf
+      inc = true
+    elseif half
+      inc = int_ne[U256](a: bit_and[U256](a: q, b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
+  var qq = q
+  if inc
+    qq = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: int_truncate[U256, U128](qq)))
+
+### Truncates toward zero to an integral value. Specials pass through. Never crashes.
+routine D128.trunc() -> D128
+  return d128_round_int(x: me, mode: 0_s64)
+
+### Rounds down toward -inf to an integral value. Specials pass through. Never crashes.
+routine D128.floor() -> D128
+  return d128_round_int(x: me, mode: 1_s64)
+
+### Rounds up toward +inf to an integral value. Specials pass through. Never crashes.
+routine D128.ceil() -> D128
+  return d128_round_int(x: me, mode: 2_s64)
+
+### Rounds to nearest integral value, ties away from zero. Specials pass through. Never crashes.
+routine D128.round() -> D128
+  return d128_round_int(x: me, mode: 3_s64)
+
+### Rounds to nearest integral value, ties to even (IEEE roundTiesToEven). Never crashes.
+routine D128.rint() -> D128
+  return d128_round_int(x: me, mode: 4_s64)
+
+### Fractional part me - trunc(me) (carries me's sign). NaN propagates; ±inf -> ±0. Never crashes.
+routine D128.frac() -> D128
+  if me.is_nan()
+    return me
+  var p = me.decode()
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+  return me - me.trunc()

@@ -1,0 +1,104 @@
+module Core
+
+### A lock-free atomic cell — the cross-thread data primitive of the concurrency tier.
+###
+### `Atomic[T]` is a single-field struct record whose method receiver is passed by
+### reference (v0.0.4 by-ref `me`), so `me.value.hijack()` yields the live address of
+### the cell's storage. The atomic intrinsics (`Core/LLVMIntrinsics.rf`) then drive
+### sequentially-consistent `load`/`store`/`atomicrmw`/`cmpxchg` on that address.
+###
+### **Sharing across threads.** Do not copy an `Atomic[T]` into a thread's argument
+### pack — that produces N independent cells. Share the *address* instead: a
+### `Hijacked[Atomic[T]]` is a plain `ptr` (a copyable value), so it marshals into a
+### `threaded routine` while still pointing every worker at the one cell. The cell
+### must outlive every worker — join them before its storage goes out of scope, or
+### put it behind a `Shared[Atomic[T]]` (atomic-RC heap ownership) when no single
+### frame is guaranteed to outlive the workers.
+###
+### **Valid `T`.** `T` must lower to a byte-or-larger hardware-atomic integer: the
+### types `S8`..`S64` and `U8`..`U64`. `Bool` is **not** supported — it lowers to
+### `i1`, and LLVM requires atomic accesses to be byte-sized; for an atomic flag use
+### `Atomic[U8]` (`0`/`1`). There is deliberately no 128-bit atomic: not all targets
+### provide a lock-free 128-bit RMW and we never emit a libcall lock. All methods are
+### integer operations and, like the rest of the `Hijacked` low-level surface, are
+### unchecked — instantiating `Atomic[T]` on a non-integer `T` is a misuse.
+###
+### :typeparam T: The cell's element type (an atomic-capable scalar).
+### :see: {Shared}, {Hijacked}, {ImmutableSharedController}
+record Atomic[T]
+needs T obeys AtomicType
+  ### The payload. Driven through SeqCst atomic intrinsics on its live address;
+  ### never read directly (see the by-ref `me` note above).
+  secret value: T
+
+### Creates an atomic cell holding `initial`.
+### :param initial: The starting value.
+### :returns: The new `Atomic[T]`.
+routine Atomic[T].$create(initial: T) -> Atomic[T]
+  return Atomic[T](value: initial)
+
+### Atomically reads the current value.
+### :returns: The value observed.
+@readonly
+routine Atomic[T].load() -> T
+  danger!
+    return atomic_load[T](ptr: me.value.hijack())
+
+### Atomically writes `desired`.
+### :param desired: The replacement value.
+routine Atomic[T].store(desired: T)
+  danger!
+    atomic_store[T](ptr: me.value.hijack(), value: desired)
+  return
+
+### Atomically writes `desired` and returns the value that was present before.
+### :param desired: The replacement value.
+### :returns: The previous value.
+routine Atomic[T].swap(desired: T) -> T
+  danger!
+    return atomic_exchange[T](ptr: me.value.hijack(), value: desired)
+
+### Atomically installs `desired` iff the cell currently equals `expected`.
+### :param expected: The value that must be present for the exchange to occur.
+### :param desired: The value to install on success.
+### :returns: `true` if the exchange happened.
+routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
+  danger!
+    var result = atomic_compare_and_exchange[T](ptr: me.value.hijack(),
+                                                expected: expected, desired: desired)
+    return result.item1
+
+### Atomically adds `delta`, returning the value before the addition. Integer `T` only.
+### :param delta: The increment to apply.
+### :returns: The previous value.
+routine Atomic[T].fetch_add(delta: T) -> T
+  danger!
+    return atomic_add[T](ptr: me.value.hijack(), value: delta)
+
+### Atomically subtracts `delta`, returning the value before the subtraction. Integer `T` only.
+### :param delta: The decrement to apply.
+### :returns: The previous value.
+routine Atomic[T].fetch_sub(delta: T) -> T
+  danger!
+    return atomic_sub[T](ptr: me.value.hijack(), value: delta)
+
+### Atomically ANDs the cell with `mask`, returning the value before the update. Integer `T` only.
+### :param mask: The bit mask to apply.
+### :returns: The previous value.
+routine Atomic[T].fetch_and(mask: T) -> T
+  danger!
+    return atomic_and[T](ptr: me.value.hijack(), value: mask)
+
+### Atomically ORs the cell with `mask`, returning the value before the update. Integer `T` only.
+### :param mask: The bit mask to apply.
+### :returns: The previous value.
+routine Atomic[T].fetch_or(mask: T) -> T
+  danger!
+    return atomic_or[T](ptr: me.value.hijack(), value: mask)
+
+### Atomically XORs the cell with `mask`, returning the value before the update. Integer `T` only.
+### :param mask: The bit mask to apply.
+### :returns: The previous value.
+routine Atomic[T].fetch_xor(mask: T) -> T
+  danger!
+    return atomic_xor[T](ptr: me.value.hijack(), value: mask)

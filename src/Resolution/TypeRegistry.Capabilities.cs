@@ -154,8 +154,14 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // Direct support: type has the method registered (explicit or synthesised).
-        if (LookupMethod(type: type, methodName: wiredName) != null) return true;
+        // Direct support: type has a CONCRETE impl of the method (explicit or synthesised).
+        // A lookup that resolves to the ABSTRACT protocol method (e.g. `Equatable.$eq` for a
+        // plain record that neither defines `$eq` nor obeys Equatable) does NOT count — it has no
+        // body, so reporting capability here would let callers emit a call to the unimplemented
+        // abstract symbol (LINKERR). Genuine conformance is established by the TypeObeysProtocol
+        // check below (concrete impl) or by obeying the protocol.
+        RoutineInfo? direct = LookupMethod(type: type, methodName: wiredName);
+        if (direct != null && direct.OwnerType is not ProtocolTypeInfo) return true;
 
         // Marker conformance: the type obeys the named protocol — we expect a body to
         // appear eventually (via auto-synthesis) or for it to be an abstract marker.

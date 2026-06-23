@@ -31,7 +31,7 @@ j32: 0+2j
 j64: 0+3j
 j64 short: 0+4j
 j128: 0+5j
-jn: 0+6.0j
+jn: 0+6j
 true: true
 false: false
 text: hello

@@ -1,0 +1,7 @@
+asinh(1): true
+asinh(2): true
+acosh(2): true
+asinh(0)==0: true
+acosh(1)==0: true
+asinh odd (-5): true
+acosh(cosh(t))==t for t=1..12: true

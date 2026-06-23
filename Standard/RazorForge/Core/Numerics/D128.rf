@@ -2,616 +2,1164 @@ module Core
 
 import Collections
 
-### Represents a 128-bit IEEE 754 decimal floating-point value.
-### `D128` is the highest-precision fixed-size decimal type in the stdlib and is
-### intended for calculations that need decimal semantics with substantially more
-### precision and range than `D64`.
-record D128 obeys Numeric, Ordered
-  ### Stores the low 64 bits of the runtime decimal128 encoding.
-  secret low: U64
-  ### Stores the high 64 bits of the runtime decimal128 encoding.
-  secret high: U64
+# CREDITS: the BID (Binary-Integer-Decimal) encoding, rounding, and exponent rules of
+# this decimal128 engine are a port and extension of Intel's Decimal Floating-Point
+# Math Library ("libbid", © Intel Corporation, BSD 3-Clause). See THIRD-PARTY-NOTICES.md.
 
-# Constants for D128
+# ============================================================================
+# D128 — software IEEE 754-2008 decimal128 in BID form, done competently.
+#
+# Storage is a custom BINARY layout (NOT a DPD declet container): bit127=sign,
+# bits126..113=biased exponent (14 bits, bias 6176), bits112..0=coefficient as a
+# plain U128 binary integer (< 10^34 < 2^113). Finite values only — the layout
+# does not reserve a combination field, so infinities/NaNs are not representable.
+# Arithmetic, decimal formatting, and the pow10 reciprocal tables all live in this
+# file — the engine is self-contained (only the wide-int primitives are imported).
+# Values are built natively via from_components / from_int64 (no decNumber/DPD).
+#
+# decimal128 limits: Pmax=34, stored exponent q in [-6176, 6111].
+# ============================================================================
+
+### A software decimal128 value in BID binary storage.
+@llvm("i128")
+record D128 obeys Numeric, Ordered
+  pass
+
+### The decoded fields of a decimal128: value = (-1)^sign * coeff * 10^exp.
+### `special`: 0 finite, 1 infinity, 2 quiet NaN, 3 signaling NaN. Specials are
+### encoded with the IEEE combination prefix (11110 = Inf, 11111 = NaN), which the
+### finite range never reaches (biased exp <= 12287, top 2 bits never 11).
+record D128Parts
+  ### Sign bit.
+  sign: Bool
+  ### 0 finite, 1 inf, 2 qNaN, 3 sNaN.
+  special: U64
+  ### Unbiased exponent (finite only).
+  exp: S64
+  ### Integer significand 0..10^34-1 (finite only).
+  coeff: U128
+
+### Reinterprets this value as its raw decimal128 bit pattern.
+routine D128.to_bits() -> U128
+  return reinterpret_bits[D128, U128](me)
+
+### Builds a value directly from a raw decimal128 bit pattern.
+common routine D128.from_bits(bits: U128) -> D128
+  return reinterpret_bits[U128, D128](bits)
+
+### Builds a value from its low/high 64-bit words (matching Core.D128 layout).
+common routine D128.from_words(low: U64, high: U64) -> D128
+  var bits = bit_or[U128](a: zero_extend[U64, U128](low), b: shift_left[U128](value: zero_extend[U64, U128](high), bits: uf_amt[U128](64_s64)))
+  return D128.from_bits(bits: bits)
+
+### BINARY decode — sign / specials (combination prefix) / 14-bit biased exponent /
+### 113-bit coefficient.
+routine D128.decode() -> D128Parts
+  var bits = me.to_bits()
+  # bit127 = sign.
+  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: 1, bits: uf_amt[U128](127_s64))), b: 0)
+  # Combination prefix = top 5 bits (126..122): 11110 (0x1E) = Inf, 11111 (0x1F) = NaN.
+  var top5 = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, uf_amt[U128](122_s64)), b: zero_extend[U64, U128](0x1F_u64)))
+  if int_eq[U64](a: top5, b: 0x1E_u64)
+    return D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))
+  if int_eq[U64](a: top5, b: 0x1F_u64)
+    # NaN: bit121 is the signaling flag (1 = sNaN -> special 3, else qNaN -> 2).
+    var sp = 2_u64
+    if int_ne[U128](a: bit_and[U128](a: shift_right_unsigned[U128](bits, uf_amt[U128](121_s64)), b: zero_extend[U64, U128](1_u64)), b: 0)
+      sp = 3_u64
+    return D128Parts(sign: sign, special: sp, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))
+  # Finite: bits 126..113 = 14-bit biased exponent; bits 112..0 = 113-bit coefficient.
+  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, uf_amt[U128](113_s64)), b: zero_extend[U64, U128](0x3FFF_u64)))
+  var coeff = bit_and[U128](a: bits, b: sub[U128](a: shift_left[U128](value: 1, bits: uf_amt[U128](113_s64)), b: 1))
+  # Unbias by 6176 to recover the true base-10 exponent.
+  return D128Parts(sign: sign, special: 0_u64, exp: sub[S64](a: reinterpret_bits[U64, S64](biased), b: 6176_s64), coeff: coeff)
+
+### BINARY encode — pack sign / specials / exponent / coefficient.
+routine d128_of_parts(p: D128Parts) -> D128
+  # Sign goes to bit127.
+  var sbit = shift_left[U128](value: zero_extend[U64, U128](if p.sign then 1_u64 else 0_u64), bits: uf_amt[U128](127_s64))
+  if int_ne[U64](a: p.special, b: 0_u64)
+    # Combination prefix 0x1E (Inf) or 0x1F (NaN) into bits 126..122; bit121 set for sNaN.
+    var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+    var b = bit_or[U128](a: sbit, b: shift_left[U128](value: zero_extend[U64, U128](top5), bits: uf_amt[U128](122_s64)))
+    if int_eq[U64](a: p.special, b: 3_u64)
+      b = bit_or[U128](a: b, b: shift_left[U128](value: 1, bits: uf_amt[U128](121_s64)))
+    return D128.from_bits(bits: b)
+  # Finite: rebias the exponent (+6176), mask to 14 bits at bits 126..113, OR in the coefficient.
+  var biased = add[U64](a: reinterpret_bits[S64, U64](p.exp), b: 6176_u64)
+  var ebits = shift_left[U128](value: zero_extend[U64, U128](bit_and[U64](a: biased, b: 0x3FFF_u64)), bits: uf_amt[U128](113_s64))
+  return D128.from_bits(bits: bit_or[U128](a: bit_or[U128](a: sbit, b: ebits), b: p.coeff))
+
+### Infinity with the given sign.
+common routine D128.infinity(sign: Bool) -> D128
+  return d128_of_parts(p: D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+
+### A quiet NaN.
+common routine D128.quiet_nan() -> D128
+  return d128_of_parts(p: D128Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+
+### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+common routine D128.signaling_nan() -> D128
+  return d128_of_parts(p: D128Parts(sign: false, special: 3_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64)))
+
+### True when finite (neither inf nor NaN).
+routine D128.is_finite() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 0_u64)
+
+### True when infinite.
+routine D128.is_infinite() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 1_u64)
+
+### True when NaN (quiet or signaling).
+routine D128.is_nan() -> Bool
+  return unsigned_ge[U64](a: me.decode().special, b: 2_u64)
+
+### True when this is a SIGNALING NaN (special field == 3).
+routine D128.is_signaling() -> Bool
+  return int_eq[U64](a: me.decode().special, b: 3_u64)
+
+### True when this is a finite zero (±0).
+routine D128.is_zero() -> Bool
+  var p = me.decode()
+  return int_eq[U64](a: p.special, b: 0_u64) and int_eq[U128](a: p.coeff, b: zero_extend[U64, U128](0_u64))
+
+### Builds a finite D128 from a signed coefficient and a base-10 exponent:
+### value = (-1)^sign * coeff * 10^exp. The native constructor — no decNumber/DPD.
+common routine D128.from_components(sign: Bool, coeff: U128, exp: S64) -> D128
+  return d128_of_parts(p: D128Parts(sign: sign, special: 0_u64, exp: exp, coeff: coeff))
+
+### Builds a D128 from a 64-bit signed integer (exponent 0).
+common routine D128.from_int64(value: S64) -> D128
+  var neg = signed_lt[S64](a: value, b: 0_s64)
+  var mag = if neg then sub[S64](a: 0_s64, b: value) else value
+  return D128.from_components(sign: neg, coeff: zero_extend[U64, U128](reinterpret_bits[S64, U64](mag)), exp: 0_s64)
+
+### Truncating integer magnitude (toward zero) of a finite decimal as a U128. Throws when
+### the integer part overflows U128. The coefficient carries <= 34 digits, so a positive
+### exponent past 38 always overflows and a negative exponent past -38 truncates to zero.
+routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
+  if int_eq[U128](a: coeff, b: 0)
+    return 0_u128
+  if signed_ge[S64](a: exp, b: 0_s64)
+    if signed_ge[S64](a: exp, b: 39_s64)
+      throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
+    var prod = mul[U256](a: zero_extend[U128, U256](coeff), b: pow10_tbl(k: exp))
+    if int_ne[U256](a: shift_right_unsigned[U256](value: prod, bits: uf_amt[U256](128_s64)), b: 0)
+      throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
+    return int_truncate[U256, U128](prod)
+  var d = sub[S64](a: 0_s64, b: exp)
+  if signed_ge[S64](a: d, b: 39_s64)
+    return 0_u128
+  return div_pow10_u128(x: coeff, k: d)
+
+### Truncates toward zero to an unsigned 128-bit integer. Throws on a non-finite value, a
+### negative value, or an integer part beyond U128.
+routine U128.$create!(from: D128) -> U128
+  var p = from.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    throw NumericDomainError(description: "non-finite decimal is not an integer")
+  if p.sign and int_ne[U128](a: p.coeff, b: 0)
+    throw NumericOverflowError(description: "negative decimal to unsigned integer")
+  return d128_int_magnitude!(coeff: p.coeff, exp: p.exp)
+
+### Truncates toward zero to a signed 128-bit integer. Throws on a non-finite value or an
+### integer part outside [-2^127, 2^127-1].
+routine S128.$create!(from: D128) -> S128
+  var p = from.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    throw NumericDomainError(description: "non-finite decimal is not an integer")
+  var mag = d128_int_magnitude!(coeff: p.coeff, exp: p.exp)
+  var lim = shift_left[U128](value: 1, bits: uf_amt[U128](127_s64))
+  if p.sign
+    if unsigned_gt[U128](a: mag, b: lim)
+      throw NumericOverflowError(description: "decimal out of range for target integer")
+    if int_eq[U128](a: mag, b: lim)
+      return reinterpret_bits[U128, S128](lim)
+    return sub[S128](a: 0_s128, b: reinterpret_bits[U128, S128](mag))
+  if unsigned_ge[U128](a: mag, b: lim)
+    throw NumericOverflowError(description: "decimal out of range for target integer")
+  return reinterpret_bits[U128, S128](mag)
+
+### Truncating integer magnitude (toward zero) of a finite decimal as a U256. Throws when
+### the integer part overflows U256. Coefficient carries <= 34 digits so exp >= 78 always
+### overflows; negative exp past -38 truncates to zero (no 34-digit value survives /10^39).
+routine d128_int_magnitude_u256!(coeff: U128, exp: S64) -> U256
+  if int_eq[U128](a: coeff, b: 0)
+    return 0_u256
+  if signed_ge[S64](a: exp, b: 0_s64)
+    if signed_ge[S64](a: exp, b: 78_s64)
+      throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
+    var prod = mul[U512](a: zero_extend[U128, U512](coeff), b: zero_extend[U256, U512](pow10_tbl(k: exp)))
+    if int_ne[U512](a: shift_right_unsigned[U512](value: prod, bits: uf_amt[U512](256_s64)), b: 0)
+      throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
+    return int_truncate[U512, U256](prod)
+  var d = sub[S64](a: 0_s64, b: exp)
+  if signed_ge[S64](a: d, b: 39_s64)
+    return 0_u256
+  return zero_extend[U128, U256](div_pow10_u128(x: coeff, k: d))
+
+### Truncates toward zero to an unsigned 256-bit integer. Throws on a non-finite value, a
+### negative value, or an integer part beyond U256.
+routine U256.$create!(from: D128) -> U256
+  var p = from.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    throw NumericDomainError(description: "non-finite decimal is not an integer")
+  if p.sign and int_ne[U128](a: p.coeff, b: 0)
+    throw NumericOverflowError(description: "negative decimal to unsigned integer")
+  return d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
+
+### Truncates toward zero to a signed 256-bit integer. Throws on a non-finite value or an
+### integer part outside [-2^255, 2^255-1].
+routine S256.$create!(from: D128) -> S256
+  var p = from.decode()
+  if int_ne[U64](a: p.special, b: 0_u64)
+    throw NumericDomainError(description: "non-finite decimal is not an integer")
+  var mag = d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
+  var lim = shift_left[U256](value: 1, bits: uf_amt[U256](255_s64))
+  if p.sign
+    if unsigned_gt[U256](a: mag, b: lim)
+      throw NumericOverflowError(description: "decimal out of range for target integer")
+    if int_eq[U256](a: mag, b: lim)
+      return reinterpret_bits[U256, S256](lim)
+    return sub[S256](a: 0_s256, b: reinterpret_bits[U256, S256](mag))
+  if unsigned_ge[U256](a: mag, b: lim)
+    throw NumericOverflowError(description: "decimal out of range for target integer")
+  return reinterpret_bits[U256, S256](mag)
+
+# ============================================================================
+# Arithmetic core (formerly DecMathB) — U256 working width, clz digit count,
+# reciprocal pow10 reduction.
+# ============================================================================
+### 10^k as a U256 (k small). Multiplies are cheap — only DIVISIONS were the
+### naive-BID cost, so a pow10 multiply loop is fine.
+routine pow10b(k: S64) -> U256
+  return pow10_tbl(k: k)
+
+### Number of decimal digits in `c` (0 has 1 digit). Divides by 10^18 chunks so a
+### 34..72-digit coefficient costs ~4 wide divisions instead of ~72, then finishes
+### the last <=18 digits in native U64 division.
+routine digits10b(c: U256) -> S64
+  if int_eq[U256](a: c, b: 0)
+    return 1_s64
+  # clz-based: digits ≈ ((nbits * 1233) >> 12) + 1, one ±1 compare vs pow10_tbl.
+  # No wide multiply — leading_zeros is one instruction, the compare one U256 cmp.
+  var nbits = sub[S64](a: 256_s64, b: int_truncate[U256, S64](leading_zeros[U256](c)))
+  var d = add[S64](a: signed_div[S64](a: mul[S64](a: nbits, b: 1233_s64), b: 4096_s64), b: 1_s64)
+  if signed_ge[S64](a: d, b: 1_s64) and unsigned_lt[U256](a: c, b: pow10_tbl(k: sub[S64](a: d, b: 1_s64)))
+    return sub[S64](a: d, b: 1_s64)
+  if signed_le[S64](a: d, b: 76_s64) and unsigned_ge[U256](a: c, b: pow10_tbl(k: d))
+    return add[S64](a: d, b: 1_s64)
+  return d
+
+### Widens a U128 coefficient to the U256 working width.
+routine cwb(c: U128) -> U256
+  return zero_extend[U128, U256](c)
+
+### Number of decimal digits in a U128 value (0 has 1 digit), via 10^18 chunks.
+routine digits10_u128(c: U128) -> S64
+  if int_eq[U128](a: c, b: 0_u128)
+    return 1_s64
+  # clz-based digit count (see digits10b). pow10 at U128 = truncated pow10_tbl.
+  var nbits = sub[S64](a: 128_s64, b: int_truncate[U128, S64](leading_zeros[U128](c)))
+  var d = add[S64](a: signed_div[S64](a: mul[S64](a: nbits, b: 1233_s64), b: 4096_s64), b: 1_s64)
+  if signed_ge[S64](a: d, b: 1_s64) and unsigned_lt[U128](a: c, b: int_truncate[U256, U128](pow10_tbl(k: sub[S64](a: d, b: 1_s64))))
+    return sub[S64](a: d, b: 1_s64)
+  if signed_le[S64](a: d, b: 38_s64) and unsigned_ge[U128](a: c, b: int_truncate[U256, U128](pow10_tbl(k: d)))
+    return add[S64](a: d, b: 1_s64)
+  return d
+
+### Rounds a wide working value to <=34 significant digits (round-half-even) and
+### applies the preferred exponent `pref`, returning a finalized finite D128Parts.
+routine decfinB(sign: Bool, coeff: U256, exp: S64, pref: S64) -> D128Parts
+  var ten = zero_extend[U64, U256](10_u64)
+  var two = zero_extend[U64, U256](2_u64)
+  var one = zero_extend[U64, U256](1_u64)
+  if int_eq[U256](a: coeff, b: 0)
+    var ez = pref
+    if signed_lt[S64](a: ez, b: -6176_s64)
+      ez = -6176_s64
+    if signed_gt[S64](a: ez, b: 6111_s64)
+      ez = 6111_s64
+    return D128Parts(sign: sign, special: 0_u64, exp: ez, coeff: zero_extend[U64, U128](0_u64))
+  var c = coeff
+  var e = exp
+  var nd = digits10b(c: c)
+  if signed_gt[S64](a: nd, b: 34_s64)
+    var drop = sub[S64](a: nd, b: 34_s64)
+    var div = pow10b(k: drop)
+    var q = div_pow10b(x: c, k: drop)
+    var r = sub[U256](a: c, b: mul[U256](a: q, b: div))
+    var twice = mul[U256](a: r, b: two)
+    if unsigned_gt[U256](a: twice, b: div)
+      q = add[U256](a: q, b: one)
+    elseif int_eq[U256](a: twice, b: div) and int_ne[U256](a: bit_and[U256](a: q, b: one), b: 0)
+      q = add[U256](a: q, b: one)
+    c = q
+    e = add[S64](a: e, b: drop)
+    # Rounding can only carry 34 digits up to 35 (e.g. 9…9 -> 10…0), i.e. c >= 10^34.
+    # One U256 compare instead of a second full digits10b clz+compare pass.
+    if unsigned_ge[U256](a: c, b: pow10_tbl(k: 34_s64))
+      c = div_pow10b(x: c, k: 1_s64)
+      e = add[S64](a: e, b: 1_s64)
+  # c is now <= 34 digits, so it fits U128. Do strip / pad / digit-count in U128
+  # (mulhi via U256, ~half the U256 path's U512) instead of widening every op.
+  var cu = int_truncate[U256, U128](c)
+  var ten128 = 10_u128
+  # Strip trailing zeros toward `pref`, batched: binary-search the largest tz (capped at
+  # both `pref-e` and 34) with cu divisible by 10^tz, then strip all tz at once. cu is
+  # divisible by 10^k iff (cu // 10^k) * 10^k == cu.
+  var room = sub[S64](a: pref, b: e)
+  if signed_gt[S64](a: room, b: 0_s64) and int_ne[U128](a: cu, b: 0_u128)
+    var cap = if signed_lt[S64](a: room, b: 34_s64) then room else 34_s64
+    # Decimal trailing zeros tz <= binary trailing zeros (each factor 10 carries a
+    # factor 2). cttz is one hardware instruction; capping the search at it means the
+    # probe loop's div_pow10/mul never fire for candidates > t2 — odd coeffs (t2=0,
+    # ~half of cases) strip with zero wide multiplies.
+    var t2 = int_truncate[U128, S64](trailing_zeros[U128](cu))
+    if signed_lt[S64](a: t2, b: cap)
+      cap = t2
+    var tz = 0_s64
+    if signed_gt[S64](a: cap, b: 0_s64)
+      # Fast path for exact-round results (a/a = 1.0…0, terminating quotients): if 10^cap
+      # divides cu outright, tz = cap in ONE wide check instead of log2(cap) probes. This
+      # is the common case for division, the strip's dominant cost.
+      var ctop = div_pow10_u128(x: cu, k: cap)
+      if int_eq[U128](a: cu, b: mul[U128](a: ctop, b: int_truncate[U256, U128](pow10_tbl(k: cap))))
+        tz = cap
+      else
+        var hi = sub[S64](a: cap, b: 1_s64)
+        var probe = 32_s64
+        while signed_ge[S64](a: probe, b: 1_s64)
+          var cand = add[S64](a: tz, b: probe)
+          if signed_le[S64](a: cand, b: hi)
+            var c10 = div_pow10_u128(x: cu, k: cand)
+            if int_eq[U128](a: cu, b: mul[U128](a: c10, b: int_truncate[U256, U128](pow10_tbl(k: cand))))
+              tz = cand
+          probe = signed_div[S64](a: probe, b: 2_s64)
+    if signed_gt[S64](a: tz, b: 0_s64)
+      cu = div_pow10_u128(x: cu, k: tz)
+      e = add[S64](a: e, b: tz)
+  # Pad toward `pref` while cu stays under 34 digits. "digits < 34" is exactly
+  # "cu < 10^33" — one U128 compare per step instead of a digits10_u128 clz pass.
+  var ten33 = int_truncate[U256, U128](pow10_tbl(k: 33_s64))
+  while signed_gt[S64](a: e, b: pref) and unsigned_lt[U128](a: cu, b: ten33)
+    cu = mul[U128](a: cu, b: ten128)
+    e = sub[S64](a: e, b: 1_s64)
+  # IEEE decimal128 range clamp. The integer-significand exponent q must lie in
+  # [qmin, qmax] = [Emin-(p-1), Emax-(p-1)] = [-6176, 6111] (p=34, Emax=6144, Emin=-6143).
+  # Above qmax: pad the coefficient with zeros to pull q down (the canonical max-q cohort);
+  # if it won't fit in 34 digits the magnitude exceeds Nmax -> overflow to infinity.
+  if signed_gt[S64](a: e, b: 6111_s64)
+    var spread = sub[S64](a: e, b: 6111_s64)
+    var fits = false
+    if signed_le[S64](a: spread, b: 33_s64)
+      var lim = int_truncate[U256, U128](pow10_tbl(k: sub[S64](a: 34_s64, b: spread)))
+      if unsigned_lt[U128](a: cu, b: lim)
+        fits = true
+    if not fits
+      return D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))
+    cu = int_truncate[U256, U128](mul[U256](a: zero_extend[U128, U256](cu), b: pow10b(k: spread)))
+    e = 6111_s64
+  # Below qmin: round the coefficient right (round-half-even) to land q at qmin. The
+  # coefficient shrinks below 10^33 (gradual underflow / subnormal); if it rounds to 0
+  # the result is a signed zero.
+  if signed_lt[S64](a: e, b: -6176_s64)
+    var drop = sub[S64](a: -6176_s64, b: e)
+    if signed_ge[S64](a: drop, b: 35_s64)
+      cu = 0_u128
+    else
+      var divp = pow10b(k: drop)
+      var cw = zero_extend[U128, U256](cu)
+      var q = div_pow10b(x: cw, k: drop)
+      var r = sub[U256](a: cw, b: mul[U256](a: q, b: divp))
+      var twice = mul[U256](a: r, b: two)
+      if unsigned_gt[U256](a: twice, b: divp)
+        q = add[U256](a: q, b: one)
+      elseif int_eq[U256](a: twice, b: divp) and int_ne[U256](a: bit_and[U256](a: q, b: one), b: 0)
+        q = add[U256](a: q, b: one)
+      cu = int_truncate[U256, U128](q)
+    e = -6176_s64
+  return D128Parts(sign: sign, special: 0_u64, exp: e, coeff: cu)
+
+# ============================================================================
+# Special-value (inf / NaN) handling for arithmetic
+# ============================================================================
+
+### Decoded parts for a quiet NaN / a signed infinity / a finite zero. Width-neutral
+### (coeff fits U128) so decimal32/64/128 all share the special-arithmetic rules below.
+routine nan_parts() -> D128Parts
+  return D128Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))
+
+### Decoded parts for a signed infinity (special=1, zero coefficient).
+routine inf_parts(sign: Bool) -> D128Parts
+  return D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))
+
+### Decoded parts for a signed finite zero (special=0, zero coefficient).
+routine zero_parts(sign: Bool) -> D128Parts
+  return D128Parts(sign: sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))
+
+### True if either operand is NaN (special >= 2).
+routine has_nan(pa: D128Parts, pb: D128Parts) -> Bool
+  return unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
+
+### add/sub special rule: NaN propagates; inf + inf(same sign) = inf; inf + -inf = NaN.
+routine add_special_parts(pa: D128Parts, pb: D128Parts) -> D128Parts
+  if has_nan(pa: pa, pb: pb)
+    return nan_parts()
+  if int_eq[U64](a: pa.special, b: 1_u64) and int_eq[U64](a: pb.special, b: 1_u64)
+    if pa.sign == pb.sign
+      return inf_parts(sign: pa.sign)
+    return nan_parts()
+  if int_eq[U64](a: pa.special, b: 1_u64)
+    return inf_parts(sign: pa.sign)
+  return inf_parts(sign: pb.sign)
+
+### mul special rule: NaN propagates; inf * 0 = NaN; else inf (sign = xor).
+routine mul_special_parts(pa: D128Parts, pb: D128Parts) -> D128Parts
+  if has_nan(pa: pa, pb: pb)
+    return nan_parts()
+  var azero = int_eq[U64](a: pa.special, b: 0_u64) and int_eq[U128](a: pa.coeff, b: 0)
+  var bzero = int_eq[U64](a: pb.special, b: 0_u64) and int_eq[U128](a: pb.coeff, b: 0)
+  if azero or bzero
+    return nan_parts()
+  return inf_parts(sign: pa.sign != pb.sign)
+
+### div special rule: NaN propagates; inf/inf = NaN; inf/finite = inf; finite/inf = 0.
+routine div_special_parts(pa: D128Parts, pb: D128Parts) -> D128Parts
+  if has_nan(pa: pa, pb: pb)
+    return nan_parts()
+  var sign = pa.sign != pb.sign
+  if int_eq[U64](a: pa.special, b: 1_u64)
+    if int_eq[U64](a: pb.special, b: 1_u64)
+      return nan_parts()
+    return inf_parts(sign: sign)
+  return zero_parts(sign: sign)
+
+# ============================================================================
+# Multiply
+# ============================================================================
+
+### Decimal multiply: coeff product, exponents add, preferred exponent = Ea+Eb.
+routine d128_mul(a: D128, b: D128) -> D128
+  var pa = a.decode()
+  var pb = b.decode()
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return d128_of_parts(p: mul_special_parts(pa: pa, pb: pb))
+  var sign = pa.sign != pb.sign
+  var prod = mul[U256](a: cwb(c: pa.coeff), b: cwb(c: pb.coeff))
+  var p = decfinB(sign: sign, coeff: prod, exp: add[S64](a: pa.exp, b: pb.exp), pref: add[S64](a: pa.exp, b: pb.exp))
+  return d128_of_parts(p: p)
+
+# ============================================================================
+# Add / subtract (alignment guard tightened 80 -> 40 to fit U256)
+# ============================================================================
+
+### Decimal add following decNumber: align to the smaller exponent (capped at 40
+### guard digits, beyond which the lesser operand folds to a sticky unit), combine
+### by sign, preferred exponent = min(Ea, Eb).
+routine d128_add(a: D128, b: D128) -> D128
+  var pa = a.decode()
+  var pb = b.decode()
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return d128_of_parts(p: add_special_parts(pa: pa, pb: pb))
+  var eh = pa.exp
+  var ch = cwb(c: pa.coeff)
+  var sh = pa.sign
+  var el = pb.exp
+  var cl = cwb(c: pb.coeff)
+  var sl = pb.sign
+  if signed_lt[S64](a: pa.exp, b: pb.exp)
+    eh = pb.exp
+    ch = cwb(c: pb.coeff)
+    sh = pb.sign
+    el = pa.exp
+    cl = cwb(c: pa.coeff)
+    sl = pa.sign
+  var pref = el
+  var shift = sub[S64](a: eh, b: el)
+  var ew = el
+  if signed_le[S64](a: shift, b: 40_s64)
+    ch = mul[U256](a: ch, b: pow10b(k: shift))
+  else
+    ch = mul[U256](a: ch, b: pow10b(k: 40_s64))
+    ew = sub[S64](a: eh, b: 40_s64)
+    # keep the low operand's in-window digits (down to ew); sticky only below.
+    var drop = sub[S64](a: shift, b: 40_s64)
+    if signed_ge[S64](a: drop, b: 34_s64)
+      cl = if int_ne[U256](a: cl, b: 0) then zero_extend[U64, U256](1_u64) else zero_extend[U64, U256](0_u64)
+    else
+      var qcl = div_pow10b(x: cl, k: drop)
+      var remcl = sub[U256](a: cl, b: mul[U256](a: qcl, b: pow10b(k: drop)))
+      cl = if int_ne[U256](a: remcl, b: 0) then bit_or[U256](a: qcl, b: zero_extend[U64, U256](1_u64)) else qcl
+  var rc = zero_extend[U64, U256](0_u64)
+  var rsign = sh
+  if sh == sl
+    rc = add[U256](a: ch, b: cl)
+  elseif unsigned_ge[U256](a: ch, b: cl)
+    rc = sub[U256](a: ch, b: cl)
+  else
+    rc = sub[U256](a: cl, b: ch)
+    rsign = sl
+  if int_eq[U256](a: rc, b: 0)
+    # IEEE 754: a zero SUM keeps the common sign when both operands share it
+    # ((-0)+(-0) = -0); exact cancellation of opposite signs gives +0 (roundTiesToEven).
+    rsign = if sh == sl then sh else false
+  return d128_of_parts(p: decfinB(sign: rsign, coeff: rc, exp: ew, pref: pref))
+
+### Decimal subtract: a - b = a + (-b).
+routine d128_sub(a: D128, b: D128) -> D128
+  return d128_add(a: a, b: d128_neg(a: b))
+
+### Arithmetic negation (flip the sign bit).
+routine d128_neg(a: D128) -> D128
+  return D128.from_bits(bits: bit_xor[U128](a: a.to_bits(), b: shift_left[U128](value: 1, bits: uf_amt[U128](127_s64))))
+
+# ============================================================================
+# Divide (scale numerator to ~38 quotient digits, divide, sticky, round)
+# ============================================================================
+
+### Decimal divide following decNumber: scale the numerator until the quotient
+### carries ~38 digits (single hoisted pow10 multiply, not a per-iteration digit
+### count), divide, fold a nonzero remainder into a sticky low bit, then round to
+### 34 digits. Preferred exponent = Ea - Eb.
+routine d128_div(a: D128, b: D128) -> D128
+  var pa = a.decode()
+  var pb = b.decode()
+  if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
+    return d128_of_parts(p: div_special_parts(pa: pa, pb: pb))
+  var sign = pa.sign != pb.sign
+  var azero = int_eq[U128](a: pa.coeff, b: 0)
+  var bzero = int_eq[U128](a: pb.coeff, b: 0)
+  # x/0 = inf (x != 0); 0/0 = NaN.
+  if bzero
+    if azero
+      return D128.quiet_nan()
+    return D128.infinity(sign: sign)
+  var pref = sub[S64](a: pa.exp, b: pb.exp)
+  if azero
+    return d128_of_parts(p: decfinB(sign: sign, coeff: zero_extend[U64, U256](0_u64), exp: pref, pref: pref))
+  var num = cwb(c: pa.coeff)
+  var den = cwb(c: pb.coeff)
+  # +35: quotient lands at 35-36 digits = 34 result + 1 round digit; the sticky bit
+  # (set below from a nonzero remainder) carries everything beneath, so 1 guard digit
+  # suffices for correct round-half-even. Smaller num => narrower divide + less to strip
+  # in decfin than the old +38 (which computed ~3 needless extra quotient digits).
+  var target = add[S64](a: digits10b(c: den), b: 36_s64)
+  var shift = sub[S64](a: target, b: digits10b(c: num))
+  if signed_lt[S64](a: shift, b: 0_s64)
+    shift = 0_s64
+  num = mul[U256](a: num, b: pow10b(k: shift))
+  # register-resident U256/U128 divide (unrolled Knuth, no Array memory traffic),
+  # returns quotient + remainder-sticky in one pass.
+  var q = udiv256_by_u128_sticky(num: num, den: den)
+  var exp = sub[S64](a: sub[S64](a: pa.exp, b: pb.exp), b: shift)
+  return d128_of_parts(p: decfinB(sign: sign, coeff: q, exp: exp, pref: pref))
+
+# ============================================================================
+# Wired operators
+# ============================================================================
+
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
+# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+
+### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw
+### IEEE.
+routine D128.$add!(you: D128) -> D128
+  var r = d128_add(a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw
+### IEEE.
+routine D128.$sub!(you: D128) -> D128
+  var r = d128_sub(a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw
+### IEEE.
+routine D128.$mul!(you: D128) -> D128
+  var r = d128_mul(a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
+### overflow.
+### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+routine D128.$truediv!(you: D128) -> D128
+  var r = d128_div(a: me, b: you)
+  if r.is_finite()
+    return r
+  if you.is_zero() and not me.is_zero()
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D128.$add_unchecked(you: D128) -> D128
+  return d128_add(a: me, b: you)
+
+### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D128.$sub_unchecked(you: D128) -> D128
+  return d128_sub(a: me, b: you)
+
+### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine D128.$mul_unchecked(you: D128) -> D128
+  return d128_mul(a: me, b: you)
+
+### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+routine D128.$truediv_unchecked(you: D128) -> D128
+  return d128_div(a: me, b: you)
+
+### Decimal value equality. NaN is never equal to anything (including itself);
+### infinities are equal only with the same sign; finite values compare by value
+### (so different cohorts of the same number — e.g. 1.0 and 1.00 — are equal).
+routine D128.$eq(you: D128) -> Bool
+  if me.is_nan() or you.is_nan()
+    return false
+  if me.is_infinite() or you.is_infinite()
+    var pa = me.decode()
+    var pb = you.decode()
+    return int_eq[U64](a: pa.special, b: pb.special) and pa.sign == pb.sign
+  return int_eq[U128](a: d128_sub(a: me, b: you).decode().coeff, b: 0)
+
+### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
+### maps to `SAME` (matching the F128 engine convention). Compares finite values by the
+### sign of `me - you`; handles infinities explicitly.
+routine D128.$cmp(you: D128) -> ComparisonSign
+  if me.is_nan() or you.is_nan()
+    return SAME
+  if me.is_infinite() or you.is_infinite()
+    var pa = me.decode()
+    var pb = you.decode()
+    if int_eq[U64](a: pa.special, b: pb.special) and pa.sign == pb.sign
+      return SAME
+    if int_eq[U64](a: pa.special, b: 1_u64)
+      return if pa.sign then ME_SMALL else ME_LARGE
+    return if pb.sign then ME_LARGE else ME_SMALL
+  var d = d128_sub(a: me, b: you).decode()
+  if int_eq[U128](a: d.coeff, b: 0)
+    return SAME
+  return if d.sign then ME_SMALL else ME_LARGE
+
+### Returns `me` raised to the `you` power. Delegates to the transcendental `pow`;
+### follows IEEE semantics (overflow/domain errors yield inf/NaN, never throw), so the
+### wired `$pow!` is crashable and satisfies `Exponentiable`.
+routine D128.$pow!(you: D128) -> D128
+  var r = me.pow_unchecked(you: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+# ============================================================================
+# Decimal formatting (decNumber decToString rules) — operates on the binary
+# coefficient directly, so no DPD round-trip is needed.
+# ============================================================================
+
+### A run of `n` ASCII zeros.
+routine dec_zeros(n: S64) -> Text
+  var s = ""
+  var i = 0_s64
+  while signed_lt[S64](a: i, b: n)
+    s = s + "0"
+    i = add[S64](a: i, b: 1_s64)
+  return s
+
+### The coefficient digits for decimal powers `hi` down to `lo` (inclusive), MSD first.
+routine dec_digit_range(c: U128, hi: S64, lo: S64) -> Text
+  var s = ""
+  var i = hi
+  while signed_ge[S64](a: i, b: lo)
+    var p = int_truncate[U256, U128](pow10_tbl(k: i))
+    var d = int_truncate[U128, U64](unsigned_rem[U128](a: unsigned_div[U128](a: c, b: p), b: zero_extend[U64, U128](10_u64)))
+    s = s + f"{d}"
+    i = sub[S64](a: i, b: 1_s64)
+  return s
+
+### Decimal text of decoded parts (decNumber decToString: plain when exp<=0 and the
+### adjusted exponent >= -6, else scientific with an explicit-sign exponent).
+routine d128_represent(p: D128Parts) -> Text
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return if p.sign then "-inf" else "inf"
+  if int_eq[U64](a: p.special, b: 3_u64)
+    return "sNaN"
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return "NaN"
+  var nd = digits10_u128(c: p.coeff)
+  var adj = add[S64](a: p.exp, b: sub[S64](a: nd, b: 1_s64))
+  var body = ""
+  if signed_le[S64](a: p.exp, b: 0_s64) and signed_ge[S64](a: adj, b: -6_s64)
+    var point = add[S64](a: nd, b: p.exp)
+    if int_eq[U64](a: reinterpret_bits[S64, U64](p.exp), b: 0_u64)
+      body = dec_digit_range(c: p.coeff, hi: sub[S64](a: nd, b: 1_s64), lo: 0_s64)
+    elseif signed_le[S64](a: point, b: 0_s64)
+      body = "0." + dec_zeros(n: sub[S64](a: 0_s64, b: point)) + dec_digit_range(c: p.coeff, hi: sub[S64](a: nd, b: 1_s64), lo: 0_s64)
+    else
+      body = dec_digit_range(c: p.coeff, hi: sub[S64](a: nd, b: 1_s64), lo: sub[S64](a: nd, b: point)) + "." + dec_digit_range(c: p.coeff, hi: sub[S64](a: sub[S64](a: nd, b: point), b: 1_s64), lo: 0_s64)
+  else
+    var mant = dec_digit_range(c: p.coeff, hi: sub[S64](a: nd, b: 1_s64), lo: sub[S64](a: nd, b: 1_s64))
+    if signed_gt[S64](a: nd, b: 1_s64)
+      mant = mant + "." + dec_digit_range(c: p.coeff, hi: sub[S64](a: nd, b: 2_s64), lo: 0_s64)
+    var mag = if signed_lt[S64](a: adj, b: 0_s64) then sub[S64](a: 0_s64, b: adj) else adj
+    var es = if signed_lt[S64](a: adj, b: 0_s64) then "-" else "+"
+    body = mant + "E" + es + f"{mag}"
+  return if p.sign then "-" + body else body
+
+### Returns the decimal text of this value.
+routine D128.$represent() -> Text
+  return d128_represent(p: me.decode())
+
+### Returns a diagnostic representation tagged with the type name.
+routine D128.$diagnose() -> Text
+  return "D128(" + me.$represent() + ")"
+
+# ============================================================================
+# pow10 tables + Granlund-Montgomery reciprocals (formerly Pow10Recip).
+# ============================================================================
+# Granlund-Montgomery reciprocals for floor(x / 10^k), k=1..40, over U256. Generated +
+# verified (20k random x + boundaries). Replaces a wide ÷10^k with a multiply-high + shift
+# (Intel-BID-style): ~2-3ns vs ~30ns for a real divide.
+
+preset POW10_MAGIC: Array[U64, 308] = [0_u64, 0_u64, 0_u64, 0_u64, 14757395258967641293_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 16233134784864405423_u64, 12543785970122495098_u64, 8854437155380584775_u64, 5165088340638674452_u64, 9297159013149614015_u64, 17413726405581816725_u64, 14462247353788288466_u64, 442721857769029238_u64, 1859431802629922803_u64, 3482745281116363345_u64, 17649844729725298986_u64, 3777893186295716170_u64, 9639530583157663293_u64, 14834133714314273027_u64, 1139270913992301907_u64, 12089258196146291747_u64, 4022275651784220311_u64, 15556655786193328745_u64, 11979463175419572495_u64, 9671406556917033397_u64, 10124989857596662821_u64, 10133253998941684699_u64, 4409745821703674700_u64, 15474250491067253436_u64, 8099991886077330257_u64, 4417254384411437436_u64, 18285191916330581053_u64, 12379400392853802748_u64, 17548039953087595175_u64, 18291198766496791241_u64, 3560107088838733872_u64, 9903520314283042199_u64, 13319468665972510987_u64, 3440476323201493724_u64, 13074868971625794843_u64, 15845632502852867518_u64, 5327787466389004395_u64, 8754888158764418136_u64, 8919296403392228260_u64, 6338253001141147007_u64, 9670222262960993417_u64, 16947595663820407066_u64, 17473702046629399463_u64, 1835665529942118807_u64, 357480180884974087_u64, 9868727716314415330_u64, 2910915193077788601_u64, 16225927682921336339_u64, 142992072353989635_u64, 3947491086525766132_u64, 12232412521456846410_u64, 6490371073168534535_u64, 3918136130508293739_u64, 6315985738441225811_u64, 1125115960621402640_u64, 10384593717069655257_u64, 2579668994071359659_u64, 13794925996247871621_u64, 5489534351736154547_u64, 16615349947311448411_u64, 11506168019997996101_u64, 18382532779254684270_u64, 1404557333294026629_u64, 8137815841988765842_u64, 1826236786514576235_u64, 7327328593919926770_u64, 8502343496119041950_u64, 2820903858849102350_u64, 13990025302649052945_u64, 4345028120788062185_u64, 6225051964306646474_u64, 15581492618384294730_u64, 2798005060529810589_u64, 869005624157612437_u64, 4934359207603239618_u64, 6805647338418769269_u64, 11855505726331517589_u64, 5079757813394090222_u64, 15273672361649004035_u64, 10889035741470030830_u64, 4211413903162786849_u64, 8127612501430544356_u64, 5991131704928854840_u64, 17422457186352049329_u64, 6738262245060458959_u64, 1936133558063140000_u64, 16964508357369988391_u64, 9429187424453727310_u64, 16458656240274098137_u64, 12616953290676242969_u64, 9882257871154080389_u64, 3854001124821071525_u64, 16856273806961188833_u64, 10093562632540994375_u64, 4216457482181353988_u64, 17840596158824498513_u64, 9795670230827040743_u64, 4385501291290885177_u64, 10751863615228903837_u64, 14272476927059598810_u64, 4605025925097534219_u64, 10706150880807326607_u64, 17202981784366246139_u64, 4389219009585806480_u64, 14752067184303758345_u64, 8564920704645861285_u64, 10073036612751086588_u64, 18268770466636286477_u64, 2950413436860751669_u64, 1712984140929172257_u64, 9393304952034037964_u64, 3653754093327257295_u64, 4279431502114060657_u64, 15099992087153475744_u64, 1878660990406807592_u64, 730750818665451459_u64, 17319726085572194739_u64, 10246218327454126085_u64, 132186762769440174_u64, 260476884126005737_u64, 6477083238973935145_u64, 818277032479480222_u64, 7484447039699372786_u64, 14965776766268445882_u64, 1295416647794787029_u64, 11231701850721627014_u64, 8875587037423695203_u64, 2993155353253689176_u64, 16830061895439300539_u64, 6902676516928872252_u64, 6822241630394091679_u64, 4789048565205902682_u64, 9584012288502837847_u64, 7331169595204749916_u64, 10763126773035362404_u64, 15324955408658888583_u64, 12984848901926298539_u64, 8844931548524770629_u64, 13220671798832803450_u64, 3064991081731777716_u64, 9316056677490104185_u64, 8646027318913697828_u64, 18204020847175556265_u64, 1169198849373825770_u64, 3837644239758435727_u64, 6454946080778095879_u64, 3300991652287517762_u64, 12938764603223852203_u64, 1535057695903374291_u64, 9960676061795058998_u64, 12388443105140738074_u64, 12554203470773361527_u64, 15064406798148316151_u64, 5681484027100922122_u64, 9856386250511968261_u64, 2510840694154672305_u64, 7867831954343375609_u64, 6846707255510619000_u64, 7740639782147942024_u64, 16069380442589902755_u64, 1520484682723670005_u64, 18333429238300811047_u64, 12385023651436707238_u64, 7264264634434292792_u64, 8595085375662756651_u64, 10977394575898738514_u64, 17286716550633186437_u64, 2122062892805523910_u64, 18195429409232743953_u64, 8080306645101405728_u64, 14293384249737095221_u64, 8227522786606030210_u64, 18044640610546659355_u64, 5549793002678428519_u64, 4422670725869800738_u64, 13164036458569648337_u64, 17803378532648923999_u64, 8879668804285485631_u64, 10765621976133591504_u64, 2615714260001885723_u64, 18189397857285300569_u64, 7241216336456104575_u64, 15374295234679167571_u64, 8424983333484574935_u64, 7327228386198970437_u64, 5137592082033131238_u64, 3074859046935833514_u64, 1684996666696914987_u64, 5244151789540973837_u64, 6731597614153514680_u64, 13532754097585296720_u64, 3121213260010960219_u64, 2097660715816389535_u64, 2692639045661405872_u64, 5413101639034118688_u64, 8627182933488204734_u64, 5367477387395021951_u64, 13222157680754855667_u64, 8019830125969205273_u64, 6901746346790563787_u64, 12277312634573945445_u64, 2708708215498217451_u64, 16521077016292638761_u64, 11042794154864902059_u64, 6083261097959432515_u64, 8667866289594295845_u64, 12284609489975430480_u64, 16890197221858134975_u64, 1177260063625635689_u64, 3244944216933526353_u64, 6138338777238434061_u64, 9822808962744597657_u64, 12009854495126239521_u64, 6285304188288731405_u64, 12289368651274567895_u64, 4168898355453767802_u64, 16986581225584812263_u64, 12406940980114805770_u64, 17210192550503474962_u64, 18092513943330655534_u64, 9899916165725939487_u64, 6236203969349934293_u64, 17457502855144690293_u64, 14474011154664524427_u64, 13048029677370918867_u64, 1247240793869986858_u64, 10870198200512758705_u64, 2894802230932904885_u64, 13677652379699914743_u64, 249448158773997371_u64, 2174039640102551741_u64, 578960446186580977_u64, 7038461149320157363_u64, 2696524049872422393_u64, 4004531380238580045_u64, 14821387422376473014_u64, 8786389859347852119_u64, 15296700068942125771_u64, 15558301535015357301_u64, 2964277484475294602_u64, 2990177330730832421_u64, 2338627221855939295_u64, 10135887197056930390_u64, 4742843975160471364_u64, 15355430725113807777_u64, 15225120703338829151_u64, 16784572698379027370_u64, 948568795032094272_u64, 14139132589248492525_u64, 10423721770151586476_u64, 10735612169159626120_u64, 189713759006418854_u64, 2827826517849698505_u64, 16842139612997958588_u64, 16904517692799566516_u64, 37942751801283770_u64, 10979153385364064051_u64, 14486446217263407954_u64, 12504081701665070471_u64, 7770675568902916283_u64, 9307849129971632701_u64, 5773790933081891899_u64, 14187619742134853247_u64, 6419417746779780491_u64, 14824976933461126807_u64, 8308381561207423842_u64, 3971398164224061951_u64, 1446185382681914070_u64, 15549330361510811769_u64, 17714751693191670043_u64, 17934513790346890853_u64, 15914343565113172548_u64, 17287778588830055677_u64, 14464598306760488663_u64, 10863154330880666664_u64, 6365737426045269019_u64, 1835004038934716821_u64, 1007264402365319923_u64, 6313000485183335694_u64, 10185179881672430431_u64, 16940059368816824797_u64, 3223246087569023753_u64, 5444206293619032928_u64, 14145831547642225764_u64, 14154721377010550565_u64, 4978647249769519824_u64, 2177682517447613171_u64, 13037030248540710952_u64, 1972539736062309903_u64, 5680807714649718253_u64, 15628468265946686561_u64, 5214812099416284380_u64, 10534761207183516491_u64, 1710594713955728558_u64, 6558805151805146882_u64, 8343699359066055009_u64, 16864347500404344591_u64, 4031467757533056034_u64, 16069156289328670669_u64, 1668739871813211001_u64]
+
+preset POW10_SHIFT: Array[S64, 77] = [0_s64, 3_s64, 7_s64, 10_s64, 11_s64, 16_s64, 19_s64, 23_s64, 26_s64, 29_s64, 33_s64, 35_s64, 40_s64, 43_s64, 45_s64, 49_s64, 53_s64, 57_s64, 60_s64, 64_s64, 65_s64, 69_s64, 73_s64, 77_s64, 80_s64, 83_s64, 86_s64, 90_s64, 93_s64, 94_s64, 95_s64, 103_s64, 106_s64, 107_s64, 111_s64, 116_s64, 117_s64, 123_s64, 127_s64, 129_s64, 130_s64, 136_s64, 140_s64, 143_s64, 145_s64, 149_s64, 153_s64, 155_s64, 156_s64, 163_s64, 165_s64, 168_s64, 172_s64, 177_s64, 180_s64, 183_s64, 186_s64, 189_s64, 190_s64, 191_s64, 199_s64, 200_s64, 204_s64, 205_s64, 206_s64, 207_s64, 218_s64, 223_s64, 226_s64, 229_s64, 231_s64, 235_s64, 240_s64, 242_s64, 244_s64, 248_s64, 249_s64]
+
+preset POW10_ADD: Array[U64, 77] = [0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64]
+
+### floor(x / 10^k) by reciprocal-multiply (k in 1..40); k<=0 returns x.
+routine div_pow10b(x: U256, k: S64) -> U256
+  if signed_le[S64](a: k, b: 0_s64)
+    return x
+  var ku = reinterpret_bits[S64, U64](k)
+  var i0 = reinterpret_bits[S64, U64](mul[S64](a: k, b: 4_s64))
+  var i1 = add[U64](a: i0, b: 1_u64)
+  var i2 = add[U64](a: i0, b: 2_u64)
+  var i3 = add[U64](a: i0, b: 3_u64)
+  var g0 = POW10_MAGIC[i0]
+  var g1 = POW10_MAGIC[i1]
+  var g2 = POW10_MAGIC[i2]
+  var g3 = POW10_MAGIC[i3]
+  var mm = bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](g0), b: shift_left[U256](value: zero_extend[U64, U256](g1), bits: uf_amt[U256](64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](g2), bits: uf_amt[U256](128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](g3), bits: uf_amt[U256](192_s64))))
+  var prod = mul[U512](a: zero_extend[U256, U512](x), b: zero_extend[U256, U512](mm))
+  var t = int_truncate[U512, U256](shift_right_unsigned[U512](prod, uf_amt[U512](256_s64)))
+  var s = POW10_SHIFT[ku]
+  var ad = POW10_ADD[ku]
+  if int_ne[U64](a: ad, b: 0_u64)
+    var dd = shift_right_unsigned[U256](sub[U256](a: x, b: t), uf_amt[U256](1_s64))
+    var q = add[U256](a: dd, b: t)
+    return shift_right_unsigned[U256](q, uf_amt[U256](sub[S64](a: s, b: 1_s64)))
+  return shift_right_unsigned[U256](t, uf_amt[U256](s))
+
+# Precomputed 10^k as U256 (k=0..76), little-endian limbs. Replaces pow10b's
+# multiply loop with an O(1) table lookup.
+preset POW10_VAL: Array[U64, 308] = [
+  1_u64, 0_u64, 0_u64, 0_u64, 10_u64, 0_u64, 0_u64, 0_u64, 100_u64, 0_u64, 0_u64, 0_u64, 1000_u64, 0_u64, 0_u64, 0_u64, 10000_u64, 0_u64, 0_u64, 0_u64, 100000_u64, 0_u64, 0_u64, 0_u64, 1000000_u64, 0_u64, 0_u64, 0_u64, 10000000_u64, 0_u64, 0_u64, 0_u64, 100000000_u64, 0_u64, 0_u64, 0_u64, 1000000000_u64, 0_u64, 0_u64, 0_u64, 10000000000_u64, 0_u64, 0_u64, 0_u64, 100000000000_u64, 0_u64, 0_u64, 0_u64, 1000000000000_u64, 0_u64, 0_u64, 0_u64, 10000000000000_u64, 0_u64, 0_u64, 0_u64, 100000000000000_u64, 0_u64, 0_u64, 0_u64, 1000000000000000_u64, 0_u64, 0_u64, 0_u64, 10000000000000000_u64, 0_u64, 0_u64, 0_u64, 100000000000000000_u64, 0_u64, 0_u64, 0_u64, 1000000000000000000_u64, 0_u64, 0_u64, 0_u64, 10000000000000000000_u64, 0_u64, 0_u64, 0_u64, 7766279631452241920_u64, 5_u64, 0_u64, 0_u64, 3875820019684212736_u64, 54_u64, 0_u64, 0_u64, 1864712049423024128_u64, 542_u64, 0_u64, 0_u64, 200376420520689664_u64, 5421_u64, 0_u64, 0_u64, 2003764205206896640_u64, 54210_u64, 0_u64, 0_u64, 1590897978359414784_u64, 542101_u64, 0_u64, 0_u64, 15908979783594147840_u64, 5421010_u64, 0_u64, 0_u64, 11515845246265065472_u64, 54210108_u64, 0_u64, 0_u64, 4477988020393345024_u64, 542101086_u64, 0_u64, 0_u64, 7886392056514347008_u64, 5421010862_u64, 0_u64, 0_u64, 5076944270305263616_u64, 54210108624_u64, 0_u64, 0_u64, 13875954555633532928_u64, 542101086242_u64, 0_u64, 0_u64, 9632337040368467968_u64, 5421010862427_u64, 0_u64, 0_u64, 4089650035136921600_u64, 54210108624275_u64, 0_u64, 0_u64, 4003012203950112768_u64, 542101086242752_u64, 0_u64, 0_u64, 3136633892082024448_u64, 5421010862427522_u64, 0_u64, 0_u64, 12919594847110692864_u64, 54210108624275221_u64, 0_u64, 0_u64, 68739955140067328_u64, 542101086242752217_u64, 0_u64, 0_u64, 687399551400673280_u64, 5421010862427522170_u64, 0_u64, 0_u64, 6873995514006732800_u64, 17316620476856118468_u64, 2_u64, 0_u64, 13399722918938673152_u64, 7145508105175220139_u64, 29_u64, 0_u64, 4870020673419870208_u64, 16114848830623546549_u64, 293_u64, 0_u64, 11806718586779598848_u64, 13574535716559052564_u64, 2938_u64, 0_u64, 7386721425538678784_u64, 6618148649623664334_u64, 29387_u64, 0_u64, 80237960548581376_u64, 10841254275107988496_u64, 293873_u64, 0_u64, 802379605485813760_u64, 16178822382532126880_u64, 2938735_u64, 0_u64, 8023796054858137600_u64, 14214271235644855872_u64, 29387358_u64, 0_u64, 6450984253743169536_u64, 13015503840481697412_u64, 293873587_u64, 0_u64, 9169610316303040512_u64, 1027829888850112811_u64, 2938735877_u64, 0_u64, 17909126868192198656_u64, 10278298888501128114_u64, 29387358770_u64, 0_u64, 13070572018536022016_u64, 10549268516463523069_u64, 293873587705_u64, 0_u64, 1578511669393358848_u64, 13258964796087472617_u64, 2938735877055_u64, 0_u64, 15785116693933588480_u64, 3462439444907864858_u64, 29387358770557_u64, 0_u64, 10277214349659471872_u64, 16177650375369096972_u64, 293873587705571_u64, 0_u64, 10538423128046960640_u64, 14202551164014556797_u64, 2938735877055718_u64, 0_u64, 13150510911921848320_u64, 12898303124178706663_u64, 29387358770557187_u64, 0_u64, 2377900603251621888_u64, 18302566799529756941_u64, 293873587705571876_u64, 0_u64, 5332261958806667264_u64, 17004971331911604867_u64, 2938735877055718769_u64, 0_u64, 16429131440647569408_u64, 4029016655730084128_u64, 10940614696847636083_u64, 1_u64, 16717361816799281152_u64, 3396678409881738056_u64, 17172426599928602752_u64, 15_u64, 1152921504606846976_u64, 15520040025107828953_u64, 5703569335900062977_u64, 159_u64, 11529215046068469760_u64, 7626447661401876602_u64, 1695461137871974930_u64, 1593_u64, 4611686018427387904_u64, 2477500319180559562_u64, 16954611378719749304_u64, 15930_u64, 9223372036854775808_u64, 6328259118096044006_u64, 3525417123811528497_u64, 159309_u64, 0_u64, 7942358959831785217_u64, 16807427164405733357_u64, 1593091_u64, 0_u64, 5636613303479645706_u64, 2053574980671369030_u64, 15930919_u64, 0_u64, 1025900813667802212_u64, 2089005733004138687_u64, 159309191_u64, 0_u64, 10259008136678022120_u64, 2443313256331835254_u64, 1593091911_u64, 0_u64, 10356360998232463120_u64, 5986388489608800929_u64, 15930919111_u64, 0_u64, 11329889613776873120_u64, 4523652674959354447_u64, 159309191113_u64, 0_u64, 2618431695511421504_u64, 8343038602174441244_u64, 1593091911132_u64, 0_u64, 7737572881404663424_u64, 9643409726906205977_u64, 15930919111324_u64, 0_u64, 3588752519208427776_u64, 4200376900514301694_u64, 159309191113245_u64, 0_u64, 17440781118374726144_u64, 5110280857723913709_u64, 1593091911132452_u64, 0_u64, 8387114520361296896_u64, 14209320429820033867_u64, 15930919111324522_u64, 0_u64, 10084168908774762496_u64, 12965995782233477362_u64, 159309191113245227_u64, 0_u64, 8607968719199866880_u64, 532749306367912313_u64, 1593091911132452277_u64
+]
+
+### 10^k as a U256 by table lookup (k in 0..76).
+routine pow10_tbl(k: S64) -> U256
+  var i0 = reinterpret_bits[S64, U64](mul[S64](a: k, b: 4_s64))
+  var i1 = add[U64](a: i0, b: 1_u64)
+  var i2 = add[U64](a: i0, b: 2_u64)
+  var i3 = add[U64](a: i0, b: 3_u64)
+  var g0 = POW10_VAL[i0]
+  var g1 = POW10_VAL[i1]
+  var g2 = POW10_VAL[i2]
+  var g3 = POW10_VAL[i3]
+  return bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](g0), b: shift_left[U256](value: zero_extend[U64, U256](g1), bits: uf_amt[U256](64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](g2), bits: uf_amt[U256](128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](g3), bits: uf_amt[U256](192_s64))))
+
+# --- U128 reciprocals: floor(x / 10^k) for x:U128, k=1..38 (mulhi via U256). ---
+preset POW10_MAGIC128: Array[U64, 78] = [0_u64, 0_u64, 14757395258967641293_u64, 14757395258967641292_u64, 10330176681277348905_u64, 2951479051793528258_u64, 14462247353788288467_u64, 442721857769029238_u64, 15259146697772541097_u64, 15111572745182864683_u64, 14119875783780239189_u64, 3022314549036572936_u64, 6513323971497958161_u64, 604462909807314587_u64, 4409745821703674701_u64, 15474250491067253436_u64, 18123639758951610491_u64, 6312056711998053881_u64, 3560107088838733873_u64, 9903520314283042199_u64, 12492089279761224519_u64, 3961408125713216879_u64, 17838592806784456521_u64, 12676506002282294014_u64, 18325113820324532597_u64, 2535301200456458802_u64, 10678829633393670109_u64, 8112963841460668169_u64, 6018080969204141205_u64, 12980742146337069071_u64, 2250231921242805281_u64, 2322443360429758898_u64, 15207441643216202349_u64, 4153837486827862102_u64, 702278666647013315_u64, 13292279957849158729_u64, 8502343496119041951_u64, 2820903858849102350_u64, 10779635027931437427_u64, 8507059173023461586_u64, 1290692756703406857_u64, 8775845279965525461_u64, 12100600649588456455_u64, 3331327409230510045_u64, 5991131704928854841_u64, 17422457186352049329_u64, 15955621599953412261_u64, 3484491437270409865_u64, 14164500972431816003_u64, 11150372599265311570_u64, 4216457482181353989_u64, 17840596158824498513_u64, 5375931807614451919_u64, 7136238463529799405_u64, 4300745446091561535_u64, 5708990770823839524_u64, 10073036612751086589_u64, 18268770466636286477_u64, 679731660717048625_u64, 14615016373309029182_u64, 4776919471889188123_u64, 4937282123584895075_u64, 132186762769440175_u64, 260476884126005737_u64, 14968894079398745573_u64, 11484809458827340148_u64, 17055604075985229199_u64, 11972621413014756705_u64, 13644483260788183359_u64, 9578097130411805364_u64, 10763126773035362405_u64, 15324955408658888583_u64, 7994599523956055285_u64, 6129982163463555433_u64, 9102010423587778133_u64, 9807971461541688693_u64, 14660305968354043153_u64, 7846377169233350954_u64]
+preset POW10_SHIFT128: Array[S64, 39] = [0_s64, 3_s64, 4_s64, 10_s64, 13_s64, 14_s64, 15_s64, 23_s64, 27_s64, 29_s64, 31_s64, 36_s64, 37_s64, 42_s64, 46_s64, 50_s64, 51_s64, 56_s64, 60_s64, 62_s64, 67_s64, 70_s64, 73_s64, 74_s64, 79_s64, 83_s64, 85_s64, 88_s64, 93_s64, 96_s64, 100_s64, 103_s64, 107_s64, 109_s64, 112_s64, 116_s64, 118_s64, 122_s64, 125_s64]
+preset POW10_ADD128: Array[U64, 39] = [0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 1_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64]
+
+### floor(x / 10^k) for a U128 x by reciprocal-multiply (k in 1..38; k<=0 returns x).
+routine div_pow10_u128(x: U128, k: S64) -> U128
+  if signed_le[S64](a: k, b: 0_s64)
+    return x
+  var ku = reinterpret_bits[S64, U64](k)
+  var i0 = reinterpret_bits[S64, U64](mul[S64](a: k, b: 2_s64))
+  var i1 = add[U64](a: i0, b: 1_u64)
+  var g0 = POW10_MAGIC128[i0]
+  var g1 = POW10_MAGIC128[i1]
+  var mm = bit_or[U128](a: zero_extend[U64, U128](g0), b: shift_left[U128](value: zero_extend[U64, U128](g1), bits: uf_amt[U128](64_s64)))
+  var prod = mul[U256](a: zero_extend[U128, U256](x), b: zero_extend[U128, U256](mm))
+  var t = int_truncate[U256, U128](shift_right_unsigned[U256](prod, uf_amt[U256](128_s64)))
+  var s = POW10_SHIFT128[ku]
+  var ad = POW10_ADD128[ku]
+  if int_ne[U64](a: ad, b: 0_u64)
+    var dd = shift_right_unsigned[U128](sub[U128](a: x, b: t), uf_amt[U128](1_s64))
+    var q = add[U128](a: dd, b: t)
+    return shift_right_unsigned[U128](q, uf_amt[U128](sub[S64](a: s, b: 1_s64)))
+  return shift_right_unsigned[U128](t, uf_amt[U128](s))
+
+# --- W=32 reciprocals: floor(x / 10^k) for x:U32, k=1..9 (mulhi via U64). ---
+preset POW10_MAGIC32: Array[U64, 10] = [0_u64, 3435973837_u64, 1374389535_u64, 274877907_u64, 3518437209_u64, 1334532239_u64, 1125899907_u64, 1801439851_u64, 1441151881_u64, 316718723_u64]
+preset POW10_SHIFT32: Array[S64, 10] = [0_s64, 3_s64, 5_s64, 6_s64, 13_s64, 17_s64, 18_s64, 22_s64, 25_s64, 30_s64]
+preset POW10_ADD32: Array[U64, 10] = [0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 1_u64]
+
+### floor(x / 10^k) for a U32 x by reciprocal-multiply (k in 1..9; k<=0 returns x).
+routine div_pow10_u32(x: U32, k: S64) -> U32
+  if signed_le[S64](a: k, b: 0_s64)
+    return x
+  var ku = reinterpret_bits[S64, U64](k)
+  var mm = int_truncate[U64, U32](POW10_MAGIC32[ku])
+  var prod = mul[U64](a: zero_extend[U32, U64](x), b: zero_extend[U32, U64](mm))
+  var t = int_truncate[U64, U32](shift_right_unsigned[U64](prod, 32_u64))
+  var s = POW10_SHIFT32[ku]
+  var ad = POW10_ADD32[ku]
+  if int_ne[U64](a: ad, b: 0_u64)
+    var dd = shift_right_unsigned[U32](sub[U32](a: x, b: t), 1_u32)
+    var q = add[U32](a: dd, b: t)
+    return shift_right_unsigned[U32](q, int_truncate[U64, U32](reinterpret_bits[S64, U64](sub[S64](a: s, b: 1_s64))))
+  return shift_right_unsigned[U32](t, int_truncate[U64, U32](reinterpret_bits[S64, U64](s)))
+
+# --- W=64 reciprocals: floor(x / 10^k) for x:U64, k=1..19 (mulhi via U128). ---
+preset POW10_MAGIC64: Array[U64, 20] = [0_u64, 14757395258967641293_u64, 5165088340638674453_u64, 442721857769029239_u64, 3777893186295716171_u64, 5731772318583031879_u64, 4835703278458516699_u64, 15474250491067253437_u64, 12379400392853802749_u64, 1360296554856532783_u64, 15845632502852867519_u64, 12676506002282294015_u64, 2535301200456458803_u64, 4056481920730334085_u64, 811296384146066817_u64, 2322443360429758899_u64, 4153837486827862103_u64, 8137815841988765843_u64, 2820903858849102351_u64, 8507059173023461587_u64]
+preset POW10_SHIFT64: Array[S64, 20] = [0_s64, 3_s64, 7_s64, 10_s64, 11_s64, 17_s64, 18_s64, 23_s64, 26_s64, 30_s64, 33_s64, 36_s64, 37_s64, 41_s64, 42_s64, 50_s64, 51_s64, 57_s64, 60_s64, 62_s64]
+preset POW10_ADD64: Array[U64, 20] = [0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 1_u64, 1_u64, 0_u64]
+
+### floor(x / 10^k) for a U64 x by reciprocal-multiply (k in 1..19; k<=0 returns x).
+routine div_pow10_u64(x: U64, k: S64) -> U64
+  if signed_le[S64](a: k, b: 0_s64)
+    return x
+  var ku = reinterpret_bits[S64, U64](k)
+  var mm = POW10_MAGIC64[ku]
+  var prod = mul[U128](a: zero_extend[U64, U128](x), b: zero_extend[U64, U128](mm))
+  var t = int_truncate[U128, U64](shift_right_unsigned[U128](prod, uf_amt[U128](64_s64)))
+  var s = POW10_SHIFT64[ku]
+  var ad = POW10_ADD64[ku]
+  if int_ne[U64](a: ad, b: 0_u64)
+    var dd = shift_right_unsigned[U64](sub[U64](a: x, b: t), 1_u64)
+    var q = add[U64](a: dd, b: t)
+    return shift_right_unsigned[U64](q, reinterpret_bits[S64, U64](sub[S64](a: s, b: 1_s64)))
+  return shift_right_unsigned[U64](t, reinterpret_bits[S64, U64](s))
+
+# --- W=512 reciprocals: floor(x / 10^k) for x:U512, k=1..76 (mulhi via U1024). ---
+preset POW10_MAGIC512: Array[U64, 616] = [0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 14757395258967641293_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 16971004547812787487_u64, 2213609288845146193_u64, 5902958103587056517_u64, 9592306918328966840_u64, 13281655733070877163_u64, 16971004547812787486_u64, 2213609288845146193_u64, 5902958103587056517_u64, 13724377590839906403_u64, 10772898539046378143_u64, 15200117116736670531_u64, 8559289250201231949_u64, 9297159013149614014_u64, 17413726405581816725_u64, 14462247353788288466_u64, 442721857769029238_u64, 10123573147651801927_u64, 16911974966776916921_u64, 14108069867573065075_u64, 16469253109007887682_u64, 1859431802629922802_u64, 3482745281116363345_u64, 17649844729725298986_u64, 3777893186295716170_u64, 16829333553326698131_u64, 16002919418824510217_u64, 16504670857629410021_u64, 16858848343844633412_u64, 832317092605774968_u64, 11221523354918994439_u64, 2278541827984603815_u64, 5731772318583031878_u64, 14110431050814499899_u64, 17469214211755535056_u64, 10291217157793674331_u64, 14122236967021674011_u64, 4022275651784220310_u64, 15556655786193328745_u64, 11979463175419572495_u64, 9671406556917033397_u64, 11288344840651599919_u64, 17664720184146338368_u64, 15611671355718760111_u64, 3919091944133518562_u64, 14285866965653107218_u64, 5066626999470842349_u64, 2204872910851837350_u64, 7737125245533626718_u64, 5947017782872230307_u64, 14600990481054998643_u64, 10501031900627572668_u64, 783818388826703712_u64, 10235871022614442090_u64, 12081371844119899439_u64, 11509021026396098439_u64, 1547425049106725343_u64, 6024200140668251789_u64, 17182632679376107767_u64, 12664697441549889494_u64, 6343526562239897197_u64, 16649335832465638733_u64, 18135653459284030867_u64, 7120214177677467745_u64, 1360296554856532782_u64, 4894188842875560681_u64, 18193921794842862846_u64, 2532939488309977898_u64, 12336751756673710409_u64, 3329867166493127746_u64, 14695177136082537143_u64, 12492089279761224518_u64, 3961408125713216879_u64, 15736233027542753429_u64, 14706830803194303538_u64, 506587897661995579_u64, 6156699166076652405_u64, 665973433298625549_u64, 10317733056700328075_u64, 17255813114919886196_u64, 792281625142643375_u64, 9577644385967907085_u64, 7469342358533479460_u64, 6484325090073543421_u64, 5018773030942944320_u64, 4835111131480496708_u64, 17697169868764979341_u64, 17960223060169475539_u64, 10141204801825835211_u64, 1915528877193581417_u64, 1493868471706695892_u64, 16054260276982349977_u64, 15761149865156230156_u64, 4656371041038009664_u64, 3539433973752995868_u64, 7281393426775805431_u64, 2028240960365167042_u64, 6072025554368290521_u64, 8053469993619976449_u64, 17337741993536653223_u64, 17275277536904229847_u64, 571968289415958538_u64, 15789964346103064528_u64, 12036161938408282408_u64, 7514740218964586526_u64, 4857620443494632417_u64, 2753427180154070836_u64, 2802147150603591609_u64, 10130873214781473555_u64, 7836272261016587477_u64, 12631971476882451622_u64, 2250231921242805280_u64, 2322443360429758898_u64, 12039570532924657453_u64, 7929383065514634813_u64, 11628475874346449291_u64, 13094221087182025680_u64, 5256603266945227818_u64, 17283789554344131617_u64, 15207441643216202348_u64, 4153837486827862102_u64, 8195266408453720955_u64, 5308315275339595055_u64, 158817325244767250_u64, 2504009665781689473_u64, 12099914041854274833_u64, 9207319213241058971_u64, 9574511370178282465_u64, 6646139978924579364_u64, 2866864312021066441_u64, 557303405529765721_u64, 14884449119163455093_u64, 9381905362109172224_u64, 9679931233483419866_u64, 11055204185334757500_u64, 11348957910884536295_u64, 5316911983139663491_u64, 9173965798467412611_u64, 16540766156662891600_u64, 14426097848645863388_u64, 507306640814068533_u64, 16218384688179302280_u64, 2172514060394031092_u64, 3112525982153323237_u64, 17014118346046923173_u64, 14717870268257750735_u64, 2164566481104582310_u64, 11540878278916690711_u64, 11473891756876985796_u64, 5596010121059621177_u64, 1738011248315224874_u64, 9868718415206479236_u64, 13611294676837538538_u64, 8791197170244759883_u64, 7152655184509242020_u64, 11086707616782884491_u64, 18358226811003177274_u64, 5264267378953483560_u64, 10159515626788180445_u64, 12100600649588456454_u64, 3331327409230510045_u64, 7032957736195807907_u64, 5722124147607393616_u64, 12558714908168217916_u64, 14686581448802541819_u64, 4211413903162786848_u64, 8127612501430544356_u64, 5991131704928854840_u64, 17422457186352049329_u64, 184685933687561681_u64, 5466049821429919463_u64, 5336548594101507373_u64, 1362437429632604972_u64, 6738262245060458958_u64, 1936133558063140000_u64, 16964508357369988391_u64, 9429187424453727310_u64, 7526446376433869991_u64, 4372839857143935570_u64, 15337285319506936868_u64, 1089949943706083977_u64, 16458656240274098136_u64, 12616953290676242969_u64, 9882257871154080389_u64, 3854001124821071525_u64, 6021157101147095993_u64, 3498271885715148456_u64, 4891130626121728848_u64, 871959954964867182_u64, 16856273806961188832_u64, 10093562632540994375_u64, 4216457482181353988_u64, 17840596158824498513_u64, 17012548991319174235_u64, 1907886202402327206_u64, 7825809001794766157_u64, 16152531186911428784_u64, 1144596387944529868_u64, 8771002582581770355_u64, 3056983156748256058_u64, 10098209780409646005_u64, 17299388007797249711_u64, 8905006591405682411_u64, 2571298386693902602_u64, 5543327320045322381_u64, 4605025925097534218_u64, 10706150880807326607_u64, 17202981784366246139_u64, 4389219009585806480_u64, 18217272860527091235_u64, 12849047762506867451_u64, 4203608492080690843_u64, 1108665464009064476_u64, 8299702814503327490_u64, 2141230176161465321_u64, 7129945171615159551_u64, 4567192616659071619_u64, 13288779494599894855_u64, 8446929385205745228_u64, 4767001460864959460_u64, 14474156599141833294_u64, 5156563421176461734_u64, 13703873127433378057_u64, 1359463321434097248_u64, 10783288672908506748_u64, 2657755898919978971_u64, 9068083506524969692_u64, 8332097921656812538_u64, 13962877764054097628_u64, 15788707943202933639_u64, 10119472254970496257_u64, 15029287923254460742_u64, 5846006549323611672_u64, 1126121247060112061_u64, 14260471961912261722_u64, 837271646108427860_u64, 7787720697554009179_u64, 17319726085572194738_u64, 10246218327454126085_u64, 132186762769440174_u64, 260476884126005737_u64, 15658292256615730941_u64, 15097726384271719700_u64, 4359166131628652611_u64, 6230176558043207343_u64, 6477083238973935144_u64, 818277032479480222_u64, 7484447039699372786_u64, 14965776766268445882_u64, 2917174722133707567_u64, 2020269326383289582_u64, 10664014625347754502_u64, 17346980122352952395_u64, 10363333182358296230_u64, 16066638510934809648_u64, 15664464078260906780_u64, 5498498752319961795_u64, 11651481388652472483_u64, 4093402680018568239_u64, 16890198184037192193_u64, 18226791283438231771_u64, 16830061895439300538_u64, 6902676516928872252_u64, 6822241630394091679_u64, 4789048565205902682_u64, 7574323777618225003_u64, 6549444288029709183_u64, 12266921835491866216_u64, 3337424350307798572_u64, 4792006144251418923_u64, 3665584797602374958_u64, 14604935423372457010_u64, 7662477704329444291_u64, 13438156651578400649_u64, 5239555430423767346_u64, 13502886283135403296_u64, 13737985924471969827_u64, 7522953730143045461_u64, 17689863097049541259_u64, 7994599523956055284_u64, 6129982163463555433_u64, 6376980145057590453_u64, 1047911086084753469_u64, 17457972515594721952_u64, 10126294814378214611_u64, 5193939560770519415_u64, 10916670248893728898_u64, 12666966349016942026_u64, 1225996432692711086_u64, 8654093658495338737_u64, 11277628661442681663_u64, 7180943317860854713_u64, 2025258962875642922_u64, 1038787912154103883_u64, 9562031679262566426_u64, 6222742084545298728_u64, 245199286538542217_u64, 7746435175415925197_u64, 1876172366127290750_u64, 2418765215026639340_u64, 7770189715943249223_u64, 1535057695903374290_u64, 9960676061795058998_u64, 12388443105140738074_u64, 12554203470773361527_u64, 17265194584558471127_u64, 12568984337127563569_u64, 13003058616247042441_u64, 9905500587496509701_u64, 4917394971464609755_u64, 4279192034694136875_u64, 2532056854628769813_u64, 10043362776618689222_u64, 1798869632100181541_u64, 5352979680436460419_u64, 13426196156511447260_u64, 15848800939994415522_u64, 7867831954343375608_u64, 6846707255510619000_u64, 7740639782147942024_u64, 16069380442589902755_u64, 8817793335163965879_u64, 7971732559091078658_u64, 14430305739951068131_u64, 5300343122511711771_u64, 9983614378216610810_u64, 9166714619150405523_u64, 6192511825718353619_u64, 12855504354071922204_u64, 5452907481774703499_u64, 12662392956043946701_u64, 10264758777474034272_u64, 4749417439244252677_u64, 5686071690385232485_u64, 12901389368055812074_u64, 15995897624111312016_u64, 2571100870814384440_u64, 17449303941679051197_u64, 18383564570889167504_u64, 3332437569981627086_u64, 15198135805581608568_u64, 18195429409232743952_u64, 8080306645101405728_u64, 14293384249737095221_u64, 8227522786606030210_u64, 16850839862460750945_u64, 10966959239713116391_u64, 12710597741454423985_u64, 16938319659446753062_u64, 18044640610546659354_u64, 5549793002678428519_u64, 4422670725869800738_u64, 13164036458569648337_u64, 9791323075226690433_u64, 8773567391770493113_u64, 10168478193163539188_u64, 2482609283331671480_u64, 18125061303179237807_u64, 4439834402142742815_u64, 14606183024921571560_u64, 10531229166855718669_u64, 9336962244529158733_u64, 16512108737321739915_u64, 5723044453374618160_u64, 4185870671408244619_u64, 18382407519603488854_u64, 15645362139396189855_u64, 17678631863951955604_u64, 2106245833371143733_u64, 4416326143857961043_u64, 13443775550311377379_u64, 18180740427888004613_u64, 15721525852787034593_u64, 3277594868463108647_u64, 4207248508845946675_u64, 6152128301777116498_u64, 13479973333575319897_u64, 8261962858255412855_u64, 13756801554288006445_u64, 3636148085577600922_u64, 10523002800041227565_u64, 655518973692621729_u64, 841449701769189335_u64, 8609123289839243946_u64, 2695994666715063979_u64, 4915027701189808071_u64, 3188507208379303817_u64, 15892650118212825259_u64, 4628288069651380922_u64, 4195321431632779069_u64, 5385278091322811744_u64, 10826203278068237376_u64, 17254365866976409468_u64, 7864044321903692913_u64, 1412262718664975784_u64, 14360193744914789445_u64, 11094609726184119799_u64, 3023165475870536187_u64, 15995142575600319437_u64, 13632576430167269478_u64, 9160241313452703533_u64, 14213664172987208135_u64, 564905087465990313_u64, 5744077497965915778_u64, 11816541519957468566_u64, 12277312634573945444_u64, 2708708215498217451_u64, 16521077016292638761_u64, 11042794154864902059_u64, 7984467417811891723_u64, 8282545769429405148_u64, 1811826367261644598_u64, 459722358222398090_u64, 12265002585834492065_u64, 4333933144797147922_u64, 15365676781842491048_u64, 17668470647783843295_u64, 2698225119507603055_u64, 14004734245027344765_u64, 1449461093809315678_u64, 367777886577918472_u64, 9812002068667593652_u64, 10845844145321538984_u64, 12292541425473992838_u64, 14134776518227074636_u64, 539645023901520611_u64, 2800946849005468953_u64, 7668589848245683782_u64, 73555577315583694_u64, 13030446857959249700_u64, 16926564088031949089_u64, 6147857099836708890_u64, 2826955303645414927_u64, 3453728152969731911_u64, 14236711018893090976_u64, 12185486881353272973_u64, 7849453324303556290_u64, 16986581225584812262_u64, 12406940980114805770_u64, 17210192550503474962_u64, 18092513943330655534_u64, 16138886520155534057_u64, 13073382037041057036_u64, 8563543567283219512_u64, 6829130144463332839_u64, 14173330119717745551_u64, 12341474021529742954_u64, 17952123464427120954_u64, 7237005577332262213_u64, 11061599902336695427_u64, 16009380815338010255_u64, 12645944156338661147_u64, 10785170018056934116_u64, 12150517050419592855_u64, 9977926350959894869_u64, 13174609309263863176_u64, 4711673773753687468_u64, 1470582292385535695_u64, 5428807022786587558_u64, 10116755325070928918_u64, 12317484829187457616_u64, 13409762455077584607_u64, 7982341080767915895_u64, 14229036262153000864_u64, 79990204261039651_u64, 294116458477107139_u64, 8464459034041138158_u64, 16780746323981827076_u64, 13531543410063222492_u64, 6371301305757427244_u64, 5285817030895493502_u64, 10224504881914420819_u64, 3705346855594118253_u64, 7849283963047192069_u64, 6164436824982000406_u64, 8402450044661371706_u64, 17961120641359245665_u64, 17572779718695704237_u64, 12146656064174699926_u64, 12669858996321162987_u64, 5928554968950589205_u64, 14049662237525283651_u64, 4968802580974760007_u64, 8441096069206837844_u64, 2135353831220931281_u64, 11960709322923329683_u64, 9354508887423757180_u64, 3650060640808618328_u64, 524631826932333842_u64, 12998562524493934107_u64, 13055567476615634972_u64, 3376438427682735137_u64, 11922187976714103482_u64, 12162981358653152519_u64, 11120501184453323518_u64, 5149373071065357654_u64, 7588550360256754183_u64, 2350955965480742955_u64, 17199559147843105633_u64, 16470347928518107189_u64, 8007454318516834601_u64, 1014026100135492415_u64, 3035406636157676337_u64, 4549648098962661924_u64, 12141680576410806693_u64, 7450878359511099051_u64, 16451248192323238043_u64, 7905812611919419887_u64, 1743880465401204393_u64, 9001139389700608511_u64, 8545999432594192462_u64, 3590088143598348755_u64, 979944848547739093_u64, 5960702687608879241_u64, 5782300924374769788_u64, 6324650089535535910_u64, 12463150816546694484_u64, 3511562697018576485_u64, 10526148360817264293_u64, 6561419329620589327_u64, 15541351137805832567_u64, 15949535796489417141_u64, 4845808999616864280_u64, 4954278832649017505_u64, 9871327792793159543_u64, 8081010168887535943_u64, 16862624931131094151_u64, 8690981495407938511_u64, 3108270227561166513_u64, 17222006358468332269_u64, 1498387079612648811_u64, 2192594011018429448_u64, 11525614467489476552_u64, 14824976933461126806_u64, 8308381561207423842_u64, 3971398164224061951_u64, 1446185382681914070_u64, 7133750086435576777_u64, 299677415922529762_u64, 7817216431687506536_u64, 2305122893497895310_u64, 17722390645659866654_u64, 9040373941725305414_u64, 4483628447586722713_u64, 3978585891278293137_u64, 16141210035252408787_u64, 12985981906129921448_u64, 16826045830122848921_u64, 18442135333128440309_u64, 13810882134191567859_u64, 2518161005913299807_u64, 6559129176103563427_u64, 7016205630471524462_u64, 16602316842943837353_u64, 6699436710162026835_u64, 13460836664098279137_u64, 11064359451760841924_u64, 3670008077869433641_u64, 2014528804730639846_u64, 12626000970366671388_u64, 1923615689635309246_u64, 4427614060258677825_u64, 7029749921517332614_u64, 14158641033073425973_u64, 2945579863849705786_u64, 16940059368816824796_u64, 3223246087569023753_u64, 5444206293619032928_u64, 14145831547642225764_u64, 885522812051735565_u64, 5095298799045376846_u64, 13899774650840416164_u64, 7967813602253761803_u64, 7077360688505275282_u64, 11712695661739535720_u64, 1088841258723806585_u64, 6518515124270355476_u64, 6523021813307464131_u64, 16304956156945205907_u64, 11275139550012138816_u64, 18118305897728217125_u64, 7890158944249239610_u64, 4276486784889321396_u64, 7173640842658091397_u64, 2412504323955585907_u64, 16061999621629134119_u64, 10639688860872861827_u64, 5944376724744338086_u64, 7313009994287553748_u64, 5267380603591758245_u64, 855297356977864279_u64, 12502774612757349249_u64, 4171849679533027504_u64, 14252426024620610605_u64, 1685730044231929880_u64, 1150522890944660522_u64, 6220427001279330434_u64, 11575142974535790831_u64, 9163251899400241710_u64, 17298827671034559699_u64, 8253093875301824413_u64]
+preset POW10_SHIFT512: Array[S64, 77] = [0_s64, 3_s64, 5_s64, 10_s64, 11_s64, 17_s64, 19_s64, 22_s64, 23_s64, 30_s64, 31_s64, 32_s64, 39_s64, 40_s64, 47_s64, 50_s64, 51_s64, 55_s64, 58_s64, 63_s64, 66_s64, 70_s64, 73_s64, 77_s64, 80_s64, 83_s64, 87_s64, 90_s64, 91_s64, 97_s64, 98_s64, 103_s64, 106_s64, 110_s64, 111_s64, 115_s64, 118_s64, 119_s64, 120_s64, 129_s64, 132_s64, 136_s64, 139_s64, 140_s64, 145_s64, 149_s64, 152_s64, 153_s64, 159_s64, 160_s64, 166_s64, 170_s64, 172_s64, 176_s64, 179_s64, 180_s64, 186_s64, 188_s64, 193_s64, 196_s64, 197_s64, 201_s64, 206_s64, 208_s64, 212_s64, 216_s64, 219_s64, 220_s64, 226_s64, 227_s64, 233_s64, 236_s64, 240_s64, 241_s64, 246_s64, 247_s64, 253_s64]
+preset POW10_ADD512: Array[U64, 77] = [0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 1_u64, 1_u64, 0_u64, 1_u64, 1_u64, 0_u64, 1_u64, 0_u64, 1_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64, 1_u64, 0_u64, 1_u64, 1_u64, 1_u64, 0_u64, 1_u64, 0_u64, 1_u64]
+
+### floor(x / 10^k) for a U512 x by reciprocal-multiply (k in 1..76; k<=0 returns x).
+routine div_pow10_u512(x: U512, k: S64) -> U512
+  if signed_le[S64](a: k, b: 0_s64)
+    return x
+  var ku = reinterpret_bits[S64, U64](k)
+  var i0 = reinterpret_bits[S64, U64](mul[S64](a: k, b: 8_s64))
+  var i1 = add[U64](a: i0, b: 1_u64)
+  var i2 = add[U64](a: i0, b: 2_u64)
+  var i3 = add[U64](a: i0, b: 3_u64)
+  var i4 = add[U64](a: i0, b: 4_u64)
+  var i5 = add[U64](a: i0, b: 5_u64)
+  var i6 = add[U64](a: i0, b: 6_u64)
+  var i7 = add[U64](a: i0, b: 7_u64)
+  var g0 = POW10_MAGIC512[i0]
+  var g1 = POW10_MAGIC512[i1]
+  var g2 = POW10_MAGIC512[i2]
+  var g3 = POW10_MAGIC512[i3]
+  var g4 = POW10_MAGIC512[i4]
+  var g5 = POW10_MAGIC512[i5]
+  var g6 = POW10_MAGIC512[i6]
+  var g7 = POW10_MAGIC512[i7]
+  var mm = bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: zero_extend[U64, U512](g0), b: shift_left[U512](value: zero_extend[U64, U512](g1), bits: uf_amt[U512](64_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g2), bits: uf_amt[U512](128_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g3), bits: uf_amt[U512](192_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g4), bits: uf_amt[U512](256_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g5), bits: uf_amt[U512](320_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g6), bits: uf_amt[U512](384_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g7), bits: uf_amt[U512](448_s64)))
+  var prod = mul[U1024](a: zero_extend[U512, U1024](x), b: zero_extend[U512, U1024](mm))
+  var t = int_truncate[U1024, U512](shift_right_unsigned[U1024](prod, uf_amt[U1024](512_s64)))
+  var s = POW10_SHIFT512[ku]
+  var ad = POW10_ADD512[ku]
+  if int_ne[U64](a: ad, b: 0_u64)
+    var dd = shift_right_unsigned[U512](sub[U512](a: x, b: t), uf_amt[U512](1_s64))
+    var q = add[U512](a: dd, b: t)
+    return shift_right_unsigned[U512](q, uf_amt[U512](sub[S64](a: s, b: 1_s64)))
+  return shift_right_unsigned[U512](t, uf_amt[U512](s))
+
+# Precomputed 10^k as U512 (k=0..154), little-endian limbs — for D256 pow10 + digit-count
+# correction.
+preset POW10_VAL512: Array[U64, 1240] = [1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 100_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 100000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 100000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 100000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1000000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10000000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 100000000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1000000000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10000000000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 100000000000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1000000000000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10000000000000000000_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 7766279631452241920_u64, 5_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 3875820019684212736_u64, 54_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1864712049423024128_u64, 542_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 200376420520689664_u64, 5421_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 2003764205206896640_u64, 54210_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1590897978359414784_u64, 542101_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 15908979783594147840_u64, 5421010_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 11515845246265065472_u64, 54210108_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 4477988020393345024_u64, 542101086_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 7886392056514347008_u64, 5421010862_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 5076944270305263616_u64, 54210108624_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 13875954555633532928_u64, 542101086242_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 9632337040368467968_u64, 5421010862427_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 4089650035136921600_u64, 54210108624275_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 4003012203950112768_u64, 542101086242752_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 3136633892082024448_u64, 5421010862427522_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 12919594847110692864_u64, 54210108624275221_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 68739955140067328_u64, 542101086242752217_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 687399551400673280_u64, 5421010862427522170_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 6873995514006732800_u64, 17316620476856118468_u64, 2_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 13399722918938673152_u64, 7145508105175220139_u64, 29_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 4870020673419870208_u64, 16114848830623546549_u64, 293_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 11806718586779598848_u64, 13574535716559052564_u64, 2938_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 7386721425538678784_u64, 6618148649623664334_u64, 29387_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 80237960548581376_u64, 10841254275107988496_u64, 293873_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 802379605485813760_u64, 16178822382532126880_u64, 2938735_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 8023796054858137600_u64, 14214271235644855872_u64, 29387358_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 6450984253743169536_u64, 13015503840481697412_u64, 293873587_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 9169610316303040512_u64, 1027829888850112811_u64, 2938735877_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 17909126868192198656_u64, 10278298888501128114_u64, 29387358770_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 13070572018536022016_u64, 10549268516463523069_u64, 293873587705_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1578511669393358848_u64, 13258964796087472617_u64, 2938735877055_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 15785116693933588480_u64, 3462439444907864858_u64, 29387358770557_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10277214349659471872_u64, 16177650375369096972_u64, 293873587705571_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10538423128046960640_u64, 14202551164014556797_u64, 2938735877055718_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 13150510911921848320_u64, 12898303124178706663_u64, 29387358770557187_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 2377900603251621888_u64, 18302566799529756941_u64, 293873587705571876_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 5332261958806667264_u64, 17004971331911604867_u64, 2938735877055718769_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 16429131440647569408_u64, 4029016655730084128_u64, 10940614696847636083_u64, 1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 16717361816799281152_u64, 3396678409881738056_u64, 17172426599928602752_u64, 15_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1152921504606846976_u64, 15520040025107828953_u64, 5703569335900062977_u64, 159_u64, 0_u64, 0_u64, 0_u64, 0_u64, 11529215046068469760_u64, 7626447661401876602_u64, 1695461137871974930_u64, 1593_u64, 0_u64, 0_u64, 0_u64, 0_u64, 4611686018427387904_u64, 2477500319180559562_u64, 16954611378719749304_u64, 15930_u64, 0_u64, 0_u64, 0_u64, 0_u64, 9223372036854775808_u64, 6328259118096044006_u64, 3525417123811528497_u64, 159309_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 7942358959831785217_u64, 16807427164405733357_u64, 1593091_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 5636613303479645706_u64, 2053574980671369030_u64, 15930919_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1025900813667802212_u64, 2089005733004138687_u64, 159309191_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10259008136678022120_u64, 2443313256331835254_u64, 1593091911_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10356360998232463120_u64, 5986388489608800929_u64, 15930919111_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 11329889613776873120_u64, 4523652674959354447_u64, 159309191113_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 2618431695511421504_u64, 8343038602174441244_u64, 1593091911132_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 7737572881404663424_u64, 9643409726906205977_u64, 15930919111324_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 3588752519208427776_u64, 4200376900514301694_u64, 159309191113245_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 17440781118374726144_u64, 5110280857723913709_u64, 1593091911132452_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 8387114520361296896_u64, 14209320429820033867_u64, 15930919111324522_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 10084168908774762496_u64, 12965995782233477362_u64, 159309191113245227_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 8607968719199866880_u64, 532749306367912313_u64, 1593091911132452277_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 12292710897160462336_u64, 5327493063679123134_u64, 15930919111324522770_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 12246644529347313664_u64, 16381442489372128114_u64, 11735238523568814774_u64, 8_u64, 0_u64, 0_u64, 0_u64, 0_u64, 11785980851215826944_u64, 16240472304044868218_u64, 6671920793430838052_u64, 86_u64, 0_u64, 0_u64, 0_u64, 0_u64, 7179344069900959744_u64, 14830770450772269258_u64, 11378975713179725680_u64, 863_u64, 0_u64, 0_u64, 0_u64, 0_u64, 16453208477880942592_u64, 733751918046279655_u64, 3109292689539947112_u64, 8636_u64, 0_u64, 0_u64, 0_u64, 0_u64, 16958132189133012992_u64, 7337519180462796558_u64, 12646182821689919504_u64, 86361_u64, 0_u64, 0_u64, 0_u64, 0_u64, 3560625227944165376_u64, 18034959583499310741_u64, 15781363774641885347_u64, 863616_u64, 0_u64, 0_u64, 0_u64, 0_u64, 17159508205732102144_u64, 14328899171607142867_u64, 10239685156742440551_u64, 8636168_u64, 0_u64, 0_u64, 0_u64, 0_u64, 5574385393935056896_u64, 14161783200104567367_u64, 10163131198876647437_u64, 86361685_u64, 0_u64, 0_u64, 0_u64, 0_u64, 403621718221914112_u64, 12490623485078812361_u64, 9397591620218716297_u64, 863616855_u64, 0_u64, 0_u64, 0_u64, 0_u64, 4036217182219141120_u64, 14225770408530813914_u64, 1742195833639404896_u64, 8636168555_u64, 0_u64, 0_u64, 0_u64, 0_u64, 3468683674772307968_u64, 13130495569341277830_u64, 17421958336394048967_u64, 86361685550_u64, 0_u64, 0_u64, 0_u64, 0_u64, 16240092674013528064_u64, 2177747177445916989_u64, 8198886700554525133_u64, 863616855509_u64, 0_u64, 0_u64, 0_u64, 0_u64, 14826974150458867712_u64, 3330727700749618282_u64, 8201890710707044867_u64, 8636168555094_u64, 0_u64, 0_u64, 0_u64, 0_u64, 695788914912264192_u64, 14860532933786631212_u64, 8231930812232242207_u64, 86361685550944_u64, 0_u64, 0_u64, 0_u64, 0_u64, 6957889149122641920_u64, 1031376748189899192_u64, 8532331827484215614_u64, 863616855509444_u64, 0_u64, 0_u64, 0_u64, 0_u64, 14238659270097764352_u64, 10313767481898991923_u64, 11536341980003949676_u64, 8636168555094444_u64, 0_u64, 0_u64, 0_u64, 0_u64, 13259384185010782208_u64, 10903954450442161157_u64, 4682955357782187069_u64, 86361685550944446_u64, 0_u64, 0_u64, 0_u64, 0_u64, 3466633334140960768_u64, 16805824135873853497_u64, 9936065430402767463_u64, 863616855509444462_u64, 0_u64, 0_u64, 0_u64, 0_u64, 16219589267700056064_u64, 2037544695352570427_u64, 7126933935479916559_u64, 8636168555094444625_u64, 0_u64, 0_u64, 0_u64, 0_u64, 14621940087324147712_u64, 1928702879816152662_u64, 15929107133670510743_u64, 12574709256106239789_u64, 4_u64, 0_u64, 0_u64, 0_u64, 17092192357274615808_u64, 840284724451975011_u64, 11717118747028694503_u64, 15066628118805088202_u64, 46_u64, 0_u64, 0_u64, 0_u64, 4901226909360193536_u64, 8402847244519750119_u64, 6490723028029635334_u64, 3092328598374469098_u64, 468_u64, 0_u64, 0_u64, 0_u64, 12118780946182832128_u64, 10241496150359294728_u64, 9566998059167698496_u64, 12476541910035139367_u64, 4681_u64, 0_u64, 0_u64, 0_u64, 10507345019571011584_u64, 10181241135045189206_u64, 3436260223129226885_u64, 14084954658094083979_u64, 46816_u64, 0_u64, 0_u64, 0_u64, 12839729827162357760_u64, 9578690981904133985_u64, 15915858157582717239_u64, 11722338064973978479_u64, 468167_u64, 0_u64, 0_u64, 0_u64, 17716833829366267904_u64, 3553189450493581776_u64, 11584628986150759467_u64, 6542916207482475102_u64, 4681676_u64, 0_u64, 0_u64, 0_u64, 11147641630276714496_u64, 17085150431226266153_u64, 5165825419250284975_u64, 10088929853696096178_u64, 46816763_u64, 0_u64, 0_u64, 0_u64, 795951860509835264_u64, 4830807648876696992_u64, 14764766045083746527_u64, 8655578168413203702_u64, 468167635_u64, 0_u64, 0_u64, 0_u64, 7959518605098352640_u64, 11414588341347866688_u64, 73707861161052344_u64, 12768805389293830564_u64, 4681676354_u64, 0_u64, 0_u64, 0_u64, 5808209756145319936_u64, 3465418971221357188_u64, 737078611610523446_u64, 17007589450680995944_u64, 46816763546_u64, 0_u64, 0_u64, 0_u64, 2741865340324544512_u64, 16207445638504020267_u64, 7370786116105234461_u64, 4055197843423994896_u64, 468167635469_u64, 0_u64, 0_u64, 0_u64, 8971909329535893504_u64, 14500503795363789743_u64, 18367628939923689770_u64, 3658490286820845731_u64, 4681676354692_u64, 0_u64, 0_u64, 0_u64, 15932117000520728576_u64, 15877829437671036122_u64, 17655592735850933163_u64, 18138158794498905703_u64, 46816763546921_u64, 0_u64, 0_u64, 0_u64, 11747217415530872832_u64, 11204341787033948300_u64, 10535230695123367094_u64, 15360891281603092495_u64, 468167635469219_u64, 0_u64, 0_u64, 0_u64, 6791709713051418624_u64, 1362953428082173310_u64, 13118586582685912866_u64, 6034960226354512027_u64, 4681676354692198_u64, 0_u64, 0_u64, 0_u64, 12576864909385531392_u64, 13629534280821733103_u64, 2058657310892267348_u64, 5009370042416465429_u64, 46816763546921983_u64, 0_u64, 0_u64, 0_u64, 15088184651598004224_u64, 7168134292250469724_u64, 2139829035213121871_u64, 13200212276745551059_u64, 468167635469219832_u64, 0_u64, 0_u64, 0_u64, 3307893926303629312_u64, 16341110701376042400_u64, 2951546278421667097_u64, 2874914251488649279_u64, 4681676354692198327_u64, 0_u64, 0_u64, 0_u64, 14632195189326741504_u64, 15837154424084011073_u64, 11068718710507119362_u64, 10302398441176941175_u64, 9923275399502880039_u64, 2_u64, 0_u64, 0_u64, 17194743377300553728_u64, 10797591651163697809_u64, 6722662813883932_u64, 10790264043221653676_u64, 6999033626481042315_u64, 25_u64, 0_u64, 0_u64, 5926737109619572736_u64, 15742196143089220019_u64, 67226628138839325_u64, 15668920063668778680_u64, 14650104043681768307_u64, 253_u64, 0_u64, 0_u64, 3927138875067072512_u64, 9848008841215787265_u64, 672266281388393258_u64, 9115248047011373872_u64, 17373831920850821766_u64, 2537_u64, 0_u64, 0_u64, 2377900603251621888_u64, 6246368043610114572_u64, 6722662813883932585_u64, 17365504175275532256_u64, 7717622545122253120_u64, 25379_u64, 0_u64, 0_u64, 5332261958806667264_u64, 7123448214972490873_u64, 11886395917710671005_u64, 7634345089369358019_u64, 3389249156384324745_u64, 253794_u64, 0_u64, 0_u64, 16429131440647569408_u64, 15894249928596253884_u64, 8183494734849400357_u64, 2556474598855373732_u64, 15445747490133695838_u64, 2537941_u64, 0_u64, 0_u64, 16717361816799281152_u64, 11368546696286125920_u64, 8047971053655797114_u64, 7118001914844185708_u64, 6883522311660545453_u64, 25379418_u64, 0_u64, 0_u64, 1152921504606846976_u64, 3005002520603949513_u64, 6692734241719764682_u64, 15839786927313202236_u64, 13494990895476799685_u64, 253794183_u64, 0_u64, 0_u64, 11529215046068469760_u64, 11603281132329943514_u64, 11587110196068991973_u64, 10823916683455609435_u64, 5822700438801135546_u64, 2537941837_u64, 0_u64, 0_u64, 4611686018427387904_u64, 5352346881042125450_u64, 5190637518432610040_u64, 16005446466008336276_u64, 2886772166882700617_u64, 25379418373_u64, 0_u64, 0_u64, 9223372036854775808_u64, 16629980663002151270_u64, 15012887036906997170_u64, 12480512070406949834_u64, 10420977595117454562_u64, 253794183731_u64, 0_u64, 0_u64, 0_u64, 279109966635548161_u64, 2554917779393558781_u64, 14124656261812188652_u64, 11976055582626787546_u64, 2537941837315_u64, 0_u64, 0_u64, 0_u64, 2791099666355481610_u64, 7102433720226036194_u64, 12119354102155025209_u64, 9080091384010565771_u64, 25379418373156_u64, 0_u64, 0_u64, 0_u64, 9464252589845264484_u64, 15684104981131707093_u64, 10513076579292942397_u64, 17013937545267451252_u64, 253794183731564_u64, 0_u64, 0_u64, 0_u64, 2408805529904886760_u64, 9267097221640658007_u64, 12897045424381665898_u64, 4118678789288547981_u64, 2537941837315649_u64, 0_u64, 0_u64, 0_u64, 5641311225339315984_u64, 437251847858821991_u64, 18289989801559349289_u64, 4293299745466376584_u64, 25379418373156492_u64, 0_u64, 0_u64, 0_u64, 1072880032264504992_u64, 4372518478588219913_u64, 16879201352207528346_u64, 6039509307244662617_u64, 253794183731564922_u64, 0_u64, 0_u64, 0_u64, 10728800322645049920_u64, 6831696638463095898_u64, 2771316858689318918_u64, 5054860851317971331_u64, 2537941837315649223_u64, 0_u64, 0_u64, 0_u64, 15054282857902741120_u64, 12976734163502304137_u64, 9266424513183637567_u64, 13655120365760610079_u64, 6932674299446940616_u64, 1_u64, 0_u64, 0_u64, 2968875989350998272_u64, 640133119056180066_u64, 430524763288617597_u64, 7423995141639239483_u64, 13986510773340751319_u64, 13_u64, 0_u64, 0_u64, 11242015819800431104_u64, 6401331190561800661_u64, 4305247632886175970_u64, 452975121554188366_u64, 10737899217440651882_u64, 137_u64, 0_u64, 0_u64, 1739693755747001344_u64, 8673079684489351768_u64, 6158988181442656471_u64, 4529751215541883662_u64, 15145271805858760740_u64, 1375_u64, 0_u64, 0_u64, 17396937557470013440_u64, 12943820550055311216_u64, 6249649593297909866_u64, 8404024007999733391_u64, 3878765468911194474_u64, 13758_u64, 0_u64, 0_u64, 7948678911314169856_u64, 310996984586250857_u64, 7156263711850443819_u64, 10253263785159127449_u64, 1894166541692841512_u64, 137582_u64, 0_u64, 0_u64, 5699812818303492096_u64, 3109969845862508574_u64, 16222404897375783342_u64, 10298917483043516413_u64, 494921343218863509_u64, 1375821_u64, 0_u64, 0_u64, 1657895961906266112_u64, 12652954384915534127_u64, 14650096384081420493_u64, 10755454461887406058_u64, 4949213432188635095_u64, 13758210_u64, 0_u64, 0_u64, 16578959619062661120_u64, 15849079406898031574_u64, 17373755324847343624_u64, 15320824250326302507_u64, 12598646174467247723_u64, 137582102_u64, 0_u64, 0_u64, 18215643600950198272_u64, 10916841479303902820_u64, 7716856585087471704_u64, 5634289913586612151_u64, 15305997302415167542_u64, 1375821026_u64, 0_u64, 0_u64, 16135739346116018176_u64, 16934694424491270129_u64, 3381589556036510581_u64, 1002666914737466666_u64, 5486020434475262495_u64, 13758210268_u64, 0_u64, 0_u64, 13783440871483768832_u64, 3326247581526736754_u64, 15369151486655554203_u64, 10026669147374666661_u64, 17966716197333521718_u64, 137582102682_u64, 0_u64, 0_u64, 8707200198870827008_u64, 14815731741557815931_u64, 6117562276879129103_u64, 8032971105198908538_u64, 13646465309949252641_u64, 1375821026829_u64, 0_u64, 0_u64, 13285025693870063616_u64, 583364825901746386_u64, 5835390547662636190_u64, 6542734757150878919_u64, 7337444583525665102_u64, 13758210268297_u64, 0_u64, 0_u64, 3723048422733774848_u64, 5833648259017463867_u64, 3013673255497707052_u64, 10087115350380134345_u64, 18034213614127996175_u64, 137582102682973_u64, 0_u64, 0_u64, 336996079918645248_u64, 2996250369045983824_u64, 11689988481267518907_u64, 8637433135253585371_u64, 14321439477893997211_u64, 1375821026829739_u64, 0_u64, 0_u64, 3369960799186452480_u64, 11515759616750286624_u64, 6219420370417879375_u64, 12587355057697647252_u64, 14087186262973110802_u64, 13758210268297397_u64, 0_u64, 0_u64, 15252863918154973184_u64, 4477131725245556545_u64, 6853971483050138908_u64, 15193086134719162827_u64, 11744654113764246714_u64, 137582102682973977_u64, 0_u64, 0_u64, 4954686591873318912_u64, 7877829105036462226_u64, 13199482609372734234_u64, 4356908757515215345_u64, 6766076695385157452_u64, 1375821026829739776_u64, 0_u64, 0_u64, 12653377771314085888_u64, 4991314755526415798_u64, 2867617577760481032_u64, 6675599427733050225_u64, 12320534732722919674_u64, 13758210268297397763_u64]
+
+### 10^k as a U512 by table lookup (k in 0..154).
+routine pow10_512_tbl(k: S64) -> U512
+  var i0 = reinterpret_bits[S64, U64](mul[S64](a: k, b: 8_s64))
+  var i1 = add[U64](a: i0, b: 1_u64)
+  var i2 = add[U64](a: i0, b: 2_u64)
+  var i3 = add[U64](a: i0, b: 3_u64)
+  var i4 = add[U64](a: i0, b: 4_u64)
+  var i5 = add[U64](a: i0, b: 5_u64)
+  var i6 = add[U64](a: i0, b: 6_u64)
+  var i7 = add[U64](a: i0, b: 7_u64)
+  var g0 = POW10_VAL512[i0]
+  var g1 = POW10_VAL512[i1]
+  var g2 = POW10_VAL512[i2]
+  var g3 = POW10_VAL512[i3]
+  var g4 = POW10_VAL512[i4]
+  var g5 = POW10_VAL512[i5]
+  var g6 = POW10_VAL512[i6]
+  var g7 = POW10_VAL512[i7]
+  return bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: zero_extend[U64, U512](g0), b: shift_left[U512](value: zero_extend[U64, U512](g1), bits: uf_amt[U512](64_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g2), bits: uf_amt[U512](128_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g3), bits: uf_amt[U512](192_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g4), bits: uf_amt[U512](256_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g5), bits: uf_amt[U512](320_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g6), bits: uf_amt[U512](384_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g7), bits: uf_amt[U512](448_s64)))
+
+# ============================================================================
+# Public surface — creators / presets / parser / hash / bytes
+#
+# The construction/conversion web, presets, byte/hash views, and the decimal-text
+# parser. The storage layout, arithmetic, comparison, libm, and formatting are the
+# software BID engine above (the `@llvm("i128") record D128 obeys Numeric, Ordered`).
+# Pure RF, no FFI.
+# ============================================================================
+
+# ============================================================================
+# Constants
+# ============================================================================
+
 preset D128_ZERO: D128 = 0.0_d128
 preset D128_ONE: D128 = 1.0_d128
+# IEEE 754 decimal128: 34 significant digits, emax = 6144.
+preset D128_MAX: D128 = 9.999999999999999999999999999999999e6144_d128
+preset D128_MIN: D128 = -9.999999999999999999999999999999999e6144_d128
+preset D128_MIN_POSITIVE: D128 = 1e-6143_d128
+preset D128_EPSILON: D128 = 1e-33_d128
 
 # ============================================================================
-# Creators
+# Creators — integers (exact, then engine rounds to <= 34 digits)
 # ============================================================================
 
-### Converts an `S8` into decimal128 form.
-### :param from: The signed 8-bit integer to convert.
-### :returns: The corresponding `D128` value.
+### Converts a signed integer into decimal128.
 routine D128.$create(from: S8) -> D128
-  return rf_d128_from_s32(S32(from))
+  return D128.from_int64(value: S64(from))
 
-### Converts an `S16` into decimal128 form.
-### :param from: The signed 16-bit integer to convert.
-### :returns: The corresponding `D128` value.
+### Converts a signed 16-bit integer into decimal128.
 routine D128.$create(from: S16) -> D128
-  return rf_d128_from_s32(S32(from))
+  return D128.from_int64(value: S64(from))
 
-### Converts an `S32` into decimal128 form.
-### :param from: The signed 32-bit integer to convert.
-### :returns: The corresponding `D128` value.
+### Converts a signed 32-bit integer into decimal128.
 routine D128.$create(from: S32) -> D128
-  return rf_d128_from_s32(from)
+  return D128.from_int64(value: S64(from))
 
-### Converts an `S64` into decimal128 form.
-### :param from: The signed 64-bit integer to convert.
-### :returns: The corresponding `D128` value.
+### Converts a signed 64-bit integer into decimal128.
 routine D128.$create(from: S64) -> D128
-  return rf_d128_from_s64(from)
+  return D128.from_int64(value: from)
 
-### Converts an `S128` into decimal128 through the supported integer path.
-### :param from: The signed 128-bit integer to convert.
-### :returns: The closest representable `D128` value.
+### Converts a signed 128-bit integer into decimal128 (exact: <= 34 digits fit the coefficient).
 routine D128.$create(from: S128) -> D128
-  # Convert through S64 - may lose precision
-  return from.S64!().D128()
+  var neg = signed_lt[S128](a: from, b: 0_s128)
+  var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
+  return D128.from_components(sign: neg, coeff: mag, exp: 0_s64)
 
-### Converts a `U8` into decimal128 form.
-### :param from: The unsigned 8-bit integer to convert.
-### :returns: The corresponding `D128` value.
+### Converts a signed 256-bit integer into decimal128 (rounds half-even when > 34 digits).
+routine D128.$create(from: S256) -> D128
+  # The 256-bit magnitude can exceed 34 digits, so round it (half-even) via decfinB
+  # rather than D128.from_components (which assumes a <=34-digit U128 coefficient).
+  var neg = signed_lt[S256](a: from, b: 0_s256)
+  var mag = if neg then reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: from)) else reinterpret_bits[S256, U256](from)
+  return d128_of_parts(p: decfinB(sign: neg, coeff: mag, exp: 0_s64, pref: 0_s64))
+
+### Converts an unsigned integer into decimal128.
 routine D128.$create(from: U8) -> D128
-  return rf_d128_from_u32(U32(from))
+  return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
-### Converts a `U16` into decimal128 form.
-### :param from: The unsigned 16-bit integer to convert.
-### :returns: The corresponding `D128` value.
+### Converts an unsigned 16-bit integer into decimal128.
 routine D128.$create(from: U16) -> D128
-  return rf_d128_from_u32(U32(from))
+  return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
-### Converts a `U32` into decimal128 form.
-### :param from: The unsigned 32-bit integer to convert.
-### :returns: The corresponding `D128` value.
+### Converts an unsigned 32-bit integer into decimal128.
 routine D128.$create(from: U32) -> D128
-  return rf_d128_from_u32(from)
+  return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
-### Converts a `U64` into decimal128 form.
-### :param from: The unsigned 64-bit integer to convert.
-### :returns: The corresponding `D128` value.
+### Converts an unsigned 64-bit integer into decimal128.
 routine D128.$create(from: U64) -> D128
-  return rf_d128_from_u64(from)
+  return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
-### Converts a `U128` into decimal128 through the supported integer path.
-### :param from: The unsigned 128-bit integer to convert.
-### :returns: The closest representable `D128` value.
+### Converts an unsigned 128-bit integer into decimal128 (exact: <= 34 digits fit the coefficient).
 routine D128.$create(from: U128) -> D128
-  # Convert through U64 - may lose precision
-  return from.U64!().D128()
+  return D128.from_components(sign: false, coeff: from, exp: 0_s64)
 
-### Converts a half-precision binary float to decimal128.
-### :param from: The binary floating-point input.
-### :returns: The closest representable `D128` value.
+### Converts an unsigned 256-bit integer into decimal128 (rounds half-even when > 34 digits).
+routine D128.$create(from: U256) -> D128
+  # >34-digit magnitude rounds (half-even) via decfinB, same as the S256 path.
+  return d128_of_parts(p: decfinB(sign: false, coeff: from, exp: 0_s64, pref: 0_s64))
+
+# ============================================================================
+# Creators — binary floats (route through the matched-width engine F256)
+# ============================================================================
+
+### Converts a binary float to decimal128 (correctly rounded via F256 -> D128).
 routine D128.$create(from: F16) -> D128
-  return from.F32().D128()
+  return D128(from: from.F32())
 
-### Converts a single-precision binary float to decimal128.
-### :param from: The binary floating-point input.
-### :returns: The closest representable `D128` value.
+### Converts an F32 to decimal128 (widen to F64 -> F128 -> F256, correctly rounded).
 routine D128.$create(from: F32) -> D128
-  return rf_f32_to_d128(from)
+  return D128(from: from.F64())
 
-### Converts a double-precision binary float to decimal128.
-### :param from: The binary floating-point input.
-### :returns: The closest representable `D128` value.
+### Converts an F64 to decimal128 (widen to F128 -> F256, correctly rounded).
 routine D128.$create(from: F64) -> D128
-  return rf_f64_to_d128(from)
+  return f256_to_d128(x: F256(from: F128(from: from)))
 
-### Converts a quadruple-precision binary float to decimal128 through the supported runtime path.
-### :param from: The binary floating-point input.
-### :returns: The closest representable `D128` value.
+### Converts an F128 to decimal128 (widen to F256, correctly rounded).
 routine D128.$create(from: F128) -> D128
-  return from.F64!().D128()
+  return f256_to_d128(x: F256(from: from))
 
-### Widens a decimal32 value to decimal128.
-### :param from: The decimal floating-point input.
-### :returns: The corresponding `D128` value.
+# ============================================================================
+# Creators — decimal <-> decimal (widen narrow parts to D128Parts)
+# ============================================================================
+
+### Widens a decimal32 to decimal128 (exact; no rounding needed).
 routine D128.$create(from: D32) -> D128
-  var bits = from.to_bits()
-  return rf_d32_to_d128(bits)
+  return d128_of_parts(p: d32parts_to_d128(p: from.decode()))
 
-### Widens a decimal64 value to decimal128.
-### :param from: The decimal floating-point input.
-### :returns: The corresponding `D128` value.
+### Widens a decimal64 to decimal128 (exact; no rounding needed).
 routine D128.$create(from: D64) -> D128
-  var bits = from.to_bits()
-  return rf_d64_to_d128(bits)
+  return d128_of_parts(p: d64parts_to_d128(p: from.decode()))
 
-### Returns an existing `D128` unchanged.
-### :param from: The decimal128 value to forward.
-### :returns: `from`.
+### Identity conversion (decimal128 -> decimal128).
 routine D128.$create(from: D128) -> D128
   return from
 
 # ============================================================================
-# Arithmetic Operations
+# Text parsing — pure-RF decimal scanner feeding the engine from_components
+# (which rounds RNE to 34 digits and clamps the exponent). No FFI.
 # ============================================================================
 
-### Returns the decimal sum `me + you`, throwing if the result is non-finite.
-### :param you: The addend.
-### :returns: The resulting `D128` value.
-### :throws: {NumericOverflowError} if the result is non-finite.
-routine D128.$add!(you: D128) -> D128
-  var result = rf_d128_add(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"D128 addition produced non-finite result: {me} + {you}")
-  return result
-
-### Returns the decimal difference `me - you`, throwing if the result is non-finite.
-### :param you: The value to subtract.
-### :returns: The resulting `D128` value.
-### :throws: {NumericOverflowError} if the result is non-finite.
-routine D128.$sub!(you: D128) -> D128
-  var result = rf_d128_sub(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"D128 subtraction produced non-finite result: {me} - {you}")
-  return result
-
-### Returns the decimal product `me * you`, throwing if the result is non-finite.
-### :param you: The multiplier.
-### :returns: The resulting `D128` value.
-### :throws: {NumericOverflowError} if the result is non-finite.
-routine D128.$mul!(you: D128) -> D128
-  var result = rf_d128_mul(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"D128 multiplication produced non-finite result: {me} * {you}")
-  return result
-
-### Returns the decimal quotient `me / you`, throwing if the result is non-finite.
-### :param you: The divisor.
-### :returns: The resulting `D128` value.
-### :throws: {NumericOverflowError} if the result is non-finite (including division by zero).
-routine D128.$truediv!(you: D128) -> D128
-  var result = rf_d128_div(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"D128 division produced non-finite result: {me} / {you}")
-  return result
-
-### Adds `me + you` without finiteness checking (raw IEEE 754-2008 decimal).
-dangerous routine D128.$add_unchecked(you: D128) -> D128
-  return rf_d128_add(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-
-### Subtracts `me - you` without finiteness checking (raw IEEE 754-2008 decimal).
-dangerous routine D128.$sub_unchecked(you: D128) -> D128
-  return rf_d128_sub(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-
-### Multiplies `me * you` without finiteness checking (raw IEEE 754-2008 decimal).
-dangerous routine D128.$mul_unchecked(you: D128) -> D128
-  return rf_d128_mul(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-
-### Divides `me / you` without finiteness checking (raw IEEE 754-2008 decimal).
-dangerous routine D128.$truediv_unchecked(you: D128) -> D128
-  return rf_d128_div(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-
-### Returns the negated value.
-### :returns: The resulting `D128` value.
-routine D128.$neg() -> D128
-  var zero = D128_ZERO
-  return rf_d128_sub(a_low: zero.low, a_high: zero.high, b_low: me.low, b_high: me.high)
-
-# ============================================================================
-# Comparison Operations
-# ============================================================================
-
-### Returns whether both values are equal.
-### :param you: The other value to compare against.
-### :returns: The resulting `Bool` value.
-routine D128.$eq(you: D128) -> Bool
-  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) == 0
-
-### Compares this value with the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `ComparisonSign` value.
-routine D128.$cmp(you: D128) -> ComparisonSign
-  var cmp = rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
-  if cmp < 0
-    return ME_SMALL
-  if cmp > 0
-    return ME_LARGE
-  return SAME
-
-# ============================================================================
-# Math Operations
-# ============================================================================
-
-### Returns the decimal square root of this value.
-### :returns: The resulting `D128` value.
-routine D128.sqrt() -> D128
-  return rf_d128_sqrt(low: me.low, high: me.high)
-
-### Returns the absolute value.
-### :returns: The resulting `D128` value.
-routine D128.abs() -> D128
-  return rf_d128_abs(low: me.low, high: me.high)
-
-### Rounds this decimal value toward positive infinity.
-### :returns: The resulting `D128` value.
-routine D128.ceil() -> D128
-  return rf_d128_ceil(low: me.low, high: me.high)
-
-### Rounds this decimal value toward negative infinity.
-### :returns: The resulting `D128` value.
-routine D128.floor() -> D128
-  return rf_d128_floor(low: me.low, high: me.high)
-
-### Rounds this decimal value to the nearest integral decimal value.
-### :returns: The resulting `D128` value.
-routine D128.round() -> D128
-  return rf_d128_round(low: me.low, high: me.high)
-
-### Truncates this decimal value toward zero.
-### :returns: The resulting `D128` value.
-routine D128.int_truncate() -> D128
-  return rf_d128_trunc(low: me.low, high: me.high)
-
-# ============================================================================
-# Trigonometric Functions (via F128 conversion + LibBF)
-# ============================================================================
-
-### Returns the sine of this decimal value, interpreting it as radians.
-### :returns: The resulting `D128` value.
-routine D128.sin() -> D128
-  return rf_d128_sin(low: me.low, high: me.high)
-
-### Returns the cosine of this decimal value, interpreting it as radians.
-### :returns: The resulting `D128` value.
-routine D128.cos() -> D128
-  return rf_d128_cos(low: me.low, high: me.high)
-
-### Returns the tangent of this decimal value, interpreting it as radians.
-### :returns: The resulting `D128` value.
-routine D128.tan() -> D128
-  return rf_d128_tan(low: me.low, high: me.high)
-
-### Returns the inverse sine of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.asin() -> D128
-  return rf_d128_asin(low: me.low, high: me.high)
-
-### Returns the inverse cosine of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.acos() -> D128
-  return rf_d128_acos(low: me.low, high: me.high)
-
-### Returns the inverse tangent of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.atan() -> D128
-  return rf_d128_atan(low: me.low, high: me.high)
-
-### Returns the quadrant-aware angle of the point `(x, me)`.
-### :param x: The x-coordinate paired with this y-coordinate.
-### :returns: The resulting `D128` value.
-routine D128.atan2(x: D128) -> D128
-  return rf_d128_atan2(y_low: me.low, y_high: me.high, x_low: x.low, x_high: x.high)
-
-# ============================================================================
-# Hyperbolic Functions (via F128 conversion + LibBF)
-# ============================================================================
-
-### Returns the hyperbolic sine of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.sinh() -> D128
-  return rf_d128_sinh(low: me.low, high: me.high)
-
-### Returns the hyperbolic cosine of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.cosh() -> D128
-  return rf_d128_cosh(low: me.low, high: me.high)
-
-### Returns the hyperbolic tangent of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.tanh() -> D128
-  return rf_d128_tanh(low: me.low, high: me.high)
-
-### Returns the inverse hyperbolic sine of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.asinh() -> D128
-  return rf_d128_asinh(low: me.low, high: me.high)
-
-### Returns the inverse hyperbolic cosine of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.acosh() -> D128
-  return rf_d128_acosh(low: me.low, high: me.high)
-
-### Returns the inverse hyperbolic tangent of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.atanh() -> D128
-  return rf_d128_atanh(low: me.low, high: me.high)
-
-# ============================================================================
-# Exponential and Logarithmic Functions (via TLFloat octuple routing)
-# ============================================================================
-
-### Returns `e` raised to this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.exp() -> D128
-  return rf_d128_exp(low: me.low, high: me.high)
-
-### Returns `2` raised to this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.exp2() -> D128
-  return rf_d128_exp2(low: me.low, high: me.high)
-
-### Returns `e` raised to this decimal value, minus one (accurate near zero).
-### :returns: The resulting `D128` value.
-routine D128.expm1() -> D128
-  return rf_d128_expm1(low: me.low, high: me.high)
-
-### Returns the natural logarithm of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.log() -> D128
-  return rf_d128_log(low: me.low, high: me.high)
-
-### Returns the base-2 logarithm of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.log2() -> D128
-  return rf_d128_log2(low: me.low, high: me.high)
-
-### Returns the base-10 logarithm of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.log10() -> D128
-  return rf_d128_log10(low: me.low, high: me.high)
-
-### Returns the natural logarithm of one plus this decimal value (accurate near zero).
-### :returns: The resulting `D128` value.
-routine D128.log1p() -> D128
-  return rf_d128_log1p(low: me.low, high: me.high)
-
-# ============================================================================
-# Power Functions (via TLFloat octuple routing)
-# ============================================================================
-
-### Raises this decimal value to the decimal exponent `exp`.
-### :param exp: The exponent value.
-### :returns: The resulting `D128` value.
-routine D128.pow(exp: D128) -> D128
-  return rf_d128_pow(base_low: me.low, base_high: me.high, exp_low: exp.low, exp_high: exp.high)
-
-### Raises this decimal value to `exp` and rejects non-finite results.
-### :param exp: The exponent value.
-### :returns: The resulting `D128` value.
-routine D128.$pow!(exp: D128) -> D128
-  var result = me.pow(exp)
-  if not result.is_finite()
-    throw NumericOverflowError(description: f"D128 power produced non-finite result: {me} ** {exp}")
-  return result
-
-### Returns the real cube root of this decimal value.
-### :returns: The resulting `D128` value.
-routine D128.cbrt() -> D128
-  return rf_d128_cbrt(low: me.low, high: me.high)
-
-### Returns the Euclidean length of the vector `(me, y)`.
-### :param y: The second coordinate.
-### :returns: The resulting `D128` value.
-routine D128.hypot(y: D128) -> D128
-  return rf_d128_hypot(x_low: me.low, x_high: me.high, y_low: y.low, y_high: y.high)
-
-# ============================================================================
-# Utility Methods
-# ============================================================================
-
-### Returns the smaller of this value and `you`.
-### :param you: The other value to compare against.
-### :returns: The resulting `D128` value.
-routine D128.min(you: D128) -> D128
-  return if rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) <= 0 then me else you
-
-### Returns the larger of this value and `you`.
-### :param you: The other value to compare against.
-### :returns: The resulting `D128` value.
-routine D128.max(you: D128) -> D128
-  return if rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) >= 0 then me else you
-
-### Restricts this value to the closed interval `[min_val, max_val]`.
-### :param min_val: The lower bound to enforce.
-### :param max_val: The upper bound to enforce.
-### :returns: The resulting `D128` value.
-@positional
-routine D128.clamp(min_val: D128, max_val: D128) -> D128
-  return me.min(max_val).max(min_val)
-
-### Returns `true` when this decimal value is greater than zero.
-### :returns: The resulting `Bool` value.
-routine D128.is_positive() -> Bool
-  var zero = D128_ZERO
-  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) > 0
-
-### Returns `true` when this decimal value is less than zero.
-### :returns: The resulting `Bool` value.
-routine D128.is_negative() -> Bool
-  var zero = D128_ZERO
-  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) < 0
-
-### Returns `true` when this decimal value compares equal to zero.
-### :returns: The resulting `Bool` value.
-routine D128.is_zero() -> Bool
-  var zero = D128_ZERO
-  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) == 0
-
-### Returns `true` when this decimal value is finite.
-### :returns: Whether the runtime encoding represents a finite number.
-routine D128.is_finite() -> Bool
-  return rf_d128_isfinite(low: me.low, high: me.high) != 0_s32
-
-### Returns the sign of this value as `-1d128`, `0d128`, or `1d128`.
-### :returns: The resulting `D128` value.
-routine D128.signum() -> D128
-  var zero = D128_ZERO
-  var one = D128_ONE
-  return when
-    rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) > 0 => one
-    rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) < 0 => rf_d128_sub(a_low: zero.low, a_high: zero.high, b_low: one.low, b_high: one.high)
-    else => zero
-
-# ============================================================================
-# Type Conversions
-# ============================================================================
-
-### Returns the low 64 bits of the runtime decimal128 encoding.
-### :returns: The resulting `U64` value.
-routine D128.low_bits() -> U64
-  return me.low
-
-### Returns the high 64 bits of the runtime decimal128 encoding.
-### :returns: The resulting `U64` value.
-routine D128.high_bits() -> U64
-  return me.high
-
-### Reconstructs a decimal128 value from its raw low/high words.
-### :param low: The low 64 bits of the encoding.
-### :param high: The high 64 bits of the encoding.
-### :returns: The resulting `D128` value.
-common routine D128.from_bits(low: U64, high: U64) -> D128
-  return D128(low: low, high: high)
-
-# ============================================================================
-# Text Representation and Parsing
-# ============================================================================
-
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
-routine D128.$represent() -> Text
-  var cstr_result = rf_d128_to_string(low: me.low_bits(), high: me.high_bits())
-  return Text(from: CStr(from_ptr: cstr_result))
-
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
-routine D128.$diagnose() -> Text
-  return "D128(" + me.$represent() + ")"
-
-### Parses a decimal literal into a `D128`.
-### :param from_text: The text to parse. Accepts standard decimal notation and
-###   the special values `nan`, `inf`, and `infinity` (case-insensitive, with
-###   optional leading sign).
-### :returns: The `D128` value parsed from the input.
+### Parses a decimal literal into a `D128` (the shared scanner for all decimal widths;
+### D64/D32 narrow the result). Accepts an optional sign, an integer/fraction mantissa, an
+### optional `e`/`E` exponent, and the special values `inf`/`infinity`/`nan` (case-insensitive).
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
-routine D128.$create!(from_text: Text) -> D128
+### Scans decimal text into raw parts (sign, special, coeff, exp10) WITHOUT rounding to
+### 34 digits — the shared front end for both `D128` and `F128`/`F64` parsing. Keeping the
+### full coefficient (up to 38 digits in the U128) lets the binary parsers round once,
+### correctly, instead of double-rounding through decimal128.
+### :throws: {InvalidValueError} on malformed input.
+routine scan_decimal_parts!(from_text: Text) -> D128Parts
   var len = from_text.count()
   if len == 0u64
-    throw InvalidValueError(input: from_text, target: "D128")
+    throw InvalidValueError(input: from_text, target: "decimal number")
   var i = 0u64
+  var neg = false
   var first = from_text[0u64]
   if first == Character(0x002Bu32) or first == Character(0x002Du32)
+    neg = first == Character(0x002Du32)
     i = 1u64
     if i >= len
-      throw InvalidValueError(input: from_text, target: "D128")
-  var special = false
+      throw InvalidValueError(input: from_text, target: "decimal number")
+  # special values
   var rest = len - i
-  if rest >= 3u64
+  if rest == 3u64 or rest == 8u64
     var c0 = from_text[i].to_lowercase()
     var c1 = from_text[i + 1u64].to_lowercase()
     var c2 = from_text[i + 2u64].to_lowercase()
     if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
-      special = true
-    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      special = true
-    if not special and rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+      return D128Parts(sign: neg, special: 2_u64, exp: 0_s64, coeff: 0_u128)
+    if c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+      if rest == 3u64
+        return D128Parts(sign: neg, special: 1_u64, exp: 0_s64, coeff: 0_u128)
       var c3 = from_text[i + 3u64].to_lowercase()
       var c4 = from_text[i + 4u64].to_lowercase()
       var c5 = from_text[i + 5u64].to_lowercase()
       var c6 = from_text[i + 6u64].to_lowercase()
       var c7 = from_text[i + 7u64].to_lowercase()
       if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
-        special = true
-  if not special
-    var has_digit = false
-    var has_dot = false
-    var has_exp = false
-    while i < len
-      var ch = from_text[i]
-      if ch.is_numeric()
-        has_digit = true
-      elseif ch == Character(0x002Eu32)
-        if has_dot or has_exp
-          throw InvalidValueError(input: from_text, target: "D128")
-        has_dot = true
-      elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
-        if has_exp or not has_digit
-          throw InvalidValueError(input: from_text, target: "D128")
-        has_exp = true
-        has_digit = false
-        if i + 1u64 < len
-          var next_ch = from_text[i + 1u64]
-          if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
-            i = i + 1u64
-      else
-        throw InvalidValueError(input: from_text, target: "D128")
+        return D128Parts(sign: neg, special: 1_u64, exp: 0_s64, coeff: 0_u128)
+    # NOT a special value: a 3- or 8-char numeric like "0.5" / "100" / "12345678" must fall
+    # through to the numeric scan below — do NOT throw here (that was a latent bug).
+  # numeric: accumulate coefficient and base-10 exponent
+  var coeff = 0_u128
+  var exp10 = 0_s64
+  var seen_dot = false
+  var has_digit = false
+  while i < len
+    var ch = from_text[i]
+    if ch.is_numeric()
+      coeff = add[U128](a: mul[U128](a: coeff, b: 10_u128), b: zero_extend[U32, U128](reinterpret_bits[S32, U32](ch.digit_value())))
+      if seen_dot
+        exp10 = sub[S64](a: exp10, b: 1_s64)
+      has_digit = true
+    elseif ch == Character(0x002Eu32)
+      if seen_dot
+        throw InvalidValueError(input: from_text, target: "decimal number")
+      seen_dot = true
+    elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
+      if not has_digit
+        throw InvalidValueError(input: from_text, target: "decimal number")
       i = i + 1u64
-    if not has_digit
-      throw InvalidValueError(input: from_text, target: "D128")
-  var cstr_val = CStr(from: from_text)
-  return rf_d128_from_string(cstr_val)
+      var esign = false
+      if i < len and (from_text[i] == Character(0x002Bu32) or from_text[i] == Character(0x002Du32))
+        esign = from_text[i] == Character(0x002Du32)
+        i = i + 1u64
+      var eval = 0_s64
+      var has_edigit = false
+      while i < len
+        var ec = from_text[i]
+        if not ec.is_numeric()
+          throw InvalidValueError(input: from_text, target: "decimal number")
+        eval = add[S64](a: mul[S64](a: eval, b: 10_s64), b: S64(ec.digit_value()))
+        has_edigit = true
+        i = i + 1u64
+      if not has_edigit
+        throw InvalidValueError(input: from_text, target: "decimal number")
+      exp10 = add[S64](a: exp10, b: if esign then sub[S64](a: 0_s64, b: eval) else eval)
+      break
+    else
+      throw InvalidValueError(input: from_text, target: "decimal number")
+    i = i + 1u64
+  if not has_digit
+    throw InvalidValueError(input: from_text, target: "decimal number")
+  return D128Parts(sign: neg, special: 0_u64, exp: exp10, coeff: coeff)
+
+### Parses decimal text into a `D128` (rounds the scanned coefficient to 34 digits).
+### :throws: {InvalidValueError} on malformed input.
+routine parse_decimal_d128!(from_text: Text) -> D128
+  var p = scan_decimal_parts!(from_text: from_text)
+  if int_eq[U64](a: p.special, b: 1_u64)
+    return D128.infinity(sign: p.sign)
+  if unsigned_ge[U64](a: p.special, b: 2_u64)
+    return D128.quiet_nan()
+  return D128.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
+
+### Parses a decimal literal into a `D128`.
+### :throws: {InvalidValueError} if the text is not a valid decimal literal.
+routine D128.$create!(from_text: Text) -> D128
+  return parse_decimal_d128!(from_text: from_text)
 
 # ============================================================================
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this value via the 128-bit hash path.
-### :returns: A `U64` hash derived from the full decimal128 encoding.
+### Returns an xxHash64-based hash of the raw decimal128 encoding.
 routine D128.$fast_hash() -> U64
-  return __hash_u128(v: U128(me.low) | (U128(me.high) << 64_u32))
+  return __hash_u128(v: me.to_bits())
 
 # ============================================================================
 # Byte Representation
 # ============================================================================
 
 ### Returns the raw bytes of this value in little-endian order.
-### :returns: The resulting `Array[Byte, 16]` value.
 routine D128.to_bytes_le() -> Array[Byte, 16]
-  var raw = U128(me.low) | (U128(me.high) << 64_u32)
-  var lo = int_truncate[U128, U64](raw)
-  var hi = int_truncate[U128, U64](shift_right_unsigned[U128](raw, 64_u128))
+  var raw = me.to_bits()
   var result = Array[Byte, 16]()
-  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](lo))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
-  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
-  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
-  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40u64)))
-  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
-  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
-  result = set_byte_at(array: result, index: 8_u64, value: int_truncate[U64, U8](hi))
-  result = set_byte_at(array: result, index: 9_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
-  result = set_byte_at(array: result, index: 10u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
-  result = set_byte_at(array: result, index: 11_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
-  result = set_byte_at(array: result, index: 12_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
-  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40u64)))
-  result = set_byte_at(array: result, index: 14_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
-  result = set_byte_at(array: result, index: 15_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
+  var i = 0_u64
+  while unsigned_lt[U64](a: i, b: 16_u64)
+    var b = int_truncate[U128, U8](shift_right_unsigned[U128](raw, zero_extend[U64, U128](mul[U64](a: i, b: 8_u64))))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = add[U64](a: i, b: 1_u64)
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
-### :returns: The resulting `Array[Byte, 16]` value.
 routine D128.to_bytes_be() -> Array[Byte, 16]
-  var raw = U128(me.low) | (U128(me.high) << 64_u32)
-  var lo = byte_swap[U64](int_truncate[U128, U64](shift_right_unsigned[U128](raw, 64_u128)))
-  var hi = byte_swap[U64](int_truncate[U128, U64](raw))
+  var raw = me.to_bits()
   var result = Array[Byte, 16]()
-  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](lo))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
-  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
-  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
-  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40u64)))
-  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
-  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
-  result = set_byte_at(array: result, index: 8_u64, value: int_truncate[U64, U8](hi))
-  result = set_byte_at(array: result, index: 9_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
-  result = set_byte_at(array: result, index: 10u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
-  result = set_byte_at(array: result, index: 11_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
-  result = set_byte_at(array: result, index: 12_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
-  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40u64)))
-  result = set_byte_at(array: result, index: 14_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
-  result = set_byte_at(array: result, index: 15_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
+  var i = 0_u64
+  while unsigned_lt[U64](a: i, b: 16_u64)
+    var b = int_truncate[U128, U8](shift_right_unsigned[U128](raw, zero_extend[U64, U128](mul[U64](a: sub[U64](a: 15_u64, b: i), b: 8_u64))))
+    result = set_byte_at(array: result, index: i, value: b)
+    i = add[U64](a: i, b: 1_u64)
   return result
-
-### Returns a keyed hash of this value using SipHash-2-4.
-### :param k0: The first 64-bit key word.
-### :param k1: The second 64-bit key word.
-### :returns: The resulting `U64` value.
-routine D128.$hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u128(v: U128(me.low) | (U128(me.high) << 64_u32), k0: k0, k1: k1)

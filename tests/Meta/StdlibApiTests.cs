@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace RazorForge.Tests.Meta;
 
@@ -55,7 +56,47 @@ public sealed class StdlibApiTests
             $"Run with RF_TEST_BLESS=1 to capture current output as the snapshot.");
 
         string expected = NormalizeForCompare(File.ReadAllText(expectedPath));
-        Assert.Equal(expected, actual);
+        AssertOutputEqual(fixtureName: fixtureName, expected: expected, actual: actual);
+    }
+
+    /// <summary>
+    /// Compares fixture output and, on mismatch, throws with the COMPLETE expected and actual
+    /// text (xUnit's <c>Assert.Equal</c> truncates long strings with <c>···</c>, which hides the
+    /// real divergence). Also pinpoints the first differing line for a quick read.
+    /// </summary>
+    private static void AssertOutputEqual(string fixtureName, string expected, string actual)
+    {
+        if (expected == actual)
+        {
+            return;
+        }
+
+        string[] expLines = expected.Split('\n');
+        string[] actLines = actual.Split('\n');
+        var sb = new StringBuilder();
+        sb.AppendLine($"Fixture output mismatch: {fixtureName}");
+
+        int max = Math.Max(expLines.Length, actLines.Length);
+        for (int i = 0; i < max; i++)
+        {
+            string e = i < expLines.Length ? expLines[i] : "<missing line>";
+            string a = i < actLines.Length ? actLines[i] : "<missing line>";
+            if (e != a)
+            {
+                sb.AppendLine($"First difference at line {i + 1}:");
+                sb.AppendLine($"  expected: {e}");
+                sb.AppendLine($"  actual:   {a}");
+                break;
+            }
+        }
+
+        sb.AppendLine($"({expLines.Length} expected lines, {actLines.Length} actual lines)");
+        sb.AppendLine("================= FULL EXPECTED =================");
+        sb.AppendLine(expected);
+        sb.AppendLine("================= FULL ACTUAL ===================");
+        sb.AppendLine(actual);
+        sb.AppendLine("================================================");
+        throw new Xunit.Sdk.XunitException(sb.ToString());
     }
 
     private static string RunFixture(string rfPath)

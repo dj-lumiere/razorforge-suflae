@@ -28,6 +28,8 @@ public partial class Parser
                 TokenType.U32Literal,
                 TokenType.U64Literal,
                 TokenType.U128Literal,
+                TokenType.S256Literal,
+                TokenType.U256Literal,
                 TokenType.AddressLiteral,
                 TokenType.DecimalLiteral,
                 TokenType.F16Literal,

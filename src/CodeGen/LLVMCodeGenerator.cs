@@ -50,6 +50,34 @@ public partial class LlvmCodeGenerator
     private HashSet<string> _liveRoutineKeys = new(comparer: StringComparer.Ordinal);
 
     /// <summary>
+    /// RegistryKeys of routines actually REFERENCED while emitting a routine body (the transitive
+    /// closure from the user entry points). Codegen gates body definitions on this set so a routine
+    /// is emitted only if some emitted body calls it — pruning every routine nothing references
+    /// (dead derived operators, dead variants, etc.). Populated by <c>GenerateRoutineDeclaration</c>
+    /// whenever <see cref="_emittingRoutineBody"/> is set. The do/while fixpoint in
+    /// <c>GenerateRoutineDefinitions</c> drives convergence: each newly-emitted body adds its callees.
+    /// </summary>
+    private readonly HashSet<string> _referencedKeys = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
+    /// True while emitting a routine body (inside <c>GenerateRoutineBody</c>). Reference recording
+    /// is gated on this so the broad declaration pre-pass doesn't pollute <see cref="_referencedKeys"/>.
+    /// </summary>
+    private bool _emittingRoutineBody;
+
+    /// <summary>
+    /// Mangled names of non-extern RF routines that were referenced from an emitted body (so a
+    /// forward <c>declare</c> was recorded for them) and therefore MUST also receive a <c>define</c>.
+    /// A name left here without a matching entry in <see cref="_generatedRoutineDefs"/> after the
+    /// fixpoint converges means reachability pruned away a routine that emitted code actually calls —
+    /// an over-prune that would otherwise surface only as a linker "undefined symbol". Only populated
+    /// while <see cref="_emittingRoutineBody"/> is set, so dead declares from the broad pre-pass
+    /// (e.g. an unreferenced <c>List[Character].merge_into</c>) never enter it.
+    /// <c>external("C")</c> routines and <c>@innate</c> stubs are excluded — they are bodyless by design.
+    /// </summary>
+    private readonly HashSet<string> _expectedBodyNames = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
     /// Live concrete owner type FullNames from RoutineReachabilityPass. Used to drive Phase C
     /// monomorphization of synthesized routines (try_next, $represent, $diagnose) for generic owners.
     /// </summary>
@@ -159,6 +187,24 @@ public partial class LlvmCodeGenerator
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
     // TODO: this should be routine info, not string.
     private readonly HashSet<string> _generatedRoutineDefs = [];
+
+    /// <summary>
+    /// The emitted <c>define …</c> header line for each generated routine, keyed by mangled name.
+    /// Used at output assembly to assert that a routine's <c>define</c> agrees with any <c>declare</c>
+    /// recorded for the same symbol (see <see cref="NormalizeFunctionSignature"/>). A mismatch means
+    /// codegen computed the function type two different ways — an internal compiler bug that would
+    /// otherwise surface as a cryptic <c>llvm-as</c>/<c>opt</c> "call argument type mismatch" far from
+    /// the source. We catch it here instead.
+    /// </summary>
+    private readonly Dictionary<string, string> _generatedRoutineDefHeaders = new();
+
+    /// <summary>
+    /// Number of routine bodies actually emitted (the transitive closure referenced from the entry
+    /// point). This is the meaningful "how much code did we compile" figure — far smaller than the
+    /// registry's total routine count, which holds every stdlib routine available for resolution.
+    /// Valid after <see cref="Generate"/> returns.
+    /// </summary>
+    public int EmittedRoutineCount => _generatedRoutineDefs.Count;
 
     /// <summary>The return type of the current function being generated.</summary>
     private TypeInfo? _currentRoutineReturnType;
@@ -409,6 +455,16 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void GenerateTypeDeclarations() // NOSONAR S3776
     {
+        // When reachability ran (real builds), SKIP the broad registry type sweep entirely: every
+        // struct that emitted code uses is generated on-demand — records & variants via GetLlvmType,
+        // entities & crashables via Get{Entity,Crashable}TypeName at their alloc/access/size sites,
+        // and nested by-value (record/variant) field types recursively via EnsureTypeGenerated.
+        // Entity/crashable fields are `ptr`, so the broad sweep only ADDS dead reference types. The
+        // no-reachability config (some unit tests build the generator without RoutineReachabilityPass)
+        // still needs the full sweep.
+        if (_liveRoutineKeys.Count != 0)
+            return;
+
         // Generate entity types (reference types, heap-allocated)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity))
         {
@@ -433,20 +489,28 @@ public partial class LlvmCodeGenerator
                 GenerateCrashableType(crashable: crashable);
         }
 
-        // Generate record types (value types)
-        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
+        // Generate record types (value types). When reachability ran (real builds), SKIP this broad
+        // emission: GetLlvmType -> EnsureRecordTypeDeclared emits each record on first use, so only
+        // records actually referenced by emitted code get a struct definition — pruning dead record
+        // types. (Entities/crashables/variants stay broad: crashables are used opaquely in size GEPs
+        // and variants are passed by value, neither of which auto-generates their struct.) The
+        // no-reachability config (unit tests) falls back to emitting every record.
+        if (_liveRoutineKeys.Count == 0)
         {
-            if (type is RecordTypeInfo { IsGenericDefinition: false } record)
+            foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
             {
-                if (record.TypeArguments != null &&
-                    record.TypeArguments.Any(predicate: t =>
-                        ContainsGenericParameter(t) || t is ErrorTypeInfo ||
-                        ContainsAbstractProjection(t)))
+                if (type is RecordTypeInfo { IsGenericDefinition: false } record)
                 {
-                    continue;
-                }
+                    if (record.TypeArguments != null &&
+                        record.TypeArguments.Any(predicate: t =>
+                            ContainsGenericParameter(t) || t is ErrorTypeInfo ||
+                            ContainsAbstractProjection(t)))
+                    {
+                        continue;
+                    }
 
-                GenerateRecordType(record: record);
+                    GenerateRecordType(record: record);
+                }
             }
         }
 
@@ -669,9 +733,26 @@ public partial class LlvmCodeGenerator
                         int dotIdx = routine.Name.IndexOf(value: '.');
                         if (dotIdx > 0)
                         {
+                            // Member declaration (e.g. "UnpackedFloat[M, L, W].cbrt"). The
+                            // owner-qualified LookupRoutine above can miss when the AST name
+                            // carries generic params (BaseName drops them). Resolve scoped to
+                            // the owner type FIRST — never fall through to a bare short-name
+                            // lookup that could bind a same-named free/external routine of a
+                            // different owner (which would emit this method's body under the
+                            // wrong identity → "Unresolved generic method" at codegen).
+                            string ownerPart = routine.Name[..dotIdx];
+                            int bracketIdx = ownerPart.IndexOf(value: '[');
+                            if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
                             string shortName = routine.Name[(dotIdx + 1)..];
-                            routineInfo = _registry.LookupRoutine(fullName: shortName) ??
-                                          _registry.LookupRoutineByName(name: shortName);
+                            TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                            if (ownerType != null)
+                            {
+                                routineInfo = _registry.LookupMethod(type: ownerType,
+                                    methodName: shortName);
+                            }
+
+                            routineInfo ??= _registry.LookupRoutine(fullName: shortName) ??
+                                            _registry.LookupRoutineByName(name: shortName);
                         }
                         else
                         {
@@ -882,7 +963,7 @@ public partial class LlvmCodeGenerator
                     // from pulling in entire stdlib subgraphs (SortedList, BTreeNode, etc.)
                     // that the user program never invokes.
                     if (_liveRoutineKeys.Count > 0
-                        && !_liveRoutineKeys.Contains(item: routineInfo.RegistryKey))
+                        && !_referencedKeys.Contains(item: routineInfo.RegistryKey))
                     {
                         continue;
                     }
@@ -913,7 +994,7 @@ public partial class LlvmCodeGenerator
                 string instFuncName = MangleRoutineName(routine: body.Info);
                 if (_generatedRoutineDefs.Contains(item: instFuncName)) continue;
                 if (_liveRoutineKeys.Count > 0
-                    && !_liveRoutineKeys.Contains(item: body.Info.RegistryKey))
+                    && !_referencedKeys.Contains(item: body.Info.RegistryKey))
                     continue;
 
                 var savedSubs = _typeSubstitutions;
@@ -969,7 +1050,7 @@ public partial class LlvmCodeGenerator
                     && synthInfo.OwnerType?.IsGenericDefinition == true;
                 if (!isWrapperForwarderGenDef
                     && _liveRoutineKeys.Count > 0
-                    && !_liveRoutineKeys.Contains(item: synthInfo.RegistryKey))
+                    && !_referencedKeys.Contains(item: synthInfo.RegistryKey))
                     continue;
                 // Skip routines whose owner type still has unresolved generic parameters
                 // (e.g. $represent/$hash on DictEntry[K, V] — the generic definition).
@@ -1017,7 +1098,7 @@ public partial class LlvmCodeGenerator
                                 type: candidateOwner, methodName: synthInfo.Name);
                             if (concreteMethod == null) continue;
                             if (_liveRoutineKeys.Count > 0
-                                && !_liveRoutineKeys.Contains(item: concreteMethod.RegistryKey))
+                                && !_referencedKeys.Contains(item: concreteMethod.RegistryKey))
                                 continue;
                             string monoFuncName = MangleRoutineName(routine: concreteMethod);
                             if (_generatedRoutineDefs.Contains(item: monoFuncName)) continue;
@@ -1135,6 +1216,42 @@ public partial class LlvmCodeGenerator
             }
         } while (_generatedRoutineDefs.Count > prevDefCount ||
                  _generatedRoutines.Count > prevDeclCount);
+
+        if (Environment.GetEnvironmentVariable(variable: "RF_PRUNE_STATS") == "1")
+        {
+            int liveNotRef = _liveRoutineKeys.Count(predicate: k => !_referencedKeys.Contains(item: k));
+            Console.Error.WriteLine(
+                value:
+                $"[PRUNE-STATS] live={_liveRoutineKeys.Count} referenced={_referencedKeys.Count} " +
+                $"defs={_generatedRoutineDefs.Count} expectedBodies={_expectedBodyNames.Count} " +
+                $"live_not_referenced={liveNotRef}");
+        }
+
+        // Over-prune tripwire (only meaningful when reachability gating is active; with no live set
+        // nothing is pruned, so every referenced routine is emitted and this is trivially satisfied).
+        // Every routine an emitted body actually references must itself have been emitted. A name in
+        // _expectedBodyNames with no define means RoutineReachabilityPass dropped a routine that
+        // emitted code calls — caught here as a located codegen error instead of a linker
+        // "undefined symbol" far downstream.
+        if (_liveRoutineKeys.Count > 0)
+        {
+            List<string> overPruned = _expectedBodyNames
+                                     .Where(predicate: name => !_generatedRoutineDefs.Contains(item: name))
+                                     .OrderBy(keySelector: name => name, comparer: StringComparer.Ordinal)
+                                     .ToList();
+            if (overPruned.Count > 0)
+            {
+                string sample = string.Join(separator: "\n",
+                    values: overPruned.Take(count: 20).Select(selector: n => $"  @{n}"));
+                string more = overPruned.Count > 20 ? $"\n  … and {overPruned.Count - 20} more" : "";
+                throw new InvalidOperationException(
+                    message:
+                    $"Codegen bug: {overPruned.Count} referenced routine(s) were declared and called " +
+                    "but never defined — reachability pruned a routine that emitted code calls. " +
+                    "This would surface as a linker \"undefined symbol\"; catching it here instead.\n" +
+                    sample + more);
+            }
+        }
     }
 
     /// <summary>
@@ -1231,12 +1348,35 @@ public partial class LlvmCodeGenerator
             output.Append(value: _functionDeclarations);
         }
 
-        // RF function forward declarations — skip any that now have definitions
+        // RF function forward declarations — skip any that now have definitions.
+        // A symbol with BOTH a declare and a define is an RF routine (C externs are declare-only,
+        // never defined), so the two MUST describe the same function type. If they diverge, codegen
+        // computed the signature two different ways — an internal bug that LLVM would otherwise only
+        // flag downstream as a cryptic "call argument type mismatch". Assert the invariant here.
         foreach ((string name, string line) in _rfRoutineDeclarations)
         {
             if (!_generatedRoutineDefs.Contains(item: name))
             {
                 output.AppendLine(value: line);
+                continue;
+            }
+
+            // Define wins (the declare is dropped); first verify the pair agrees.
+            if (_generatedRoutineDefHeaders.TryGetValue(key: name, value: out string? defHeader))
+            {
+                string declSig = NormalizeFunctionSignature(header: line);
+                string defSig = NormalizeFunctionSignature(header: defHeader);
+                if (declSig != defSig)
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Codegen bug: declare/define signature mismatch for @{name}.\n" +
+                        $"  declare: {declSig}  ({line.Trim()})\n" +
+                        $"  define : {defSig}  ({defHeader.Trim()})\n" +
+                        "The forward declaration and the emitted body disagree on the function type. " +
+                        "This is an internal compiler error — the conversion/mangling path that built " +
+                        "the declare differs from the one that built the define.");
+                }
             }
         }
 
@@ -1393,6 +1533,173 @@ public partial class LlvmCodeGenerator
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// Attribute/linkage words that may precede the return type of a <c>declare</c>/<c>define</c>
+    /// header (e.g. <c>define private noalias ptr @f</c>). Stripped when isolating the bare type.
+    /// </summary>
+    private static readonly HashSet<string> ReturnAttributeWords =
+    [
+        "private", "internal", "external", "linkonce", "linkonce_odr", "weak", "weak_odr",
+        "noalias", "zeroext", "signext", "inreg", "noundef", "nonnull"
+    ];
+
+    /// <summary>
+    /// Reduces a <c>declare …</c> or <c>define … {</c> header to a canonical type-only signature
+    /// such as <c>i64(i32,ptr)</c> — return type plus the ordered parameter types, with parameter
+    /// names and all attributes (sret/byval/align/…) stripped. Two headers for the same symbol that
+    /// describe the same LLVM function type normalize to the same string, so an inequality is a real
+    /// signature divergence. Used only by the declare/define consistency assertion at output assembly.
+    /// </summary>
+    private static string NormalizeFunctionSignature(string header)
+    {
+        int at = header.IndexOf(value: '@');
+        int open = at < 0 ? -1 : header.IndexOf(value: '(', startIndex: at);
+        if (at < 0 || open < 0)
+        {
+            return header.Trim();
+        }
+
+        // Depth-aware scan for the matching close paren of the parameter list.
+        int depth = 0;
+        int close = -1;
+        for (int i = open; i < header.Length; i++)
+        {
+            char c = header[index: i];
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    close = i;
+                    break;
+                }
+            }
+        }
+
+        if (close < 0)
+        {
+            return header.Trim();
+        }
+
+        // Return segment = everything between the leading keyword (declare/define) and '@'.
+        string head = header[..at].Trim();
+        int firstSpace = head.IndexOf(value: ' ');
+        string returnSegment = firstSpace < 0 ? "" : head[(firstSpace + 1)..].Trim();
+        string returnType = NormalizeTypeToken(token: returnSegment);
+
+        // Parameter types: split on top-level commas, normalize each to its bare type.
+        string paramSegment = header[(open + 1)..close];
+        var paramTypes = new List<string>();
+        depth = 0;
+        int start = 0;
+        for (int i = 0; i <= paramSegment.Length; i++)
+        {
+            if (i == paramSegment.Length || (paramSegment[index: i] == ',' && depth == 0))
+            {
+                string raw = paramSegment[start..i].Trim();
+                if (raw.Length > 0)
+                {
+                    paramTypes.Add(item: NormalizeTypeToken(token: raw));
+                }
+
+                start = i + 1;
+            }
+            else if (paramSegment[index: i] == '(')
+            {
+                depth++;
+            }
+            else if (paramSegment[index: i] == ')')
+            {
+                depth--;
+            }
+        }
+
+        return $"{returnType}({string.Join(separator: ",", values: paramTypes)})";
+    }
+
+    /// <summary>
+    /// Extracts the leading LLVM type from a parameter or return token, discarding any leading
+    /// return attributes, any trailing parameter attributes, and the <c>%name</c>. Handles struct
+    /// (<c>{…}</c>), array (<c>[…]</c>), and quoted named (<c>%"…"</c>) types whose spelling contains
+    /// spaces or commas.
+    /// </summary>
+    private static string NormalizeTypeToken(string token)
+    {
+        token = token.Trim();
+        if (token.Length == 0)
+        {
+            return "";
+        }
+
+        // Strip leading attribute/linkage words (these precede the return type). Parameter attributes
+        // follow the type, so they are dropped naturally by reading only the leading type below.
+        bool stripped = true;
+        while (stripped && token.Length > 0)
+        {
+            stripped = false;
+            int sp = token.IndexOf(value: ' ');
+            string firstWord = sp < 0 ? token : token[..sp];
+            if (ReturnAttributeWords.Contains(item: firstWord))
+            {
+                token = sp < 0 ? "" : token[(sp + 1)..].TrimStart();
+                stripped = true;
+            }
+        }
+
+        if (token.Length == 0)
+        {
+            return "";
+        }
+
+        // Read the leading balanced type.
+        char first = token[index: 0];
+        if (first is '{' or '[')
+        {
+            char closeChar = first == '{' ? '}' : ']';
+            int depth = 0;
+            for (int i = 0; i < token.Length; i++)
+            {
+                if (token[index: i] == first)
+                {
+                    depth++;
+                }
+                else if (token[index: i] == closeChar)
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return token[..(i + 1)];
+                    }
+                }
+            }
+
+            return token;
+        }
+
+        if (token.StartsWith(value: "%\"", comparisonType: StringComparison.Ordinal))
+        {
+            int endQuote = token.IndexOf(value: '"', startIndex: 2);
+            return endQuote < 0 ? token : token[..(endQuote + 1)];
+        }
+
+        // Simple type: up to the first whitespace or '(' (an attribute like sret(...) following ptr).
+        int stop = token.Length;
+        for (int i = 0; i < token.Length; i++)
+        {
+            if (token[index: i] is ' ' or '(')
+            {
+                stop = i;
+                break;
+            }
+        }
+
+        return token[..stop];
+    }
 
     /// <summary>
     /// Gets the next unique temporary variable name.

@@ -5,7 +5,7 @@ import IO/Console
 # return, throw/absent propagation, break). Side-effecting hooks print markers
 # so the snapshot proves the order.
 
-entity Resource
+entity Resource obeys Enterable
   tag: S64
 
 routine Resource.$create(tag: S32) -> ?Resource
@@ -16,9 +16,9 @@ dangerous routine Resource.$destroy()
   show(f"  destroy({me.tag})")
   return
 
-routine Resource.$enter()
+routine Resource.$enter() -> ?Resource
   show(f"  $enter({me.tag})")
-  return
+  return me
 
 routine Resource.$exit()
   show(f"  $exit({me.tag})")

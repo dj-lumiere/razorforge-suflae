@@ -42,11 +42,44 @@ public sealed partial class SemanticVerifier
     private readonly CallGraph _callGraph = new();
     private MarkerProtocolDesugarPass? _markerPass;
 
-    /// <summary>Errors collected during analysis.</summary>
+    /// <summary>Errors collected during analysis (insertion order preserved; deduplicated).</summary>
     private readonly List<SemanticError> _errors = [];
 
-    /// <summary>Warnings collected during analysis.</summary>
+    /// <summary>Warnings collected during analysis (insertion order preserved; deduplicated).</summary>
     private readonly List<SemanticWarning> _warnings = [];
+
+    // The analyzer runs several passes and re-resolves expressions (post type/protocol
+    // registration, monomorphization, etc.), so the SAME diagnostic can be produced more than
+    // once for one source location. These sets dedup by value — SemanticError/SemanticWarning are
+    // records whose equality is (Code, Message, Location) — so a re-reported diagnostic is dropped
+    // while the List keeps first-seen order. All add-sites route through AddError/AddWarning.
+    private readonly HashSet<SemanticError> _seenErrors = [];
+    private readonly HashSet<SemanticWarning> _seenWarnings = [];
+
+    /// <summary>Adds an error unless an identical one (same code/message/location) was already recorded.</summary>
+    private void AddError(SemanticError error)
+    {
+        if (_seenErrors.Add(item: error))
+            _errors.Add(item: error);
+    }
+
+    /// <summary>Adds a warning unless an identical one (same code/message/location) was already recorded.</summary>
+    private void AddWarning(SemanticWarning warning)
+    {
+        if (_seenWarnings.Add(item: warning))
+            _warnings.Add(item: warning);
+    }
+
+    /// <summary>
+    /// Warnings visible to a user build: stdlib-internal warnings are excluded (surface them with
+    /// the <c>validate-stdlib</c> verb instead). EVERY AnalysisResult must use this — passing the
+    /// raw <c>_warnings</c> list leaks stdlib style warnings (e.g. RF-W258) into user output.
+    /// </summary>
+    private List<SemanticWarning> UserVisibleWarnings() =>
+        _warnings
+            .Where(predicate: w => !string.IsNullOrEmpty(value: w.Location.FileName)
+                                && !IsStdlibFile(filePath: w.Location.FileName))
+            .ToList();
 
     /// <summary>
     /// Parsed literal values for types requiring native library parsing.
@@ -137,6 +170,30 @@ public sealed partial class SemanticVerifier
 
     /// <summary>Tracks lock policy per variable for lock policy validation (#19).</summary>
     private readonly Dictionary<string, string> _variableLockPolicies = [];
+
+    /// <summary>The resource expression currently being analyzed as a `using` target, if any. A
+    /// multi-threaded access token (Inspecting/Claiming) is only legal in this exact position —
+    /// any other use is rejected (RF-S629) so its lock is always `using`-scoped.</summary>
+    private ISyntaxTreeNode? _usingResourceNode;
+
+    /// <summary>Stack of MT access holds (`inspect`/`claim`) live in the enclosing `using` scopes.
+    /// Each hold records the syntactic handle path AND the controller-identity it resolves to (see
+    /// <see cref="_sharedHandleIdentity"/>), so aliased handles (`s2 = s.share()`) conflict even
+    /// though their names differ. Pushed on `using` entry, popped on exit, so a nested `using` sees
+    /// the holds it overlaps — the basis of the readers-XOR-writer check (RF-S630).</summary>
+    private readonly List<(string Handle, int Identity, bool IsWriter, SourceLocation Location)>
+        _activeAccessHolds = [];
+
+    /// <summary>Maps a Shared/Watched handle path (`s`, `s.a`) to the identity of the controller
+    /// (the atomic Arc cell) it refers to. A fresh `T.share[P]()` mints a new identity;
+    /// `.share()`/`.watch()` clones and plain copies INHERIT the source handle's identity, so all
+    /// handles to one controller share an identity. Lets the readers-XOR-writer check key on the
+    /// shared DATA rather than the variable name. Paths never bound to a tracked handle are
+    /// lazily assigned a unique identity on first use (degrades to per-path = the old behaviour).</summary>
+    private readonly Dictionary<string, int> _sharedHandleIdentity = new(StringComparer.Ordinal);
+
+    /// <summary>Monotonic source of fresh controller identities for <see cref="_sharedHandleIdentity"/>.</summary>
+    private int _nextSharedHandleIdentity;
 
     /// <summary>Temporary: last share[Policy]() call info, propagated in variable declaration (#19).</summary>
     private (string SourceVar, string Policy)? _lastSharePolicy;
@@ -351,13 +408,9 @@ public sealed partial class SemanticVerifier
             allSynthesized[key] = variantBody;
         }
 
-        var userWarnings = _warnings
-            .Where(predicate: w => !string.IsNullOrEmpty(value: w.Location.FileName)
-                               && !IsStdlibFile(filePath: w.Location.FileName))
-            .ToList();
         return new AnalysisResult(Registry: _registry,
             Errors: _errors.ToList(),
-            Warnings: userWarnings.ToList(),
+            Warnings: UserVisibleWarnings(),
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -521,6 +574,16 @@ public sealed partial class SemanticVerifier
             teardownPass.Run(program: program);
         teardownPass.RunOnVariantBodies();
 
+        // Tear down owned RVALUE temporaries (heap-owning receiver/discarded producers) that the
+        // binding-only ScopeTeardownLoweringPass cannot see. Runs AFTER teardown so it never
+        // double-frees the temps' bindings, and BEFORE reachability so its $destroy calls drive
+        // liveness. Stdlib + variant bodies are already Phase-7 lowered here (when→if done); USER
+        // programs are lowered later (Phase 7 per-file), so they get this pass in RunPhase7Postprocessing.
+        var tempTeardownPass = new Compiler.Postprocessing.Passes.TemporaryTeardownPass(markerCtx);
+        foreach ((Program program, _, _) in _registry.StdlibPrograms)
+            tempTeardownPass.Run(program: program);
+        tempTeardownPass.RunOnBodies(markerCtx.VariantBodies);
+
         var markerPass = new MarkerProtocolDesugarPass(markerCtx);
         _markerPass = markerPass;
         markerPass.RewriteAllSignatures();
@@ -612,6 +675,12 @@ public sealed partial class SemanticVerifier
             target: _target,
             buildMode: _buildMode);
         new PostprocessingPipeline(ctx: ctx).Run(program: program);
+
+        // Owned rvalue-temporary teardown for user code, now that Phase 7 has lowered when→if so the
+        // producing calls sit in real statements. ScopeTeardownLoweringPass already ran (pre-lowering,
+        // step 4) and will not revisit this program, so the temps' bindings are freed exactly once by
+        // the $destroy calls this pass emits (codegen emit-on-demand resolves the concrete $destroy).
+        new Compiler.Postprocessing.Passes.TemporaryTeardownPass(ctx).Run(program: program);
     }
 
     /// <summary>
@@ -696,7 +765,10 @@ public sealed partial class SemanticVerifier
         foreach ((Program program, _, _) in _registry.UserPrograms)
         {
             reprPass.Run(program: program);
-            _errors.AddRange(collection: validator.ValidateProgram(program: program));
+            foreach (SemanticError error in validator.ValidateProgram(program: program))
+            {
+                AddError(error: error);
+            }
         }
 
         foreach ((Program stdlibProgram, _, _) in _registry.StdlibPrograms)
@@ -709,7 +781,7 @@ public sealed partial class SemanticVerifier
             reprPass.Run(statement: body);
             foreach (SemanticError error in validator.ValidateStatement(statement: body))
             {
-                _errors.Add(item: error with
+                AddError(error: error with
                 {
                     Message = $"[{key}] {error.Message}"
                 });
@@ -725,7 +797,7 @@ public sealed partial class SemanticVerifier
 
             foreach (SemanticError error in BackendEntryValidator.ValidateMonomorphizedBody(body: mono))
             {
-                _errors.Add(item: error with
+                AddError(error: error with
                 {
                     Message = $"[mono:{key}] {error.Message}"
                 });
@@ -886,13 +958,13 @@ public sealed partial class SemanticVerifier
         // Pre-mark their declared modules as provided so `import` statements between them
         // record the module name instead of re-loading the file through StdlibLoader
         // (which would register every routine a second time -> duplicate-definition errors).
-        foreach ((Program program, string _) in files)
+        foreach ((Program program, string filePath) in files)
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ModuleDeclaration moduleDecl)
                 {
-                    _registry.MarkModuleProvided(modulePath: moduleDecl.Path);
+                    _registry.MarkModuleProvided(modulePath: moduleDecl.Path, filePath: filePath);
                     break;
                 }
             }
@@ -918,6 +990,18 @@ public sealed partial class SemanticVerifier
         }
         Mark(label: "Phase 1 -> Declarations");
 
+        // Phase 1b: Re-resolve record/entity `obeys` conformances now that ALL files' types AND
+        // every referenced (lazily-loaded) protocol are registered. Initial per-file declaration
+        // resolution can drop a protocol whose definition wasn't loaded yet — e.g. a user module
+        // record obeying a Core protocol (FloorDivisible) registered before that protocol's file
+        // loaded — leaving ImplementedProtocols short. Re-resolving here (before signature
+        // resolution runs the generic-constraint checks, RF-S150) fills them in.
+        foreach ((Program program, string _) in files)
+        {
+            Compiler.Declaration.StdlibLoader.ResolveProgramProtocolConformances(registry: _registry, program: program);
+        }
+        Mark(label: "Phase 1b -> re-resolve conformances");
+
         // Phase 2: Resolve type bodies across ALL files (members can reference types from other files)
         foreach ((Program program, string filePath) in files)
         {
@@ -939,7 +1023,7 @@ public sealed partial class SemanticVerifier
         {
             return new AnalysisResult(Registry: _registry,
                 Errors: _errors.ToList(),
-                Warnings: _warnings.ToList(),
+                Warnings: UserVisibleWarnings(),
                 ParsedLiterals: _parsedLiterals,
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -1023,7 +1107,7 @@ public sealed partial class SemanticVerifier
         {
             return new AnalysisResult(Registry: _registry,
                 Errors: _errors.ToList(),
-                Warnings: _warnings.ToList(),
+                Warnings: UserVisibleWarnings(),
                 ParsedLiterals: _parsedLiterals,
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -1083,7 +1167,7 @@ public sealed partial class SemanticVerifier
 
         return new AnalysisResult(Registry: _registry,
             Errors: _errors.ToList(),
-            Warnings: _warnings.ToList(),
+            Warnings: UserVisibleWarnings(),
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized2,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -1330,7 +1414,7 @@ public sealed partial class SemanticVerifier
     /// <param name="location">The source location of the error.</param>
     internal void ReportError(SemanticDiagnosticCode code, string message, SourceLocation location)
     {
-        _errors.Add(item: new SemanticError(Code: code, Message: message, Location: location));
+        AddError(error: new SemanticError(Code: code, Message: message, Location: location));
     }
 
     /// <summary>
@@ -1342,7 +1426,7 @@ public sealed partial class SemanticVerifier
     internal void ReportWarning(SemanticWarningCode code, string message, SourceLocation location)
     {
         if (SuppressedWarnings.Contains(item: code)) return;
-        _warnings.Add(item: new SemanticWarning(Code: code, Message: message, Location: location));
+        AddWarning(warning: new SemanticWarning(Code: code, Message: message, Location: location));
     }
 
     private static readonly HashSet<SemanticWarningCode> SuppressedWarnings = new()

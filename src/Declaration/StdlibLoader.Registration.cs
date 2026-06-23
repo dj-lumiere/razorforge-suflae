@@ -185,7 +185,7 @@ public sealed partial class StdlibLoader
     /// where S64 wasn't registered during initial entity registration).
     /// Called after all type shells are registered.
     /// </summary>
-    private static void ResolveProgramProtocolConformances(TypeRegistry registry, Program program) // NOSONAR S3776
+    internal static void ResolveProgramProtocolConformances(TypeRegistry registry, Program program) // NOSONAR S3776
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
@@ -702,7 +702,7 @@ public sealed partial class StdlibLoader
                         ? m.Type.Name[..m.Type.Name.IndexOf('[')]
                         : m.Type.Name;
                     return baseName is "Hijacked" or "Viewing" or "Modifying"
-                        or "Retained" or "Tracked";
+                        or "Retained" or "Tracked" or "Shared" or "Watched";
                 });
             if (allMembersPtrWrapper)
             {

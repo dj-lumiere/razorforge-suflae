@@ -84,54 +84,94 @@ routine S128.$create!(from: U128) -> S128
     throw IntegerOverflowError()
   return reinterpret_bits[U128, S128](from)
 
-### Converts an `F16` to `S128` via `S64` conversion.
+### Converts an `S256` to `S128`, throwing if outside the S128 range.
+### :param from: The `S256` value to convert.
+### :returns: The lower 128 bits reinterpreted as an `S128`.
+### :throws: {IntegerOverflowError} if `from` is outside the S128 range.
+routine S128.$create!(from: S256) -> S128
+  if not (-170141183460469231731687303715884105728_s256 <= from <= 170141183460469231731687303715884105727_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, S128](from)
+
+### Converts a `U256` to `S128`, throwing if the value exceeds S128_MAX.
+### :param from: The `U256` value to convert.
+### :returns: The lower 128 bits reinterpreted as an `S128`.
+### :throws: {IntegerOverflowError} if `from > 170141183460469231731687303715884105727`.
+routine S128.$create!(from: U256) -> S128
+  if from > 170141183460469231731687303715884105727_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, S128](from)
+
+### Converts an `F16` to `S128`, truncating toward zero.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
 routine S128.$create!(from: F16) -> S128
-  return from.S64!().S128()
+  return from.F32().S128!()
 
-### Converts an `F32` to `S128` via `S64` conversion.
+### Converts an `F32` to `S128`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^127, 2^127-1].
 routine S128.$create!(from: F32) -> S128
-  return from.S64!().S128()
+  if from.is_nan() or from < -170141183460469231731687303715884105728.0_f32 or from >= 170141183460469231731687303715884105728.0_f32
+    throw IntegerOverflowError()
+  return float_to_signed[F32, S128](from)
 
-### Converts an `F64` to `S128` via `S64` conversion.
+### Converts an `F64` to `S128`, truncating toward zero.
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^127, 2^127-1].
 routine S128.$create!(from: F64) -> S128
-  return from.S64!().S128()
+  if from.is_nan() or from < -170141183460469231731687303715884105728.0_f64 or from >= 170141183460469231731687303715884105728.0_f64
+    throw IntegerOverflowError()
+  return float_to_signed[F64, S128](from)
 
-### Converts an `F128` to `S128` via `S64` conversion.
+### Converts an `F128` to `S128`, truncating toward zero.
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
 routine S128.$create!(from: F128) -> S128
-  return from.S64!().S128()
+  var bits = from.to_bits()
+  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
+  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var frac = bit_and[U128](a: bits, b: f128_mant_mask())
+  if biased == 0x7FFF_u64
+    if int_eq[U128](a: frac, b: 0_u128)
+      throw NumericOverflowError(description: "cannot convert infinite F128 to S128")
+    throw NumericDomainError(description: "cannot convert NaN F128 to S128")
+  if biased < 16383_u64
+    return 0_s128
+  var actual_exp = sub[U64](a: biased, b: 16383_u64)
+  if actual_exp >= 128_u64
+    throw NumericOverflowError(description: "F128 value out of range for S128")
+  if actual_exp == 127_u64
+    if sign == 0_u64 or int_ne[U128](a: frac, b: 0_u128)
+      throw NumericOverflowError(description: "F128 value out of range for S128")
+    return reinterpret_bits[U128, S128](shift_left[U128](value: 1_u128, bits: 127_u128))
+  var sig = bit_or[U128](a: f128_implicit(), b: frac)
+  lateinit var int_part: U128
+  if actual_exp <= 112_u64
+    int_part = shift_right_unsigned[U128](sig, zero_extend[U64, U128](sub[U64](a: 112_u64, b: actual_exp)))
+  else
+    int_part = shift_left[U128](sig, zero_extend[U64, U128](sub[U64](a: actual_exp, b: 112_u64)))
+  if sign == 1_u64
+    return sub[S128](a: 0_s128, b: reinterpret_bits[U128, S128](int_part))
+  return reinterpret_bits[U128, S128](int_part)
 
-### Converts a `D32` to `S128` via `S64` conversion.
+### Converts a `D32` to `S128`, truncating toward zero.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {NumericOverflowError} if the integer part overflows S128.
 routine S128.$create!(from: D32) -> S128
-  return from.S64!().S128()
+  return S128(from: D128(from: from))
 
-### Converts a `D64` to `S128` via `S64` conversion.
+### Converts a `D64` to `S128`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+### :throws: {NumericOverflowError} if the integer part overflows S128.
 routine S128.$create!(from: D64) -> S128
-  return from.S64!().S128()
-
-### Converts a `D128` to `S128` via `S64` conversion.
-### :param from: The `D128` value to convert.
-### :returns: The integer part of `from` as an `S128`.
-### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
-routine S128.$create!(from: D128) -> S128
-  return from.S64!().S128()
+  return S128(from: D128(from: from))
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
@@ -185,39 +225,60 @@ routine S128.$mul!(you: S128) -> S128
     throw IntegerOverflowError()
   return result.item0
 
-### Returns `me // you` (floor division), throwing on errors.
-### Floor division rounds toward negative infinity (unlike truncating division).
+### Returns `me // you` (euclidean division), throwing on errors.
+### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `$mod!`.
 ### The special case `S128_MIN // -1` would overflow and throws.
 ### :param you: The divisor.
-### :returns: The floor quotient `me // you`.
+### :returns: The euclidean quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S128_MIN` and `you == -1`.
+### `|x|` as a U128 magnitude. `S128_MIN` maps to exactly 2¹²⁷ (the wrapping
+### negate reinterpreted as unsigned), so there is no overflow.
+routine s128_abs_u128(x: S128) -> U128
+  if signed_ge[S128](a: x, b: 0_s128)
+    return reinterpret_bits[S128, U128](x)
+  return reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: x))
+
+### Euclidean floor division of `me` by `you`.
+### :param you: The divisor.
+### :returns: The euclidean quotient (rounds toward negative infinity).
+### :throws: {DivisionByZeroError} if `you == 0`.
 routine S128.$floordiv!(you: S128) -> S128
   if you == 0
     throw DivisionByZeroError()
   if me == S128_MIN and you == -1_s128
     throw IntegerOverflowError()
-  var quotient = signed_div[S128](a: me, b: you)
-  var remainder = signed_rem[S128](a: me, b: you)
-  if remainder < 0_s128
-    if you > 0_s128
-      return quotient - 1_s128
-    return quotient + 1_s128
-  return quotient
+  var amag = s128_abs_u128(x: me)
+  var bmag = s128_abs_u128(x: you)
+  var uq = u128_floordiv(a: amag, b: bmag)
+  var aneg = signed_lt[S128](a: me, b: 0_s128)
+  var bneg = signed_lt[S128](a: you, b: 0_s128)
+  # EUCLIDEAN division (remainder always >= 0), consistent with S8..S64. The remainder
+  # is non-negative, so when the dividend is negative and the division is inexact the
+  # quotient MAGNITUDE rounds up by one before the sign is applied. The quotient is
+  # positive when the operands share a sign, negative otherwise.
+  if aneg and int_ne[U128](a: u128_mod(a: amag, b: bmag), b: 0_u128)
+    uq = add[U128](a: uq, b: 1_u128)
+  var q = reinterpret_bits[U128, S128](uq)
+  if aneg == bneg
+    return q
+  return sub[S128](a: 0_s128, b: q)
 
-### Returns `me % you` (floor modulo), where the result sign matches `you`.
+### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
 ### :param you: The divisor.
-### :returns: The floor modulo — result has the same sign as `you`.
+### :returns: The euclidean remainder — always non-negative.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S128.$mod!(you: S128) -> S128
   if you == 0
     throw DivisionByZeroError()
-  var remainder = signed_rem[S128](a: me, b: you)
-  if remainder < 0_s128
-    if you > 0_s128
-      return remainder + you
-    return remainder - you
-  return remainder
+  # EUCLIDEAN remainder (always >= 0), consistent with S8..S64. The magnitude
+  # remainder from the unsigned kernel is already in [0, |you|); for a negative
+  # dividend with a nonzero remainder, reflect it into [0, |you|) via |you| - r.
+  var bmag = s128_abs_u128(x: you)
+  var ur = u128_mod(a: s128_abs_u128(x: me), b: bmag)
+  if signed_lt[S128](a: me, b: 0_s128) and int_ne[U128](a: ur, b: 0_u128)
+    ur = sub[U128](a: bmag, b: ur)
+  return reinterpret_bits[U128, S128](ur)
 
 ### Returns `-me` (arithmetic negation), with wrapping behavior on `S128_MIN`.
 ### :returns: The negated value. `-S128_MIN` wraps to `S128_MIN`.
@@ -270,9 +331,9 @@ dangerous routine S128.$sub_unchecked(you: S128) -> S128
 dangerous routine S128.$mul_unchecked(you: S128) -> S128
   return signed_mul_exact[S128](a: me, b: you)
 
-### Returns `me // you` (floor division) with undefined behavior if `you == 0` or overflow.
+### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
-### :returns: The floor quotient, assuming `you != 0` and no overflow.
+### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
 dangerous routine S128.$floordiv_unchecked(you: S128) -> S128
   var quotient = signed_div[S128](a: me, b: you)
   var remainder = signed_rem[S128](a: me, b: you)
@@ -282,9 +343,9 @@ dangerous routine S128.$floordiv_unchecked(you: S128) -> S128
     return quotient + 1_s128
   return quotient
 
-### Returns `me % you` (floor modulo) with undefined behavior if `you == 0`.
+### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
-### :returns: The floor modulo, assuming `you != 0`.
+### :returns: The euclidean remainder, assuming `you != 0`.
 dangerous routine S128.$mod_unchecked(you: S128) -> S128
   var remainder = signed_rem[S128](a: me, b: you)
   if remainder < 0_s128
@@ -334,13 +395,10 @@ routine S128.$mul_clamp(you: S128) -> S128
 ### Returns `me ** exp` and a flag indicating whether the result overflowed.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)
@@ -361,8 +419,7 @@ routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result is outside the S128 range.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.$pow!(exp: S128) -> S128
   var result = me.pow_with_overflow!(exp)
   if result.item1
@@ -372,13 +429,10 @@ routine S128.$pow!(exp: S128) -> S128
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result modulo 2¹²⁸ (signed wrap).
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.$pow_wrap!(exp: S128) -> S128
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0_s128
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)
@@ -393,13 +447,10 @@ routine S128.$pow_wrap!(exp: S128) -> S128
 ### Returns `me ** exp`, clamped to `S128_MAX` or `S128_MIN` on overflow.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result, or `S128_MAX` / `S128_MIN` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.$pow_clamp!(exp: S128) -> S128
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = U32(exp)
@@ -562,6 +613,30 @@ routine S128.reverse_bits() -> S128
 routine S128.swap_bytes() -> S128
   return byte_swap[S128](me)
 
+### Returns this value rotated left by `bits` positions.
+routine S128.rotate_left(bits: U32) -> S128
+  return reinterpret_bits[U128, S128](reinterpret_bits[S128, U128](me).rotate_left(bits: bits))
+
+### Returns this value rotated right by `bits` positions.
+routine S128.rotate_right(bits: U32) -> S128
+  return reinterpret_bits[U128, S128](reinterpret_bits[S128, U128](me).rotate_right(bits: bits))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine S128.to_bytes_le() -> Array[Byte, 16]
+  return reinterpret_bits[S128, U128](me).to_bytes_le()
+
+### Returns the raw byte representation of this value in big-endian order.
+routine S128.to_bytes_be() -> Array[Byte, 16]
+  return reinterpret_bits[S128, U128](me).to_bytes_be()
+
+### Builds an `S128` from its little-endian raw byte representation.
+common routine S128.from_bytes_le(bytes: Array[Byte, 16]) -> S128
+  return reinterpret_bits[U128, S128](U128.from_bytes_le(bytes: bytes))
+
+### Builds an `S128` from its big-endian raw byte representation.
+common routine S128.from_bytes_be(bytes: Array[Byte, 16]) -> S128
+  return reinterpret_bits[U128, S128](U128.from_bytes_be(bytes: bytes))
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -592,6 +667,11 @@ routine S128.is_even() -> Bool
 routine S128.is_odd() -> Bool
   return not me.is_even()
 
+### Returns `true` if this value is an exact power of two.
+### Negative values always return `false`.
+routine S128.is_power_of_two() -> Bool
+  return me > 0_s128 and (me & (me -% 1_s128)) == 0_s128
+
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
 routine S128.signum() -> S128
@@ -604,6 +684,8 @@ routine S128.signum() -> S128
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine S128.$represent() -> Text
   if me == 0s128
     return "0"
@@ -614,6 +696,8 @@ routine S128.$represent() -> Text
   # yields |me| (works correctly even for S128.MIN, whose absolute value overflows S128).
   return "-" + (0u128 -% reinterpret_bits[S128, U128](me)).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine S128.$diagnose() -> Text
   return "S128(" + me.$represent() + ")"
 

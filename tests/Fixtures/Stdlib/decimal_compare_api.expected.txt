@@ -1,0 +1,12 @@
+a == c: true
+a == b: false
+a != b: true
+a > b: true
+b < a: true
+a >= c: true
+a <= c: true
+neg < b: true
+neg < a: true
+1.0 == 1.00: true
+0.0 == -0.0: true
+DONE

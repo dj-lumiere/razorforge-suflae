@@ -1,15 +1,21 @@
 module Tests/Stdlib/HashableApi
 import IO/Console
 
-# Records auto-derive Equatable/Hashable on `open`+`posted` fields. We can't observe
-# raw hash bytes (xxHash64 implementation detail), but we can check the invariants:
+# Records hand-write Equatable/Hashable (auto-derivation is reserved for tuple/choice/flags).
+# We can't observe raw hash bytes (xxHash64 implementation detail), but we can check the invariants:
 #   * equal values have equal hashes
 #   * unequal values typically differ (probabilistic, but ours are simple)
 # and that Set/Dict keyed by records work end-to-end (covered elsewhere).
 
-record Point obeys Hashable
+record Point obeys Equatable, Hashable
   x: S64
   y: S64
+
+routine Point.$eq(you: Point) -> Bool
+  return me.x == you.x and me.y == you.y
+
+routine Point.$hash(k0: U64, k1: U64) -> U64
+  return reinterpret_bits[S64, U64](me.x) ^ reinterpret_bits[S64, U64](me.y)
 
 routine start()
   var p = Point(x: 1, y: 2)

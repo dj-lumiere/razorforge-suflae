@@ -5,7 +5,7 @@ module Core
 ### `S32` is the standard 32-bit integer type in RazorForge, used for Unicode
 ### code points, array indices on smaller platforms, and general arithmetic.
 @llvm("i32")
-record S32 obeys SignedIntegral, Ordered, ConstCompatible
+record S32 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for S32 limits
@@ -93,6 +93,24 @@ routine S32.$create!(from: U128) -> S32
     throw IntegerOverflowError()
   return int_truncate[U128, S32](from)
 
+### Converts an `S256` to `S32`, throwing if outside −2147483648..2147483647.
+### :param from: The `S256` value to convert.
+### :returns: The lower 32 bits reinterpreted as an `S32`.
+### :throws: {IntegerOverflowError} if `from` is outside −2147483648..2147483647.
+routine S32.$create!(from: S256) -> S32
+  if not (-2147483648_s256 <= from <= 2147483647_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, S32](from)
+
+### Converts a `U256` to `S32`, throwing if the value exceeds 2147483647.
+### :param from: The `U256` value to convert.
+### :returns: The lower 32 bits reinterpreted as an `S32`.
+### :throws: {IntegerOverflowError} if `from > 2147483647`.
+routine S32.$create!(from: U256) -> S32
+  if from > 2147483647_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, S32](from)
+
 ### Converts an `F16` to `S32` by widening to `F32` first, then truncating toward zero.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
@@ -130,32 +148,21 @@ routine S32.$create!(from: F128) -> S32
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D32) -> S32
-  var as_f64 = from.F64()
-  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
-    throw IntegerOverflowError()
-  var bits = reinterpret_bits[D32, U32](from)
-  return d32_to_s32(bits)
+  return S128(from: D128(from: from)).S32!()
 
 ### Converts a `D64` decimal to `S32` via its packed bit representation.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D64) -> S32
-  var as_f64 = from.F64()
-  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
-    throw IntegerOverflowError()
-  var bits = reinterpret_bits[D64, U64](from)
-  return d64_to_s32(bits)
+  return S128(from: D128(from: from)).S32!()
 
 ### Converts a `D128` decimal to `S32` via its low/high 64-bit halves.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D128) -> S32
-  var as_f64 = from.F64()
-  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
-    throw IntegerOverflowError()
-  return d128_to_s32(low: from.low, high: from.high)
+  return S128(from: from).S32!()
 
 # ============================================================================
 # Arithmetic Operations
@@ -209,11 +216,11 @@ routine S32.$mul!(you: S32) -> S32
     throw IntegerOverflowError()
   return result.item0
 
-### Returns `me // you` (floor division), throwing on errors.
-### Floor division rounds toward negative infinity (unlike truncating division).
+### Returns `me // you` (euclidean division), throwing on errors.
+### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `$mod!`.
 ### The special case `S32_MIN // -1` would overflow and throws.
 ### :param you: The divisor.
-### :returns: The floor quotient `me // you`.
+### :returns: The euclidean quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S32_MIN` and `you == -1`.
 routine S32.$floordiv!(you: S32) -> S32
@@ -229,9 +236,9 @@ routine S32.$floordiv!(you: S32) -> S32
     return quotient + 1_s32
   return quotient
 
-### Returns `me % you` (floor modulo), where the result sign matches `you`.
+### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
 ### :param you: The divisor.
-### :returns: The floor modulo — result has the same sign as `you`.
+### :returns: The euclidean remainder — always non-negative.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S32.$mod!(you: S32) -> S32
   if you == 0
@@ -294,9 +301,9 @@ dangerous routine S32.$sub_unchecked(you: S32) -> S32
 dangerous routine S32.$mul_unchecked(you: S32) -> S32
   return signed_mul_exact[S32](a: me, b: you)
 
-### Returns `me // you` (floor division) with undefined behavior if `you == 0` or overflow.
+### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
-### :returns: The floor quotient, assuming `you != 0` and no overflow.
+### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
 dangerous routine S32.$floordiv_unchecked(you: S32) -> S32
   var quotient = signed_div[S32](a: me, b: you)
   var remainder = signed_rem[S32](a: me, b: you)
@@ -306,9 +313,9 @@ dangerous routine S32.$floordiv_unchecked(you: S32) -> S32
     return quotient + 1_s32
   return quotient
 
-### Returns `me % you` (floor modulo) with undefined behavior if `you == 0`.
+### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
-### :returns: The floor modulo, assuming `you != 0`.
+### :returns: The euclidean remainder, assuming `you != 0`.
 dangerous routine S32.$mod_unchecked(you: S32) -> S32
   var remainder = signed_rem[S32](a: me, b: you)
   if remainder < 0_s32
@@ -351,13 +358,10 @@ routine S32.$mul_clamp(you: S32) -> S32
 ### Returns `me ** exp` and a flag indicating whether the result overflowed.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S32.pow_with_overflow!(exp: S32) -> (S32, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S32 = 1
   var base: S32 = me
   var e: U32 = U32(exp)
@@ -378,8 +382,7 @@ routine S32.pow_with_overflow!(exp: S32) -> (S32, Bool)
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result is outside the S32 range.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S32.$pow!(exp: S32) -> S32
   var result = me.pow_with_overflow!(exp)
   if result.item1
@@ -389,13 +392,10 @@ routine S32.$pow!(exp: S32) -> S32
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result modulo 2³² (signed wrap).
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S32.$pow_wrap!(exp: S32) -> S32
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0_s32
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S32 = 1
   var base: S32 = me
   var e: U32 = U32(exp)
@@ -410,13 +410,10 @@ routine S32.$pow_wrap!(exp: S32) -> S32
 ### Returns `me ** exp`, clamped to `S32_MAX` or `S32_MIN` on overflow.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result, or `2147483647` / `−2147483648` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S32.$pow_clamp!(exp: S32) -> S32
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S32 = 1
   var base: S32 = me
   var e: U32 = U32(exp)
@@ -579,6 +576,30 @@ routine S32.reverse_bits() -> S32
 routine S32.swap_bytes() -> S32
   return byte_swap[S32](me)
 
+### Returns this value rotated left by `bits` positions.
+routine S32.rotate_left(bits: U32) -> S32
+  return reinterpret_bits[U32, S32](reinterpret_bits[S32, U32](me).rotate_left(bits: bits))
+
+### Returns this value rotated right by `bits` positions.
+routine S32.rotate_right(bits: U32) -> S32
+  return reinterpret_bits[U32, S32](reinterpret_bits[S32, U32](me).rotate_right(bits: bits))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine S32.to_bytes_le() -> Array[Byte, 4]
+  return reinterpret_bits[S32, U32](me).to_bytes_le()
+
+### Returns the raw byte representation of this value in big-endian order.
+routine S32.to_bytes_be() -> Array[Byte, 4]
+  return reinterpret_bits[S32, U32](me).to_bytes_be()
+
+### Builds an `S32` from its little-endian raw byte representation.
+common routine S32.from_bytes_le(bytes: Array[Byte, 4]) -> S32
+  return reinterpret_bits[U32, S32](U32.from_bytes_le(bytes: bytes))
+
+### Builds an `S32` from its big-endian raw byte representation.
+common routine S32.from_bytes_be(bytes: Array[Byte, 4]) -> S32
+  return reinterpret_bits[U32, S32](U32.from_bytes_be(bytes: bytes))
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -631,6 +652,8 @@ routine S32.is_power_of_two() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine S32.$represent() -> Text
   if me == 0s32
     return "0"
@@ -641,6 +664,8 @@ routine S32.$represent() -> Text
   # yields |me| (works correctly even for S32.MIN, whose absolute value overflows S32).
   return "-" + (0u32 -% reinterpret_bits[S32, U32](me)).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine S32.$diagnose() -> Text
   return "S32(" + me.$represent() + ")"
 

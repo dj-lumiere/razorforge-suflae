@@ -95,6 +95,38 @@ external("llvm") routine float_extend[From, To](value: From) -> To
 external("llvm") routine float_narrow[From, To](value: From) -> To
 
 # ============================================================================
+# Optimization Barrier
+# ============================================================================
+
+### Returns `value` unchanged but opaque to the optimizer — an empty `sideeffect` inline-asm
+### identity. A benchmarked op whose result is fed through this cannot be folded, hoisted,
+### strength-reduced, narrowed, or dead-code-eliminated, so a micro-benchmark loop measures the
+### real op instead of whichever optimization the harness shape happened to trigger. Zero machine
+### cost (the asm string is empty); it is purely a barrier. Like Rust's `black_box` / Google
+### Benchmark's `DoNotOptimize`.
+###
+### ONLY valid for types that fit a general-register class (≤ 128 bits, plus float/double). The
+### `=r` constraint has no register class for wider integers, so on x86 i256 CRASHES instruction
+### selection — use `do_not_optimize_wide` for `S256`/`U256`/`F256`.
+### :param value: The value to keep live and opaque.
+### :returns: `value`, bit-for-bit unchanged.
+@llvm_ir("{result} = call {T} asm sideeffect \"\", \"=r,0\"({T} {value})")
+external("llvm") routine do_not_optimize[T](value: T) -> T
+
+### Optimizer barrier for i256-carrier types (`S256`/`U256`/`F256`) — `do_not_optimize`'s `=r`
+### constraint has no register class for i256 and CRASHES instruction selection. This makes only the
+### low 64 bits opaque (an `=r,0` register barrier on the truncated limb) and ORs them back with the
+### untouched high 192 bits: the whole i256 becomes opaque to the optimizer (it can't prove the low
+### limb, so `a OP a` can't be folded or hoisted) with NO memory traffic — no `alloca` (the earlier
+### volatile/alloca version allocated per loop iteration and overflowed the stack). The `sideeffect`
+### asm can't be hoisted out of a loop, so the value is recomputed each iteration. A few i256
+### bit-ops of overhead (and/trunc/zext/or) — calibrate it out with a `*_null` baseline if needed.
+### i256-WIDTH ONLY (the i256/i64 widths are hardcoded). :param value: kept live and opaque.
+### :returns: `value`, bit-for-bit unchanged.
+@llvm_ir("{result} = and i256 {value}, -18446744073709551616\n  {result} = trunc i256 {value} to i64\n  {result} = call i64 asm sideeffect \"\", \"=r,0\"(i64 {prev})\n  {result} = zext i64 {prev} to i256\n  {result} = or i256 {prev}, {first}")
+external("llvm") routine do_not_optimize_wide[T](value: T) -> T
+
+# ============================================================================
 # Integer Arithmetic Instructions
 # ============================================================================
 

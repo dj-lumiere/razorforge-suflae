@@ -1,0 +1,26 @@
+module Tests/Stdlib/F16Api
+
+import IO/Console
+
+# F16 (half-precision) end-to-end coverage. The transcendental-across-a-call loop below is the
+# case that previously miscompiled on x86-64 without F16C (the half accumulator decayed to 0);
+# the toolchain now emits `-mf16c` on x86-64, so the sum must be the correct ~120, never 0/NaN.
+
+routine start()
+  # Exact conversions and arithmetic (hand-verifiable, no rounding).
+  show(F32(from: F16(from: 1.5_f32)))                          # 1.5
+  show(F32(from: F16(from: 0.5_f32) + F16(from: 0.25_f32)))    # 0.75
+  show(F32(from: F16(from: 2.0_f32) * F16(from: 3.0_f32)))     # 6
+  show(F32(from: F16(from: 10.0_f32) - F16(from: 4.0_f32)))    # 6
+  show(F32(from: F16_MAX))                                     # 65504
+  show(F32(from: F16(from: 4.0_f32).sqrt_unchecked()))         # 2
+
+  # Transcendental called in a loop with a live F16 accumulator (the regression case).
+  var base = F16(from: 3.0_f32)
+  var tsum = F16(from: 0.0_f32)
+  var i = 0_s64
+  while i < 6_s64
+    tsum = tsum + base.exp_unchecked()
+    i = i + 1_s64
+  show(F32(from: tsum))                                        # ~120 (6 * F16(exp 3)), NOT 0
+  return

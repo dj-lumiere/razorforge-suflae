@@ -72,6 +72,10 @@ rf_task* rf_task_create(rf_task_kind kind);
 void rf_task_destroy(rf_task* task);
 
 uint64_t rf_task_id(rf_task* task);
+
+/* Opaque, stable identifier for the calling OS thread. Used by the lock policies to detect a
+ * re-entrant claim (a thread acquiring an exclusive lock it already holds = self-deadlock). */
+uint64_t rf_current_thread_id(void);
 rf_task_kind rf_task_kind_get(rf_task* task);
 rf_task_status rf_task_status_get(rf_task* task);
 rf_task_completion_kind rf_task_completion_kind_get(rf_task* task);

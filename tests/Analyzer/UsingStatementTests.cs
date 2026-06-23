@@ -46,11 +46,11 @@ public class UsingStatementTests
     {
         // When $enter returns Blank (void), the bound variable should have the resource type
         string source = """
-                        record Lock
+                        record Lock obeys Enterable
                           id: S32
 
-                        routine Lock.$enter()
-                          return
+                        routine Lock.$enter() -> Lock
+                          return me
 
                         routine Lock.$exit()
                           return
@@ -74,18 +74,16 @@ public class UsingStatementTests
     /// </summary>
 
     [Fact]
-    public void Analyze_ResourceWithNonVoidEnter_BindsEnterReturnType()
+    public void Analyze_EntityEnterablePassThrough_BindsEntityType()
     {
-        // When $enter returns a non-void type, the bound variable should have that type
+        // An entity obeying Enterable passes itself through `$enter` (entities return `?Me`), so the
+        // bound variable has the entity type and its members resolve.
         string source = """
-                        record Handle
-                          fd: S32
-
-                        entity Connection
+                        entity Connection obeys Enterable
                           tag: S32
 
-                        routine Connection.$enter() -> Handle
-                          return Handle(fd: 1)
+                        routine Connection.$enter() -> ?Connection
+                          return me
 
                         routine Connection.$exit()
                           return
@@ -93,12 +91,11 @@ public class UsingStatementTests
                         routine test()
                           var conn = Connection(tag: 1)
                           using conn as h
-                            var a: S32 = h.fd
+                            var a: S32 = h.tag
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        // h should be typed as Handle (from $enter return), so h.fd should resolve
         Assert.Empty(collection: result.Errors);
     }
 
@@ -195,11 +192,11 @@ public class UsingStatementTests
     public void Analyze_NestedUsing_BothBindingsInScope_NoError()
     {
         string source = """
-                        record Token
+                        record Token obeys Enterable
                           id: S32
 
-                        routine Token.$enter()
-                          return
+                        routine Token.$enter() -> Token
+                          return me
                         routine Token.$exit()
                           return
 
@@ -251,18 +248,18 @@ public class UsingStatementTests
     [Fact]
     public void Analyze_GenericUsing_BindsViewedType()
     {
-        // using on a generic resolution type (e.g., Container[Point].$enter)
-        // should bind the inner type and allow member access
+        // using on a generic resolution type (Container[Point]) obeying Enterable binds the entity
+        // (self pass-through), and member access through it resolves.
         string source = """
                         record Point
                           x: S32
                           y: S32
 
-                        entity Container[T]
+                        entity Container[T] obeys Enterable
                           item: T
 
-                        routine Container[T].$enter() -> ?T
-                          return me.item
+                        routine Container[T].$enter() -> ?Container[T]
+                          return me
 
                         routine Container[T].$exit()
                           return
@@ -270,7 +267,7 @@ public class UsingStatementTests
                         routine test()
                           var c = Container[Point](item: Point(x: 1, y: 2))
                           using c as p
-                            var a: S32 = p.x
+                            var a: S32 = p.item.x
                           return
                         """;
 

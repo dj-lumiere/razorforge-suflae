@@ -1,0 +1,81 @@
+module Core
+
+import BuilderService
+
+### Represents temporary thread-safe read-only access to data guarded by a {Shared[T, P]}.
+### `Inspecting[T]` is the non-storable token produced by `Shared.inspect()` for shared (multi-reader)
+### observation. It holds the shared {ShareController[T, P]} pointer; entering its `using` scope
+### (`$enter`) acquires the reader hold on the controller's access-discipline lock and exiting
+### (`$exit`) releases it, so the lock spans exactly the `using` block. Many inspectors may coexist;
+### the readers-XOR-writer borrow checker forbids an inspector from coexisting with a {Claiming[T]}.
+### Must be opened with `using` — a bare/inline `inspect()` would never acquire the lock.
+### :typeparam T: The entity type being inspected.
+### :typeparam P: The access-discipline lock policy of the originating `Shared`.
+### :see: {Claiming[T]}, {Viewing[T]}, {Shared[T, P]}, {Access-Types}
+@llvm("ptr")
+record Inspecting[T, P] obeys Referring[T], Enterable
+needs T is EntityType, P obeys LockPolicy
+  pass
+
+# NOTE: No creators, no manual methods — the token is produced only by `Shared.inspect()`, which
+# acquires the reader hold and constructs it from the controller pointer. Users never create one.
+
+# ============================================================================
+# Resource management — enables `using shared.inspect() as v`
+# ============================================================================
+
+### Called on entry to the `using` block: acquires the shared reader hold on the controller's
+### access-discipline lock, then passes the token through as the bound value. Pairs with `$exit`,
+### so the lock spans exactly the `using` scope.
+### :returns: This token as `Inspecting[T, P]`.
+routine Inspecting[T, P].$enter() -> Inspecting[T, P]
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    ctrl.add_inspector()
+  return me
+
+### Called on exit from the `using` block (and on every escape): releases the reader hold.
+routine Inspecting[T, P].$exit()
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    ctrl.remove_inspector()
+  return
+
+# ============================================================================
+# Marker-protocol coercion ($refer) — yields the guarded entity as ?T
+# ============================================================================
+
+### Yields the guarded entity as an in-flight `?T` reference for read-only access.
+### Inserted implicitly at call sites whose parameter is `Referring[T]`. Projects through the
+### controller to reach the managed entity.
+### :returns: The guarded entity as `?T`.
+@[readonly, inline]
+routine Inspecting[T, P].$refer() -> ?T
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    return ctrl.borrow_data().as_entity()
+
+# ============================================================================
+# Display (transparent — delegates to the guarded entity through the controller)
+# ============================================================================
+
+### Returns the display form of the inspected entity.
+### :returns: The resulting `Text` value.
+@readonly
+routine Inspecting[T, P].$represent() -> Text
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    return ctrl.borrow_data().as_entity().$represent()
+
+### Returns the diagnostic form of the inspected entity.
+### :returns: The resulting `Text` value.
+@readonly
+routine Inspecting[T, P].$diagnose() -> Text
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    return me.type_name() + "(" + ctrl.borrow_data().as_entity().$diagnose() + ")"
+
+### No-op: the token owns no heap (it only aliases the controller), and the reader hold is
+### released by `$exit`. Releasing here too would double-release the lock.
+dangerous routine Inspecting[T, P].$destroy()
+  return

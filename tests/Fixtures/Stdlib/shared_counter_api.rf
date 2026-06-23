@@ -1,0 +1,30 @@
+module Tests/Stdlib/SharedCounterApi
+import IO/Console
+
+# The headline of the concurrency data layer: N OS threads safely incrementing ONE
+# shared counter. The Atomic[S64] cell lives on start()'s frame; passing it into a
+# `threaded routine` marshals its ADDRESS (struct-record thread args are by-ref), so
+# every worker's `cell` aliases the same storage. We join all workers BEFORE reading
+# the cell, so the total is deterministic and the cell outlives every worker.
+
+threaded routine add_n(cell: Atomic[S64], times: S64, amount: S64) -> S64
+  for i in 0 til times
+    discard cell.fetch_add(delta: amount)
+  return times
+
+routine start()
+  var counter = Atomic[S64](initial: 0_s64)
+
+  # 4 workers x 1000 increments of 1 = 4000, regardless of interleaving.
+  var t1 = add_n(cell: counter, times: 1000_s64, amount: 1_s64)
+  var t2 = add_n(cell: counter, times: 1000_s64, amount: 1_s64)
+  var t3 = add_n(cell: counter, times: 1000_s64, amount: 1_s64)
+  var t4 = add_n(cell: counter, times: 1000_s64, amount: 1_s64)
+
+  discard t1.retrieve!()
+  discard t2.retrieve!()
+  discard t3.retrieve!()
+  discard t4.retrieve!()
+
+  show(f"total: {counter.load()}")
+  return

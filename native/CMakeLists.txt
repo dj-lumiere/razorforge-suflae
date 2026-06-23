@@ -30,17 +30,17 @@ include_directories(include)
 # https://bellard.org/libbf/ (MIT)
 include(cmake/libbf.cmake)
 
-# decNumber - IEEE 754 decimal floating-point (D32/D64/D128) + arbitrary-precision Decimal
-# https://github.com/SDL-Hercules-390/decNumber (ICU License)
-include(cmake/decNumber.cmake)
+# (decNumber retired: D32/D64/D128 are now pure-RF software BID engines; the arbitrary
+#  Decimal was removed in favour of Integer + Real (libbf).)
 
 # LibTomMath - Arbitrary precision integer arithmetic
 # https://github.com/libtom/libtommath (Public Domain)
 include(cmake/libtommath.cmake)
 
-# TLFloat - IEEE quad-precision soft-float with correctly-rounded math
-# https://github.com/shibatch/tlfloat (Boost Software License 1.0)
-include(cmake/tlfloat.cmake)
+# (TLFloat retired 2026-06-19: F128 arithmetic/libm/conversions are pure-RF software
+#  (SoftFloat/F128*.rf); F128 literals parse in managed C# (NumericLiteralParser.EncodeF128).
+#  Algorithm credit retained in docs/licenses. LibBF remains for arbitrary Real + the F128
+#  string fallback. See native/runtime/f128_functions.c.)
 
 # ============================================================================
 # Third-party libraries — Modules (loaded on demand)
@@ -126,8 +126,8 @@ add_library(razorforge_runtime SHARED
     runtime/stacktrace.c
     runtime/moment.c
     runtime/math_functions.c
-    runtime/decimal_functions.c
     runtime/bignum_functions.c
+    runtime/real_functions.c
     runtime/f16_functions.c
     runtime/f128_functions.c
     runtime/text_functions.c
@@ -160,18 +160,6 @@ if(HAVE_LIBBF)
     if(WIN32)
         target_link_libraries(razorforge_runtime compiler_rt_shim)
     endif()
-endif()
-
-# Link TLFloat (F128 soft-float + transcendentals, decimal transcendental bridge)
-if(HAVE_TLFLOAT)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_TLFLOAT)
-    target_link_libraries(razorforge_runtime rf_tlfloat)
-endif()
-
-# Link decNumber (D32/D64/D128 + Decimal)
-if(HAVE_DECNUMBER)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_DECNUMBER)
-    target_link_libraries(razorforge_runtime decnumber)
 endif()
 
 # Link LibTomMath if available
@@ -270,8 +258,8 @@ set_target_properties(razorforge_runtime PROPERTIES
 # ============================================================================
 add_library(razorforge_math STATIC
     runtime/math_functions.c
-    runtime/decimal_functions.c
     runtime/bignum_functions.c
+    runtime/real_functions.c
     runtime/f16_functions.c
     runtime/f128_functions.c
 )
@@ -289,16 +277,6 @@ if(HAVE_LIBBF)
     if(WIN32)
         target_link_libraries(razorforge_math compiler_rt_shim)
     endif()
-endif()
-
-if(HAVE_TLFLOAT)
-    target_compile_definitions(razorforge_math PRIVATE HAVE_TLFLOAT)
-    target_link_libraries(razorforge_math rf_tlfloat)
-endif()
-
-if(HAVE_DECNUMBER)
-    target_compile_definitions(razorforge_math PRIVATE HAVE_DECNUMBER)
-    target_link_libraries(razorforge_math decnumber)
 endif()
 
 if(HAVE_LIBTOMMATH)
@@ -332,8 +310,6 @@ message(STATUS "")
 message(STATUS "RazorForge Native Configuration:")
 message(STATUS "  ── Core ──")
 message(STATUS "  LibBF (f128 + transcendentals): ${HAVE_LIBBF}")
-message(STATUS "  TLFloat (f128 soft-float math):   ${HAVE_TLFLOAT}")
-message(STATUS "  decNumber (d32/d64/d128/Decimal): ${HAVE_DECNUMBER}")
 message(STATUS "  LibTomMath (bigint):              ${HAVE_LIBTOMMATH}")
 message(STATUS "  ── Modules ──")
 message(STATUS "  zlib (compression):               ${HAVE_ZLIB}")

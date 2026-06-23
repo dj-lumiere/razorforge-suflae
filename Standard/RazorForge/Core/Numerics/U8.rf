@@ -5,7 +5,7 @@ module Core
 ### `U8` is the standard byte-sized unsigned integer type in RazorForge, used
 ### for raw byte manipulation, character codes, and compact numeric data.
 @llvm("i8")
-record U8 obeys UnsignedIntegral, Ordered, ConstCompatible
+record U8 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for U8 limits
@@ -104,6 +104,24 @@ routine U8.$create!(from: U128) -> U8
   if from > 255_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U8](from)
+
+### Converts an `S256` to `U8`, throwing if the value is negative or exceeds 255.
+### :param from: The `S256` value to convert.
+### :returns: The lower 8 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is outside 0..255.
+routine U8.$create!(from: S256) -> U8
+  if not (0_s256 <= from <= 255_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, U8](from)
+
+### Converts a `U256` to `U8`, throwing if the value exceeds 255.
+### :param from: The `U256` value to convert.
+### :returns: The lower 8 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 255`.
+routine U8.$create!(from: U256) -> U8
+  if from > 255_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, U8](from)
 
 ### Converts an `F16` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F16` value to convert.
@@ -311,10 +329,7 @@ routine U8.$mul_clamp(you: U8) -> U8
 ### Returns `me ** exp` and a flag indicating whether the result wrapped around.
 ### :param exp: The exponent.
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U8.pow_with_overflow!(exp: U8) -> (U8, Bool)
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U8.pow_with_overflow(exp: U8) -> (U8, Bool)
   var result: U8 = 1
   var base: U8 = me
   var e: U32 = U32(exp)
@@ -335,9 +350,8 @@ routine U8.pow_with_overflow!(exp: U8) -> (U8, Bool)
 ### :param exp: The exponent.
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U8_MAX`.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U8.$pow!(exp: U8) -> U8
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -345,10 +359,7 @@ routine U8.$pow!(exp: U8) -> U8
 ### Returns `me ** exp` with wrapping arithmetic (mod 256).
 ### :param exp: The exponent.
 ### :returns: The result modulo 256.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U8.$pow_wrap!(exp: U8) -> U8
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U8.$pow_wrap(exp: U8) -> U8
   var result: U8 = 1
   var base: U8 = me
   var e: U32 = U32(exp)
@@ -363,10 +374,7 @@ routine U8.$pow_wrap!(exp: U8) -> U8
 ### Returns `me ** exp`, clamped to `U8_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `255` if it would overflow.
-### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
-routine U8.$pow_clamp!(exp: U8) -> U8
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
+routine U8.$pow_clamp(exp: U8) -> U8
   var result: U8 = 1
   var base: U8 = me
   var e: U32 = U32(exp)
@@ -516,10 +524,48 @@ routine U8.trailing_ones() -> U8
 routine U8.reverse_bits() -> U8
   return reverse_bits[U8](me)
 
+### Reverses the byte order. A single-byte value is its own byte-swap, so this returns `me`
+### unchanged — provided for parity with the wider unsigned types and `S8.swap_bytes`.
+### :returns: `me`.
+routine U8.swap_bytes() -> U8
+  return me
+
 ### Returns `true` if this value is an exact power of two.
 ### :returns: `true` if `me` is 1, 2, 4, 8, ..., 128; `false` otherwise (including zero).
 routine U8.is_power_of_two() -> Bool
   return me != 0_u8 and (me & (me - 1_u8)) == 0_u8
+
+### Returns this value rotated left by `bits` positions.
+routine U8.rotate_left(bits: U32) -> U8
+  var n = bits % 8_u32
+  if n == 0_u32
+    return me
+  return bit_or[U8](a: shift_left[U8](me, U8(n)), b: shift_right_unsigned[U8](me, U8(8_u32 -% n)))
+
+### Returns this value rotated right by `bits` positions.
+routine U8.rotate_right(bits: U32) -> U8
+  var n = bits % 8_u32
+  if n == 0_u32
+    return me
+  return bit_or[U8](a: shift_right_unsigned[U8](me, U8(n)), b: shift_left[U8](me, U8(8_u32 -% n)))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U8.to_bytes_le() -> Array[Byte, 1]
+  var result = Array[Byte, 1]()
+  result = set_byte_at(array: result, index: 0_u64, value: me)
+  return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U8.to_bytes_be() -> Array[Byte, 1]
+  return me.to_bytes_le()
+
+### Builds a `U8` from its little-endian raw byte representation.
+common routine U8.from_bytes_le(bytes: Array[Byte, 1]) -> U8
+  return byte_at(array: bytes, index: 0_u64)
+
+### Builds a `U8` from its big-endian raw byte representation.
+common routine U8.from_bytes_be(bytes: Array[Byte, 1]) -> U8
+  return U8.from_bytes_le(bytes: bytes)
 
 # ============================================================================
 # Type Conversions (creator syntax)
@@ -597,9 +643,13 @@ routine U8.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine U8.$represent() -> Text
   return U32(me).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine U8.$diagnose() -> Text
   return "U8(" + me.$represent() + ")"
 

@@ -224,10 +224,13 @@ public sealed partial class StdlibLoader
 
         _stdlibScanned = true;
 
-        // Recursively find all files with the appropriate extension
+        // Recursively find all files with the appropriate extension. Sort by ordinal path so the
+        // scan/registration order is identical on every OS (Directory.GetFiles order is
+        // OS-dependent) — otherwise method resolution becomes order-dependent across platforms.
         foreach (string filePath in Directory.GetFiles(path: _stdlibPath,
                      searchPattern: _fileExtension,
-                     searchOption: SearchOption.AllDirectories))
+                     searchOption: SearchOption.AllDirectories)
+                 .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
         {
             try
             {
@@ -639,7 +642,7 @@ public sealed partial class StdlibLoader
             // Wrapper types (Hijacked, Viewing, Modifying, etc.) are not in _types — create directly
             if (typeExpr.GenericArguments.Count == 1 &&
                 typeName is "Hijacked" or "Viewing" or "Modifying"
-                    or "Retained" or "Tracked")
+                    or "Retained" or "Tracked" or "Shared" or "Watched")
             {
                 TypeInfo? wrapperInner = ResolveSimpleType(registry: registry,
                     typeExpr: typeExpr.GenericArguments[index: 0],

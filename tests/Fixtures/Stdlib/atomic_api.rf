@@ -1,0 +1,47 @@
+module Tests/Stdlib/AtomicApi
+import IO/Console
+
+# Single-threaded exercise of Atomic[T]: every method drives a SeqCst atomic
+# intrinsic on the cell's live address (by-ref `me` + me.value.hijack()).
+# Cross-thread sharing (Hijacked[Atomic[T]] into a threaded routine) is covered
+# by the shared-counter fixture.
+
+routine start()
+  # Integer cell: load / store / swap / fetch_add / fetch_sub / compare_exchange.
+  var c = Atomic[S64](initial: 10_s64)
+  discard c.fetch_add(delta: 5_s64)
+  show(f"after add: {c.load()}")
+
+  discard c.fetch_sub(delta: 3_s64)
+  show(f"after sub: {c.load()}")
+
+  var prev = c.swap(desired: 100_s64)
+  show(f"swapped from: {prev}")
+  show(f"now: {c.load()}")
+
+  c.store(desired: 7_s64)
+  show(f"stored: {c.load()}")
+
+  var ok = c.compare_exchange(expected: 7_s64, desired: 42_s64)
+  show(f"cas ok: {ok} val: {c.load()}")
+
+  var ok2 = c.compare_exchange(expected: 7_s64, desired: 99_s64)
+  show(f"cas2 ok: {ok2} val: {c.load()}")
+
+  # Bitwise RMW on an unsigned cell.
+  var bits = Atomic[U32](initial: 0b1100_u32)
+  discard bits.fetch_or(mask: 0b0001_u32)
+  discard bits.fetch_and(mask: 0b1101_u32)
+  discard bits.fetch_xor(mask: 0b1000_u32)
+  show(f"bits: {bits.load()}")
+
+  # Flag via Atomic[U8] (Bool is sub-byte, so not atomic-capable): 0 = clear, 1 = set.
+  var flag = Atomic[U8](initial: 0_u8)
+  show(f"flag: {flag.load()}")
+  flag.store(desired: 1_u8)
+  show(f"flag: {flag.load()}")
+  var was = flag.swap(desired: 0_u8)
+  show(f"was: {was} flag: {flag.load()}")
+  var caso = flag.compare_exchange(expected: 0_u8, desired: 1_u8)
+  show(f"caso: {caso} flag: {flag.load()}")
+  return

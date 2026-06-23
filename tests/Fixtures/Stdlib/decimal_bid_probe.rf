@@ -1,0 +1,31 @@
+module Main
+
+import IO/Console
+
+routine start()
+  # literals (now BID-encoded)
+  var a = 6.0_d128
+  var b = 2.0_d128
+  show(a / b)            # 3
+  show(1.0_d128 + 0.5_d128)
+  show(0.1_d64 + 0.2_d64)
+  show(1.5_d32 * 2.0_d32)
+  # int -> decimal
+  show(D128(42_s64))
+  show(D64(255_u8))
+  show(D32(7_s32))
+  # decimal -> int
+  show(D128(123.9_d128).S64!())
+  show(D64(255.0_d64).U8!())
+  # float <-> decimal
+  show(D128(3.25_f64))
+  show(D128(2.5_d128).F64())
+  # decimal -> decimal
+  show(D64(D128(9.75_d128)))
+  show(D128(D32(1.25_d32)))
+  # comparison
+  show(2.0_d128 < 3.0_d128)
+  show(D128(1) == D128(1))
+  # parse
+  show(D128!("3.14159"))
+  return

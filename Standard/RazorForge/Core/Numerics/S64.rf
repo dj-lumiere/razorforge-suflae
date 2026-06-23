@@ -3,7 +3,7 @@ module Core
 ### A 64-bit signed integer in the range −9,223,372,036,854,775,808 to 9,223,372,036,854,775,807.
 ### `S64` is the default word-sized signed integer type in RazorForge.
 @llvm("i64")
-record S64 obeys SignedIntegral, Ordered, ConstCompatible
+record S64 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for S64 limits
@@ -85,6 +85,24 @@ routine S64.$create!(from: U128) -> S64
     throw IntegerOverflowError()
   return int_truncate[U128, S64](from)
 
+### Converts an `S256` to `S64`, throwing if outside the S64 range.
+### :param from: The `S256` value to convert.
+### :returns: The lower 64 bits reinterpreted as an `S64`.
+### :throws: {IntegerOverflowError} if `from` is outside −9223372036854775808..9223372036854775807.
+routine S64.$create!(from: S256) -> S64
+  if not (-9223372036854775808_s256 <= from <= 9223372036854775807_s256)
+    throw IntegerOverflowError()
+  return int_truncate[S256, S64](from)
+
+### Converts a `U256` to `S64`, throwing if the value exceeds S64_MAX.
+### :param from: The `U256` value to convert.
+### :returns: The lower 64 bits reinterpreted as an `S64`.
+### :throws: {IntegerOverflowError} if `from > 9223372036854775807`.
+routine S64.$create!(from: U256) -> S64
+  if from > 9223372036854775807_u256
+    throw IntegerOverflowError()
+  return int_truncate[U256, S64](from)
+
 ### Truncates a 16-bit float to `S64` by first widening to `F32`.
 ### :param from: The source float value.
 ### :returns: The truncated `S64` representation.
@@ -119,30 +137,19 @@ routine S64.$create!(from: F128) -> S64
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D32) -> S64
-  var as_f128 = from.F128()
-  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
-    throw IntegerOverflowError()
-  var bits = reinterpret_bits[D32, U32](from)
-  return d32_to_s64(bits)
+  return S128(from: D128(from: from)).S64!()
 
 ### Converts a 64-bit decimal float to `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D64) -> S64
-  var as_f128 = from.F128()
-  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
-    throw IntegerOverflowError()
-  var bits = reinterpret_bits[D64, U64](from)
-  return d64_to_s64(bits)
+  return S128(from: D128(from: from)).S64!()
 
 ### Converts a 128-bit decimal float to `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D128) -> S64
-  var as_f128 = from.F128()
-  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
-    throw IntegerOverflowError()
-  return d128_to_s64(low: from.low, high: from.high)
+  return S128(from: from).S64!()
 
 # ============================================================================
 # Arithmetic Operations
@@ -160,7 +167,8 @@ routine S64.add_with_overflow(you: S64) -> (S64, Bool)
 routine S64.sub_with_overflow(you: S64) -> (S64, Bool)
   return signed_sub_checked[S64](me, you)
 
-### Returns the product of this value and `you`, and a flag indicating whether the result overflowed.
+### Returns the product of this value and `you`, and a flag indicating whether the result
+### overflowed.
 ### :param you: The right operand.
 ### :returns: A tuple of `(product, overflow_flag)`.
 routine S64.mul_with_overflow(you: S64) -> (S64, Bool)
@@ -196,10 +204,10 @@ routine S64.$mul!(you: S64) -> S64
     throw IntegerOverflowError()
   return result.item0
 
-### Returns `me // you` (floor division), throwing on errors.
-### Floor division rounds toward negative infinity, unlike truncation-division.
+### Returns `me // you` (euclidean division), throwing on errors.
+### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `$mod!`.
 ### :param you: The divisor.
-### :returns: The floor quotient.
+### :returns: The euclidean quotient.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S64_MIN and you == -1`.
 routine S64.$floordiv!(you: S64) -> S64
@@ -215,9 +223,9 @@ routine S64.$floordiv!(you: S64) -> S64
     return quotient + 1_s64
   return quotient
 
-### Returns `me % you` (floor modulo), where the result sign matches `you`.
+### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
 ### :param you: The divisor.
-### :returns: The floor remainder.
+### :returns: The euclidean remainder — always non-negative.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S64.$mod!(you: S64) -> S64
   if you == 0
@@ -280,9 +288,9 @@ dangerous routine S64.$sub_unchecked(you: S64) -> S64
 dangerous routine S64.$mul_unchecked(you: S64) -> S64
   return signed_mul_exact[S64](a: me, b: you)
 
-### Returns `me // you` (floor division) with undefined behavior if `you` is zero.
+### Returns `me // you` (euclidean division) with undefined behavior if `you` is zero.
 ### :param you: The divisor.
-### :returns: The floor quotient.
+### :returns: The euclidean quotient.
 dangerous routine S64.$floordiv_unchecked(you: S64) -> S64
   var quotient = signed_div[S64](a: me, b: you)
   var remainder = signed_rem[S64](a: me, b: you)
@@ -292,7 +300,7 @@ dangerous routine S64.$floordiv_unchecked(you: S64) -> S64
     return quotient + 1_s64
   return quotient
 
-### Returns `me % you` (floor modulo) with undefined behavior if `you` is zero.
+### Returns `me % you` (euclidean modulo) with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The floor remainder.
 dangerous routine S64.$mod_unchecked(you: S64) -> S64
@@ -335,20 +343,18 @@ routine S64.$mul_clamp(you: S64) -> S64
 # ============================================================================
 
 ### Returns `me ** exp` and an overflow flag.
-### Uses repeated squaring. `0 ** 0` is indeterminate; negative exponents are rejected.
+### Uses repeated squaring. `0 ** 0 == 1` (the empty product); a negative exponent crashes
+### with NumericDomainError (the result would not be an integer).
 ### :param exp: The exponent. Must be non-negative.
 ### :returns: A tuple of `(result, overflow_flag)`.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
-### :throws: {NegativeExponentError} if `exp < 0`.
+### :throws: {NumericDomainError} if `exp < 0`.
 routine S64.pow_with_overflow!(exp: S64) -> (S64, Bool)
   var result: S64 = 1
   var base: S64 = me
   var e: S64 = exp
   var overflow = false
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -364,7 +370,6 @@ routine S64.pow_with_overflow!(exp: S64) -> (S64, Bool)
 ### Returns `me ** exp`, throwing on overflow.
 ### :param exp: The exponent. Must be non-negative.
 ### :returns: The result.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 ### :throws: {IntegerOverflowError} if the result is outside the `S64` range.
 routine S64.$pow!(exp: S64) -> S64
   var result = me.pow_with_overflow!(exp)
@@ -375,12 +380,9 @@ routine S64.$pow!(exp: S64) -> S64
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent. Must be non-negative.
 ### :returns: The result modulo 2⁶⁴ in two's complement.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 routine S64.$pow_wrap!(exp: S64) -> S64
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0_s64
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S64 = 1
   var base: S64 = me
   var e: U32 = U32(exp)
@@ -395,14 +397,11 @@ routine S64.$pow_wrap!(exp: S64) -> S64
 ### Returns `me ** exp` clamped to `[S64_MIN, S64_MAX]` on overflow.
 ### :param exp: The exponent. Must be non-negative.
 ### :returns: The clamped result.
-### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 routine S64.$pow_clamp!(exp: S64) -> S64
   var result: S64 = 1
   var base: S64 = me
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
   if exp < 0
-    throw NegativeExponentError()
+    throw NumericDomainError(description: "negative exponent: no integer result")
   while exp > 0
     if (exp & 1) == 1
       result = result.$mul_clamp(base)
@@ -568,6 +567,30 @@ routine S64.reverse_bits() -> S64
 routine S64.swap_bytes() -> S64
   return byte_swap[S64](me)
 
+### Returns this value rotated left by `bits` positions.
+routine S64.rotate_left(bits: U32) -> S64
+  return reinterpret_bits[U64, S64](reinterpret_bits[S64, U64](me).rotate_left(bits: bits))
+
+### Returns this value rotated right by `bits` positions.
+routine S64.rotate_right(bits: U32) -> S64
+  return reinterpret_bits[U64, S64](reinterpret_bits[S64, U64](me).rotate_right(bits: bits))
+
+### Returns the raw byte representation of this value in little-endian order.
+routine S64.to_bytes_le() -> Array[Byte, 8]
+  return reinterpret_bits[S64, U64](me).to_bytes_le()
+
+### Returns the raw byte representation of this value in big-endian order.
+routine S64.to_bytes_be() -> Array[Byte, 8]
+  return reinterpret_bits[S64, U64](me).to_bytes_be()
+
+### Builds an `S64` from its little-endian raw byte representation.
+common routine S64.from_bytes_le(bytes: Array[Byte, 8]) -> S64
+  return reinterpret_bits[U64, S64](U64.from_bytes_le(bytes: bytes))
+
+### Builds an `S64` from its big-endian raw byte representation.
+common routine S64.from_bytes_be(bytes: Array[Byte, 8]) -> S64
+  return reinterpret_bits[U64, S64](U64.from_bytes_be(bytes: bytes))
+
 # ============================================================================
 # Utility Methods
 # ============================================================================
@@ -620,6 +643,8 @@ routine S64.is_power_of_two() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the human-readable text of this value.
+### :returns: The value rendered as `Text`.
 routine S64.$represent() -> Text
   if me == 0s64
     return "0"
@@ -630,6 +655,8 @@ routine S64.$represent() -> Text
   # yields |me| (works correctly even for S64.MIN, whose absolute value overflows S64).
   return "-" + (0u64 -% reinterpret_bits[S64, U64](me)).$represent()
 
+### Returns a type-tagged debug rendering of this value.
+### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 routine S64.$diagnose() -> Text
   return "S64(" + me.$represent() + ")"
 

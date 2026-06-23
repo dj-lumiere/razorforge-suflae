@@ -2070,28 +2070,67 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             RecordTypeInfo { HasDirectBackendType: false } r => r.MemberVariables,
             _ => null
         };
-        if (fields is null or { Count: 0 })
+
+        // Entities are heap-allocated (rf_allocate_dynamic); their destructor must free the
+        // entity allocation itself AFTER tearing down fields, exactly as hand-written entity
+        // destructors do (e.g. List[T].$destroy ends with `me.hijack().invalidate()`). Without
+        // this the struct leaks on every $destroy — auto-derived entities like RangeEmitter[T]
+        // (the iterator behind every `for x in range`) otherwise leak per iteration. Records,
+        // tuples, and crashables are value-typed / managed elsewhere, so they only recurse.
+        bool isEntity = owner is EntityTypeInfo;
+        if (!isEntity && fields is null or { Count: 0 })
             return noop;
 
         TypeInfo? blankType = ctx.Registry.LookupType(name: "Blank");
-        var statements = new List<Statement>(capacity: fields.Count + 1);
-        foreach (MemberVariableInfo field in fields)
+        var statements = new List<Statement>(capacity: (fields?.Count ?? 0) + 2);
+        if (fields is { Count: > 0 })
         {
-            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
-                { ResolvedType = owner };
-            var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
-                Location: _synthLoc) { ResolvedType = field.Type };
-            var destroyCall = new CallExpression(
-                Callee: new MemberExpression(Object: fieldRef, PropertyName: "$destroy",
-                    Location: _synthLoc) { ResolvedType = blankType },
-                Arguments: [],
-                Location: _synthLoc) { ResolvedType = blankType };
-            statements.Add(item: new ExpressionStatement(Expression: destroyCall,
-                Location: _synthLoc));
+            foreach (MemberVariableInfo field in fields)
+            {
+                var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                    { ResolvedType = owner };
+                var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+                    Location: _synthLoc) { ResolvedType = field.Type };
+                var destroyCall = new CallExpression(
+                    Callee: new MemberExpression(Object: fieldRef, PropertyName: "$destroy",
+                        Location: _synthLoc) { ResolvedType = blankType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = blankType };
+                statements.Add(item: new ExpressionStatement(Expression: destroyCall,
+                    Location: _synthLoc));
+            }
         }
+
+        if (isEntity)
+            statements.Add(item: BuildEntitySelfFree(owner: owner!, blankType: blankType));
 
         statements.Add(item: noop);
         return new BlockStatement(Statements: statements, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds <c>me.hijack().invalidate()</c> — frees the heap allocation backing an entity.
+    /// Mirrors the tail of hand-written entity destructors (e.g. <c>List[T].$destroy</c>); the
+    /// synthesized destructor must emit it too, or every auto-derived entity leaks its struct.
+    /// </summary>
+    private ExpressionStatement BuildEntitySelfFree(TypeInfo owner, TypeInfo? blankType)
+    {
+        TypeInfo hijackedType = ctx.Registry.GetOrCreateWrapperType(
+            wrapperName: "Hijacked", innerType: owner, isReadOnly: false);
+
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            { ResolvedType = owner };
+        var hijackCall = new CallExpression(
+            Callee: new MemberExpression(Object: meRef, PropertyName: "hijack",
+                Location: _synthLoc) { ResolvedType = hijackedType },
+            Arguments: [],
+            Location: _synthLoc) { ResolvedType = hijackedType };
+        var invalidateCall = new CallExpression(
+            Callee: new MemberExpression(Object: hijackCall, PropertyName: "invalidate",
+                Location: _synthLoc) { ResolvedType = blankType },
+            Arguments: [],
+            Location: _synthLoc) { ResolvedType = blankType };
+        return new ExpressionStatement(Expression: invalidateCall, Location: _synthLoc);
     }
 
     /// <summary>

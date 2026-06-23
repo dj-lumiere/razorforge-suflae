@@ -235,6 +235,25 @@ public sealed partial class SemanticVerifier
     private void CollectPresetDeclaration(PresetDeclaration preset)
     {
         TypeSymbol presetType = ResolveType(typeExpr: preset.Type);
+
+        // A collection-literal preset is only Presettable as a fixed-size `Array[T, N]` or
+        // `BitArray[N]` — those lower to a single constant global. Heap collections (List/Set/Dict/
+        // Deque/...) would rebuild the whole collection on every use (the fun_bench OOM class), so
+        // reject them. Non-collection presets (scalars, constructor calls like `C64(...)`) are fine.
+        if (preset.Value is ListLiteralExpression && presetType is not ErrorTypeInfo)
+        {
+            string baseName = PresetCollectionBaseName(name: presetType.Name);
+            if (baseName is not ("Array" or "BitArray"))
+            {
+                ReportError(code: SemanticDiagnosticCode.NonPresettableCollectionPreset,
+                    message:
+                    $"Preset '{preset.Name}' has type '{presetType.Name}': a collection-literal preset must be " +
+                    "a fixed-size 'Array[T, N]' or 'BitArray[N]'. Other collection types would rebuild the whole " +
+                    "collection on every use.",
+                    location: preset.Location);
+            }
+        }
+
         SeedPresetValueMetadata(value: preset.Value, presetType: presetType);
         _registry.DeclareVariable(name: preset.Name,
             type: presetType,
@@ -250,6 +269,18 @@ public sealed partial class SemanticVerifier
                 module: module,
                 value: preset.Value);
         }
+    }
+
+    /// <summary>
+    /// Strips generic arguments and module qualifiers from a type name
+    /// (e.g. <c>Collections.Array[U16, 1000]</c> -&gt; <c>Array</c>) for the Presettable check.
+    /// </summary>
+    private static string PresetCollectionBaseName(string name)
+    {
+        int bracket = name.IndexOf(value: '[');
+        string bare = bracket > 0 ? name[..bracket] : name;
+        int dot = bare.LastIndexOf(value: '.');
+        return dot >= 0 ? bare[(dot + 1)..] : bare;
     }
 
     private static void SeedPresetValueMetadata(Expression value, TypeSymbol presetType)
@@ -567,14 +598,11 @@ public sealed partial class SemanticVerifier
                 location: routine.Location);
         }
 
-        // #66: Index operators ($getitem/$setitem) are only valid on entities
-        if (baseName is "$getitem" or "$setitem" && ownerType is not null &&
-            ownerType is not EntityTypeInfo)
-        {
-            ReportError(code: SemanticDiagnosticCode.IndexOperatorTypeKindRestriction,
-                message: $"Index operators are only valid on entities, not on '{ownerType.Name}'.",
-                location: routine.Location);
-        }
+        // Index operators ($getitem/$setitem) are governed by PROTOCOL conformance, not type KIND:
+        // any type that follows Indexable/MutableIndexable may define them (records like
+        // Array[T,N]/BitArray[N], entities like List/Dict, and user containers alike). The
+        // conformance requirement is enforced by RF-S411 (OperatorWithoutProtocol) via the
+        // wired-routine→protocol catalog, so no type-kind restriction is applied here.
 
         // @writable is removed — emit error before the conflict check
         if (routine.Annotations.Contains(item: "writable"))

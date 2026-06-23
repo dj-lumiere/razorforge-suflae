@@ -41,8 +41,11 @@ public class MarkerConformanceTests
     [Fact]
     public void Analyze_Record_HasTransitiveProtocols()
     {
-        // RecordType obeys Diagnosable, Equatable, Hashable, Copyable
-        // Diagnosable obeys Representable
+        // RecordType obeys only Diagnosable (which transitively obeys Representable). It does NOT
+        // imply Equatable/Hashable: equality and hashing are capabilities a record opts into
+        // explicitly (`obeys Equatable`/`Hashable` + a hand-written `$eq`/`$hash`), never an
+        // automatic consequence of being a record (otherwise the conformance is a promise with no
+        // body, and constrained generics like `List[T].$eq` LINKERR on a non-equatable element).
         string source = """
                         record Point
                           x: S32
@@ -54,13 +57,14 @@ public class MarkerConformanceTests
 
         var record = (RecordTypeInfo)result.Registry.LookupType(name: "Point")!;
 
-        // Should have at minimum these transitive protocols
-        Assert.Contains(collection: record.ImplementedProtocols,
-            filter: p => p.Name == "Equatable");
-        Assert.Contains(collection: record.ImplementedProtocols,
-            filter: p => p.Name == "Hashable");
+        // RecordType's only transitive protocol is Diagnosable (and Representable below it).
         Assert.Contains(collection: record.ImplementedProtocols,
             filter: p => p.Name == "Diagnosable");
+        // Equatable/Hashable are NOT implied — Point declares no `obeys Equatable`.
+        Assert.DoesNotContain(collection: record.ImplementedProtocols,
+            filter: p => p.Name == "Equatable");
+        Assert.DoesNotContain(collection: record.ImplementedProtocols,
+            filter: p => p.Name == "Hashable");
     }
     /// <summary>
     /// Verifies semantic analysis behavior for entity has entity type conformance.
