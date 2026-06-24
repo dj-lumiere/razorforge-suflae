@@ -26,25 +26,29 @@ public partial class LlvmCodeGenerator
         paramList.AddRange(collection:
             from param in routine.Parameters
             let byval = ParameterPassedByval(routine: routine, paramType: param.Type)
+            let coerce = byval ? null : ParameterCoerceType(routine: routine, paramType: param.Type)
             let paramType = byval ? $"ptr byval({GetLlvmType(type: param.Type)})"
-                : GetParameterLlvmType(type: param.Type)
+                : coerce ?? GetParameterLlvmType(type: param.Type)
             let emittedName = byval ? $"{param.Name}.addr"
                 : param.Name == "entry" ? "entry_" : param.Name
             select $"{paramType} %{emittedName}");
 
         string returnType = routine.ReturnType != null ? GetLlvmType(type: routine.ReturnType) : "void";
 
-        // Mirror GenerateRoutineDefinition's ABI-Indirect (sret) return handling: this synthesized
-        // define path must agree with the declaration GenerateRoutineDeclaration emitted, or the
-        // declare/define signature-match invariant trips (e.g. crash_title returning Text).
+        // Mirror GenerateRoutineDefinition's ABI return handling (sret for Indirect, integer coercion
+        // for small structs): this synthesized define path must agree with the declaration
+        // GenerateRoutineDeclaration emitted, or the declare/define signature-match invariant trips.
         bool prevReturnViaSret = _currentReturnViaSret;
+        string? prevReturnCoerce = _currentReturnCoerceType;
         _currentReturnViaSret = ReturnsViaSret(routine: routine);
+        _currentReturnCoerceType = _currentReturnViaSret ? null : ReturnCoerceType(routine: routine);
         if (_currentReturnViaSret)
         {
             paramList.Insert(index: 0, item: $"ptr sret({returnType}) %sret");
         }
 
-        string headerReturnType = _currentReturnViaSret ? "void" : returnType;
+        string headerReturnType = _currentReturnViaSret ? "void"
+            : _currentReturnCoerceType ?? returnType;
         string parameters = string.Join(separator: ", ", values: paramList);
 
         int savedLength = _functionDefinitions.Length;
@@ -71,6 +75,7 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
         _currentReturnViaSret = prevReturnViaSret;
+        _currentReturnCoerceType = prevReturnCoerce;
     }
 
 }

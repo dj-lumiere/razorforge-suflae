@@ -73,6 +73,9 @@ public partial class LlvmCodeGenerator
             // ABI-Indirect struct value arg: passed as a hidden byval pointer-to-copy.
             if (ParameterPassedByval(routine: routine, paramType: param.Type))
                 return $"ptr byval({GetLlvmType(type: param.Type)})";
+            // ABI-Coerce small struct value arg: passed reinterpreted as an integer register form.
+            if (ParameterCoerceType(routine: routine, paramType: param.Type) is { } coerceArg)
+                return coerceArg;
             string t = GetParameterLlvmType(type: param.Type);
             if (isCExtern && t == "half") return "i16";
             string attrs = GetExplicitParameterAttributes(type: param.Type);
@@ -127,12 +130,21 @@ public partial class LlvmCodeGenerator
         bool needsSret = isCExtern
             ? NeedsCExternSret(routine: routine)
             : ReturnsViaSret(routine: routine);
+        // Phase 2: a small struct return is coerced to an integer register form — the declared
+        // return type becomes that, matching the define/return/call sites. (Not for C externs.)
+        string? declCoerceReturn = isCExtern || needsSret ? null : ReturnCoerceType(routine: routine);
         if (needsSret)
         {
             // Change declaration: void @func(ptr sret(%RecordType), original_params...)
             paramTypes.Insert(index: 0, item: $"ptr sret({returnType})");
             string parameters = string.Join(separator: ", ", values: paramTypes);
             _rfRoutineDeclarations[key: funcName] = $"declare void @{funcName}({parameters})";
+        }
+        else if (declCoerceReturn != null)
+        {
+            string parameters = string.Join(separator: ", ", values: paramTypes);
+            _rfRoutineDeclarations[key: funcName] =
+                $"declare {declCoerceReturn} @{funcName}({parameters})";
         }
         else
         {
@@ -357,10 +369,15 @@ public partial class LlvmCodeGenerator
             // private copy. Like a by-ref thread arg, `%<name>.addr` doubles as the struct's lvalue
             // address so the prologue skips the alloca/store copy (the byval copy already exists).
             let byval = !byRefThreadArg && ParameterPassedByval(routine: routineInfo, paramType: param.Type)
+            // ABI-Coerce small struct value arg: arrives as an integer register value (`%<name>`);
+            // the prologue reconstructs the struct into `%<name>.addr`. Plain value name (not .addr).
+            let coerce = !byRefThreadArg && !byval
+                ? ParameterCoerceType(routine: routineInfo, paramType: param.Type)
+                : null
             let paramType = byRefThreadArg ? "ptr"
                 : byval ? $"ptr byval({GetLlvmType(type: param.Type)})"
-                : GetParameterLlvmType(type: param.Type)
-            let paramAttrs = byRefThreadArg || byval
+                : coerce ?? GetParameterLlvmType(type: param.Type)
+            let paramAttrs = byRefThreadArg || byval || coerce != null
                 ? string.Empty
                 : GetExplicitParameterAttributes(type: param.Type)
             let emittedName = byRefThreadArg || byval ? $"{param.Name}.addr"
@@ -391,7 +408,11 @@ public partial class LlvmCodeGenerator
         // then stores through %sret (see EmitReturn). _currentReturnViaSret is read during body
         // emission, so set it before GenerateRoutineBody and restore after.
         bool prevReturnViaSret = _currentReturnViaSret;
+        string? prevReturnCoerce = _currentReturnCoerceType;
         _currentReturnViaSret = ReturnsViaSret(routine: routineInfo);
+        // Phase 2: a small struct return is coerced to an integer register form; the header returns
+        // that type and every `return` reinterprets the struct into it (see EmitReturn).
+        _currentReturnCoerceType = _currentReturnViaSret ? null : ReturnCoerceType(routine: routineInfo);
         if (_currentReturnViaSret)
         {
             paramList.Insert(index: 0, item: $"ptr sret({returnType}) %sret");
@@ -403,7 +424,8 @@ public partial class LlvmCodeGenerator
         int savedTempCounter = _tempCounter;
 
         bool isInline = routineInfo.Annotations.Contains(value: "inline");
-        string headerReturnType = _currentReturnViaSret ? "void" : returnType;
+        string headerReturnType = _currentReturnViaSret ? "void"
+            : _currentReturnCoerceType ?? returnType;
         string returnPrefix =
             !_currentReturnViaSret && isCreator && returnType == "ptr" ? "noalias " : "";
         string funcAttrs = isInline ? " alwaysinline" : "";
@@ -457,6 +479,7 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
         _currentReturnViaSret = prevReturnViaSret;
+        _currentReturnCoerceType = prevReturnCoerce;
     }
 
     /// <summary>
@@ -546,10 +569,25 @@ public partial class LlvmCodeGenerator
                 continue;
             }
 
-            // Parameters are passed as value, create a local copy
             // Use "entry_" instead of "entry" to avoid conflict with the entry: block label
             string emittedParamName = param.Name == "entry" ? "entry_" : param.Name;
             string paramPtr = $"%{param.Name}.addr";
+
+            // ABI-Coerce small struct value param: the parameter arrives as an integer register
+            // value. Allocate a slot of the ABI type (≥ the struct), store the register value into
+            // it, and bind `%<name>.addr` to it — field access then reads the struct out (the slot is
+            // large enough). No managed-entity teardown applies (records only).
+            string? coerceType = ParameterCoerceType(routine: routine, paramType: param.Type);
+            if (coerceType != null)
+            {
+                EmitEntryAlloca(llvmName: paramPtr, llvmType: coerceType);
+                EmitLine(sb: sb,
+                    line: $"  store {coerceType} %{emittedParamName}, ptr {paramPtr}");
+                _localVariables[key: param.Name] = param.Type;
+                continue;
+            }
+
+            // Parameters are passed as value, create a local copy
             string llvmType = GetLlvmType(type: param.Type);
             EmitEntryAlloca(llvmName: paramPtr, llvmType: llvmType);
             EmitLine(sb: sb,
@@ -655,6 +693,11 @@ public partial class LlvmCodeGenerator
             string zeroValue = GetZeroValue(type: routine.ReturnType!);
             EmitLine(sb: sb, line: $"  store {retType} {zeroValue}, ptr %sret");
             EmitLine(sb: sb, line: "  ret void");
+        }
+        else if (_currentReturnCoerceType != null)
+        {
+            // Coerced (Phase 2) return: the header returns the ABI integer type; zero fills it.
+            EmitLine(sb: sb, line: $"  ret {_currentReturnCoerceType} zeroinitializer");
         }
         else
         {

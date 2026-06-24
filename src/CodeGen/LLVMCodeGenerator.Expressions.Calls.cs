@@ -435,6 +435,19 @@ public partial class LlvmCodeGenerator
             return result;
         }
 
+        // Coerced (Phase 2) struct return: the callee returns the ABI integer form; call it as that,
+        // then reinterpret the result back into the struct value.
+        string? calleeCoerce = routine != null && !isCExtern ? ReturnCoerceType(routine: routine) : null;
+        if (calleeCoerce != null)
+        {
+            string result = NextTemp();
+            string args = BuildCallArgs(types: argTypes, values: argValues);
+            EmitLine(sb: sb, line: $"  {result} = call {calleeCoerce} @{mangledName}({args})");
+            ConsumeTransferredCallOwnership(arguments: arguments);
+            return CoerceAbiToStruct(sb: sb, abiValue: result, abiType: calleeCoerce,
+                structLlvm: returnType);
+        }
+
         if (callReturnType == "void")
         {
             // Void return - no result
@@ -1031,6 +1044,14 @@ public partial class LlvmCodeGenerator
                     argValues[index: ai] = bv;
                     argTypes[index: ai] = bt;
                 }
+                else if (TryCoerceArgToRegister(sb: sb, argValue: argValues[index: ai],
+                             parameterType: method.Parameters[index: i].Type,
+                             callee: method,
+                             out string rv, out string rt))
+                {
+                    argValues[index: ai] = rv;
+                    argTypes[index: ai] = rt;
+                }
             }
         }
 
@@ -1053,6 +1074,18 @@ public partial class LlvmCodeGenerator
             string sretResult = NextTemp();
             EmitLine(sb: sb, line: $"  {sretResult} = load {returnType}, ptr {sretPtr}");
             return sretResult;
+        }
+
+        // Coerced (Phase 2) struct return: call as the ABI integer form, reinterpret back to struct.
+        string? methodCoerce = method != null ? ReturnCoerceType(routine: method) : null;
+        if (methodCoerce != null)
+        {
+            string args = BuildCallArgs(types: argTypes, values: argValues);
+            string r = NextTemp();
+            EmitLine(sb: sb, line: $"  {r} = call {methodCoerce} @{mangledName}({args})");
+            ConsumeTransferredCallOwnership(arguments: arguments);
+            return CoerceAbiToStruct(sb: sb, abiValue: r, abiType: methodCoerce,
+                structLlvm: returnType);
         }
 
         if (returnType == "void")
@@ -1151,6 +1184,13 @@ public partial class LlvmCodeGenerator
                 out string byvalValue, out string byvalType))
         {
             return (byvalValue, byvalType);
+        }
+
+        // ABI-Coerce small struct value arg: reinterpret into the integer register form.
+        if (TryCoerceArgToRegister(sb: sb, argValue: argValue, parameterType: parameterType,
+                callee: callee, out string regValue, out string regType))
+        {
+            return (regValue, regType);
         }
 
         string expectedLlvm = GetParameterLlvmType(type: parameterType);

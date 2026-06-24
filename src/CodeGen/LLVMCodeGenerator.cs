@@ -217,6 +217,14 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private bool _currentReturnViaSret;
 
+    /// <summary>
+    /// When non-null, the current function's struct return is COERCED to this ABI register type
+    /// (e.g. <c>i64</c> / <c>{ i64, i32 }</c>) — the Phase 2 small-struct register form. The header
+    /// returns this type and every <c>return</c> reinterprets the struct value into it. Mutually
+    /// exclusive with <see cref="_currentReturnViaSret"/>.
+    /// </summary>
+    private string? _currentReturnCoerceType;
+
     /// <summary>Function-entry alloca instructions emitted once per function.</summary>
     private readonly StringBuilder _currentRoutineEntryAllocas = new();
 

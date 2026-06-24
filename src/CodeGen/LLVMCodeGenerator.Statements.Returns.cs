@@ -74,6 +74,14 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb, line: "  ret void");
             return;
         }
+        // Coerced (Phase 2) return: reinterpret the struct value into its ABI register type.
+        if (_currentReturnCoerceType != null)
+        {
+            string coerced = CoerceStructToAbi(sb: sb, structValue: value, structLlvm: llvmType,
+                abiType: _currentReturnCoerceType);
+            EmitLine(sb: sb, line: $"  ret {_currentReturnCoerceType} {coerced}");
+            return;
+        }
         EmitLine(sb: sb, line: $"  ret {llvmType} {value}");
     }
 

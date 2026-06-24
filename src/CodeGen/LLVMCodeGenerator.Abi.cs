@@ -26,18 +26,66 @@ public partial class LlvmCodeGenerator
     /// <summary>How a struct-record value is passed/returned across a call boundary.</summary>
     internal enum AbiKind
     {
-        /// <summary>Pass/return the value as-is (scalars, @llvm records, and — for now — small structs).</summary>
+        /// <summary>Pass/return the value as-is (scalars, @llvm records, float-bearing small structs).</summary>
         Direct,
+
+        /// <summary>
+        /// Pass/return reinterpreted as integer register chunks (one <c>iN</c>, or an inline
+        /// <c>{i64, iM}</c> pair) — the Phase 2 register-coercion form for small all-integer structs.
+        /// Eliminates sub-word fields at the boundary (the aarch64 spill bug) without going indirect.
+        /// </summary>
+        Coerce,
 
         /// <summary>Pass via a pointer-to-copy argument / return via a hidden <c>sret</c> pointer.</summary>
         Indirect
     }
 
     /// <summary>The ABI passing decision for one type. A lightweight discriminated union.</summary>
-    internal readonly record struct AbiPassing(AbiKind Kind, string? DirectType = null)
+    internal readonly record struct AbiPassing(AbiKind Kind, string? DirectType = null,
+        string? CoerceType = null)
     {
         public static AbiPassing Direct(string llvm) => new(Kind: AbiKind.Direct, DirectType: llvm);
+        public static AbiPassing Coerce(string llvm) => new(Kind: AbiKind.Coerce, CoerceType: llvm);
         public static readonly AbiPassing Indirect = new(Kind: AbiKind.Indirect);
+    }
+
+    /// <summary>The integer width (<c>i8/i16/i32/i64</c>) covering a chunk of <paramref name="bytes"/>.</summary>
+    private static string ChunkIntType(int bytes) => bytes switch
+    {
+        <= 1 => "i8",
+        <= 2 => "i16",
+        <= 4 => "i32",
+        _ => "i64"
+    };
+
+    /// <summary>
+    /// Whether <paramref name="type"/> (a struct record) contains a floating-point field, directly
+    /// or nested. Such structs are NOT integer-coerced in Phase 2 — on SysV/AAPCS64 their fields are
+    /// SSE/FP-classified (and may be homogeneous-float aggregates), which Phase 3 handles; integer
+    /// coercion would place them in the wrong register file. Left <see cref="AbiKind.Direct"/> here.
+    /// </summary>
+    private bool StructHasFloatField(TypeInfo type)
+    {
+        if (type is not RecordTypeInfo { MemberVariables: { } members })
+        {
+            return false;
+        }
+
+        foreach (MemberVariableInfo m in members)
+        {
+            string llvm = GetLlvmType(type: m.Type);
+            if (llvm is "half" or "float" or "double" or "fp128")
+            {
+                return true;
+            }
+
+            if (m.Type is RecordTypeInfo { HasDirectBackendType: false } && StructHasFloatField(type: m.Type))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -55,10 +103,16 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Classifies how <paramref name="type"/> crosses a call boundary on the current target.
-    /// Phase 1: struct records larger than the in-register limit go <see cref="AbiKind.Indirect"/>;
-    /// everything else is <see cref="AbiKind.Direct"/>. The size threshold mirrors the per-ABI rule
-    /// already used by <c>NeedsCExternSret</c>: Win-x64 MSVC passes aggregates &gt; 8 bytes
-    /// indirectly, SysV / AAPCS64 pass aggregates &gt; 16 bytes indirectly.
+    /// <list type="bullet">
+    /// <item>Not an in-scope by-value struct (scalars/@llvm/entities/wrappers) → <see cref="AbiKind.Direct"/>.</item>
+    /// <item>Float-bearing struct → Direct for now (Phase 3 / HFA handles the FP register file).</item>
+    /// <item><b>Win-x64 MSVC:</b> all-integer struct of size 1/2/4/8 → <see cref="AbiKind.Coerce"/> to
+    ///   the exact <c>iN</c>; any other size (3/5/6/7 or &gt; 8) → <see cref="AbiKind.Indirect"/>.</item>
+    /// <item><b>SysV / AAPCS64:</b> ≤ 8 bytes → Coerce to one integer chunk; 9–16 bytes → Coerce to an
+    ///   inline <c>{i64, iM}</c> pair; &gt; 16 bytes → Indirect.</item>
+    /// </list>
+    /// Integer coercion reinterprets the struct's bytes as word chunks, eliminating sub-word fields
+    /// at the boundary (the aarch64 spill class) while keeping the value in registers.
     /// </summary>
     private AbiPassing AbiClassify(TypeInfo type)
     {
@@ -68,8 +122,39 @@ public partial class LlvmCodeGenerator
         }
 
         int size = GetTypeSize(type: type);
-        bool indirect = _target.TargetOS == "windows" ? size > 8 : size > 16;
-        return indirect ? AbiPassing.Indirect : AbiPassing.Direct(llvm: GetLlvmType(type: type));
+        // Empty record: nothing to pass — leave as-is.
+        if (size == 0)
+        {
+            return AbiPassing.Direct(llvm: GetLlvmType(type: type));
+        }
+
+        // Float-bearing aggregates use the SSE/FP register file (and may be HFAs); integer coercion
+        // would misplace them. Deferred to Phase 3 — keep LLVM's natural lowering for now.
+        if (StructHasFloatField(type: type))
+        {
+            return AbiPassing.Direct(llvm: GetLlvmType(type: type));
+        }
+
+        if (_target.TargetOS == "windows")
+        {
+            // MS x64: only sizes 1/2/4/8 ride in a register (as that exact integer); all else indirect.
+            return size is 1 or 2 or 4 or 8
+                ? AbiPassing.Coerce(llvm: ChunkIntType(bytes: size))
+                : AbiPassing.Indirect;
+        }
+
+        // SysV / AAPCS64: up to two eightbyte integer chunks in registers, else memory.
+        if (size <= 8)
+        {
+            return AbiPassing.Coerce(llvm: ChunkIntType(bytes: size));
+        }
+
+        if (size <= 16)
+        {
+            return AbiPassing.Coerce(llvm: $"{{ i64, {ChunkIntType(bytes: size - 8)} }}");
+        }
+
+        return AbiPassing.Indirect;
     }
 
     /// <summary>
@@ -96,6 +181,63 @@ public partial class LlvmCodeGenerator
 
         return routine.ReturnType != null
                && AbiClassify(type: routine.ReturnType).Kind == AbiKind.Indirect;
+    }
+
+    /// <summary>
+    /// The ABI register type a routine's struct return is COERCED to (e.g. <c>i64</c> /
+    /// <c>{ i64, i32 }</c>), or null when the return is not coerced (Direct, Indirect, or an async /
+    /// failable-variant routine whose result uses its own lowering). The function header then returns
+    /// this type, every <c>return</c> reinterprets the struct value into it, and the caller
+    /// reinterprets the result back into the struct.
+    /// </summary>
+    private string? ReturnCoerceType(RoutineInfo routine)
+    {
+        if (routine.AsyncStatus is AsyncStatus.Suspended or AsyncStatus.Threaded)
+        {
+            return null;
+        }
+
+        if (routine.FailableVariant is FailableVariant.Lookup or FailableVariant.Check
+            or FailableVariant.TryBool or FailableVariant.Try)
+        {
+            return null;
+        }
+
+        if (routine.ReturnType == null)
+        {
+            return null;
+        }
+
+        AbiPassing p = AbiClassify(type: routine.ReturnType);
+        return p.Kind == AbiKind.Coerce ? p.CoerceType : null;
+    }
+
+    /// <summary>
+    /// Reinterprets a struct VALUE into its ABI register type via a stack round-trip (store the
+    /// struct, load the wider/equal integer form). The slot is the ABI type, which is always at
+    /// least as large as the struct, so the store fits; any bytes past the struct are ABI don't-care.
+    /// </summary>
+    private string CoerceStructToAbi(StringBuilder sb, string structValue, string structLlvm,
+        string abiType)
+    {
+        string slot = NextTemp();
+        EmitEntryAlloca(llvmName: slot, llvmType: abiType);
+        EmitLine(sb: sb, line: $"  store {structLlvm} {structValue}, ptr {slot}");
+        string v = NextTemp();
+        EmitLine(sb: sb, line: $"  {v} = load {abiType}, ptr {slot}");
+        return v;
+    }
+
+    /// <summary>Reverse of <see cref="CoerceStructToAbi"/>: an ABI register value → the struct value.</summary>
+    private string CoerceAbiToStruct(StringBuilder sb, string abiValue, string abiType,
+        string structLlvm)
+    {
+        string slot = NextTemp();
+        EmitEntryAlloca(llvmName: slot, llvmType: abiType);
+        EmitLine(sb: sb, line: $"  store {abiType} {abiValue}, ptr {slot}");
+        string v = NextTemp();
+        EmitLine(sb: sb, line: $"  {v} = load {structLlvm}, ptr {slot}");
+        return v;
     }
 
     /// <summary>
@@ -131,6 +273,47 @@ public partial class LlvmCodeGenerator
         !routine.IsAsync
         && AbiClassify(type: paramType).Kind == AbiKind.Indirect
         && IsTriviallyCopyableRecord(type: paramType);
+
+    /// <summary>
+    /// The ABI register type a value parameter is COERCED to (e.g. <c>i64</c> / <c>{ i64, i32 }</c>),
+    /// or null when the parameter is not register-coerced. Unlike byval, coercion needs NO trivial-
+    /// copyability gate: it passes the struct's VALUE (reinterpreted as integers) and the callee
+    /// reconstructs the same value, so ownership is identical to the existing by-value path (the
+    /// copy-lowering pass already balances any managed <c>$copy</c>/<c>$destroy</c>). Excludes async
+    /// routines, whose workers receive args through their own cell/closure handoff.
+    /// </summary>
+    private string? ParameterCoerceType(RoutineInfo routine, TypeInfo paramType)
+    {
+        if (routine.IsAsync)
+        {
+            return null;
+        }
+
+        AbiPassing p = AbiClassify(type: paramType);
+        return p.Kind == AbiKind.Coerce ? p.CoerceType : null;
+    }
+
+    /// <summary>
+    /// If <paramref name="parameterType"/> is register-coerced for <paramref name="callee"/>,
+    /// reinterprets the struct argument value into its ABI integer form and rewrites the argument.
+    /// Returns true (with <paramref name="newValue"/>/<paramref name="newType"/> set) when applied.
+    /// </summary>
+    private bool TryCoerceArgToRegister(StringBuilder sb, string argValue, TypeInfo parameterType,
+        RoutineInfo callee, out string newValue, out string newType)
+    {
+        newValue = argValue;
+        newType = GetParameterLlvmType(type: parameterType);
+        string? coerce = ParameterCoerceType(routine: callee, paramType: parameterType);
+        if (coerce == null)
+        {
+            return false;
+        }
+
+        newValue = CoerceStructToAbi(sb: sb, structValue: argValue,
+            structLlvm: GetLlvmType(type: parameterType), abiType: coerce);
+        newType = coerce;
+        return true;
+    }
 
     /// <summary>
     /// If <paramref name="parameterType"/> is an Indirect (byval) struct parameter and
