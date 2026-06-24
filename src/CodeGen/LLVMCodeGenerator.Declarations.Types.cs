@@ -200,12 +200,12 @@ public partial class LlvmCodeGenerator
         // Recursively ensure struct types for member variable types are defined
         EnsureMemberVariableTypesGenerated(memberVariables: record.MemberVariables);
 
-        // Build the struct type
+        // Build the struct type. Bool fields use their i8 STORAGE type (not i1) — see
+        // GetFieldStorageLlvmType.
         var memberVariableTypes = new List<string>();
         foreach (MemberVariableInfo memberVariable in record.MemberVariables)
         {
-            string memberVariableType = GetLlvmType(type: memberVariable.Type);
-            memberVariableTypes.Add(item: memberVariableType);
+            memberVariableTypes.Add(item: GetFieldStorageLlvmType(type: memberVariable.Type));
         }
 
         var decl = new StringBuilder();

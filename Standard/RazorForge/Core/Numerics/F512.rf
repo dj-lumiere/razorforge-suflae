@@ -32,7 +32,7 @@ record F512 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multi
 
 ### The implicit-bit mask `1 << 488`.
 routine f512a_implicit() -> U512
-  return shift_left[U512](value: 1, bits: uf_amt[U512](488_s64))
+  return shift_left[U512](value: 1, bits: U512.to_width(s: 488_s64))
 
 ### The 488-bit mantissa mask `(1 << 488) - 1`.
 routine f512a_mant_mask() -> U512
@@ -40,7 +40,7 @@ routine f512a_mant_mask() -> U512
 
 ### The sign-bit mask `1 << 511`.
 routine f512a_sign_mask() -> U512
-  return shift_left[U512](value: 1, bits: uf_amt[U512](511_s64))
+  return shift_left[U512](value: 1, bits: U512.to_width(s: 511_s64))
 
 ### The magnitude mask `~(1 << 511)` (all but the sign bit).
 routine f512a_abs_mask() -> U512
@@ -48,14 +48,14 @@ routine f512a_abs_mask() -> U512
 
 ### The infinity encoding `0x7FFFFF << 488` for the given sign bit.
 routine f512a_inf(sign: U64) -> U512
-  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64))
-  var e = shift_left[U512](value: zero_extend[U64, U512](0x7FFFFF_u64), bits: uf_amt[U512](488_s64))
+  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
+  var e = shift_left[U512](value: zero_extend[U64, U512](0x7FFFFF_u64), bits: U512.to_width(s: 488_s64))
   return bit_or[U512](a: s, b: e)
 
 ### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
 routine f512a_qnan() -> U512
-  var e = shift_left[U512](value: zero_extend[U64, U512](0x7FFFFF_u64), bits: uf_amt[U512](488_s64))
-  var q = shift_left[U512](value: 1, bits: uf_amt[U512](487_s64))
+  var e = shift_left[U512](value: zero_extend[U64, U512](0x7FFFFF_u64), bits: U512.to_width(s: 488_s64))
+  var q = shift_left[U512](value: 1, bits: U512.to_width(s: 487_s64))
   return bit_or[U512](a: e, b: q)
 
 ### Sign-magnitude total-order key for comparison.
@@ -78,7 +78,7 @@ common routine F512.from_bits(bits: U512) -> F512
 
 ### Returns the raw biased exponent field (0..8388607).
 routine F512.raw_exponent() -> U64
-  return int_truncate[U512, U64](bit_and[U512](a: shift_right_unsigned[U512](me.to_bits(), uf_amt[U512](488_s64)), b: zero_extend[U64, U512](0x7FFFFF_u64)))
+  return int_truncate[U512, U64](bit_and[U512](a: shift_right_unsigned[U512](me.to_bits(), U512.to_width(s: 488_s64)), b: zero_extend[U64, U512](0x7FFFFF_u64)))
 
 ### Returns the raw 488-bit mantissa field (no implicit bit).
 routine F512.raw_mantissa() -> U512
@@ -168,7 +168,7 @@ routine F512.$cmp(you: F512) -> ComparisonSign
 routine F512.to_uf() -> UnpackedFloat[U512, U1024, 512]
   var bits = me.to_bits()
   var sign = int_ne[U512](a: bit_and[U512](a: bits, b: f512a_sign_mask()), b: 0)
-  var e = int_truncate[U512, U64](bit_and[U512](a: shift_right_unsigned[U512](bits, uf_amt[U512](488_s64)), b: zero_extend[U64, U512](0x7FFFFF_u64)))
+  var e = int_truncate[U512, U64](bit_and[U512](a: shift_right_unsigned[U512](bits, U512.to_width(s: 488_s64)), b: zero_extend[U64, U512](0x7FFFFF_u64)))
   var f = bit_and[U512](a: bits, b: f512a_mant_mask())
   if e == 0x7FFFFF_u64
     if int_ne[U512](a: f, b: 0)
@@ -179,27 +179,27 @@ routine F512.to_uf() -> UnpackedFloat[U512, U1024, 512]
   if e == 0_u64
     var msbf = int_truncate[U512, S64](sub[U512](a: zero_extend[U64, U512](511_u64), b: leading_zeros[U512](f)))
     var shift = sub[S64](a: 510_s64, b: msbf)
-    var mant = shift_left[U512](value: f, bits: uf_amt[U512](shift))
-    return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: msbf, b: 4194791_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+    var mant = shift_left[U512](value: f, bits: U512.to_width(s: shift))
+    return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: msbf, b: 4194791_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
   var sig = bit_or[U512](a: f, b: f512a_implicit())
-  var mant = shift_left[U512](value: sig, bits: uf_amt[U512](22_s64))
-  return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 4194304_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  var mant = shift_left[U512](value: sig, bits: U512.to_width(s: 22_s64))
+  return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 4194304_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Packs the implicit-stripped significand and exponent into binary512 bits.
 routine f512a_pack(sign: U64, biased: U64, sig: U512) -> U512
-  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64))
-  var e = shift_left[U512](value: zero_extend[U64, U512](biased), bits: uf_amt[U512](488_s64))
+  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
+  var e = shift_left[U512](value: zero_extend[U64, U512](biased), bits: U512.to_width(s: 488_s64))
   var f = bit_and[U512](a: sig, b: f512a_mant_mask())
   return bit_or[U512](a: bit_or[U512](a: s, b: e), b: f)
 
 ### Builds a subnormal binary512 encoding by shifting the significand down.
 routine f512a_finish_subnormal(sign: U64, sig: U512, under: S64) -> U512
-  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64))
+  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
   if signed_gt[S64](a: under, b: 488_s64)
     return s
-  var lost = bit_and[U512](a: sig, b: uf_lowmask[U512](under))
-  var half = shift_left[U512](value: 1, bits: uf_amt[U512](sub[S64](a: under, b: 1_s64)))
-  var q = shift_right_unsigned[U512](sig, uf_amt[U512](under))
+  var lost = bit_and[U512](a: sig, b: U512.low_mask(n: under))
+  var half = shift_left[U512](value: 1, bits: U512.to_width(s: sub[S64](a: under, b: 1_s64)))
+  var q = shift_right_unsigned[U512](sig, U512.to_width(s: under))
   if unsigned_gt[U512](a: lost, b: half)
     q = add[U512](a: q, b: 1)
   elseif int_eq[U512](a: lost, b: half) and int_ne[U512](a: bit_and[U512](a: q, b: 1), b: 0)
@@ -217,18 +217,18 @@ routine UnpackedFloat[M, L, W].to_f512a() -> F512
   if me.isinf()
     return F512.from_bits(bits: f512a_inf(sign: sign))
   if me.iszero()
-    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64)))
+    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64)))
   var biased = add[S64](a: me.exp, b: 4194304_s64)
   var sh = sub[S64](a: reinterpret_bits[U64, S64](W), b: 490_s64)
-  var lost = bit_and[M](a: me.mant, b: uf_lowmask[M](sh))
-  var half = shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: sh, b: 1_s64)))
-  var sig = int_truncate[L, U512](zero_extend[M, L](shift_right_unsigned[M](me.mant, uf_amt[M](sh))))
+  var lost = bit_and[M](a: me.mant, b: M.low_mask(n: sh))
+  var half = shift_left[M](value: 1, bits: M.to_width(s: sub[S64](a: sh, b: 1_s64)))
+  var sig = int_truncate[L, U512](zero_extend[M, L](shift_right_unsigned[M](me.mant, M.to_width(s: sh))))
   if unsigned_gt[M](a: lost, b: half)
     sig = add[U512](a: sig, b: 1)
   elseif int_eq[M](a: lost, b: half) and int_ne[U512](a: bit_and[U512](a: sig, b: 1), b: 0)
     sig = add[U512](a: sig, b: 1)
-  if int_ne[U512](a: bit_and[U512](a: sig, b: shift_left[U512](value: 1, bits: uf_amt[U512](489_s64))), b: 0)
-    sig = shift_right_unsigned[U512](sig, uf_amt[U512](1_s64))
+  if int_ne[U512](a: bit_and[U512](a: sig, b: shift_left[U512](value: 1, bits: U512.to_width(s: 489_s64))), b: 0)
+    sig = shift_right_unsigned[U512](sig, U512.to_width(s: 1_s64))
     biased = add[S64](a: biased, b: 1_s64)
   if signed_ge[S64](a: biased, b: 8388607_s64)
     return F512.from_bits(bits: f512a_inf(sign: sign))

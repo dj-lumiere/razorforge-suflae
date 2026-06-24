@@ -429,6 +429,13 @@ public partial class LlvmCodeGenerator
         string returnPrefix =
             !_currentReturnViaSret && isCreator && returnType == "ptr" ? "noalias " : "";
         string funcAttrs = isInline ? " alwaysinline" : "";
+        // `@no_optimize` emits `noinline optnone` — a per-routine optimization barrier for routines
+        // that an LLVM backend pass miscompiles. Currently the softfloat gamma cores (F128.lgamma/
+        // tgamma_unchecked + UnpackedFloat.lgamma_core + f512_lgamma_core): LLVM 21's InstCombine
+        // miscompiles them at -O2+ (found via opt -opt-bisect-limit; -O0 is correct). The routine
+        // runs unoptimized but correct; see the memory note on the pending proper IR-dodge fix.
+        if (routineInfo.Annotations.Contains(value: "no_optimize"))
+            funcAttrs += " noinline optnone";
         string defineHeader =
             $"define {returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;

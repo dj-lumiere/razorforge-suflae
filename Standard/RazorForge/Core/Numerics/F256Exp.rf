@@ -70,12 +70,12 @@ routine f256_widen(x: F256) -> F512
     sign = 1_u64
   var exp = x.raw_exponent()
   var mant = x.raw_mantissa()
-  var sbit = shift_left[U512](value: zero_extend[U64, U512](sign), bits: uf_amt[U512](511_s64))
+  var sbit = shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
   if int_eq[U64](a: exp, b: 0_u64) and int_eq[U256](a: mant, b: 0)
     return F512.from_bits(bits: sbit)
   var biased512 = add[U64](a: exp, b: 3932160_u64)
-  var ebits = shift_left[U512](value: zero_extend[U64, U512](biased512), bits: uf_amt[U512](488_s64))
-  var mant512 = shift_left[U512](value: zero_extend[U256, U512](mant), bits: uf_amt[U512](252_s64))
+  var ebits = shift_left[U512](value: zero_extend[U64, U512](biased512), bits: U512.to_width(s: 488_s64))
+  var mant512 = shift_left[U512](value: zero_extend[U256, U512](mant), bits: U512.to_width(s: 252_s64))
   return F512.from_bits(bits: bit_or[U512](a: bit_or[U512](a: sbit, b: ebits), b: mant512))
 
 ### Small-integer F256 constant via the engine (for thresholds).

@@ -25,20 +25,20 @@ routine uf256_from_u128(c: U128, sign: Bool) -> ?UnpackedFloat[U256, U512, 256]
     return UnpackedFloat[U256, U512, 256].zero(sign: sign)
   var cw = zero_extend[U128, U256](c)
   var x = sub[S64](a: 256_s64, b: int_truncate[U256, S64](leading_zeros[U256](cw)))
-  var mant = shift_left[U256](value: cw, bits: uf_amt[U256](sub[S64](a: 255_s64, b: x)))
-  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: x, b: 2_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  var mant = shift_left[U256](value: cw, bits: U256.to_width(s: sub[S64](a: 255_s64, b: x)))
+  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Rounds the engine value (assumed a positive ~integer) to a U256, round-half-even.
 ### shift = 253 - exp (positive in the ~10^40 range).
 routine uf256_to_u256_round(u: UnpackedFloat[U256, U512, 256]) -> U256
   var shift = sub[S64](a: 253_s64, b: u.exp)
   if signed_le[S64](a: shift, b: 0_s64)
-    return shift_left[U256](value: u.mant, bits: uf_amt[U256](sub[S64](a: 0_s64, b: shift)))
+    return shift_left[U256](value: u.mant, bits: U256.to_width(s: sub[S64](a: 0_s64, b: shift)))
   if signed_ge[S64](a: shift, b: 256_s64)
     return zero_extend[U64, U256](0_u64)
-  var q = shift_right_unsigned[U256](u.mant, uf_amt[U256](shift))
-  var lost = bit_and[U256](a: u.mant, b: uf_lowmask[U256](shift))
-  var half = shift_left[U256](value: 1, bits: uf_amt[U256](sub[S64](a: shift, b: 1_s64)))
+  var q = shift_right_unsigned[U256](u.mant, U256.to_width(s: shift))
+  var lost = bit_and[U256](a: u.mant, b: U256.low_mask(n: shift))
+  var half = shift_left[U256](value: 1, bits: U256.to_width(s: sub[S64](a: shift, b: 1_s64)))
   if unsigned_gt[U256](a: lost, b: half)
     q = add[U256](a: q, b: 1)
   elseif int_eq[U256](a: lost, b: half) and int_ne[U256](a: bit_and[U256](a: q, b: 1), b: 0)
@@ -72,7 +72,7 @@ routine d128parts_to_f256(p: D128Parts) -> F256
   if unsigned_ge[U64](a: p.special, b: 2_u64)
     return F256.from_bits(bits: f256a_qnan())
   if int_eq[U128](a: p.coeff, b: 0_u128)
-    return F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](s), bits: uf_amt[U256](255_s64)))
+    return F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](s), bits: U256.to_width(s: 255_s64)))
   return uf256_from_u128(c: p.coeff, sign: p.sign).to_f256a() * f256_pow10(e: p.exp)
 
 ### dec -> bin: D128 value as an F256 (coeff exact, scaled by 10^exp).
@@ -119,7 +119,7 @@ routine D128.exp!() -> D128
 
 ### Raw e^me via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.exp_unchecked() -> D128
-  return f256_to_d128(x: d128_to_f256(x: me).exp())
+  return f256_to_d128(x: d128_to_f256(x: me).exp_n(n: 20_s64))
 
 ### e^me - 1 (accurate near 0). Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.expm1!() -> D128
@@ -132,7 +132,7 @@ routine D128.expm1!() -> D128
 
 ### Raw e^me - 1 via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.expm1_unchecked() -> D128
-  return f256_to_d128(x: d128_to_f256(x: me).expm1())
+  return f256_to_d128(x: d128_to_f256(x: me).expm1_n(n: 21_s64))
 
 ### 2^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.exp2!() -> D128
@@ -172,7 +172,7 @@ routine D128.log!() -> D128
 
 ### Raw ln(me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.log_unchecked() -> D128
-  return f256_to_d128(x: d128_to_f256(x: me).log())
+  return f256_to_d128(x: d128_to_f256(x: me).log_n(n: 23_s64))
 
 ### ln(1 + me) (accurate near 0). Crashes: NumericDomainError on NaN/domain, NumericOverflowError
 ### on ±inf.
@@ -186,7 +186,7 @@ routine D128.log1p!() -> D128
 
 ### Raw ln(1 + me) via the F256 core; may return ±inf or NaN; never crashes.
 routine D128.log1p_unchecked() -> D128
-  return f256_to_d128(x: d128_to_f256(x: me).log1p())
+  return f256_to_d128(x: d128_to_f256(x: me).log1p_n(n: 23_s64))
 
 ### Base-2 log log2(me). Crashes: NumericDomainError on NaN/domain, NumericOverflowError on ±inf.
 routine D128.log2!() -> D128
@@ -274,7 +274,7 @@ routine D128.fma_unchecked(b: D128, c: D128) -> D128
 
 ### Sine of me (radians). Finite-preserving for finite input; never crashes.
 routine D128.sin() -> D128
-  return f256_to_d128(x: d128_to_f256(x: me).sin())
+  return f256_to_d128(x: d128_to_f256(x: me).sin_n(n: 16_s64))
 
 ### Cosine of me (radians). Finite-preserving for finite input; never crashes.
 routine D128.cos() -> D128
@@ -424,6 +424,7 @@ routine f256_erfc(x: F256) -> F256
   return a.erfc_cf().to_f256a()
 
 ### gamma via the generic Stirling lgamma_core (octuple gamma_coef ~49 digits >> 34).
+
 routine f256_tgamma(x: F256) -> F256
   if x.is_nan()
     return F256.from_bits(bits: f256a_qnan())

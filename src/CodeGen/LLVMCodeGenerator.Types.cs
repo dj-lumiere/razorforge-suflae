@@ -110,6 +110,38 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Gets the LLVM type needed by this compiler phase.
     /// </summary>
+    /// <summary>
+    /// The in-MEMORY/aggregate LLVM type of a record field. <c>Bool</c> (register type <c>i1</c>) is
+    /// stored as <c>i8</c> inside structs: an <c>i1</c> field in a value record returned by <c>sret</c>
+    /// miscompiles at -O3 (its 1-bit-value / 1-byte-slot duality confuses SROA/store-forwarding, which
+    /// corrupts the neighbouring wide field). Using the honest byte type and zext/trunc at the field
+    /// boundary — exactly how clang lowers C++ <c>bool</c> — removes the <c>i1</c> from the aggregate.
+    /// The struct size is unchanged (an <c>i1</c> already occupied a byte), so field offsets are stable.
+    /// </summary>
+    private string GetFieldStorageLlvmType(TypeInfo type) =>
+        FieldNeedsBoolStorage(type: type) ? "i8" : GetLlvmType(type: type);
+
+    /// <summary>True when a record field's register type is <c>i1</c> (Bool) and needs <c>i8</c> storage.</summary>
+    private bool FieldNeedsBoolStorage(TypeInfo type) => GetLlvmType(type: type) is "i1";
+
+    /// <summary>zext an <c>i1</c> Bool value to its <c>i8</c> storage form before writing an aggregate field.</summary>
+    private string CoerceBoolToStorage(System.Text.StringBuilder sb, string value, TypeInfo fieldType)
+    {
+        if (!FieldNeedsBoolStorage(type: fieldType)) return value;
+        string t = NextTemp();
+        EmitLine(sb: sb, line: $"  {t} = zext i1 {value} to i8");
+        return t;
+    }
+
+    /// <summary>trunc an <c>i8</c> storage Bool back to <c>i1</c> after reading an aggregate field.</summary>
+    private string CoerceStorageToBool(System.Text.StringBuilder sb, string storageValue, TypeInfo fieldType)
+    {
+        if (!FieldNeedsBoolStorage(type: fieldType)) return storageValue;
+        string t = NextTemp();
+        EmitLine(sb: sb, line: $"  {t} = trunc i8 {storageValue} to i1");
+        return t;
+    }
+
     private string GetLlvmType(TypeInfo type)
     {
         type = ResolveTypeSubstitution(type: type);

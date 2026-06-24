@@ -383,8 +383,11 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: sb, line: $"  {taskInt} = ptrtoint ptr {task} to i64");
         string r0 = NextTemp();
         EmitLine(sb: sb, line: $"  {r0} = insertvalue {recLlvm} zeroinitializer, i64 {taskInt}, 0");
+        // `spawned` (field 3) is a Bool, stored as i8 — zext the i1.
+        string spawnedByte = NextTemp();
+        EmitLine(sb: sb, line: $"  {spawnedByte} = zext i1 {spawned} to i8");
         string r1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i1 {spawned}, 3");
+        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i8 {spawnedByte}, 3");
         return r1;
     }
 

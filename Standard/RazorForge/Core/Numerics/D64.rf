@@ -15,7 +15,7 @@ import Collections
 # Pmax=16, Emax=384, Emin=-383, bias=398, stored exponent q in [-398, 369].
 # Decodes to a narrow U64-coefficient D64Parts; converts to D128Parts only for the
 # cold special-value / formatter paths. (64-bit storage shifts use direct U64
-# literals — uf_amt[U64] is not width-safe.)
+# literals — U64.to_width(s:) is not width-safe.)
 # ============================================================================
 
 ### A software decimal64 value in BID storage.

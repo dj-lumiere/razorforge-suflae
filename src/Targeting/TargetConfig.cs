@@ -78,7 +78,7 @@ public sealed class TargetConfig
             Architecture.X64 when isWindows => new TargetConfig(
                 triple: "x86_64-pc-windows-msvc",
                 dataLayout:
-                "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+                "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
                 pointerBitWidth: 64,
                 pageSize: 4096,
                 cacheLineSize: 64,
@@ -89,7 +89,7 @@ public sealed class TargetConfig
             Architecture.X64 when isMacOS => new TargetConfig(
                 triple: "x86_64-apple-darwin",
                 dataLayout:
-                "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+                "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
                 pointerBitWidth: 64,
                 pageSize: 4096,
                 cacheLineSize: 64,
@@ -98,7 +98,7 @@ public sealed class TargetConfig
             Architecture.X64 => new TargetConfig(
                 triple: "x86_64-unknown-linux-gnu",
                 dataLayout:
-                "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+                "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
                 pointerBitWidth: 64,
                 pageSize: 4096,
                 cacheLineSize: 64,

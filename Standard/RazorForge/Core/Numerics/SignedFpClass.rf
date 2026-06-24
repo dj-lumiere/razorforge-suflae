@@ -31,3 +31,51 @@ choice SignedFpClass
   SIGNALING_NOT_A_NUMBER
   ### A quiet NaN (the kind RazorForge arithmetic produces).
   QUIET_NOT_A_NUMBER
+
+### True iff this class is negative (sign bit set). NaN is sign-agnostic, so it is not negative.
+routine SignedFpClass.is_negative() -> Bool
+  if me is NEGATIVE_NORMAL
+    return true
+  if me is NEGATIVE_SUBNORMAL
+    return true
+  if me is NEGATIVE_ZERO
+    return true
+  if me is NEGATIVE_INF
+    return true
+  return false
+
+### True iff this class is ±0.
+routine SignedFpClass.is_zero() -> Bool
+  if me is POSITIVE_ZERO
+    return true
+  if me is NEGATIVE_ZERO
+    return true
+  return false
+
+### True iff this class is ±infinity.
+routine SignedFpClass.is_inf() -> Bool
+  if me is POSITIVE_INF
+    return true
+  if me is NEGATIVE_INF
+    return true
+  return false
+
+### True iff this class is NaN (quiet or signaling).
+routine SignedFpClass.is_nan() -> Bool
+  if me is QUIET_NOT_A_NUMBER
+    return true
+  if me is SIGNALING_NOT_A_NUMBER
+    return true
+  return false
+
+### Folds the legacy (sign, zero, inf, nan) boolean quartet into a class. The softfloat engine
+### never represents subnormals internally (it normalizes), so finite-nonzero is always NORMAL, and
+### engine-produced NaNs are always quiet. Replaces the old free `uf_class_of` routine.
+common routine SignedFpClass.from_flags(sign: Bool, iszero: Bool, isinf: Bool, isnan: Bool) -> SignedFpClass
+  if isnan
+    return QUIET_NOT_A_NUMBER
+  if isinf
+    return if sign then NEGATIVE_INF else POSITIVE_INF
+  if iszero
+    return if sign then NEGATIVE_ZERO else POSITIVE_ZERO
+  return if sign then NEGATIVE_NORMAL else POSITIVE_NORMAL

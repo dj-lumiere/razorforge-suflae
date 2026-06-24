@@ -49,7 +49,7 @@ common routine D128.from_bits(bits: U128) -> D128
 
 ### Builds a value from its low/high 64-bit words (matching Core.D128 layout).
 common routine D128.from_words(low: U64, high: U64) -> D128
-  var bits = bit_or[U128](a: zero_extend[U64, U128](low), b: shift_left[U128](value: zero_extend[U64, U128](high), bits: uf_amt[U128](64_s64)))
+  var bits = bit_or[U128](a: zero_extend[U64, U128](low), b: shift_left[U128](value: zero_extend[U64, U128](high), bits: U128.to_width(s: 64_s64)))
   return D128.from_bits(bits: bits)
 
 ### BINARY decode — sign / specials (combination prefix) / 14-bit biased exponent /
@@ -57,37 +57,37 @@ common routine D128.from_words(low: U64, high: U64) -> D128
 routine D128.decode() -> D128Parts
   var bits = me.to_bits()
   # bit127 = sign.
-  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: 1, bits: uf_amt[U128](127_s64))), b: 0)
+  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))), b: 0)
   # Combination prefix = top 5 bits (126..122): 11110 (0x1E) = Inf, 11111 (0x1F) = NaN.
-  var top5 = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, uf_amt[U128](122_s64)), b: zero_extend[U64, U128](0x1F_u64)))
+  var top5 = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 122_s64)), b: zero_extend[U64, U128](0x1F_u64)))
   if int_eq[U64](a: top5, b: 0x1E_u64)
     return D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))
   if int_eq[U64](a: top5, b: 0x1F_u64)
     # NaN: bit121 is the signaling flag (1 = sNaN -> special 3, else qNaN -> 2).
     var sp = 2_u64
-    if int_ne[U128](a: bit_and[U128](a: shift_right_unsigned[U128](bits, uf_amt[U128](121_s64)), b: zero_extend[U64, U128](1_u64)), b: 0)
+    if int_ne[U128](a: bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 121_s64)), b: zero_extend[U64, U128](1_u64)), b: 0)
       sp = 3_u64
     return D128Parts(sign: sign, special: sp, exp: 0_s64, coeff: zero_extend[U64, U128](0_u64))
   # Finite: bits 126..113 = 14-bit biased exponent; bits 112..0 = 113-bit coefficient.
-  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, uf_amt[U128](113_s64)), b: zero_extend[U64, U128](0x3FFF_u64)))
-  var coeff = bit_and[U128](a: bits, b: sub[U128](a: shift_left[U128](value: 1, bits: uf_amt[U128](113_s64)), b: 1))
+  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 113_s64)), b: zero_extend[U64, U128](0x3FFF_u64)))
+  var coeff = bit_and[U128](a: bits, b: sub[U128](a: shift_left[U128](value: 1, bits: U128.to_width(s: 113_s64)), b: 1))
   # Unbias by 6176 to recover the true base-10 exponent.
   return D128Parts(sign: sign, special: 0_u64, exp: sub[S64](a: reinterpret_bits[U64, S64](biased), b: 6176_s64), coeff: coeff)
 
 ### BINARY encode — pack sign / specials / exponent / coefficient.
 routine d128_of_parts(p: D128Parts) -> D128
   # Sign goes to bit127.
-  var sbit = shift_left[U128](value: zero_extend[U64, U128](if p.sign then 1_u64 else 0_u64), bits: uf_amt[U128](127_s64))
+  var sbit = shift_left[U128](value: zero_extend[U64, U128](if p.sign then 1_u64 else 0_u64), bits: U128.to_width(s: 127_s64))
   if int_ne[U64](a: p.special, b: 0_u64)
     # Combination prefix 0x1E (Inf) or 0x1F (NaN) into bits 126..122; bit121 set for sNaN.
     var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
-    var b = bit_or[U128](a: sbit, b: shift_left[U128](value: zero_extend[U64, U128](top5), bits: uf_amt[U128](122_s64)))
+    var b = bit_or[U128](a: sbit, b: shift_left[U128](value: zero_extend[U64, U128](top5), bits: U128.to_width(s: 122_s64)))
     if int_eq[U64](a: p.special, b: 3_u64)
-      b = bit_or[U128](a: b, b: shift_left[U128](value: 1, bits: uf_amt[U128](121_s64)))
+      b = bit_or[U128](a: b, b: shift_left[U128](value: 1, bits: U128.to_width(s: 121_s64)))
     return D128.from_bits(bits: b)
   # Finite: rebias the exponent (+6176), mask to 14 bits at bits 126..113, OR in the coefficient.
   var biased = add[U64](a: reinterpret_bits[S64, U64](p.exp), b: 6176_u64)
-  var ebits = shift_left[U128](value: zero_extend[U64, U128](bit_and[U64](a: biased, b: 0x3FFF_u64)), bits: uf_amt[U128](113_s64))
+  var ebits = shift_left[U128](value: zero_extend[U64, U128](bit_and[U64](a: biased, b: 0x3FFF_u64)), bits: U128.to_width(s: 113_s64))
   return D128.from_bits(bits: bit_or[U128](a: bit_or[U128](a: sbit, b: ebits), b: p.coeff))
 
 ### Infinity with the given sign.
@@ -144,7 +144,7 @@ routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
     if signed_ge[S64](a: exp, b: 39_s64)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
     var prod = mul[U256](a: zero_extend[U128, U256](coeff), b: pow10_tbl(k: exp))
-    if int_ne[U256](a: shift_right_unsigned[U256](value: prod, bits: uf_amt[U256](128_s64)), b: 0)
+    if int_ne[U256](a: shift_right_unsigned[U256](value: prod, bits: U256.to_width(s: 128_s64)), b: 0)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
     return int_truncate[U256, U128](prod)
   var d = sub[S64](a: 0_s64, b: exp)
@@ -169,7 +169,7 @@ routine S128.$create!(from: D128) -> S128
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   var mag = d128_int_magnitude!(coeff: p.coeff, exp: p.exp)
-  var lim = shift_left[U128](value: 1, bits: uf_amt[U128](127_s64))
+  var lim = shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))
   if p.sign
     if unsigned_gt[U128](a: mag, b: lim)
       throw NumericOverflowError(description: "decimal out of range for target integer")
@@ -190,7 +190,7 @@ routine d128_int_magnitude_u256!(coeff: U128, exp: S64) -> U256
     if signed_ge[S64](a: exp, b: 78_s64)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
     var prod = mul[U512](a: zero_extend[U128, U512](coeff), b: zero_extend[U256, U512](pow10_tbl(k: exp)))
-    if int_ne[U512](a: shift_right_unsigned[U512](value: prod, bits: uf_amt[U512](256_s64)), b: 0)
+    if int_ne[U512](a: shift_right_unsigned[U512](value: prod, bits: U512.to_width(s: 256_s64)), b: 0)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
     return int_truncate[U512, U256](prod)
   var d = sub[S64](a: 0_s64, b: exp)
@@ -215,7 +215,7 @@ routine S256.$create!(from: D128) -> S256
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   var mag = d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
-  var lim = shift_left[U256](value: 1, bits: uf_amt[U256](255_s64))
+  var lim = shift_left[U256](value: 1, bits: U256.to_width(s: 255_s64))
   if p.sign
     if unsigned_gt[U256](a: mag, b: lim)
       throw NumericOverflowError(description: "decimal out of range for target integer")
@@ -512,7 +512,7 @@ routine d128_sub(a: D128, b: D128) -> D128
 
 ### Arithmetic negation (flip the sign bit).
 routine d128_neg(a: D128) -> D128
-  return D128.from_bits(bits: bit_xor[U128](a: a.to_bits(), b: shift_left[U128](value: 1, bits: uf_amt[U128](127_s64))))
+  return D128.from_bits(bits: bit_xor[U128](a: a.to_bits(), b: shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))))
 
 # ============================================================================
 # Divide (scale numerator to ~38 quotient digits, divide, sticky, round)
@@ -752,16 +752,16 @@ routine div_pow10b(x: U256, k: S64) -> U256
   var g1 = POW10_MAGIC[i1]
   var g2 = POW10_MAGIC[i2]
   var g3 = POW10_MAGIC[i3]
-  var mm = bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](g0), b: shift_left[U256](value: zero_extend[U64, U256](g1), bits: uf_amt[U256](64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](g2), bits: uf_amt[U256](128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](g3), bits: uf_amt[U256](192_s64))))
+  var mm = bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](g0), b: shift_left[U256](value: zero_extend[U64, U256](g1), bits: U256.to_width(s: 64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](g2), bits: U256.to_width(s: 128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](g3), bits: U256.to_width(s: 192_s64))))
   var prod = mul[U512](a: zero_extend[U256, U512](x), b: zero_extend[U256, U512](mm))
-  var t = int_truncate[U512, U256](shift_right_unsigned[U512](prod, uf_amt[U512](256_s64)))
+  var t = int_truncate[U512, U256](shift_right_unsigned[U512](prod, U512.to_width(s: 256_s64)))
   var s = POW10_SHIFT[ku]
   var ad = POW10_ADD[ku]
   if int_ne[U64](a: ad, b: 0_u64)
-    var dd = shift_right_unsigned[U256](sub[U256](a: x, b: t), uf_amt[U256](1_s64))
+    var dd = shift_right_unsigned[U256](sub[U256](a: x, b: t), U256.to_width(s: 1_s64))
     var q = add[U256](a: dd, b: t)
-    return shift_right_unsigned[U256](q, uf_amt[U256](sub[S64](a: s, b: 1_s64)))
-  return shift_right_unsigned[U256](t, uf_amt[U256](s))
+    return shift_right_unsigned[U256](q, U256.to_width(s: sub[S64](a: s, b: 1_s64)))
+  return shift_right_unsigned[U256](t, U256.to_width(s: s))
 
 # Precomputed 10^k as U256 (k=0..76), little-endian limbs. Replaces pow10b's
 # multiply loop with an O(1) table lookup.
@@ -779,7 +779,7 @@ routine pow10_tbl(k: S64) -> U256
   var g1 = POW10_VAL[i1]
   var g2 = POW10_VAL[i2]
   var g3 = POW10_VAL[i3]
-  return bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](g0), b: shift_left[U256](value: zero_extend[U64, U256](g1), bits: uf_amt[U256](64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](g2), bits: uf_amt[U256](128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](g3), bits: uf_amt[U256](192_s64))))
+  return bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](g0), b: shift_left[U256](value: zero_extend[U64, U256](g1), bits: U256.to_width(s: 64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](g2), bits: U256.to_width(s: 128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](g3), bits: U256.to_width(s: 192_s64))))
 
 # --- U128 reciprocals: floor(x / 10^k) for x:U128, k=1..38 (mulhi via U256). ---
 preset POW10_MAGIC128: Array[U64, 78] = [0_u64, 0_u64, 14757395258967641293_u64, 14757395258967641292_u64, 10330176681277348905_u64, 2951479051793528258_u64, 14462247353788288467_u64, 442721857769029238_u64, 15259146697772541097_u64, 15111572745182864683_u64, 14119875783780239189_u64, 3022314549036572936_u64, 6513323971497958161_u64, 604462909807314587_u64, 4409745821703674701_u64, 15474250491067253436_u64, 18123639758951610491_u64, 6312056711998053881_u64, 3560107088838733873_u64, 9903520314283042199_u64, 12492089279761224519_u64, 3961408125713216879_u64, 17838592806784456521_u64, 12676506002282294014_u64, 18325113820324532597_u64, 2535301200456458802_u64, 10678829633393670109_u64, 8112963841460668169_u64, 6018080969204141205_u64, 12980742146337069071_u64, 2250231921242805281_u64, 2322443360429758898_u64, 15207441643216202349_u64, 4153837486827862102_u64, 702278666647013315_u64, 13292279957849158729_u64, 8502343496119041951_u64, 2820903858849102350_u64, 10779635027931437427_u64, 8507059173023461586_u64, 1290692756703406857_u64, 8775845279965525461_u64, 12100600649588456455_u64, 3331327409230510045_u64, 5991131704928854841_u64, 17422457186352049329_u64, 15955621599953412261_u64, 3484491437270409865_u64, 14164500972431816003_u64, 11150372599265311570_u64, 4216457482181353989_u64, 17840596158824498513_u64, 5375931807614451919_u64, 7136238463529799405_u64, 4300745446091561535_u64, 5708990770823839524_u64, 10073036612751086589_u64, 18268770466636286477_u64, 679731660717048625_u64, 14615016373309029182_u64, 4776919471889188123_u64, 4937282123584895075_u64, 132186762769440175_u64, 260476884126005737_u64, 14968894079398745573_u64, 11484809458827340148_u64, 17055604075985229199_u64, 11972621413014756705_u64, 13644483260788183359_u64, 9578097130411805364_u64, 10763126773035362405_u64, 15324955408658888583_u64, 7994599523956055285_u64, 6129982163463555433_u64, 9102010423587778133_u64, 9807971461541688693_u64, 14660305968354043153_u64, 7846377169233350954_u64]
@@ -795,16 +795,16 @@ routine div_pow10_u128(x: U128, k: S64) -> U128
   var i1 = add[U64](a: i0, b: 1_u64)
   var g0 = POW10_MAGIC128[i0]
   var g1 = POW10_MAGIC128[i1]
-  var mm = bit_or[U128](a: zero_extend[U64, U128](g0), b: shift_left[U128](value: zero_extend[U64, U128](g1), bits: uf_amt[U128](64_s64)))
+  var mm = bit_or[U128](a: zero_extend[U64, U128](g0), b: shift_left[U128](value: zero_extend[U64, U128](g1), bits: U128.to_width(s: 64_s64)))
   var prod = mul[U256](a: zero_extend[U128, U256](x), b: zero_extend[U128, U256](mm))
-  var t = int_truncate[U256, U128](shift_right_unsigned[U256](prod, uf_amt[U256](128_s64)))
+  var t = int_truncate[U256, U128](shift_right_unsigned[U256](prod, U256.to_width(s: 128_s64)))
   var s = POW10_SHIFT128[ku]
   var ad = POW10_ADD128[ku]
   if int_ne[U64](a: ad, b: 0_u64)
-    var dd = shift_right_unsigned[U128](sub[U128](a: x, b: t), uf_amt[U128](1_s64))
+    var dd = shift_right_unsigned[U128](sub[U128](a: x, b: t), U128.to_width(s: 1_s64))
     var q = add[U128](a: dd, b: t)
-    return shift_right_unsigned[U128](q, uf_amt[U128](sub[S64](a: s, b: 1_s64)))
-  return shift_right_unsigned[U128](t, uf_amt[U128](s))
+    return shift_right_unsigned[U128](q, U128.to_width(s: sub[S64](a: s, b: 1_s64)))
+  return shift_right_unsigned[U128](t, U128.to_width(s: s))
 
 # --- W=32 reciprocals: floor(x / 10^k) for x:U32, k=1..9 (mulhi via U64). ---
 preset POW10_MAGIC32: Array[U64, 10] = [0_u64, 3435973837_u64, 1374389535_u64, 274877907_u64, 3518437209_u64, 1334532239_u64, 1125899907_u64, 1801439851_u64, 1441151881_u64, 316718723_u64]
@@ -839,7 +839,7 @@ routine div_pow10_u64(x: U64, k: S64) -> U64
   var ku = reinterpret_bits[S64, U64](k)
   var mm = POW10_MAGIC64[ku]
   var prod = mul[U128](a: zero_extend[U64, U128](x), b: zero_extend[U64, U128](mm))
-  var t = int_truncate[U128, U64](shift_right_unsigned[U128](prod, uf_amt[U128](64_s64)))
+  var t = int_truncate[U128, U64](shift_right_unsigned[U128](prod, U128.to_width(s: 64_s64)))
   var s = POW10_SHIFT64[ku]
   var ad = POW10_ADD64[ku]
   if int_ne[U64](a: ad, b: 0_u64)
@@ -874,16 +874,16 @@ routine div_pow10_u512(x: U512, k: S64) -> U512
   var g5 = POW10_MAGIC512[i5]
   var g6 = POW10_MAGIC512[i6]
   var g7 = POW10_MAGIC512[i7]
-  var mm = bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: zero_extend[U64, U512](g0), b: shift_left[U512](value: zero_extend[U64, U512](g1), bits: uf_amt[U512](64_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g2), bits: uf_amt[U512](128_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g3), bits: uf_amt[U512](192_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g4), bits: uf_amt[U512](256_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g5), bits: uf_amt[U512](320_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g6), bits: uf_amt[U512](384_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g7), bits: uf_amt[U512](448_s64)))
+  var mm = bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: zero_extend[U64, U512](g0), b: shift_left[U512](value: zero_extend[U64, U512](g1), bits: U512.to_width(s: 64_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g2), bits: U512.to_width(s: 128_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g3), bits: U512.to_width(s: 192_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g4), bits: U512.to_width(s: 256_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g5), bits: U512.to_width(s: 320_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g6), bits: U512.to_width(s: 384_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g7), bits: U512.to_width(s: 448_s64)))
   var prod = mul[U1024](a: zero_extend[U512, U1024](x), b: zero_extend[U512, U1024](mm))
-  var t = int_truncate[U1024, U512](shift_right_unsigned[U1024](prod, uf_amt[U1024](512_s64)))
+  var t = int_truncate[U1024, U512](shift_right_unsigned[U1024](prod, U1024.to_width(s: 512_s64)))
   var s = POW10_SHIFT512[ku]
   var ad = POW10_ADD512[ku]
   if int_ne[U64](a: ad, b: 0_u64)
-    var dd = shift_right_unsigned[U512](sub[U512](a: x, b: t), uf_amt[U512](1_s64))
+    var dd = shift_right_unsigned[U512](sub[U512](a: x, b: t), U512.to_width(s: 1_s64))
     var q = add[U512](a: dd, b: t)
-    return shift_right_unsigned[U512](q, uf_amt[U512](sub[S64](a: s, b: 1_s64)))
-  return shift_right_unsigned[U512](t, uf_amt[U512](s))
+    return shift_right_unsigned[U512](q, U512.to_width(s: sub[S64](a: s, b: 1_s64)))
+  return shift_right_unsigned[U512](t, U512.to_width(s: s))
 
 # Precomputed 10^k as U512 (k=0..154), little-endian limbs — for D256 pow10 + digit-count
 # correction.
@@ -907,7 +907,7 @@ routine pow10_512_tbl(k: S64) -> U512
   var g5 = POW10_VAL512[i5]
   var g6 = POW10_VAL512[i6]
   var g7 = POW10_VAL512[i7]
-  return bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: zero_extend[U64, U512](g0), b: shift_left[U512](value: zero_extend[U64, U512](g1), bits: uf_amt[U512](64_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g2), bits: uf_amt[U512](128_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g3), bits: uf_amt[U512](192_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g4), bits: uf_amt[U512](256_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g5), bits: uf_amt[U512](320_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g6), bits: uf_amt[U512](384_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g7), bits: uf_amt[U512](448_s64)))
+  return bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: bit_or[U512](a: zero_extend[U64, U512](g0), b: shift_left[U512](value: zero_extend[U64, U512](g1), bits: U512.to_width(s: 64_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g2), bits: U512.to_width(s: 128_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g3), bits: U512.to_width(s: 192_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g4), bits: U512.to_width(s: 256_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g5), bits: U512.to_width(s: 320_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g6), bits: U512.to_width(s: 384_s64))), b: shift_left[U512](value: zero_extend[U64, U512](g7), bits: U512.to_width(s: 448_s64)))
 
 # ============================================================================
 # Public surface — creators / presets / parser / hash / bytes

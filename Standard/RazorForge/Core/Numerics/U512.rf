@@ -16,25 +16,25 @@ record U512 obeys FloorDivisible
 @inline
 routine asm512(q0: U64, q1: U64, q2: U64, q3: U64, q4: U64, q5: U64, q6: U64, q7: U64) -> U512
   var r = zero_extend[U64, U512](q0)
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q1), bits: uf_amt[U512](64_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q2), bits: uf_amt[U512](128_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q3), bits: uf_amt[U512](192_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q4), bits: uf_amt[U512](256_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q5), bits: uf_amt[U512](320_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q6), bits: uf_amt[U512](384_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q7), bits: uf_amt[U512](448_s64)))
+  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q1), bits: U512.to_width(s: 64_s64)))
+  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q2), bits: U512.to_width(s: 128_s64)))
+  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q3), bits: U512.to_width(s: 192_s64)))
+  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q4), bits: U512.to_width(s: 256_s64)))
+  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q5), bits: U512.to_width(s: 320_s64)))
+  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q6), bits: U512.to_width(s: 384_s64)))
+  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q7), bits: U512.to_width(s: 448_s64)))
   return r
 
 ### nth U64 limb of a U512.
 @inline
 routine limb512(x: U512, i: S64) -> U64
-  return int_truncate[U512, U64](shift_right_unsigned[U512](x, uf_amt[U512](mul[S64](a: i, b: 64_s64))))
+  return int_truncate[U512, U64](shift_right_unsigned[U512](x, U512.to_width(s: mul[S64](a: i, b: 64_s64))))
 
 ### Quotient of num // den (den fits U256) with the round-sticky in bit 0. The n=1 case
 ### (single-limb divisor — e.g. dividing by 2/5/10) is register-resident 8-limb long
 ### division; larger divisors fall back to the generic Knuth kernel.
 routine udiv512_by_u256_sticky(num: U512, den: U512) -> U512
-  if int_eq[U512](a: shift_right_unsigned[U512](den, uf_amt[U512](64_s64)), b: zero_extend[U64, U512](0_u64))
+  if int_eq[U512](a: shift_right_unsigned[U512](den, U512.to_width(s: 64_s64)), b: zero_extend[U64, U512](0_u64))
     var d0 = int_truncate[U512, U64](den)
     var dr7 = udivrem128(hi: 0_u64, lo: limb512(x: num, i: 7_s64), d: d0)
     var dr6 = udivrem128(hi: dr7.r, lo: limb512(x: num, i: 6_s64), d: d0)
