@@ -272,49 +272,62 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string ConvertPrefixedToDecimal(string value) // NOSONAR S3776
     {
-        if (value.Length > 2)
+        // A leading sign may be baked into signed wide literals (S128/S256); strip it, convert the
+        // magnitude, and re-apply it so `-0x…` becomes a valid signed decimal rather than `-0x…`.
+        string sign = "";
+        string magnitude = value;
+        if (magnitude.Length > 0 && magnitude[index: 0] is '+' or '-')
         {
-            if (value.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase))
+            sign = magnitude[index: 0] == '-' ? "-" : "";
+            magnitude = magnitude[1..];
+        }
+
+        if (magnitude.Length > 2)
+        {
+            int numericBase = 0;
+            if (magnitude.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase))
             {
-                // Don't convert hex floats ? they go through EmitFloatLiteral
-                if (value.IndexOfAny(anyOf: ['.', 'p', 'P'], startIndex: 2) >= 0)
+                // Don't convert hex floats — they go through EmitFloatLiteral.
+                if (magnitude.IndexOfAny(anyOf: ['.', 'p', 'P'], startIndex: 2) >= 0)
                 {
                     return value;
                 }
 
-                if (ulong.TryParse(s: value[2..],
-                        style: NumberStyles.HexNumber,
-                        provider: null,
-                        result: out ulong hexVal))
-                {
-                    return hexVal.ToString();
-                }
+                numericBase = 16;
             }
-            else if (value.StartsWith(value: "0b",
-                         comparisonType: StringComparison.OrdinalIgnoreCase))
+            else if (magnitude.StartsWith(value: "0b", comparisonType: StringComparison.OrdinalIgnoreCase))
             {
-                try
-                {
-                    return Convert.ToUInt64(value: value[2..], fromBase: 2)
-                                  .ToString();
-                }
-                catch
-                {
-                    /* fall through */
-                }
+                numericBase = 2;
             }
-            else if (value.StartsWith(value: "0o",
-                         comparisonType: StringComparison.OrdinalIgnoreCase))
+            else if (magnitude.StartsWith(value: "0o", comparisonType: StringComparison.OrdinalIgnoreCase))
             {
-                try
+                numericBase = 8;
+            }
+
+            // Accumulate via BigInteger so wide (U128/U256/...) base-prefixed literals convert to
+            // their full decimal value — a ulong/Convert.ToUInt64 path overflows past 64 bits and
+            // would leave the raw `0x…` string in the IR, which LLVM rejects ("constant bigger than
+            // 64 bits"). Decimal literals pass straight through.
+            if (numericBase != 0)
+            {
+                var acc = System.Numerics.BigInteger.Zero;
+                foreach (char c in magnitude.AsSpan(start: 2))
                 {
-                    return Convert.ToUInt64(value: value[2..], fromBase: 8)
-                                  .ToString();
+                    int digit = char.ToLowerInvariant(c: c) switch
+                    {
+                        >= '0' and <= '9' => c - '0',
+                        >= 'a' and <= 'f' => char.ToLowerInvariant(c: c) - 'a' + 10,
+                        _ => -1
+                    };
+                    if (digit < 0 || digit >= numericBase)
+                    {
+                        return value; // malformed digit — leave as-is
+                    }
+
+                    acc = acc * numericBase + digit;
                 }
-                catch
-                {
-                    /* fall through */
-                }
+
+                return sign + acc.ToString();
             }
         }
 
