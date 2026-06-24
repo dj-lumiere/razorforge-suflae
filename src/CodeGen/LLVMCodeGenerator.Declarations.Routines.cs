@@ -70,6 +70,9 @@ public partial class LlvmCodeGenerator
         {
             // By-ref struct-record thread arg: the worker receives a pointer to the spawner's cell.
             if (IsByRefThreadArg(routine: routine, param: param)) return "ptr";
+            // ABI-Indirect struct value arg: passed as a hidden byval pointer-to-copy.
+            if (ParameterPassedByval(routine: routine, paramType: param.Type))
+                return $"ptr byval({GetLlvmType(type: param.Type)})";
             string t = GetParameterLlvmType(type: param.Type);
             if (isCExtern && t == "half") return "i16";
             string attrs = GetExplicitParameterAttributes(type: param.Type);
@@ -94,7 +97,7 @@ public partial class LlvmCodeGenerator
         string returnType = routine.ReturnType != null
             ? GetLlvmType(type: routine.ReturnType)
             : "void";
-        if (routine.AsyncStatus == AsyncStatus.LookupVariant)
+        if (routine.FailableVariant == FailableVariant.Lookup)
         {
             // Lookup[Blank] degenerates to Result[Blank]: a Blank value payload makes the
             // "found vs not-found" distinction meaningless, so use the Result carrier instead.
@@ -102,11 +105,11 @@ public partial class LlvmCodeGenerator
                 ? GetResultCarrierLlvmType(valueType: routine.ReturnType!)
                 : GetLookupCarrierLlvmType(valueType: routine.ReturnType!);
         }
-        else if (routine.AsyncStatus == AsyncStatus.CheckVariant)
+        else if (routine.FailableVariant == FailableVariant.Check)
         {
             returnType = GetResultCarrierLlvmType(valueType: routine.ReturnType!);
         }
-        else if (routine.AsyncStatus == AsyncStatus.TryBoolVariant)
+        else if (routine.FailableVariant == FailableVariant.TryBool)
         {
             returnType = "i1";
         }
@@ -116,10 +119,14 @@ public partial class LlvmCodeGenerator
             returnType = "i16";
         }
 
-        // On Windows x64 MSVC ABI, C structs > 8 bytes are returned via hidden sret pointer.
-        // LLVM IR passes {i64, i64} in registers (RAX:RDX) but C expects sret, causing ABI mismatch.
-        // Detect this case and emit the declaration with sret convention.
-        bool needsSret = isCExtern && NeedsCExternSret(routine: routine);
+        // Struct returns classified Indirect by the target ABI go through a hidden sret pointer.
+        // For external("C") this matches the platform C ABI (Win-x64 MSVC: structs > 8 bytes);
+        // for RF routines it is the ABI boundary-coercion return form (see
+        // internal-wiki/v0.1.x-struct-abi-boundary-coercion.md). The declaration, definition,
+        // every return, and every call site must agree — see ReturnsViaSret / _currentReturnViaSret.
+        bool needsSret = isCExtern
+            ? NeedsCExternSret(routine: routine)
+            : ReturnsViaSret(routine: routine);
         if (needsSret)
         {
             // Change declaration: void @func(ptr sret(%RecordType), original_params...)
@@ -346,11 +353,17 @@ public partial class LlvmCodeGenerator
         paramList.AddRange(collection:
             from param in routineInfo.Parameters
             let byRefThreadArg = IsByRefThreadArg(routine: routineInfo, param: param)
-            let paramType = byRefThreadArg ? "ptr" : GetParameterLlvmType(type: param.Type)
-            let paramAttrs = byRefThreadArg ? string.Empty : GetExplicitParameterAttributes(type: param.Type)
-            // By-ref thread arg: name the parameter `%<name>.addr` so it doubles as the cell's
-            // lvalue address (mirrors by-ref `me`); the prologue then skips the alloca/store copy.
-            let emittedName = byRefThreadArg ? $"{param.Name}.addr"
+            // ABI-Indirect struct value arg: arrives as `ptr byval(%T)` — a pointer to the callee's
+            // private copy. Like a by-ref thread arg, `%<name>.addr` doubles as the struct's lvalue
+            // address so the prologue skips the alloca/store copy (the byval copy already exists).
+            let byval = !byRefThreadArg && ParameterPassedByval(routine: routineInfo, paramType: param.Type)
+            let paramType = byRefThreadArg ? "ptr"
+                : byval ? $"ptr byval({GetLlvmType(type: param.Type)})"
+                : GetParameterLlvmType(type: param.Type)
+            let paramAttrs = byRefThreadArg || byval
+                ? string.Empty
+                : GetExplicitParameterAttributes(type: param.Type)
+            let emittedName = byRefThreadArg || byval ? $"{param.Name}.addr"
                 : param.Name == "entry" ? "entry_" : param.Name
             select string.IsNullOrEmpty(paramAttrs)
                 ? $"{paramType} %{emittedName}"
@@ -360,17 +373,28 @@ public partial class LlvmCodeGenerator
         string returnType = routineInfo.ReturnType != null
             ? GetLlvmType(type: routineInfo.ReturnType)
             : "void";
-        if (routineInfo.AsyncStatus == AsyncStatus.LookupVariant)
+        if (routineInfo.FailableVariant == FailableVariant.Lookup)
         {
             returnType = GetLookupCarrierLlvmType(valueType: routineInfo.ReturnType!);
         }
-        else if (routineInfo.AsyncStatus == AsyncStatus.CheckVariant)
+        else if (routineInfo.FailableVariant == FailableVariant.Check)
         {
             returnType = GetResultCarrierLlvmType(valueType: routineInfo.ReturnType!);
         }
-        else if (routineInfo.AsyncStatus == AsyncStatus.TryBoolVariant)
+        else if (routineInfo.FailableVariant == FailableVariant.TryBool)
         {
             returnType = "i1";
+        }
+
+        // Struct returns classified Indirect by the ABI are returned through a hidden sret pointer:
+        // prepend `ptr sret(%T) %sret` and make the header return void; every `return` in the body
+        // then stores through %sret (see EmitReturn). _currentReturnViaSret is read during body
+        // emission, so set it before GenerateRoutineBody and restore after.
+        bool prevReturnViaSret = _currentReturnViaSret;
+        _currentReturnViaSret = ReturnsViaSret(routine: routineInfo);
+        if (_currentReturnViaSret)
+        {
+            paramList.Insert(index: 0, item: $"ptr sret({returnType}) %sret");
         }
 
         // Start function — save position so we can rollback on error
@@ -379,10 +403,12 @@ public partial class LlvmCodeGenerator
         int savedTempCounter = _tempCounter;
 
         bool isInline = routineInfo.Annotations.Contains(value: "inline");
-        string returnPrefix = isCreator && returnType == "ptr" ? "noalias " : "";
+        string headerReturnType = _currentReturnViaSret ? "void" : returnType;
+        string returnPrefix =
+            !_currentReturnViaSret && isCreator && returnType == "ptr" ? "noalias " : "";
         string funcAttrs = isInline ? " alwaysinline" : "";
         string defineHeader =
-            $"define {returnPrefix}{returnType} @{funcName}({parameters}){funcAttrs} {{";
+            $"define {returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;
         EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
@@ -430,6 +456,7 @@ public partial class LlvmCodeGenerator
         // End function
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
+        _currentReturnViaSret = prevReturnViaSret;
     }
 
     /// <summary>
@@ -505,6 +532,15 @@ public partial class LlvmCodeGenerator
             // spawner's cell), exactly like a by-ref `me`. No alloca/store — field/method access
             // resolves through the address and reaches the shared cell directly.
             if (IsByRefThreadArg(routine: routine, param: param))
+            {
+                _localVariables[key: param.Name] = param.Type;
+                continue;
+            }
+
+            // ABI-Indirect (byval) struct value param: `%<name>.addr` IS the pointer to the callee's
+            // private copy the backend materialized — no alloca/store, field access reads/writes
+            // through it directly (mirrors the by-ref thread-arg path, but value-semantic).
+            if (ParameterPassedByval(routine: routine, paramType: param.Type))
             {
                 _localVariables[key: param.Name] = param.Type;
                 continue;
@@ -596,21 +632,29 @@ public partial class LlvmCodeGenerator
         {
             // For check_/try_ variant wrappers with Blank return type, emit the success
             // carrier instead of ret void — the define header uses the carrier type.
-            switch (routine.AsyncStatus)
+            switch (routine.FailableVariant)
             {
-                case AsyncStatus.CheckVariant:
+                case FailableVariant.Check:
                 {
                     string carrier = GetResultCarrierLlvmType(valueType: routine.ReturnType!);
                     EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
                     break;
                 }
-                case AsyncStatus.TryBoolVariant:
+                case FailableVariant.TryBool:
                     EmitLine(sb: sb, line: "  ret i1 false");
                     break;
                 default:
                     EmitLine(sb: sb, line: "  ret void");
                     break;
             }
+        }
+        else if (_currentReturnViaSret)
+        {
+            // Indirect (sret) return: the header is void, so store the zero struct through the
+            // hidden %sret pointer and return void (matches the by-value path's zero fallthrough).
+            string zeroValue = GetZeroValue(type: routine.ReturnType!);
+            EmitLine(sb: sb, line: $"  store {retType} {zeroValue}, ptr %sret");
+            EmitLine(sb: sb, line: "  ret void");
         }
         else
         {

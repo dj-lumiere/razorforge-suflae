@@ -23,7 +23,7 @@ public sealed record MonomorphizedBody(
 
     Dictionary<string, TypeInfo> TypeSubs,
 
-    AsyncStatus? VariantStatus,
+    FailableVariant? VariantStatus,
 
     TypeInfo? VariantInnerType,
 

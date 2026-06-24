@@ -856,7 +856,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         Dictionary<string, string> stringSubs)
     {
         // Compute carrier-unwrapping metadata for instantiated variant bodies.
-        AsyncStatus? variantStatus = null;
+        FailableVariant? variantStatus = null;
         TypeInfo? variantInnerType = null;
 
         if (concreteInfo.ReturnType?.TypeArguments is { Count: > 0 })
@@ -864,18 +864,18 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             string? baseName = GetGenericBaseName(concreteInfo.ReturnType);
             if (baseName == "Lookup")
             {
-                variantStatus = AsyncStatus.LookupVariant;
+                variantStatus = FailableVariant.Lookup;
                 variantInnerType = concreteInfo.ReturnType.TypeArguments[0];
             }
             else if (baseName == "Result")
             {
-                variantStatus = AsyncStatus.CheckVariant;
+                variantStatus = FailableVariant.Check;
                 variantInnerType = concreteInfo.ReturnType.TypeArguments[0];
             }
         }
-        // TryBool variants return Bool (no type args) — detect via AsyncStatus.
-        if (variantStatus == null && concreteInfo.AsyncStatus == AsyncStatus.TryBoolVariant)
-            variantStatus = AsyncStatus.TryBoolVariant;
+        // TryBool variants return Bool (no type args) — detect via the failable-variant kind.
+        if (variantStatus == null && concreteInfo.FailableVariant == FailableVariant.TryBool)
+            variantStatus = FailableVariant.TryBool;
 
         // When there is a carrier, the RoutineInfo.ReturnType is the inner type T,
         // not the carrier.
@@ -899,7 +899,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 IsVariadic = concreteInfo.IsVariadic,
                 IsDangerous = concreteInfo.IsDangerous,
                 Storage = concreteInfo.Storage,
-                AsyncStatus = variantStatus.Value,
+                AsyncStatus = concreteInfo.AsyncStatus,
+                FailableVariant = variantStatus.Value,
                 OriginalName = concreteInfo.OriginalName
             };
         }
@@ -947,9 +948,9 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // them beyond the equivalent VariantReturn rewrite codegen already understands.)
         ErrorHandlingVariantKind? fallbackKind = variantStatus switch
         {
-            AsyncStatus.CheckVariant => ErrorHandlingVariantKind.Check,
-            AsyncStatus.LookupVariant => ErrorHandlingVariantKind.Lookup,
-            AsyncStatus.TryBoolVariant => ErrorHandlingVariantKind.TryBool,
+            FailableVariant.Check => ErrorHandlingVariantKind.Check,
+            FailableVariant.Lookup => ErrorHandlingVariantKind.Lookup,
+            FailableVariant.TryBool => ErrorHandlingVariantKind.TryBool,
             _ when emitInfo.ReturnType != null && GetGenericBaseName(emitInfo.ReturnType) == "Maybe" => ErrorHandlingVariantKind.Try,
             _ => null
         };
@@ -1022,6 +1023,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     WrapperForwarderInnerGenericDef = genMethod.WrapperForwarderInnerGenericDef,
                     Storage = genMethod.Storage,
                     AsyncStatus = genMethod.AsyncStatus,
+                    FailableVariant = genMethod.FailableVariant,
                     OriginalName = genMethod.OriginalName
                 };
             }
@@ -1069,6 +1071,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             IsDangerous = genMethod.IsDangerous,
             Storage = genMethod.Storage,
             AsyncStatus = genMethod.AsyncStatus,
+            FailableVariant = genMethod.FailableVariant,
             OriginalName = genMethod.OriginalName
         };
     }

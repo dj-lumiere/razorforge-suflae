@@ -104,16 +104,20 @@ internal partial class Program
 
             case BuildCommand:
             {
-                (string? entryFile, string? projectRoot, string? outputFile2,
+                // `build` compiles all the way to a native executable for the HOST OS
+                // (codegen -> opt -> link -> stage runtime DLLs) but does NOT run it. The
+                // intermediate <entry>.ll / .opt.ll are kept as byproducts for inspection;
+                // `codegen` remains the IR-only verb. (All-OS artifacts come from the release CI.)
+                (string? entryFile, string? projectRoot, _,
                     RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2,
-                    bool showStages2, IReadOnlyList<string> libraryRoots2) = ResolveEntryFile(args: args, needsOutputArg: true);
+                    bool showStages2, IReadOnlyList<string> libraryRoots2) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
                 }
 
-                return BuildMultiFile(entryFile: entryFile,
-                    outputFile: outputFile2,
+                int buildRc = BuildExecutable(entryFile: entryFile,
+                    exeFile: out string builtExe,
                     projectRoot: projectRoot,
                     buildMode: buildMode2,
                     dumpAst: dumpAst2,
@@ -121,6 +125,12 @@ internal partial class Program
                     requireStartRoutine: requireStart2,
                     showBuildStages: showStages2,
                     libraryRoots: libraryRoots2);
+                if (buildRc == 0)
+                {
+                    Console.WriteLine(value: $"Executable written to: {Path.GetFullPath(path: builtExe)}");
+                }
+
+                return buildRc;
             }
 
             case "buildandrun":
@@ -374,7 +384,7 @@ internal partial class Program
             value:
             "  RazorForge codegen <source-file> [out.ll]       - Generate LLVM IR (single file)");
         Console.WriteLine(
-            value: "  RazorForge build [entry-file] [out.ll]          - Build multi-file project");
+            value: "  RazorForge build [entry-file]                   - Build a native executable (host OS, no run)");
         Console.WriteLine(
             value: "  RazorForge buildandrun [entry-file]             - Build and execute");
         Console.WriteLine(
@@ -1150,15 +1160,21 @@ internal partial class Program
     /// Builds a multi-file project and executes the resulting LLVM IR via lli.
     /// Returns 0 on success or 1 if build or execution fails.
     /// </summary>
-    private static int BuildAndRun(string entryFile, string? projectRoot = null,
+    /// <summary>
+    /// Compiles <paramref name="entryFile"/> all the way to a native executable
+    /// (codegen → opt → link → stage runtime DLLs) but does NOT run it. On success returns 0 and
+    /// sets <paramref name="exeFile"/> to the produced executable path. Shared by the <c>buildexe</c>
+    /// verb (stop here) and <c>buildandrun</c> (run it next) so the slow optimize+link is identical.
+    /// </summary>
+    private static int BuildExecutable(string entryFile, out string exeFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
-        bool requireStartRoutine = true,
-        bool showBuildStages = false, IReadOnlyList<string>? libraryRoots = null)
+        bool requireStartRoutine = true, bool showBuildStages = false,
+        IReadOnlyList<string>? libraryRoots = null)
     {
         // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
         string optFile = Path.ChangeExtension(path: llFile, extension: ".opt.ll");
-        string exeFile = Path.ChangeExtension(path: llFile, extension: ".exe");
+        exeFile = Path.ChangeExtension(path: llFile, extension: ".exe");
         NativeToolchain.CleanBuildAndRunOutputs(llFile: llFile, optFile: optFile, exeFile: exeFile);
 
         // Build first (to a temp .ll file)
@@ -1232,6 +1248,27 @@ internal partial class Program
         // Copy the runtime DLL (and its shared-library dependencies) next to the
         // output .exe so the loader can find them at runtime.
         NativeToolchain.StageRuntimeDlls(exeDir: exeDir, exeFile: exeFile);
+        return 0;
+    }
+
+    private static int BuildAndRun(string entryFile, string? projectRoot = null,
+        RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
+        bool requireStartRoutine = true,
+        bool showBuildStages = false, IReadOnlyList<string>? libraryRoots = null)
+    {
+        int buildResult = BuildExecutable(entryFile: entryFile,
+            exeFile: out string exeFile,
+            projectRoot: projectRoot,
+            buildMode: buildMode,
+            dumpAst: dumpAst,
+            saTiming: saTiming,
+            requireStartRoutine: requireStartRoutine,
+            showBuildStages: showBuildStages,
+            libraryRoots: libraryRoots);
+        if (buildResult != 0)
+        {
+            return buildResult;
+        }
 
         // Run the produced .exe
         if (showBuildStages)
@@ -1267,15 +1304,40 @@ internal partial class Program
                 return 1;
             }
 
+            // Forward our stdin to the child CONCURRENTLY — never synchronously before draining
+            // the child's output. When this process's own stdin is a redirected pipe that never
+            // reaches EOF (the common in-harness / CI case), a synchronous CopyTo blocks forever:
+            // it waits for our stdin to end while the child fills its stdout pipe with nobody
+            // draining it, so both sides wedge (the long-standing "buildandrun stalls in harness"
+            // bug). On a background task the copy can't stall the output drain; it ends when our
+            // stdin closes or the child's stdin pipe does. It's a background thread, so a copy that
+            // never completes (parent stdin held open) does not keep the process alive.
             if (stdinIsPiped)
             {
-                Console.OpenStandardInput()
-                       .CopyTo(destination: process.StandardInput.BaseStream);
-                process.StandardInput.Close();
+                _ = Task.Run(action: () =>
+                {
+                    try
+                    {
+                        Console.OpenStandardInput()
+                               .CopyTo(destination: process.StandardInput.BaseStream);
+                        process.StandardInput.Close();
+                    }
+                    catch
+                    {
+                        // Child exited / its stdin pipe closed — nothing left to forward.
+                    }
+                });
             }
 
-            string stdout = process.StandardOutput.ReadToEnd();
-            string stderr = process.StandardError.ReadToEnd();
+            // Drain stdout and stderr CONCURRENTLY. Reading them sequentially (all of stdout,
+            // then all of stderr) deadlocks whenever the child fills the OS stderr pipe buffer
+            // while we are still blocked on stdout: the child blocks writing stderr, we block
+            // reading stdout, and neither side progresses. Kicking off both async reads first
+            // keeps both pipes draining continuously.
+            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+            string stdout = stdoutTask.GetAwaiter().GetResult();
+            string stderr = stderrTask.GetAwaiter().GetResult();
             process.WaitForExit();
 
             if (!string.IsNullOrEmpty(value: stdout))

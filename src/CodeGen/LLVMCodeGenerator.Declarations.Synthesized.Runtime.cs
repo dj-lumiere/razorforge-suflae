@@ -25,16 +25,31 @@ public partial class LlvmCodeGenerator
         }
         paramList.AddRange(collection:
             from param in routine.Parameters
-            let paramType = GetParameterLlvmType(type: param.Type)
-            let emittedName = param.Name == "entry" ? "entry_" : param.Name
+            let byval = ParameterPassedByval(routine: routine, paramType: param.Type)
+            let paramType = byval ? $"ptr byval({GetLlvmType(type: param.Type)})"
+                : GetParameterLlvmType(type: param.Type)
+            let emittedName = byval ? $"{param.Name}.addr"
+                : param.Name == "entry" ? "entry_" : param.Name
             select $"{paramType} %{emittedName}");
 
         string returnType = routine.ReturnType != null ? GetLlvmType(type: routine.ReturnType) : "void";
+
+        // Mirror GenerateRoutineDefinition's ABI-Indirect (sret) return handling: this synthesized
+        // define path must agree with the declaration GenerateRoutineDeclaration emitted, or the
+        // declare/define signature-match invariant trips (e.g. crash_title returning Text).
+        bool prevReturnViaSret = _currentReturnViaSret;
+        _currentReturnViaSret = ReturnsViaSret(routine: routine);
+        if (_currentReturnViaSret)
+        {
+            paramList.Insert(index: 0, item: $"ptr sret({returnType}) %sret");
+        }
+
+        string headerReturnType = _currentReturnViaSret ? "void" : returnType;
         string parameters = string.Join(separator: ", ", values: paramList);
 
         int savedLength = _functionDefinitions.Length;
         int savedTempCounter = _tempCounter;
-        string defineHeader = $"define {returnType} @{funcName}({parameters}) {{";
+        string defineHeader = $"define {headerReturnType} @{funcName}({parameters}) {{";
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;
         EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
@@ -55,6 +70,7 @@ public partial class LlvmCodeGenerator
         }
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
+        _currentReturnViaSret = prevReturnViaSret;
     }
 
 }

@@ -52,6 +52,10 @@ void rf_crash(const char* type_name, int64_t type_len,
               int32_t line, int32_t col,
               const int32_t* message_utf32, int64_t message_len)
 {
+    // Flush any buffered stdout first: rf_console_show no longer flushes per call when
+    // stdout is piped, so partial program output could otherwise be lost or appear after
+    // the crash report. (exit() below also flushes, but do it up front for ordering.)
+    fflush(stdout);
     fprintf(stderr, "\033[91m%.*s: ", (int)type_len, type_name);
 
     if (message_utf32 != NULL && message_len > 0)

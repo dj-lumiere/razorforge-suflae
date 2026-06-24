@@ -165,7 +165,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     {
         return variant.Kind switch
         {
-            ErrorHandlingVariantKind.Try when variant.Routine.AsyncStatus == AsyncStatus.TryBoolVariant
+            ErrorHandlingVariantKind.Try when variant.Routine.FailableVariant == FailableVariant.TryBool
                 => ErrorHandlingVariantKind.TryBool,
             _ => variant.Kind
         };

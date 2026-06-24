@@ -143,11 +143,11 @@ public partial class LlvmCodeGenerator
         string returnType = routine.ReturnType != null
             ? GetLlvmType(type: routine.ReturnType)
             : "void";
-        returnType = routine.AsyncStatus switch
+        returnType = routine.FailableVariant switch
         {
-            AsyncStatus.LookupVariant => GetLookupCarrierLlvmType(valueType: routine.ReturnType!),
-            AsyncStatus.CheckVariant => GetResultCarrierLlvmType(valueType: routine.ReturnType!),
-            AsyncStatus.TryBoolVariant => "i1",
+            FailableVariant.Lookup => GetLookupCarrierLlvmType(valueType: routine.ReturnType!),
+            FailableVariant.Check => GetResultCarrierLlvmType(valueType: routine.ReturnType!),
+            FailableVariant.TryBool => "i1",
             _ => returnType
         };
 
@@ -329,7 +329,8 @@ public partial class LlvmCodeGenerator
             (string cv, string _) = CoerceCallArgumentToParameter(sb: sb,
                 argValue: v,
                 actualType: actual,
-                parameterType: routine.Parameters[index: i].Type);
+                parameterType: routine.Parameters[index: i].Type,
+                callee: routine);
             values.Add(item: cv);
             types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
         }

@@ -65,6 +65,15 @@ public partial class LlvmCodeGenerator
             EmitMaybeWrappedReturn(sb: sb, retType: retType, innerValue: value);
             return;
         }
+
+        // Indirect (sret) return: the struct value is stored through the hidden %sret pointer and
+        // the function returns void (see _currentReturnViaSret / GenerateRoutineDefinition).
+        if (_currentReturnViaSret)
+        {
+            EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr %sret");
+            EmitLine(sb: sb, line: "  ret void");
+            return;
+        }
         EmitLine(sb: sb, line: $"  ret {llvmType} {value}");
     }
 
@@ -96,13 +105,13 @@ public partial class LlvmCodeGenerator
         EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
             EmitLine(sb: sb, line: TracePop);
-        if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.CheckVariant &&
+        if (_currentEmittingRoutine?.FailableVariant == FailableVariant.Check &&
             _currentRoutineReturnType != null)
         {
             string carrier = GetResultCarrierLlvmType(valueType: _currentRoutineReturnType);
             EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
         }
-        else if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.TryBoolVariant)
+        else if (_currentEmittingRoutine?.FailableVariant == FailableVariant.TryBool)
         {
             EmitLine(sb: sb, line: "  ret i1 false");
         }

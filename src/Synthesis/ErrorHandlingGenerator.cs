@@ -286,7 +286,7 @@ public sealed class ErrorHandlingGenerator
                 Annotations = original.Annotations,
                 CallingConvention = original.CallingConvention,
                 Storage = original.Storage,
-                AsyncStatus = AsyncStatus.TryBoolVariant,
+                FailableVariant = FailableVariant.TryBool,
                 OriginalName = original.Name
             };
         }

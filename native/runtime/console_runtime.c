@@ -5,10 +5,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef _WIN32
+#include <io.h>
+#define rf_isatty _isatty
+#define rf_fileno _fileno
+#else
+#include <unistd.h>
+#define rf_isatty isatty
+#define rf_fileno fileno
+#endif
+
+// Whether stdout is an interactive terminal. Cached on first use (it never changes
+// for the life of the process). When stdout is a TTY we flush after every show() so
+// prompts/progress appear immediately; when it is a pipe or file (e.g. fixture capture,
+// `buildandrun`, the in-harness runner) we let libc block-buffer instead — flushing per
+// call there costs a write() syscall + reader round-trip per print, throttling piped
+// output to a fraction of native speed. Buffered output is still delivered: libc flushes
+// at exit, every rf_console_ask_* flushes before reading, rf_console_flush() is explicit,
+// and rf_crash() flushes stdout before reporting.
+static int rf_stdout_is_tty = -1;
+
+static int rf_stdout_interactive(void)
+{
+    if (rf_stdout_is_tty < 0)
+        rf_stdout_is_tty = rf_isatty(rf_fileno(stdout)) ? 1 : 0;
+    return rf_stdout_is_tty;
+}
+
 void rf_console_show(const char* ptr, rf_address count)
 {
     fwrite(ptr, 1, count, stdout);
-    fflush(stdout);
+    if (rf_stdout_interactive())
+        fflush(stdout);
 }
 
 void rf_console_alert(const char* ptr, rf_address count)

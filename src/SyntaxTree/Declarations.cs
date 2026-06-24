@@ -521,7 +521,10 @@ public record ImportDeclaration(
 #region Supporting Types and Enums
 
 /// <summary>
-/// Specifies the async execution model for a routine.
+/// Specifies the async execution model for a routine. This is ORTHOGONAL to
+/// <see cref="FailableVariant"/> (the compiler-generated failable-wrapper kind): a routine has an
+/// async model AND, independently, may be a generated failable variant. The two used to be mixed
+/// into one enum; they are now separate.
 /// </summary>
 public enum AsyncStatus
 {
@@ -538,32 +541,43 @@ public enum AsyncStatus
     /// OS-level threading for CPU-bound parallel work.
     /// Uses real threads with higher overhead but true parallelism.
     /// </summary>
-    Threaded,
+    Threaded
+}
+
+/// <summary>
+/// Which compiler-generated failable wrapper a routine is, if any. Orthogonal to
+/// <see cref="AsyncStatus"/> (the async execution model). A routine is at most one of these; the
+/// failable variants were previously mixed into <see cref="AsyncStatus"/> and are now separated out.
+/// </summary>
+public enum FailableVariant
+{
+    /// <summary>Not a compiler-generated failable variant (the common case).</summary>
+    None,
 
     /// <summary>
     /// Compiler-generated lookup_ variant: wraps a failable routine to return Lookup[T].
     /// throw -> error carrier, absent -> zeroinitializer, return -> success carrier.
     /// </summary>
-    LookupVariant,
+    Lookup,
 
     /// <summary>
     /// Compiler-generated check_ variant: wraps a failable routine to return Result[Blank].
     /// throw -> error carrier, absent/return -> success zeroinitializer (Blank).
     /// </summary>
-    CheckVariant,
+    Check,
 
     /// <summary>
     /// Compiler-generated try_ variant for Blank-returning failable routines.
     /// Returns Bool (i1): true = success, false = absent or throw.
     /// </summary>
-    TryBoolVariant,
+    TryBool,
 
     /// <summary>
     /// Compiler-generated try_ variant for non-Blank failable routines.
     /// Returns Maybe[T] carrier: absent/throw -> zeroinitializer (None), return value -> present.
     /// RoutineInfo.ReturnType is the full Maybe[T] type; codegen uses GetLLVMType directly.
     /// </summary>
-    TryVariant
+    Try
 }
 
 /// <summary>
