@@ -1,0 +1,31 @@
+module Tests/Stdlib/ByvalComplexRecord
+import IO/Console
+
+# Case #4 of the struct-ABI byval coverage: Cxx (C32/C64) float-aggregate records
+# passed BY VALUE and returned by value. Phase 3 (HFA handling) was deliberately
+# deferred as a justified no-op; this fixture is the runtime guard backing that
+# assumption — float-aggregate args/returns must not regress at -O3.
+
+@positional
+routine cnorm_sq(c: C64) -> F64
+  return c.real * c.real + c.imag * c.imag
+
+@positional
+routine cadd(a: C64, b: C64) -> C64
+  return C64(real: a.real + b.real, imag: a.imag + b.imag)
+
+@positional
+routine c32_real(c: C32) -> F32
+  return c.real
+
+routine start()
+  var c = C64(real: 3.0_f64, imag: 4.0_f64)
+  show(f"norm_sq: {cnorm_sq(c)}")
+
+  var s = cadd(c, C64(real: 1.0_f64, imag: 1.0_f64))
+  show(f"cadd: {s.real} {s.imag}")
+  show(f"c unchanged: {c.real} {c.imag}")
+
+  var c32 = C32(real: 1.0_f32, imag: 2.0_f32)
+  show(f"c32 real: {c32_real(c32)}")
+  return

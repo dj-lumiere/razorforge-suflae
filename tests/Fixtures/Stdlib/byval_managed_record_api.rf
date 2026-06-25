@@ -1,0 +1,40 @@
+module Tests/Stdlib/ByvalManagedRecord
+import IO/Console
+
+# Case #1 + #5 of the struct-ABI byval coverage: records that carry a MANAGED
+# field (Text) passed BY VALUE as a non-`me` param, and a NESTED record (record
+# inside a record) passed by value. This is the double-free risk surface — byval
+# is gated on `GetLifecycle().Copy == null`, so Text-bearing records must go
+# through the retaining-copy path, NOT raw byval. We pass the same owned variable
+# into the callee multiple times and keep using it afterward: if the callee's
+# copy double-freed the caller's Text, the later reads would crash.
+
+record Person
+  name: Text
+  age: S64
+
+record Team
+  lead: Person
+  size: S64
+
+@positional
+routine greet(p: Person) -> S64
+  show(f"  greet {p.name} age {p.age}")
+  return p.age
+
+@positional
+routine team_lead_age(t: Team) -> S64
+  show(f"  team lead {t.lead.name} size {t.size}")
+  return t.lead.age
+
+routine start()
+  var alice = Person(name: "alice", age: 30_s64)
+  show(f"greet returns: {greet(alice)}")
+  show(f"alice still valid: {alice.name} {alice.age}")
+  discard greet(alice)
+  show(f"alice after 2nd call: {alice.name} {alice.age}")
+
+  var team = Team(lead: Person(name: "bob", age: 40_s64), size: 5_s64)
+  show(f"team_lead_age: {team_lead_age(team)}")
+  show(f"team still valid: {team.lead.name} {team.size}")
+  return

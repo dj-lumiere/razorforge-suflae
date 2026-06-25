@@ -1,0 +1,34 @@
+module Tests/Stdlib/ByvalFailableRecord
+import IO/Console
+
+# Case #2 of the struct-ABI byval coverage: a record (with a MANAGED Text field)
+# passed BY VALUE into a FAILABLE `!` routine that is called directly inside a
+# `danger!` block. This is the exact shape of the RecordCopyLoweringPass
+# double-free (the pass once had no `case DangerStatement`, so the retaining
+# `$copy` was skipped for by-value args inside `danger!`). Both the throwing and
+# non-throwing paths are exercised, and the caller keeps using the record after.
+
+record Person
+  name: Text
+  age: S64
+
+routine checked_age!(p: Person) -> S64
+  if p.age < 0
+    throw VerificationFailedError()
+  return p.age
+
+routine start()
+  var alice = Person(name: "alice", age: 30_s64)
+  danger!
+    var a = checked_age!(alice)
+    show(f"checked_age: {a}")
+  show(f"alice still valid: {alice.name} {alice.age}")
+
+  # catch path via the compiler-generated check_ variant
+  var bad = Person(name: "bob", age: -1_s64)
+  var r = check_checked_age(p: bad)
+  when r
+    is VerificationFailedError e => show(f"caught: {e.crash_title()}")
+    else v                        => show(f"ok: {v}")
+  show(f"bad still valid: {bad.name} {bad.age}")
+  return

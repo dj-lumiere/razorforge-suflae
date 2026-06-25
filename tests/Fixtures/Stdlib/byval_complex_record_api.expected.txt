@@ -1,0 +1,4 @@
+norm_sq: 25
+cadd: 4 5
+c unchanged: 3 4
+c32 real: 1
