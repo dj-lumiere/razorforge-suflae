@@ -460,14 +460,54 @@ routine f256_lgamma(x: F256) -> F256
   var p = zu.lgamma_core()
   return p.item1.to_f256a()
 
+# ============================================================================
+# Reduced-level F256-width erf/erfc for D128's 113-bit target. The full f256_erf/f256_erfc above
+# serve F256's own 237-bit need (levels=120) and stay untouched. D128 needs only 113 bits, so the
+# mid-branch (|z|<3.1) continued fraction uses fewer levels — still at W=256 (113 bits needs more
+# than F128's 113-bit-exact width, so width is NOT reduced; the |z|>=3.1 tail also keeps 120).
+# (Gamma was assessed too: at 113 bits its internal log/exp need near-full degrees — no slack.)
+# ============================================================================
+
+### erf at W=256 with caller-sized CF levels (D128). Mirrors f256_erf's branch structure.
+routine f256_erf_fast(x: F256, levels_mid: S64, levels_tail: S64) -> F256
+  if x.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return f256_intval(n: -1_s64)
+    return f256_intval(n: 1_s64)
+  var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
+  var a = x.to_uf()
+  if a.lt(you: thr.neg())
+    return UnpackedFloat[U256, U512, 256].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_f256a()
+  if a.lt(you: thr)
+    return a.erf_cf(levels: levels_mid).to_f256a()
+  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_f256a()
+
+### erfc at W=256 with caller-sized CF levels (D128). Mirrors f256_erfc.
+routine f256_erfc_fast(x: F256, levels_mid: S64, levels_tail: S64) -> F256
+  if x.is_nan()
+    return F256.from_bits(bits: f256a_qnan())
+  if x.is_infinite()
+    if x.is_negative()
+      return f256_intval(n: 2_s64)
+    return f256_intval(n: 0_s64)
+  var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
+  var a = x.to_uf()
+  if a.lt(you: thr.neg())
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: levels_tail)).to_f256a()
+  if a.lt(you: thr)
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: levels_mid)).to_f256a()
+  return a.erfc_cf(levels: levels_tail).to_f256a()
+
 ### Error function erf(me), in [-1, 1]. Finite-preserving; never crashes.
 routine D128.erf() -> D128
-  return f256_to_d128(x: f256_erf(x: d128_to_f256(x: me)))
+  return f256_to_d128(x: f256_erf_fast(x: d128_to_f256(x: me), levels_mid: 72_s64, levels_tail: 120_s64))
 
 ### Complementary error function erfc(me) = 1 - erf(me), in [0, 2]. Finite-preserving; never
 ### crashes.
 routine D128.erfc() -> D128
-  return f256_to_d128(x: f256_erfc(x: d128_to_f256(x: me)))
+  return f256_to_d128(x: f256_erfc_fast(x: d128_to_f256(x: me), levels_mid: 72_s64, levels_tail: 120_s64))
 
 ### Gamma function. Checked: crashes if the result is non-finite (overflow or a pole at a
 ### non-positive integer). Matches the tgamma!/tgamma_unchecked split on the other types.
@@ -481,6 +521,8 @@ routine D128.tgamma!() -> D128
 
 ### Raw gamma(me) via the F256 special core; may return ±inf or NaN; never crashes.
 routine D128.tgamma_unchecked() -> D128
+  # 113-bit gamma needs degrees just below the full octuple (sweep: logn floor ~20, expn floor ~18);
+  # conservative margins leave too little slack to justify a reduced path. Keep the full core.
   return f256_to_d128(x: f256_tgamma(x: d128_to_f256(x: me)))
 
 ### Log-gamma ln|gamma(me)|. Finite for non-pole inputs; +inf at 0 and non-positive integers.

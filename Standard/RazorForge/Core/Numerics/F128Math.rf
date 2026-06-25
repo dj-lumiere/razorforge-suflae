@@ -187,8 +187,20 @@ routine UnpackedFloat[M, L, W].cbrt() -> UnpackedFloat[M, L, W]
   var cc = one_third.ldexp(e: 1_s64).neg().mul(you: y2)
   return t.fma(b: cc, c: y2).mul(you: q)
 
-### atan2 on the unpacked engine (TLFloat atan2_, N=17, M=3).
+### atan2 on the unpacked engine (TLFloat atan2_, N=17, M=3). Picks degree/depth by width.
 routine UnpackedFloat[M, L, W].atan2(x0: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
+  # W=512 needs deeper half-angle reduction + higher poly degree for 70+ digits.
+  var deg = 17_s64
+  var depth = 3_s64
+  if int_eq[U64](a: W, b: 512_u64)
+    deg = 22_s64
+    depth = 5_s64
+  return me.atan2_p(x0: x0, deg: deg, depth: depth)
+
+### Degree/depth-parameterized atan2. `deg` = atan-series Horner degree, `depth` = half-angle
+### reductions; callers below F128's 113 bits (D64) size both down to their target. atan_coef is
+### W-dispatched (a valid quad table at W=128), so reducing `deg` just uses fewer correct terms.
+routine UnpackedFloat[M, L, W].atan2_p(x0: UnpackedFloat[M, L, W], deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
   var y = me
   var x = x0
   # Octant folding into |y| <= |x|: q records the quadrant offset (in units of pi/2)
@@ -203,13 +215,6 @@ routine UnpackedFloat[M, L, W].atan2(x0: UnpackedFloat[M, L, W]) -> UnpackedFloa
     q = if y.sign() then -2_s64 else 2_s64
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var d = y.div(you: x)
-  # W=512 needs deeper half-angle reduction + higher poly degree for 70+ digits;
-  # the reconstruction ldexp MUST equal the reduction depth.
-  var deg = 17_s64
-  var depth = 3_s64
-  if int_eq[U64](a: W, b: 512_u64)
-    deg = 22_s64
-    depth = 5_s64
   var r = UnpackedFloat[M, L, W].atan_coef(deg)
   # `depth` half-angle reductions d <- d/(sqrt(1+d^2)+1) shrink |d| so the fixed-degree
   # poly converges; the matching ldexp(depth) below undoes them.
@@ -266,6 +271,37 @@ routine UnpackedFloat[M, L, W].acos() -> UnpackedFloat[M, L, W]
   # acos(x) = atan2(sqrt(1-x^2), x).
   var y = one.add(you: me).mul(you: one.sub(you: me)).sqrt()
   return y.atan2(x0: me)
+
+### Degree/depth-parameterized atan/asin/acos cores for sub-113-bit targets (D64). Same methods
+### as atan/asin/acos but thread `deg`/`depth` to atan2_p.
+routine UnpackedFloat[M, L, W].atan_p(deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
+  if me.isnan()
+    return me
+  var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  var negone = one.neg()
+  var yinf = if me.sign() then negone else one
+  var y = if me.isinf() then yinf else me
+  var zero = UnpackedFloat[M, L, W].zero(sign: false)
+  var x = if me.isinf() then zero else one
+  return y.atan2_p(x0: x, deg: deg, depth: depth)
+
+routine UnpackedFloat[M, L, W].asin_p(deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
+  if me.isnan()
+    return me
+  var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  if me.abs().gt(you: one)
+    return UnpackedFloat[M, L, W].nan()
+  var x = one.add(you: me).mul(you: one.sub(you: me)).sqrt()
+  return me.atan2_p(x0: x, deg: deg, depth: depth)
+
+routine UnpackedFloat[M, L, W].acos_p(deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
+  if me.isnan()
+    return me
+  var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  if me.abs().gt(you: one)
+    return UnpackedFloat[M, L, W].nan()
+  var y = one.add(you: me).mul(you: one.sub(you: me)).sqrt()
+  return y.atan2_p(x0: me, deg: deg, depth: depth)
 
 ### sinh on the unpacked engine (expm1_), with explicit expm1 term count `en`.
 ### The inner expm1 range-reduces uniformly (reduced |d| <= ln2/2), so a lower `en`
@@ -603,6 +639,14 @@ routine F128.$pow!(you: F128) -> F128
 ### `me^you` with raw IEEE (full C99 pow special-case ladder). No crash.
 ### Core path is octuple `exp(you * ln|me|)`; the sign of an odd-integer exponent is reapplied.
 routine F128.pow_unchecked(you: F128) -> F128
+  return me.pow_unchecked_p(you: you, logn: 23_s64, expn: 20_s64, fast: false)
+
+### Precision-parameterized pow. `fast: true` runs the general `exp(you * ln|me|)` core at
+### F128 width (113-bit significand, ~59 guard bits over D64's 54-bit target) instead of octuple;
+### `fast: false` keeps the octuple path for F128's own correctly-rounded 113-bit result. The
+### C99 special-case ladder is precision-independent and shared. `logn`/`expn` set the series
+### degrees of the general path.
+routine F128.pow_unchecked_p(you: F128, logn: S64, expn: S64, fast: Bool) -> F128
   var one = UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).to_f128()
   var negone = one.$neg()
   var yo = you.to_oct()
@@ -657,8 +701,14 @@ routine F128.pow_unchecked(you: F128) -> F128
     return F128.from_bits(bits: f128_inf(sign: xs))
   if me.is_zero() and you.is_negative() and not you.is_zero() and not yisoddint
     return posinf
-  # General case in octuple: exp(you * ln|me|), with log degree n=23, exp degree n=20.
-  var z = me.abs().to_oct().log(n: 23_s64, m: 0_s64, t: 0_s64).mul(you: yo).exp(n: 20_s64)
+  # General case: exp(you * ln|me|). Fast path stays at F128 width; default path is octuple.
+  if fast
+    var zu = me.abs().to_uf().log(n: logn, m: 0_s64, t: 0_s64).mul(you: you.to_uf()).exp(n: expn)
+    # Negative base with an odd-integer exponent keeps a negative result.
+    if me.is_negative() and yisoddint
+      zu = zu.neg()
+    return zu.to_f128()
+  var z = me.abs().to_oct().log(n: logn, m: 0_s64, t: 0_s64).mul(you: yo).exp(n: expn)
   # Negative base with an odd-integer exponent keeps a negative result.
   if me.is_negative() and yisoddint
     z = z.neg()
@@ -718,6 +768,42 @@ routine F128.atan2(you: F128) -> F128
     var xfin = UnpackedFloat[U128, U256, 128].zero(sign: you.is_negative())
     x = if you.is_infinite() then xinf else xfin
   return y.atan2(x0: x).to_f128()
+
+### Degree/depth-reduced inverse-trig for sub-113-bit targets (D64). atan/asin/acos all funnel
+### through atan2; these thread reduced `deg`/`depth` to the F128-width core. Already F128 width
+### (not octuple), so the win is purely fewer Horner terms + fewer half-angle sqrt reductions.
+routine F128.atan_fast(deg: S64, depth: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  return me.to_uf().atan_p(deg: deg, depth: depth).to_f128()
+
+routine F128.asin_fast(deg: S64, depth: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  return me.to_uf().asin_p(deg: deg, depth: depth).to_f128()
+
+routine F128.acos_fast(deg: S64, depth: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  return me.to_uf().acos_p(deg: deg, depth: depth).to_f128()
+
+routine F128.atan2_fast(you: F128, deg: S64, depth: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if you.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: you.to_bits()))
+  var y = me.to_uf()
+  var x = you.to_uf()
+  if me.is_infinite() or you.is_infinite()
+    var one = UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64)
+    var negone = one.neg()
+    var yinf = if me.is_negative() then negone else one
+    var yfin = UnpackedFloat[U128, U256, 128].zero(sign: me.is_negative())
+    y = if me.is_infinite() then yinf else yfin
+    var xinf = if you.is_negative() then negone else one
+    var xfin = UnpackedFloat[U128, U256, 128].zero(sign: you.is_negative())
+    x = if you.is_infinite() then xinf else xfin
+  return y.atan2_p(x0: x, deg: deg, depth: depth).to_f128()
 
 ### Returns `sinh(me)`.
 routine F128.sinh!() -> F128
@@ -1281,6 +1367,39 @@ routine F128.erfc() -> F128
     return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 72_s64)).to_f128()
   return a.erfc_cf(levels: 120_s64).to_f128()
 
+### Precision-reduced erf for sub-113-bit targets (D64 ~54 bits): identical branch structure to
+### `erf()` but the continued fraction runs at F128 width (113-bit) instead of octuple, with
+### caller-sized `levels_mid` (|z|<3.1 erf branch) and `levels_tail` (|z|>=3.1 erfc branch).
+routine F128.erf_fast(levels_mid: S64, levels_tail: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_infinite()
+    var s = if me.is_negative() then -1_s64 else 1_s64
+    return UnpackedFloat[U128, U256, 128].from_s64(src: s).to_f128()
+  var thr = UnpackedFloat[U128, U256, 128].from_s64(src: 31_s64).div(you: UnpackedFloat[U128, U256, 128].from_s64(src: 10_s64))
+  var a = me.to_uf()
+  if a.lt(you: thr.neg())
+    return UnpackedFloat[U128, U256, 128].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_f128()
+  if a.lt(you: thr)
+    return a.erf_cf(levels: levels_mid).to_f128()
+  return UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_f128()
+
+### Precision-reduced erfc for sub-113-bit targets (D64): F128-width continued fraction with
+### caller-sized `levels_mid`/`levels_tail`. Mirrors `erfc()`'s branch structure.
+routine F128.erfc_fast(levels_mid: S64, levels_tail: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_infinite()
+    var s = if me.is_negative() then 2_s64 else 0_s64
+    return UnpackedFloat[U128, U256, 128].from_s64(src: s).to_f128()
+  var thr = UnpackedFloat[U128, U256, 128].from_s64(src: 31_s64).div(you: UnpackedFloat[U128, U256, 128].from_s64(src: 10_s64))
+  var a = me.to_uf()
+  if a.lt(you: thr.neg())
+    return UnpackedFloat[U128, U256, 128].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: levels_tail)).to_f128()
+  if a.lt(you: thr)
+    return UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: levels_mid)).to_f128()
+  return a.erfc_cf(levels: levels_tail).to_f128()
+
 # ============================================================================
 # tgamma / lgamma (TLFloat) — octuple Stirling series + reflection.
 # Params: R=20, O=35, sin N=15, log N=23, exp N=20.
@@ -1325,6 +1444,76 @@ routine UnpackedFloat[M, L, W].lgamma_core() -> UFSign[M, L, W]
     sign = (sign).xor(you: s.sign())
     sign = sign == inv.iseven()
   return UFSign[M, L, W](item0: sign, item1: y)
+
+### Degree-parameterized lgamma core for sub-octuple targets (D64): same octuple-width Stirling
+### method as `lgamma_core` (so the octuple `gamma_coef` table stays valid — it is NOT width-portable),
+### but with caller-sized Stirling degree `sdeg` (tail terms negligible at the augmented a>=20),
+### `log` degree `logn`, and reflection `sin` degree `sinn`. Argument-augmentation target stays 20.
+routine UnpackedFloat[M, L, W].lgamma_core_p(sdeg: S64, logn: S64, sinn: S64) -> UFSign[M, L, W]
+  var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  var p5 = one.ldexp(e: -1_s64)
+  var reflect = me.lt(you: one.neg())
+  var a = if reflect then one.sub(you: me) else me
+  var inv = a.rint()
+  var fr = a.sub(you: inv)
+  var w = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  var twenty = UnpackedFloat[M, L, W].from_s64(src: 20_s64)
+  if inv.lt(you: twenty)
+    var ii = inv.to_s64()
+    while signed_lt[S64](a: ii, b: 20_s64)
+      w = w.mul(you: UnpackedFloat[M, L, W].from_s64(src: ii).add(you: fr))
+      ii = add[S64](a: ii, b: 1_s64)
+    a = twenty.add(you: fr)
+  var inv_aa = one.div(you: a.mul(you: a))
+  var y = UnpackedFloat[M, L, W].gamma_coef(sdeg)
+  var i = sub[S64](a: sdeg, b: 1_s64)
+  while signed_ge[S64](a: i, b: 0_s64)
+    y = y.fma(b: inv_aa, c: UnpackedFloat[M, L, W].gamma_coef(i))
+    i = sub[S64](a: i, b: 1_s64)
+  var loga = a.log(n: logn, m: 0_s64, t: 0_s64)
+  y = y.div(you: a).add(you: a.sub(you: p5).mul(you: loga)).sub(you: a).add(you: p5.mul(you: UnpackedFloat[M, L, W].ln_2pi()))
+  y = y.sub(you: w.abs().log(n: logn, m: 0_s64, t: 0_s64))
+  var sign = w.sign()
+  if reflect
+    var s = UnpackedFloat[M, L, W].pi().mul(you: fr).sin(n: sinn)
+    y = UnpackedFloat[M, L, W].ln_pi().sub(you: s.abs().log(n: logn, m: 0_s64, t: 0_s64)).sub(you: y)
+    sign = (sign).xor(you: s.sign())
+    sign = sign == inv.iseven()
+  return UFSign[M, L, W](item0: sign, item1: y)
+
+### Degree-reduced tgamma for sub-octuple targets (D64): octuple width (valid gamma_coef) with
+### caller-sized Stirling/log/sin/exp degrees. See `lgamma_core_p`.
+routine F128.tgamma_unchecked_p(sdeg: S64, logn: S64, sinn: S64, expn: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_infinite()
+    if me.is_negative()
+      return F128.from_bits(bits: f128_qnan())
+    return me
+  var zu = me.to_oct()
+  if me.is_zero()
+    var sg = 0_u64
+    if me.is_negative()
+      sg = 1_u64
+    return F128.from_bits(bits: f128_inf(sign: sg))
+  if me.is_negative() and zu.isint()
+    return F128.from_bits(bits: f128_qnan())
+  var p = zu.lgamma_core_p(sdeg: sdeg, logn: logn, sinn: sinn)
+  var r = p.item1.exp(n: expn)
+  if p.item0
+    r = r.neg()
+  return r.to_f128()
+
+### Degree-reduced lgamma for sub-octuple targets (D64). See `lgamma_core_p`.
+routine F128.lgamma_p(sdeg: S64, logn: S64, sinn: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_zero() or me.is_infinite()
+    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+  if me.is_negative() and me.to_oct().isint()
+    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+  var p = me.to_oct().lgamma_core_p(sdeg: sdeg, logn: logn, sinn: sinn)
+  return p.item1.to_f128()
 
 ### Returns the gamma function `tgamma(me)`.
 routine F128.tgamma!() -> F128

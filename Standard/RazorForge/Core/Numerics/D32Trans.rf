@@ -6,15 +6,13 @@ module Core
 # platform libm double routine, and rounded back to 7 digits is correctly
 # rounded (double error lands near digit ~16, far below 7).
 #
-# The dec<->bin conversions are HAND-ROLLED on our tabled-BID parts — NOT the
-# rf_d32_to_f64/rf_f64_to_d32 FFI, which assume decNumber's (DPD) layout and would
-# misread our binary-coefficient encoding. Transcendentals use F64 methods where
-# present and external("C") libm bindings (incl. erf/tgamma) otherwise.
+# The dec<->bin conversions are HAND-ROLLED on our tabled-BID parts (binary-coefficient
+# encoding). Transcendentals use F64 methods where present and external("C") libm bindings
+# (incl. erf/tgamma) otherwise.
 # ============================================================================
 
 # Transcendentals delegate to F64's libm methods (Standard F64.rf, bound to the
-# rf_f64_* runtime passthroughs). The dec<->f64 conversions below are hand-rolled
-# on our BID parts (NOT the rf_d32_to_f64 FFI, which assumes decNumber's layout).
+# rf_f64_* runtime passthroughs). The dec<->f64 conversions below are hand-rolled on our BID parts.
 
 # ============================================================================
 # Hand-rolled radix conversions (our BID parts <-> F64). value = coeff * 10^exp.

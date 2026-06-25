@@ -94,6 +94,76 @@ routine D32.to_bits() -> U32
 common routine D32.from_bits(bits: U32) -> D32
   return reinterpret_bits[U32, D32](bits)
 
+# ============================================================================
+# DPD (IEEE 754-2008 densely-packed-decimal) interchange encoding. BID is RazorForge's
+# native storage (to_bits/from_bits); these convert to/from the DPD interchange word for
+# interop with DPD-based systems (IBM POWER, decNumber). Layout for decimal32:
+#   bit 31 sign | bits 30:26 combination | bits 25:20 exp continuation (6) | bits 19:0 two declets.
+# The combination field holds the 2 exponent MSBs + the leading coefficient digit (special
+# 8/9 handling); the trailing 6 digits are two DPD declets via bin_to_dpd/dpd_to_bin (DPDTables.rf,
+# Cowlishaw equations). Validated against the IEEE/Speleotrove canonical encodings.
+# ============================================================================
+
+### The decimal32 value re-encoded in DPD (densely-packed-decimal) interchange form. Never crashes.
+routine D32.to_dpd() -> U32
+  var p = me.decode()
+  var sbit = shift_left[U32](value: if p.sign then 1_u32 else 0_u32, bits: 31_u32)
+  if int_ne[U64](a: p.special, b: 0_u64)
+    var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u32 else 0x1F_u32
+    var bb = bit_or[U32](a: sbit, b: shift_left[U32](value: top5, bits: 26_u32))
+    if int_eq[U64](a: p.special, b: 3_u64)
+      bb = bit_or[U32](a: bb, b: shift_left[U32](value: 1_u32, bits: 25_u32))
+    return bb
+  # biased exponent E = q + 101 (8 bits: 2 MSBs in combo, 6 in continuation)
+  var e = add[U64](a: reinterpret_bits[S64, U64](p.exp), b: 101_u64)
+  # split the 7-digit coefficient: two trailing declets (low then high) + leading digit
+  var c = p.coeff
+  var d0 = bin_to_dpd(v: unsigned_rem[U64](a: c, b: 1000_u64))
+  c = unsigned_div[U64](a: c, b: 1000_u64)
+  var d1 = bin_to_dpd(v: unsigned_rem[U64](a: c, b: 1000_u64))
+  c = unsigned_div[U64](a: c, b: 1000_u64)
+  var msd = c
+  var ehi = shift_right_unsigned[U64](e, 6_u64)
+  var elo = bit_and[U64](a: e, b: 0x3F_u64)
+  var combo = 0_u64
+  if unsigned_lt[U64](a: msd, b: 8_u64)
+    combo = bit_or[U64](a: shift_left[U64](value: ehi, bits: 3_u64), b: msd)
+  else
+    combo = bit_or[U64](a: 0x18_u64, b: bit_or[U64](a: shift_left[U64](value: ehi, bits: 1_u64), b: sub[U64](a: msd, b: 8_u64)))
+  var w = bit_or[U32](a: sbit, b: shift_left[U32](value: int_truncate[U64, U32](combo), bits: 26_u32))
+  w = bit_or[U32](a: w, b: shift_left[U32](value: int_truncate[U64, U32](elo), bits: 20_u32))
+  w = bit_or[U32](a: w, b: shift_left[U32](value: int_truncate[U64, U32](d1), bits: 10_u32))
+  w = bit_or[U32](a: w, b: int_truncate[U64, U32](d0))
+  return w
+
+### Decodes a DPD (densely-packed-decimal) interchange word into a decimal32. Never crashes.
+common routine D32.from_dpd(bits: U32) -> D32
+  var sign = int_ne[U32](a: bit_and[U32](a: bits, b: shift_left[U32](value: 1_u32, bits: 31_u32)), b: 0_u32)
+  var combo = zero_extend[U32, U64](bit_and[U32](a: shift_right_unsigned[U32](bits, 26_u32), b: 0x1F_u32))
+  if int_eq[U64](a: combo, b: 0x1E_u64)
+    return d32_of_parts(p: D32Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+  if int_eq[U64](a: combo, b: 0x1F_u64)
+    var sp = 2_u64
+    if int_ne[U32](a: bit_and[U32](a: shift_right_unsigned[U32](bits, 25_u32), b: 1_u32), b: 0_u32)
+      sp = 3_u64
+    return d32_of_parts(p: D32Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64))
+  var ehi = 0_u64
+  var msd = 0_u64
+  if unsigned_lt[U64](a: combo, b: 0x18_u64)
+    ehi = shift_right_unsigned[U64](combo, 3_u64)
+    msd = bit_and[U64](a: combo, b: 0x7_u64)
+  else
+    ehi = bit_and[U64](a: shift_right_unsigned[U64](combo, 1_u64), b: 0x3_u64)
+    msd = add[U64](a: 8_u64, b: bit_and[U64](a: combo, b: 1_u64))
+  var elo = zero_extend[U32, U64](bit_and[U32](a: shift_right_unsigned[U32](bits, 20_u32), b: 0x3F_u32))
+  var e = bit_or[U64](a: shift_left[U64](value: ehi, bits: 6_u64), b: elo)
+  var exp = sub[S64](a: reinterpret_bits[U64, S64](e), b: 101_s64)
+  var d1 = zero_extend[U32, U64](bit_and[U32](a: shift_right_unsigned[U32](bits, 10_u32), b: 0x3FF_u32))
+  var d0 = zero_extend[U32, U64](bit_and[U32](a: bits, b: 0x3FF_u32))
+  var coeff = add[U64](a: mul[U64](a: msd, b: 1000_u64), b: dpd_to_bin(d: d1))
+  coeff = add[U64](a: mul[U64](a: coeff, b: 1000_u64), b: dpd_to_bin(d: d0))
+  return d32_of_parts(p: D32Parts(sign: sign, special: 0_u64, exp: exp, coeff: coeff))
+
 ### BID32 decode -> narrow parts.
 routine D32.decode() -> D32Parts
   var bits = me.to_bits()

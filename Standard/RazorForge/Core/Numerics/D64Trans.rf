@@ -248,7 +248,10 @@ routine D64.cbrt() -> D64
 ### :param you: The exponent.
 ### :returns: `me` raised to the power `you`, possibly non-finite.
 routine D64.pow_unchecked(you: D64) -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).pow_unchecked(you: d64_to_f128(x: you)))
+  # D64 needs ~54 bits; run the general exp(you*ln|me|) core at F128 width (113-bit, ~59 guard
+  # bits) with reduced series degrees rather than octuple. Correctness vs the octuple result is
+  # checked across a (base, exp) grid by the pow self-diff fixture.
+  return f128_to_d64(x: d64_to_f128(x: me).pow_unchecked_p(you: d64_to_f128(x: you), logn: 12_s64, expn: 12_s64, fast: true))
 
 ### sqrt(me^2 + you^2) (without spurious overflow) via F128. Crashes if non-finite.
 ### :param you: The second leg.
@@ -317,7 +320,8 @@ routine D64.asin!() -> D64
 ### asin(me), raw IEEE: NaN for |me|>1. Never crashes.
 ### :returns: The arcsine of `me`, possibly NaN.
 routine D64.asin_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).asin_unchecked())
+  # Already F128 width; reduce the atan2 Horner degree + half-angle depth to D64's ~54 bits.
+  return f128_to_d64(x: d64_to_f128(x: me).asin_fast(deg: 12_s64, depth: 2_s64))
 
 ### Arccosine acos(me) via F128. Crashes if non-finite (|me|>1).
 ### :returns: The arccosine of `me` in radians.
@@ -333,18 +337,18 @@ routine D64.acos!() -> D64
 ### acos(me), raw IEEE: NaN for |me|>1. Never crashes.
 ### :returns: The arccosine of `me`, possibly NaN.
 routine D64.acos_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).acos_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).acos_fast(deg: 12_s64, depth: 2_s64))
 
 ### Arctangent atan(me) via F128 (defined for all reals). Never crashes.
 ### :returns: The arctangent of `me` in radians.
 routine D64.atan() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atan())
+  return f128_to_d64(x: d64_to_f128(x: me).atan_fast(deg: 12_s64, depth: 2_s64))
 
 ### Two-argument arctangent atan2(me, x), quadrant-aware, via F128. Never crashes.
 ### :param x: The x-coordinate (me is the y-coordinate).
 ### :returns: The angle of (x, me) in radians, in (-pi, pi].
 routine D64.atan2(x: D64) -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atan2(you: d64_to_f128(x: x)))
+  return f128_to_d64(x: d64_to_f128(x: me).atan2_fast(you: d64_to_f128(x: x), deg: 12_s64, depth: 2_s64))
 
 ### Hyperbolic sine sinh(me) via F128. Crashes if non-finite (overflow for large |me|).
 ### :returns: The hyperbolic sine of `me`.
@@ -423,12 +427,15 @@ routine D64.atanh_unchecked() -> D64
 ### Error function erf(me) via F128. Never crashes (saturates to ±1).
 ### :returns: The error function of `me`.
 routine D64.erf() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).erf())
+  # D64 needs ~54 bits; run the continued fraction at F128 width (113-bit) with reduced levels
+  # rather than octuple. lm=50/lt=64 carry ~20% margin over the validated floors (lm=42, lt<<62)
+  # at the hardest point z~3.1. Checked vs the octuple result by the erf levels-sweep fixture.
+  return f128_to_d64(x: d64_to_f128(x: me).erf_fast(levels_mid: 50_s64, levels_tail: 64_s64))
 
 ### Complementary error function erfc(me) = 1 - erf(me) via F128. Never crashes.
 ### :returns: The complementary error function of `me`.
 routine D64.erfc() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).erfc())
+  return f128_to_d64(x: d64_to_f128(x: me).erfc_fast(levels_mid: 50_s64, levels_tail: 64_s64))
 
 ### Gamma function tgamma(me) via F128. Crashes if non-finite (poles at 0 and neg ints).
 ### :returns: The gamma function of `me`.
@@ -444,12 +451,15 @@ routine D64.tgamma!() -> D64
 ### tgamma(me), raw IEEE: ±inf at poles, NaN for neg-int poles, overflow. Never crashes.
 ### :returns: The gamma function of `me`, possibly non-finite.
 routine D64.tgamma_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tgamma_unchecked())
+  # D64 needs ~54 bits; octuple-width Stirling (gamma_coef is octuple-only, not width-portable)
+  # but with reduced Stirling/log/sin/exp degrees. Checked vs the full-degree octuple result by
+  # the gamma self-diff fixture.
+  return f128_to_d64(x: d64_to_f128(x: me).tgamma_unchecked_p(sdeg: 12_s64, logn: 10_s64, sinn: 9_s64, expn: 10_s64))
 
 ### Log-gamma lgamma(me) = ln(|gamma(me)|) via F128. Never crashes (+inf at poles).
 ### :returns: The natural log of the absolute gamma of `me`.
 routine D64.lgamma() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).lgamma())
+  return f128_to_d64(x: d64_to_f128(x: me).lgamma_p(sdeg: 12_s64, logn: 10_s64, sinn: 9_s64))
 
 # ============================================================================
 # libm manipulation / classification — decimal-native on D64Parts (coeff U64).

@@ -52,6 +52,82 @@ common routine D128.from_words(low: U64, high: U64) -> D128
   var bits = bit_or[U128](a: zero_extend[U64, U128](low), b: shift_left[U128](value: zero_extend[U64, U128](high), bits: U128.to_width(s: 64_s64)))
   return D128.from_bits(bits: bits)
 
+# ---- DPD interchange (IEEE 754-2008 densely-packed-decimal) ----
+# BID is native (to_bits/from_bits); these convert to/from the DPD interchange word for interop.
+# decimal128: bit 127 sign | 126:122 combination | 121:110 exp continuation (12) | 109:0 eleven
+# declets. Combination = 2 exponent MSBs + leading digit (8/9 special-cased); trailing 33 digits
+# are eleven DPD declets via bin_to_dpd/dpd_to_bin. Same scheme validated on D32/D64 vs the
+# IEEE/Speleotrove canonical encodings.
+
+### The decimal128 value re-encoded in DPD interchange form. Never crashes.
+routine D128.to_dpd() -> U128
+  var p = me.decode()
+  var zero128 = zero_extend[U64, U128](0_u64)
+  var one128 = zero_extend[U64, U128](1_u64)
+  var sbit = shift_left[U128](value: if p.sign then one128 else zero128, bits: U128.to_width(s: 127_s64))
+  if int_ne[U64](a: p.special, b: 0_u64)
+    var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+    var bb = bit_or[U128](a: sbit, b: shift_left[U128](value: zero_extend[U64, U128](top5), bits: U128.to_width(s: 122_s64)))
+    if int_eq[U64](a: p.special, b: 3_u64)
+      bb = bit_or[U128](a: bb, b: shift_left[U128](value: one128, bits: U128.to_width(s: 121_s64)))
+    return bb
+  var e = add[U64](a: reinterpret_bits[S64, U64](p.exp), b: 6176_u64)
+  var thousand = zero_extend[U64, U128](1000_u64)
+  var c = p.coeff
+  var cont = zero128
+  var sh = 0_s64
+  var k = 0_s64
+  while signed_lt[S64](a: k, b: 11_s64)
+    var g = int_truncate[U128, U64](unsigned_rem[U128](a: c, b: thousand))
+    cont = bit_or[U128](a: cont, b: shift_left[U128](value: zero_extend[U64, U128](bin_to_dpd(v: g)), bits: U128.to_width(s: sh)))
+    c = unsigned_div[U128](a: c, b: thousand)
+    sh = add[S64](a: sh, b: 10_s64)
+    k = add[S64](a: k, b: 1_s64)
+  var msd = int_truncate[U128, U64](c)
+  var ehi = shift_right_unsigned[U64](e, 12_u64)
+  var elo = bit_and[U64](a: e, b: 0xFFF_u64)
+  var combo = 0_u64
+  if unsigned_lt[U64](a: msd, b: 8_u64)
+    combo = bit_or[U64](a: shift_left[U64](value: ehi, bits: 3_u64), b: msd)
+  else
+    combo = bit_or[U64](a: 0x18_u64, b: bit_or[U64](a: shift_left[U64](value: ehi, bits: 1_u64), b: sub[U64](a: msd, b: 8_u64)))
+  var w = bit_or[U128](a: sbit, b: shift_left[U128](value: zero_extend[U64, U128](combo), bits: U128.to_width(s: 122_s64)))
+  w = bit_or[U128](a: w, b: shift_left[U128](value: zero_extend[U64, U128](elo), bits: U128.to_width(s: 110_s64)))
+  w = bit_or[U128](a: w, b: cont)
+  return w
+
+### Decodes a DPD interchange word into a decimal128. Never crashes.
+common routine D128.from_dpd(bits: U128) -> D128
+  var zero128 = zero_extend[U64, U128](0_u64)
+  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: zero_extend[U64, U128](1_u64), bits: U128.to_width(s: 127_s64))), b: zero128)
+  var combo = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 122_s64)), b: zero_extend[U64, U128](0x1F_u64)))
+  if int_eq[U64](a: combo, b: 0x1E_u64)
+    return d128_of_parts(p: D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero128))
+  if int_eq[U64](a: combo, b: 0x1F_u64)
+    var sp = 2_u64
+    if int_ne[U128](a: bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 121_s64)), b: zero_extend[U64, U128](1_u64)), b: zero128)
+      sp = 3_u64
+    return d128_of_parts(p: D128Parts(sign: sign, special: sp, exp: 0_s64, coeff: zero128))
+  var ehi = 0_u64
+  var msd = 0_u64
+  if unsigned_lt[U64](a: combo, b: 0x18_u64)
+    ehi = shift_right_unsigned[U64](combo, 3_u64)
+    msd = bit_and[U64](a: combo, b: 0x7_u64)
+  else
+    ehi = bit_and[U64](a: shift_right_unsigned[U64](combo, 1_u64), b: 0x3_u64)
+    msd = add[U64](a: 8_u64, b: bit_and[U64](a: combo, b: 1_u64))
+  var elo = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 110_s64)), b: zero_extend[U64, U128](0xFFF_u64)))
+  var e = bit_or[U64](a: shift_left[U64](value: ehi, bits: 12_u64), b: elo)
+  var exp = sub[S64](a: reinterpret_bits[U64, S64](e), b: 6176_s64)
+  var thousand = zero_extend[U64, U128](1000_u64)
+  var coeff = zero_extend[U64, U128](msd)
+  var k = 10_s64
+  while signed_ge[S64](a: k, b: 0_s64)
+    var declet = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: mul[S64](a: 10_s64, b: k))), b: zero_extend[U64, U128](0x3FF_u64)))
+    coeff = add[U128](a: mul[U128](a: coeff, b: thousand), b: zero_extend[U64, U128](dpd_to_bin(d: declet)))
+    k = sub[S64](a: k, b: 1_s64)
+  return d128_of_parts(p: D128Parts(sign: sign, special: 0_u64, exp: exp, coeff: coeff))
+
 ### BINARY decode — sign / specials (combination prefix) / 14-bit biased exponent /
 ### 113-bit coefficient.
 routine D128.decode() -> D128Parts
