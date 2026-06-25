@@ -507,9 +507,12 @@ public partial class LlvmCodeGenerator
             {
                 string elem = NextTemp();
                 EmitLine(sb: sb, line: $"  {elem} = extractvalue {anonType} {lastResult}, {i}");
+                // The named tuple stores a Bool element as i8 — zext the i1 from the anon result.
+                TypeInfo elemType = tupleReturn.ElementTypes[index: i];
+                elem = CoerceBoolToStorage(sb: sb, value: elem, fieldType: elemType);
                 string ins = NextTemp();
                 EmitLine(sb: sb,
-                    line: $"  {ins} = insertvalue {namedType} {tupleVal}, {GetLlvmType(type: tupleReturn.ElementTypes[index: i])} {elem}, {i}");
+                    line: $"  {ins} = insertvalue {namedType} {tupleVal}, {GetFieldStorageLlvmType(type: elemType)} {elem}, {i}");
                 tupleVal = ins;
             }
             return tupleVal;

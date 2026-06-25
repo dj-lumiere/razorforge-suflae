@@ -65,6 +65,23 @@ public partial class LlvmCodeGenerator
             EmitMaybeWrappedReturn(sb: sb, retType: retType, innerValue: value);
             return;
         }
+
+        // Indirect (sret) return: the struct value is stored through the hidden %sret pointer and
+        // the function returns void (see _currentReturnViaSret / GenerateRoutineDefinition).
+        if (_currentReturnViaSret)
+        {
+            EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr %sret");
+            EmitLine(sb: sb, line: "  ret void");
+            return;
+        }
+        // Coerced (Phase 2) return: reinterpret the struct value into its ABI register type.
+        if (_currentReturnCoerceType != null)
+        {
+            string coerced = CoerceStructToAbi(sb: sb, structValue: value, structLlvm: llvmType,
+                abiType: _currentReturnCoerceType);
+            EmitLine(sb: sb, line: $"  ret {_currentReturnCoerceType} {coerced}");
+            return;
+        }
         EmitLine(sb: sb, line: $"  ret {llvmType} {value}");
     }
 
@@ -96,13 +113,13 @@ public partial class LlvmCodeGenerator
         EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
             EmitLine(sb: sb, line: TracePop);
-        if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.CheckVariant &&
+        if (_currentEmittingRoutine?.FailableVariant == FailableVariant.Check &&
             _currentRoutineReturnType != null)
         {
             string carrier = GetResultCarrierLlvmType(valueType: _currentRoutineReturnType);
             EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
         }
-        else if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.TryBoolVariant)
+        else if (_currentEmittingRoutine?.FailableVariant == FailableVariant.TryBool)
         {
             EmitLine(sb: sb, line: "  ret i1 false");
         }
@@ -119,8 +136,9 @@ public partial class LlvmCodeGenerator
             : retType;
         string carrierType = GetLlvmType(type: retType);
         string innerLlvm = innerType is EntityTypeInfo ? "ptr" : GetLlvmType(type: innerType);
+        // Maybe `present` (field 0) is a Bool, stored as i8 (see GetFieldStorageLlvmType).
         string v0 = NextTemp();
-        EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} zeroinitializer, i1 1, 0");
+        EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} zeroinitializer, i8 1, 0");
         string v1 = NextTemp();
         EmitLine(sb: sb, line: $"  {v1} = insertvalue {carrierType} {v0}, {innerLlvm} {innerValue}, 1");
         EmitLine(sb: sb, line: $"  ret {carrierType} {v1}");
@@ -263,16 +281,18 @@ public partial class LlvmCodeGenerator
         }
         else if (variantRet.Value == null || isBlank)
         {
+            // Maybe `present` (field 0) is a Bool, stored as i8.
             string v0 = NextTemp();
-            EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrier} zeroinitializer, i1 1, 0");
+            EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrier} zeroinitializer, i8 1, 0");
             EmitLine(sb: sb, line: $"  ret {carrier} {v0}");
         }
         else
         {
             string value = EmitExpression(sb: sb, expr: variantRet.Value);
             string innerLlvm = innerType is EntityTypeInfo ? "ptr" : GetLlvmType(type: innerType);
+            // Maybe `present` (field 0) is a Bool, stored as i8.
             string v0 = NextTemp();
-            EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrier} zeroinitializer, i1 1, 0");
+            EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrier} zeroinitializer, i8 1, 0");
             string v1 = NextTemp();
             EmitLine(sb: sb, line: $"  {v1} = insertvalue {carrier} {v0}, {innerLlvm} {value}, 1");
             EmitLine(sb: sb, line: $"  ret {carrier} {v1}");

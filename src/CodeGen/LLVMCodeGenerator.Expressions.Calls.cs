@@ -313,7 +313,8 @@ public partial class LlvmCodeGenerator
                 (argValues[i], argTypes[i]) = CoerceCallArgumentToParameter(sb: sb,
                     argValue: argValues[i],
                     actualType: argTypeInfos[i],
-                    parameterType: routine.Parameters[index: i].Type);
+                    parameterType: routine.Parameters[index: i].Type,
+                    callee: routine);
             }
         }
 
@@ -411,9 +412,12 @@ public partial class LlvmCodeGenerator
             ? "i16"
             : returnType;
 
-        // On Windows x64 MSVC ABI, external("C") functions returning structs > 8 bytes
-        // use a hidden sret pointer as the first parameter. We must match this convention.
-        bool needsSret = isCExtern && routine != null && NeedsCExternSret(routine: routine);
+        // Struct returns classified Indirect by the ABI come back through a hidden sret pointer:
+        // external("C") returning structs > 8 bytes (Win-x64 MSVC), or an RF routine whose return
+        // is ABI-Indirect. The declaration, definition, and every return already agree (see
+        // ReturnsViaSret); the call must pass the result slot as the first argument and load it back.
+        bool needsSret = routine != null &&
+            (isCExtern ? NeedsCExternSret(routine: routine) : ReturnsViaSret(routine: routine));
         if (needsSret)
         {
             // Allocate space for the result, pass as sret pointer, call as void, then load
@@ -424,10 +428,24 @@ public partial class LlvmCodeGenerator
             argValues.Insert(index: 0, item: sretPtr);
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  call void @{mangledName}({args})");
+            ConsumeTransferredCallOwnership(arguments: arguments);
             // Load the result from the sret allocation
             string result = NextTemp();
             EmitLine(sb: sb, line: $"  {result} = load {returnType}, ptr {sretPtr}");
             return result;
+        }
+
+        // Coerced (Phase 2) struct return: the callee returns the ABI integer form; call it as that,
+        // then reinterpret the result back into the struct value.
+        string? calleeCoerce = routine != null && !isCExtern ? ReturnCoerceType(routine: routine) : null;
+        if (calleeCoerce != null)
+        {
+            string result = NextTemp();
+            string args = BuildCallArgs(types: argTypes, values: argValues);
+            EmitLine(sb: sb, line: $"  {result} = call {calleeCoerce} @{mangledName}({args})");
+            ConsumeTransferredCallOwnership(arguments: arguments);
+            return CoerceAbiToStruct(sb: sb, abiValue: result, abiType: calleeCoerce,
+                structLlvm: returnType);
         }
 
         if (callReturnType == "void")
@@ -1005,9 +1023,70 @@ public partial class LlvmCodeGenerator
             }
         }
 
+        // Coerce explicit struct value args to byval (the ABI-Indirect arg form) before the call.
+        // The receiver, when present, occupies index 0 of the arg lists; explicit args follow and
+        // map 1:1 to method.Parameters. Only byval is applied here — other coercions keep their
+        // existing handling so member-call behavior is otherwise unchanged.
+        if (method != null)
+        {
+            int recvOffset = methodTakesReceiver ? 1 : 0;
+            int explicitCount =
+                Math.Min(val1: argValues.Count - recvOffset, val2: method.Parameters.Count);
+            for (int i = 0; i < explicitCount; i++)
+            {
+                int ai = i + recvOffset;
+                if (TryCoerceArgToByval(sb: sb, argValue: argValues[index: ai],
+                        actualType: argTypeInfos[index: ai],
+                        parameterType: method.Parameters[index: i].Type,
+                        callee: method,
+                        out string bv, out string bt))
+                {
+                    argValues[index: ai] = bv;
+                    argTypes[index: ai] = bt;
+                }
+                else if (TryCoerceArgToRegister(sb: sb, argValue: argValues[index: ai],
+                             parameterType: method.Parameters[index: i].Type,
+                             callee: method,
+                             out string rv, out string rt))
+                {
+                    argValues[index: ai] = rv;
+                    argTypes[index: ai] = rt;
+                }
+            }
+        }
+
         string returnType = resolvedReturnType != null
             ? GetLlvmType(type: resolvedReturnType)
             : "void";
+
+        // ABI-Indirect struct return: the callee returns through a hidden sret pointer (declared via
+        // GenerateRoutineDeclaration above, which agrees through ReturnsViaSret). Pass the result
+        // slot as the first argument, call as void, then load the struct back.
+        if (method != null && ReturnsViaSret(routine: method))
+        {
+            string sretPtr = NextTemp();
+            EmitEntryAlloca(llvmName: sretPtr, llvmType: returnType);
+            argTypes.Insert(index: 0, item: $"ptr sret({returnType})");
+            argValues.Insert(index: 0, item: sretPtr);
+            string sretArgs = BuildCallArgs(types: argTypes, values: argValues);
+            EmitLine(sb: sb, line: $"  call void @{mangledName}({sretArgs})");
+            ConsumeTransferredCallOwnership(arguments: arguments);
+            string sretResult = NextTemp();
+            EmitLine(sb: sb, line: $"  {sretResult} = load {returnType}, ptr {sretPtr}");
+            return sretResult;
+        }
+
+        // Coerced (Phase 2) struct return: call as the ABI integer form, reinterpret back to struct.
+        string? methodCoerce = method != null ? ReturnCoerceType(routine: method) : null;
+        if (methodCoerce != null)
+        {
+            string args = BuildCallArgs(types: argTypes, values: argValues);
+            string r = NextTemp();
+            EmitLine(sb: sb, line: $"  {r} = call {methodCoerce} @{mangledName}({args})");
+            ConsumeTransferredCallOwnership(arguments: arguments);
+            return CoerceAbiToStruct(sb: sb, abiValue: r, abiType: methodCoerce,
+                structLlvm: returnType);
+        }
 
         if (returnType == "void")
         {
@@ -1097,8 +1176,23 @@ public partial class LlvmCodeGenerator
     }
 
     private (string Value, string LlvmType) CoerceCallArgumentToParameter(StringBuilder sb,
-        string argValue, TypeInfo actualType, TypeInfo parameterType)
+        string argValue, TypeInfo actualType, TypeInfo parameterType, RoutineInfo callee)
     {
+        // ABI-Indirect struct value arg: spill to a stack slot and pass `ptr byval(%T)`.
+        if (TryCoerceArgToByval(sb: sb, argValue: argValue, actualType: actualType,
+                parameterType: parameterType, callee: callee,
+                out string byvalValue, out string byvalType))
+        {
+            return (byvalValue, byvalType);
+        }
+
+        // ABI-Coerce small struct value arg: reinterpret into the integer register form.
+        if (TryCoerceArgToRegister(sb: sb, argValue: argValue, parameterType: parameterType,
+                callee: callee, out string regValue, out string regType))
+        {
+            return (regValue, regType);
+        }
+
         string expectedLlvm = GetParameterLlvmType(type: parameterType);
         string actualLlvm = GetLlvmType(type: actualType);
         if (actualLlvm == expectedLlvm)

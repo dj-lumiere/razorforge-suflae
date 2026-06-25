@@ -15,7 +15,7 @@ import Collections
 # Pmax=16, Emax=384, Emin=-383, bias=398, stored exponent q in [-398, 369].
 # Decodes to a narrow U64-coefficient D64Parts; converts to D128Parts only for the
 # cold special-value / formatter paths. (64-bit storage shifts use direct U64
-# literals — uf_amt[U64] is not width-safe.)
+# literals — U64.to_width(s:) is not width-safe.)
 # ============================================================================
 
 ### A software decimal64 value in BID storage.
@@ -54,6 +54,81 @@ routine D64.to_bits() -> U64
 ### Reinterprets a raw U64 as BID64 storage (no validation).
 common routine D64.from_bits(bits: U64) -> D64
   return reinterpret_bits[U64, D64](bits)
+
+# ---- DPD interchange (IEEE 754-2008 densely-packed-decimal) ----
+# BID is native (to_bits/from_bits); these convert to/from the DPD interchange word for interop.
+# decimal64: bit 63 sign | 62:58 combination | 57:50 exp continuation (8) | 49:0 five declets.
+# Combination = 2 exponent MSBs + leading digit (8/9 special-cased); trailing 15 digits are five
+# DPD declets via bin_to_dpd/dpd_to_bin. Validated against the Speleotrove -7.50 = 0xA2300000000003D0.
+
+### The decimal64 value re-encoded in DPD interchange form. Never crashes.
+routine D64.to_dpd() -> U64
+  var p = me.decode()
+  var sbit = shift_left[U64](value: if p.sign then 1_u64 else 0_u64, bits: 63_u64)
+  if int_ne[U64](a: p.special, b: 0_u64)
+    var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+    var bb = bit_or[U64](a: sbit, b: shift_left[U64](value: top5, bits: 58_u64))
+    if int_eq[U64](a: p.special, b: 3_u64)
+      bb = bit_or[U64](a: bb, b: shift_left[U64](value: 1_u64, bits: 57_u64))
+    return bb
+  var e = add[U64](a: reinterpret_bits[S64, U64](p.exp), b: 398_u64)
+  var c = p.coeff
+  var d0 = bin_to_dpd(v: unsigned_rem[U64](a: c, b: 1000_u64))
+  c = unsigned_div[U64](a: c, b: 1000_u64)
+  var d1 = bin_to_dpd(v: unsigned_rem[U64](a: c, b: 1000_u64))
+  c = unsigned_div[U64](a: c, b: 1000_u64)
+  var d2 = bin_to_dpd(v: unsigned_rem[U64](a: c, b: 1000_u64))
+  c = unsigned_div[U64](a: c, b: 1000_u64)
+  var d3 = bin_to_dpd(v: unsigned_rem[U64](a: c, b: 1000_u64))
+  c = unsigned_div[U64](a: c, b: 1000_u64)
+  var d4 = bin_to_dpd(v: unsigned_rem[U64](a: c, b: 1000_u64))
+  c = unsigned_div[U64](a: c, b: 1000_u64)
+  var msd = c
+  var ehi = shift_right_unsigned[U64](e, 8_u64)
+  var elo = bit_and[U64](a: e, b: 0xFF_u64)
+  var combo = 0_u64
+  if unsigned_lt[U64](a: msd, b: 8_u64)
+    combo = bit_or[U64](a: shift_left[U64](value: ehi, bits: 3_u64), b: msd)
+  else
+    combo = bit_or[U64](a: 0x18_u64, b: bit_or[U64](a: shift_left[U64](value: ehi, bits: 1_u64), b: sub[U64](a: msd, b: 8_u64)))
+  var w = bit_or[U64](a: sbit, b: shift_left[U64](value: combo, bits: 58_u64))
+  w = bit_or[U64](a: w, b: shift_left[U64](value: elo, bits: 50_u64))
+  w = bit_or[U64](a: w, b: shift_left[U64](value: d4, bits: 40_u64))
+  w = bit_or[U64](a: w, b: shift_left[U64](value: d3, bits: 30_u64))
+  w = bit_or[U64](a: w, b: shift_left[U64](value: d2, bits: 20_u64))
+  w = bit_or[U64](a: w, b: shift_left[U64](value: d1, bits: 10_u64))
+  w = bit_or[U64](a: w, b: d0)
+  return w
+
+### Decodes a DPD interchange word into a decimal64. Never crashes.
+common routine D64.from_dpd(bits: U64) -> D64
+  var sign = int_ne[U64](a: bit_and[U64](a: bits, b: shift_left[U64](value: 1_u64, bits: 63_u64)), b: 0_u64)
+  var combo = bit_and[U64](a: shift_right_unsigned[U64](bits, 58_u64), b: 0x1F_u64)
+  if int_eq[U64](a: combo, b: 0x1E_u64)
+    return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+  if int_eq[U64](a: combo, b: 0x1F_u64)
+    var sp = 2_u64
+    if int_ne[U64](a: bit_and[U64](a: shift_right_unsigned[U64](bits, 57_u64), b: 1_u64), b: 0_u64)
+      sp = 3_u64
+    return d64_of_parts(p: D64Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64))
+  var ehi = 0_u64
+  var msd = 0_u64
+  if unsigned_lt[U64](a: combo, b: 0x18_u64)
+    ehi = shift_right_unsigned[U64](combo, 3_u64)
+    msd = bit_and[U64](a: combo, b: 0x7_u64)
+  else
+    ehi = bit_and[U64](a: shift_right_unsigned[U64](combo, 1_u64), b: 0x3_u64)
+    msd = add[U64](a: 8_u64, b: bit_and[U64](a: combo, b: 1_u64))
+  var elo = bit_and[U64](a: shift_right_unsigned[U64](bits, 50_u64), b: 0xFF_u64)
+  var e = bit_or[U64](a: shift_left[U64](value: ehi, bits: 8_u64), b: elo)
+  var exp = sub[S64](a: reinterpret_bits[U64, S64](e), b: 398_s64)
+  var coeff = msd
+  coeff = add[U64](a: mul[U64](a: coeff, b: 1000_u64), b: dpd_to_bin(d: bit_and[U64](a: shift_right_unsigned[U64](bits, 40_u64), b: 0x3FF_u64)))
+  coeff = add[U64](a: mul[U64](a: coeff, b: 1000_u64), b: dpd_to_bin(d: bit_and[U64](a: shift_right_unsigned[U64](bits, 30_u64), b: 0x3FF_u64)))
+  coeff = add[U64](a: mul[U64](a: coeff, b: 1000_u64), b: dpd_to_bin(d: bit_and[U64](a: shift_right_unsigned[U64](bits, 20_u64), b: 0x3FF_u64)))
+  coeff = add[U64](a: mul[U64](a: coeff, b: 1000_u64), b: dpd_to_bin(d: bit_and[U64](a: shift_right_unsigned[U64](bits, 10_u64), b: 0x3FF_u64)))
+  coeff = add[U64](a: mul[U64](a: coeff, b: 1000_u64), b: dpd_to_bin(d: bit_and[U64](a: bits, b: 0x3FF_u64)))
+  return d64_of_parts(p: D64Parts(sign: sign, special: 0_u64, exp: exp, coeff: coeff))
 
 ### BID64 decode -> narrow parts.
 routine D64.decode() -> D64Parts

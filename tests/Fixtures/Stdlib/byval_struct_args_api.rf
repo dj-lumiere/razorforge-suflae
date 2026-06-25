@@ -1,0 +1,76 @@
+module Tests/Stdlib/ByvalStructArgs
+import IO/Console
+
+# Locks the struct-ABI-boundary coercion: records passed as ordinary (non-`me`)
+# routine parameters BY VALUE, and returned by value, must cross the ABI boundary
+# intact at every opt level (-O3 is where the old `byval(%T)` spike miscompiled).
+# Covers: read fields of a by-value param, multiple record args, sret return,
+# record-in-and-out in one call, a tiny mixed-width record (the register-coerce
+# case), a larger record, and value semantics (callee gets a copy).
+
+# small multi-field record: candidate for register coercion
+record Point
+  posted x: S64
+  posted y: S64
+
+# tiny record: U32 + Bool, the register-coerce (Tuple[U32,Bool]->i64) case
+record Flagged
+  posted n: U32
+  posted ok: Bool
+
+# larger record: more likely to go through sret/byval
+record Box3
+  posted a: S64
+  posted b: S64
+  posted c: S64
+
+@positional
+routine sum_point(p: Point) -> S64
+  return p.x + p.y
+
+@positional
+routine dot(a: Point, b: Point) -> S64
+  return a.x * b.x + a.y * b.y
+
+@positional
+routine make_point(x: S64, y: S64) -> Point
+  return Point(x: x, y: y)
+
+@positional
+routine translate(p: Point, dx: S64, dy: S64) -> Point
+  return Point(x: p.x + dx, y: p.y + dy)
+
+@positional
+routine bump_flag(f: Flagged) -> Flagged
+  return Flagged(n: f.n + 1_u32, ok: not f.ok)
+
+@positional
+routine sum3(b: Box3) -> S64
+  return b.a + b.b + b.c
+
+@positional
+routine first_x(p: Point) -> S64
+  return p.x
+
+routine start()
+  var p = Point(x: 3_s64, y: 4_s64)
+  show(f"sum_point: {sum_point(p)}")
+  show(f"dot: {dot(p, Point(x: 5_s64, y: 6_s64))}")
+
+  var q = make_point(10_s64, 20_s64)
+  show(f"make_point: {q.x},{q.y}")
+
+  var r = translate(p, 100_s64, 200_s64)
+  show(f"translate: {r.x},{r.y}")
+  show(f"orig unchanged: {p.x},{p.y}")
+
+  var f = Flagged(n: 41_u32, ok: false)
+  var g = bump_flag(f)
+  show(f"bump_flag: {g.n} {g.ok}")
+  show(f"flag orig: {f.n} {f.ok}")
+
+  var b = Box3(a: 1_s64, b: 2_s64, c: 3_s64)
+  show(f"sum3: {sum3(b)}")
+
+  show(f"first_x: {first_x(p)}")
+  return

@@ -188,17 +188,17 @@ routine Decimal.$create!(from_text: Text) -> Decimal
 @readonly
 routine Decimal.decode() -> DecimalParts
   var bits = me.to_bits()
-  var sign = int_ne[U256](a: bit_and[U256](a: bits, b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](255_s64))), b: zero_extend[U64, U256](0_u64))
-  var top5 = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, uf_amt[U256](250_s64)), b: zero_extend[U64, U256](0x1F_u64)))
+  var sign = int_ne[U256](a: bit_and[U256](a: bits, b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 255_s64))), b: zero_extend[U64, U256](0_u64))
+  var top5 = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, U256.to_width(s: 250_s64)), b: zero_extend[U64, U256](0x1F_u64)))
   if int_eq[U64](a: top5, b: 0x1E_u64)
     return DecimalParts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
   if int_eq[U64](a: top5, b: 0x1F_u64)
     var sp = 2_u64
-    if int_ne[U256](a: bit_and[U256](a: shift_right_unsigned[U256](bits, uf_amt[U256](249_s64)), b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
+    if int_ne[U256](a: bit_and[U256](a: shift_right_unsigned[U256](bits, U256.to_width(s: 249_s64)), b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
       sp = 3_u64
     return DecimalParts(sign: sign, special: sp, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64))
-  var biased = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, uf_amt[U256](233_s64)), b: zero_extend[U64, U256](0x3FFFFF_u64)))
-  var coeff = bit_and[U256](a: bits, b: sub[U256](a: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](233_s64)), b: zero_extend[U64, U256](1_u64)))
+  var biased = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, U256.to_width(s: 233_s64)), b: zero_extend[U64, U256](0x3FFFFF_u64)))
+  var coeff = bit_and[U256](a: bits, b: sub[U256](a: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 233_s64)), b: zero_extend[U64, U256](1_u64)))
   return DecimalParts(sign: sign, special: 0_u64, exp: sub[S64](a: reinterpret_bits[U64, S64](biased), b: 1572932_s64), coeff: coeff)
 
 ### Canonicalizes a finite decimal by stripping FRACTIONAL trailing zeros (exponent < 0) up
@@ -251,16 +251,16 @@ routine decimal_normalize_parts(p: DecimalParts) -> DecimalParts
 ### Finite values are canonicalized (trailing zeros stripped) so the stored bits — and thus
 ### `decode`, `$eq`, `$cmp`, `$hash`, `to_bytes`, and `$represent` — are all consistent.
 routine decimalfixed_of_parts(p: DecimalParts) -> Decimal
-  var sbit = shift_left[U256](value: zero_extend[U64, U256](if p.sign then 1_u64 else 0_u64), bits: uf_amt[U256](255_s64))
+  var sbit = shift_left[U256](value: zero_extend[U64, U256](if p.sign then 1_u64 else 0_u64), bits: U256.to_width(s: 255_s64))
   if int_ne[U64](a: p.special, b: 0_u64)
     var top5 = if int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
-    var b = bit_or[U256](a: sbit, b: shift_left[U256](value: zero_extend[U64, U256](top5), bits: uf_amt[U256](250_s64)))
+    var b = bit_or[U256](a: sbit, b: shift_left[U256](value: zero_extend[U64, U256](top5), bits: U256.to_width(s: 250_s64)))
     if int_eq[U64](a: p.special, b: 3_u64)
-      b = bit_or[U256](a: b, b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](249_s64)))
+      b = bit_or[U256](a: b, b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 249_s64)))
     return Decimal.from_bits(bits: b)
   var pn = decimal_normalize_parts(p: p)
   var biased = add[U64](a: reinterpret_bits[S64, U64](pn.exp), b: 1572932_u64)
-  var ebits = shift_left[U256](value: zero_extend[U64, U256](bit_and[U64](a: biased, b: 0x3FFFFF_u64)), bits: uf_amt[U256](233_s64))
+  var ebits = shift_left[U256](value: zero_extend[U64, U256](bit_and[U64](a: biased, b: 0x3FFFFF_u64)), bits: U256.to_width(s: 233_s64))
   return Decimal.from_bits(bits: bit_or[U256](a: bit_or[U256](a: sbit, b: ebits), b: pn.coeff))
 
 # ============================================================================
@@ -753,7 +753,7 @@ routine Decimal.$add!(you: Decimal) -> Decimal
 
 ### Arithmetic negation (flip sign bit).
 routine decimalfixed_neg(a: Decimal) -> Decimal
-  return Decimal.from_bits(bits: bit_xor[U256](a: a.to_bits(), b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](255_s64))))
+  return Decimal.from_bits(bits: bit_xor[U256](a: a.to_bits(), b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 255_s64))))
 
 ### Returns me - you. Failable like `$add!`/`$mul!`/`$truediv!`: subtraction can overflow the
 ### `Decimal` range (e.g. MAX - (-MAX)), so the throw propagates through `$add!` (the `-` operator

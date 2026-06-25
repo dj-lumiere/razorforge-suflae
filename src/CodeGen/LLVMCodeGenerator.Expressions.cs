@@ -143,11 +143,11 @@ public partial class LlvmCodeGenerator
         string returnType = routine.ReturnType != null
             ? GetLlvmType(type: routine.ReturnType)
             : "void";
-        returnType = routine.AsyncStatus switch
+        returnType = routine.FailableVariant switch
         {
-            AsyncStatus.LookupVariant => GetLookupCarrierLlvmType(valueType: routine.ReturnType!),
-            AsyncStatus.CheckVariant => GetResultCarrierLlvmType(valueType: routine.ReturnType!),
-            AsyncStatus.TryBoolVariant => "i1",
+            FailableVariant.Lookup => GetLookupCarrierLlvmType(valueType: routine.ReturnType!),
+            FailableVariant.Check => GetResultCarrierLlvmType(valueType: routine.ReturnType!),
+            FailableVariant.TryBool => "i1",
             _ => returnType
         };
 
@@ -329,7 +329,8 @@ public partial class LlvmCodeGenerator
             (string cv, string _) = CoerceCallArgumentToParameter(sb: sb,
                 argValue: v,
                 actualType: actual,
-                parameterType: routine.Parameters[index: i].Type);
+                parameterType: routine.Parameters[index: i].Type,
+                callee: routine);
             values.Add(item: cv);
             types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
         }
@@ -382,8 +383,11 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: sb, line: $"  {taskInt} = ptrtoint ptr {task} to i64");
         string r0 = NextTemp();
         EmitLine(sb: sb, line: $"  {r0} = insertvalue {recLlvm} zeroinitializer, i64 {taskInt}, 0");
+        // `spawned` (field 3) is a Bool, stored as i8 — zext the i1.
+        string spawnedByte = NextTemp();
+        EmitLine(sb: sb, line: $"  {spawnedByte} = zext i1 {spawned} to i8");
         string r1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i1 {spawned}, 3");
+        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i8 {spawnedByte}, 3");
         return r1;
     }
 

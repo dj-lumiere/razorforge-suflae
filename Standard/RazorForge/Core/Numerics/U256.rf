@@ -91,17 +91,17 @@ routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64) -> KStep
 ### Assemble 4 U64 limbs (little-endian) into a U256.
 @inline
 routine asm256(q0: U64, q1: U64, q2: U64, q3: U64) -> U256
-  return bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](q0), b: shift_left[U256](value: zero_extend[U64, U256](q1), bits: uf_amt[U256](64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](q2), bits: uf_amt[U256](128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](q3), bits: uf_amt[U256](192_s64))))
+  return bit_or[U256](a: bit_or[U256](a: zero_extend[U64, U256](q0), b: shift_left[U256](value: zero_extend[U64, U256](q1), bits: U256.to_width(s: 64_s64))), b: bit_or[U256](a: shift_left[U256](value: zero_extend[U64, U256](q2), bits: U256.to_width(s: 128_s64)), b: shift_left[U256](value: zero_extend[U64, U256](q3), bits: U256.to_width(s: 192_s64))))
 
 ### Quotient of num // den (den fits U128) with the round-sticky in bit 0. Register-
 ### resident: n=1 long division for a single-limb divisor, unrolled n=2 Knuth otherwise.
 routine udiv256_by_u128_sticky(num: U256, den: U256) -> U256
   var a0 = int_truncate[U256, U64](num)
-  var a1 = int_truncate[U256, U64](shift_right_unsigned[U256](num, uf_amt[U256](64_s64)))
-  var a2 = int_truncate[U256, U64](shift_right_unsigned[U256](num, uf_amt[U256](128_s64)))
-  var a3 = int_truncate[U256, U64](shift_right_unsigned[U256](num, uf_amt[U256](192_s64)))
+  var a1 = int_truncate[U256, U64](shift_right_unsigned[U256](num, U256.to_width(s: 64_s64)))
+  var a2 = int_truncate[U256, U64](shift_right_unsigned[U256](num, U256.to_width(s: 128_s64)))
+  var a3 = int_truncate[U256, U64](shift_right_unsigned[U256](num, U256.to_width(s: 192_s64)))
   var d0 = int_truncate[U256, U64](den)
-  var d1 = int_truncate[U256, U64](shift_right_unsigned[U256](den, uf_amt[U256](64_s64)))
+  var d1 = int_truncate[U256, U64](shift_right_unsigned[U256](den, U256.to_width(s: 64_s64)))
   if int_eq[U64](a: d1, b: 0_u64)
     # single-limb divisor: long division high -> low
     var dr3 = udivrem128(hi: 0_u64, lo: a3, d: d0)

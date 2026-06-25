@@ -975,16 +975,16 @@ routine f128_isqrt256(n: U256) -> U256
     sh = sub[S64](a: bl, b: 52_s64)
     if int_ne[S64](a: signed_rem[S64](a: sh, b: 2_s64), b: 0_s64)
       sh = sub[S64](a: sh, b: 1_s64)
-  var ntop = int_truncate[U256, U64](shift_right_unsigned[U256](n, uf_amt[U256](sh)))
+  var ntop = int_truncate[U256, U64](shift_right_unsigned[U256](n, U256.to_width(s: sh)))
   var seed = float_to_unsigned[F64, U64](F64(from: ntop).sqrt_unchecked())
-  var x = shift_left[U256](value: zero_extend[U64, U256](seed), bits: uf_amt[U256](signed_div[S64](a: sh, b: 2_s64)))
+  var x = shift_left[U256](value: zero_extend[U64, U256](seed), bits: U256.to_width(s: signed_div[S64](a: sh, b: 2_s64)))
   if int_eq[U256](a: x, b: zero)
     x = one
   # Newton: x <- (x + n/x)/2. Quadratic; 4 iterations from a ~52-bit seed is ample.
   var j = 0_s64
   while signed_lt[S64](a: j, b: 4_s64)
     var q = udivrem256(num: n, den: x).q
-    x = shift_right_unsigned[U256](add[U256](a: x, b: q), uf_amt[U256](1_s64))
+    x = shift_right_unsigned[U256](add[U256](a: x, b: q), U256.to_width(s: 1_s64))
     j = add[S64](a: j, b: 1_s64)
   # Exact correction to floor(sqrt(n)).
   while unsigned_gt[U256](a: mul[U256](a: x, b: x), b: n)
@@ -1403,11 +1403,11 @@ routine F128.to_uf() -> UnpackedFloat[U128, U256, 128]
   if e == 0_u64
     var msbf = int_truncate[U128, S64](sub[U128](a: 127_u128, b: leading_zeros[U128](f)))
     var shift = sub[S64](a: 126_s64, b: msbf)
-    var mant = shift_left[U128](value: f, bits: uf_amt[U128](shift))
-    return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: sub[S64](a: msbf, b: 16495_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+    var mant = shift_left[U128](value: f, bits: U128.to_width(s: shift))
+    return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: sub[S64](a: msbf, b: 16495_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
   var sig = bit_or[U128](a: f, b: f128_implicit())
   var mant = shift_left[U128](value: sig, bits: 14_u128)
-  return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 16384_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Rounds any unpacked engine value (quad or octuple) back to an `F128`
 ### (round-to-nearest-even). Width-generic: the mantissa shift is `W - 114`
@@ -1424,9 +1424,9 @@ routine UnpackedFloat[M, L, W].to_f128() -> F128
     return F128.from_bits(bits: shift_left[U128](value: zero_extend[U64, U128](sign), bits: 127_u128))
   var biased = add[S64](a: me.exp, b: 16384_s64)
   var sh = sub[S64](a: reinterpret_bits[U64, S64](W), b: 114_s64)
-  var lost = bit_and[M](a: me.mant, b: uf_lowmask[M](sh))
-  var half = shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: sh, b: 1_s64)))
-  var sig = int_truncate[L, U128](zero_extend[M, L](shift_right_unsigned[M](me.mant, uf_amt[M](sh))))
+  var lost = bit_and[M](a: me.mant, b: M.low_mask(n: sh))
+  var half = shift_left[M](value: 1, bits: M.to_width(s: sub[S64](a: sh, b: 1_s64)))
+  var sig = int_truncate[L, U128](zero_extend[M, L](shift_right_unsigned[M](me.mant, M.to_width(s: sh))))
   if unsigned_gt[M](a: lost, b: half)
     sig = add[U128](a: sig, b: 1_u128)
   elseif int_eq[M](a: lost, b: half) and int_ne[U128](a: bit_and[U128](a: sig, b: 1_u128), b: 0_u128)
@@ -1460,11 +1460,11 @@ routine F128.to_oct() -> UnpackedFloat[U256, U512, 256]
   if e == 0_u64
     var msbf = int_truncate[U128, S64](sub[U128](a: 127_u128, b: leading_zeros[U128](f)))
     var shift = sub[S64](a: 254_s64, b: msbf)
-    var mant = shift_left[U256](value: zero_extend[U128, U256](f), bits: uf_amt[U256](shift))
-    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: msbf, b: 16495_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+    var mant = shift_left[U256](value: zero_extend[U128, U256](f), bits: U256.to_width(s: shift))
+    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: msbf, b: 16495_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
   var sig = bit_or[U128](a: f, b: f128_implicit())
   var mant = shift_left[U256](value: zero_extend[U128, U256](sig), bits: 142)
-  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 16384_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 # ============================================================================
 # More exact members: nextafter, modf, frexp

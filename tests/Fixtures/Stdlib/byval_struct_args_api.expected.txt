@@ -1,0 +1,9 @@
+sum_point: 7
+dot: 39
+make_point: 10,20
+translate: 103,204
+orig unchanged: 3,4
+bump_flag: 42 true
+flag orig: 41 false
+sum3: 6
+first_x: 3

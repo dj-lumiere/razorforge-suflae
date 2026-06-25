@@ -187,8 +187,20 @@ routine UnpackedFloat[M, L, W].cbrt() -> UnpackedFloat[M, L, W]
   var cc = one_third.ldexp(e: 1_s64).neg().mul(you: y2)
   return t.fma(b: cc, c: y2).mul(you: q)
 
-### atan2 on the unpacked engine (TLFloat atan2_, N=17, M=3).
+### atan2 on the unpacked engine (TLFloat atan2_, N=17, M=3). Picks degree/depth by width.
 routine UnpackedFloat[M, L, W].atan2(x0: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
+  # W=512 needs deeper half-angle reduction + higher poly degree for 70+ digits.
+  var deg = 17_s64
+  var depth = 3_s64
+  if int_eq[U64](a: W, b: 512_u64)
+    deg = 22_s64
+    depth = 5_s64
+  return me.atan2_p(x0: x0, deg: deg, depth: depth)
+
+### Degree/depth-parameterized atan2. `deg` = atan-series Horner degree, `depth` = half-angle
+### reductions; callers below F128's 113 bits (D64) size both down to their target. atan_coef is
+### W-dispatched (a valid quad table at W=128), so reducing `deg` just uses fewer correct terms.
+routine UnpackedFloat[M, L, W].atan2_p(x0: UnpackedFloat[M, L, W], deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
   var y = me
   var x = x0
   # Octant folding into |y| <= |x|: q records the quadrant offset (in units of pi/2)
@@ -203,13 +215,6 @@ routine UnpackedFloat[M, L, W].atan2(x0: UnpackedFloat[M, L, W]) -> UnpackedFloa
     q = if y.sign() then -2_s64 else 2_s64
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var d = y.div(you: x)
-  # W=512 needs deeper half-angle reduction + higher poly degree for 70+ digits;
-  # the reconstruction ldexp MUST equal the reduction depth.
-  var deg = 17_s64
-  var depth = 3_s64
-  if int_eq[U64](a: W, b: 512_u64)
-    deg = 22_s64
-    depth = 5_s64
   var r = UnpackedFloat[M, L, W].atan_coef(deg)
   # `depth` half-angle reductions d <- d/(sqrt(1+d^2)+1) shrink |d| so the fixed-degree
   # poly converges; the matching ldexp(depth) below undoes them.
@@ -267,15 +272,48 @@ routine UnpackedFloat[M, L, W].acos() -> UnpackedFloat[M, L, W]
   var y = one.add(you: me).mul(you: one.sub(you: me)).sqrt()
   return y.atan2(x0: me)
 
-### sinh on the unpacked engine (expm1_ N=20).
-routine UnpackedFloat[M, L, W].sinh() -> UnpackedFloat[M, L, W]
+### Degree/depth-parameterized atan/asin/acos cores for sub-113-bit targets (D64). Same methods
+### as atan/asin/acos but thread `deg`/`depth` to atan2_p.
+routine UnpackedFloat[M, L, W].atan_p(deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
+  if me.isnan()
+    return me
+  var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  var negone = one.neg()
+  var yinf = if me.sign() then negone else one
+  var y = if me.isinf() then yinf else me
+  var zero = UnpackedFloat[M, L, W].zero(sign: false)
+  var x = if me.isinf() then zero else one
+  return y.atan2_p(x0: x, deg: deg, depth: depth)
+
+routine UnpackedFloat[M, L, W].asin_p(deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
+  if me.isnan()
+    return me
+  var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  if me.abs().gt(you: one)
+    return UnpackedFloat[M, L, W].nan()
+  var x = one.add(you: me).mul(you: one.sub(you: me)).sqrt()
+  return me.atan2_p(x0: x, deg: deg, depth: depth)
+
+routine UnpackedFloat[M, L, W].acos_p(deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
+  if me.isnan()
+    return me
+  var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  if me.abs().gt(you: one)
+    return UnpackedFloat[M, L, W].nan()
+  var y = one.add(you: me).mul(you: one.sub(you: me)).sqrt()
+  return y.atan2_p(x0: me, deg: deg, depth: depth)
+
+### sinh on the unpacked engine (expm1_), with explicit expm1 term count `en`.
+### The inner expm1 range-reduces uniformly (reduced |d| <= ln2/2), so a lower `en`
+### suffices for narrower targets (e.g. D64 at 54 bits) for any input.
+routine UnpackedFloat[M, L, W].sinh_n(en: S64) -> UnpackedFloat[M, L, W]
   if me.isnan() or me.isinf()
     return me
   if me.abs().gt(you: UnpackedFloat[M, L, W].from_s64(src: 1048576_s64))
     return UnpackedFloat[M, L, W].inf(sign: me.sign())
   # sinh via expm1 to avoid cancellation near 0: let t = expm1(|x|), then
   # sinh = (t*(t+2)/(t+1))/2; sign reapplied (sinh is odd).
-  var d = me.abs().expm1(n: 20_s64)
+  var d = me.abs().expm1(n: en)
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var two = UnpackedFloat[M, L, W].from_s64(src: 2_s64)
   d = d.mul(you: d.add(you: two)).div(you: d.add(you: one)).ldexp(e: -1_s64)
@@ -283,8 +321,13 @@ routine UnpackedFloat[M, L, W].sinh() -> UnpackedFloat[M, L, W]
     d = d.neg()
   return d
 
-### cosh on the unpacked engine (exp_ N=20).
-routine UnpackedFloat[M, L, W].cosh() -> UnpackedFloat[M, L, W]
+### sinh on the unpacked engine (expm1_ N=20) at the full F128/F256 term count.
+routine UnpackedFloat[M, L, W].sinh() -> UnpackedFloat[M, L, W]
+  return me.sinh_n(en: 20_s64)
+
+### cosh on the unpacked engine (exp_), with explicit exp term count `en`.
+### The inner exp range-reduces uniformly, so a lower `en` suffices for narrower targets.
+routine UnpackedFloat[M, L, W].cosh_n(en: S64) -> UnpackedFloat[M, L, W]
   if me.isnan()
     return me
   if me.isinf()
@@ -294,12 +337,17 @@ routine UnpackedFloat[M, L, W].cosh() -> UnpackedFloat[M, L, W]
   if me.abs().gt(you: UnpackedFloat[M, L, W].from_s64(src: 1048576_s64))
     return UnpackedFloat[M, L, W].inf(sign: false)
   # cosh(x) = (e^|x| + e^-|x|)/2.
-  var d = me.abs().exp(n: 20_s64)
+  var d = me.abs().exp(n: en)
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   return d.add(you: one.div(you: d)).ldexp(e: -1_s64)
 
-### tanh on the unpacked engine (expm1_ N=20).
-routine UnpackedFloat[M, L, W].tanh() -> UnpackedFloat[M, L, W]
+### cosh on the unpacked engine (exp_ N=20) at the full F128/F256 term count.
+routine UnpackedFloat[M, L, W].cosh() -> UnpackedFloat[M, L, W]
+  return me.cosh_n(en: 20_s64)
+
+### tanh on the unpacked engine (expm1_), with explicit expm1 term count `en`.
+### The inner expm1 range-reduces uniformly, so a lower `en` suffices for narrower targets.
+routine UnpackedFloat[M, L, W].tanh_n(en: S64) -> UnpackedFloat[M, L, W]
   if me.isnan()
     return me
   var y = me.abs()
@@ -310,14 +358,20 @@ routine UnpackedFloat[M, L, W].tanh() -> UnpackedFloat[M, L, W]
       res = one.neg()
     return res
   # tanh via expm1(2|x|): t = expm1(2|x|), tanh = t/(t+2); sign reapplied (tanh is odd).
-  var d = y.ldexp(e: 1_s64).expm1(n: 20_s64)
+  var d = y.ldexp(e: 1_s64).expm1(n: en)
   d = d.div(you: d.add(you: UnpackedFloat[M, L, W].from_s64(src: 2_s64)))
   if me.sign()
     d = d.neg()
   return d
 
-### atanh on the unpacked engine (log1p_ N=21, M=0).
-routine UnpackedFloat[M, L, W].atanh() -> UnpackedFloat[M, L, W]
+### tanh on the unpacked engine (expm1_ N=20) at the full F128/F256 term count.
+routine UnpackedFloat[M, L, W].tanh() -> UnpackedFloat[M, L, W]
+  return me.tanh_n(en: 20_s64)
+
+### atanh on the unpacked engine (log1p_, M=0), with explicit log1p term count `ln`.
+### The inner log1p recentres uniformly (series |x| <= ~0.1716), so a lower `ln` suffices
+### for narrower targets (e.g. D64 at 54 bits) for any input in (-1, 1).
+routine UnpackedFloat[M, L, W].atanh_n(ln: S64) -> UnpackedFloat[M, L, W]
   if me.isnan()
     return me
   if me.isinf()
@@ -330,10 +384,14 @@ routine UnpackedFloat[M, L, W].atanh() -> UnpackedFloat[M, L, W]
     return UnpackedFloat[M, L, W].inf(sign: me.sign())
   # atanh(x) = (1/2)*log1p(2y/(1-y)) with y=|x|; m=0 (the small frexp range needs no
   # reduction sqrt); sign reapplied (atanh is odd).
-  var d = y.ldexp(e: 1_s64).div(you: one.sub(you: y)).log1p(n: 21_s64, m: 0_s64).ldexp(e: -1_s64)
+  var d = y.ldexp(e: 1_s64).div(you: one.sub(you: y)).log1p(n: ln, m: 0_s64).ldexp(e: -1_s64)
   if me.sign()
     d = d.neg()
   return d
+
+### atanh on the unpacked engine (log1p_ N=21, M=0) at the full F128/F256 term count.
+routine UnpackedFloat[M, L, W].atanh() -> UnpackedFloat[M, L, W]
+  return me.atanh_n(ln: 21_s64)
 
 ### asinh on the unpacked engine (log_/log1p_ N=24, M=0 — no reduction sqrt).
 routine UnpackedFloat[M, L, W].asinh() -> UnpackedFloat[M, L, W]
@@ -383,13 +441,17 @@ routine F128.exp!() -> F128
 
 ### `e^me` with raw IEEE propagation (NaN -> qNaN, +inf -> +inf, -inf -> +0). No crash.
 routine F128.exp_unchecked() -> F128
+  return me.exp_unchecked_n(n: 20_s64)
+
+### `e^me` raw IEEE, with the exp-series explicit atanh/exp-series term count `n`.
+routine F128.exp_unchecked_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     if me.is_negative()
       return F128.from_bits(bits: 0_u128)
     return me
-  return me.to_uf().exp(n: 20_s64).to_f128()
+  return me.to_uf().exp(n: n).to_f128()
 
 ### Returns `ln(me)`.
 routine F128.log!() -> F128
@@ -402,6 +464,14 @@ routine F128.log!() -> F128
 
 ### `ln(me)` with raw IEEE (NaN/0 -> -inf, x<0 -> qNaN, +inf -> +inf). No crash.
 routine F128.log_unchecked() -> F128
+  return me.log_unchecked_n(n: 21_s64)
+
+### `ln(me)` raw IEEE, with the atanh-series term count sized to a TARGET precision (bits) rather
+### than the full 128-bit width — the operation owns its iteration count, keyed on what the caller
+### actually needs. After the [sqrt(1/2), sqrt(2)) reduction |x| <= ~0.172, so the series yields
+### ~6 bits per term; n = (prec + guard) / 6. Lower-precision callers (e.g. D64 at 54 bits) get a
+### proportionally cheaper log. PROTOTYPE for precision-targeted iteration counts.
+routine F128.log_unchecked_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -410,7 +480,7 @@ routine F128.log_unchecked() -> F128
     return F128.from_bits(bits: f128_qnan())
   if me.is_infinite()
     return me
-  return me.to_uf().log(n: 21_s64, m: 0_s64, t: 0_s64).to_f128()
+  return me.to_uf().log(n: n, m: 0_s64, t: 0_s64).to_f128()
 
 ### Returns `e^me - 1`.
 routine F128.expm1!() -> F128
@@ -423,13 +493,17 @@ routine F128.expm1!() -> F128
 
 ### `e^me - 1` with raw IEEE (NaN -> qNaN, -inf -> -1, +inf -> +inf). No crash.
 routine F128.expm1_unchecked() -> F128
+  return me.expm1_unchecked_n(n: 21_s64)
+
+### `e^me - 1` raw IEEE, explicit atanh/exp-series term count `n`.
+routine F128.expm1_unchecked_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     if me.is_negative()
       return UnpackedFloat[U128, U256, 128].from_s64(src: -1_s64).to_f128()
     return me
-  return me.to_uf().expm1(n: 21_s64).to_f128()
+  return me.to_uf().expm1(n: n).to_f128()
 
 ### Returns `ln(1 + me)`.
 routine F128.log1p!() -> F128
@@ -442,6 +516,10 @@ routine F128.log1p!() -> F128
 
 ### `ln(1+me)` with raw IEEE (NaN -> qNaN, me=-1 -> -inf, me<-1 -> qNaN, +inf -> +inf). No crash.
 routine F128.log1p_unchecked() -> F128
+  return me.log1p_unchecked_n(n: 21_s64)
+
+### `ln(1+me)` raw IEEE, explicit atanh/exp-series term count `n`.
+routine F128.log1p_unchecked_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -453,7 +531,7 @@ routine F128.log1p_unchecked() -> F128
     return F128.from_bits(bits: f128_qnan())
   if me.is_infinite()
     return me
-  return me.to_uf().log1p(n: 21_s64, m: 0_s64).to_f128()
+  return me.to_uf().log1p(n: n, m: 0_s64).to_f128()
 
 ### Returns `log2(me)`.
 routine F128.log2!() -> F128
@@ -466,6 +544,10 @@ routine F128.log2!() -> F128
 
 ### `log2(me)` with raw IEEE (computed as ln(me) * (1/ln2)). No crash.
 routine F128.log2_unchecked() -> F128
+  return me.log2_unchecked_n(n: 22_s64)
+
+### `log2(me)` raw IEEE, with the inner log atanh-series term count `n`.
+routine F128.log2_unchecked_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -474,7 +556,7 @@ routine F128.log2_unchecked() -> F128
     return F128.from_bits(bits: f128_qnan())
   if me.is_infinite()
     return me
-  return me.to_uf().log(n: 22_s64, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[U128, U256, 128].recip_ln2()).to_f128()
+  return me.to_uf().log(n: n, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[U128, U256, 128].recip_ln2()).to_f128()
 
 ### Returns `log10(me)`.
 routine F128.log10!() -> F128
@@ -487,6 +569,10 @@ routine F128.log10!() -> F128
 
 ### `log10(me)` with raw IEEE (computed as ln(me) * (1/ln10)). No crash.
 routine F128.log10_unchecked() -> F128
+  return me.log10_unchecked_n(n: 22_s64)
+
+### `log10(me)` raw IEEE, with the inner log atanh-series term count `n`.
+routine F128.log10_unchecked_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -495,7 +581,7 @@ routine F128.log10_unchecked() -> F128
     return F128.from_bits(bits: f128_qnan())
   if me.is_infinite()
     return me
-  return me.to_uf().log(n: 22_s64, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[U128, U256, 128].recip_ln10()).to_f128()
+  return me.to_uf().log(n: n, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[U128, U256, 128].recip_ln10()).to_f128()
 
 ### Returns the cube root `cbrt(me)`.
 routine F128.cbrt() -> F128
@@ -553,6 +639,14 @@ routine F128.$pow!(you: F128) -> F128
 ### `me^you` with raw IEEE (full C99 pow special-case ladder). No crash.
 ### Core path is octuple `exp(you * ln|me|)`; the sign of an odd-integer exponent is reapplied.
 routine F128.pow_unchecked(you: F128) -> F128
+  return me.pow_unchecked_p(you: you, logn: 23_s64, expn: 20_s64, fast: false)
+
+### Precision-parameterized pow. `fast: true` runs the general `exp(you * ln|me|)` core at
+### F128 width (113-bit significand, ~59 guard bits over D64's 54-bit target) instead of octuple;
+### `fast: false` keeps the octuple path for F128's own correctly-rounded 113-bit result. The
+### C99 special-case ladder is precision-independent and shared. `logn`/`expn` set the series
+### degrees of the general path.
+routine F128.pow_unchecked_p(you: F128, logn: S64, expn: S64, fast: Bool) -> F128
   var one = UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).to_f128()
   var negone = one.$neg()
   var yo = you.to_oct()
@@ -607,8 +701,14 @@ routine F128.pow_unchecked(you: F128) -> F128
     return F128.from_bits(bits: f128_inf(sign: xs))
   if me.is_zero() and you.is_negative() and not you.is_zero() and not yisoddint
     return posinf
-  # General case in octuple: exp(you * ln|me|), with log degree n=23, exp degree n=20.
-  var z = me.abs().to_oct().log(n: 23_s64, m: 0_s64, t: 0_s64).mul(you: yo).exp(n: 20_s64)
+  # General case: exp(you * ln|me|). Fast path stays at F128 width; default path is octuple.
+  if fast
+    var zu = me.abs().to_uf().log(n: logn, m: 0_s64, t: 0_s64).mul(you: you.to_uf()).exp(n: expn)
+    # Negative base with an odd-integer exponent keeps a negative result.
+    if me.is_negative() and yisoddint
+      zu = zu.neg()
+    return zu.to_f128()
+  var z = me.abs().to_oct().log(n: logn, m: 0_s64, t: 0_s64).mul(you: yo).exp(n: expn)
   # Negative base with an odd-integer exponent keeps a negative result.
   if me.is_negative() and yisoddint
     z = z.neg()
@@ -669,6 +769,42 @@ routine F128.atan2(you: F128) -> F128
     x = if you.is_infinite() then xinf else xfin
   return y.atan2(x0: x).to_f128()
 
+### Degree/depth-reduced inverse-trig for sub-113-bit targets (D64). atan/asin/acos all funnel
+### through atan2; these thread reduced `deg`/`depth` to the F128-width core. Already F128 width
+### (not octuple), so the win is purely fewer Horner terms + fewer half-angle sqrt reductions.
+routine F128.atan_fast(deg: S64, depth: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  return me.to_uf().atan_p(deg: deg, depth: depth).to_f128()
+
+routine F128.asin_fast(deg: S64, depth: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  return me.to_uf().asin_p(deg: deg, depth: depth).to_f128()
+
+routine F128.acos_fast(deg: S64, depth: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  return me.to_uf().acos_p(deg: deg, depth: depth).to_f128()
+
+routine F128.atan2_fast(you: F128, deg: S64, depth: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if you.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: you.to_bits()))
+  var y = me.to_uf()
+  var x = you.to_uf()
+  if me.is_infinite() or you.is_infinite()
+    var one = UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64)
+    var negone = one.neg()
+    var yinf = if me.is_negative() then negone else one
+    var yfin = UnpackedFloat[U128, U256, 128].zero(sign: me.is_negative())
+    y = if me.is_infinite() then yinf else yfin
+    var xinf = if you.is_negative() then negone else one
+    var xfin = UnpackedFloat[U128, U256, 128].zero(sign: you.is_negative())
+    x = if you.is_infinite() then xinf else xfin
+  return y.atan2_p(x0: x, deg: deg, depth: depth).to_f128()
+
 ### Returns `sinh(me)`.
 routine F128.sinh!() -> F128
   var rr = me.sinh_unchecked()
@@ -681,6 +817,10 @@ routine F128.sinh!() -> F128
 ### `sinh(me)` with raw IEEE (large |me| -> signed inf). No crash.
 routine F128.sinh_unchecked() -> F128
   return me.to_uf().sinh().to_f128()
+
+### `sinh(me)` raw IEEE, with the inner expm1-series term count `n`.
+routine F128.sinh_unchecked_n(n: S64) -> F128
+  return me.to_uf().sinh_n(en: n).to_f128()
 
 ### Returns `cosh(me)`.
 routine F128.cosh!() -> F128
@@ -695,9 +835,17 @@ routine F128.cosh!() -> F128
 routine F128.cosh_unchecked() -> F128
   return me.to_uf().cosh().to_f128()
 
+### `cosh(me)` raw IEEE, with the inner exp-series term count `n`.
+routine F128.cosh_unchecked_n(n: S64) -> F128
+  return me.to_uf().cosh_n(en: n).to_f128()
+
 ### Returns `tanh(me)`.
 routine F128.tanh() -> F128
   return me.to_uf().tanh().to_f128()
+
+### `tanh(me)` with the inner expm1-series term count `n`.
+routine F128.tanh_n(n: S64) -> F128
+  return me.to_uf().tanh_n(en: n).to_f128()
 
 ### Returns `atanh(me)`.
 routine F128.atanh!() -> F128
@@ -711,6 +859,10 @@ routine F128.atanh!() -> F128
 ### `atanh(me)` with raw IEEE (|me|=1 -> signed inf, |me|>1 -> qNaN). No crash.
 routine F128.atanh_unchecked() -> F128
   return me.to_uf().atanh().to_f128()
+
+### `atanh(me)` raw IEEE, with the inner log1p-series term count `n`.
+routine F128.atanh_unchecked_n(n: S64) -> F128
+  return me.to_uf().atanh_n(ln: n).to_f128()
 
 ### Returns `asinh(me)` (computed in octuple).
 routine F128.asinh() -> F128
@@ -739,12 +891,12 @@ routine F128.acosh_unchecked() -> F128
 # ============================================================================
 
 ### Reads `nbytes` table bytes starting at `start`, MSB-first, into an `L`.
-routine uf_readbytes[L](start: S64, nbytes: S64) -> ?L
-  var acc = uf_amt[L](0_s64)
+common routine L.read_table_bytes(start: S64, nbytes: S64) -> ?L
+  var acc = L.to_width(s: 0_s64)
   var i = 0_s64
   while signed_lt[S64](a: i, b: nbytes)
     var byte = rpitab_byte(idx: reinterpret_bits[S64, U64](add[S64](a: start, b: i)))
-    acc = add[L](a: shift_left[L](value: acc, bits: uf_amt[L](8_s64)), b: zero_extend[U64, L](byte))
+    acc = add[L](a: shift_left[L](value: acc, bits: L.to_width(s: 8_s64)), b: zero_extend[U64, L](byte))
     i = add[S64](a: i, b: 1_s64)
   return acc
 
@@ -756,7 +908,7 @@ routine UnpackedFloat[M, L, W].ph(p: S64) -> UFExp[M, L, W]
   var nbmant = sub[S64](a: wb, b: 2_s64)
   # Tiny arguments (|me| < ~2^-5) need no reduction: return unchanged, quadrant 0.
   if me.iszero() or signed_lt[S64](a: me.exp, b: -5_s64)
-    var asis = UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, sign: me.sign(), iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan())
+    var asis = UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan()))
     return UFExp[M, L, W](item0: asis, item1: 0_s64)
   # Pick the byte window of the 1/(2pi) table aligned to the input's binary exponent so
   # only the bits of 1/(2pi) that overlap me's significance are multiplied.
@@ -768,55 +920,55 @@ routine UnpackedFloat[M, L, W].ph(p: S64) -> UFExp[M, L, W]
   var rpiexp = sub[S64](a: sub[S64](a: p, b: m_aligned), b: wb)
   var m8 = signed_div[S64](a: m, b: 8_s64)
   # Read two W-bit limbs (high, low) of 1/(2pi) and form mant * 1/(2pi) at full width.
-  var rpih = uf_readbytes[L](start: m8, nbytes: nbytes)
-  var rpil = uf_readbytes[L](start: add[S64](a: m8, b: nbytes), nbytes: nbytes)
+  var rpih = L.read_table_bytes(start: m8, nbytes: nbytes)
+  var rpil = L.read_table_bytes(start: add[S64](a: m8, b: nbytes), nbytes: nbytes)
   var mantL = zero_extend[M, L](me.mant)
-  var rm = add[L](a: mul[L](a: mantL, b: rpih), b: shift_right_unsigned[L](mul[L](a: mantL, b: rpil), uf_amt[L](wb)))
+  var rm = add[L](a: mul[L](a: mantL, b: rpih), b: shift_right_unsigned[L](mul[L](a: mantL, b: rpil), L.to_width(s: wb)))
   # Extract the integer quadrant q = round(rm) and subtract it, leaving the fractional
   # part rm in [-1/2, 1/2) of a full turn (round-to-nearest via the roundbit + mask).
   var q = 0_s64
   var negshift = sub[S64](a: 0_s64, b: add[S64](a: mantexp, b: rpiexp))
   if signed_lt[S64](a: negshift, b: w2)
-    var roundbit = shift_left[L](value: uf_amt[L](1_s64), bits: uf_amt[L](sub[S64](a: negshift, b: 1_s64)))
-    var mask = shift_left[L](value: uf_not[L](uf_amt[L](0_s64)), bits: uf_amt[L](negshift))
+    var roundbit = shift_left[L](value: L.to_width(s: 1_s64), bits: L.to_width(s: sub[S64](a: negshift, b: 1_s64)))
+    var mask = shift_left[L](value: (L.to_width(s: 0_s64)).bit_not(), bits: L.to_width(s: negshift))
     var qm = bit_and[L](a: add[L](a: rm, b: roundbit), b: mask)
     rm = sub[L](a: rm, b: qm)
-    q = int_truncate[L, S64](shift_right_unsigned[L](qm, uf_amt[L](negshift)))
+    q = int_truncate[L, S64](shift_right_unsigned[L](qm, L.to_width(s: negshift)))
   var exp = sub[S64](a: add[S64](a: mantexp, b: rpiexp), b: p)
   # If the fraction is tiny (near 0 or all-ones), bring in more low limbs of 1/(2pi) to
   # keep full precision before normalizing.
   var j = mul[S64](a: 2_s64, b: nbytes)
-  while signed_gt[S64](a: uf_clzL[M, L, W](rm), b: wb) or signed_gt[S64](a: uf_clzL[M, L, W](uf_not[L](rm)), b: wb)
-    var lowpart = bit_and[L](a: mul[L](a: mantL, b: rpil), b: uf_lowmask[L](wb))
-    rm = add[L](a: shift_left[L](value: rm, bits: uf_amt[L](wb)), b: lowpart)
-    rpil = uf_readbytes[L](start: add[S64](a: j, b: m8), nbytes: nbytes)
-    rm = add[L](a: rm, b: shift_right_unsigned[L](mul[L](a: mantL, b: rpil), uf_amt[L](wb)))
+  while signed_gt[S64](a: UnpackedFloat[M, L, W].clz_wide(v: rm), b: wb) or signed_gt[S64](a: UnpackedFloat[M, L, W].clz_wide(v: (rm).bit_not()), b: wb)
+    var lowpart = bit_and[L](a: mul[L](a: mantL, b: rpil), b: L.low_mask(n: wb))
+    rm = add[L](a: shift_left[L](value: rm, bits: L.to_width(s: wb)), b: lowpart)
+    rpil = L.read_table_bytes(start: add[S64](a: j, b: m8), nbytes: nbytes)
+    rm = add[L](a: rm, b: shift_right_unsigned[L](mul[L](a: mantL, b: rpil), L.to_width(s: wb)))
     exp = sub[S64](a: exp, b: wb)
     j = add[S64](a: j, b: nbytes)
   # If the fraction is in the upper half (>= 1/2 turn) negate it (and q, sign) so the
   # reduced value lies in [0, 1/2) and the quadrant accounting stays consistent.
   var sign = me.sign()
-  if uf_bit[L](v: rm, pos: sub[S64](a: w2, b: 1_s64))
-    rm = sub[L](a: uf_amt[L](0_s64), b: rm)
+  if (rm).bit(pos: sub[S64](a: w2, b: 1_s64))
+    rm = sub[L](a: L.to_width(s: 0_s64), b: rm)
     q = sub[S64](a: 0_s64, b: q)
     sign = not sign
   # Normalize the fraction back into an M-bit mantissa u (left/right shift with rounding),
   # fixing the exponent x for any leading-zero count or rounding carry.
-  var x = sub[S64](a: w2, b: uf_clzL[M, L, W](rm))
+  var x = sub[S64](a: w2, b: UnpackedFloat[M, L, W].clz_wide(v: rm))
   var s = sub[S64](a: nbmant, b: sub[S64](a: x, b: 1_s64))
-  var u = uf_amt[M](0_s64)
+  var u = M.to_width(s: 0_s64)
   if signed_ge[S64](a: s, b: 0_s64)
-    u = int_truncate[L, M](shift_left[L](value: rm, bits: uf_amt[L](s)))
+    u = int_truncate[L, M](shift_left[L](value: rm, bits: L.to_width(s: s)))
   else
     var ns = sub[S64](a: 0_s64, b: s)
-    var rb = shift_left[L](value: uf_amt[L](1_s64), bits: uf_amt[L](sub[S64](a: ns, b: 1_s64)))
-    u = int_truncate[L, M](shift_right_unsigned[L](add[L](a: rm, b: rb), uf_amt[L](ns)))
-  if uf_bit[M](v: u, pos: add[S64](a: nbmant, b: 1_s64))
-    u = shift_right_unsigned[M](u, uf_amt[M](1_s64))
+    var rb = shift_left[L](value: L.to_width(s: 1_s64), bits: L.to_width(s: sub[S64](a: ns, b: 1_s64)))
+    u = int_truncate[L, M](shift_right_unsigned[L](add[L](a: rm, b: rb), L.to_width(s: ns)))
+  if (u).bit(pos: add[S64](a: nbmant, b: 1_s64))
+    u = shift_right_unsigned[M](u, M.to_width(s: 1_s64))
     x = add[S64](a: x, b: 1_s64)
   # Multiply the reduced turn-fraction by pi to get the reduced angle in radians.
   var rexp = add[S64](a: sub[S64](a: x, b: 2_s64), b: exp)
-  var r = UnpackedFloat[M, L, W].make(mant: u, exp: rexp, sign: false, iszero: false, isinf: false, isnan: false).mul(you: UnpackedFloat[M, L, W].pi())
+  var r = UnpackedFloat[M, L, W].make(mant: u, exp: rexp, fpclass: SignedFpClass.from_flags(sign: false, iszero: false, isinf: false, isnan: false)).mul(you: UnpackedFloat[M, L, W].pi())
   var rr = r
   if sign
     rr = r.neg()
@@ -854,16 +1006,19 @@ routine UnpackedFloat[M, L, W].sin(n: S64) -> UnpackedFloat[M, L, W]
     return d.neg()
   return d
 
-### cos on the unpacked engine (TLFloat cos_, N=14).
-routine UnpackedFloat[M, L, W].cos() -> UnpackedFloat[M, L, W]
+### cos on the unpacked engine (TLFloat cos_), with explicit series term count `cn`
+### (the even-quadrant cos poly runs to cn+1, the odd-quadrant sin poly to cn). A lower
+### `cn` suffices for narrower targets (e.g. D64 at 54 bits) since |red| <= pi/4 caps the
+### series argument. W=512 overrides to its 70-digit degree regardless.
+routine UnpackedFloat[M, L, W].cos_n(cn: S64) -> UnpackedFloat[M, L, W]
   # Payne-Hanek reduce; evaluate in -red^2 like sin but with the quadrant roles swapped.
   var pr = me.ph(p: 1_s64)
   var red = pr.item0
   var quad = pr.item1
   var negsq = red.mul(you: red).neg()
   # W=512 needs higher poly degree (the ph reduction is already full-width).
-  var codd = 14_s64
-  var ceven = 15_s64
+  var codd = cn
+  var ceven = add[S64](a: cn, b: 1_s64)
   if int_eq[U64](a: W, b: 512_u64)
     codd = 26_s64
     ceven = 27_s64
@@ -888,31 +1043,45 @@ routine UnpackedFloat[M, L, W].cos() -> UnpackedFloat[M, L, W]
     return d.neg()
   return d
 
+### cos on the unpacked engine (TLFloat cos_, N=14) at the full F128/F256 term count.
+routine UnpackedFloat[M, L, W].cos() -> UnpackedFloat[M, L, W]
+  return me.cos_n(cn: 14_s64)
+
 ### Returns `sin(me)`.
 routine F128.sin() -> F128
+  return me.sin_n(n: 14_s64)
+
+### `sin(me)` with the series explicit atanh/exp-series term count `n`.
+routine F128.sin_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     return F128.from_bits(bits: f128_qnan())
-  return me.to_uf().sin(n: 14_s64).to_f128()
+  return me.to_uf().sin(n: n).to_f128()
 
 ### Returns `cos(me)`.
 routine F128.cos() -> F128
+  return me.cos_n(n: 14_s64)
+
+### `cos(me)` with the cos-series explicit term count `n`.
+routine F128.cos_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     return F128.from_bits(bits: f128_qnan())
-  return me.to_uf().cos().to_f128()
+  return me.to_uf().cos_n(cn: n).to_f128()
 
 ### tan numerator/denominator pair (TLFloat tan_, N=16, M=2); tan = first/second.
-routine UnpackedFloat[M, L, W].tanxy() -> UFPair[M, L, W]
+### `td0` is the tan-poly degree; a lower value suffices for narrower targets since the
+### 2^sh half-angle reduction caps |x| <= ~pi/4/2^sh. W=512 overrides to its 70-digit degree.
+routine UnpackedFloat[M, L, W].tanxy_n(td0: S64) -> UFPair[M, L, W]
   var pr = me.ph(p: 1_s64)
   var red = pr.item0
   var quad = pr.item1
   # W=512 reduces by 2^sh (sh doublings reconstruct: sh-1 in the loop + 1 after) and
   # uses a higher-degree numerator poly for 70+ digits.
   var sh = 3_s64
-  var tdeg = 15_s64
+  var tdeg = td0
   if int_eq[U64](a: W, b: 512_u64)
     sh = 6_s64
     tdeg = 25_s64
@@ -945,18 +1114,30 @@ routine UnpackedFloat[M, L, W].tanxy() -> UFPair[M, L, W]
     y = tmp.neg()
   return UFPair[M, L, W](item0: x, item1: y)
 
+### tan numerator/denominator pair at the full F128/F256 degree.
+routine UnpackedFloat[M, L, W].tanxy() -> UFPair[M, L, W]
+  return me.tanxy_n(td0: 15_s64)
+
+### tan on the unpacked engine, with explicit tan-poly degree `td0`.
+routine UnpackedFloat[M, L, W].tan_n(td0: S64) -> UnpackedFloat[M, L, W]
+  var p = me.tanxy_n(td0: td0)
+  return p.item0.div(you: p.item1)
+
 ### tan on the unpacked engine.
 routine UnpackedFloat[M, L, W].tan() -> UnpackedFloat[M, L, W]
-  var p = me.tanxy()
-  return p.item0.div(you: p.item1)
+  return me.tan_n(td0: 15_s64)
 
 ### Returns `tan(me)`.
 routine F128.tan() -> F128
+  return me.tan_n(n: 15_s64)
+
+### `tan(me)` with the tan-series explicit degree `n`.
+routine F128.tan_n(n: S64) -> F128
   if me.is_nan()
     return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     return F128.from_bits(bits: f128_qnan())
-  return me.to_uf().tan().to_f128()
+  return me.to_uf().tan_n(td0: n).to_f128()
 
 ### Returns the fused multiply-add `me*b + c` with a single rounding (octuple).
 routine F128.fma!(b: F128, c: F128) -> F128
@@ -1005,9 +1186,9 @@ routine UnpackedFloat[M, L, W].intlsb() -> S64
     return 0_s64
   var mm = 0_s64
   if signed_ge[S64](a: s, b: 0_s64)
-    mm = int_truncate[M, S64](shift_right_unsigned[M](me.mant, uf_amt[M](s)))
+    mm = int_truncate[M, S64](shift_right_unsigned[M](me.mant, M.to_width(s: s)))
   else
-    mm = int_truncate[M, S64](shift_left[M](value: me.mant, bits: uf_amt[M](sub[S64](a: 0_s64, b: s))))
+    mm = int_truncate[M, S64](shift_left[M](value: me.mant, bits: M.to_width(s: sub[S64](a: 0_s64, b: s))))
   mm = bit_and[S64](a: mm, b: 0xffff_s64)
   if me.sign()
     return sub[S64](a: sub[S64](a: 0_s64, b: mm), b: 1_s64)
@@ -1101,7 +1282,7 @@ routine F128.tanpi() -> F128
   if int_ne[S64](a: lx1and2, b: 0_s64)
     z = pr.item1.div(you: pr.item0)
   if z.isinf()
-    z = UnpackedFloat[U128, U256, 128].make(mant: z.mant, exp: z.exp, sign: int_eq[S64](a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan())
+    z = UnpackedFloat[U128, U256, 128].make(mant: z.mant, exp: z.exp, fpclass: SignedFpClass.from_flags(sign: int_eq[S64](a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan()))
   if int_ne[S64](a: lx1and2, b: 0_s64)
     z = z.neg()
   return z.to_f128()
@@ -1112,13 +1293,15 @@ routine F128.tanpi() -> F128
 # ============================================================================
 
 ### erf_ continued fraction (TLFloat erf_, N=120).
-routine UnpackedFloat[M, L, W].erf_cf() -> UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].erf_cf(levels: S64) -> UnpackedFloat[M, L, W]
   # Backward recurrence (Lentz-style numerator/denominator pair) for the erf continued
-  # fraction, 120 levels; two recurrence steps per loop iteration.
+  # fraction; `levels` recurrence levels (must be EVEN — two steps per loop iteration), sized by the
+  # caller to its precision target (F256 needs ~120; F128/D64 far fewer). The seed numerator is
+  # 2*levels+1 (odd partial numerator just past the deepest level).
   var zz = me.mul(you: me)
-  var n = UnpackedFloat[M, L, W].from_s64(src: 241_s64)
+  var n = UnpackedFloat[M, L, W].from_s64(src: add[S64](a: mul[S64](a: 2_s64, b: levels), b: 1_s64))
   var d = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
-  var i = 120_s64
+  var i = levels
   while signed_gt[S64](a: i, b: 0_s64)
     var i2 = mul[S64](a: i, b: 2_s64)
     var t = n
@@ -1133,13 +1316,14 @@ routine UnpackedFloat[M, L, W].erf_cf() -> UnpackedFloat[M, L, W]
   return me.mul(you: UnpackedFloat[M, L, W].rsqrt_pi()).mul(you: zz.neg().exp(n: 22_s64)).mul(you: d.div(you: n))
 
 ### erfc_ continued fraction (TLFloat erfc_, N=120).
-routine UnpackedFloat[M, L, W].erfc_cf() -> UnpackedFloat[M, L, W]
-  # Backward recurrence for the erfc continued fraction (the i/2 partial terms), 120 levels;
-  # converges for the tail |z| >= 3.1 where the erf series loses digits.
+routine UnpackedFloat[M, L, W].erfc_cf(levels: S64) -> UnpackedFloat[M, L, W]
+  # Backward recurrence for the erfc continued fraction (the i/2 partial terms), `levels` levels
+  # (EVEN); converges for the tail |z| >= 3.1 where the erf series loses digits. Caller sizes `levels`
+  # to its precision target.
   var zz = me.mul(you: me)
   var n = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var d = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
-  var i = 120_s64
+  var i = levels
   while signed_gt[S64](a: i, b: 0_s64)
     var t = n
     n = n.add(you: UnpackedFloat[M, L, W].from_s64(src: i).ldexp(e: -1_s64).mul(you: d))
@@ -1161,10 +1345,12 @@ routine F128.erf() -> F128
   var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
   var a = me.to_oct()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U256, U512, 256].from_s64(src: -1_s64).sub(you: a.erfc_cf()).to_f128()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f128()
   if a.lt(you: thr)
-    return a.erf_cf().to_f128()
-  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf()).to_f128()
+    # 72 levels is bit-exact for F128 across the whole erf branch |z|<3.1 (verified: lv=60 already
+    # bit-identical to 120 at z=3.09); the shared W=256 erf_cf otherwise carries 120 for F256's 237 bits.
+    return a.erf_cf(levels: 72_s64).to_f128()
+  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f128()
 
 ### Returns the complementary error function `erfc(me)`.
 routine F128.erfc() -> F128
@@ -1176,10 +1362,43 @@ routine F128.erfc() -> F128
   var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
   var a = me.to_oct()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U256, U512, 256].from_s64(src: 2_s64).add(you: a.erfc_cf()).to_f128()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_f128()
   if a.lt(you: thr)
-    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf()).to_f128()
-  return a.erfc_cf().to_f128()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 72_s64)).to_f128()
+  return a.erfc_cf(levels: 120_s64).to_f128()
+
+### Precision-reduced erf for sub-113-bit targets (D64 ~54 bits): identical branch structure to
+### `erf()` but the continued fraction runs at F128 width (113-bit) instead of octuple, with
+### caller-sized `levels_mid` (|z|<3.1 erf branch) and `levels_tail` (|z|>=3.1 erfc branch).
+routine F128.erf_fast(levels_mid: S64, levels_tail: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_infinite()
+    var s = if me.is_negative() then -1_s64 else 1_s64
+    return UnpackedFloat[U128, U256, 128].from_s64(src: s).to_f128()
+  var thr = UnpackedFloat[U128, U256, 128].from_s64(src: 31_s64).div(you: UnpackedFloat[U128, U256, 128].from_s64(src: 10_s64))
+  var a = me.to_uf()
+  if a.lt(you: thr.neg())
+    return UnpackedFloat[U128, U256, 128].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_f128()
+  if a.lt(you: thr)
+    return a.erf_cf(levels: levels_mid).to_f128()
+  return UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_f128()
+
+### Precision-reduced erfc for sub-113-bit targets (D64): F128-width continued fraction with
+### caller-sized `levels_mid`/`levels_tail`. Mirrors `erfc()`'s branch structure.
+routine F128.erfc_fast(levels_mid: S64, levels_tail: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_infinite()
+    var s = if me.is_negative() then 2_s64 else 0_s64
+    return UnpackedFloat[U128, U256, 128].from_s64(src: s).to_f128()
+  var thr = UnpackedFloat[U128, U256, 128].from_s64(src: 31_s64).div(you: UnpackedFloat[U128, U256, 128].from_s64(src: 10_s64))
+  var a = me.to_uf()
+  if a.lt(you: thr.neg())
+    return UnpackedFloat[U128, U256, 128].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: levels_tail)).to_f128()
+  if a.lt(you: thr)
+    return UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: levels_mid)).to_f128()
+  return a.erfc_cf(levels: levels_tail).to_f128()
 
 # ============================================================================
 # tgamma / lgamma (TLFloat) — octuple Stirling series + reflection.
@@ -1222,9 +1441,79 @@ routine UnpackedFloat[M, L, W].lgamma_core() -> UFSign[M, L, W]
     # Reflection: lgamma(me) = ln(pi) - ln|sin(pi*fr)| - lgamma(1-me); sign from sin and parity.
     var s = UnpackedFloat[M, L, W].pi().mul(you: fr).sin(n: 15_s64)
     y = UnpackedFloat[M, L, W].ln_pi().sub(you: s.abs().log(n: 23_s64, m: 0_s64, t: 0_s64)).sub(you: y)
-    sign = uf_bxor(a: sign, b: s.sign())
+    sign = (sign).xor(you: s.sign())
     sign = sign == inv.iseven()
   return UFSign[M, L, W](item0: sign, item1: y)
+
+### Degree-parameterized lgamma core for sub-octuple targets (D64): same octuple-width Stirling
+### method as `lgamma_core` (so the octuple `gamma_coef` table stays valid — it is NOT width-portable),
+### but with caller-sized Stirling degree `sdeg` (tail terms negligible at the augmented a>=20),
+### `log` degree `logn`, and reflection `sin` degree `sinn`. Argument-augmentation target stays 20.
+routine UnpackedFloat[M, L, W].lgamma_core_p(sdeg: S64, logn: S64, sinn: S64) -> UFSign[M, L, W]
+  var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  var p5 = one.ldexp(e: -1_s64)
+  var reflect = me.lt(you: one.neg())
+  var a = if reflect then one.sub(you: me) else me
+  var inv = a.rint()
+  var fr = a.sub(you: inv)
+  var w = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
+  var twenty = UnpackedFloat[M, L, W].from_s64(src: 20_s64)
+  if inv.lt(you: twenty)
+    var ii = inv.to_s64()
+    while signed_lt[S64](a: ii, b: 20_s64)
+      w = w.mul(you: UnpackedFloat[M, L, W].from_s64(src: ii).add(you: fr))
+      ii = add[S64](a: ii, b: 1_s64)
+    a = twenty.add(you: fr)
+  var inv_aa = one.div(you: a.mul(you: a))
+  var y = UnpackedFloat[M, L, W].gamma_coef(sdeg)
+  var i = sub[S64](a: sdeg, b: 1_s64)
+  while signed_ge[S64](a: i, b: 0_s64)
+    y = y.fma(b: inv_aa, c: UnpackedFloat[M, L, W].gamma_coef(i))
+    i = sub[S64](a: i, b: 1_s64)
+  var loga = a.log(n: logn, m: 0_s64, t: 0_s64)
+  y = y.div(you: a).add(you: a.sub(you: p5).mul(you: loga)).sub(you: a).add(you: p5.mul(you: UnpackedFloat[M, L, W].ln_2pi()))
+  y = y.sub(you: w.abs().log(n: logn, m: 0_s64, t: 0_s64))
+  var sign = w.sign()
+  if reflect
+    var s = UnpackedFloat[M, L, W].pi().mul(you: fr).sin(n: sinn)
+    y = UnpackedFloat[M, L, W].ln_pi().sub(you: s.abs().log(n: logn, m: 0_s64, t: 0_s64)).sub(you: y)
+    sign = (sign).xor(you: s.sign())
+    sign = sign == inv.iseven()
+  return UFSign[M, L, W](item0: sign, item1: y)
+
+### Degree-reduced tgamma for sub-octuple targets (D64): octuple width (valid gamma_coef) with
+### caller-sized Stirling/log/sin/exp degrees. See `lgamma_core_p`.
+routine F128.tgamma_unchecked_p(sdeg: S64, logn: S64, sinn: S64, expn: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_infinite()
+    if me.is_negative()
+      return F128.from_bits(bits: f128_qnan())
+    return me
+  var zu = me.to_oct()
+  if me.is_zero()
+    var sg = 0_u64
+    if me.is_negative()
+      sg = 1_u64
+    return F128.from_bits(bits: f128_inf(sign: sg))
+  if me.is_negative() and zu.isint()
+    return F128.from_bits(bits: f128_qnan())
+  var p = zu.lgamma_core_p(sdeg: sdeg, logn: logn, sinn: sinn)
+  var r = p.item1.exp(n: expn)
+  if p.item0
+    r = r.neg()
+  return r.to_f128()
+
+### Degree-reduced lgamma for sub-octuple targets (D64). See `lgamma_core_p`.
+routine F128.lgamma_p(sdeg: S64, logn: S64, sinn: S64) -> F128
+  if me.is_nan()
+    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+  if me.is_zero() or me.is_infinite()
+    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+  if me.is_negative() and me.to_oct().isint()
+    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+  var p = me.to_oct().lgamma_core_p(sdeg: sdeg, logn: logn, sinn: sinn)
+  return p.item1.to_f128()
 
 ### Returns the gamma function `tgamma(me)`.
 routine F128.tgamma!() -> F128

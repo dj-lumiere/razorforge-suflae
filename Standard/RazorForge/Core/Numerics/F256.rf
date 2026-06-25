@@ -32,7 +32,7 @@ record F256 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multi
 
 ### The implicit-bit mask `1 << 236`.
 routine f256a_implicit() -> U256
-  return shift_left[U256](value: 1, bits: uf_amt[U256](236_s64))
+  return shift_left[U256](value: 1, bits: U256.to_width(s: 236_s64))
 
 ### The 236-bit mantissa mask `(1 << 236) - 1`.
 routine f256a_mant_mask() -> U256
@@ -40,7 +40,7 @@ routine f256a_mant_mask() -> U256
 
 ### The sign-bit mask `1 << 255`.
 routine f256a_sign_mask() -> U256
-  return shift_left[U256](value: 1, bits: uf_amt[U256](255_s64))
+  return shift_left[U256](value: 1, bits: U256.to_width(s: 255_s64))
 
 ### The magnitude mask `~(1 << 255)` (all but the sign bit).
 routine f256a_abs_mask() -> U256
@@ -48,14 +48,14 @@ routine f256a_abs_mask() -> U256
 
 ### The infinity encoding `0x7FFFF << 236` for the given sign bit.
 routine f256a_inf(sign: U64) -> U256
-  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: uf_amt[U256](255_s64))
-  var e = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: uf_amt[U256](236_s64))
+  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
+  var e = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
   return bit_or[U256](a: s, b: e)
 
 ### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
 routine f256a_qnan() -> U256
-  var e = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: uf_amt[U256](236_s64))
-  var q = shift_left[U256](value: 1, bits: uf_amt[U256](235_s64))
+  var e = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
+  var q = shift_left[U256](value: 1, bits: U256.to_width(s: 235_s64))
   return bit_or[U256](a: e, b: q)
 
 ### Sign-magnitude total-order key for comparison.
@@ -83,14 +83,14 @@ common routine F256.from_bits(bits: U256) -> F256
 ### a decimal via `f256_to_d128`.
 routine F256.$create(from: F128) -> F256
   var bits = from.to_bits()
-  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: 1, bits: uf_amt[U128](127_s64))), b: 0)
-  var e = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, uf_amt[U128](112_s64)), b: zero_extend[U64, U128](0x7FFF_u64)))
-  var f = bit_and[U128](a: bits, b: sub[U128](a: shift_left[U128](value: 1, bits: uf_amt[U128](112_s64)), b: 1))
-  var s256 = shift_left[U256](value: zero_extend[U64, U256](if sign then 1_u64 else 0_u64), bits: uf_amt[U256](255_s64))
+  var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))), b: 0)
+  var e = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 112_s64)), b: zero_extend[U64, U128](0x7FFF_u64)))
+  var f = bit_and[U128](a: bits, b: sub[U128](a: shift_left[U128](value: 1, bits: U128.to_width(s: 112_s64)), b: 1))
+  var s256 = shift_left[U256](value: zero_extend[U64, U256](if sign then 1_u64 else 0_u64), bits: U256.to_width(s: 255_s64))
   # inf / nan: exponent all ones; carry the 112-bit payload up (quiet bit preserved).
   if int_eq[U64](a: e, b: 0x7FFF_u64)
-    var m = shift_left[U256](value: zero_extend[U128, U256](f), bits: uf_amt[U256](124_s64))
-    var ew = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: uf_amt[U256](236_s64))
+    var m = shift_left[U256](value: zero_extend[U128, U256](f), bits: U256.to_width(s: 124_s64))
+    var ew = shift_left[U256](value: zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
     return F256.from_bits(bits: bit_or[U256](a: bit_or[U256](a: s256, b: ew), b: m))
   # signed zero.
   if int_eq[U64](a: e, b: 0_u64) and int_eq[U128](a: f, b: 0)
@@ -101,20 +101,20 @@ routine F256.$create(from: F128) -> F256
     # subnormal F128: value = f * 2^-16494; normalize so the implicit bit lands at bit 112.
     var msb = sub[U64](a: 127_u64, b: int_truncate[U128, U64](leading_zeros[U128](f)))
     var shift = sub[U64](a: 112_u64, b: msb)
-    mant = bit_and[U128](a: shift_left[U128](value: f, bits: uf_amt[U128](reinterpret_bits[U64, S64](shift))), b: sub[U128](a: shift_left[U128](value: 1, bits: uf_amt[U128](112_s64)), b: 1))
+    mant = bit_and[U128](a: shift_left[U128](value: f, bits: U128.to_width(s: reinterpret_bits[U64, S64](shift))), b: sub[U128](a: shift_left[U128](value: 1, bits: U128.to_width(s: 112_s64)), b: 1))
     # F256 exponent bias is 262143 (19-bit IEEE). subnormal: biased = (msb - 16494) + 262143.
     e256 = add[U64](a: msb, b: 245649_u64)
   else
     mant = f
     # normal: biased = (e - 16383) + 262143 = e + 245760.
     e256 = add[U64](a: e, b: 245760_u64)
-  var ew = shift_left[U256](value: zero_extend[U64, U256](e256), bits: uf_amt[U256](236_s64))
-  var mw = shift_left[U256](value: zero_extend[U128, U256](mant), bits: uf_amt[U256](124_s64))
+  var ew = shift_left[U256](value: zero_extend[U64, U256](e256), bits: U256.to_width(s: 236_s64))
+  var mw = shift_left[U256](value: zero_extend[U128, U256](mant), bits: U256.to_width(s: 124_s64))
   return F256.from_bits(bits: bit_or[U256](a: bit_or[U256](a: s256, b: ew), b: mw))
 
 ### Returns the raw biased exponent field (0..524287).
 routine F256.raw_exponent() -> U64
-  return int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](me.to_bits(), uf_amt[U256](236_s64)), b: zero_extend[U64, U256](0x7FFFF_u64)))
+  return int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](me.to_bits(), U256.to_width(s: 236_s64)), b: zero_extend[U64, U256](0x7FFFF_u64)))
 
 ### Returns the raw 236-bit mantissa field (no implicit bit).
 routine F256.raw_mantissa() -> U256
@@ -232,7 +232,7 @@ routine F256.$cmp(you: F256) -> ComparisonSign
 routine F256.to_uf() -> UnpackedFloat[U256, U512, 256]
   var bits = me.to_bits()
   var sign = int_ne[U256](a: bit_and[U256](a: bits, b: f256a_sign_mask()), b: 0)
-  var e = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, uf_amt[U256](236_s64)), b: zero_extend[U64, U256](0x7FFFF_u64)))
+  var e = int_truncate[U256, U64](bit_and[U256](a: shift_right_unsigned[U256](bits, U256.to_width(s: 236_s64)), b: zero_extend[U64, U256](0x7FFFF_u64)))
   var f = bit_and[U256](a: bits, b: f256a_mant_mask())
   if e == 0x7FFFF_u64
     if int_ne[U256](a: f, b: 0)
@@ -243,27 +243,27 @@ routine F256.to_uf() -> UnpackedFloat[U256, U512, 256]
   if e == 0_u64
     var msbf = int_truncate[U256, S64](sub[U256](a: zero_extend[U64, U256](255_u64), b: leading_zeros[U256](f)))
     var shift = sub[S64](a: 254_s64, b: msbf)
-    var mant = shift_left[U256](value: f, bits: uf_amt[U256](shift))
-    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: msbf, b: 262379_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+    var mant = shift_left[U256](value: f, bits: U256.to_width(s: shift))
+    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: msbf, b: 262379_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
   var sig = bit_or[U256](a: f, b: f256a_implicit())
-  var mant = shift_left[U256](value: sig, bits: uf_amt[U256](18_s64))
-  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 262144_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  var mant = shift_left[U256](value: sig, bits: U256.to_width(s: 18_s64))
+  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 262144_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Packs the implicit-stripped significand and exponent into binary256 bits.
 routine f256a_pack(sign: U64, biased: U64, sig: U256) -> U256
-  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: uf_amt[U256](255_s64))
-  var e = shift_left[U256](value: zero_extend[U64, U256](biased), bits: uf_amt[U256](236_s64))
+  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
+  var e = shift_left[U256](value: zero_extend[U64, U256](biased), bits: U256.to_width(s: 236_s64))
   var f = bit_and[U256](a: sig, b: f256a_mant_mask())
   return bit_or[U256](a: bit_or[U256](a: s, b: e), b: f)
 
 ### Builds a subnormal binary256 encoding by shifting the significand down.
 routine f256a_finish_subnormal(sign: U64, sig: U256, under: S64) -> U256
-  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: uf_amt[U256](255_s64))
+  var s = shift_left[U256](value: zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
   if signed_gt[S64](a: under, b: 236_s64)
     return s
-  var lost = bit_and[U256](a: sig, b: uf_lowmask[U256](under))
-  var half = shift_left[U256](value: 1, bits: uf_amt[U256](sub[S64](a: under, b: 1_s64)))
-  var q = shift_right_unsigned[U256](sig, uf_amt[U256](under))
+  var lost = bit_and[U256](a: sig, b: U256.low_mask(n: under))
+  var half = shift_left[U256](value: 1, bits: U256.to_width(s: sub[S64](a: under, b: 1_s64)))
+  var q = shift_right_unsigned[U256](sig, U256.to_width(s: under))
   if unsigned_gt[U256](a: lost, b: half)
     q = add[U256](a: q, b: 1)
   elseif int_eq[U256](a: lost, b: half) and int_ne[U256](a: bit_and[U256](a: q, b: 1), b: 0)
@@ -281,18 +281,18 @@ routine UnpackedFloat[M, L, W].to_f256a() -> F256
   if me.isinf()
     return F256.from_bits(bits: f256a_inf(sign: sign))
   if me.iszero()
-    return F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](sign), bits: uf_amt[U256](255_s64)))
+    return F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64)))
   var biased = add[S64](a: me.exp, b: 262144_s64)
   var sh = sub[S64](a: reinterpret_bits[U64, S64](W), b: 238_s64)
-  var lost = bit_and[M](a: me.mant, b: uf_lowmask[M](sh))
-  var half = shift_left[M](value: 1, bits: uf_amt[M](sub[S64](a: sh, b: 1_s64)))
-  var sig = int_truncate[L, U256](zero_extend[M, L](shift_right_unsigned[M](me.mant, uf_amt[M](sh))))
+  var lost = bit_and[M](a: me.mant, b: M.low_mask(n: sh))
+  var half = shift_left[M](value: 1, bits: M.to_width(s: sub[S64](a: sh, b: 1_s64)))
+  var sig = int_truncate[L, U256](zero_extend[M, L](shift_right_unsigned[M](me.mant, M.to_width(s: sh))))
   if unsigned_gt[M](a: lost, b: half)
     sig = add[U256](a: sig, b: 1)
   elseif int_eq[M](a: lost, b: half) and int_ne[U256](a: bit_and[U256](a: sig, b: 1), b: 0)
     sig = add[U256](a: sig, b: 1)
-  if int_ne[U256](a: bit_and[U256](a: sig, b: shift_left[U256](value: 1, bits: uf_amt[U256](237_s64))), b: 0)
-    sig = shift_right_unsigned[U256](sig, uf_amt[U256](1_s64))
+  if int_ne[U256](a: bit_and[U256](a: sig, b: shift_left[U256](value: 1, bits: U256.to_width(s: 237_s64))), b: 0)
+    sig = shift_right_unsigned[U256](sig, U256.to_width(s: 1_s64))
     biased = add[S64](a: biased, b: 1_s64)
   if signed_ge[S64](a: biased, b: 524287_s64)
     return F256.from_bits(bits: f256a_inf(sign: sign))
@@ -388,19 +388,35 @@ routine F256.sqrt() -> F256
 
 ### e raised to this value.
 routine F256.exp() -> F256
-  return me.to_uf().exp(n: 20_s64).to_f256a()
+  return me.exp_n(n: 20_s64)
+
+### `e^me`, exp-series explicit series term count `n`.
+routine F256.exp_n(n: S64) -> F256
+  return me.to_uf().exp(n: n).to_f256a()
 
 ### Natural logarithm.
 routine F256.log() -> F256
-  return me.to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).to_f256a()
+  return me.log_n(n: 23_s64)
+
+### `ln(me)`, atanh-series explicit series term count `n`.
+routine F256.log_n(n: S64) -> F256
+  return me.to_uf().log(n: n, m: 0_s64, t: 0_s64).to_f256a()
 
 ### exp(me) - 1.
 routine F256.expm1() -> F256
-  return me.to_uf().expm1(n: 21_s64).to_f256a()
+  return me.expm1_n(n: 21_s64)
+
+### `e^me - 1`, explicit series term count `n`.
+routine F256.expm1_n(n: S64) -> F256
+  return me.to_uf().expm1(n: n).to_f256a()
 
 ### log(1 + me).
 routine F256.log1p() -> F256
-  return me.to_uf().log1p(n: 23_s64, m: 0_s64).to_f256a()
+  return me.log1p_n(n: 23_s64)
+
+### `ln(1+me)`, explicit series term count `n`.
+routine F256.log1p_n(n: S64) -> F256
+  return me.to_uf().log1p(n: n, m: 0_s64).to_f256a()
 
 ### Base-2 logarithm.
 routine F256.log2() -> F256
@@ -425,7 +441,7 @@ routine F256.exp10() -> F256
 routine F256.$pow(you: F256) -> F256
   var one = UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a()
   var poszero = F256.from_bits(bits: zero_extend[U64, U256](0_u64))
-  var negzero = F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: uf_amt[U256](255_s64)))
+  var negzero = F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 255_s64)))
   var posinf = F256.from_bits(bits: f256a_inf(sign: 0_u64))
   var neginf = F256.from_bits(bits: f256a_inf(sign: 1_u64))
   var negone = poszero - one
@@ -500,7 +516,11 @@ routine F256.fma(b: F256, c: F256) -> F256
 
 ### Sine.
 routine F256.sin() -> F256
-  return me.to_uf().sin(n: 16_s64).to_f256a()
+  return me.sin_n(n: 16_s64)
+
+### `sin(me)`, series explicit series term count `n`.
+routine F256.sin_n(n: S64) -> F256
+  return me.to_uf().sin(n: n).to_f256a()
 
 ### Cosine.
 routine F256.cos() -> F256

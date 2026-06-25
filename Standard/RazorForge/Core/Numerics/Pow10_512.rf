@@ -14,7 +14,7 @@ routine f512_pow10_in_table(k: S64) -> Bool
 
 ### Correctly-rounded 10^k as F512 via table lookup (caller guards range).
 ### Limbs big-endian (h7 first). Index with a plain running pointer var (generic
-### calls inside `[]` don't lower), rebuild U512 inline (no generic uf_w8 call).
+### calls inside `[]` don't lower), rebuild U512 inline (no generic from_words8 call).
 routine f512_pow10_tbl(k: S64) -> F512
   var p = mul[U64](a: reinterpret_bits[S64, U64](add[S64](a: k, b: 400_s64)), b: 8_u64)
   var acc = zero_extend[U64, U512](POW10_512_LIMBS[p])

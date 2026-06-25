@@ -31,20 +31,20 @@ routine uf512_from_u256(c: U256) -> ?UnpackedFloat[U512, U1024, 512]
     return UnpackedFloat[U512, U1024, 512].zero(sign: false)
   var cw = zero_extend[U256, U512](c)
   var x = sub[S64](a: 512_s64, b: int_truncate[U512, S64](leading_zeros[U512](cw)))
-  var mant = shift_left[U512](value: cw, bits: uf_amt[U512](sub[S64](a: 511_s64, b: x)))
-  return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: x, b: 2_s64), sign: false, iszero: false, isinf: false, isnan: false)
+  var mant = shift_left[U512](value: cw, bits: U512.to_width(s: sub[S64](a: 511_s64, b: x)))
+  return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: false, iszero: false, isinf: false, isnan: false))
 
 ### Rounds the engine value (assumed a positive ~integer) to a U512, round-half-even.
 ### integer = round(mant * 2^(exp-509)); shift = 509 - exp (positive in the ~10^77 range).
 routine uf512_to_u512_round(u: UnpackedFloat[U512, U1024, 512]) -> U512
   var shift = sub[S64](a: 509_s64, b: u.exp)
   if signed_le[S64](a: shift, b: 0_s64)
-    return shift_left[U512](value: u.mant, bits: uf_amt[U512](sub[S64](a: 0_s64, b: shift)))
+    return shift_left[U512](value: u.mant, bits: U512.to_width(s: sub[S64](a: 0_s64, b: shift)))
   if signed_ge[S64](a: shift, b: 512_s64)
     return zero_extend[U64, U512](0_u64)
-  var q = shift_right_unsigned[U512](u.mant, uf_amt[U512](shift))
-  var lost = bit_and[U512](a: u.mant, b: uf_lowmask[U512](shift))
-  var half = shift_left[U512](value: 1, bits: uf_amt[U512](sub[S64](a: shift, b: 1_s64)))
+  var q = shift_right_unsigned[U512](u.mant, U512.to_width(s: shift))
+  var lost = bit_and[U512](a: u.mant, b: U512.low_mask(n: shift))
+  var half = shift_left[U512](value: 1, bits: U512.to_width(s: sub[S64](a: shift, b: 1_s64)))
   if unsigned_gt[U512](a: lost, b: half)
     q = add[U512](a: q, b: 1)
   elseif int_eq[U512](a: lost, b: half) and int_ne[U512](a: bit_and[U512](a: q, b: 1), b: 0)
@@ -82,7 +82,7 @@ routine d128parts_to_f512(p: D128Parts) -> F512
   if unsigned_ge[U64](a: p.special, b: 2_u64)
     return F512.from_bits(bits: f512a_qnan())
   if int_eq[U128](a: p.coeff, b: 0_u128)
-    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](s), bits: uf_amt[U512](511_s64)))
+    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](s), bits: U512.to_width(s: 511_s64)))
   var v = uf512_from_u256(c: zero_extend[U128, U256](p.coeff)).to_f512a() * f512_pow10(e: p.exp)
   if p.sign
     return v.$neg()
@@ -97,7 +97,7 @@ routine decimalfixed_to_f512(x: Decimal) -> F512
   if unsigned_ge[U64](a: p.special, b: 2_u64)
     return F512.from_bits(bits: f512a_qnan())
   if int_eq[U256](a: p.coeff, b: 0)
-    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](s), bits: uf_amt[U512](511_s64)))
+    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](s), bits: U512.to_width(s: 511_s64)))
   var c = uf512_from_u256(c: p.coeff).to_f512a()
   var v = c * f512_pow10(e: p.exp)
   if p.sign
@@ -452,10 +452,10 @@ routine f512_erf_cr(x: F512) -> F512
   var thr = f512_intval(n: 31_s64) / f512_intval(n: 10_s64)
   var a = x.to_uf()
   if x < thr.$neg()
-    return UnpackedFloat[U512, U1024, 512].from_s64(src: -1_s64).sub(you: a.erfc_cf()).to_f512a()
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f512a()
   if x < thr
-    return a.erf_cf().to_f512a()
-  return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erfc_cf()).to_f512a()
+    return a.erf_cf(levels: 120_s64).to_f512a()
+  return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f512a()
 
 ### Complementary error function erfc(x)=1-erf(x). Specials: erfc(NaN)=NaN,
 ### erfc(-inf)=2, erfc(+inf)=0.
@@ -469,10 +469,10 @@ routine f512_erfc_cr(x: F512) -> F512
   var thr = f512_intval(n: 31_s64) / f512_intval(n: 10_s64)
   var a = x.to_uf()
   if x < thr.$neg()
-    return UnpackedFloat[U512, U1024, 512].from_s64(src: 2_s64).add(you: a.erfc_cf()).to_f512a()
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_f512a()
   if x < thr
-    return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erf_cf()).to_f512a()
-  return a.erfc_cf().to_f512a()
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 120_s64)).to_f512a()
+  return a.erfc_cf(levels: 120_s64).to_f512a()
 
 ### Error function.
 routine Decimal.erf() -> Decimal
@@ -526,7 +526,7 @@ routine f512_lgamma_core(z: UnpackedFloat[U512, U1024, 512]) -> UFSign[U512, U10
     # parity
     var s = UnpackedFloat[U512, U1024, 512].pi().mul(you: fr).sin(n: 26_s64)
     y = UnpackedFloat[U512, U1024, 512].ln_pi().sub(you: s.abs().log(n: 23_s64, m: 0_s64, t: 0_s64)).sub(you: y)
-    sign = uf_bxor(a: sign, b: s.sign())
+    sign = (sign).xor(you: s.sign())
     sign = sign == inv.iseven()
   return UFSign[U512, U1024, 512](item0: sign, item1: y)
 

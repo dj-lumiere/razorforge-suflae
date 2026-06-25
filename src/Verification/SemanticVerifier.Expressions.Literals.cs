@@ -634,9 +634,11 @@ public sealed partial class SemanticVerifier
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "s128");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
-        if (Int128.TryParse(s: cleanedValue, result: out Int128 value))
+        if (TryParseWideMagnitude(cleaned: cleanedValue, value: out System.Numerics.BigInteger value)
+            && value >= (System.Numerics.BigInteger)Int128.MinValue
+            && value <= (System.Numerics.BigInteger)Int128.MaxValue)
         {
-            return new ParsedSignedInt(Location: literal.Location, TypeName: "S128", Value: value);
+            return new ParsedSignedInt(Location: literal.Location, TypeName: "S128", Value: (Int128)value);
         }
 
         ReportError(code: SemanticDiagnosticCode.InvalidIntegerLiteral,
@@ -766,11 +768,12 @@ public sealed partial class SemanticVerifier
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "u128");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
-        if (UInt128.TryParse(s: cleanedValue, result: out UInt128 value))
+        if (TryParseWideMagnitude(cleaned: cleanedValue, value: out System.Numerics.BigInteger value)
+            && value.Sign >= 0 && value <= (System.Numerics.BigInteger)UInt128.MaxValue)
         {
             return new ParsedUnsignedInt(Location: literal.Location,
                 TypeName: "U128",
-                Value: value);
+                Value: (UInt128)value);
         }
 
         ReportError(code: SemanticDiagnosticCode.InvalidIntegerLiteral,
@@ -794,7 +797,7 @@ public sealed partial class SemanticVerifier
     private ParsedLiteral? ParseU256Literal(LiteralExpression literal, string rawValue)
     {
         string cleanedValue = CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "u256"));
-        if (System.Numerics.BigInteger.TryParse(value: cleanedValue, result: out System.Numerics.BigInteger value)
+        if (TryParseWideMagnitude(cleaned: cleanedValue, value: out System.Numerics.BigInteger value)
             && value.Sign >= 0 && value <= U256MaxValue)
         {
             return new ParsedWideInt(Location: literal.Location, TypeName: "U256", Value: value);
@@ -815,7 +818,7 @@ public sealed partial class SemanticVerifier
         string cleanedValue = CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "s256"));
         // The lexer bakes a leading sign into the literal text (mirroring S128), so accept the
         // full signed range here. Codegen emits the (possibly negative) decimal as an i256 const.
-        if (System.Numerics.BigInteger.TryParse(value: cleanedValue, result: out System.Numerics.BigInteger value)
+        if (TryParseWideMagnitude(cleaned: cleanedValue, value: out System.Numerics.BigInteger value)
             && value >= S256MinValue && value <= S256MaxValue)
         {
             return new ParsedWideInt(Location: literal.Location, TypeName: "S256", Value: value);
@@ -1140,6 +1143,66 @@ public sealed partial class SemanticVerifier
     internal static string CleanNumericLiteral(string value)
     {
         return value.Replace(oldValue: "_", newValue: "");
+    }
+
+    /// <summary>
+    /// Parses a cleaned integer magnitude into a full-width <see cref="System.Numerics.BigInteger"/>,
+    /// honoring an optional leading sign and a base prefix (<c>0x</c> hex, <c>0b</c> binary,
+    /// <c>0o</c> octal; otherwise decimal). The wide-literal parsers (U128/S128/U256/S256) need this
+    /// because <c>BigInteger</c>/<c>Int128</c>/<c>UInt128</c>.<c>TryParse</c> only accept decimal, so
+    /// base-prefixed wide literals (e.g. a full 256-bit <c>0x…</c> constant) were rejected as
+    /// out-of-range. Returns false for a malformed digit, an empty body, or a bare base prefix.
+    /// </summary>
+    private static bool TryParseWideMagnitude(string cleaned, out System.Numerics.BigInteger value)
+    {
+        value = System.Numerics.BigInteger.Zero;
+        if (string.IsNullOrEmpty(value: cleaned))
+        {
+            return false;
+        }
+
+        int i = 0;
+        bool negative = cleaned[index: 0] == '-';
+        if (cleaned[index: 0] is '+' or '-')
+        {
+            i = 1;
+        }
+
+        int numericBase = 10;
+        if (i + 1 < cleaned.Length && cleaned[index: i] == '0')
+        {
+            switch (char.ToLowerInvariant(c: cleaned[index: i + 1]))
+            {
+                case 'x': numericBase = 16; i += 2; break;
+                case 'b': numericBase = 2; i += 2; break;
+                case 'o': numericBase = 8; i += 2; break;
+            }
+        }
+
+        if (i >= cleaned.Length)
+        {
+            return false; // sign / base prefix with no digits
+        }
+
+        var acc = System.Numerics.BigInteger.Zero;
+        for (; i < cleaned.Length; i++)
+        {
+            int digit = char.ToLowerInvariant(c: cleaned[index: i]) switch
+            {
+                >= '0' and <= '9' => cleaned[index: i] - '0',
+                >= 'a' and <= 'f' => char.ToLowerInvariant(c: cleaned[index: i]) - 'a' + 10,
+                _ => -1
+            };
+            if (digit < 0 || digit >= numericBase)
+            {
+                return false;
+            }
+
+            acc = acc * numericBase + digit;
+        }
+
+        value = negative ? -acc : acc;
+        return true;
     }
 
     /// <summary>

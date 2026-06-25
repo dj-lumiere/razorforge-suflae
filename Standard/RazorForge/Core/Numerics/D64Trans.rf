@@ -19,20 +19,20 @@ routine uf128_from_u64(c: U64, sign: Bool) -> ?UnpackedFloat[U128, U256, 128]
     return UnpackedFloat[U128, U256, 128].zero(sign: sign)
   var cw = zero_extend[U64, U128](c)
   var x = sub[S64](a: 128_s64, b: int_truncate[U128, S64](leading_zeros[U128](cw)))
-  var mant = shift_left[U128](value: cw, bits: uf_amt[U128](sub[S64](a: 127_s64, b: x)))
-  return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: sub[S64](a: x, b: 2_s64), sign: sign, iszero: false, isinf: false, isnan: false)
+  var mant = shift_left[U128](value: cw, bits: U128.to_width(s: sub[S64](a: 127_s64, b: x)))
+  return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: sub[S64](a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Rounds the engine value (assumed a positive ~integer) to a U128, round-half-even.
 ### shift = 125 - exp (positive in the ~10^20 range).
 routine uf128_to_u128_round(u: UnpackedFloat[U128, U256, 128]) -> U128
   var shift = sub[S64](a: 125_s64, b: u.exp)
   if signed_le[S64](a: shift, b: 0_s64)
-    return shift_left[U128](value: u.mant, bits: uf_amt[U128](sub[S64](a: 0_s64, b: shift)))
+    return shift_left[U128](value: u.mant, bits: U128.to_width(s: sub[S64](a: 0_s64, b: shift)))
   if signed_ge[S64](a: shift, b: 128_s64)
     return zero_extend[U64, U128](0_u64)
-  var q = shift_right_unsigned[U128](u.mant, uf_amt[U128](shift))
-  var lost = bit_and[U128](a: u.mant, b: uf_lowmask[U128](shift))
-  var half = shift_left[U128](value: 1, bits: uf_amt[U128](sub[S64](a: shift, b: 1_s64)))
+  var q = shift_right_unsigned[U128](u.mant, U128.to_width(s: shift))
+  var lost = bit_and[U128](a: u.mant, b: U128.low_mask(n: shift))
+  var half = shift_left[U128](value: 1, bits: U128.to_width(s: sub[S64](a: shift, b: 1_s64)))
   if unsigned_gt[U128](a: lost, b: half)
     q = add[U128](a: q, b: 1)
   elseif int_eq[U128](a: lost, b: half) and int_ne[U128](a: bit_and[U128](a: q, b: 1), b: 0)
@@ -64,7 +64,7 @@ routine d64_to_f128(x: D64) -> F128
     return F128.from_bits(bits: f128_qnan())
   if int_eq[U64](a: p.coeff, b: 0_u64)
     # signed zero: sign bit (s) at bit 127, all else 0
-    return F128.from_bits(bits: shift_left[U128](value: zero_extend[U64, U128](s), bits: uf_amt[U128](127_s64)))
+    return F128.from_bits(bits: shift_left[U128](value: zero_extend[U64, U128](s), bits: U128.to_width(s: 127_s64)))
   # coeff (exact, <=16 digits fits the 113-bit significand) scaled by the decimal exponent 10^exp
   return uf128_from_u64(c: p.coeff, sign: p.sign).to_f128() * f128_pow10(e: p.exp)
 
@@ -106,7 +106,7 @@ routine D64.exp!() -> D64
 ### e^me, raw IEEE: may return ±inf (overflow) or NaN. Never crashes.
 ### :returns: The exponential of `me`, possibly non-finite.
 routine D64.exp_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).exp_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).exp_unchecked_n(n: 9_s64))
 
 ### e^me - 1 (accurate near 0) via F128. Crashes on a non-finite result.
 ### :returns: `exp(me) - 1`.
@@ -122,7 +122,7 @@ routine D64.expm1!() -> D64
 ### `exp(me) - 1`, raw IEEE: may return ±inf or NaN. Never crashes.
 ### :returns: `exp(me) - 1`, possibly non-finite.
 routine D64.expm1_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).expm1_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).expm1_unchecked_n(n: 9_s64))
 
 ### 2^me via F128. Crashes on a non-finite result.
 ### :returns: Two raised to the power `me`.
@@ -170,7 +170,10 @@ routine D64.log!() -> D64
 ### ln(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The natural logarithm of `me`, possibly non-finite.
 routine D64.log_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log_unchecked())
+  # PROTOTYPE: D64 carries ~16 digits (~54 bits), so size the log's atanh-series term count to 54
+  # bits rather than F128's full 128 — roughly half the series terms. Correctness gated by
+  # tcheck_d64_transcendentals.
+  return f128_to_d64(x: d64_to_f128(x: me).log_unchecked_n(n: 9_s64))
 
 ### ln(1+me) (accurate near 0) via F128. Crashes on a non-finite result (me<=-1).
 ### :returns: `ln(1 + me)`.
@@ -186,7 +189,7 @@ routine D64.log1p!() -> D64
 ### `ln(1 + me)`, raw IEEE: NaN for me<-1, -inf for me=-1. Never crashes.
 ### :returns: `ln(1 + me)`, possibly non-finite.
 routine D64.log1p_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log1p_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).log1p_unchecked_n(n: 9_s64))
 
 ### Base-2 log log2(me) via F128. Crashes on a non-finite result (me<=0).
 ### :returns: The base-2 logarithm of `me`.
@@ -202,7 +205,7 @@ routine D64.log2!() -> D64
 ### log2(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The base-2 logarithm of `me`, possibly non-finite.
 routine D64.log2_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log2_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).log2_unchecked_n(n: 9_s64))
 
 ### Base-10 log log10(me) via F128. Crashes on a non-finite result (me<=0).
 ### :returns: The base-10 logarithm of `me`.
@@ -218,7 +221,7 @@ routine D64.log10!() -> D64
 ### log10(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The base-10 logarithm of `me`, possibly non-finite.
 routine D64.log10_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log10_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).log10_unchecked_n(n: 9_s64))
 
 ### Square root sqrt(me) via F128. Crashes on a non-finite result (me<0).
 ### :returns: The square root of `me`.
@@ -245,7 +248,10 @@ routine D64.cbrt() -> D64
 ### :param you: The exponent.
 ### :returns: `me` raised to the power `you`, possibly non-finite.
 routine D64.pow_unchecked(you: D64) -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).pow_unchecked(you: d64_to_f128(x: you)))
+  # D64 needs ~54 bits; run the general exp(you*ln|me|) core at F128 width (113-bit, ~59 guard
+  # bits) with reduced series degrees rather than octuple. Correctness vs the octuple result is
+  # checked across a (base, exp) grid by the pow self-diff fixture.
+  return f128_to_d64(x: d64_to_f128(x: me).pow_unchecked_p(you: d64_to_f128(x: you), logn: 12_s64, expn: 12_s64, fast: true))
 
 ### sqrt(me^2 + you^2) (without spurious overflow) via F128. Crashes if non-finite.
 ### :param you: The second leg.
@@ -288,17 +294,17 @@ routine D64.fma_unchecked(b: D64, c: D64) -> D64
 ### Sine sin(me) (radians) via F128. Never crashes (NaN for non-finite input).
 ### :returns: The sine of `me`.
 routine D64.sin() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).sin())
+  return f128_to_d64(x: d64_to_f128(x: me).sin_n(n: 6_s64))
 
 ### Cosine cos(me) (radians) via F128. Never crashes (NaN for non-finite input).
 ### :returns: The cosine of `me`.
 routine D64.cos() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).cos())
+  return f128_to_d64(x: d64_to_f128(x: me).cos_n(n: 8_s64))
 
 ### Tangent tan(me) (radians) via F128. Never crashes (NaN for non-finite input).
 ### :returns: The tangent of `me`.
 routine D64.tan() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tan())
+  return f128_to_d64(x: d64_to_f128(x: me).tan_n(n: 10_s64))
 
 ### Arcsine asin(me) via F128. Crashes if non-finite (|me|>1).
 ### :returns: The arcsine of `me` in radians.
@@ -314,7 +320,8 @@ routine D64.asin!() -> D64
 ### asin(me), raw IEEE: NaN for |me|>1. Never crashes.
 ### :returns: The arcsine of `me`, possibly NaN.
 routine D64.asin_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).asin_unchecked())
+  # Already F128 width; reduce the atan2 Horner degree + half-angle depth to D64's ~54 bits.
+  return f128_to_d64(x: d64_to_f128(x: me).asin_fast(deg: 12_s64, depth: 2_s64))
 
 ### Arccosine acos(me) via F128. Crashes if non-finite (|me|>1).
 ### :returns: The arccosine of `me` in radians.
@@ -330,18 +337,18 @@ routine D64.acos!() -> D64
 ### acos(me), raw IEEE: NaN for |me|>1. Never crashes.
 ### :returns: The arccosine of `me`, possibly NaN.
 routine D64.acos_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).acos_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).acos_fast(deg: 12_s64, depth: 2_s64))
 
 ### Arctangent atan(me) via F128 (defined for all reals). Never crashes.
 ### :returns: The arctangent of `me` in radians.
 routine D64.atan() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atan())
+  return f128_to_d64(x: d64_to_f128(x: me).atan_fast(deg: 12_s64, depth: 2_s64))
 
 ### Two-argument arctangent atan2(me, x), quadrant-aware, via F128. Never crashes.
 ### :param x: The x-coordinate (me is the y-coordinate).
 ### :returns: The angle of (x, me) in radians, in (-pi, pi].
 routine D64.atan2(x: D64) -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atan2(you: d64_to_f128(x: x)))
+  return f128_to_d64(x: d64_to_f128(x: me).atan2_fast(you: d64_to_f128(x: x), deg: 12_s64, depth: 2_s64))
 
 ### Hyperbolic sine sinh(me) via F128. Crashes if non-finite (overflow for large |me|).
 ### :returns: The hyperbolic sine of `me`.
@@ -357,7 +364,7 @@ routine D64.sinh!() -> D64
 ### sinh(me), raw IEEE: ±inf on overflow. Never crashes.
 ### :returns: The hyperbolic sine of `me`, possibly ±inf.
 routine D64.sinh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).sinh_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).sinh_unchecked_n(n: 9_s64))
 
 ### Hyperbolic cosine cosh(me) via F128. Crashes if non-finite (overflow for large |me|).
 ### :returns: The hyperbolic cosine of `me`.
@@ -373,12 +380,12 @@ routine D64.cosh!() -> D64
 ### cosh(me), raw IEEE: +inf on overflow. Never crashes.
 ### :returns: The hyperbolic cosine of `me`, possibly +inf.
 routine D64.cosh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).cosh_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).cosh_unchecked_n(n: 9_s64))
 
 ### Hyperbolic tangent tanh(me) via F128 (defined for all reals). Never crashes.
 ### :returns: The hyperbolic tangent of `me`.
 routine D64.tanh() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tanh())
+  return f128_to_d64(x: d64_to_f128(x: me).tanh_n(n: 9_s64))
 
 ### Inverse hyperbolic sine asinh(me) via F128 (defined for all reals). Never crashes.
 ### :returns: The inverse hyperbolic sine of `me`.
@@ -415,17 +422,20 @@ routine D64.atanh!() -> D64
 ### atanh(me), raw IEEE: NaN for |me|>1, ±inf for |me|=1. Never crashes.
 ### :returns: The inverse hyperbolic tangent of `me`, possibly non-finite.
 routine D64.atanh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atanh_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).atanh_unchecked_n(n: 9_s64))
 
 ### Error function erf(me) via F128. Never crashes (saturates to ±1).
 ### :returns: The error function of `me`.
 routine D64.erf() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).erf())
+  # D64 needs ~54 bits; run the continued fraction at F128 width (113-bit) with reduced levels
+  # rather than octuple. lm=50/lt=64 carry ~20% margin over the validated floors (lm=42, lt<<62)
+  # at the hardest point z~3.1. Checked vs the octuple result by the erf levels-sweep fixture.
+  return f128_to_d64(x: d64_to_f128(x: me).erf_fast(levels_mid: 50_s64, levels_tail: 64_s64))
 
 ### Complementary error function erfc(me) = 1 - erf(me) via F128. Never crashes.
 ### :returns: The complementary error function of `me`.
 routine D64.erfc() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).erfc())
+  return f128_to_d64(x: d64_to_f128(x: me).erfc_fast(levels_mid: 50_s64, levels_tail: 64_s64))
 
 ### Gamma function tgamma(me) via F128. Crashes if non-finite (poles at 0 and neg ints).
 ### :returns: The gamma function of `me`.
@@ -441,12 +451,15 @@ routine D64.tgamma!() -> D64
 ### tgamma(me), raw IEEE: ±inf at poles, NaN for neg-int poles, overflow. Never crashes.
 ### :returns: The gamma function of `me`, possibly non-finite.
 routine D64.tgamma_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tgamma_unchecked())
+  # D64 needs ~54 bits; octuple-width Stirling (gamma_coef is octuple-only, not width-portable)
+  # but with reduced Stirling/log/sin/exp degrees. Checked vs the full-degree octuple result by
+  # the gamma self-diff fixture.
+  return f128_to_d64(x: d64_to_f128(x: me).tgamma_unchecked_p(sdeg: 12_s64, logn: 10_s64, sinn: 9_s64, expn: 10_s64))
 
 ### Log-gamma lgamma(me) = ln(|gamma(me)|) via F128. Never crashes (+inf at poles).
 ### :returns: The natural log of the absolute gamma of `me`.
 routine D64.lgamma() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).lgamma())
+  return f128_to_d64(x: d64_to_f128(x: me).lgamma_p(sdeg: 12_s64, logn: 10_s64, sinn: 9_s64))
 
 # ============================================================================
 # libm manipulation / classification — decimal-native on D64Parts (coeff U64).

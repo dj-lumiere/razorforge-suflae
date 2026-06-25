@@ -335,24 +335,31 @@ dangerous routine S128.$mul_unchecked(you: S128) -> S128
 ### :param you: The divisor.
 ### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
 dangerous routine S128.$floordiv_unchecked(you: S128) -> S128
-  var quotient = signed_div[S128](a: me, b: you)
-  var remainder = signed_rem[S128](a: me, b: you)
-  if remainder < 0_s128
-    if you > 0_s128
-      return quotient - 1_s128
-    return quotient + 1_s128
-  return quotient
+  # Mirror $floordiv! (euclidean, custom base-2⁶⁴ Knuth on magnitudes) minus the zero/overflow guards —
+  # NOT LLVM `sdiv`+`srem` i128 (two `__divti3`/`__modti3` libcalls). Faster AND now consistent with the
+  # checked euclidean semantics (the old unchecked path computed floor, diverging on negative divisors).
+  var amag = s128_abs_u128(x: me)
+  var bmag = s128_abs_u128(x: you)
+  var uq = u128_floordiv(a: amag, b: bmag)
+  var aneg = signed_lt[S128](a: me, b: 0_s128)
+  var bneg = signed_lt[S128](a: you, b: 0_s128)
+  if aneg and int_ne[U128](a: u128_mod(a: amag, b: bmag), b: 0_u128)
+    uq = add[U128](a: uq, b: 1_u128)
+  var q = reinterpret_bits[U128, S128](uq)
+  if aneg == bneg
+    return q
+  return sub[S128](a: 0_s128, b: q)
 
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The euclidean remainder, assuming `you != 0`.
 dangerous routine S128.$mod_unchecked(you: S128) -> S128
-  var remainder = signed_rem[S128](a: me, b: you)
-  if remainder < 0_s128
-    if you > 0_s128
-      return remainder + you
-    return remainder - you
-  return remainder
+  # Mirror $mod! (euclidean, custom Knuth magnitude kernel) minus the zero guard — not LLVM `srem` i128.
+  var bmag = s128_abs_u128(x: you)
+  var ur = u128_mod(a: s128_abs_u128(x: me), b: bmag)
+  if signed_lt[S128](a: me, b: 0_s128) and int_ne[U128](a: ur, b: 0_u128)
+    ur = sub[U128](a: bmag, b: ur)
+  return reinterpret_bits[U128, S128](ur)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)

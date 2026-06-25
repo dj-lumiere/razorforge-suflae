@@ -681,6 +681,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             WrapperForwarderInnerGenericDef = genericMethod.WrapperForwarderInnerGenericDef,
             Storage = genericMethod.Storage,
             AsyncStatus = genericMethod.AsyncStatus,
+            FailableVariant = genericMethod.FailableVariant,
             OriginalName = genericMethod.OriginalName,
         };
         return ctx.Registry.RegisterRoutineResolution(resolvedMethod: clone);
@@ -1790,6 +1791,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             WrapperForwarderInnerGenericDef = resolved.WrapperForwarderInnerGenericDef,
             Storage = resolved.Storage,
             AsyncStatus = resolved.AsyncStatus,
+            FailableVariant = resolved.FailableVariant,
             OriginalName = resolved.OriginalName,
             HasThrow = resolved.HasThrow,
             HasAbsent = resolved.HasAbsent,

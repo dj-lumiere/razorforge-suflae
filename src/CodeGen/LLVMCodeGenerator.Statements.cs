@@ -919,9 +919,12 @@ public partial class LlvmCodeGenerator
                 .FirstOrDefault(f => f.Name == "present");
             if (presentField != null)
             {
-                string presentVal = NextTemp();
+                // Maybe `present` is a Bool stored as i8 — trunc to i1 for the branch.
+                string presentByte = NextTemp();
                 EmitLine(sb: sb,
-                    line: $"  {presentVal} = extractvalue {llvmType} {loaded}, {presentField.Index}");
+                    line: $"  {presentByte} = extractvalue {llvmType} {loaded}, {presentField.Index}");
+                string presentVal = NextTemp();
+                EmitLine(sb: sb, line: $"  {presentVal} = trunc i8 {presentByte} to i1");
                 string doLabel = NextLabel(prefix: "rcrel_do");
                 skipLabel = NextLabel(prefix: "rcrel_skip");
                 EmitLine(sb: sb,

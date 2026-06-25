@@ -348,6 +348,13 @@ public sealed class RoutineInfo
     /// <summary>The suspended or threaded status of this routine (None, Suspended, Threaded).</summary>
     public AsyncStatus AsyncStatus { get; init; } = AsyncStatus.None;
 
+    /// <summary>
+    /// Which compiler-generated failable wrapper this routine is, if any (None for ordinary
+    /// routines). Orthogonal to <see cref="AsyncStatus"/> — previously the lookup_/check_/try_
+    /// variants were mixed into AsyncStatus and are now tracked separately here.
+    /// </summary>
+    public FailableVariant FailableVariant { get; init; } = FailableVariant.None;
+
     /// <summary>Whether this routine is a suspended routine.</summary>
     public bool IsSuspended => AsyncStatus is AsyncStatus.Suspended;
 
@@ -453,7 +460,8 @@ public sealed class RoutineInfo
             WrapperForwarderInnerMethod = WrapperForwarderInnerMethod,
             WrapperForwarderInnerGenericDef = WrapperForwarderInnerGenericDef,
             Storage = Storage,
-            AsyncStatus = AsyncStatus
+            AsyncStatus = AsyncStatus,
+            FailableVariant = FailableVariant
         };
     }
 

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Compiler.Postprocessing.Passes;
 using SyntaxTree;
+using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
@@ -282,7 +283,10 @@ public partial class LlvmCodeGenerator
         for (int i = 0; i < expr.MemberVariables.Count && i < record.MemberVariables.Count; i++)
         {
             string value = EmitExpression(sb: sb, expr: expr.MemberVariables[index: i].Value);
-            string memberVariableType = GetLlvmType(type: record.MemberVariables[index: i].Type);
+            TypeInfo fieldType = record.MemberVariables[index: i].Type;
+            // Bool fields are stored as i8 in the aggregate — zext the i1 value to its storage form.
+            value = CoerceBoolToStorage(sb: sb, value: value, fieldType: fieldType);
+            string memberVariableType = GetFieldStorageLlvmType(type: fieldType);
 
             string newResult = NextTemp();
             EmitLine(sb: sb,
@@ -334,7 +338,10 @@ public partial class LlvmCodeGenerator
                 ? named.Value
                 : arguments[index: i];
             string value = EmitExpression(sb: sb, expr: arg);
-            string memberVariableType = GetLlvmType(type: record.MemberVariables[index: i].Type);
+            TypeInfo fieldType = record.MemberVariables[index: i].Type;
+            // Bool fields are stored as i8 in the aggregate — zext the i1 value to its storage form.
+            value = CoerceBoolToStorage(sb: sb, value: value, fieldType: fieldType);
+            string memberVariableType = GetFieldStorageLlvmType(type: fieldType);
 
             string newResult = NextTemp();
             EmitLine(sb: sb,
@@ -785,10 +792,11 @@ public partial class LlvmCodeGenerator
 
         string typeName = GetRecordTypeName(record: record);
 
-        // Extract the member variable value
+        // A Bool field is stored as i8 in the aggregate — trunc back to the i1 register form.
         string value = NextTemp();
         EmitLine(sb: sb,
             line: $"  {value} = extractvalue {typeName} {recordValue}, {memberVariableIndex}");
+        value = CoerceStorageToBool(sb: sb, storageValue: value, fieldType: memberVariable.Type);
 
         return value;
     }
@@ -825,6 +833,8 @@ public partial class LlvmCodeGenerator
         string tupleTypeName = GetLlvmType(type: tuple);
         string result = NextTemp();
         EmitLine(sb: sb, line: $"  {result} = extractvalue {tupleTypeName} {tupleValue}, {index}");
+        // A Bool element is stored as i8 in the aggregate — trunc back to the i1 register form.
+        result = CoerceStorageToBool(sb: sb, storageValue: result, fieldType: tuple.ElementTypes[index: index]);
         return result;
     }
 
@@ -873,9 +883,10 @@ public partial class LlvmCodeGenerator
             string innerLlvm = memberVariable.Type.TypeArguments is { Count: 1 }
                 ? GetLlvmType(type: memberVariable.Type.TypeArguments[index: 0])
                 : "ptr";
+            // Maybe `present` (field 0) is a Bool, stored as i8.
             string wrapped = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {wrapped} = insertvalue {memberCarrierType} zeroinitializer, i1 1, 0");
+                line: $"  {wrapped} = insertvalue {memberCarrierType} zeroinitializer, i8 1, 0");
             string wrapped2 = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {wrapped2} = insertvalue {memberCarrierType} {wrapped}, {innerLlvm} {value}, 1");

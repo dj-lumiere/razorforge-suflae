@@ -209,6 +209,22 @@ public partial class LlvmCodeGenerator
     /// <summary>The return type of the current function being generated.</summary>
     private TypeInfo? _currentRoutineReturnType;
 
+    /// <summary>
+    /// True when the current function returns its value through a hidden <c>ptr sret(%T) %sret</c>
+    /// first parameter rather than by value (the ABI Indirect return form — see
+    /// internal-wiki/v0.1.x-struct-abi-boundary-coercion.md). When set, every <c>return</c> stores
+    /// through <c>%sret</c> and emits <c>ret void</c>.
+    /// </summary>
+    private bool _currentReturnViaSret;
+
+    /// <summary>
+    /// When non-null, the current function's struct return is COERCED to this ABI register type
+    /// (e.g. <c>i64</c> / <c>{ i64, i32 }</c>) — the Phase 2 small-struct register form. The header
+    /// returns this type and every <c>return</c> reinterprets the struct value into it. Mutually
+    /// exclusive with <see cref="_currentReturnViaSret"/>.
+    /// </summary>
+    private string? _currentReturnCoerceType;
+
     /// <summary>Function-entry alloca instructions emitted once per function.</summary>
     private readonly StringBuilder _currentRoutineEntryAllocas = new();
 

@@ -409,7 +409,8 @@ public sealed partial class TypeRegistry
             IsVariadic = routine.IsVariadic,
             IsDangerous = routine.IsDangerous,
             Storage = routine.Storage,
-            AsyncStatus = routine.AsyncStatus
+            AsyncStatus = routine.AsyncStatus,
+            FailableVariant = routine.FailableVariant
         };
 
         // Replace base name entry
@@ -960,6 +961,7 @@ public sealed partial class TypeRegistry
                 WrapperForwarderInnerGenericDef = method.WrapperForwarderInnerGenericDef,
                 Storage = method.Storage,
                 AsyncStatus = method.AsyncStatus,
+                FailableVariant = method.FailableVariant,
                 OriginalName = method.OriginalName
             };
 
@@ -1040,6 +1042,7 @@ public sealed partial class TypeRegistry
                     WrapperForwarderInnerGenericDef = method.WrapperForwarderInnerGenericDef,
                     Storage = method.Storage,
                     AsyncStatus = method.AsyncStatus,
+                    FailableVariant = method.FailableVariant,
                     OriginalName = method.OriginalName,
                     // Propagate method-level generic parameters from the concrete inner method so
                     // OperatorLoweringPass can monomorphize (e.g. Text.$getitem![I] -> [U64]).
@@ -1132,6 +1135,7 @@ public sealed partial class TypeRegistry
             WrapperForwarderInnerGenericDef = method.WrapperForwarderInnerGenericDef,
             Storage = method.Storage,
             AsyncStatus = method.AsyncStatus,
+            FailableVariant = method.FailableVariant,
             OriginalName = method.OriginalName
         };
         return CacheResolvedOwnerMethod(resolvedMethod: resolvedOwnerMethod);
