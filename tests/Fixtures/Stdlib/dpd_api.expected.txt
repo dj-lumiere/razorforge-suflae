@@ -1,0 +1,16 @@
+d32 +0    575668224
+d32 +1    575668225
+d32 -7.50 2721055696
+d64 +0    2465720795985346560
+d64 -7.50 11686841033026438096
+d128 +0   45235290231555418299757684020165476352
+rt d32 big   true
+rt d32 inf   true
+rt d32 nan   true
+rt d64 big   true
+rt d64 frac  true
+rt d64 inf   true
+rt d128 big  true
+rt d128 frac true
+rt d128 nan  true
+DONE
