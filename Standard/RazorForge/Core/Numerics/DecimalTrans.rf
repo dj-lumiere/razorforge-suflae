@@ -452,10 +452,10 @@ routine f512_erf_cr(x: F512) -> F512
   var thr = f512_intval(n: 31_s64) / f512_intval(n: 10_s64)
   var a = x.to_uf()
   if x < thr.$neg()
-    return UnpackedFloat[U512, U1024, 512].from_s64(src: -1_s64).sub(you: a.erfc_cf()).to_f512a()
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f512a()
   if x < thr
-    return a.erf_cf().to_f512a()
-  return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erfc_cf()).to_f512a()
+    return a.erf_cf(levels: 120_s64).to_f512a()
+  return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f512a()
 
 ### Complementary error function erfc(x)=1-erf(x). Specials: erfc(NaN)=NaN,
 ### erfc(-inf)=2, erfc(+inf)=0.
@@ -469,10 +469,10 @@ routine f512_erfc_cr(x: F512) -> F512
   var thr = f512_intval(n: 31_s64) / f512_intval(n: 10_s64)
   var a = x.to_uf()
   if x < thr.$neg()
-    return UnpackedFloat[U512, U1024, 512].from_s64(src: 2_s64).add(you: a.erfc_cf()).to_f512a()
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_f512a()
   if x < thr
-    return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erf_cf()).to_f512a()
-  return a.erfc_cf().to_f512a()
+    return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 120_s64)).to_f512a()
+  return a.erfc_cf(levels: 120_s64).to_f512a()
 
 ### Error function.
 routine Decimal.erf() -> Decimal

@@ -401,10 +401,10 @@ routine f256_erf(x: F256) -> F256
   var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
   var a = x.to_uf()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U256, U512, 256].from_s64(src: -1_s64).sub(you: a.erfc_cf()).to_f256a()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f256a()
   if a.lt(you: thr)
-    return a.erf_cf().to_f256a()
-  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf()).to_f256a()
+    return a.erf_cf(levels: 120_s64).to_f256a()
+  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f256a()
 
 ### Complementary error function erfc(x) = 1 - erf(x) via the N=120 CF cores at W=256.
 ### erfc(-inf) = 2, erfc(+inf) = 0. Threshold ±3.1 selects erf vs erfc continued fraction.
@@ -418,10 +418,10 @@ routine f256_erfc(x: F256) -> F256
   var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
   var a = x.to_uf()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U256, U512, 256].from_s64(src: 2_s64).add(you: a.erfc_cf()).to_f256a()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_f256a()
   if a.lt(you: thr)
-    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf()).to_f256a()
-  return a.erfc_cf().to_f256a()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 120_s64)).to_f256a()
+  return a.erfc_cf(levels: 120_s64).to_f256a()
 
 ### gamma via the generic Stirling lgamma_core (octuple gamma_coef ~49 digits >> 34).
 

@@ -1207,13 +1207,15 @@ routine F128.tanpi() -> F128
 # ============================================================================
 
 ### erf_ continued fraction (TLFloat erf_, N=120).
-routine UnpackedFloat[M, L, W].erf_cf() -> UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].erf_cf(levels: S64) -> UnpackedFloat[M, L, W]
   # Backward recurrence (Lentz-style numerator/denominator pair) for the erf continued
-  # fraction, 120 levels; two recurrence steps per loop iteration.
+  # fraction; `levels` recurrence levels (must be EVEN — two steps per loop iteration), sized by the
+  # caller to its precision target (F256 needs ~120; F128/D64 far fewer). The seed numerator is
+  # 2*levels+1 (odd partial numerator just past the deepest level).
   var zz = me.mul(you: me)
-  var n = UnpackedFloat[M, L, W].from_s64(src: 241_s64)
+  var n = UnpackedFloat[M, L, W].from_s64(src: add[S64](a: mul[S64](a: 2_s64, b: levels), b: 1_s64))
   var d = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
-  var i = 120_s64
+  var i = levels
   while signed_gt[S64](a: i, b: 0_s64)
     var i2 = mul[S64](a: i, b: 2_s64)
     var t = n
@@ -1228,13 +1230,14 @@ routine UnpackedFloat[M, L, W].erf_cf() -> UnpackedFloat[M, L, W]
   return me.mul(you: UnpackedFloat[M, L, W].rsqrt_pi()).mul(you: zz.neg().exp(n: 22_s64)).mul(you: d.div(you: n))
 
 ### erfc_ continued fraction (TLFloat erfc_, N=120).
-routine UnpackedFloat[M, L, W].erfc_cf() -> UnpackedFloat[M, L, W]
-  # Backward recurrence for the erfc continued fraction (the i/2 partial terms), 120 levels;
-  # converges for the tail |z| >= 3.1 where the erf series loses digits.
+routine UnpackedFloat[M, L, W].erfc_cf(levels: S64) -> UnpackedFloat[M, L, W]
+  # Backward recurrence for the erfc continued fraction (the i/2 partial terms), `levels` levels
+  # (EVEN); converges for the tail |z| >= 3.1 where the erf series loses digits. Caller sizes `levels`
+  # to its precision target.
   var zz = me.mul(you: me)
   var n = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var d = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
-  var i = 120_s64
+  var i = levels
   while signed_gt[S64](a: i, b: 0_s64)
     var t = n
     n = n.add(you: UnpackedFloat[M, L, W].from_s64(src: i).ldexp(e: -1_s64).mul(you: d))
@@ -1256,10 +1259,12 @@ routine F128.erf() -> F128
   var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
   var a = me.to_oct()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U256, U512, 256].from_s64(src: -1_s64).sub(you: a.erfc_cf()).to_f128()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f128()
   if a.lt(you: thr)
-    return a.erf_cf().to_f128()
-  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf()).to_f128()
+    # 72 levels is bit-exact for F128 across the whole erf branch |z|<3.1 (verified: lv=60 already
+    # bit-identical to 120 at z=3.09); the shared W=256 erf_cf otherwise carries 120 for F256's 237 bits.
+    return a.erf_cf(levels: 72_s64).to_f128()
+  return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f128()
 
 ### Returns the complementary error function `erfc(me)`.
 routine F128.erfc() -> F128
@@ -1271,10 +1276,10 @@ routine F128.erfc() -> F128
   var thr = UnpackedFloat[U256, U512, 256].from_s64(src: 31_s64).div(you: UnpackedFloat[U256, U512, 256].from_s64(src: 10_s64))
   var a = me.to_oct()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U256, U512, 256].from_s64(src: 2_s64).add(you: a.erfc_cf()).to_f128()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_f128()
   if a.lt(you: thr)
-    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf()).to_f128()
-  return a.erfc_cf().to_f128()
+    return UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 72_s64)).to_f128()
+  return a.erfc_cf(levels: 120_s64).to_f128()
 
 # ============================================================================
 # tgamma / lgamma (TLFloat) — octuple Stirling series + reflection.
