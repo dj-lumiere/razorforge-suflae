@@ -335,13 +335,15 @@ dangerous routine U128.$mul_unchecked(you: U128) -> U128
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
 dangerous routine U128.$floordiv_unchecked(you: U128) -> U128
-  return unsigned_div[U128](a: me, b: you)
+  # Use the hand-written base-2⁶⁴ Knuth divider, not LLVM's `udiv i128` (`__udivti3`): the bench shows
+  # `u128_floordiv` is faster (~11 vs ~17 ns) and it matches `$floordiv!`'s kernel (sans the zero check).
+  return u128_floordiv(a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
 dangerous routine U128.$mod_unchecked(you: U128) -> U128
-  return unsigned_rem[U128](a: me, b: you)
+  return u128_mod(a: me, b: you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
