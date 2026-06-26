@@ -517,6 +517,20 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitCall(StringBuilder sb, CallExpression call)
     {
+        // v0.2.0 5b-2: cancellation markers inserted by CancellationInstrumentationPass. Recognised
+        // before any normal resolution and lowered to rf_coro_cf_push / rf_coro_cf_pop. They are
+        // void; the empty result is discarded by the enclosing ExpressionStatement.
+        if (call.Callee is IdentifierExpression
+            { Name: Compiler.Postprocessing.Passes.CancellationInstrumentationPass.PushMarker })
+        {
+            return EmitCancelPush(sb: sb, call: call);
+        }
+        if (call.Callee is IdentifierExpression
+            { Name: Compiler.Postprocessing.Passes.CancellationInstrumentationPass.PopMarker })
+        {
+            return EmitCancelPop(sb: sb, call: call);
+        }
+
         EmitTraceLocUpdate(sb: sb, location: call.Location);
 
         return call.Callee switch
@@ -539,6 +553,69 @@ public partial class LlvmCodeGenerator
             _ => throw new NotImplementedException(
                 message: $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
         };
+    }
+
+    /// <summary>
+    /// Lowers a <c>__rf_cf_push(local)</c> marker: allocate a cancellation node for the owned local
+    /// and push it onto the coroutine's shadow stack with the local's value and its <c>$destroy</c>.
+    /// The value pushed is exactly the <c>me</c> the inline <c>$destroy</c> would receive: the loaded
+    /// pointer for an entity, the alloca address for a value-type record. Returns "" (void).
+    /// </summary>
+    private string EmitCancelPush(StringBuilder sb, CallExpression call)
+    {
+        string local = ((IdentifierExpression)call.Arguments[index: 0]).Name;
+        if (!_localVarLlvmNames.TryGetValue(key: local, value: out string? unique)
+            || !_localVariables.TryGetValue(key: local, value: out TypeInfo? type))
+        {
+            return ""; // not a tracked local (e.g. a param) — leave untracked (first-cut limitation)
+        }
+
+        RoutineInfo? destroy = _registry.LookupMethod(type: type, methodName: "$destroy");
+        if (destroy == null)
+        {
+            return "";
+        }
+        GenerateRoutineDeclaration(routine: destroy);
+        string mangled = MangleRoutineName(routine: destroy);
+
+        string valuePtr;
+        if (type is EntityTypeInfo)
+        {
+            valuePtr = NextTemp();
+            EmitLine(sb: sb, line: $"  {valuePtr} = load ptr, ptr %{unique}.addr");
+        }
+        else
+        {
+            valuePtr = $"%{unique}.addr";
+        }
+
+        string node = $"%{unique}.cfnode";
+        EmitEntryAlloca(llvmName: node, llvmType: "{ ptr, ptr, ptr }");
+        // Register the declare alongside the call (idempotent) — EnsureTaskRuntimeDeclares only runs
+        // for threaded/waitfor IR, but cancellation markers fire for any may-suspend routine.
+        _rfRoutineDeclarations[key: "rf_coro_cf_push"] =
+            "declare void @rf_coro_cf_push(ptr, ptr, ptr)";
+        EmitLine(sb: sb,
+            line: $"  call void @rf_coro_cf_push(ptr {node}, ptr {valuePtr}, ptr @{mangled})");
+        _cfNodes[key: local] = node;
+        return "";
+    }
+
+    /// <summary>
+    /// Lowers a <c>__rf_cf_pop(local)</c> marker: unlink the local's cancellation node before its
+    /// inline <c>$destroy</c> runs (so abandon never double-frees it). No-op if the local was never
+    /// pushed (e.g. a param). Returns "" (void).
+    /// </summary>
+    private string EmitCancelPop(StringBuilder sb, CallExpression call)
+    {
+        string local = ((IdentifierExpression)call.Arguments[index: 0]).Name;
+        if (!_cfNodes.TryGetValue(key: local, value: out string? node))
+        {
+            return "";
+        }
+        _rfRoutineDeclarations[key: "rf_coro_cf_pop"] = "declare void @rf_coro_cf_pop(ptr)";
+        EmitLine(sb: sb, line: $"  call void @rf_coro_cf_pop(ptr {node})");
+        return "";
     }
 
     /// <summary>

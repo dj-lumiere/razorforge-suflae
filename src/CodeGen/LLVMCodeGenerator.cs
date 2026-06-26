@@ -178,6 +178,13 @@ public partial class LlvmCodeGenerator
     /// <summary>Map of source variable names to unique LLVM variable names (handles shadowing).</summary>
     private readonly Dictionary<string, string> _localVarLlvmNames = new();
 
+    /// <summary>
+    /// v0.2.0 5b-2: per-routine map of an instrumented owned local's source name to its
+    /// cancellation-node alloca (<c>%name.cfnode</c>). Populated by a <c>__rf_cf_push</c> marker,
+    /// read by the matching <c>__rf_cf_pop</c>. Cleared per routine.
+    /// </summary>
+    private readonly Dictionary<string, string> _cfNodes = new();
+
     /// <summary>Counter for deduplicating variable names within a function.</summary>
     private readonly Dictionary<string, int> _varNameCounts = new();
 

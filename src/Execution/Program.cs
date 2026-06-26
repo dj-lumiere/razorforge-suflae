@@ -713,6 +713,15 @@ internal partial class Program
             // Pass stdlib programs to codegen so intrinsic routines get built
             List<(SyntaxTree.Program Program, string FilePath, string Module)>
                 stdlibPrograms = result.Registry.StdlibPrograms;
+
+            // 5b-2: instrument may-suspend routine bodies with cancellation push/pop markers
+            // (no-op unless something reaches a coroutine suspend point). Mutates `ast` in place,
+            // which is the same AST object codegen consumes below.
+            Compiler.Postprocessing.Passes.CancellationInstrumentationPass.Run(
+                programs: [(ast, ast.Location.FileName, "")],
+                maySuspendKeys: result.MaySuspendRoutineKeys,
+                registry: result.Registry);
+
             var generator = new LlvmCodeGenerator(program: ast,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
@@ -959,6 +968,15 @@ internal partial class Program
 
             List<(SyntaxTree.Program Program, string FilePath, string Module)>
                 stdlibPrograms = result.Registry.StdlibPrograms;
+
+            // 5b-2: instrument may-suspend routine bodies with cancellation push/pop markers
+            // (no-op unless something reaches a coroutine suspend point). Mutates the userPrograms
+            // ASTs in place — the same objects codegen consumes below.
+            Compiler.Postprocessing.Passes.CancellationInstrumentationPass.Run(
+                programs: userPrograms,
+                maySuspendKeys: result.MaySuspendRoutineKeys,
+                registry: result.Registry);
+
             var generator = new LlvmCodeGenerator(userPrograms: userPrograms,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
