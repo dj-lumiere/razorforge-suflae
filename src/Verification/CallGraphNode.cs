@@ -41,6 +41,27 @@ public sealed class CallGraphNode
     public bool Visited { get; set; }
 
     /// <summary>
+    /// Whether this routine's body directly invokes a coroutine suspend primitive
+    /// (e.g. <c>rf_coro_yield</c>). Seed for the may-suspend backward fixpoint
+    /// (<see cref="MaySuspendAnalysis"/>); set when the call graph is built.
+    /// </summary>
+    public bool DirectlySuspends { get; set; }
+
+    /// <summary>
+    /// Whether this routine makes an indirect or dynamically-dispatched call (a first-class
+    /// routine value, lambda, or protocol dispatch) whose target the static call graph cannot
+    /// see. v0.2.0 treats these conservatively as may-suspend (design §6): over-approximating
+    /// only adds cancellation push/pops (a perf cost), never miscompiles teardown.
+    /// </summary>
+    public bool HasIndirectCall { get; set; }
+
+    /// <summary>
+    /// Result of the may-suspend fixpoint: true once this routine is known to transitively reach
+    /// a suspend primitive. Monotonic — only ever flips false→true.
+    /// </summary>
+    public bool MaySuspend { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="CallGraphNode"/> class.
     /// </summary>
     /// <param name="routine">The routine this node represents.</param>
