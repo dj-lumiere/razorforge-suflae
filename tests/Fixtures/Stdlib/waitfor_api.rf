@@ -2,13 +2,13 @@ module Tests/Stdlib/WaitforApi
 
 # Standalone `waitfor(d)` — a timed wait. Currently a `threaded routine` (the wait runs on a
 # worker thread, joined by `retrieve!`); it becomes a `suspended routine` when the scheduler
-# lands, with identical call sites. Uncolored: prefer this over a raw sleep.
+# lands, with identical call sites. Uncolored: prefer this over a raw sleep. Returns nothing
+# (a Task[Blank]) — also exercises the void-returning threaded-routine path.
 
 import IO/Console
 
 routine start()
   show(value: "before")
-  var waited = waitfor(10ms).retrieve!()
-  show(f"waited {waited.total_nanoseconds() >= 10000000_s64}")
+  discard waitfor(10ms).retrieve!()
   show(value: "after")
   return
