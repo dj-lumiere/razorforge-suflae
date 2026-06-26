@@ -1,0 +1,42 @@
+module Core
+
+### Handle to a `suspended routine` — a stackful coroutine. Calling a `suspended routine` creates
+### the coroutine (it does not start running) and yields one of these handles. `retrieve!()` drives
+### it to completion and returns its value; dropping the handle abandons a coroutine that never
+### finished (its cancellation shadow stack tears down whatever it still owned).
+###
+### v0.2.0: single coroutine, driven synchronously by `retrieve!`. A scheduler/reactor (so a parked
+### coroutine makes progress on its own) is the rest of v0.2.0's async work.
+record Coroutine[T]
+  ### The opaque coroutine handle (rf_coro*).
+  secret coro: CPtr
+  ### The task control block that holds the produced value (completed by the coroutine's entry thunk).
+  secret result: Address
+
+### Drives the coroutine to completion and returns its produced value. Each call to the underlying
+### resume runs the body until its next suspend point; we pump until it finishes.
+### :returns: The value the suspended routine returned.
+routine Coroutine[T].retrieve!() -> ?T
+  if me.coro.is_none()
+    throw TaskSpawnError()
+  danger!
+    var status = rf_coro_resume(coro: me.coro)
+    while status == 2_u32              # RF_CORO_PARKED — keep pumping until it finishes
+      status = rf_coro_resume(coro: me.coro)
+
+    var payload = rf_task_result_payload(task: me.result)
+    var value = Hijacked[T](from: payload).extract()
+    rf_invalidate(ptr: payload)
+    return value
+
+### Teardown: a completed coroutine is freed; one that never finished is abandoned (its shadow
+### stack runs, tearing down whatever it still owns). The result task block is always released.
+dangerous routine Coroutine[T].$destroy()
+  if not me.coro.is_none()
+    var status = rf_coro_status_get(coro: me.coro)
+    if status == 3_u32                # RF_CORO_COMPLETED
+      rf_coro_delete(coro: me.coro)
+    else
+      rf_coro_abandon(coro: me.coro)
+    rf_task_destroy(task: me.result)
+  return
