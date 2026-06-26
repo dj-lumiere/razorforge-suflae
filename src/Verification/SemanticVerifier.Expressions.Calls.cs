@@ -402,6 +402,17 @@ public sealed partial class SemanticVerifier
                             : returnType;
                     }
 
+                    // A `suspended routine` call creates a stackful coroutine and yields a
+                    // `Coroutine[T]` handle, driven to completion via `Coroutine[T].retrieve!()`.
+                    if (routine.AsyncStatus == AsyncStatus.Suspended)
+                    {
+                        TypeSymbol? coroDef = _registry.LookupType(name: "Coroutine");
+                        return coroDef != null
+                            ? _registry.GetOrCreateResolution(genericDef: coroDef,
+                                typeArguments: [returnType])
+                            : returnType;
+                    }
+
                     return returnType;
                 }
 

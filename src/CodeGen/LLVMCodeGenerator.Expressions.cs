@@ -392,6 +392,150 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Spawns a `suspended routine` as a stackful coroutine and returns a `Coroutine[T]` handle
+    /// { coro: CPtr, result: Address }. Mirrors <see cref="EmitThreadedSpawn"/> but the execution
+    /// mechanism is a coroutine (rf_coro_create) instead of an OS thread; the result is still boxed
+    /// into a task block (reusing the Task result machinery), which the coroutine's entry thunk
+    /// completes. The coroutine does NOT start here — `Coroutine[T].retrieve!()` drives it.
+    /// </summary>
+    private string EmitSuspendedSpawn(StringBuilder sb, RoutineInfo routine,
+        List<Expression> arguments)
+    {
+        EnsureTaskRuntimeDeclares();
+        _rfRoutineDeclarations[key: "rf_coro_create"] = "declare ptr @rf_coro_create(ptr, ptr, i64)";
+        GenerateRoutineDeclaration(routine: routine);
+        string thunk = EnsureCoroEntryThunk(routine: routine);
+
+        int n = Math.Min(val1: arguments.Count, val2: routine.Parameters.Count);
+        var values = new List<string>();
+        var types = new List<string>();
+        for (int i = 0; i < n; i++)
+        {
+            string v = EmitExpression(sb: sb, expr: arguments[index: i]);
+            TypeInfo actual = GetExpressionType(expr: arguments[index: i])
+                              ?? routine.Parameters[index: i].Type!;
+            (string cv, string _) = CoerceCallArgumentToParameter(sb: sb, argValue: v,
+                actualType: actual, parameterType: routine.Parameters[index: i].Type, callee: routine);
+            values.Add(item: cv);
+            types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
+        }
+
+        string argpack = "ptr null";
+        if (values.Count > 0)
+        {
+            string packType = EnsureArgpackType(routine: routine);
+            string szp = NextTemp();
+            EmitLine(sb: sb, line: $"  {szp} = getelementptr {packType}, ptr null, i32 1");
+            string sz = NextTemp();
+            EmitLine(sb: sb, line: $"  {sz} = ptrtoint ptr {szp} to i64");
+            string pack = NextTemp();
+            EmitLine(sb: sb, line: $"  {pack} = call ptr @rf_allocate_dynamic(i64 {sz})");
+            for (int i = 0; i < values.Count; i++)
+            {
+                string fp = NextTemp();
+                EmitLine(sb: sb, line: $"  {fp} = getelementptr {packType}, ptr {pack}, i32 0, i32 {i}");
+                EmitLine(sb: sb, line: $"  store {types[index: i]} {values[index: i]}, ptr {fp}");
+            }
+            argpack = $"ptr {pack}";
+        }
+
+        // Result holder: a suspended-kind task block (0). The coro thunk completes it.
+        string task = NextTemp();
+        EmitLine(sb: sb, line: $"  {task} = call ptr @rf_task_create(i32 0)");
+
+        // userdata = { ptr task, ptr argpack } handed to the coroutine entry.
+        string udszp = NextTemp();
+        EmitLine(sb: sb, line: $"  {udszp} = getelementptr {{ ptr, ptr }}, ptr null, i32 1");
+        string udsz = NextTemp();
+        EmitLine(sb: sb, line: $"  {udsz} = ptrtoint ptr {udszp} to i64");
+        string ud = NextTemp();
+        EmitLine(sb: sb, line: $"  {ud} = call ptr @rf_allocate_dynamic(i64 {udsz})");
+        EmitLine(sb: sb, line: $"  store ptr {task}, ptr {ud}");
+        string udf1 = NextTemp();
+        EmitLine(sb: sb, line: $"  {udf1} = getelementptr {{ ptr, ptr }}, ptr {ud}, i32 0, i32 1");
+        EmitLine(sb: sb, line: $"  store {argpack}, ptr {udf1}");
+
+        string coro = NextTemp();
+        EmitLine(sb: sb, line: $"  {coro} = call ptr @rf_coro_create(ptr {thunk}, ptr {ud}, i64 0)");
+
+        // Build Coroutine[T] { coro: CPtr (ptr), result: Address (i64) }.
+        TypeInfo coroType = _registry.GetOrCreateResolution(
+            genericDef: _registry.LookupType(name: "Coroutine")!,
+            typeArguments: [routine.ReturnType!]);
+        string recLlvm = GetLlvmType(type: coroType);
+        string r0 = NextTemp();
+        EmitLine(sb: sb, line: $"  {r0} = insertvalue {recLlvm} zeroinitializer, ptr {coro}, 0");
+        string taskInt = NextTemp();
+        EmitLine(sb: sb, line: $"  {taskInt} = ptrtoint ptr {task} to i64");
+        string r1 = NextTemp();
+        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i64 {taskInt}, 1");
+        return r1;
+    }
+
+    /// <summary>
+    /// Emits the coroutine entry thunk <c>@&lt;routine&gt;$coro_entry(ptr %ud)</c> matching the C
+    /// <c>rf_context_entry_fn</c> signature. <c>ud = { ptr task, ptr argpack }</c>: it unpacks the
+    /// args, calls the real routine, heap-boxes the result, completes the task, and frees ud/argpack.
+    /// </summary>
+    private string EnsureCoroEntryThunk(RoutineInfo routine)
+    {
+        string mangled = MangleRoutineName(routine: routine);
+        string realRef = $"@{mangled}";
+        string raw = mangled.StartsWith(value: '"') ? mangled[1..^1] : mangled;
+        string thunkRaw = $"{raw}$coro_entry";
+        string thunkSym = $"@{Q(name: thunkRaw)}";
+        if (!_emittedRoutineValueThunks.Add(item: thunkRaw))
+            return thunkSym;
+
+        string retType = routine.ReturnType != null ? GetLlvmType(type: routine.ReturnType) : "void";
+        StringBuilder b = _auxRoutineDefinitions;
+        b.Append(value: $"define void {thunkSym}(ptr %ud) {{\n");
+        b.Append(value: "entry:\n");
+        b.Append(value: "  %task = load ptr, ptr %ud\n");
+        b.Append(value: "  %apf = getelementptr { ptr, ptr }, ptr %ud, i32 0, i32 1\n");
+        b.Append(value: "  %argpack = load ptr, ptr %apf\n");
+
+        var callArgs = new List<string>();
+        if (routine.Parameters.Count > 0)
+        {
+            string packType = EnsureArgpackType(routine: routine);
+            for (int i = 0; i < routine.Parameters.Count; i++)
+            {
+                string pt = GetParameterLlvmType(type: routine.Parameters[index: i].Type);
+                b.Append(value: $"  %fp{i} = getelementptr {packType}, ptr %argpack, i32 0, i32 {i}\n");
+                b.Append(value: $"  %a{i} = load {pt}, ptr %fp{i}\n");
+                callArgs.Add(item: $"{pt} %a{i}");
+            }
+        }
+
+        string argList = string.Join(separator: ", ", values: callArgs);
+        if (retType == "void")
+        {
+            b.Append(value: $"  call void {realRef}({argList})\n");
+            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr null)\n");
+        }
+        else
+        {
+            b.Append(value: $"  %r = call {retType} {realRef}({argList})\n");
+            b.Append(value: $"  %bsz.p = getelementptr {retType}, ptr null, i32 1\n");
+            b.Append(value: "  %bsz = ptrtoint ptr %bsz.p to i64\n");
+            b.Append(value: "  %box = call ptr @rf_allocate_dynamic(i64 %bsz)\n");
+            b.Append(value: $"  store {retType} %r, ptr %box\n");
+            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr %box)\n");
+        }
+
+        if (routine.Parameters.Count > 0)
+        {
+            b.Append(value: "  %apint = ptrtoint ptr %argpack to i64\n");
+            b.Append(value: "  call void @rf_invalidate(i64 %apint)\n");
+        }
+        b.Append(value: "  %udint = ptrtoint ptr %ud to i64\n");
+        b.Append(value: "  call void @rf_invalidate(i64 %udint)\n");
+        b.Append(value: "  ret void\n}\n");
+        return thunkSym;
+    }
+
+    /// <summary>
     /// Generates a variable reference.
     /// </summary>
     private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)

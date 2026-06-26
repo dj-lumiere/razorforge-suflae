@@ -278,6 +278,12 @@ public partial class LlvmCodeGenerator
             return EmitThreadedSpawn(sb: sb, routine: routine, arguments: arguments);
         }
 
+        // A `suspended routine` call creates a coroutine and yields a Coroutine[T] handle.
+        if (routine is { AsyncStatus: AsyncStatus.Suspended })
+        {
+            return EmitSuspendedSpawn(sb: sb, routine: routine, arguments: arguments);
+        }
+
         // Evaluate all arguments
         var argValues = new List<string>();
         var argTypes = new List<string>();
