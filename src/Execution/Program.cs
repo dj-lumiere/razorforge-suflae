@@ -719,6 +719,7 @@ internal partial class Program
             // which is the same AST object codegen consumes below.
             Compiler.Postprocessing.Passes.CancellationInstrumentationPass.Run(
                 programs: [(ast, ast.Location.FileName, "")],
+                instantiatedBodies: result.InstantiatedGenericBodies,
                 maySuspendKeys: result.MaySuspendRoutineKeys,
                 registry: result.Registry);
 
@@ -974,6 +975,7 @@ internal partial class Program
             // ASTs in place — the same objects codegen consumes below.
             Compiler.Postprocessing.Passes.CancellationInstrumentationPass.Run(
                 programs: userPrograms,
+                instantiatedBodies: result.InstantiatedGenericBodies,
                 maySuspendKeys: result.MaySuspendRoutineKeys,
                 registry: result.Registry);
 

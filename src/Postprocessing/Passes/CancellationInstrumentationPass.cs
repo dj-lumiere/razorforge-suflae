@@ -48,11 +48,14 @@ public sealed class CancellationInstrumentationPass
     }
 
     /// <summary>
-    /// Instruments every may-suspend free routine in <paramref name="programs"/> in place. No-op
-    /// when <paramref name="maySuspendKeys"/> is empty (i.e. no coroutine reaches a suspend point).
+    /// Instruments every may-suspend routine in place: free routines and concrete member routines
+    /// from <paramref name="programs"/>, plus monomorphized generic bodies in
+    /// <paramref name="instantiatedBodies"/> (e.g. <c>List[Box].pop</c>). No-op when
+    /// <paramref name="maySuspendKeys"/> is empty (i.e. no coroutine reaches a suspend point).
     /// </summary>
     public static void Run(
         IEnumerable<(Program Program, string FilePath, string Module)> programs,
+        IReadOnlyDictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedBodies,
         IReadOnlyCollection<string> maySuspendKeys,
         TypeRegistry registry)
     {
@@ -70,6 +73,18 @@ public sealed class CancellationInstrumentationPass
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 pass.MaybeInstrument(decl: decl);
+            }
+        }
+
+        // Monomorphized generic bodies (List[Box].pop, etc.) are keyed by concrete RegistryKey and
+        // are the SAME objects codegen emits, so mutating their bodies in place takes effect. They
+        // inherited the inline $destroy calls from the lowered generic-def, so InstrumentBody derives
+        // the teardown set the same way.
+        foreach ((string key, Compiler.Instantiation.MonomorphizedBody mb) in instantiatedBodies)
+        {
+            if (pass._maySuspend.Contains(item: key) || pass._maySuspend.Contains(item: mb.Info.RegistryKey))
+            {
+                pass.InstrumentBody(body: mb.Ast.Body);
             }
         }
     }
@@ -98,19 +113,26 @@ public sealed class CancellationInstrumentationPass
     private void MaybeInstrument(RoutineDeclaration decl)
     {
         RoutineInfo? info = ResolveDecl(decl: decl);
-        if (info == null || !_maySuspend.Contains(item: info.RegistryKey))
+        if (info != null && _maySuspend.Contains(item: info.RegistryKey))
         {
-            return;
+            InstrumentBody(body: decl.Body);
         }
-        if (decl.Body is not BlockStatement body)
+    }
+
+    /// <summary>
+    /// Instruments one routine body (whether a source decl or a monomorphized generic body). The
+    /// set of instrumented locals is DERIVED from the inline <c>X.$destroy()</c> calls
+    /// <c>ScopeTeardownLoweringPass</c> already inserted — keeping abandon's set == inline's set.
+    /// </summary>
+    private void InstrumentBody(Statement body)
+    {
+        if (body is not BlockStatement block)
         {
             return;
         }
 
-        // Teardown locals = the names with at least one inline `X.$destroy()` call. Deriving the set
-        // from the inline teardown is what keeps abandon's set == inline's set.
         var locals = new HashSet<string>(comparer: StringComparer.Ordinal);
-        AstWalker.Walk(root: body, visit: n =>
+        AstWalker.Walk(root: block, visit: n =>
         {
             if (n is CallExpression
                 {
@@ -125,7 +147,7 @@ public sealed class CancellationInstrumentationPass
             return;
         }
 
-        InstrumentBlock(block: body, locals: locals);
+        InstrumentBlock(block: block, locals: locals);
     }
 
     /// <summary>
