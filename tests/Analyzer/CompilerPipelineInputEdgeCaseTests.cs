@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Compiler.CodeGen;
 using Compiler.Diagnostics;
@@ -149,12 +151,33 @@ public class CompilerPipelineInputEdgeCaseTests
     [Fact(Timeout = 30_000)]
     public async Task Codegen_DeeplyNestedSource_GeneratesRoutineDefinitionAsync()
     {
-        // Wrapped in Task.Run so xUnit's Timeout attribute can actually abort runaway work.
-        // Without async, Timeout in xUnit 2.x silently has no effect on sync test bodies.
-        string llvmIr = await Task.Run(function: () =>
+        // Run on a dedicated thread with a LARGE stack — the parser/SA/codegen recurse over the AST,
+        // and a default ThreadPool stack (which `Task.Run` would use) overflows on deep nesting,
+        // especially on macOS/ARM64 (larger frames, smaller default stack) where this previously
+        // crashed. The returned Task keeps xUnit's Timeout effective on the async body.
+        string llvmIr = await RunOnLargeStackAsync(work: () =>
             GenerateIr(source: CreateDeeplyNestedSource(nestingDepth: 32)));
 
         Assert.Contains(expectedSubstring: TestRoutineIrSignature, actualString: llvmIr);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="work"/> on a dedicated thread with a 64&#160;MB stack and surfaces it as a
+    /// <see cref="Task{T}"/>. Recursive compiler passes need far more stack than a ThreadPool thread
+    /// provides for deeply nested input; the explicit large stack makes nesting depth a property of
+    /// the input, not of the platform's default thread stack.
+    /// </summary>
+    private static Task<T> RunOnLargeStackAsync<T>(Func<T> work)
+    {
+        var tcs = new TaskCompletionSource<T>();
+        var thread = new Thread(start: () =>
+        {
+            try { tcs.SetResult(result: work()); }
+            catch (Exception e) { tcs.SetException(exception: e); }
+        }, maxStackSize: 64 * 1024 * 1024)
+        { IsBackground = true };
+        thread.Start();
+        return tcs.Task;
     }
 
     private static string GenerateIr(string source)
