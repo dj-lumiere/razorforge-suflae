@@ -194,6 +194,14 @@ void rf_sched_spawn(rf_sched* sched, rf_coro* coro);
  * inside a coroutine (e.g. by waitfor). No-op outside a running scheduler/coroutine. */
 void rf_sched_park_timer(uint64_t delay_ns);
 
+/* Park the current coroutine with no scheduler-satisfiable wake: only rf_sched_wake re-queues it.
+ * How a coroutine awaits work on another OS thread without blocking the scheduler thread. */
+void rf_sched_park_external(void);
+
+/* Make a parked coroutine runnable again. Safe to call from ANY thread — the bridge a worker
+ * thread uses to hand a result back to a coroutine awaiting it on the scheduler thread. */
+void rf_sched_wake(rf_sched* sched, rf_coro* coro);
+
 /* Drive all spawned coroutines to completion on this thread (returns when none remain). */
 void rf_sched_run(rf_sched* sched);
 

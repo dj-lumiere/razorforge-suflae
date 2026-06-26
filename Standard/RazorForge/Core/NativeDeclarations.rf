@@ -116,6 +116,12 @@ dangerous external("C") routine rf_sched_spawn(sched: CPtr, coro: CPtr)
 ### Parks the coroutine currently running under the loop for `delay_ns`, then resumes it. Called
 ### from inside a coroutine (e.g. by waitfor). A no-op outside a running scheduler/coroutine.
 external("C") routine rf_sched_park_timer(delay_ns: U64)
+### Parks the current coroutine with no scheduler-side wake: only rf_sched_wake re-queues it.
+### How a coroutine awaits work on another OS thread without blocking the scheduler thread.
+external("C") routine rf_sched_park_external()
+### Makes a parked coroutine runnable again. Safe to call from ANY thread — the bridge a worker
+### thread uses to hand a result back to a coroutine awaiting it on the scheduler thread.
+dangerous external("C") routine rf_sched_wake(sched: CPtr, coro: CPtr)
 ### Drives all spawned coroutines to completion on this thread (returns when none remain).
 dangerous external("C") routine rf_sched_run(sched: CPtr)
 ### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
