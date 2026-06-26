@@ -32,6 +32,7 @@ struct rf_coro {
     rf_context_entry_fn entry;     /* user routine to run inside the coroutine            */
     void* userdata;                /* opaque argument handed to entry                     */
     rf_coro_status status;         /* NEW -> RUNNING -> {PARKED -> RUNNING}* -> COMPLETED */
+    rf_cancel_frame* cf_top;       /* top of the cancellation shadow stack (NULL = empty) */
 #ifdef HAVE_LIBCO
     cothread_t thread;             /* libco context for this coroutine's own stack        */
     cothread_t resumer;            /* context to switch back to on yield/finish           */
@@ -148,4 +149,65 @@ void rf_coro_delete(rf_coro* coro)
     }
 #endif
     free(coro);
+}
+
+/* ---- Cancellation shadow stack (Phase 3) -------------------------------------------------- */
+
+void rf_coro_cf_push(rf_cancel_frame* frame, rf_teardown_thunk thunk, void* locals_base)
+{
+    if (frame == NULL) {
+        return;
+    }
+#ifdef HAVE_LIBCO
+    rf_coro* self = g_current_coro;
+    if (self == NULL) {
+        return; /* not inside a coroutine: nothing to abandon, so nothing to track */
+    }
+    frame->thunk = thunk;
+    frame->locals_base = locals_base;
+    frame->prev = self->cf_top;
+    self->cf_top = frame;
+#else
+    (void)thunk;
+    (void)locals_base;
+#endif
+}
+
+void rf_coro_cf_pop(rf_cancel_frame* frame)
+{
+#ifdef HAVE_LIBCO
+    rf_coro* self = g_current_coro;
+    if (self == NULL || self->cf_top != frame) {
+        return; /* unbalanced pop (or outside a coroutine): leave the stack intact */
+    }
+    self->cf_top = frame->prev;
+#else
+    (void)frame;
+#endif
+}
+
+void rf_coro_abandon(rf_coro* coro)
+{
+    if (coro == NULL) {
+        return;
+    }
+
+    /* A completed coroutine ran every inline destroy and popped every frame already; abandon
+     * degenerates to a plain free. Anything else (NEW or PARKED) walks whatever frames are
+     * live. Abandon is only ever called at a suspend point, so no frame can have both its
+     * inline destroys and its thunk run — the double-free invariant (design §7.6). */
+    if (coro->status != RF_CORO_COMPLETED) {
+        coro->status = RF_CORO_CANCELLED;
+        rf_cancel_frame* frame = coro->cf_top;
+        while (frame != NULL) {
+            rf_cancel_frame* prev = frame->prev; /* read before the thunk runs */
+            if (frame->thunk != NULL) {
+                frame->thunk(frame->locals_base);
+            }
+            frame = prev;
+        }
+        coro->cf_top = NULL;
+    }
+
+    rf_coro_delete(coro);
 }
