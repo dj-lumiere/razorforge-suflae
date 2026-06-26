@@ -153,7 +153,7 @@ void rf_coro_delete(rf_coro* coro)
 
 /* ---- Cancellation shadow stack (Phase 3) -------------------------------------------------- */
 
-void rf_coro_cf_push(rf_cancel_frame* frame, rf_teardown_thunk thunk, void* locals_base)
+void rf_coro_cf_push(rf_cancel_frame* frame, void* value_ptr, rf_destroy_fn destroy_fn)
 {
     if (frame == NULL) {
         return;
@@ -163,13 +163,13 @@ void rf_coro_cf_push(rf_cancel_frame* frame, rf_teardown_thunk thunk, void* loca
     if (self == NULL) {
         return; /* not inside a coroutine: nothing to abandon, so nothing to track */
     }
-    frame->thunk = thunk;
-    frame->locals_base = locals_base;
+    frame->value_ptr = value_ptr;
+    frame->destroy_fn = destroy_fn;
     frame->prev = self->cf_top;
     self->cf_top = frame;
 #else
-    (void)thunk;
-    (void)locals_base;
+    (void)value_ptr;
+    (void)destroy_fn;
 #endif
 }
 
@@ -192,17 +192,19 @@ void rf_coro_abandon(rf_coro* coro)
         return;
     }
 
-    /* A completed coroutine ran every inline destroy and popped every frame already; abandon
-     * degenerates to a plain free. Anything else (NEW or PARKED) walks whatever frames are
-     * live. Abandon is only ever called at a suspend point, so no frame can have both its
-     * inline destroys and its thunk run — the double-free invariant (design §7.6). */
+    /* A completed coroutine ran every inline destroy and popped every node already; abandon
+     * degenerates to a plain free. Anything else (NEW or PARKED) walks whatever nodes are
+     * live, calling each owned value's $destroy on its address (passed as `me`). Abandon is
+     * only ever at a suspend point, so no value can have both its inline destroy and its node's
+     * destroy run — the double-free invariant (design §7.6). Top-to-bottom = reverse
+     * construction order = correct teardown order. */
     if (coro->status != RF_CORO_COMPLETED) {
         coro->status = RF_CORO_CANCELLED;
         rf_cancel_frame* frame = coro->cf_top;
         while (frame != NULL) {
-            rf_cancel_frame* prev = frame->prev; /* read before the thunk runs */
-            if (frame->thunk != NULL) {
-                frame->thunk(frame->locals_base);
+            rf_cancel_frame* prev = frame->prev; /* read before the destroy runs */
+            if (frame->destroy_fn != NULL) {
+                frame->destroy_fn(frame->value_ptr);
             }
             frame = prev;
         }

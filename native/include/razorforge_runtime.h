@@ -126,18 +126,19 @@ typedef enum rf_coro_status {
     RF_CORO_CANCELLED = 4   /* abandoned while parked; teardown thunks ran   */
 } rf_coro_status;
 
-/* A teardown thunk runs one scope's reverse-order $destroy() chain over that scope's locals,
- * reached through a captured base pointer. On abandon it is the ONLY thing that frees the
- * scope's owned values; on normal exit the inline destroys run instead and the thunk never
- * fires. (Phase 3 — the compiler will synthesize these in Phase 5; the spike hand-writes them.) */
-typedef void (*rf_teardown_thunk)(void* locals_base);
+/* The $destroy of one owned value, called on the value's address (its `me`). Member $destroy is
+ * always passed `me` by pointer for every type, so a single signature covers all owned types — no
+ * per-type thunk needed. On abandon it is the ONLY thing that frees the value; on normal exit the
+ * inline $destroy runs instead and the node is popped without firing. (v0.2.0 Mechanism C.) */
+typedef void (*rf_destroy_fn)(void* self);
 
-/* One cancellation frame in a coroutine's shadow stack. The struct itself lives as a local in
- * the scope it guards (intrusive, zero-allocation); push/pop only relink the coroutine's top. */
+/* One cancellation node in a coroutine's shadow stack — one per live owned value. The node lives
+ * as a local in the scope that owns the value (intrusive, zero-allocation); push/pop only relink
+ * the coroutine's top. Pushed when the value is constructed, popped at its inline $destroy. */
 typedef struct rf_cancel_frame {
-    rf_teardown_thunk thunk;        /* this scope's teardown chain                  */
-    void* locals_base;              /* pointer the thunk uses to reach the locals   */
-    struct rf_cancel_frame* prev;   /* next frame down (older), or NULL at bottom    */
+    void* value_ptr;                /* address of the owned value (passed as `me`)  */
+    rf_destroy_fn destroy_fn;       /* that value's $destroy                         */
+    struct rf_cancel_frame* prev;   /* next node down (older), or NULL at bottom     */
 } rf_cancel_frame;
 
 /* Allocate a coroutine whose body is entry(userdata). stack_size == 0 picks a default.
@@ -163,17 +164,17 @@ void rf_coro_delete(rf_coro* coro);
  * coroutine (scope entry / normal scope exit); abandon is called by the host on a parked or
  * never-started coroutine. */
 
-/* On scope entry: link `frame` (a caller-owned stack local) as the current coroutine's new
- * top, recording its teardown thunk + locals base. No-op outside a coroutine. */
-void rf_coro_cf_push(rf_cancel_frame* frame, rf_teardown_thunk thunk, void* locals_base);
+/* When an owned value is constructed: link `frame` (a caller-owned stack node) as the current
+ * coroutine's new top, recording the value's address + its $destroy. No-op outside a coroutine. */
+void rf_coro_cf_push(rf_cancel_frame* frame, void* value_ptr, rf_destroy_fn destroy_fn);
 
-/* On NORMAL scope exit: unlink `frame` WITHOUT firing its thunk (inline destroys already ran).
- * `frame` must be the current top. No-op outside a coroutine. */
+/* At the value's inline $destroy (normal/throw/break exit): unlink `frame` WITHOUT firing
+ * (the inline $destroy already ran). `frame` must be the current top. No-op outside a coroutine. */
 void rf_coro_cf_pop(rf_cancel_frame* frame);
 
-/* Abandon a parked (or never-started) coroutine: walk its shadow stack innermost-first, fire
- * each teardown thunk exactly once, then free the coroutine and its stack. Abandoning a
- * completed coroutine just frees it (its frames were already popped). */
+/* Abandon a parked (or never-started) coroutine: walk its shadow stack top-to-bottom (reverse
+ * construction order), call each live value's $destroy on its address exactly once, then free the
+ * coroutine and its stack. Abandoning a completed coroutine just frees it (its nodes were popped). */
 void rf_coro_abandon(rf_coro* coro);
 
 #ifdef __cplusplus

@@ -1,15 +1,16 @@
 /*
- * coro_abandon_spike.c — Phase 3 cancellation shadow-stack harness (no RF front-end).
+ * coro_abandon_spike.c — Phase 3/5b-2 cancellation shadow-stack harness (no RF front-end).
  *
- * Proves rf_coro_abandon walks a parked coroutine's shadow stack innermost-first and runs each
- * scope's teardown thunk EXACTLY once, exercising the two sharp edges from the design doc:
- *   §7.6 double-fire invariant — a scope that exited normally (popped) must NOT fire on a later
- *        abandon; a still-live scope MUST. A built-in double-free detector guards this.
- *   §7.1 partial init       — a scope parked mid-construction tears down only the constructed
- *        prefix of its locals, never the not-yet-built tail.
+ * Proves rf_coro_abandon walks a parked coroutine's shadow stack top-to-bottom and runs each
+ * owned value's $destroy EXACTLY once, under v0.2.0 Mechanism C (per-VALUE nodes — the compiler
+ * pushes one node per owned value at its construction, pops at its inline $destroy). Exercises:
+ *   §7.6 double-fire invariant — a value inline-destroyed+popped before the park must NOT fire on
+ *        a later abandon; a still-live value MUST. A built-in double-free detector guards this.
+ *   §7.1 partial init       — a value not yet constructed at the park has no node, so it is never
+ *        torn down (free, no fill-count needed).
  *
- * The thunks here are HAND-WRITTEN (the compiler synthesizes them in Phase 5). They model RF's
- * reverse-declaration-order $destroy chain over a scope's owned entities.
+ * The push/pop here are HAND-WRITTEN; the compiler emits them in 5b-2. destroy_entity stands in
+ * for a monomorphized `$destroy` called on a value's address (its `me`).
  *
  * Build (Windows x64, clang):
  *   clang -std=c23 -I native/include -I native/libco -DHAVE_LIBCO \
@@ -54,21 +55,11 @@ static void ent_destroy(int id)
     destroy_log[destroy_count++] = id;
 }
 
-/* ---- A scope's locals + its hand-written teardown thunk ----------------------------------- */
-
-/* Owned-entity ids in declaration order; `inited` = how many are currently constructed (the
- * partial-init prefix). The thunk destroys the live prefix in REVERSE declaration order. */
-typedef struct {
-    int ids[4];
-    int inited;
-} scope_locals;
-
-static void scope_teardown(void* base)
+/* Stands in for a monomorphized `$destroy`: called on the value's ADDRESS (its `me`). The "value"
+ * here is just an int holding the entity id, so we read it back and destroy that entity. */
+static void destroy_entity(void* me)
 {
-    scope_locals* s = (scope_locals*)base;
-    for (int i = s->inited - 1; i >= 0; i--) {
-        ent_destroy(s->ids[i]);
-    }
+    ent_destroy(*(int*)me);
 }
 
 /* ---- Bodies ------------------------------------------------------------------------------- */
@@ -76,58 +67,48 @@ static void scope_teardown(void* base)
 typedef struct { int finished; } run_state;
 
 /* Nested scopes: outer owns ent 0; inner owns ents 1,2 and PARKS after constructing only 1
- * (ent 2 not yet built — partial init). Normal completion destroys 2,1 then 0 inline. */
+ * (ent 2's node doesn't exist yet — partial init). Normal completion destroys 2,1 then 0. */
 static void body_nested(void* ud)
 {
     run_state* rs = (run_state*)ud;
 
-    scope_locals outer = { .ids = { 0 }, .inited = 0 };
-    rf_cancel_frame cf_outer;
-    rf_coro_cf_push(&cf_outer, scope_teardown, &outer);
-    ent_construct(0); outer.inited = 1;
+    int e0 = 0; ent_construct(0);
+    rf_cancel_frame n0; rf_coro_cf_push(&n0, &e0, destroy_entity);
 
     {
-        scope_locals inner = { .ids = { 1, 2 }, .inited = 0 };
-        rf_cancel_frame cf_inner;
-        rf_coro_cf_push(&cf_inner, scope_teardown, &inner);
-        ent_construct(1); inner.inited = 1;
+        int e1 = 1; ent_construct(1);
+        rf_cancel_frame n1; rf_coro_cf_push(&n1, &e1, destroy_entity);
 
-        rf_coro_yield(); /* PARK: ent 0 and 1 live, ent 2 NOT constructed */
+        rf_coro_yield(); /* PARK: ent 0 and 1 live, ent 2 NOT constructed (no node) */
 
-        ent_construct(2); inner.inited = 2;
-        /* normal inner exit: inline reverse-order destroy, then pop without firing */
-        ent_destroy(2); ent_destroy(1); inner.inited = 0;
-        rf_coro_cf_pop(&cf_inner);
+        int e2 = 2; ent_construct(2);
+        rf_cancel_frame n2; rf_coro_cf_push(&n2, &e2, destroy_entity);
+        /* normal inner exit: reverse-order pop-then-destroy */
+        rf_coro_cf_pop(&n2); ent_destroy(2);
+        rf_coro_cf_pop(&n1); ent_destroy(1);
     }
 
-    ent_destroy(0); outer.inited = 0; /* normal outer exit */
-    rf_coro_cf_pop(&cf_outer);
+    rf_coro_cf_pop(&n0); ent_destroy(0); /* normal outer exit */
     rs->finished = 1;
 }
 
-/* Sequential scopes: scope 1 (ent 0) FULLY completes and pops before scope 2 (ent 1) parks.
- * Abandoning at the park must fire only scope 2's thunk — ent 0 is already gone, popped. */
+/* Sequential scopes: scope 1 (ent 0) FULLY destroys+pops before scope 2 (ent 1) parks.
+ * Abandoning at the park must fire only ent 1's node — ent 0 is already gone, popped. */
 static void body_sequential(void* ud)
 {
     run_state* rs = (run_state*)ud;
 
     {
-        scope_locals s1 = { .ids = { 0 }, .inited = 0 };
-        rf_cancel_frame cf1;
-        rf_coro_cf_push(&cf1, scope_teardown, &s1);
-        ent_construct(0); s1.inited = 1;
-        ent_destroy(0); s1.inited = 0; /* inline destroy */
-        rf_coro_cf_pop(&cf1);          /* popped: thunk must never fire for ent 0 */
+        int e0 = 0; ent_construct(0);
+        rf_cancel_frame n0; rf_coro_cf_push(&n0, &e0, destroy_entity);
+        rf_coro_cf_pop(&n0); ent_destroy(0); /* inline destroy + pop */
     }
 
     {
-        scope_locals s2 = { .ids = { 1 }, .inited = 0 };
-        rf_cancel_frame cf2;
-        rf_coro_cf_push(&cf2, scope_teardown, &s2);
-        ent_construct(1); s2.inited = 1;
+        int e1 = 1; ent_construct(1);
+        rf_cancel_frame n1; rf_coro_cf_push(&n1, &e1, destroy_entity);
         rf_coro_yield(); /* PARK with only ent 1 live */
-        ent_destroy(1); s2.inited = 0;
-        rf_coro_cf_pop(&cf2);
+        rf_coro_cf_pop(&n1); ent_destroy(1);
     }
     rs->finished = 1;
 }
@@ -152,7 +133,7 @@ int main(void)
 {
     printf("coro backend: %s\n", rf_context_backend_name());
 
-    /* --- Scenario 1: normal completion — inline destroys run, thunks NEVER fire --- */
+    /* --- Scenario 1: normal completion — inline destroys run, abandon fires nothing --- */
     {
         registry_reset();
         run_state rs = { 0 };
@@ -165,9 +146,9 @@ int main(void)
         CHECK(destroy_log[0] == 2 && destroy_log[1] == 1 && destroy_log[2] == 0,
               "inline destroy order should be 2,1,0");
         CHECK(!double_free, "double-free on normal completion");
-        /* abandon a COMPLETED coroutine: frames already popped, nothing more should fire */
+        /* abandon a COMPLETED coroutine: nodes already popped, nothing more should fire */
         rf_coro_abandon(c);
-        CHECK(destroy_count == 3, "abandon of completed coroutine fired a thunk");
+        CHECK(destroy_count == 3, "abandon of completed coroutine fired a destroy");
         CHECK(all_dead(), "an entity leaked after normal completion");
         printf("scenario 1 (normal completion): OK\n");
     }
@@ -182,19 +163,19 @@ int main(void)
         /* parked with ent 0,1 live, ent 2 never constructed */
         CHECK(ent_alive[0] && ent_alive[1] && !ent_alive[2], "unexpected live set at park");
 
-        rf_coro_abandon(c); /* walk innermost-first: inner thunk (ent 1) then outer (ent 0) */
+        rf_coro_abandon(c); /* walk top-to-bottom: ent 1's node then ent 0's */
 
         CHECK(rs.finished == 0, "body must not have run its normal tail");
         CHECK(destroy_count == 2, "abandon should destroy exactly the 2 live entities");
         CHECK(destroy_log[0] == 1 && destroy_log[1] == 0,
-              "abandon order should be innermost-first: 1 then 0");
+              "abandon order should be reverse-construction: 1 then 0");
         CHECK(!double_free, "double-free during abandon");
         CHECK(all_dead(), "an entity leaked after abandon");
         /* ent 2 was never constructed and must never have been destroyed (partial init) */
         printf("scenario 2 (abandon @ partial init): OK\n");
     }
 
-    /* --- Scenario 3: double-fire invariant — popped scope must not fire on abandon --- */
+    /* --- Scenario 3: double-fire invariant — popped value must not fire on abandon --- */
     {
         registry_reset();
         run_state rs = { 0 };
@@ -207,9 +188,9 @@ int main(void)
 
         rf_coro_abandon(c);
 
-        CHECK(destroy_count == 2, "abandon should fire only scope 2's thunk");
+        CHECK(destroy_count == 2, "abandon should fire only ent 1's node");
         CHECK(destroy_log[1] == 1, "abandon should destroy ent 1");
-        CHECK(!double_free, "popped scope 1 fired its thunk -> double-free");
+        CHECK(!double_free, "popped ent 0 fired its node -> double-free");
         CHECK(all_dead(), "an entity leaked");
         printf("scenario 3 (double-fire invariant): OK\n");
     }
