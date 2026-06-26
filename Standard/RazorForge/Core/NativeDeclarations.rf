@@ -101,6 +101,23 @@ dangerous external("C") routine rf_coro_delete(coro: CPtr)
 ### Blocks the calling thread for the given duration. The synchronous-sleep backing for the
 ### `waitfor` routine; a `suspended` waitfor will instead park on a timer (v0.3.0 scheduler).
 dangerous external("C") routine rf_waitfor_duration(secs: S64, ns: U32)
+
+# ============================================================================
+# Cooperative coroutine scheduler (v0.2.0 async). Drives many coroutines on one
+# OS thread; a parked coroutine waits without blocking the thread.
+# ============================================================================
+
+### Creates a scheduler. :returns: an opaque `rf_sched*` handle as a `CPtr`.
+dangerous external("C") routine rf_sched_create() -> CPtr
+### Frees a scheduler.
+dangerous external("C") routine rf_sched_destroy(sched: CPtr)
+### Queues a NEW coroutine to run on the scheduler (starts on its first resume by the run loop).
+dangerous external("C") routine rf_sched_spawn(sched: CPtr, coro: CPtr)
+### Parks the coroutine currently running under the loop for `delay_ns`, then resumes it. Called
+### from inside a coroutine (e.g. by waitfor). A no-op outside a running scheduler/coroutine.
+external("C") routine rf_sched_park_timer(delay_ns: U64)
+### Drives all spawned coroutines to completion on this thread (returns when none remain).
+dangerous external("C") routine rf_sched_run(sched: CPtr)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.

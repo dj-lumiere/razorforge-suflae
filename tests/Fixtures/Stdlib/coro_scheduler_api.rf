@@ -1,0 +1,33 @@
+module Tests/Stdlib/CoroSchedulerApi
+
+# v0.2.0 cooperative scheduler: two coroutines park on timers (rf_sched_park_timer) and the run
+# loop resumes each when its timer fires — so they progress CONCURRENTLY on one thread. `slow` is
+# spawned first but `fast` (shorter delay) wakes and prints first: the loop schedules by wake time,
+# not spawn order, and neither blocks the thread while parked. (Low-level danger! driving; the
+# `spawn`/`run`/uncolored-`waitfor` surface is the next step.)
+
+import IO/Console
+
+routine fast_worker(ud: CPtr)
+  rf_sched_park_timer(delay_ns: 20000000_u64)
+  show(value: "fast")
+  return
+
+routine slow_worker(ud: CPtr)
+  rf_sched_park_timer(delay_ns: 80000000_u64)
+  show(value: "slow")
+  return
+
+routine start()
+  danger!
+    var s = rf_sched_create()
+    var cs = rf_coro_create(entry: slow_worker, userdata: cptr_none(), stack_size: 0)
+    var cf = rf_coro_create(entry: fast_worker, userdata: cptr_none(), stack_size: 0)
+    rf_sched_spawn(sched: s, coro: cs)
+    rf_sched_spawn(sched: s, coro: cf)
+    rf_sched_run(sched: s)
+    rf_coro_delete(coro: cs)
+    rf_coro_delete(coro: cf)
+    rf_sched_destroy(sched: s)
+  show(value: "done")
+  return
