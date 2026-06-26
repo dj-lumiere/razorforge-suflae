@@ -31,99 +31,7 @@
 #include "libco.h"
 #endif
 
-/* Minimal portable mutex + condition variable for the scheduler's cross-thread wake. Uses the
- * platform primitives directly (Win32 CONDITION_VARIABLE / POSIX pthread) so this file still
- * compiles standalone for the spikes. The Win32 timed wait takes a relative ms timeout; POSIX
- * needs an absolute time, computed from CLOCK_REALTIME — both wrapped by rf_cond_wait_ns. */
-#ifdef _WIN32
-typedef CRITICAL_SECTION rf_mutex;
-typedef CONDITION_VARIABLE rf_cond;
-#else
-#include <pthread.h>
-typedef pthread_mutex_t rf_mutex;
-typedef pthread_cond_t rf_cond;
-#endif
-
-static void rf_mutex_init(rf_mutex* m)
-{
-#ifdef _WIN32
-    InitializeCriticalSection(m);
-#else
-    pthread_mutex_init(m, NULL);
-#endif
-}
-static void rf_mutex_destroy(rf_mutex* m)
-{
-#ifdef _WIN32
-    DeleteCriticalSection(m);
-#else
-    pthread_mutex_destroy(m);
-#endif
-}
-static void rf_mutex_lock(rf_mutex* m)
-{
-#ifdef _WIN32
-    EnterCriticalSection(m);
-#else
-    pthread_mutex_lock(m);
-#endif
-}
-static void rf_mutex_unlock(rf_mutex* m)
-{
-#ifdef _WIN32
-    LeaveCriticalSection(m);
-#else
-    pthread_mutex_unlock(m);
-#endif
-}
-static void rf_cond_init(rf_cond* c)
-{
-#ifdef _WIN32
-    InitializeConditionVariable(c);
-#else
-    pthread_cond_init(c, NULL);
-#endif
-}
-static void rf_cond_destroy(rf_cond* c)
-{
-#ifndef _WIN32
-    pthread_cond_destroy(c);
-#else
-    (void)c;
-#endif
-}
-static void rf_cond_signal(rf_cond* c)
-{
-#ifdef _WIN32
-    WakeConditionVariable(c);
-#else
-    pthread_cond_signal(c);
-#endif
-}
-/* Wait on the cond with the mutex held; returns after a signal or `timeout_ns` elapses. */
-static void rf_cond_wait_ns(rf_cond* c, rf_mutex* m, uint64_t timeout_ns)
-{
-#ifdef _WIN32
-    DWORD ms = (DWORD)((timeout_ns + 999999ULL) / 1000000ULL);
-    SleepConditionVariableCS(c, m, ms);
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    uint64_t total = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec + timeout_ns;
-    ts.tv_sec = (time_t)(total / 1000000000ULL);
-    ts.tv_nsec = (long)(total % 1000000000ULL);
-    pthread_cond_timedwait(c, m, &ts);
-#endif
-}
-/* Wait on the cond with the mutex held until a signal (no timeout). */
-static void rf_cond_wait_forever(rf_cond* c, rf_mutex* m)
-{
-#ifdef _WIN32
-    SleepConditionVariableCS(c, m, INFINITE);
-#else
-    pthread_cond_wait(c, m);
-#endif
-}
+#include "rf_sync.h" /* portable rf_mutex / rf_cond — shared with the task↔coro bridge */
 
 /* Default coroutine stack, in bytes, when the caller passes stack_size == 0. libco reserves
  * this eagerly today; growable demand-paged stacks are sibling Phase-2 work (design §9.2). */
@@ -221,7 +129,11 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
 #endif
 }
 
-void rf_coro_yield(void)
+/* Pure context switch back to the resumer, marking PARKED. The low-level half of every suspend:
+ * the caller is responsible for arranging WHEN the coroutine becomes runnable again (a timer, an
+ * external wake, or re-queuing to ready for a cooperative yield). NOT scheduler-aware itself.
+ * The public rf_coro_yield (cooperative) is defined after the scheduler, since it re-queues. */
+static void rf_coro_switch_out(void)
 {
 #ifdef HAVE_LIBCO
     rf_coro* self = g_current_coro;
@@ -319,8 +231,9 @@ void rf_coro_abandon(rf_coro* coro)
 }
 
 /* The coroutine running on this OS thread, or NULL outside any coroutine. Bridges the
- * libco-gated g_current_coro so the scheduler (compiled regardless of HAVE_LIBCO) can use it. */
-static rf_coro* rf_coro_current(void)
+ * libco-gated g_current_coro so the scheduler (compiled regardless of HAVE_LIBCO) and the
+ * task↔coro await bridge (task_runtime.c) can recover the running coroutine. */
+rf_coro* rf_coro_current(void)
 {
 #ifdef HAVE_LIBCO
     return g_current_coro;
@@ -465,7 +378,7 @@ void rf_sched_park_timer(uint64_t delay_ns)
     }
     self->wake_ns = rf_now_ns() + delay_ns;
     rf_sched_insert_timer(s, self);
-    rf_coro_yield(); /* switch back to the run loop; it resumes us when the timer fires */
+    rf_coro_switch_out(); /* switch back to the run loop; it resumes us when the timer fires */
 }
 
 /* Park the current coroutine with NO wake condition the scheduler itself can satisfy: it is
@@ -480,7 +393,33 @@ void rf_sched_park_external(void)
     if (g_sched == NULL || rf_coro_current() == NULL) {
         return;
     }
-    rf_coro_yield(); /* the run loop will not resume us until someone calls rf_sched_wake */
+    rf_coro_switch_out(); /* the run loop will not resume us until someone calls rf_sched_wake */
+}
+
+/* Cooperative yield (the public suspend primitive): let other ready coroutines run, then continue.
+ * Under a scheduler this re-queues the current coroutine to the ready FIFO before switching out, so
+ * the run loop resumes it after the others — UNLIKE rf_sched_park_*, which wait for an external
+ * condition. Outside a scheduler it is a bare switch back to the resumer (a naive pump re-resumes).
+ * This is the primitive the may-suspend analysis seeds on. */
+void rf_coro_yield(void)
+{
+#ifdef HAVE_LIBCO
+    rf_coro* self = g_current_coro;
+    if (self == NULL) {
+        return; /* not inside a coroutine */
+    }
+    rf_sched* s = g_sched;
+    if (s != NULL) {
+        /* Re-queue self so the run loop resumes us again after the other ready coroutines. The
+         * run loop holds no lock while we run, so taking it here is safe. */
+        rf_mutex_lock(&s->lock);
+        if (!self->in_ready) {
+            rf_sched_push_ready(s, self);
+        }
+        rf_mutex_unlock(&s->lock);
+    }
+    rf_coro_switch_out();
+#endif
 }
 
 /* Make a parked coroutine runnable again. Safe to call from ANY thread — this is the bridge that
@@ -499,6 +438,49 @@ void rf_sched_wake(rf_sched* s, rf_coro* c)
     rf_mutex_unlock(&s->lock);
 }
 
+/* Resume one ready coroutine if any (returns 1), else block until something can make progress and
+ * return 0. Caller holds s->lock; this drops it around the resume / the cond wait and re-takes it.
+ * The shared body of rf_sched_run and rf_sched_run_until. */
+static int rf_sched_step(rf_sched* s)
+{
+    rf_coro* c = rf_sched_pop_ready(s);
+    if (c != NULL) {
+        /* Run user code WITHOUT the lock: it may re-enter the scheduler (spawn, park) and a
+         * worker thread may want to wake someone meanwhile. The coroutine re-registers itself
+         * (timer / external) before yielding, so it is not ready again until its wake fires. */
+        rf_mutex_unlock(&s->lock);
+        rf_coro_status st = rf_coro_resume(c);
+        rf_mutex_lock(&s->lock);
+        if (st == RF_CORO_COMPLETED) {
+            s->live--; /* the owner (the Coroutine[T] handle) frees it later */
+        }
+        return 1;
+    }
+
+    /* Nothing ready. Wait for the earliest timer if any, otherwise purely for an external wake (a
+     * worker thread signalling). Timers are touched only on this thread, so reading the head under
+     * the lock is fine. */
+    if (s->timers != NULL) {
+        uint64_t now = rf_now_ns();
+        uint64_t deadline = s->timers->wake_ns;
+        if (deadline > now) {
+            rf_cond_wait_ns(&s->cond, &s->lock, deadline - now);
+        }
+        now = rf_now_ns();
+        while (s->timers != NULL && s->timers->wake_ns <= now) {
+            rf_coro* t = s->timers;
+            s->timers = t->sched_next;
+            t->sched_next = NULL;
+            rf_sched_push_ready(s, t);
+        }
+    } else {
+        /* Nothing ready and no timer: everyone left is parked externally, so the only thing that
+         * can make progress is a cross-thread wake. Block until it arrives. */
+        rf_cond_wait_forever(&s->cond, &s->lock);
+    }
+    return 0;
+}
+
 /* Drive all spawned coroutines to completion on this thread. Blocks on s->cond (not a bare sleep)
  * whenever nothing is ready, so a cross-thread rf_sched_wake interrupts the wait promptly. */
 void rf_sched_run(rf_sched* s)
@@ -511,41 +493,32 @@ void rf_sched_run(rf_sched* s)
 
     rf_mutex_lock(&s->lock);
     while (s->live > 0) {
-        rf_coro* c = rf_sched_pop_ready(s);
-        if (c != NULL) {
-            /* Run user code WITHOUT the lock: it may re-enter the scheduler (spawn, park) and a
-             * worker thread may want to wake someone meanwhile. The coroutine re-registers itself
-             * (timer / external) before yielding, so it is not ready again until its wake fires. */
-            rf_mutex_unlock(&s->lock);
-            rf_coro_status st = rf_coro_resume(c);
-            rf_mutex_lock(&s->lock);
-            if (st == RF_CORO_COMPLETED) {
-                s->live--; /* the owner (the Coroutine[T] handle) frees it later */
-            }
-            continue;
-        }
+        rf_sched_step(s);
+    }
+    rf_mutex_unlock(&s->lock);
 
-        /* Nothing ready. Wait for the earliest timer if any, otherwise purely for an external
-         * wake (a worker thread signalling). Timers are touched only on this thread, so reading
-         * the head under the lock is fine. */
-        if (s->timers != NULL) {
-            uint64_t now = rf_now_ns();
-            uint64_t deadline = s->timers->wake_ns;
-            if (deadline > now) {
-                rf_cond_wait_ns(&s->cond, &s->lock, deadline - now);
-            }
-            now = rf_now_ns();
-            while (s->timers != NULL && s->timers->wake_ns <= now) {
-                rf_coro* t = s->timers;
-                s->timers = t->sched_next;
-                t->sched_next = NULL;
-                rf_sched_push_ready(s, t);
-            }
-        } else {
-            /* live > 0 but nothing ready and no timer: everyone left is parked externally, so the
-             * only thing that can make progress is a cross-thread wake. Block until it arrives. */
-            rf_cond_wait_forever(&s->cond, &s->lock);
-        }
+    g_sched = prev;
+}
+
+/* Drive the scheduler only until `target` finishes (completes or is cancelled), then return —
+ * leaving any other spawned coroutines parked for a later run/run_until. This is the entry point
+ * for Coroutine[T].retrieve!(): `target` was spawned (at the suspended-routine call) onto this
+ * thread's scheduler; retrieve! drives the loop until just that handle is done, so siblings spawned
+ * earlier progress concurrently meanwhile but are not forced to completion. Reentrant: a coroutine
+ * may itself call run_until on another handle (a nested loop on the same scheduler). */
+void rf_sched_run_until(rf_sched* s, rf_coro* target)
+{
+    if (s == NULL || target == NULL) {
+        return;
+    }
+    rf_sched* prev = g_sched;
+    g_sched = s;
+
+    rf_mutex_lock(&s->lock);
+    /* `target` counts toward `live` until it finishes, so while it is unfinished there is always
+     * something to wait on; rf_sched_step never busy-spins. */
+    while (target->status != RF_CORO_COMPLETED && target->status != RF_CORO_CANCELLED) {
+        rf_sched_step(s);
     }
     rf_mutex_unlock(&s->lock);
 
@@ -559,4 +532,104 @@ void rf_sched_run(rf_sched* s)
 int rf_in_coroutine(void)
 {
     return (g_sched != NULL && rf_coro_current() != NULL) ? 1 : 0;
+}
+
+/* The scheduler currently driving this OS thread (the one inside rf_sched_run / run_until), or
+ * NULL if none. The task↔coro await bridge reads this to record which scheduler must wake the
+ * coroutine when the awaited work completes. */
+rf_sched* rf_sched_current(void)
+{
+    return g_sched;
+}
+
+/* ---- Implicit per-thread scheduler (the `retrieve!` entry into async) --------------------- */
+/*
+ * Calling a `suspended routine` spawns its coroutine onto THIS thread's implicit scheduler (created
+ * lazily, reused across calls), and Coroutine[T].retrieve!() drives that scheduler until the
+ * handle is done. So a program enters async simply by retrieving a coroutine — no explicit run
+ * loop — and coroutines spawned earlier on the thread run concurrently while one is retrieved.
+ */
+static _Thread_local rf_sched* g_thread_sched = NULL;
+
+/* This thread's implicit scheduler, created on first use. Leaks one scheduler per thread that ever
+ * runs a coroutine (negligible; a thread-exit reclaim is a later refinement). */
+rf_sched* rf_sched_thread_default(void)
+{
+    if (g_thread_sched == NULL) {
+        g_thread_sched = rf_sched_create();
+    }
+    return g_thread_sched;
+}
+
+/* Spawn a NEW coroutine onto this thread's implicit scheduler. Emitted at a `suspended routine`
+ * call site right after rf_coro_create, so the coroutine is ready before any retrieve! drives. */
+void rf_sched_spawn_default(rf_coro* c)
+{
+    rf_sched_spawn(rf_sched_thread_default(), c);
+}
+
+/* Drive this thread's implicit scheduler until `target` finishes. The retrieve!-side convenience
+ * over rf_sched_run_until that needs no scheduler handle. */
+void rf_sched_run_until_default(rf_coro* target)
+{
+    rf_sched_run_until(rf_sched_thread_default(), target);
+}
+
+/* Unlink `c` from a scheduler's ready queue or timer list and decrement `live`. Returns 1 if it was
+ * found (and thus removed + uncounted), 0 otherwise. Used by Coroutine[T].$destroy to detach a
+ * spawned-but-never-finished coroutine from the scheduler BEFORE rf_coro_abandon frees it — without
+ * this the scheduler would hold a dangling pointer / an inflated live count. A coroutine that is
+ * already completed is in neither list (already uncounted) → returns 0, no double-decrement. */
+static int rf_sched_remove(rf_sched* s, rf_coro* c)
+{
+    if (s == NULL || c == NULL) {
+        return 0;
+    }
+    int found = 0;
+    rf_mutex_lock(&s->lock);
+
+    /* ready FIFO */
+    rf_coro** rlink = &s->ready_head;
+    rf_coro* prev = NULL;
+    while (*rlink != NULL) {
+        if (*rlink == c) {
+            *rlink = c->sched_next;
+            if (s->ready_tail == c) {
+                s->ready_tail = prev;
+            }
+            c->sched_next = NULL;
+            c->in_ready = 0;
+            found = 1;
+            break;
+        }
+        prev = *rlink;
+        rlink = &(*rlink)->sched_next;
+    }
+
+    /* timer list (only if not found in ready — a coroutine is in at most one) */
+    if (!found) {
+        rf_coro** tlink = &s->timers;
+        while (*tlink != NULL) {
+            if (*tlink == c) {
+                *tlink = c->sched_next;
+                c->sched_next = NULL;
+                found = 1;
+                break;
+            }
+            tlink = &(*tlink)->sched_next;
+        }
+    }
+
+    if (found) {
+        s->live--;
+    }
+    rf_mutex_unlock(&s->lock);
+    return found;
+}
+
+/* Detach `c` from this thread's implicit scheduler (if present). The $destroy-side convenience over
+ * rf_sched_remove. Call BEFORE rf_coro_abandon on a coroutine that was spawned but never retrieved. */
+int rf_sched_unschedule_default(rf_coro* c)
+{
+    return rf_sched_remove(g_thread_sched, c);
 }

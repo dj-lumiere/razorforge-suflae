@@ -1,0 +1,24 @@
+module Tests/Stdlib/CoroConcurrentApi
+
+# v0.2.0 implicit-scheduler surface. Calling a `suspended routine` spawns it onto this thread's
+# scheduler; `retrieve!()` drives the loop until THAT handle finishes (run-until-this-handle), so a
+# coroutine spawned earlier progresses concurrently meanwhile. A `waitfor` inside a coroutine PARKS
+# (the scheduler runs the other coroutine) instead of blocking the thread — proven here by the fact
+# that two coroutines, each parking on a timer, both complete (no deadlock, no busy-block).
+
+import IO/Console
+
+suspended routine slow_double(x: S64) -> S64
+  waitfor(20ms)        # parks under the scheduler; the sibling runs while we wait
+  return x * 2
+
+suspended routine fast_inc(x: S64) -> S64
+  waitfor(5ms)
+  return x + 1
+
+routine start()
+  var a = slow_double(x: 21)   # spawned, ready
+  var b = fast_inc(x: 41)      # spawned, ready — runs concurrently while `a` is retrieved
+  show(f"a => {a.retrieve!()}")   # drives the loop until a finishes; b progresses meanwhile
+  show(f"b => {b.retrieve!()}")   # b is already partway (or done) — finished here
+  return

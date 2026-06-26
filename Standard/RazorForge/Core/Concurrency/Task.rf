@@ -23,7 +23,10 @@ routine Task[T].waitfor(deadline: Duration) -> Task[T]
   return Task[T](task_handle: me.task_handle, deadline: deadline,
                  has_deadline: true, spawned: me.spawned)
 
-### Blocks until the worker finishes and returns its produced value.
+### Waits for the worker to finish and returns its produced value. UNCOLORED: inside a
+### scheduler-driven coroutine (no deadline) it PARKS — the scheduler runs other coroutines while
+### this one awaits the worker thread — instead of blocking; on a plain thread it blocks. (A
+### deadline still blocks for now; a non-blocking timed await is a follow-up.)
 ### :throws: {TaskSpawnError} if the task could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value produced by the threaded routine.
@@ -41,7 +44,14 @@ routine Task[T].retrieve!() -> ?T
         rf_task_destroy(task: me.task_handle)
         throw TaskTimeoutError()
     else
-      discard rf_task_wait(task: me.task_handle)
+      if rf_in_coroutine() != 0_u32
+        # Inside a scheduler-driven coroutine: park instead of blocking the thread. Register as the
+        # task's awaiter and yield; the worker wakes us (cross-thread) on completion. The loop
+        # re-checks under the lock so no wake is lost, and tolerates spurious wakes.
+        while rf_task_await_coro(task: me.task_handle) == 0_u32
+          rf_sched_park_external()
+      else
+        discard rf_task_wait(task: me.task_handle)
 
     var payload = rf_task_result_payload(task: me.task_handle)
     var value = Hijacked[T](from: payload).extract()

@@ -1,5 +1,6 @@
 #include "types.h"
 #include "../include/razorforge_runtime.h"
+#include "rf_sync.h" /* portable rf_mutex for the task↔coro await handshake */
 
 #include <stdlib.h>
 #include <string.h>
@@ -69,6 +70,13 @@ struct rf_task
     rf_U32 prerequisite_count;
     rf_U32 prerequisites_remaining;
     rf_U64 task_id;
+
+    /* Coroutine awaiting this task (set by rf_task_await_coro, cleared+woken at completion). When
+     * a scheduler-driven coroutine retrieves a threaded Task it parks instead of blocking the
+     * thread; the worker wakes it here. coro_lock makes register-vs-complete race-free. */
+    rf_mutex coro_lock;
+    rf_sched* coro_sched;
+    rf_coro* coro_waiter;
 };
 
 static rf_U64 rf_next_task_id = 1;
@@ -119,6 +127,22 @@ static rf_Bool rf_task_is_completed(rf_task* task)
 
 static void rf_task_signal_completion(rf_task* task)
 {
+    if (task == NULL) return;
+
+    /* Wake a coroutine awaiting this task (if one parked via rf_task_await_coro). Done under
+     * coro_lock and BEFORE the thread-backend signal: register-vs-complete is race-free because
+     * await_coro re-checks completion under the same lock, and the status store happens-before this
+     * locked read (program order). Reads + clears the slot so a redundant signal can't double-wake. */
+    rf_mutex_lock(&task->coro_lock);
+    rf_sched* waking_sched = task->coro_sched;
+    rf_coro* waiter = task->coro_waiter;
+    task->coro_sched = NULL;
+    task->coro_waiter = NULL;
+    rf_mutex_unlock(&task->coro_lock);
+    if (waking_sched != NULL && waiter != NULL) {
+        rf_sched_wake(waking_sched, waiter);
+    }
+
     rf_thread_backend* backend = rf_task_thread_backend(task);
     if (backend == NULL) return;
 
@@ -129,6 +153,34 @@ static void rf_task_signal_completion(rf_task* task)
     pthread_cond_broadcast(&backend->completion_cond);
     pthread_mutex_unlock(&backend->lock);
 #endif
+}
+
+/* Register the CURRENT scheduler-driven coroutine as the awaiter of `task`, so the worker thread
+ * wakes it via rf_sched_wake when the task completes. Returns 1 if the task is ALREADY complete
+ * (the caller should read the result without parking), 0 if registered (the caller should
+ * rf_sched_park_external, to be woken on completion). The completion check is under coro_lock, so
+ * it cannot lose a wake against a task finishing concurrently. Call only inside a coroutine driven
+ * by a scheduler (rf_in_coroutine() != 0); outside one it conservatively reports "complete" (1) so
+ * the caller falls back to a blocking wait. */
+rf_U32 rf_task_await_coro(rf_task* task)
+{
+    if (task == NULL) return 1;
+
+    rf_sched* sched = rf_sched_current();
+    rf_coro* self = rf_coro_current();
+    if (sched == NULL || self == NULL) {
+        return 1; /* not on a scheduler-driven coroutine — caller must block-wait instead */
+    }
+
+    rf_mutex_lock(&task->coro_lock);
+    if (rf_task_is_completed(task)) {
+        rf_mutex_unlock(&task->coro_lock);
+        return 1;
+    }
+    task->coro_sched = sched;
+    task->coro_waiter = self;
+    rf_mutex_unlock(&task->coro_lock);
+    return 0;
 }
 
 static rf_thread_backend* rf_thread_backend_create(void)
@@ -266,6 +318,7 @@ rf_task* rf_task_create(rf_task_kind kind)
     task->status = RF_TASK_NEW;
     task->completion.kind = RF_TASK_COMPLETION_PENDING;
     task->task_id = rf_next_task_id++;
+    rf_mutex_init(&task->coro_lock);
 
     if (kind == RF_TASK_THREADED)
     {
@@ -299,6 +352,7 @@ void rf_task_destroy(rf_task* task)
     }
 
     rf_thread_backend_destroy((rf_thread_backend*)task->wait_backend);
+    rf_mutex_destroy(&task->coro_lock);
     free(task);
 }
 

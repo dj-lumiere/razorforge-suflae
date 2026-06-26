@@ -1,28 +1,27 @@
 module Core
 
 ### Handle to a `suspended routine` — a stackful coroutine. Calling a `suspended routine` creates
-### the coroutine (it does not start running) and yields one of these handles. `retrieve!()` drives
-### it to completion and returns its value; dropping the handle abandons a coroutine that never
-### finished (its cancellation shadow stack tears down whatever it still owned).
-###
-### v0.2.0: single coroutine, driven synchronously by `retrieve!`. A scheduler/reactor (so a parked
-### coroutine makes progress on its own) is the rest of v0.2.0's async work.
+### the coroutine AND spawns it onto this thread's implicit scheduler (it does not run yet) and
+### yields one of these handles. `retrieve!()` drives the scheduler until THIS handle finishes and
+### returns its value; coroutines spawned earlier on the thread progress concurrently meanwhile.
+### Dropping the handle without retrieving abandons the coroutine (its cancellation shadow stack
+### tears down whatever it still owned) after detaching it from the scheduler.
 record Coroutine[T]
   ### The opaque coroutine handle (rf_coro*).
   secret coro: CPtr
   ### The task control block that holds the produced value (completed by the coroutine's entry thunk).
   secret result: Address
 
-### Drives the coroutine to completion and returns its produced value. Each call to the underlying
-### resume runs the body until its next suspend point; we pump until it finishes.
+### Drives this thread's implicit scheduler until the coroutine finishes, then returns its produced
+### value. Because the coroutine was spawned at the call site, a `waitfor` (or a Task await) inside
+### it PARKS — the scheduler runs other coroutines meanwhile — instead of blocking. This is the
+### entry into async: a program goes concurrent simply by calling suspended routines and retrieving.
 ### :returns: The value the suspended routine returned.
 routine Coroutine[T].retrieve!() -> ?T
   if me.coro.is_none()
     throw TaskSpawnError()
   danger!
-    var status = rf_coro_resume(coro: me.coro)
-    while status == 2_u32              # RF_CORO_PARKED — keep pumping until it finishes
-      status = rf_coro_resume(coro: me.coro)
+    rf_sched_run_until_default(coro: me.coro)
 
     var payload = rf_task_result_payload(task: me.result)
     var value = Hijacked[T](from: payload).extract()
@@ -37,6 +36,9 @@ dangerous routine Coroutine[T].$destroy()
     if status == 3_u32                # RF_CORO_COMPLETED
       rf_coro_delete(coro: me.coro)
     else
+      # Never retrieved: detach from the implicit scheduler (drop its ready/live reference) BEFORE
+      # abandoning, so the scheduler does not dangle on freed memory.
+      discard rf_sched_unschedule_default(coro: me.coro)
       rf_coro_abandon(coro: me.coro)
     rf_task_destroy(task: me.result)
   return

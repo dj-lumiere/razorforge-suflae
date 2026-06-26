@@ -84,6 +84,10 @@ void* rf_task_result_payload(rf_task* task);
 void* rf_task_error_payload(rf_task* task);
 rf_task_completion_kind rf_task_wait(rf_task* task);
 rf_task_completion_kind rf_task_wait_within(rf_task* task, int64_t timeout_seconds, uint32_t timeout_nanoseconds);
+/* Register the current scheduler-driven coroutine as this task's awaiter. Returns 1 if already
+ * complete (read the result, don't park), 0 if registered (park via rf_sched_park_external; the
+ * worker wakes you on completion). Outside a scheduler-driven coroutine, returns 1 (block-wait). */
+uint32_t rf_task_await_coro(rf_task* task);
 int rf_task_spawn_threaded(rf_task* task, rf_task_entry_fn entry, void* userdata);
 
 void rf_task_mark_ready(rf_task* task);
@@ -177,6 +181,9 @@ void rf_coro_cf_pop(rf_cancel_frame* frame);
  * coroutine and its stack. Abandoning a completed coroutine just frees it (its nodes were popped). */
 void rf_coro_abandon(rf_coro* coro);
 
+/* The coroutine running on this OS thread, or NULL outside any coroutine. */
+rf_coro* rf_coro_current(void);
+
 /* ---------------------------------------------------------------------------
  * Single-thread cooperative scheduler (v0.2.0 async). Drives many coroutines on
  * one OS thread; a coroutine parks on a wake condition (today: a timer) and the
@@ -205,9 +212,34 @@ void rf_sched_wake(rf_sched* sched, rf_coro* coro);
 /* Drive all spawned coroutines to completion on this thread (returns when none remain). */
 void rf_sched_run(rf_sched* sched);
 
+/* Drive the scheduler only until `target` finishes, leaving other coroutines parked. The engine
+ * behind Coroutine[T].retrieve!() (run-until-this-handle semantics). */
+void rf_sched_run_until(rf_sched* sched, rf_coro* target);
+
 /* 1 if the caller runs inside a scheduler-driven coroutine (a park would suspend), else 0.
  * Lets `waitfor` park under a scheduler but OS-sleep on a plain thread. */
 int rf_in_coroutine(void);
+
+/* The scheduler currently driving this OS thread (inside run/run_until), or NULL. The task↔coro
+ * await bridge reads it to learn which scheduler must wake the coroutine on completion. */
+rf_sched* rf_sched_current(void);
+
+/* ---- Implicit per-thread scheduler: the `retrieve!` entry into async --------------------- */
+
+/* This thread's implicit scheduler, created lazily on first use and reused across calls. */
+rf_sched* rf_sched_thread_default(void);
+
+/* Spawn a NEW coroutine onto this thread's implicit scheduler (emitted at a suspended-routine call
+ * site, so the coroutine is ready before any retrieve! drives the loop). */
+void rf_sched_spawn_default(rf_coro* coro);
+
+/* Drive this thread's implicit scheduler until `target` finishes (retrieve!'s engine). */
+void rf_sched_run_until_default(rf_coro* target);
+
+/* Detach `coro` from this thread's implicit scheduler if present (returns 1 if removed). Call
+ * before rf_coro_abandon on a spawned-but-never-retrieved coroutine, so the scheduler drops its
+ * reference + live count instead of dangling. */
+int rf_sched_unschedule_default(rf_coro* coro);
 
 #ifdef __cplusplus
 }

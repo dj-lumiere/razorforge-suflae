@@ -458,6 +458,12 @@ public partial class LlvmCodeGenerator
         string coro = NextTemp();
         EmitLine(sb: sb, line: $"  {coro} = call ptr @rf_coro_create(ptr {thunk}, ptr {ud}, i64 0)");
 
+        // Spawn it onto this thread's implicit scheduler immediately, so siblings spawned earlier
+        // run concurrently while one handle is retrieved. retrieve!() then drives the loop until
+        // just this coroutine finishes (run-until-this-handle).
+        _rfRoutineDeclarations[key: "rf_sched_spawn_default"] = "declare void @rf_sched_spawn_default(ptr)";
+        EmitLine(sb: sb, line: $"  call void @rf_sched_spawn_default(ptr {coro})");
+
         // Build Coroutine[T] { coro: CPtr (ptr), result: Address (i64) }.
         TypeInfo coroType = _registry.GetOrCreateResolution(
             genericDef: _registry.LookupType(name: "Coroutine")!,

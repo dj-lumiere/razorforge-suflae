@@ -124,6 +124,19 @@ external("C") routine rf_sched_park_external()
 dangerous external("C") routine rf_sched_wake(sched: CPtr, coro: CPtr)
 ### Drives all spawned coroutines to completion on this thread (returns when none remain).
 dangerous external("C") routine rf_sched_run(sched: CPtr)
+### Spawns a NEW coroutine onto THIS thread's implicit scheduler (created lazily). Emitted at a
+### `suspended routine` call site so the coroutine is ready before any retrieve! drives the loop.
+dangerous external("C") routine rf_sched_spawn_default(coro: CPtr)
+### Drives this thread's implicit scheduler until `coro` finishes, leaving siblings parked. The
+### engine behind Coroutine[T].retrieve!() (run-until-this-handle: siblings progress concurrently).
+dangerous external("C") routine rf_sched_run_until_default(coro: CPtr)
+### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
+### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
+dangerous external("C") routine rf_sched_unschedule_default(coro: CPtr) -> U32
+### Registers the current scheduler-driven coroutine as `task`'s awaiter. Returns 1 if the task is
+### already complete (read the result, don't park), 0 if registered (park via rf_sched_park_external;
+### the worker wakes you on completion). Outside a scheduler-driven coroutine returns 1 (block-wait).
+dangerous external("C") routine rf_task_await_coro(task: Address) -> U32
 ### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
 ### Safe: reads only thread-local scheduler state. Lets `waitfor` be uncolored.
 external("C") routine rf_in_coroutine() -> U32
