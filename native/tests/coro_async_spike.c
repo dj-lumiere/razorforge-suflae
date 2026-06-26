@@ -168,6 +168,75 @@ static int test_await_threaded(void)
     return 0;
 }
 
+/* ---- (3) timed await: race task completion against a deadline, non-blocking ---------------- */
+
+static void slow_task_entry(rf_task* task, void* ud)
+{
+    (void)ud;
+    sleep_ms(250);                              /* finishes well AFTER the 40ms deadline below */
+    rf_task_complete_value(task, &g_payload);
+}
+
+static int g_dl_outcome_fast, g_dl_outcome_slow, g_dl_sib_ticks, g_dl_ticks_at_done;
+
+static void dl_fast_coro(void* ud)              /* task completes (50ms) BEFORE deadline (300ms) */
+{
+    g_dl_outcome_fast = (int)rf_task_await_coro_deadline((rf_task*)ud, 300ull * 1000000ull);
+}
+
+static void dl_slow_coro(void* ud)              /* task (250ms) misses deadline (40ms) -> timeout */
+{
+    g_dl_outcome_slow = (int)rf_task_await_coro_deadline((rf_task*)ud, 40ull * 1000000ull);
+    g_dl_ticks_at_done = g_dl_sib_ticks;
+}
+
+static void dl_sib_coro(void* ud)
+{
+    (void)ud;
+    for (int i = 0; i < 8; i++) {
+        rf_sched_park_timer(15ull * 1000000ull);
+        g_dl_sib_ticks++;
+    }
+}
+
+static int test_await_deadline(void)
+{
+    rf_sched* s = rf_sched_create();
+    CHECK(s != NULL, "sched create");
+
+    rf_task* fast = rf_task_create(RF_TASK_THREADED);
+    rf_task* slow = rf_task_create(RF_TASK_THREADED);
+    CHECK(fast && slow, "task create");
+    CHECK(rf_task_spawn_threaded(fast, task_entry, NULL) != 0, "fast task spawn");      /* 50ms */
+    CHECK(rf_task_spawn_threaded(slow, slow_task_entry, NULL) != 0, "slow task spawn"); /* 250ms */
+
+    rf_coro* cf = rf_coro_create(dl_fast_coro, fast, 0);
+    rf_coro* cs = rf_coro_create(dl_slow_coro, slow, 0);
+    rf_coro* sib = rf_coro_create(dl_sib_coro, NULL, 0);
+    CHECK(cf && cs && sib, "coro create");
+
+    rf_sched_spawn(s, cf);
+    rf_sched_spawn(s, cs);
+    rf_sched_spawn(s, sib);
+
+    rf_sched_run_until(s, cf);   /* drives all three; cf completes ~50ms, cs times out ~40ms */
+    CHECK(g_dl_outcome_fast == 1, "fast await should COMPLETE before its deadline");
+    CHECK(g_dl_outcome_slow == 0, "slow await should TIME OUT (deadline before completion)");
+    CHECK(g_dl_ticks_at_done >= 1, "sibling should tick while a timed await waits (concurrency)");
+
+    rf_task_wait(slow);          /* let the slow worker finish before we free its task (no UAF) */
+    rf_task_destroy(fast);
+    rf_task_destroy(slow);
+    rf_coro_delete(cf);
+    rf_coro_delete(cs);
+    rf_sched_run_until(s, sib);  /* drain the sibling's remaining ticks */
+    rf_coro_delete(sib);
+    rf_sched_destroy(s);
+    printf("OK (3): timed await — completed=%d timeout=%d; sibling ticked %d before timeout\n",
+           g_dl_outcome_fast, g_dl_outcome_slow == 0, g_dl_ticks_at_done);
+    return 0;
+}
+
 int main(void)
 {
     printf("coro backend: %s\n", rf_context_backend_name());
@@ -175,6 +244,8 @@ int main(void)
     if (rc) return rc;
     rc = test_await_threaded();
     if (rc) return rc;
-    printf("OK: implicit-scheduler async surface (run_until + threaded await) works\n");
+    rc = test_await_deadline();
+    if (rc) return rc;
+    printf("OK: implicit-scheduler async surface (run_until + threaded await + timed await) works\n");
     return 0;
 }

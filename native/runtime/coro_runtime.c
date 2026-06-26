@@ -45,6 +45,7 @@ struct rf_coro {
     struct rf_coro* sched_next;    /* scheduler link: ready queue OR timer list (one at a time) */
     uint64_t wake_ns;              /* monotonic deadline this coroutine is parked until         */
     int in_ready;                  /* 1 while queued in the ready FIFO (dedups external wakes)  */
+    int counted_done;              /* 1 once its completion has decremented live (idempotent)   */
 #ifdef HAVE_LIBCO
     cothread_t thread;             /* libco context for this coroutine's own stack        */
     cothread_t resumer;            /* context to switch back to on yield/finish           */
@@ -320,7 +321,9 @@ static rf_coro* rf_sched_pop_ready(rf_sched* s)
     return c;
 }
 
-/* Insert into the timer list keeping it sorted by wake_ns ascending (earliest first). */
+/* Insert into the timer list keeping it sorted by wake_ns ascending (earliest first). Caller holds
+ * s->lock — the timer list is mutated from the scheduler thread (park) AND, for deadline parks that
+ * are also externally wakeable, unlinked by rf_sched_wake from a worker thread. */
 static void rf_sched_insert_timer(rf_sched* s, rf_coro* c)
 {
     rf_coro** link = &s->timers;
@@ -329,6 +332,22 @@ static void rf_sched_insert_timer(rf_sched* s, rf_coro* c)
     }
     c->sched_next = *link;
     *link = c;
+}
+
+/* Remove `c` from the timer list if present (caller holds s->lock). Used when a deadline-parked
+ * coroutine is woken by something OTHER than its timer (a worker completing the awaited task), so
+ * it does not linger in the timer list and get moved to ready a second time when the timer fires. */
+static void rf_sched_unlink_timer(rf_sched* s, rf_coro* c)
+{
+    rf_coro** link = &s->timers;
+    while (*link != NULL) {
+        if (*link == c) {
+            *link = c->sched_next;
+            c->sched_next = NULL;
+            return;
+        }
+        link = &(*link)->sched_next;
+    }
 }
 
 rf_sched* rf_sched_create(void)
@@ -376,9 +395,30 @@ void rf_sched_park_timer(uint64_t delay_ns)
     if (s == NULL || self == NULL) {
         return;
     }
+    rf_mutex_lock(&s->lock);
     self->wake_ns = rf_now_ns() + delay_ns;
     rf_sched_insert_timer(s, self);
+    rf_mutex_unlock(&s->lock);
     rf_coro_switch_out(); /* switch back to the run loop; it resumes us when the timer fires */
+}
+
+/* Park the current coroutine until `delay_ns` from now — BUT, unlike rf_sched_park_timer, it also
+ * stays externally wakeable (rf_sched_wake). The run loop resumes it whichever happens first: the
+ * timer fires, or a worker thread wakes it (which unlinks it from the timer list). The substrate
+ * for a timed await — racing an awaited task's completion against a deadline without blocking the
+ * thread. The caller (rf_task_await_coro_deadline) re-checks both conditions after each resume. */
+void rf_sched_park_deadline(uint64_t delay_ns)
+{
+    rf_sched* s = g_sched;
+    rf_coro* self = rf_coro_current();
+    if (s == NULL || self == NULL) {
+        return;
+    }
+    rf_mutex_lock(&s->lock);
+    self->wake_ns = rf_now_ns() + delay_ns;
+    rf_sched_insert_timer(s, self);
+    rf_mutex_unlock(&s->lock);
+    rf_coro_switch_out();
 }
 
 /* Park the current coroutine with NO wake condition the scheduler itself can satisfy: it is
@@ -431,6 +471,10 @@ void rf_sched_wake(rf_sched* s, rf_coro* c)
         return;
     }
     rf_mutex_lock(&s->lock);
+    /* If it was parked on a deadline timer (rf_sched_park_deadline), unlink it first so the timer
+     * does not later move an already-ready coroutine to ready a second time. No-op for a plain
+     * external park (not in the timer list). */
+    rf_sched_unlink_timer(s, c);
     if (!c->in_ready) {
         rf_sched_push_ready(s, c);
         rf_cond_signal(&s->cond);
@@ -451,8 +495,9 @@ static int rf_sched_step(rf_sched* s)
         rf_mutex_unlock(&s->lock);
         rf_coro_status st = rf_coro_resume(c);
         rf_mutex_lock(&s->lock);
-        if (st == RF_CORO_COMPLETED) {
-            s->live--; /* the owner (the Coroutine[T] handle) frees it later */
+        if (st == RF_CORO_COMPLETED && !c->counted_done) {
+            c->counted_done = 1; /* count each completion exactly once, even if a stray wake */
+            s->live--;           /* re-queued it after it finished (the owner frees it later) */
         }
         return 1;
     }
@@ -632,4 +677,11 @@ static int rf_sched_remove(rf_sched* s, rf_coro* c)
 int rf_sched_unschedule_default(rf_coro* c)
 {
     return rf_sched_remove(g_thread_sched, c);
+}
+
+/* The monotonic nanosecond clock the scheduler uses for timers, exposed for the task↔coro deadline
+ * bridge (so a timed await measures its deadline on the same clock the timer list is sorted by). */
+uint64_t rf_monotonic_now_ns(void)
+{
+    return rf_now_ns();
 }

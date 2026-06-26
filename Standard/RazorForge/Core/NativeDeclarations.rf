@@ -137,6 +137,10 @@ dangerous external("C") routine rf_sched_unschedule_default(coro: CPtr) -> U32
 ### already complete (read the result, don't park), 0 if registered (park via rf_sched_park_external;
 ### the worker wakes you on completion). Outside a scheduler-driven coroutine returns 1 (block-wait).
 dangerous external("C") routine rf_task_await_coro(task: Address) -> U32
+### Timed variant: parks (deadline timer + externally wakeable) until the task completes or
+### `timeout_ns` elapses. Returns 1 if completed (read the result), 0 if it timed out, 2 if not on a
+### scheduler-driven coroutine (the caller should block-wait with the deadline instead).
+dangerous external("C") routine rf_task_await_coro_deadline(task: Address, timeout_ns: U64) -> U32
 ### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
 ### Safe: reads only thread-local scheduler state. Lets `waitfor` be uncolored.
 external("C") routine rf_in_coroutine() -> U32

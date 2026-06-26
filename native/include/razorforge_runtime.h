@@ -88,6 +88,10 @@ rf_task_completion_kind rf_task_wait_within(rf_task* task, int64_t timeout_secon
  * complete (read the result, don't park), 0 if registered (park via rf_sched_park_external; the
  * worker wakes you on completion). Outside a scheduler-driven coroutine, returns 1 (block-wait). */
 uint32_t rf_task_await_coro(rf_task* task);
+/* Timed variant: park (deadline timer + externally wakeable) until the task completes or
+ * `timeout_ns` elapses. Returns 1 = completed (read result), 0 = timed out, 2 = not on a
+ * scheduler-driven coroutine (block-wait with the deadline instead). */
+uint32_t rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns);
 int rf_task_spawn_threaded(rf_task* task, rf_task_entry_fn entry, void* userdata);
 
 void rf_task_mark_ready(rf_task* task);
@@ -204,6 +208,14 @@ void rf_sched_park_timer(uint64_t delay_ns);
 /* Park the current coroutine with no scheduler-satisfiable wake: only rf_sched_wake re-queues it.
  * How a coroutine awaits work on another OS thread without blocking the scheduler thread. */
 void rf_sched_park_external(void);
+
+/* Park the current coroutine until `delay_ns` from now, but ALSO leave it externally wakeable
+ * (rf_sched_wake) — resumed whichever happens first. Substrate for a timed await (race a task's
+ * completion against a deadline). An external wake unlinks it from the timer list. */
+void rf_sched_park_deadline(uint64_t delay_ns);
+
+/* The monotonic nanosecond clock the scheduler's timers use (for the timed-await bridge). */
+uint64_t rf_monotonic_now_ns(void);
 
 /* Make a parked coroutine runnable again. Safe to call from ANY thread — the bridge a worker
  * thread uses to hand a result back to a coroutine awaiting it on the scheduler thread. */

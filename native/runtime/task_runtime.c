@@ -183,6 +183,59 @@ rf_U32 rf_task_await_coro(rf_task* task)
     return 0;
 }
 
+/* Timed await: like rf_task_await_coro but bounded by `timeout_ns`. Parks the current coroutine on
+ * a deadline timer that is ALSO externally wakeable, looping until the task completes or the
+ * deadline elapses — without blocking the scheduler thread (siblings run meanwhile). Returns:
+ *   1 = task completed (read the result),
+ *   0 = deadline elapsed first (the caller should treat this as a timeout),
+ *   2 = not on a scheduler-driven coroutine (the caller must fall back to a blocking timed wait).
+ * The awaiter slot is cleared on timeout (under coro_lock, with a final completion re-check) so a
+ * later completion cannot wake a coroutine that already moved on. */
+rf_U32 rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns)
+{
+    if (task == NULL) return 1;
+
+    rf_sched* sched = rf_sched_current();
+    rf_coro* self = rf_coro_current();
+    if (sched == NULL || self == NULL) {
+        return 2; /* not on a scheduler-driven coroutine — caller block-waits with the deadline */
+    }
+
+    uint64_t deadline = rf_monotonic_now_ns() + timeout_ns;
+    for (;;) {
+        /* Register + check completion atomically (same race-freedom as rf_task_await_coro). */
+        rf_mutex_lock(&task->coro_lock);
+        if (rf_task_is_completed(task)) {
+            rf_mutex_unlock(&task->coro_lock);
+            return 1;
+        }
+        task->coro_sched = sched;
+        task->coro_waiter = self;
+        rf_mutex_unlock(&task->coro_lock);
+
+        uint64_t now = rf_monotonic_now_ns();
+        if (now >= deadline) {
+            /* Deadline reached. Final completion check + deregister, atomically: if the task just
+             * completed, prefer the value (return 1); otherwise clear our awaiter slot so a later
+             * completion does not wake us after we have returned. */
+            rf_mutex_lock(&task->coro_lock);
+            if (rf_task_is_completed(task)) {
+                rf_mutex_unlock(&task->coro_lock);
+                return 1;
+            }
+            if (task->coro_waiter == self) {
+                task->coro_sched = NULL;
+                task->coro_waiter = NULL;
+            }
+            rf_mutex_unlock(&task->coro_lock);
+            return 0;
+        }
+
+        /* Park until the timer fires OR the worker wakes us; then re-check both conditions. */
+        rf_sched_park_deadline(deadline - now);
+    }
+}
+
 static rf_thread_backend* rf_thread_backend_create(void)
 {
     rf_thread_backend* backend = (rf_thread_backend*)calloc(1, sizeof(rf_thread_backend));

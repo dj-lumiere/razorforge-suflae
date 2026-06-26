@@ -24,9 +24,10 @@ routine Task[T].waitfor(deadline: Duration) -> Task[T]
                  has_deadline: true, spawned: me.spawned)
 
 ### Waits for the worker to finish and returns its produced value. UNCOLORED: inside a
-### scheduler-driven coroutine (no deadline) it PARKS — the scheduler runs other coroutines while
-### this one awaits the worker thread — instead of blocking; on a plain thread it blocks. (A
-### deadline still blocks for now; a non-blocking timed await is a follow-up.)
+### scheduler-driven coroutine it PARKS — the scheduler runs other coroutines while this one awaits
+### the worker thread — instead of blocking; on a plain thread it blocks. A deadline
+### (`task.waitfor(d).retrieve!()`) races completion against the timer the same way: it parks inside
+### a coroutine, blocks on a plain thread, and throws {TaskTimeoutError} if the deadline wins.
 ### :throws: {TaskSpawnError} if the task could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value produced by the threaded routine.
@@ -37,12 +38,21 @@ routine Task[T].retrieve!() -> ?T
   danger!
     if me.has_deadline
       var total = me.deadline.total_nanoseconds()
-      var secs = total // 1000000000
-      var nanos = U32(total - secs * 1000000000)
-      var kind = rf_task_wait_within(task: me.task_handle, secs: secs, ns: nanos)
-      if kind != 1
-        rf_task_destroy(task: me.task_handle)
-        throw TaskTimeoutError()
+      if rf_in_coroutine() != 0_u32
+        # Inside a scheduler-driven coroutine: race the worker against the deadline WITHOUT
+        # blocking. The coroutine parks on a deadline timer that is also externally wakeable;
+        # siblings run meanwhile. 0 => the deadline elapsed first (timeout); 1 => completed.
+        var outcome = rf_task_await_coro_deadline(task: me.task_handle, timeout_ns: U64(total))
+        if outcome == 0_u32
+          rf_task_destroy(task: me.task_handle)
+          throw TaskTimeoutError()
+      else
+        var secs = total // 1000000000
+        var nanos = U32(total - secs * 1000000000)
+        var kind = rf_task_wait_within(task: me.task_handle, secs: secs, ns: nanos)
+        if kind != 1
+          rf_task_destroy(task: me.task_handle)
+          throw TaskTimeoutError()
     else
       if rf_in_coroutine() != 0_u32
         # Inside a scheduler-driven coroutine: park instead of blocking the thread. Register as the
