@@ -4,6 +4,7 @@ using System.Linq;
 using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace Compiler.Postprocessing.Passes;
 
@@ -73,9 +74,30 @@ public sealed class CancellationInstrumentationPass
         }
     }
 
+    /// <summary>
+    /// Resolves a routine declaration to its <see cref="RoutineInfo"/> so it can be gated on the
+    /// may-suspend set. A member routine declares with a dotted name (<c>Box.do_work</c>); resolve
+    /// it on its owner type. A concrete owner (a user-declared entity/record) resolves directly;
+    /// generic-definition owners (<c>List[T].x</c>) are skipped here — their instrumentation belongs
+    /// on the monomorphized bodies, a separate follow-up.
+    /// </summary>
+    private RoutineInfo? ResolveDecl(RoutineDeclaration decl)
+    {
+        int dot = decl.Name.LastIndexOf(value: '.');
+        if (dot < 0)
+        {
+            return _registry.LookupRoutineByName(name: decl.Name, isFailable: decl.IsFailable);
+        }
+
+        string ownerName = decl.Name[..dot];
+        string methodName = decl.Name[(dot + 1)..];
+        TypeInfo? owner = _registry.LookupType(name: ownerName);
+        return owner == null ? null : _registry.LookupMethod(type: owner, methodName: methodName, isFailable: decl.IsFailable);
+    }
+
     private void MaybeInstrument(RoutineDeclaration decl)
     {
-        RoutineInfo? info = _registry.LookupRoutineByName(name: decl.Name, isFailable: decl.IsFailable);
+        RoutineInfo? info = ResolveDecl(decl: decl);
         if (info == null || !_maySuspend.Contains(item: info.RegistryKey))
         {
             return;
