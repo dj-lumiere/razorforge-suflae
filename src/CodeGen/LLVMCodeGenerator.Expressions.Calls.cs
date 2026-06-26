@@ -283,8 +283,31 @@ public partial class LlvmCodeGenerator
         var argTypes = new List<string>();
         var argTypeInfos = new List<TypeInfo>();
 
-        foreach (Expression arg in arguments)
+        for (int argIdx = 0; argIdx < arguments.Count; argIdx++)
         {
+            Expression arg = arguments[index: argIdx];
+
+            // FFI routine -> CPtr coercion: a bare top-level routine name passed where a CPtr is
+            // expected lowers to the routine's bare C function pointer (its native symbol already
+            // has C ABI; no closure thunk). SA gates this to non-capturing references. Unwrap a
+            // NamedArgumentExpression and match the parameter by name (named args may be reordered).
+            Expression argInner = arg is NamedArgumentExpression namedArg ? namedArg.Value : arg;
+            TypeInfo? paramTy = arg is NamedArgumentExpression na
+                ? routine?.Parameters.FirstOrDefault(predicate: p => p.Name == na.Name)?.Type
+                : routine != null && argIdx < routine.Parameters.Count
+                    ? routine.Parameters[index: argIdx].Type
+                    : null;
+            if (paramTy?.Name == "CPtr"
+                && argInner is IdentifierExpression routineRef
+                && _registry.LookupRoutineByName(name: routineRef.Name) is { } refRoutine)
+            {
+                GenerateRoutineDeclaration(routine: refRoutine);
+                argValues.Add(item: $"@{MangleRoutineName(routine: refRoutine)}");
+                argTypeInfos.Add(item: paramTy);
+                argTypes.Add(item: "ptr");
+                continue;
+            }
+
             string value = EmitExpression(sb: sb, expr: arg);
             argValues.Add(item: value);
 

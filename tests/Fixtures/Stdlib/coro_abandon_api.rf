@@ -1,0 +1,41 @@
+module Tests/Stdlib/CoroAbandonApi
+
+# v0.2.0 coroutine abandon-teardown end-to-end (Mechanism C). A coroutine body owns an entity
+# `Box`; the compiler instruments its construction with a cancellation push and its teardown with
+# a pop. Two cases prove the owned value is destroyed EXACTLY once on each path:
+#   1. Abandon while parked  -> the cancellation shadow stack runs Box.$destroy.
+#   2. Resume to completion   -> the inline teardown runs Box.$destroy; the node was popped, so
+#      the later delete does not re-fire (no double-free).
+# These exercise the substrate directly (no scheduler yet), so they live in a danger! block.
+
+import IO/Console
+
+entity Box
+  value: S64
+
+dangerous routine Box.$destroy()
+  show(value: "Box destroyed")
+  me.hijack().invalidate()
+  return
+
+# may-suspend (calls rf_coro_yield) and owns `b`. CPtr param => native void(ptr) C entry.
+routine coro_body(ud: CPtr)
+  var b = Box(value: 5)
+  rf_coro_yield()
+  return
+
+routine start()
+  # Case 1: abandon a parked coroutine -> shadow-stack teardown.
+  danger!
+    var c1 = rf_coro_create(entry: coro_body, userdata: cptr_none(), stack_size: 0)
+    discard rf_coro_resume(coro: c1)
+    rf_coro_abandon(coro: c1)
+  show(value: "---")
+  # Case 2: run to completion -> inline teardown, no re-fire on delete.
+  danger!
+    var c2 = rf_coro_create(entry: coro_body, userdata: cptr_none(), stack_size: 0)
+    discard rf_coro_resume(coro: c2)
+    discard rf_coro_resume(coro: c2)
+    rf_coro_delete(coro: c2)
+  show(value: "done")
+  return

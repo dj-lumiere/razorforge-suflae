@@ -1,0 +1,4 @@
+Box destroyed
+---
+Box destroyed
+done

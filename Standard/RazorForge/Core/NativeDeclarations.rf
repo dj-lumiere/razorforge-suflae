@@ -81,22 +81,23 @@ external("C") routine rf_current_thread_id() -> U64
 # rf_coro_yield is THE suspend primitive the may-suspend analysis seeds on.
 # ============================================================================
 
-### Allocates a coroutine running `entry(userdata)`. `stack_size` of 0 picks a default.
-### :returns: an opaque `rf_coro*` handle as an `Address` (null on failure). Does not start it.
-dangerous external("C") routine rf_coro_create(entry: Address, userdata: Address, stack_size: U64) -> Address
+### Allocates a coroutine running `entry(userdata)`. `entry` is a C function pointer — a
+### non-capturing routine coerces to `CPtr`. `stack_size` of 0 picks a default.
+### :returns: an opaque coroutine handle as a `CPtr` (null on failure). Does not start it.
+dangerous external("C") routine rf_coro_create(entry: CPtr, userdata: CPtr, stack_size: U64) -> CPtr
 ### Switches into the coroutine, blocking the caller until it parks or finishes.
 ### :returns: the resulting status (2 = parked, 3 = completed).
-dangerous external("C") routine rf_coro_resume(coro: Address) -> U32
+dangerous external("C") routine rf_coro_resume(coro: CPtr) -> U32
 ### Parks the coroutine currently running on this OS thread, switching back to its resumer.
 ### Safe: takes no pointers; a no-op outside a coroutine. THIS is the suspend point.
 external("C") routine rf_coro_yield()
 ### Reads a coroutine's status (0 new, 1 running, 2 parked, 3 completed, 4 cancelled).
-dangerous external("C") routine rf_coro_status_get(coro: Address) -> U32
+dangerous external("C") routine rf_coro_status_get(coro: CPtr) -> U32
 ### Abandons a parked (or never-started) coroutine: walks its cancellation shadow stack
 ### innermost-first, runs each teardown thunk once, then frees the coroutine and its stack.
-dangerous external("C") routine rf_coro_abandon(coro: Address)
+dangerous external("C") routine rf_coro_abandon(coro: CPtr)
 ### Frees a completed (or never-started) coroutine and its stack. Use rf_coro_abandon for a parked one.
-dangerous external("C") routine rf_coro_delete(coro: Address)
+dangerous external("C") routine rf_coro_delete(coro: CPtr)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
