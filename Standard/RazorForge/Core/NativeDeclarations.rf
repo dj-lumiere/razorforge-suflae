@@ -98,6 +98,9 @@ dangerous external("C") routine rf_coro_status_get(coro: CPtr) -> U32
 dangerous external("C") routine rf_coro_abandon(coro: CPtr)
 ### Frees a completed (or never-started) coroutine and its stack. Use rf_coro_abandon for a parked one.
 dangerous external("C") routine rf_coro_delete(coro: CPtr)
+### Blocks the calling thread for the given duration. The synchronous-sleep backing for the
+### `waitfor` routine; a `suspended` waitfor will instead park on a timer (v0.3.0 scheduler).
+dangerous external("C") routine rf_waitfor_duration(secs: S64, ns: U32)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
