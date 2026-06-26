@@ -272,7 +272,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 IdentifierExpression id => ResolveRoutineValueRef(id: id, frame: frame),
                 _ => null
             };
-            if (resolved == null) continue;
+            if (resolved == null)
+            {
+                if (node is CallExpression indirectCe) NoteIfIndirectCall(caller: frame.Routine, ce: indirectCe);
+                continue;
+            }
 
             RoutineInfo concreteCallee = SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs);
             EnqueueCallee(callee: concreteCallee);
@@ -309,7 +313,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     IdentifierExpression id => ResolveRoutineValueRef(id: id, frame: frame),
                     _ => null
                 };
-                if (resolved == null) continue;
+                if (resolved == null)
+                {
+                    if (node is CallExpression indirectCe) NoteIfIndirectCall(caller: frame.Routine, ce: indirectCe);
+                    continue;
+                }
                 RoutineInfo variantCallee = SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs);
                 EnqueueCallee(callee: variantCallee);
                 RecordSuspendEdge(caller: frame.Routine, callee: variantCallee);
@@ -719,6 +727,27 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (SuspendPrimitives.IsSuspendPrimitive(routine: callee))
         {
             ctx.MaySuspendGraph.GetOrCreateNode(routine: caller).DirectlySuspends = true;
+        }
+    }
+
+    /// <summary>
+    /// Marks <paramref name="caller"/> as having an indirect call when <paramref name="ce"/> invokes
+    /// a routine VALUE (a first-class routine or lambda held in a variable/parameter/field) rather
+    /// than a statically-named routine — i.e. its callee expression itself evaluates to a
+    /// <see cref="RoutineTypeInfo"/>. The static graph cannot see such a target, so the may-suspend
+    /// analysis treats the caller conservatively as may-suspend (design §6): over-approximation only
+    /// adds shadow-stack push/pops, never miscompiles teardown. Only reached when static resolution
+    /// already failed, so direct calls (which carry a ResolvedRoutine) never land here.
+    ///
+    /// NOTE (5b hardening): protocol/virtual dispatch that fails to devirtualize still resolves to
+    /// the protocol method (non-null) and so is NOT flagged here yet. That is sound for v0.2.0 (no
+    /// suspending protocol impls exist); tighten before any such impl ships.
+    /// </summary>
+    private void NoteIfIndirectCall(RoutineInfo caller, CallExpression ce)
+    {
+        if (ce.Callee.ResolvedType is RoutineTypeInfo)
+        {
+            ctx.MaySuspendGraph.GetOrCreateNode(routine: caller).HasIndirectCall = true;
         }
     }
 
