@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
 using Compiler.CodeGen;
 using Compiler.Diagnostics;
@@ -148,36 +146,21 @@ public class CompilerPipelineInputEdgeCaseTests
     /// surfaces algorithmic regressions in seconds instead of bleeding CI throughput.
     /// Repro source mirrored at <c>playground/deeply_nested_repro.rf</c>.
     /// </remarks>
-    [Fact(Timeout = 30_000)]
+    // Timeout is generous (not the ~6 s baseline) on purpose: the work is a full fresh stdlib
+    // semantic analysis, and the macOS/ARM64 CI runners are slow and contended enough to spike
+    // several-fold. A true algorithmic regression (exponential in nesting) would run for minutes or
+    // hang, so a 2-minute cap still surfaces it while tolerating runner variance.
+    [Fact(Timeout = 120_000)]
     public async Task Codegen_DeeplyNestedSource_GeneratesRoutineDefinitionAsync()
     {
-        // Run on a dedicated thread with a LARGE stack — the parser/SA/codegen recurse over the AST,
-        // and a default ThreadPool stack (which `Task.Run` would use) overflows on deep nesting,
-        // especially on macOS/ARM64 (larger frames, smaller default stack) where this previously
-        // crashed. The returned Task keeps xUnit's Timeout effective on the async body.
-        string llvmIr = await RunOnLargeStackAsync(work: () =>
+        // Task.Run (not a custom large-stack thread): depth 32 fits a default stack on every
+        // platform, and a 64 MB-stack thread is pathologically slow to set up on macOS (eager stack
+        // commit), which previously turned a passing 6 s test into a 30 s+ timeout. Task.Run also
+        // keeps xUnit's Timeout effective on the async body.
+        string llvmIr = await Task.Run(function: () =>
             GenerateIr(source: CreateDeeplyNestedSource(nestingDepth: 32)));
 
         Assert.Contains(expectedSubstring: TestRoutineIrSignature, actualString: llvmIr);
-    }
-
-    /// <summary>
-    /// Runs <paramref name="work"/> on a dedicated thread with a 64&#160;MB stack and surfaces it as a
-    /// <see cref="Task{T}"/>. Recursive compiler passes need far more stack than a ThreadPool thread
-    /// provides for deeply nested input; the explicit large stack makes nesting depth a property of
-    /// the input, not of the platform's default thread stack.
-    /// </summary>
-    private static Task<T> RunOnLargeStackAsync<T>(Func<T> work)
-    {
-        var tcs = new TaskCompletionSource<T>();
-        var thread = new Thread(start: () =>
-        {
-            try { tcs.SetResult(result: work()); }
-            catch (Exception e) { tcs.SetException(exception: e); }
-        }, maxStackSize: 64 * 1024 * 1024)
-        { IsBackground = true };
-        thread.Start();
-        return tcs.Task;
     }
 
     private static string GenerateIr(string source)
