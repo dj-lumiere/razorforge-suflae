@@ -31,8 +31,10 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 public sealed class CancellationInstrumentationPass
 {
-    /// <summary>Sentinel callee names codegen recognises. Must not collide with any real routine.</summary>
+    /// <summary>Sentinel callee name for a cancellation-node PUSH; codegen lowers it to rf_coro_cf_push.</summary>
     public const string PushMarker = "__rf_cf_push";
+
+    /// <summary>Sentinel callee name for a cancellation-node POP; codegen lowers it to rf_coro_cf_pop.</summary>
     public const string PopMarker = "__rf_cf_pop";
 
     private readonly HashSet<string> _maySuspend;
