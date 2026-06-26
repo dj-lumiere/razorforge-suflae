@@ -177,6 +177,26 @@ void rf_coro_cf_pop(rf_cancel_frame* frame);
  * coroutine and its stack. Abandoning a completed coroutine just frees it (its nodes were popped). */
 void rf_coro_abandon(rf_coro* coro);
 
+/* ---------------------------------------------------------------------------
+ * Single-thread cooperative scheduler (v0.2.0 async). Drives many coroutines on
+ * one OS thread; a coroutine parks on a wake condition (today: a timer) and the
+ * loop resumes it when ready, so `waitfor` parks instead of blocking the thread.
+ * --------------------------------------------------------------------------- */
+typedef struct rf_sched rf_sched;
+
+rf_sched* rf_sched_create(void);
+void rf_sched_destroy(rf_sched* sched);
+
+/* Queue a NEW coroutine to run; it starts on its first resume by the loop. */
+void rf_sched_spawn(rf_sched* sched, rf_coro* coro);
+
+/* Park the coroutine currently running under the loop for `delay_ns`, then resume it. Called from
+ * inside a coroutine (e.g. by waitfor). No-op outside a running scheduler/coroutine. */
+void rf_sched_park_timer(uint64_t delay_ns);
+
+/* Drive all spawned coroutines to completion on this thread (returns when none remain). */
+void rf_sched_run(rf_sched* sched);
+
 #ifdef __cplusplus
 }
 #endif
