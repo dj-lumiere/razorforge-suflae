@@ -12,6 +12,7 @@ extern "C" {
 typedef struct rf_context_runtime rf_context_runtime;
 typedef struct rf_async_runtime rf_async_runtime;
 typedef struct rf_task rf_task;
+typedef struct rf_coro rf_coro;
 
 typedef void (*rf_context_entry_fn)(void* userdata);
 typedef void (*rf_task_entry_fn)(rf_task* task, void* userdata);
@@ -112,6 +113,36 @@ uint32_t rf_task_prerequisites_remaining(rf_task* task);
 bool rf_task_prerequisite_complete(rf_task* task, bool success);
 
 void rf_waitfor_duration(int64_t duration_seconds, uint32_t duration_nanoseconds);
+
+/* ---------------------------------------------------------------------------
+ * v0.2.0 stackful coroutine primitive (Phase 1: context-switch spike).
+ * Single coroutine, no scheduler. See internal-wiki/v0.2.0-coroutine-primitive.md.
+ * --------------------------------------------------------------------------- */
+typedef enum rf_coro_status {
+    RF_CORO_NEW = 0,       /* created, never resumed                       */
+    RF_CORO_RUNNING = 1,   /* currently executing on its own stack         */
+    RF_CORO_PARKED = 2,    /* yielded; resumable                           */
+    RF_CORO_COMPLETED = 3  /* entry returned; not resumable                */
+} rf_coro_status;
+
+/* Allocate a coroutine whose body is entry(userdata). stack_size == 0 picks a default.
+ * Returns NULL on allocation failure or NULL entry. Does NOT start running it. */
+rf_coro* rf_coro_create(rf_context_entry_fn entry, void* userdata, size_t stack_size);
+
+/* Switch into the coroutine; block the caller until it parks or finishes. Returns the
+ * resulting status (RF_CORO_PARKED or RF_CORO_COMPLETED). Resuming a completed coroutine
+ * is a no-op that returns RF_CORO_COMPLETED. */
+rf_coro_status rf_coro_resume(rf_coro* coro);
+
+/* Park the coroutine currently running on this OS thread, switching back to its resumer.
+ * No-op when called outside any coroutine. */
+void rf_coro_yield(void);
+
+rf_coro_status rf_coro_status_get(rf_coro* coro);
+
+/* Free the coroutine and its stack. Caller must not delete a coroutine that is currently
+ * running on the stack. (Abandon-teardown of a PARKED coroutine is Phase 3, not here.) */
+void rf_coro_delete(rf_coro* coro);
 
 #ifdef __cplusplus
 }

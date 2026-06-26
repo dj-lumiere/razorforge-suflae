@@ -135,6 +135,7 @@ add_library(razorforge_runtime SHARED
     runtime/file_functions.c
     runtime/task_runtime.c
     runtime/concurrency_context.c
+    runtime/coro_runtime.c
     runtime/async_io.c
     runtime/random.c
     runtime/types.h
