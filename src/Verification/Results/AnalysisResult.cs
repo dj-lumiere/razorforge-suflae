@@ -27,6 +27,9 @@ namespace Verification.Results;
 /// body emission so unreachable routines are not emitted.</param>
 /// <param name="LiveOwnerTypeNames">Live concrete owner type full-names from RoutineReachabilityPass.
 /// GMP gates monomorphization on membership so unreachable generic instances are skipped.</param>
+/// <param name="MaySuspendRoutineKeys">RegistryKeys of routines that can transitively reach a
+/// coroutine suspend point (<see cref="MaySuspendAnalysis"/>). Codegen instruments only these with
+/// cancellation push/pop (5b-2). Empty for any program that never reaches a suspend primitive.</param>
 public sealed record AnalysisResult(
     TypeRegistry Registry,
     List<SemanticError> Errors,
@@ -35,7 +38,8 @@ public sealed record AnalysisResult(
     IReadOnlyDictionary<string, Statement> SynthesizedBodies,
     IReadOnlyDictionary<string, MonomorphizedBody> InstantiatedGenericBodies,
     IReadOnlyCollection<string> LiveRoutineKeys,
-    IReadOnlyCollection<string> LiveOwnerTypeNames)
+    IReadOnlyCollection<string> LiveOwnerTypeNames,
+    IReadOnlyCollection<string> MaySuspendRoutineKeys)
 {
     /// <summary>Whether analysis completed without errors.</summary>
     public bool Success => Errors.Count == 0;

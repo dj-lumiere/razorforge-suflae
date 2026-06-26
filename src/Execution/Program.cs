@@ -721,7 +721,8 @@ internal partial class Program
                 synthesizedBodies: result.SynthesizedBodies,
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
                 liveRoutineKeys: result.LiveRoutineKeys,
-                liveOwnerTypeNames: result.LiveOwnerTypeNames) { Timing = saTiming };
+                liveOwnerTypeNames: result.LiveOwnerTypeNames,
+                maySuspendRoutineKeys: result.MaySuspendRoutineKeys) { Timing = saTiming };
             string llvmIr = generator.Generate();
             Console.WriteLine(value: $"Routines emitted: {generator.EmittedRoutineCount}");
 
@@ -966,7 +967,8 @@ internal partial class Program
                 synthesizedBodies: result.SynthesizedBodies,
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
                 liveRoutineKeys: result.LiveRoutineKeys,
-                liveOwnerTypeNames: result.LiveOwnerTypeNames) { Timing = saTiming };
+                liveOwnerTypeNames: result.LiveOwnerTypeNames,
+                maySuspendRoutineKeys: result.MaySuspendRoutineKeys) { Timing = saTiming };
             string llvmIr = generator.Generate();
             if (showBuildStages)
                 Console.Error.WriteLine(value: $"Routines emitted: {generator.EmittedRoutineCount}");

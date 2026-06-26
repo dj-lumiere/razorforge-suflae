@@ -50,6 +50,14 @@ public partial class LlvmCodeGenerator
     private HashSet<string> _liveRoutineKeys = new(comparer: StringComparer.Ordinal);
 
     /// <summary>
+    /// RegistryKeys of routines that can transitively reach a coroutine suspend point
+    /// (<see cref="Verification.MaySuspendAnalysis"/>). Only these get 5b-2 cancellation
+    /// instrumentation (cf_push/cf_pop). Empty for any program that never reaches a suspend
+    /// primitive — so non-coroutine code emits identically to before.
+    /// </summary>
+    private HashSet<string> _maySuspendRoutineKeys = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
     /// RegistryKeys of routines actually REFERENCED while emitting a routine body (the transitive
     /// closure from the user entry points). Codegen gates body definitions on this set so a routine
     /// is emitted only if some emitted body calls it — pruning every routine nothing references
@@ -280,7 +288,8 @@ public partial class LlvmCodeGenerator
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
         IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
         IReadOnlyCollection<string>? liveRoutineKeys = null,
-        IReadOnlyCollection<string>? liveOwnerTypeNames = null) :
+        IReadOnlyCollection<string>? liveOwnerTypeNames = null,
+        IReadOnlyCollection<string>? maySuspendRoutineKeys = null) :
         this(userPrograms:
             [(program, program.Location.FileName, "")],
             registry: registry,
@@ -290,7 +299,8 @@ public partial class LlvmCodeGenerator
             synthesizedBodies: synthesizedBodies,
             instantiatedGenericBodies: instantiatedGenericBodies,
             liveRoutineKeys: liveRoutineKeys,
-            liveOwnerTypeNames: liveOwnerTypeNames)
+            liveOwnerTypeNames: liveOwnerTypeNames,
+            maySuspendRoutineKeys: maySuspendRoutineKeys)
     {
     }
 
@@ -314,7 +324,8 @@ public partial class LlvmCodeGenerator
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
         IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
         IReadOnlyCollection<string>? liveRoutineKeys = null,
-        IReadOnlyCollection<string>? liveOwnerTypeNames = null)
+        IReadOnlyCollection<string>? liveOwnerTypeNames = null,
+        IReadOnlyCollection<string>? maySuspendRoutineKeys = null)
     {
         _target = target ?? TargetConfig.ForCurrentHost();
         if (_target.PointerBitWidth != 64)
@@ -336,6 +347,9 @@ public partial class LlvmCodeGenerator
                 comparer: StringComparer.Ordinal);
         if (liveOwnerTypeNames is { Count: > 0 })
             _liveOwnerTypeNames = new HashSet<string>(collection: liveOwnerTypeNames,
+                comparer: StringComparer.Ordinal);
+        if (maySuspendRoutineKeys is { Count: > 0 })
+            _maySuspendRoutineKeys = new HashSet<string>(collection: maySuspendRoutineKeys,
                 comparer: StringComparer.Ordinal);
         _buildMode = buildMode;
         _pointerBitWidth = _target.PointerBitWidth;

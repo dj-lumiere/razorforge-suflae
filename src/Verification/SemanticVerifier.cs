@@ -243,6 +243,13 @@ public sealed partial class SemanticVerifier
     private IReadOnlyCollection<string> _liveRoutineKeys = Array.Empty<string>();
     private IReadOnlyCollection<string> _liveOwnerTypeNames = Array.Empty<string>();
 
+    /// <summary>
+    /// May-suspend routine keys from <see cref="MaySuspendAnalysis"/>, captured from
+    /// <see cref="InstantiationContext.MaySuspendRoutineKeys"/> after Phase 6. Drives 5b-2
+    /// cancellation instrumentation in codegen.
+    /// </summary>
+    private IReadOnlyCollection<string> _maySuspendRoutineKeys = Array.Empty<string>();
+
     #endregion
 
     #region Constructor
@@ -415,7 +422,8 @@ public sealed partial class SemanticVerifier
             SynthesizedBodies: allSynthesized,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
             LiveRoutineKeys: _liveRoutineKeys,
-            LiveOwnerTypeNames: _liveOwnerTypeNames);
+            LiveOwnerTypeNames: _liveOwnerTypeNames,
+            MaySuspendRoutineKeys: _maySuspendRoutineKeys);
     }
 
     /// <summary>Phase 1: Collect all type shapes and routine stubs -> no names resolved.</summary>
@@ -640,6 +648,12 @@ public sealed partial class SemanticVerifier
         _liveRoutineKeys = ctx.LiveRoutineKeys.ToArray();
         _liveOwnerTypeNames = ctx.LiveOwnerTypeNames.ToArray();
 
+        // v0.2.0 may-suspend effect analysis over the call graph RoutineReachabilityPass populated
+        // (in either the timed or pipeline path above). Runs here — after both branches — so it is
+        // computed exactly once regardless of SaTiming. Empty for any program that never reaches a
+        // suspend primitive (all current code), so codegen instruments nothing extra.
+        ComputeMaySuspend(ctx: ctx);
+
         // Classify call expressions (set LoweringKind) in rewritten instantiated generic bodies.
         // GenericAstRewriter preserves source-AST structure but doesn't re-classify try_next
         // and other wired calls — they stay Unknown and cause codegen exceptions if not fixed here.
@@ -649,6 +663,27 @@ public sealed partial class SemanticVerifier
             buildMode: _buildMode);
         new CallOverloadResolutionPass(classCtx).RunOnStatements(
             _instantiatedGenericBodies.Values.Select(selector: b => b.Ast.Body));
+    }
+
+    /// <summary>
+    /// Runs the v0.2.0 may-suspend fixpoint over the call graph that
+    /// <see cref="RoutineReachabilityPass"/> populated, storing the result for codegen's 5b-2
+    /// cancellation instrumentation. Optional <c>RF_MAYSUSPEND_DUMP</c> writes the set for probes.
+    /// </summary>
+    private void ComputeMaySuspend(InstantiationContext ctx)
+    {
+        IReadOnlyCollection<string> maySuspend =
+            new MaySuspendAnalysis(callGraph: ctx.MaySuspendGraph).Compute().ToArray();
+        foreach (string key in maySuspend) ctx.MaySuspendRoutineKeys.Add(item: key);
+        _maySuspendRoutineKeys = maySuspend;
+
+        string? dumpPath = Environment.GetEnvironmentVariable(variable: "RF_MAYSUSPEND_DUMP");
+        if (!string.IsNullOrEmpty(value: dumpPath))
+        {
+            var lines = new List<string> { "=== MAY-SUSPEND ROUTINES ===" };
+            lines.AddRange(collection: maySuspend.OrderBy(keySelector: s => s));
+            System.IO.File.WriteAllLines(path: dumpPath, contents: lines);
+        }
     }
 
     /// <summary>
@@ -1028,7 +1063,8 @@ public sealed partial class SemanticVerifier
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
                 LiveRoutineKeys: _liveRoutineKeys,
-                LiveOwnerTypeNames: _liveOwnerTypeNames);
+                LiveOwnerTypeNames: _liveOwnerTypeNames,
+            MaySuspendRoutineKeys: _maySuspendRoutineKeys);
         }
 
         // Phase 2 global: once, registry-only -> no per-file import scoping needed
@@ -1112,7 +1148,8 @@ public sealed partial class SemanticVerifier
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
                 LiveRoutineKeys: _liveRoutineKeys,
-            LiveOwnerTypeNames: _liveOwnerTypeNames);
+            LiveOwnerTypeNames: _liveOwnerTypeNames,
+            MaySuspendRoutineKeys: _maySuspendRoutineKeys);
         }
 
         foreach ((Program program, string filePath) in files)
@@ -1172,7 +1209,8 @@ public sealed partial class SemanticVerifier
             SynthesizedBodies: allSynthesized2,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
             LiveRoutineKeys: _liveRoutineKeys,
-            LiveOwnerTypeNames: _liveOwnerTypeNames);
+            LiveOwnerTypeNames: _liveOwnerTypeNames,
+            MaySuspendRoutineKeys: _maySuspendRoutineKeys);
     }
 
     /// <summary>
