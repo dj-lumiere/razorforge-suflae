@@ -74,6 +74,29 @@ dangerous external("C") routine rf_task_destroy(task: Address)
 ### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
 ### the same thread.
 external("C") routine rf_current_thread_id() -> U64
+
+# ============================================================================
+# Stackful coroutine substrate (v0.2.0 — single coroutine, no scheduler).
+# Runtime-internal: these underlie Suflae's concurrency layer, not application API.
+# rf_coro_yield is THE suspend primitive the may-suspend analysis seeds on.
+# ============================================================================
+
+### Allocates a coroutine running `entry(userdata)`. `stack_size` of 0 picks a default.
+### :returns: an opaque `rf_coro*` handle as an `Address` (null on failure). Does not start it.
+dangerous external("C") routine rf_coro_create(entry: Address, userdata: Address, stack_size: U64) -> Address
+### Switches into the coroutine, blocking the caller until it parks or finishes.
+### :returns: the resulting status (2 = parked, 3 = completed).
+dangerous external("C") routine rf_coro_resume(coro: Address) -> U32
+### Parks the coroutine currently running on this OS thread, switching back to its resumer.
+### Safe: takes no pointers; a no-op outside a coroutine. THIS is the suspend point.
+external("C") routine rf_coro_yield()
+### Reads a coroutine's status (0 new, 1 running, 2 parked, 3 completed, 4 cancelled).
+dangerous external("C") routine rf_coro_status_get(coro: Address) -> U32
+### Abandons a parked (or never-started) coroutine: walks its cancellation shadow stack
+### innermost-first, runs each teardown thunk once, then frees the coroutine and its stack.
+dangerous external("C") routine rf_coro_abandon(coro: Address)
+### Frees a completed (or never-started) coroutine and its stack. Use rf_coro_abandon for a parked one.
+dangerous external("C") routine rf_coro_delete(coro: Address)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.

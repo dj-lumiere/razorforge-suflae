@@ -5,6 +5,7 @@ using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
+using Verification;
 using TypeInfo = TypeModel.Types.TypeInfo;
 
 namespace Compiler.Instantiation.Passes;
@@ -275,6 +276,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
             RoutineInfo concreteCallee = SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs);
             EnqueueCallee(callee: concreteCallee);
+            RecordSuspendEdge(caller: frame.Routine, callee: concreteCallee);
 
             // Pure synthesized $represent / try_next / wrapper-forwarders also have call sites
             // we may need to walk later; their bodies live in VariantBodies under the generic-def
@@ -308,7 +310,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     _ => null
                 };
                 if (resolved == null) continue;
-                EnqueueCallee(callee: SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs));
+                RoutineInfo variantCallee = SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs);
+                EnqueueCallee(callee: variantCallee);
+                RecordSuspendEdge(caller: frame.Routine, callee: variantCallee);
             }
         }
     }
@@ -697,6 +701,27 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         };
     }
 
+    /// <summary>
+    /// Additively records a caller→callee edge into the v0.2.0 may-suspend call graph and seeds the
+    /// caller's <see cref="CallGraphNode.DirectlySuspends"/> flag when the callee is a coroutine
+    /// suspend primitive (<see cref="SuspendPrimitives"/>). This is pure side data consumed later by
+    /// <see cref="MaySuspendAnalysis"/>: it never reads or mutates the live set, the worklist, or any
+    /// resolution state, so it cannot change reachability or codegen. <c>callsOnMe</c> is irrelevant
+    /// to suspension (it propagates across every call), so edges are recorded with it false.
+    ///
+    /// Edges are recorded only at the three real-call sites (the two ProcessFrame loops and the
+    /// synthesized-body walk). Display/operator/wired/f-string seed paths reach only pure value
+    /// routines that never suspend — a v0.2.0 invariant — so their missing incoming edges are sound.
+    /// </summary>
+    private void RecordSuspendEdge(RoutineInfo caller, RoutineInfo callee)
+    {
+        ctx.MaySuspendGraph.AddEdge(caller: caller, callee: callee, callsOnMe: false);
+        if (SuspendPrimitives.IsSuspendPrimitive(routine: callee))
+        {
+            ctx.MaySuspendGraph.GetOrCreateNode(routine: caller).DirectlySuspends = true;
+        }
+    }
+
     private void EnqueueCallee(RoutineInfo callee)
     {
         // Mark live first — synthesized leafs (no AST body) still need to be in the live set
@@ -866,7 +891,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                                 _ => null
                             };
                             if (resolved == null) continue;
-                            EnqueueCallee(callee: SubstituteRoutine(routine: resolved, typeSubs: subs));
+                            RoutineInfo synthSubCallee = SubstituteRoutine(routine: resolved, typeSubs: subs);
+                            EnqueueCallee(callee: synthSubCallee);
+                            RecordSuspendEdge(caller: callee, callee: synthSubCallee);
                         }
                     }
                     finally
