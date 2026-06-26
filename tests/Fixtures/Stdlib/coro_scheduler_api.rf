@@ -9,12 +9,12 @@ module Tests/Stdlib/CoroSchedulerApi
 import IO/Console
 
 routine fast_worker(ud: CPtr)
-  rf_sched_park_timer(delay_ns: 20000000_u64)
+  waitfor(20ms)            # uncolored: parks under the scheduler (no thread blocked)
   show(value: "fast")
   return
 
 routine slow_worker(ud: CPtr)
-  rf_sched_park_timer(delay_ns: 80000000_u64)
+  waitfor(80ms)
   show(value: "slow")
   return
 

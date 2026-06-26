@@ -1,14 +1,13 @@
 module Tests/Stdlib/WaitforApi
 
-# Standalone `waitfor(d)` — a timed wait. Currently a `threaded routine` (the wait runs on a
-# worker thread, joined by `retrieve!`); it becomes a `suspended routine` when the scheduler
-# lands, with identical call sites. Uncolored: prefer this over a raw sleep. Returns nothing
-# (a Task[Blank]) — also exercises the void-returning threaded-routine path.
+# Standalone `waitfor(d)` — an uncolored timed wait. On a plain thread (here) it sleeps the
+# thread; inside a scheduler-driven coroutine the same call parks instead (see
+# coro_scheduler_api). Called directly, not awaited.
 
 import IO/Console
 
 routine start()
   show(value: "before")
-  discard waitfor(10ms).retrieve!()
+  waitfor(10ms)
   show(value: "after")
   return

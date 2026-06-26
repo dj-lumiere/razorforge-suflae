@@ -49,18 +49,18 @@ routine Task[T].retrieve!() -> ?T
     rf_task_destroy(task: me.task_handle)
     return value
 
-### Waits for `duration` to elapse. `waitfor(5s).retrieve!()` blocks for five seconds.
-###
-### Currently a `threaded routine` — the wait runs on a worker thread, joined by `retrieve!`.
-### It will become a `suspended routine` once the scheduler lands: the call sites are identical
-### (`waitfor(d).retrieve!()`), but it will park the calling coroutine on a timer instead of
-### consuming an OS thread. Prefer this over a raw `sleep`: it is uncolored — the same call does
-### the right thing whether it runs on a thread (today) or a coroutine (later).
+### Waits for `duration` to elapse. UNCOLORED: inside a scheduler-driven coroutine it PARKS — the
+### scheduler runs other coroutines meanwhile and resumes this one when the timer fires — so it
+### costs no thread; on a plain thread it sleeps the thread. The same `waitfor(5s)` does the right
+### thing in either context, which is why it is preferable to a raw `sleep`.
 ### :param duration: How long to wait.
-threaded routine waitfor(duration: Duration)
+routine waitfor(duration: Duration)
   danger!
     var total = duration.total_nanoseconds()
-    var secs = total // 1000000000
-    var nanos = U32(total - secs * 1000000000)
-    rf_waitfor_duration(secs: secs, ns: nanos)
+    if rf_in_coroutine() != 0_u32
+      rf_sched_park_timer(delay_ns: U64(total))
+    else
+      var secs = total // 1000000000
+      var nanos = U32(total - secs * 1000000000)
+      rf_waitfor_duration(secs: secs, ns: nanos)
   return

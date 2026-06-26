@@ -385,3 +385,12 @@ void rf_sched_run(rf_sched* s)
 
     g_sched = prev;
 }
+
+/* True (1) when the caller is running inside a coroutine that is driven by a scheduler — i.e. a
+ * park (rf_sched_park_timer) would actually suspend and let siblings run. False (0) on a plain
+ * thread, or in a coroutine pumped without a scheduler (where a "park" could not be honored).
+ * Lets `waitfor` be uncolored: park under a scheduler, OS-sleep otherwise. */
+int rf_in_coroutine(void)
+{
+    return (g_sched != NULL && rf_coro_current() != NULL) ? 1 : 0;
+}

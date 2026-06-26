@@ -197,6 +197,10 @@ void rf_sched_park_timer(uint64_t delay_ns);
 /* Drive all spawned coroutines to completion on this thread (returns when none remain). */
 void rf_sched_run(rf_sched* sched);
 
+/* 1 if the caller runs inside a scheduler-driven coroutine (a park would suspend), else 0.
+ * Lets `waitfor` park under a scheduler but OS-sleep on a plain thread. */
+int rf_in_coroutine(void);
+
 #ifdef __cplusplus
 }
 #endif

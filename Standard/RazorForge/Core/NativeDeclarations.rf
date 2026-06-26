@@ -118,6 +118,9 @@ dangerous external("C") routine rf_sched_spawn(sched: CPtr, coro: CPtr)
 external("C") routine rf_sched_park_timer(delay_ns: U64)
 ### Drives all spawned coroutines to completion on this thread (returns when none remain).
 dangerous external("C") routine rf_sched_run(sched: CPtr)
+### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
+### Safe: reads only thread-local scheduler state. Lets `waitfor` be uncolored.
+external("C") routine rf_in_coroutine() -> U32
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
