@@ -3,6 +3,9 @@
 
 #include <stdlib.h>
 
+/* Runtime error + stack trace + exit(1) (stacktrace.c). */
+extern void __rf_throw(const char* error_type, const char* message);
+
 struct rf_async_runtime
 {
     rf_Bool should_stop;
@@ -28,7 +31,12 @@ rf_runtime_backend_state rf_async_backend_state(void)
 
 rf_async_runtime* rf_async_runtime_create(void)
 {
-    return (rf_async_runtime*)calloc(1, sizeof(rf_async_runtime));
+    rf_async_runtime* runtime = (rf_async_runtime*)calloc(1, sizeof(rf_async_runtime));
+    if (runtime == NULL) {
+        __rf_throw("OutOfMemoryError", "Failed to allocate async runtime");
+        return NULL; /* unreachable */
+    }
+    return runtime;
 }
 
 void rf_async_runtime_destroy(rf_async_runtime* runtime)

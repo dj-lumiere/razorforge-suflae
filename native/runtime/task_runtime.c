@@ -14,6 +14,10 @@
 #include <time.h>
 #endif
 
+/* Runtime error + stack trace + exit(1) (stacktrace.c). Raised on a control-structure allocation
+ * failure instead of returning NULL/0 that would crash or silently mis-spawn downstream. */
+extern void __rf_throw(const char* error_type, const char* message);
+
 /* Stable identifier for the calling OS thread. The exact value is opaque — only equality across
  * calls on the same thread matters (lock re-entrancy detection). */
 uint64_t rf_current_thread_id(void)
@@ -90,7 +94,7 @@ static rf_U64 rf_next_task_id = 1;
 static rf_task_node* rf_task_node_new(rf_task* task)
 {
     rf_task_node* node = (rf_task_node*)calloc(1, sizeof(rf_task_node));
-    if (node == NULL) return NULL;
+    if (node == NULL) { __rf_throw("OutOfMemoryError", "Failed to allocate task queue node"); return NULL; }
     node->task = task;
     return node;
 }
@@ -263,7 +267,7 @@ rf_U32 rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns)
 static rf_thread_backend* rf_thread_backend_create(void)
 {
     rf_thread_backend* backend = (rf_thread_backend*)calloc(1, sizeof(rf_thread_backend));
-    if (backend == NULL) return NULL;
+    if (backend == NULL) { __rf_throw("OutOfMemoryError", "Failed to allocate thread backend"); return NULL; }
 
 #ifdef _WIN32
     backend->completion_event = CreateEventA(NULL, TRUE, FALSE, NULL);
@@ -389,7 +393,7 @@ const char* rf_task_completion_name(rf_task_completion_kind kind)
 rf_task* rf_task_create(rf_task_kind kind)
 {
     rf_task* task = (rf_task*)calloc(1, sizeof(rf_task));
-    if (task == NULL) return NULL;
+    if (task == NULL) { __rf_throw("OutOfMemoryError", "Failed to allocate task"); return NULL; }
 
     task->kind = kind;
     task->status = RF_TASK_NEW;
@@ -565,7 +569,8 @@ int rf_task_spawn_threaded(rf_task* task, rf_task_entry_fn entry, void* userdata
     start_data = (rf_thread_start_data*)calloc(1, sizeof(rf_thread_start_data));
     if (start_data == NULL)
     {
-        return 0;
+        __rf_throw("OutOfMemoryError", "Failed to allocate thread start data");
+        return 0; /* unreachable */
     }
 
     start_data->task = task;

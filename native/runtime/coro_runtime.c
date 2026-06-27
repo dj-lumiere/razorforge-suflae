@@ -573,7 +573,8 @@ rf_sched* rf_sched_create(void)
 {
     rf_sched* s = (rf_sched*)calloc(1, sizeof(rf_sched));
     if (s == NULL) {
-        return NULL;
+        __rf_throw("OutOfMemoryError", "Failed to allocate coroutine scheduler");
+        return NULL; /* unreachable */
     }
     rf_mutex_init(&s->lock);
     rf_cond_init(&s->cond);
@@ -820,6 +821,10 @@ typedef struct rf_race {
 rf_race* rf_race_begin(void)
 {
     rf_race* r = (rf_race*)calloc(1, sizeof(rf_race));
+    if (r == NULL) {
+        __rf_throw("OutOfMemoryError", "Failed to allocate race competitor set");
+        return NULL; /* unreachable */
+    }
     return r;
 }
 
@@ -834,7 +839,8 @@ static void rf_race_push(rf_race* r, void* handle, uint8_t kind)
         uint8_t* nk = (uint8_t*)realloc(r->kinds, (size_t)ncap * sizeof(uint8_t));
         if (nh == NULL || nk == NULL) {
             free(nh); free(nk);
-            return;
+            __rf_throw("OutOfMemoryError", "Failed to grow race competitor set");
+            return; /* unreachable */
         }
         r->handles = nh;
         r->kinds = nk;
