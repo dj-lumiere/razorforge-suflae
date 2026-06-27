@@ -11,6 +11,13 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <!-- This is the test project (the compiler project sets this false). -->
     <SonarQubeTestProject>true</SonarQubeTestProject>
+    <!-- Workstation GC for the test host. StdlibApiTests spawns ~150 sequential `buildandrun`
+         children (each compiling the full stdlib + opt -O2/-O3); under default Server GC the host's
+         per-core heap reservation stacks onto that peak and the OS OOM-kills processes across the
+         tree during long runs (test host aborts; "exit=143, no output" child kills). Workstation GC
+         keeps the host footprint small. The children get the same via env vars in StdlibApiTests. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>
