@@ -271,14 +271,14 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // A `threaded routine` call spawns an OS thread; the expression value is the Task[T]
-        // handle (v0.1 concurrency, Phase 1).
+        // A `threaded routine` call spawns an OS thread; the expression value is an Agent[T]
+        // handle (kind THREAD).
         if (routine is { AsyncStatus: AsyncStatus.Threaded })
         {
             return EmitThreadedSpawn(sb: sb, routine: routine, arguments: arguments);
         }
 
-        // A `suspended routine` call creates a coroutine and yields a Coroutine[T] handle.
+        // A `suspended routine` call creates a coroutine and yields an Agent[T] handle (kind CORO).
         if (routine is { AsyncStatus: AsyncStatus.Suspended })
         {
             return EmitSuspendedSpawn(sb: sb, routine: routine, arguments: arguments);

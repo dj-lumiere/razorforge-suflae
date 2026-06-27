@@ -372,22 +372,26 @@ public partial class LlvmCodeGenerator
         string spawned = NextTemp();
         EmitLine(sb: sb, line: $"  {spawned} = and i1 {createOk}, {spawnOk}");
 
-        // Build the Task[T] record value: { task_handle, deadline (zero), has_deadline (false),
-        // spawned }. deadline/has_deadline stay at their zeroinitializer defaults.
-        TypeInfo taskType = _registry.GetOrCreateResolution(
-            genericDef: _registry.LookupType(name: "Task")!,
+        // Build the Agent[T] record value (kind THREAD): { kind=1, coro=null, agent=task_handle,
+        // deadline (zero), has_deadline (false), spawned }. Fields: kind@0 (AgentKind choice -> i32),
+        // coro@1 (CPtr, stays null), agent@2 (Address -> i64), deadline@3, has_deadline@4, spawned@5.
+        TypeInfo agentType = _registry.GetOrCreateResolution(
+            genericDef: _registry.LookupType(name: "Agent")!,
             typeArguments: [routine.ReturnType!]);
-        string recLlvm = GetLlvmType(type: taskType);
-        // Address lowers to i64, so the handle pointer must be ptrtoint'd into field 0.
+        string recLlvm = GetLlvmType(type: agentType);
+        // kind = THREAD (1).
+        string rKind = NextTemp();
+        EmitLine(sb: sb, line: $"  {rKind} = insertvalue {recLlvm} zeroinitializer, i32 1, 0");
+        // agent (field 2) is an Address (i64) — ptrtoint the task handle in.
         string taskInt = NextTemp();
         EmitLine(sb: sb, line: $"  {taskInt} = ptrtoint ptr {task} to i64");
-        string r0 = NextTemp();
-        EmitLine(sb: sb, line: $"  {r0} = insertvalue {recLlvm} zeroinitializer, i64 {taskInt}, 0");
-        // `spawned` (field 3) is a Bool, stored as i8 — zext the i1.
+        string rAgent = NextTemp();
+        EmitLine(sb: sb, line: $"  {rAgent} = insertvalue {recLlvm} {rKind}, i64 {taskInt}, 2");
+        // `spawned` (field 5) is a Bool, stored as i8 — zext the i1.
         string spawnedByte = NextTemp();
         EmitLine(sb: sb, line: $"  {spawnedByte} = zext i1 {spawned} to i8");
         string r1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i8 {spawnedByte}, 3");
+        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {rAgent}, i8 {spawnedByte}, 5");
         return r1;
     }
 
@@ -464,17 +468,18 @@ public partial class LlvmCodeGenerator
         _rfRoutineDeclarations[key: "rf_sched_spawn_default"] = "declare void @rf_sched_spawn_default(ptr)";
         EmitLine(sb: sb, line: $"  call void @rf_sched_spawn_default(ptr {coro})");
 
-        // Build Coroutine[T] { coro: CPtr (ptr), result: Address (i64) }.
-        TypeInfo coroType = _registry.GetOrCreateResolution(
-            genericDef: _registry.LookupType(name: "Coroutine")!,
+        // Build Agent[T] (kind CORO): { kind=0, coro: CPtr@1 (ptr), agent: Address@2 (i64) }. kind
+        // stays 0 (CORO) from the zeroinitializer; coro and the result block fill fields 1 and 2.
+        TypeInfo agentType = _registry.GetOrCreateResolution(
+            genericDef: _registry.LookupType(name: "Agent")!,
             typeArguments: [routine.ReturnType!]);
-        string recLlvm = GetLlvmType(type: coroType);
-        string r0 = NextTemp();
-        EmitLine(sb: sb, line: $"  {r0} = insertvalue {recLlvm} zeroinitializer, ptr {coro}, 0");
+        string recLlvm = GetLlvmType(type: agentType);
+        string rCoro = NextTemp();
+        EmitLine(sb: sb, line: $"  {rCoro} = insertvalue {recLlvm} zeroinitializer, ptr {coro}, 1");
         string taskInt = NextTemp();
         EmitLine(sb: sb, line: $"  {taskInt} = ptrtoint ptr {task} to i64");
         string r1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i64 {taskInt}, 1");
+        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {rCoro}, i64 {taskInt}, 2");
         return r1;
     }
 

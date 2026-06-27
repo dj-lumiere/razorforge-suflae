@@ -68,6 +68,9 @@ dangerous external("C") routine rf_task_wait(task: Address) -> S32
 dangerous external("C") routine rf_task_wait_within(task: Address, secs: S64, ns: U32) -> S32
 ### :returns: the boxed result payload pointer set by the task's entry thunk.
 dangerous external("C") routine rf_task_result_payload(task: Address) -> Address
+### Reads a task's status (0 new, 1 ready, 2 running, 3 parked, 4 completed). Used by Agent[T].$destroy
+### to decide between freeing a completed worker and joining one still in flight.
+dangerous external("C") routine rf_task_status_get(task: Address) -> U32
 ### Releases a task control block.
 dangerous external("C") routine rf_task_destroy(task: Address)
 ### Opaque, stable identifier for the calling OS thread (lock re-entrancy detection). Safe: takes
@@ -128,7 +131,7 @@ dangerous external("C") routine rf_sched_run(sched: CPtr)
 ### `suspended routine` call site so the coroutine is ready before any retrieve! drives the loop.
 dangerous external("C") routine rf_sched_spawn_default(coro: CPtr)
 ### Drives this thread's implicit scheduler until `coro` finishes, leaving siblings parked. The
-### engine behind Coroutine[T].retrieve!() (run-until-this-handle: siblings progress concurrently).
+### engine behind Agent[T].retrieve!() (run-until-this-handle: siblings progress concurrently).
 dangerous external("C") routine rf_sched_run_until_default(coro: CPtr)
 ### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
 ### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
