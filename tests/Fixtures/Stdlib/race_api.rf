@@ -1,0 +1,42 @@
+module Tests/Stdlib/RaceApi
+
+# v0.2.0 race! over a heterogeneous Agent set. Calling a `suspended routine` yields a coroutine-
+# backed Agent and a `threaded routine` yields a thread-backed Agent; both are the ONE concrete type
+# Agent[T], so they live together in a `List[Agent[T]]`. `race!(of: steal agents)` drives the whole
+# set CONCURRENTLY until the first finishes and returns that winner's value — coroutine competitors
+# progress on this thread's scheduler, thread competitors signal the loop on completion. The list is
+# consumed: at race!'s return the winner is freed and every loser is abandoned (a parked coroutine
+# tears down via its shadow stack; a still-running worker thread is joined then discarded).
+
+import IO/Console
+
+# Coroutine competitor: parks briefly, then wins the race.
+suspended routine quick(x: S64) -> S64
+  waitfor(5ms)
+  return x + 1
+
+# Thread competitor: takes much longer, so it loses and is abandoned at teardown.
+threaded routine slow(x: S64) -> S64
+  waitfor(60ms)
+  return x * 2
+
+# Two coroutine competitors: the shorter park wins regardless of insertion order.
+suspended routine nap(label: S64, ms: S64) -> S64
+  waitfor(Duration.from_milliseconds(ms: ms))
+  return label
+
+routine start()
+  # Mixed set: a fast coroutine vs a slow thread. The coroutine wins; the thread is joined+discarded.
+  var mixed = List[Agent[S64]]()
+  mixed.add_last(value: quick(x: 41))
+  mixed.add_last(value: slow(x: 10))
+  danger!
+    show(f"mixed => {race!(of: steal mixed)}")
+
+  # All-coroutine set: the shortest nap wins (returns its own label, 7).
+  var coros = List[Agent[S64]]()
+  coros.add_last(value: nap(label: 3, ms: 40))
+  coros.add_last(value: nap(label: 7, ms: 5))
+  danger!
+    show(f"coros => {race!(of: steal coros)}")
+  return

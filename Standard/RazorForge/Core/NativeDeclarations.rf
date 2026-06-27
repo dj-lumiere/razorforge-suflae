@@ -147,6 +147,24 @@ dangerous external("C") routine rf_task_await_coro_deadline(task: Address, timeo
 ### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
 ### Safe: reads only thread-local scheduler state. Lets `waitfor` be uncolored.
 external("C") routine rf_in_coroutine() -> U32
+
+# ============================================================================
+# race! competitor set (v0.2.0). Built one entry per Agent in List order, then
+# driven on this thread's implicit scheduler until the first competitor finishes.
+# Underlies the stdlib `race![T](of: ?List[Agent[T]])`.
+# ============================================================================
+
+### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as a `CPtr`.
+dangerous external("C") routine rf_race_begin() -> CPtr
+### Appends a coroutine competitor (Agent of kind CORO), preserving add (List) order.
+dangerous external("C") routine rf_race_add_coro(race: CPtr, coro: CPtr)
+### Appends a thread competitor (Agent of kind THREAD), preserving add (List) order.
+dangerous external("C") routine rf_race_add_task(race: CPtr, task: Address)
+### Drives the scheduler until one competitor completes; :returns: its index in add (List) order, or
+### -1 if the set is empty. Thread competitors' completions wake the loop; no wake can be lost.
+dangerous external("C") routine rf_race_wait(race: CPtr) -> S64
+### Frees the competitor set. Does NOT touch the Agents themselves (the caller still owns them).
+dangerous external("C") routine rf_race_end(race: CPtr)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.

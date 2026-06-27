@@ -570,6 +570,128 @@ void rf_sched_run_until(rf_sched* s, rf_coro* target)
     g_sched = prev;
 }
 
+/* Wake a scheduler's run loop without targeting a specific coroutine: just signal its cond. Used by
+ * a worker thread completing a task that a `race!` loop is waiting on — the loop holds no awaiter
+ * coroutine, it re-polls all competitors under s->lock when woken. Safe to call from ANY thread. */
+void rf_sched_signal(rf_sched* s)
+{
+    if (s == NULL) {
+        return;
+    }
+    rf_mutex_lock(&s->lock);
+    rf_cond_signal(&s->cond);
+    rf_mutex_unlock(&s->lock);
+}
+
+/* ---- race!: drive a heterogeneous competitor set until the FIRST one completes ---------------- */
+/*
+ * A `race!` competitor set built incrementally by the stdlib `race!` routine (one entry per Agent,
+ * in List order) and then driven on this thread's implicit scheduler until any entry completes.
+ * Coroutine competitors are progressed by stepping the scheduler; thread competitors complete on
+ * their own OS thread and signal the loop via rf_sched_signal (registered through race_sched). The
+ * completion poll and the cond wait share s->lock, so a completion can never be lost between them.
+ */
+typedef struct rf_race {
+    void** handles;   /* rf_coro* (kind 0) or rf_task* (kind 1)                   */
+    uint8_t* kinds;   /* 0 = coroutine competitor, 1 = thread competitor          */
+    intptr_t count;
+    intptr_t cap;
+} rf_race;
+
+rf_race* rf_race_begin(void)
+{
+    rf_race* r = (rf_race*)calloc(1, sizeof(rf_race));
+    return r;
+}
+
+static void rf_race_push(rf_race* r, void* handle, uint8_t kind)
+{
+    if (r == NULL) {
+        return;
+    }
+    if (r->count == r->cap) {
+        intptr_t ncap = (r->cap == 0) ? 4 : r->cap * 2;
+        void** nh = (void**)realloc(r->handles, (size_t)ncap * sizeof(void*));
+        uint8_t* nk = (uint8_t*)realloc(r->kinds, (size_t)ncap * sizeof(uint8_t));
+        if (nh == NULL || nk == NULL) {
+            free(nh); free(nk);
+            return;
+        }
+        r->handles = nh;
+        r->kinds = nk;
+        r->cap = ncap;
+    }
+    r->handles[r->count] = handle;
+    r->kinds[r->count] = kind;
+    r->count++;
+}
+
+void rf_race_add_coro(rf_race* r, rf_coro* c) { rf_race_push(r, (void*)c, 0); }
+void rf_race_add_task(rf_race* r, rf_task* t) { rf_race_push(r, (void*)t, 1); }
+
+/* Drive the set until one competitor completes; return its index in add (List) order, or -1 if the
+ * set is empty. Registers every thread competitor's race_sched so its completion wakes this loop. */
+intptr_t rf_race_wait(rf_race* r)
+{
+    if (r == NULL || r->count == 0) {
+        return -1;
+    }
+    rf_sched* s = rf_sched_thread_default();
+    rf_sched* prev = g_sched;
+    g_sched = s;
+
+    for (intptr_t i = 0; i < r->count; i++) {
+        if (r->kinds[i] == 1) {
+            rf_task_race_register((rf_task*)r->handles[i], s);
+        }
+    }
+
+    intptr_t winner = -1;
+    rf_mutex_lock(&s->lock);
+    for (;;) {
+        for (intptr_t i = 0; i < r->count; i++) {
+            if (r->kinds[i] == 0) {
+                rf_coro* c = (rf_coro*)r->handles[i];
+                if (c != NULL && (c->status == RF_CORO_COMPLETED || c->status == RF_CORO_CANCELLED)) {
+                    winner = i;
+                    break;
+                }
+            } else {
+                if (rf_task_status_get((rf_task*)r->handles[i]) == RF_TASK_COMPLETED) {
+                    winner = i;
+                    break;
+                }
+            }
+        }
+        if (winner >= 0) {
+            break;
+        }
+        /* Nothing done yet: progress coroutine competitors (and any siblings) and/or block on the
+         * cond until a timer fires or a thread competitor signals us. Re-poll on return. */
+        rf_sched_step(s);
+    }
+    rf_mutex_unlock(&s->lock);
+
+    for (intptr_t i = 0; i < r->count; i++) {
+        if (r->kinds[i] == 1) {
+            rf_task_race_register((rf_task*)r->handles[i], NULL);
+        }
+    }
+
+    g_sched = prev;
+    return winner;
+}
+
+void rf_race_end(rf_race* r)
+{
+    if (r == NULL) {
+        return;
+    }
+    free(r->handles);
+    free(r->kinds);
+    free(r);
+}
+
 /* True (1) when the caller is running inside a coroutine that is driven by a scheduler — i.e. a
  * park (rf_sched_park_timer) would actually suspend and let siblings run. False (0) on a plain
  * thread, or in a coroutine pumped without a scheduler (where a "park" could not be honored).

@@ -13,6 +13,7 @@ typedef struct rf_context_runtime rf_context_runtime;
 typedef struct rf_async_runtime rf_async_runtime;
 typedef struct rf_task rf_task;
 typedef struct rf_coro rf_coro;
+typedef struct rf_sched rf_sched;
 
 typedef void (*rf_context_entry_fn)(void* userdata);
 typedef void (*rf_task_entry_fn)(rf_task* task, void* userdata);
@@ -92,6 +93,9 @@ uint32_t rf_task_await_coro(rf_task* task);
  * `timeout_ns` elapses. Returns 1 = completed (read result), 0 = timed out, 2 = not on a
  * scheduler-driven coroutine (block-wait with the deadline instead). */
 uint32_t rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns);
+/* Register (s != NULL) / clear (s == NULL) the scheduler a `race!` over a set including this task is
+ * driving, so the worker signals that loop on completion (see rf_race_wait). */
+void rf_task_race_register(rf_task* task, rf_sched* s);
 int rf_task_spawn_threaded(rf_task* task, rf_task_entry_fn entry, void* userdata);
 
 void rf_task_mark_ready(rf_task* task);
@@ -193,7 +197,6 @@ rf_coro* rf_coro_current(void);
  * one OS thread; a coroutine parks on a wake condition (today: a timer) and the
  * loop resumes it when ready, so `waitfor` parks instead of blocking the thread.
  * --------------------------------------------------------------------------- */
-typedef struct rf_sched rf_sched;
 
 rf_sched* rf_sched_create(void);
 void rf_sched_destroy(rf_sched* sched);
@@ -227,6 +230,29 @@ void rf_sched_run(rf_sched* sched);
 /* Drive the scheduler only until `target` finishes, leaving other coroutines parked. The engine
  * behind Coroutine[T].retrieve!() (run-until-this-handle semantics). */
 void rf_sched_run_until(rf_sched* sched, rf_coro* target);
+
+/* Signal a scheduler's run loop with no target coroutine (just its cond). The wake a worker thread
+ * gives a `race!` loop on completing a competitor task. Safe to call from ANY thread. */
+void rf_sched_signal(rf_sched* sched);
+
+/* ---- race!: drive a heterogeneous Agent set until the first competitor finishes -------------- */
+
+/* An opaque competitor set built incrementally by the stdlib `race!`, one entry per Agent in List
+ * order, then driven by rf_race_wait. */
+typedef struct rf_race rf_race;
+
+/* Allocate an empty competitor set. */
+rf_race* rf_race_begin(void);
+/* Append a coroutine competitor (an Agent of kind CORO). Order = List order. */
+void rf_race_add_coro(rf_race* race, rf_coro* coro);
+/* Append a thread competitor (an Agent of kind THREAD). Order = List order. */
+void rf_race_add_task(rf_race* race, rf_task* task);
+/* Drive this thread's implicit scheduler until one competitor completes; return its index in add
+ * (List) order, or -1 if the set is empty. Registers each thread competitor so its completion wakes
+ * the loop; the completion poll and the cond wait share the scheduler lock, so no wake is lost. */
+intptr_t rf_race_wait(rf_race* race);
+/* Free the set (does NOT touch the competitors themselves — the caller still owns the Agents). */
+void rf_race_end(rf_race* race);
 
 /* 1 if the caller runs inside a scheduler-driven coroutine (a park would suspend), else 0.
  * Lets `waitfor` park under a scheduler but OS-sleep on a plain thread. */

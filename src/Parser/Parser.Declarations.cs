@@ -300,6 +300,21 @@ public partial class Parser
             name = name[..^1]; // Strip the '!' from name, we track it separately
         }
 
+        // A failable free routine writes the bang immediately after the base name, with its
+        // type-level generics following it: `race![T](...)`. (Member routines instead carry their
+        // generics on the receiver before the dot, e.g. `Agent[T].retrieve!()`.) Parse those
+        // post-bang generics here so they bind exactly like the pre-name form.
+        if (isFailable && !hasGenericParams && Match(type: TokenType.LeftBracket))
+        {
+            (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints)
+                result = ParseGenericParametersWithConstraints();
+            genericParams = result.genericParams;
+            inlineConstraints = result.inlineConstraints;
+            hasGenericParams = true;
+            Consume(type: TokenType.RightBracket,
+                errorMessage: ExpectedRightBracketAfterGenericParameters);
+        }
+
         // ===============================================================================
         // PHASE 3: PARAMETERS
         // ===============================================================================
