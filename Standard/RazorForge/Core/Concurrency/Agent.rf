@@ -182,6 +182,27 @@ routine race![T](of: ?List[Agent[T]]) -> ?T
     rf_invalidate(ptr: payload)
     return value
 
+### Drives a set of Agents CONCURRENTLY and waits for ALL of them to finish, returning their results
+### in INPUT order. The twin of `race!` (which returns the first finisher); `gather!` returns every
+### finisher. CONSUMES the list — call it `gather!(of: steal agents)`. Each Agent is driven with the
+### same uncolored `retrieve!` logic, so coroutine competitors progress on this thread's scheduler and
+### thread competitors run on their OS threads; total wait is the SLOWEST agent, not the sum (they all
+### run at once — we merely collect in order). FAIL-FAST: if any Agent's routine throws, that throw
+### propagates out of `gather!` and the remaining (un-retrieved) Agents are ABANDONED when the stolen
+### list tears down at return. An empty set yields an empty list (there is nothing to wait for).
+### :param of: The Agents to gather; ownership is transferred (`steal` at the call site).
+### :returns: The values produced by every Agent, in the order they appear in the list.
+routine gather![T](of: ?List[Agent[T]]) -> ?List[T]
+  danger!
+    var n = of.count()
+    var results = List[T]()
+    var i = 0_u64
+    while i < n
+      var value = of[i].retrieve!()
+      results.add_last(value: value)
+      i = i + 1
+    return results
+
 ### Waits for `duration` to elapse. UNCOLORED: inside a scheduler-driven coroutine it PARKS — the
 ### scheduler runs other coroutines meanwhile and resumes this one when the timer fires — so it
 ### costs no thread; on a plain thread it sleeps the thread. The same `waitfor(5s)` does the right

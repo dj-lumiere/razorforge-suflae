@@ -751,6 +751,25 @@ external("C") routine rf_file_read_all(fd: S32) -> Hijacked[Byte]
 ### :param fd: The file descriptor to read from.
 ### :returns: A pointer to the captured byte buffer.
 external("C") routine rf_file_read_line(fd: S32) -> Hijacked[Byte]
+### Reads a whole file asynchronously off the libuv threadpool. Inside a suspended routine the calling
+### coroutine parks while the read runs (siblings keep progressing); outside one it reads inline.
+### :param path: The null-terminated file path.
+### :param path_len: The path length in bytes.
+### :returns: A pointer to the captured byte buffer (length via `rf_io_get_result_len`).
+external("C") routine rf_io_read_file_all(path: CStr, path_len: S32) -> Hijacked[Byte]
+### Returns the byte length of the most recent async I/O buffer result.
+### :returns: The length of the current async result buffer in bytes.
+external("C") routine rf_io_get_result_len() -> U64
+### Writes a whole file asynchronously off the libuv threadpool, truncating any existing contents.
+### Inside a suspended routine the calling coroutine parks while the write runs (siblings keep
+### progressing); outside one it writes inline. The payload is copied, so the caller's buffer need not
+### outlive the call.
+### :param path: The null-terminated file path.
+### :param path_len: The path length in bytes.
+### :param data: Pointer to the bytes to write.
+### :param data_len: The number of bytes to write.
+### :returns: The number of bytes written, or a negative value on error.
+external("C") routine rf_io_write_file_all(path: CStr, path_len: S32, data: Hijacked[Byte], data_len: S64) -> S64
 ### Reads up to `count` bytes from a file into a runtime-managed buffer.
 ### :param fd: The file descriptor to read from.
 ### :param count: The maximum number of bytes to read.
