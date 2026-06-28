@@ -188,8 +188,9 @@ typedef struct rf_proc_state {
     uv_process_t proc;
     uv_pipe_t out_pipe;
     uv_pipe_t err_pipe;
-    char* command;             /* malloc'd copy of the command line passed to the shell */
-    char* argv[4];             /* { shell, flag, command, NULL } */
+    char** argv;               /* owned, NULL-terminated argv (each entry malloc'd) */
+    char* cwd;                 /* owned working directory, or NULL to inherit */
+    char** envp;               /* owned, NULL-terminated "KEY=VALUE" env, or NULL to inherit */
     int handles_open;          /* proc + 2 pipes still open; finalize when this hits 0 */
     int64_t exit_status;       /* child exit code (meaningful when term_signal == 0) */
     int term_signal;           /* signal that killed the child, or 0 if it exited normally */
@@ -292,6 +293,8 @@ static void rf_proc_start(rf_io_req* req)
     opts.exit_cb = rf_proc_exit_cb;
     opts.file = st->argv[0];
     opts.args = st->argv;
+    opts.cwd = st->cwd; /* NULL = inherit the parent's working directory */
+    opts.env = st->envp; /* NULL = inherit the parent's environment */
     opts.stdio = stdio;
     opts.stdio_count = 3;
 
@@ -494,43 +497,59 @@ rf_address rf_proc_output_len(void)  { return g_proc_out_len; }
 char*      rf_proc_errors(void)      { return g_proc_err; }
 rf_address rf_proc_errors_len(void)  { return g_proc_err_len; }
 
-/* Run `command` through the platform shell, capturing stdout/stderr, returning its exit code. Inside
- * a scheduler-driven coroutine the coroutine PARKS while the process runs (siblings progress); on a
- * plain thread it blocks. The captured streams + signal are read afterwards via the accessors above;
- * the output buffers are malloc'd and handed to the caller (NUL-terminated), mirroring read. Returns
- * the child's exit code, or -1 if the process could not be spawned. */
-int64_t rf_proc_run(const char* command, rf_S32 command_len)
+/* Duplicate `n` bytes of `s` (or strlen(s) if n < 0) into a fresh NUL-terminated string. */
+static char* rf_strdupn(const char* s, rf_S32 n)
 {
-    uv_once(&g_io_once, rf_io_init_once); /* normally already done by rf_io_runtime_init */
+    size_t len = (n < 0) ? strlen(s) : (size_t)n;
+    char* d = (char*)malloc(len + 1);
+    if (d == NULL) { return NULL; }
+    memcpy(d, s, len);
+    d[len] = '\0';
+    return d;
+}
 
-    rf_io_req* req = (rf_io_req*)calloc(1, sizeof(rf_io_req));
+static rf_proc_state* rf_proc_state_new(void)
+{
     rf_proc_state* st = (rf_proc_state*)calloc(1, sizeof(rf_proc_state));
-    if (req == NULL || st == NULL) {
-        free(req); free(st);
+    if (st == NULL) {
+        __rf_throw("OutOfMemoryError", "Failed to allocate subprocess state");
+        return NULL; /* unreachable */
+    }
+    st->exit_status = -1;
+    st->term_signal = 0;
+    return st;
+}
+
+static void rf_proc_state_free(rf_proc_state* st)
+{
+    if (st == NULL) { return; }
+    if (st->argv != NULL) {
+        for (int i = 0; st->argv[i] != NULL; i++) { free(st->argv[i]); }
+        free(st->argv);
+    }
+    if (st->envp != NULL) {
+        for (int i = 0; st->envp[i] != NULL; i++) { free(st->envp[i]); }
+        free(st->envp);
+    }
+    free(st->cwd);
+    /* out_buf / err_buf are handed to the RF caller via the thread-locals — NOT freed here. */
+    free(st);
+}
+
+/* Run a fully-prepared state (argv + optional cwd set), capturing stdout/stderr. Inside a
+ * scheduler-driven coroutine the coroutine PARKS while the process runs (siblings progress); on a
+ * plain thread it blocks on a semaphore. Publishes the captured streams + status to the thread-locals,
+ * frees the state (takes ownership), and returns the child's exit code (-1 if it could not be spawned). */
+static int64_t rf_proc_exec(rf_proc_state* st)
+{
+    rf_io_req* req = (rf_io_req*)calloc(1, sizeof(rf_io_req));
+    if (req == NULL) {
+        rf_proc_state_free(st);
         __rf_throw("OutOfMemoryError", "Failed to allocate subprocess request");
         return -1; /* unreachable */
     }
     req->kind = RF_IO_RUN_PROCESS;
     req->proc = st;
-    st->exit_status = -1;
-    st->term_signal = 0;
-
-    size_t clen = (command_len < 0) ? strlen(command) : (size_t)command_len;
-    st->command = (char*)malloc(clen + 1);
-    if (st->command == NULL) {
-        free(st); free(req);
-        __rf_throw("OutOfMemoryError", "Failed to allocate subprocess command");
-        return -1; /* unreachable */
-    }
-    memcpy(st->command, command, clen);
-    st->command[clen] = '\0';
-#if defined(_WIN32)
-    st->argv[0] = "cmd.exe"; st->argv[1] = "/c";
-#else
-    st->argv[0] = "/bin/sh"; st->argv[1] = "-c";
-#endif
-    st->argv[2] = st->command;
-    st->argv[3] = NULL;
 
     rf_sched* sched = g_io_ok ? rf_sched_current() : NULL;
     rf_coro* self = g_io_ok ? rf_coro_current() : NULL;
@@ -548,8 +567,6 @@ int64_t rf_proc_run(const char* command, rf_S32 command_len)
         uv_sem_destroy(&st->sem);
     }
 
-    /* Publish the captured streams + status to the thread-locals. The buffers' ownership passes to
-     * the caller (NOT freed here), mirroring rf_io_read_file_all. */
     g_proc_exit    = st->exit_status;
     g_proc_signal  = st->term_signal;
     g_proc_out     = st->out_buf;
@@ -558,10 +575,163 @@ int64_t rf_proc_run(const char* command, rf_S32 command_len)
     g_proc_err_len = (rf_address)st->err_len;
 
     int64_t exit_code = (st->spawn_err != 0) ? -1 : st->exit_status;
-    free(st->command);
-    free(st);
+    rf_proc_state_free(st);
     free(req);
     return exit_code;
+}
+
+/* Shell form: run `command` via the platform shell (sh -c / cmd /c). Convenience for pipes/globs at
+ * the cost of shell quoting; prefer the argv builder (rf_proc_begin/...) for untrusted input. */
+int64_t rf_proc_run(const char* command, rf_S32 command_len)
+{
+    uv_once(&g_io_once, rf_io_init_once); /* normally already done by rf_io_runtime_init */
+    rf_proc_state* st = rf_proc_state_new();
+    st->argv = (char**)calloc(4, sizeof(char*));
+    if (st->argv == NULL) {
+        rf_proc_state_free(st);
+        __rf_throw("OutOfMemoryError", "Failed to allocate subprocess argv");
+        return -1; /* unreachable */
+    }
+#if defined(_WIN32)
+    st->argv[0] = rf_strdupn("cmd.exe", -1); st->argv[1] = rf_strdupn("/c", -1);
+#else
+    st->argv[0] = rf_strdupn("/bin/sh", -1); st->argv[1] = rf_strdupn("-c", -1);
+#endif
+    st->argv[2] = rf_strdupn(command, command_len);
+    st->argv[3] = NULL;
+    return rf_proc_exec(st);
+}
+
+/* Argv builder: spawn an executable directly with an explicit argument vector (NO shell — no quoting
+ * or injection hazard). rf_proc_begin sets argv[0] = file; add_arg appends; set_cwd is optional;
+ * run_built launches and consumes the builder. Mirrors the rf_race_* incremental-FFI pattern. */
+typedef struct rf_proc_builder {
+    char** argv;
+    int argv_count;
+    int argv_cap;
+    char* cwd;
+    char** envv;               /* "KEY=VALUE" override strings (not NULL-terminated; env_count) */
+    int env_count;
+    int env_cap;
+} rf_proc_builder;
+
+/* The parent process environment as a NULL-terminated "KEY=VALUE" array. NOTE (Windows): this is the
+ * CRT's ANSI environment — correct for ASCII keys/values (PATH, etc.); non-ASCII values could be
+ * mis-encoded since uv treats opts.env as UTF-8. Acceptable for the common case. */
+#if defined(_WIN32)
+extern char** _environ;
+  #define RF_PARENT_ENVIRON _environ
+#else
+extern char** environ;
+  #define RF_PARENT_ENVIRON environ
+#endif
+
+/* Build a NULL-terminated env array = parent environment with `overrides` applied (an override
+ * replaces a parent entry with the same KEY, else is appended). The override strings are MOVED into
+ * the result; parent entries are copied. Returns NULL if there are no overrides (inherit). */
+static char** rf_proc_merge_env(char** overrides, int n)
+{
+    if (n <= 0) { return NULL; }
+    char** parent = RF_PARENT_ENVIRON;
+    int pc = 0;
+    if (parent != NULL) { while (parent[pc] != NULL) { pc++; } }
+    char** env = (char**)malloc((size_t)(pc + n + 1) * sizeof(char*));
+    if (env == NULL) { return NULL; }
+    int k = 0;
+    for (int i = 0; i < pc; i++) {
+        const char* peq = strchr(parent[i], '=');
+        size_t pkl = peq ? (size_t)(peq - parent[i]) : strlen(parent[i]);
+        int overridden = 0;
+        for (int j = 0; j < n; j++) {
+            const char* oeq = strchr(overrides[j], '=');
+            size_t okl = oeq ? (size_t)(oeq - overrides[j]) : strlen(overrides[j]);
+            if (okl == pkl && memcmp(overrides[j], parent[i], pkl) == 0) { overridden = 1; break; }
+        }
+        if (!overridden) { env[k++] = rf_strdupn(parent[i], -1); }
+    }
+    for (int j = 0; j < n; j++) { env[k++] = overrides[j]; } /* move the override strings in */
+    env[k] = NULL;
+    return env;
+}
+
+rf_proc_builder* rf_proc_begin(const char* file, rf_S32 file_len)
+{
+    uv_once(&g_io_once, rf_io_init_once);
+    rf_proc_builder* b = (rf_proc_builder*)calloc(1, sizeof(rf_proc_builder));
+    if (b == NULL) {
+        __rf_throw("OutOfMemoryError", "Failed to allocate subprocess builder");
+        return NULL; /* unreachable */
+    }
+    b->argv_cap = 4;
+    b->argv = (char**)calloc((size_t)b->argv_cap, sizeof(char*));
+    if (b->argv == NULL) {
+        free(b);
+        __rf_throw("OutOfMemoryError", "Failed to allocate subprocess argv");
+        return NULL; /* unreachable */
+    }
+    b->argv[0] = rf_strdupn(file, file_len); /* argv[0] = the executable */
+    b->argv_count = 1;
+    return b;
+}
+
+void rf_proc_add_arg(rf_proc_builder* b, const char* arg, rf_S32 arg_len)
+{
+    if (b == NULL) { return; }
+    if (b->argv_count + 2 > b->argv_cap) { /* +1 for the new arg, +1 for the trailing NULL */
+        int ncap = b->argv_cap * 2;
+        char** na = (char**)realloc(b->argv, (size_t)ncap * sizeof(char*));
+        if (na == NULL) { return; }
+        b->argv = na;
+        b->argv_cap = ncap;
+    }
+    b->argv[b->argv_count] = rf_strdupn(arg, arg_len);
+    b->argv_count++;
+    b->argv[b->argv_count] = NULL;
+}
+
+void rf_proc_set_cwd(rf_proc_builder* b, const char* cwd, rf_S32 cwd_len)
+{
+    if (b == NULL) { return; }
+    free(b->cwd);
+    b->cwd = NULL;
+    size_t len = (cwd_len < 0) ? strlen(cwd) : (size_t)cwd_len;
+    if (len > 0) { b->cwd = rf_strdupn(cwd, (rf_S32)len); } /* empty = inherit (leave NULL) */
+}
+
+/* Add an environment override "KEY=VALUE". These are MERGED into (not replacing) the parent
+ * environment at launch — so setting one var keeps PATH and the rest intact. */
+void rf_proc_add_env(rf_proc_builder* b, const char* key, rf_S32 key_len, const char* val, rf_S32 val_len)
+{
+    if (b == NULL) { return; }
+    if (b->env_count + 1 > b->env_cap) {
+        int ncap = (b->env_cap == 0) ? 4 : b->env_cap * 2;
+        char** ne = (char**)realloc(b->envv, (size_t)ncap * sizeof(char*));
+        if (ne == NULL) { return; }
+        b->envv = ne;
+        b->env_cap = ncap;
+    }
+    size_t kl = (key_len < 0) ? strlen(key) : (size_t)key_len;
+    size_t vl = (val_len < 0) ? strlen(val) : (size_t)val_len;
+    char* entry = (char*)malloc(kl + 1 + vl + 1);
+    if (entry == NULL) { return; }
+    memcpy(entry, key, kl);
+    entry[kl] = '=';
+    memcpy(entry + kl + 1, val, vl);
+    entry[kl + 1 + vl] = '\0';
+    b->envv[b->env_count] = entry;
+    b->env_count++;
+}
+
+int64_t rf_proc_run_built(rf_proc_builder* b)
+{
+    if (b == NULL) { return -1; }
+    rf_proc_state* st = rf_proc_state_new();
+    st->argv = b->argv; /* transfer ownership of the array + strings */
+    st->cwd = b->cwd;
+    st->envp = rf_proc_merge_env(b->envv, b->env_count); /* moves override strings into st->envp */
+    free(b->envv); /* the override strings were moved into st->envp; free only the array */
+    free(b);
+    return rf_proc_exec(st);
 }
 
 #else /* !HAVE_LIBUV — synchronous fallback so the surface exists without the async backend. */
@@ -650,6 +820,48 @@ int64_t rf_proc_run(const char* command, rf_S32 command_len)
     g_proc_out = buf;
     g_proc_out_len = (rf_address)len;
     return (int64_t)status;
+}
+
+/* Argv builder fallback (no libuv): accumulate a space-joined command string and run it via popen.
+ * This loses the no-shell safety of the real builder, but the fallback only applies when the async
+ * backend is absent. cwd is ignored here. */
+typedef struct rf_proc_builder {
+    char* cmd; size_t len; size_t cap;
+} rf_proc_builder;
+
+static void rf_proc_fb_append(rf_proc_builder* b, const char* s, rf_S32 n)
+{
+    size_t add = (n < 0) ? strlen(s) : (size_t)n;
+    if (b->len + add + 2 > b->cap) {
+        size_t ncap = (b->cap == 0) ? 256 : b->cap;
+        while (b->len + add + 2 > ncap) { ncap *= 2; }
+        char* nb = (char*)realloc(b->cmd, ncap);
+        if (nb == NULL) { return; }
+        b->cmd = nb; b->cap = ncap;
+    }
+    if (b->len > 0) { b->cmd[b->len++] = ' '; }
+    memcpy(b->cmd + b->len, s, add);
+    b->len += add;
+    b->cmd[b->len] = '\0';
+}
+
+rf_proc_builder* rf_proc_begin(const char* file, rf_S32 file_len)
+{
+    rf_proc_builder* b = (rf_proc_builder*)calloc(1, sizeof(rf_proc_builder));
+    if (b == NULL) { return NULL; }
+    rf_proc_fb_append(b, file, file_len);
+    return b;
+}
+void rf_proc_add_arg(rf_proc_builder* b, const char* arg, rf_S32 arg_len) { if (b) { rf_proc_fb_append(b, arg, arg_len); } }
+void rf_proc_set_cwd(rf_proc_builder* b, const char* cwd, rf_S32 cwd_len) { (void)b; (void)cwd; (void)cwd_len; }
+void rf_proc_add_env(rf_proc_builder* b, const char* key, rf_S32 key_len, const char* val, rf_S32 val_len) { (void)b; (void)key; (void)key_len; (void)val; (void)val_len; }
+int64_t rf_proc_run_built(rf_proc_builder* b)
+{
+    if (b == NULL) { return -1; }
+    int64_t code = rf_proc_run(b->cmd != NULL ? b->cmd : "", -1);
+    free(b->cmd);
+    free(b);
+    return code;
 }
 
 #endif /* HAVE_LIBUV */

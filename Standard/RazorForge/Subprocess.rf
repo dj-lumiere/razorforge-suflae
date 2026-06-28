@@ -31,15 +31,49 @@ routine term_signal_value!(raw: S32) -> S32
     absent
   return raw
 
-### Runs `command` through the platform shell (`/bin/sh -c` on POSIX, `cmd /c` on Windows), capturing
-### its stdout and stderr, and returns the result. Inside a `suspended routine` the calling coroutine
-### parks while the child runs; on a plain thread it blocks.
-### :param command: The command line to run.
-### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
-routine run_process(command: Text) -> ProcessResult
-  var cstr = CStr(from: command)
-  var code = rf_proc_run(command: cstr, command_len: cstr.count().S32!())
+### Assembles a `ProcessResult` from the just-run child's exit code plus the runtime's captured-stream
+### and signal accessors. Shared by both `run_process` forms.
+### :param code: The child's exit code, as returned by the native run.
+### :returns: The assembled `ProcessResult`.
+routine proc_result_of(code: S64) -> ProcessResult
   var output = Bytes(ptr: rf_proc_output(), count: rf_proc_output_len()).decode_as_utf8_lossy()
   var errors = Bytes(ptr: rf_proc_errors(), count: rf_proc_errors_len()).decode_as_utf8_lossy()
   var signal = try_term_signal_value(raw: rf_proc_term_signal())
   return ProcessResult(exit_code: code, signal: signal, output: output, errors: errors)
+
+### Runs `command` through the platform shell (`/bin/sh -c` on POSIX, `cmd /c` on Windows), capturing
+### its stdout and stderr, and returns the result. The shell form is convenient for pipes and globs,
+### but interpolating untrusted input is a shell-injection hazard — prefer the argv form below for
+### that. Inside a `suspended routine` the calling coroutine parks while the child runs; on a plain
+### thread it blocks.
+### :param command: The command line to run.
+### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
+routine run_process(command: Text) -> ProcessResult
+  var cstr = CStr(from: command)
+  return proc_result_of(code: rf_proc_run(command: cstr, command_len: cstr.count().S32!()))
+
+### Runs `file` directly with an explicit argument vector — NO shell, so there is no quoting or
+### injection hazard (the safe form for untrusted arguments). Optionally runs in `cwd` (empty =
+### inherit). Captures stdout/stderr; parks the calling coroutine while it runs.
+### Counterpart to `run_process`, which takes a shell command line.
+### :param file: The executable to run (argv[0]).
+### :param args: The arguments after the executable name.
+### :param cwd: The working directory, or "" to inherit the parent's.
+### :param env: Environment overrides, MERGED into the parent environment (so PATH etc. stay intact);
+###   the default empty `{:}` inherits the parent environment unchanged.
+### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
+routine run_program(file: Text, args: Referring[List[Text]], cwd: Text = "",
+                    env: ?Dict[Text, Text] = {:}) -> ProcessResult
+  var fcstr = CStr(from: file)
+  var builder = rf_proc_begin(file: fcstr, file_len: fcstr.count().S32!())
+  for arg in args
+    var acstr = CStr(from: arg)
+    rf_proc_add_arg(builder: builder, arg: acstr, arg_len: acstr.count().S32!())
+  var ccstr = CStr(from: cwd)
+  rf_proc_set_cwd(builder: builder, cwd: ccstr, cwd_len: ccstr.count().S32!())
+  for entry in env
+    var kcstr = CStr(from: entry.key)
+    var vcstr = CStr(from: entry.value)
+    rf_proc_add_env(builder: builder, key: kcstr, key_len: kcstr.count().S32!(),
+                    val: vcstr, val_len: vcstr.count().S32!())
+  return proc_result_of(code: rf_proc_run_built(builder: builder))

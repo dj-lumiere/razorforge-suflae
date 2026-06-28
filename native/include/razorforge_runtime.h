@@ -90,6 +90,17 @@ uintptr_t rf_proc_output_len(void);
 char* rf_proc_errors(void);          /* captured stderr (malloc'd, NUL-terminated) */
 uintptr_t rf_proc_errors_len(void);
 
+/* Argv builder: spawn an executable directly with an explicit argument vector (no shell). begin sets
+ * argv[0] = file; add_arg appends; set_cwd is optional (empty = inherit); run_built launches it
+ * (same parking/blocking + accessors as rf_proc_run) and consumes the builder. */
+typedef struct rf_proc_builder rf_proc_builder;
+rf_proc_builder* rf_proc_begin(const char* file, int32_t file_len);
+void rf_proc_add_arg(rf_proc_builder* builder, const char* arg, int32_t arg_len);
+void rf_proc_set_cwd(rf_proc_builder* builder, const char* cwd, int32_t cwd_len);
+/* Add an environment override (merged into the parent environment, not replacing it). */
+void rf_proc_add_env(rf_proc_builder* builder, const char* key, int32_t key_len, const char* val, int32_t val_len);
+int64_t rf_proc_run_built(rf_proc_builder* builder);
+
 const char* rf_task_kind_name(rf_task_kind kind);
 const char* rf_task_status_name(rf_task_status status);
 const char* rf_task_completion_name(rf_task_completion_kind kind);

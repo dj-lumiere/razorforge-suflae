@@ -787,6 +787,20 @@ external("C") routine rf_proc_output_len() -> U64
 external("C") routine rf_proc_errors() -> Hijacked[Byte]
 ### Returns the byte length of the most recent `rf_proc_run` stderr capture.
 external("C") routine rf_proc_errors_len() -> U64
+### Begins an argv subprocess builder (no shell), setting argv[0] to `file`. Returns an opaque handle.
+### :param file: The executable to run.
+### :param file_len: The file length in bytes.
+### :returns: An opaque builder handle for `rf_proc_add_arg`/`rf_proc_set_cwd`/`rf_proc_run_built`.
+external("C") routine rf_proc_begin(file: CStr, file_len: S32) -> CPtr
+### Appends an argument to a subprocess builder.
+external("C") routine rf_proc_add_arg(builder: CPtr, arg: CStr, arg_len: S32)
+### Sets the working directory for a subprocess builder (empty = inherit the parent's).
+external("C") routine rf_proc_set_cwd(builder: CPtr, cwd: CStr, cwd_len: S32)
+### Adds an environment override (KEY=VALUE), merged into the parent environment at launch.
+external("C") routine rf_proc_add_env(builder: CPtr, key: CStr, key_len: S32, val: CStr, val_len: S32)
+### Launches a built subprocess (no shell), capturing stdout/stderr like `rf_proc_run`, and consumes
+### the builder. Parks the calling coroutine while it runs. Returns the exit code, or -1 on failure.
+external("C") routine rf_proc_run_built(builder: CPtr) -> S64
 ### Reads up to `count` bytes from a file into a runtime-managed buffer.
 ### :param fd: The file descriptor to read from.
 ### :param count: The maximum number of bytes to read.
