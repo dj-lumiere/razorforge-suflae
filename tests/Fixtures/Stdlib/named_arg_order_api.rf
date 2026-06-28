@@ -1,0 +1,64 @@
+module Tests/Stdlib/NamedArgOrder
+
+import IO/Console
+
+# Locks named-argument ordering semantics: arguments are bound to parameters BY NAME (not by
+# writing position), and are EVALUATED in parameter-declaration order regardless of the order they
+# are written at the call site. A regression here is a SILENT miscompile (wrong value bound to the
+# wrong parameter with no error), so this fixture exercises every call-emission path: free routine,
+# member call, record construction, a middle-omitted named default, and a suspended-spawn call.
+
+record Point3
+  posted x: S64
+  posted y: S64
+  posted z: S64
+
+routine Point3.weighted(a: S64, b: S64, c: S64) -> S64
+  return me.x * 100 + me.y * 10 + me.z + a - b - c
+
+routine sub3(a: S64, b: S64, c: S64) -> S64
+  return a - b - c
+
+routine with_default(a: S64, b: S64 = 7, c: S64 = 3) -> S64
+  return a * 100 + b * 10 + c
+
+suspended routine work(a: S64, b: S64, c: S64) -> S64
+  return a - b - c
+
+# Side-effecting helper: prints its label when evaluated, so the order the labels appear in the
+# output reflects the order the arguments were evaluated.
+routine tag(label: Text, val: S64) -> S64
+  show(label)
+  return val
+
+routine start()
+  # Free routine: same result whether written in declaration order or shuffled.
+  show(f"free_inorder: {sub3(a: 100, b: 10, c: 1)}")
+  show(f"free_reorder: {sub3(c: 1, a: 100, b: 10)}")
+
+  # Record construction with fields written out of declaration order.
+  var p = Point3(z: 3, x: 1, y: 2)
+  show(f"record: {p.x},{p.y},{p.z}")
+
+  # Member call with named args out of order.
+  show(f"member: {p.weighted(c: 1, a: 100, b: 10)}")
+
+  # Middle-omitted named default: provide a and c, default b.
+  show(f"mid_default: {with_default(c: 9, a: 5)}")
+  show(f"all_default: {with_default(a: 5)}")
+
+  # Suspended-spawn call with named args out of order.
+  var ag = work(c: 1, a: 100, b: 10)
+  danger!
+    show(f"spawn: {ag.retrieve!()}")
+
+  # Free-routine arguments evaluate in declaration order (a, b, c) even though written c, a, b.
+  var e = sub3(c: tag(label: "eval_c", val: 1), a: tag(label: "eval_a", val: 100),
+               b: tag(label: "eval_b", val: 10))
+  show(f"eval_result: {e}")
+
+  # Member-call arguments also evaluate in declaration order (a, b, c) regardless of writing order.
+  var m = p.weighted(c: tag(label: "m_c", val: 1), a: tag(label: "m_a", val: 100),
+                     b: tag(label: "m_b", val: 10))
+  show(f"member_eval: {m}")
+  return
