@@ -92,8 +92,11 @@ extern void      rf_sched_wake(rf_sched* sched, rf_coro* coro);
 
 typedef enum rf_io_kind {
     RF_IO_READ_FILE = 0,
-    RF_IO_WRITE_FILE = 1
+    RF_IO_WRITE_FILE = 1,
+    RF_IO_RUN_PROCESS = 2
 } rf_io_kind;
+
+struct rf_proc_state; /* defined below; non-NULL only for RF_IO_RUN_PROCESS requests */
 
 typedef struct rf_io_req {
     uv_work_t work;            /* threadpool work handle (work.data points back here)           */
@@ -108,6 +111,7 @@ typedef struct rf_io_req {
     int64_t data_len;          /* write: number of payload bytes in `data`                      */
     int64_t result;            /* read: bytes read. write: bytes written. < 0 on error          */
     int done;                  /* set by the loop thread before the wake; read after resume     */
+    struct rf_proc_state* proc; /* RF_IO_RUN_PROCESS: uv_spawn handles + captured output        */
 } rf_io_req;
 
 typedef struct rf_io_loop {
@@ -174,8 +178,142 @@ static void rf_io_after_cb(uv_work_t* w, int status)
     }
 }
 
-/* Loop thread: drain the submission queue and start each request on the threadpool. uv_queue_work
- * must run on the loop thread, so submission hops here via uv_async_send. */
+/* ---- Subprocess (uv_spawn): run a command, capture stdout/stderr, get exit code + signal -------
+ * Runs entirely on the loop thread: uv_spawn the command (via the platform shell), redirect the
+ * child's stdout/stderr into pipes, accumulate both streams in read callbacks, and on the exit
+ * callback record exit_status + term_signal. The request completes once the process AND both pipes
+ * have closed (3 handles); then we wake the parked coroutine (or post a semaphore for a non-coroutine
+ * caller). libuv reads both pipes on the loop, so there is no read-order deadlock. */
+typedef struct rf_proc_state {
+    uv_process_t proc;
+    uv_pipe_t out_pipe;
+    uv_pipe_t err_pipe;
+    char* command;             /* malloc'd copy of the command line passed to the shell */
+    char* argv[4];             /* { shell, flag, command, NULL } */
+    int handles_open;          /* proc + 2 pipes still open; finalize when this hits 0 */
+    int64_t exit_status;       /* child exit code (meaningful when term_signal == 0) */
+    int term_signal;           /* signal that killed the child, or 0 if it exited normally */
+    int spawn_err;             /* non-zero libuv error if uv_spawn failed outright */
+    char* out_buf; size_t out_len; size_t out_cap;
+    char* err_buf; size_t err_len; size_t err_cap;
+    uv_sem_t sem;              /* non-coroutine caller blocks on this; coroutine uses the scheduler */
+    int use_sem;               /* 1 if a non-coroutine caller is waiting on sem */
+} rf_proc_state;
+
+/* Grow-and-append into a malloc'd, NUL-terminated buffer. Best-effort on OOM (drops the chunk). */
+static void rf_proc_buf_append(char** buf, size_t* len, size_t* cap, const char* data, size_t n)
+{
+    if (*len + n + 1 > *cap) {
+        size_t ncap = (*cap == 0) ? 256 : *cap;
+        while (*len + n + 1 > ncap) { ncap *= 2; }
+        char* nb = (char*)realloc(*buf, ncap);
+        if (nb == NULL) { return; }
+        *buf = nb;
+        *cap = ncap;
+    }
+    memcpy(*buf + *len, data, n);
+    *len += n;
+    (*buf)[*len] = '\0';
+}
+
+static void rf_proc_finalize(rf_io_req* req)
+{
+    rf_proc_state* st = req->proc;
+    req->done = 1;
+    if (req->coro != NULL && req->sched != NULL) {
+        rf_sched_wake(req->sched, req->coro);  /* coroutine caller: woken via the scheduler */
+    } else if (st->use_sem) {
+        uv_sem_post(&st->sem);                 /* non-coroutine caller: release the blocking wait */
+    }
+}
+
+static void rf_proc_close_cb(uv_handle_t* h)
+{
+    rf_io_req* req = (rf_io_req*)h->data;
+    rf_proc_state* st = req->proc;
+    st->handles_open--;
+    if (st->handles_open == 0) {
+        rf_proc_finalize(req);
+    }
+}
+
+static void rf_proc_alloc_cb(uv_handle_t* h, size_t suggested, uv_buf_t* buf)
+{
+    (void)h;
+    *buf = uv_buf_init((char*)malloc(suggested), (unsigned int)suggested);
+}
+
+static void rf_proc_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
+{
+    rf_io_req* req = (rf_io_req*)stream->data;
+    rf_proc_state* st = req->proc;
+    if (nread > 0) {
+        if (stream == (uv_stream_t*)&st->out_pipe) {
+            rf_proc_buf_append(&st->out_buf, &st->out_len, &st->out_cap, buf->base, (size_t)nread);
+        } else {
+            rf_proc_buf_append(&st->err_buf, &st->err_len, &st->err_cap, buf->base, (size_t)nread);
+        }
+    }
+    if (buf->base != NULL) { free(buf->base); }
+    if (nread < 0) { /* UV_EOF or error: the child closed this stream */
+        uv_read_stop(stream);
+        uv_close((uv_handle_t*)stream, rf_proc_close_cb);
+    }
+}
+
+static void rf_proc_exit_cb(uv_process_t* proc, int64_t exit_status, int term_signal)
+{
+    rf_io_req* req = (rf_io_req*)proc->data;
+    rf_proc_state* st = req->proc;
+    st->exit_status = exit_status;
+    st->term_signal = term_signal;
+    uv_close((uv_handle_t*)proc, rf_proc_close_cb);
+}
+
+/* Loop thread: launch the process. On spawn failure no exit_cb fires, so we close the (init'd but
+ * unused) pipes and let their close callbacks finalize with the error. */
+static void rf_proc_start(rf_io_req* req)
+{
+    rf_proc_state* st = req->proc;
+    rf_io_loop* io = &g_io;
+
+    uv_pipe_init(&io->loop, &st->out_pipe, 0); st->out_pipe.data = req;
+    uv_pipe_init(&io->loop, &st->err_pipe, 0); st->err_pipe.data = req;
+
+    uv_stdio_container_t stdio[3];
+    stdio[0].flags = UV_IGNORE;
+    stdio[1].flags = (uv_stdio_flags)(UV_CREATE_PIPE | UV_WRITABLE_PIPE);
+    stdio[1].data.stream = (uv_stream_t*)&st->out_pipe;
+    stdio[2].flags = (uv_stdio_flags)(UV_CREATE_PIPE | UV_WRITABLE_PIPE);
+    stdio[2].data.stream = (uv_stream_t*)&st->err_pipe;
+
+    uv_process_options_t opts;
+    memset(&opts, 0, sizeof opts);
+    opts.exit_cb = rf_proc_exit_cb;
+    opts.file = st->argv[0];
+    opts.args = st->argv;
+    opts.stdio = stdio;
+    opts.stdio_count = 3;
+
+    st->proc.data = req;
+    int r = uv_spawn(&io->loop, &st->proc, &opts);
+    if (r != 0) {
+        st->spawn_err = r;
+        st->exit_status = -1;
+        st->term_signal = 0;
+        st->handles_open = 2; /* only the two pipes exist (proc never started) */
+        uv_close((uv_handle_t*)&st->out_pipe, rf_proc_close_cb);
+        uv_close((uv_handle_t*)&st->err_pipe, rf_proc_close_cb);
+        return;
+    }
+    st->handles_open = 3; /* proc + 2 pipes */
+    uv_read_start((uv_stream_t*)&st->out_pipe, rf_proc_alloc_cb, rf_proc_read_cb);
+    uv_read_start((uv_stream_t*)&st->err_pipe, rf_proc_alloc_cb, rf_proc_read_cb);
+}
+
+/* Loop thread: drain the submission queue and start each request. File I/O goes to the threadpool
+ * (uv_queue_work); a subprocess is launched directly on the loop (uv_spawn). Both must run on the
+ * loop thread, so submission hops here via uv_async_send. */
 static void rf_io_on_submit(uv_async_t* h)
 {
     rf_io_loop* io = (rf_io_loop*)h->data;
@@ -187,8 +325,12 @@ static void rf_io_on_submit(uv_async_t* h)
     while (list != NULL) {
         rf_io_req* req = list;
         list = req->qnext;
-        req->work.data = req;
-        uv_queue_work(&io->loop, &req->work, rf_io_work_cb, rf_io_after_cb);
+        if (req->kind == RF_IO_RUN_PROCESS) {
+            rf_proc_start(req);
+        } else {
+            req->work.data = req;
+            uv_queue_work(&io->loop, &req->work, rf_io_work_cb, rf_io_after_cb);
+        }
     }
 }
 
@@ -336,6 +478,92 @@ int64_t rf_io_write_file_all(const char* path, rf_S32 path_len, const char* data
     return result;
 }
 
+/* Captured subprocess result, handed to RF after rf_proc_run returns. Thread-local for the same
+ * reason as g_io_last_len: set on the scheduler thread immediately before rf_proc_run returns and
+ * read by RF right after, with no other coroutine running in between. */
+static _Thread_local int64_t    g_proc_exit = 0;
+static _Thread_local int        g_proc_signal = 0;     /* 0 = exited normally (not signalled) */
+static _Thread_local char*      g_proc_out = NULL;
+static _Thread_local rf_address g_proc_out_len = 0;
+static _Thread_local char*      g_proc_err = NULL;
+static _Thread_local rf_address g_proc_err_len = 0;
+
+rf_S32     rf_proc_term_signal(void) { return (rf_S32)g_proc_signal; }
+char*      rf_proc_output(void)      { return g_proc_out; }
+rf_address rf_proc_output_len(void)  { return g_proc_out_len; }
+char*      rf_proc_errors(void)      { return g_proc_err; }
+rf_address rf_proc_errors_len(void)  { return g_proc_err_len; }
+
+/* Run `command` through the platform shell, capturing stdout/stderr, returning its exit code. Inside
+ * a scheduler-driven coroutine the coroutine PARKS while the process runs (siblings progress); on a
+ * plain thread it blocks. The captured streams + signal are read afterwards via the accessors above;
+ * the output buffers are malloc'd and handed to the caller (NUL-terminated), mirroring read. Returns
+ * the child's exit code, or -1 if the process could not be spawned. */
+int64_t rf_proc_run(const char* command, rf_S32 command_len)
+{
+    uv_once(&g_io_once, rf_io_init_once); /* normally already done by rf_io_runtime_init */
+
+    rf_io_req* req = (rf_io_req*)calloc(1, sizeof(rf_io_req));
+    rf_proc_state* st = (rf_proc_state*)calloc(1, sizeof(rf_proc_state));
+    if (req == NULL || st == NULL) {
+        free(req); free(st);
+        __rf_throw("OutOfMemoryError", "Failed to allocate subprocess request");
+        return -1; /* unreachable */
+    }
+    req->kind = RF_IO_RUN_PROCESS;
+    req->proc = st;
+    st->exit_status = -1;
+    st->term_signal = 0;
+
+    size_t clen = (command_len < 0) ? strlen(command) : (size_t)command_len;
+    st->command = (char*)malloc(clen + 1);
+    if (st->command == NULL) {
+        free(st); free(req);
+        __rf_throw("OutOfMemoryError", "Failed to allocate subprocess command");
+        return -1; /* unreachable */
+    }
+    memcpy(st->command, command, clen);
+    st->command[clen] = '\0';
+#if defined(_WIN32)
+    st->argv[0] = "cmd.exe"; st->argv[1] = "/c";
+#else
+    st->argv[0] = "/bin/sh"; st->argv[1] = "-c";
+#endif
+    st->argv[2] = st->command;
+    st->argv[3] = NULL;
+
+    rf_sched* sched = g_io_ok ? rf_sched_current() : NULL;
+    rf_coro* self = g_io_ok ? rf_coro_current() : NULL;
+
+    if (sched != NULL && self != NULL) {
+        req->sched = sched;
+        req->coro = self;
+        rf_io_submit(req);
+        rf_sched_park_external();   /* woken exactly once by rf_proc_finalize */
+    } else if (g_io_ok) {
+        st->use_sem = 1;
+        uv_sem_init(&st->sem, 0);
+        rf_io_submit(req);
+        uv_sem_wait(&st->sem);      /* non-coroutine caller: block until the loop thread finalizes */
+        uv_sem_destroy(&st->sem);
+    }
+
+    /* Publish the captured streams + status to the thread-locals. The buffers' ownership passes to
+     * the caller (NOT freed here), mirroring rf_io_read_file_all. */
+    g_proc_exit    = st->exit_status;
+    g_proc_signal  = st->term_signal;
+    g_proc_out     = st->out_buf;
+    g_proc_out_len = (rf_address)st->out_len;
+    g_proc_err     = st->err_buf;
+    g_proc_err_len = (rf_address)st->err_len;
+
+    int64_t exit_code = (st->spawn_err != 0) ? -1 : st->exit_status;
+    free(st->command);
+    free(st);
+    free(req);
+    return exit_code;
+}
+
 #else /* !HAVE_LIBUV — synchronous fallback so the surface exists without the async backend. */
 
 void rf_io_runtime_init(void) {}
@@ -375,6 +603,53 @@ int64_t rf_io_write_file_all(const char* path, rf_S32 path_len, const char* data
     int flush_ok = (fflush(f) == 0);
     fclose(f);
     return (flush_ok && n == (size_t)data_len) ? (int64_t)n : -1;
+}
+
+/* Synchronous subprocess fallback (no libuv): popen captures stdout only; no stderr split, no
+ * signal info. Provides the symbols so the surface exists without the async backend. */
+static _Thread_local char*      g_proc_out = NULL;
+static _Thread_local rf_address g_proc_out_len = 0;
+
+rf_S32     rf_proc_term_signal(void) { return 0; }
+char*      rf_proc_output(void)      { return g_proc_out; }
+rf_address rf_proc_output_len(void)  { return g_proc_out_len; }
+char*      rf_proc_errors(void)      { return NULL; }
+rf_address rf_proc_errors_len(void)  { return 0; }
+
+int64_t rf_proc_run(const char* command, rf_S32 command_len)
+{
+    (void)command_len;
+    g_proc_out = NULL;
+    g_proc_out_len = 0;
+#if defined(_WIN32)
+    FILE* p = _popen(command, "r");
+#else
+    FILE* p = popen(command, "r");
+#endif
+    if (p == NULL) { return -1; }
+    char* buf = NULL; size_t len = 0; size_t cap = 0;
+    char chunk[4096];
+    size_t r;
+    while ((r = fread(chunk, 1, sizeof chunk, p)) > 0) {
+        if (len + r + 1 > cap) {
+            size_t ncap = (cap == 0) ? 4096 : cap;
+            while (len + r + 1 > ncap) { ncap *= 2; }
+            char* nb = (char*)realloc(buf, ncap);
+            if (nb == NULL) { break; }
+            buf = nb; cap = ncap;
+        }
+        memcpy(buf + len, chunk, r);
+        len += r;
+    }
+    if (buf != NULL) { buf[len] = '\0'; }
+#if defined(_WIN32)
+    int status = _pclose(p);
+#else
+    int status = pclose(p);
+#endif
+    g_proc_out = buf;
+    g_proc_out_len = (rf_address)len;
+    return (int64_t)status;
 }
 
 #endif /* HAVE_LIBUV */

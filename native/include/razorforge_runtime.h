@@ -79,6 +79,17 @@ int64_t rf_io_write_file_all(const char* path, int32_t path_len, const char* dat
 /* Eagerly start the async I/O loop on the main thread at process startup (called by rf_runtime_init). */
 void rf_io_runtime_init(void);
 
+/* Run a shell command, capturing stdout/stderr, while the calling coroutine is parked (it blocks on a
+ * plain thread). Returns the child's exit code, or -1 if it could not be spawned. The captured streams
+ * and terminating signal are read afterwards via the accessors below; the output buffers are malloc'd,
+ * NUL-terminated, and owned by the caller. */
+int64_t rf_proc_run(const char* command, int32_t command_len);
+int32_t rf_proc_term_signal(void);   /* signal that killed the child, or 0 if it exited normally */
+char* rf_proc_output(void);          /* captured stdout (malloc'd, NUL-terminated) */
+uintptr_t rf_proc_output_len(void);
+char* rf_proc_errors(void);          /* captured stderr (malloc'd, NUL-terminated) */
+uintptr_t rf_proc_errors_len(void);
+
 const char* rf_task_kind_name(rf_task_kind kind);
 const char* rf_task_status_name(rf_task_status status);
 const char* rf_task_completion_name(rf_task_completion_kind kind);

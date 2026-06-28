@@ -770,6 +770,23 @@ external("C") routine rf_io_get_result_len() -> U64
 ### :param data_len: The number of bytes to write.
 ### :returns: The number of bytes written, or a negative value on error.
 external("C") routine rf_io_write_file_all(path: CStr, path_len: S32, data: Hijacked[Byte], data_len: S64) -> S64
+### Runs a shell command, capturing stdout/stderr, while the calling coroutine parks (siblings keep
+### progressing); blocks on a plain thread. Returns the child's exit code (-1 if it could not be
+### spawned). The captured streams + signal are read via the accessors below.
+### :param command: The null-terminated command line, run via the platform shell.
+### :param command_len: The command length in bytes.
+### :returns: The child's exit code, or -1 on spawn failure.
+external("C") routine rf_proc_run(command: CStr, command_len: S32) -> S64
+### Returns the signal that killed the most recent `rf_proc_run` child, or 0 if it exited normally.
+external("C") routine rf_proc_term_signal() -> S32
+### Returns the captured stdout buffer of the most recent `rf_proc_run` (length via `rf_proc_output_len`).
+external("C") routine rf_proc_output() -> Hijacked[Byte]
+### Returns the byte length of the most recent `rf_proc_run` stdout capture.
+external("C") routine rf_proc_output_len() -> U64
+### Returns the captured stderr buffer of the most recent `rf_proc_run` (length via `rf_proc_errors_len`).
+external("C") routine rf_proc_errors() -> Hijacked[Byte]
+### Returns the byte length of the most recent `rf_proc_run` stderr capture.
+external("C") routine rf_proc_errors_len() -> U64
 ### Reads up to `count` bytes from a file into a runtime-managed buffer.
 ### :param fd: The file descriptor to read from.
 ### :param count: The maximum number of bytes to read.
