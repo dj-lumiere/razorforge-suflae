@@ -20,7 +20,7 @@ where you want native speed and deterministic memory behavior. It is *not* a ker
 language: programs link against the RazorForge runtime library, and there is no freestanding mode.
 
 > **Honesty first:** RazorForge is an early alpha. The compiler, runtime, and standard library
-> work — 1,400+ unit tests and 90+ end-to-end snapshot fixtures run green in CI on every commit —
+> work — 1,400+ unit tests and 140+ end-to-end snapshot fixtures run green in CI on every commit —
 > but the language is young, APIs will change, and you will find bugs. Its sibling language
 > **Suflae** is a *design* (see [Suflae status](#suflae-design-preview)) and is **not implemented yet**.
 
@@ -122,7 +122,7 @@ RazorForge isn't in any model's training data yet — assistants will guess
 Rust/Python-flavored syntax that doesn't compile. Point yours at
 [`RAZORFORGE-FOR-AI.md`](RAZORFORGE-FOR-AI.md) (also shipped inside every
 release package): a compact reference of exactly where their assumptions
-break, plus pointers to the 90+ CI-verified example programs in
+break, plus pointers to the 140+ CI-verified example programs in
 [`tests/Fixtures/Stdlib/`](tests/Fixtures/Stdlib/).
 
 ### CLI reference
@@ -181,7 +181,12 @@ With no entry file given, the CLI searches the current and parent directories fo
 - **Interop**: `external("C")` declarations for calling C from RazorForge.
 - **Generics**: type parameters with protocol constraints, const generics (`Array[T, N]`),
   monomorphization.
-- **Quality gates**: every commit runs 1,400+ unit tests plus 92 end-to-end fixtures that
+- **Concurrency**: stackful coroutines (`suspended routine`) and OS threads (`threaded routine`)
+  behind one `Agent[T]` handle with an *uncolored* `retrieve!`; cooperative `waitfor`, `race!`
+  (first finisher) and `gather!` (wait for all); abandon-on-drop teardown; and async file I/O
+  (`read_text`/`write_text`) that parks a coroutine while it waits. *Async networking
+  (sockets/HTTP) is not implemented yet.*
+- **Quality gates**: every commit runs 1,400+ unit tests plus 143 end-to-end fixtures that
   compile, link, execute, and diff program output against snapshots — on Linux CI; Windows is
   exercised continuously during development.
 
@@ -198,11 +203,12 @@ With no entry file given, the CLI searches the current and parent directories fo
 ## Suflae (design preview)
 
 Suflae is RazorForge's planned sibling: same type system and standard library surface, but
-garbage-collected, with arbitrary-precision numerics by default and actor-model concurrency
-(`suspended` routines, `waitfor`, `.act()`). The grammar is designed and partially parsed,
-and the docs at [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/) describe the design —
-**but there is no Suflae standard library or runtime yet, and Suflae programs cannot run.**
-It will land after RazorForge stabilizes.
+garbage-collected, with arbitrary-precision numerics by default and an **actor model** — every
+entity an actor with a mailbox, built on RazorForge's coroutine runtime (the `suspended`/`threaded`
+primitives already live in RazorForge; Suflae adds actors and GC on top). The grammar is designed
+and partially parsed, and the docs at [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/) describe
+the design — **but there is no Suflae standard library or runtime yet, and Suflae programs cannot
+run.** It will land after RazorForge stabilizes.
 
 ---
 
@@ -253,17 +259,24 @@ RazorForge/
 
 ## Roadmap
 
-### Now (v0.0.1-alpha)
+### Shipped (latest release: v0.1.1)
 
 - [x] Working compiler → LLVM → native pipeline on Windows/Linux x86-64
 - [x] Ownership model, failable-routine variants, generics, collections, 128-bit numerics
 - [x] Fully green CI: unit tests + end-to-end output-snapshot fixtures
 - [x] Diagnostics polish: source excerpts with carets, "did you mean" suggestions
-- [ ] Prebuilt release packages (win-x64, linux-x64)
+- [x] Prebuilt release packages (win-x64, linux-x64)
+
+### In development (v0.2.0)
+
+- [x] Concurrency: coroutines + threads behind `Agent[T]`, `retrieve!`/`race!`/`gather!`/`waitfor`,
+  abandon-on-drop teardown, async file I/O
 
 ### Next
 
-- Suflae standard library and runtime (actors, suspended routines)
+- Async networking (TCP → HTTP), then higher-level protocols
+- Channels and structured concurrency
+- Suflae standard library and runtime (actor model + GC)
 - Language server (LSP) and editor tooling beyond syntax highlighting
 - macOS and ARM64 support
 - Package management story
