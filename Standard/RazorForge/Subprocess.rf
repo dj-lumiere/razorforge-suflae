@@ -1,0 +1,45 @@
+module Subprocess
+
+# Running external commands. `run_process` runs a command through the platform shell and returns a
+# ProcessResult with the exit code, the captured show/alert streams (stdout/stderr), and — on POSIX —
+# the signal that killed the child if it was signalled. It is UNCOLORED like the file I/O: inside a
+# `suspended routine` the calling coroutine PARKS while the child runs (siblings progress); on a plain
+# thread it blocks. Wrap it in a `suspended routine` + `gather!`/`race!` to run many commands at once.
+
+### The outcome of running an external command.
+record ProcessResult
+  ### The child's exit code. Meaningful when `signal` is absent. (S64 holds POSIX 0–255 and the full
+  ### Windows DWORD, including crash codes, without loss.)
+  exit_code: S64
+  ### The signal that killed the child (POSIX), or absent if it exited normally. Always absent on
+  ### Windows, which has no signals.
+  signal: S32?
+  ### The captured stdout ("show" stream), decoded as lossy UTF-8.
+  output: Text
+  ### The captured stderr ("alert" stream), decoded as lossy UTF-8.
+  errors: Text
+
+### Whether the command finished cleanly: exited normally (no signal) with exit code 0.
+### :returns: true if not signalled and `exit_code == 0`.
+routine ProcessResult.succeeded() -> Bool
+  return (not me.signal.is_present()) and me.exit_code == 0
+
+### Maps the runtime's term-signal convention (0 = not signalled) to a `Maybe`: absent when 0,
+### otherwise the signal number. The `try_` variant yields the `S32?` that ProcessResult carries.
+routine term_signal_value!(raw: S32) -> S32
+  if raw == 0
+    absent
+  return raw
+
+### Runs `command` through the platform shell (`/bin/sh -c` on POSIX, `cmd /c` on Windows), capturing
+### its stdout and stderr, and returns the result. Inside a `suspended routine` the calling coroutine
+### parks while the child runs; on a plain thread it blocks.
+### :param command: The command line to run.
+### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
+routine run_process(command: Text) -> ProcessResult
+  var cstr = CStr(from: command)
+  var code = rf_proc_run(command: cstr, command_len: cstr.count().S32!())
+  var output = Bytes(ptr: rf_proc_output(), count: rf_proc_output_len()).decode_as_utf8_lossy()
+  var errors = Bytes(ptr: rf_proc_errors(), count: rf_proc_errors_len()).decode_as_utf8_lossy()
+  var signal = try_term_signal_value(raw: rf_proc_term_signal())
+  return ProcessResult(exit_code: code, signal: signal, output: output, errors: errors)

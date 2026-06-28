@@ -1,0 +1,36 @@
+module Tests/Stdlib/SubprocessApi
+
+# v0.2.0 subprocess capstone. `run_process` runs a command through the platform shell, capturing
+# stdout/stderr and returning exit code + (POSIX) terminating signal. It is UNCOLORED: called directly
+# it blocks; inside a `suspended routine` the coroutine parks while the child runs, so a set of
+# commands can run concurrently via `gather!`. Commands here (`exit N`, `echo`) work in both `sh` and
+# `cmd`, and the asserts use exit code / succeeded / output-nonempty so they are deterministic across
+# platforms (Windows echoes CRLF, POSIX LF — so we do not compare raw captured text here).
+
+import IO/Console
+import Subprocess
+
+suspended routine sh(cmd: Text) -> ProcessResult
+  return run_process(command: cmd)
+
+routine start()
+  # Direct (non-coroutine) call: blocks until the child exits.
+  danger!
+    var r = run_process(command: "exit 0")
+    show(f"direct => ok={r.succeeded()}")
+
+  # Output capture: echo produces output on both shells (exact bytes differ, so just check non-empty).
+  danger!
+    var e = run_process(command: "echo hi")
+    show(f"echo => ok={e.succeeded()} has_output={e.output.count() > 0_u64}")
+
+  # Concurrent: three commands at once (mix of success + a non-zero exit), gathered in order.
+  var jobs = List[Agent[ProcessResult]]()
+  jobs.add_last(value: sh(cmd: "exit 0"))
+  jobs.add_last(value: sh(cmd: "exit 5"))
+  jobs.add_last(value: sh(cmd: "exit 0"))
+  danger!
+    var rs = gather!(of: steal jobs)
+    show(f"gathered => {rs[0].exit_code} {rs[1].exit_code} {rs[2].exit_code}")
+    show(f"ok => {rs[0].succeeded()} {rs[1].succeeded()} {rs[2].succeeded()}")
+  return
