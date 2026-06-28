@@ -47,20 +47,14 @@
  * (or, at scale, a machine wedged under commit pressure). */
 extern void __rf_throw(const char* error_type, const char* message);
 
-/* Default coroutine stack, in bytes, when the caller passes stack_size == 0. The stack is a DEMAND-
- * COMMITTED mapping handed to co_derive (see rf_coro_stack_alloc): we reserve the whole region but
- * only commit pages as the stack actually grows into them, so this is a VIRTUAL reserve. A parked
- * coroutine therefore charges roughly the pages it has touched — NOT a full megabyte — against the
- * system commit limit; that is what lets a great many coroutines coexist without exhausting the
- * pagefile. A no-access guard page below the body turns an overflow into a clean fault instead of
- * silent neighbour corruption, so we can reserve generously (deep call chains safe). (Design §9.2.) */
+/* Default coroutine stack reserve, in bytes, when the caller passes stack_size == 0. This is a
+ * VIRTUAL reserve, not committed up front: pages back the stack only as it actually grows into them,
+ * so a parked shallow coroutine charges roughly the pages it has touched — NOT a full megabyte —
+ * letting a great many coroutines coexist. The demand growth is the OS's job on both backends:
+ * Windows fibers (CreateFiberEx: small commit + this reserve, guard-page growth) and POSIX libco
+ * stacks (mmap MAP_NORESERVE + a no-access guard page; see rf_coro_stack_alloc). A deep call chain is
+ * therefore safe — the stack grows on demand up to this reserve. (Design §9.2.) */
 #define RF_CORO_DEFAULT_STACK (1024u * 1024u)
-
-/* We commit just the top PAGE of a fresh stack up front — enough for co_derive to lay down the
- * initial context without a fault — and let everything below commit on demand. Keeping the eager
- * commit to one page (not a fat window) is what holds per-coroutine commit charge to a few KiB, so
- * very many coroutines can coexist. (Windows: the handler below commits on touch; POSIX: the kernel
- * does, MAP_NORESERVE.) */
 
 struct rf_coro {
     rf_context_entry_fn entry;     /* user routine to run inside the coroutine            */
@@ -143,139 +137,15 @@ static void rf_coro_trampoline(void)
     co_switch(self->resumer);
 }
 
-#if defined(_WIN32)
-/*
- * Demand-committed coroutine stacks (Windows).
- *
- * We RESERVE the whole stack region but COMMIT pages lazily, as the stack first touches them, via a
- * vectored exception handler. This is the fix for the machine wedging when many coroutines are
- * spawned: VirtualAlloc(MEM_COMMIT) charges every committed byte against the system commit limit
- * (pagefile-backed) up front, so N stacks of 1 MiB charge N MiB whether or not they are used —
- * spawn enough and the OS thrashes the pagefile toward the limit and the machine freezes. Reserving
- * costs only address space; committing on demand charges only the pages actually used (a parked
- * shallow coroutine ≈ a couple of pages).
- *
- * Region layout (page-aligned):
- *   [ header page | guard page | ... stack body, grows downward ... ]
- *   base           base+pg      base+2pg                       base+total
- *
- * The header page (committed) carries a magic + the body's commit range, so the handler can identify
- * OUR regions from a bare fault address in O(1) with no global registry: VirtualQuery yields the
- * AllocationBase (= header), we verify the magic, then commit the faulting page if it lies in the
- * body. A fault below the body (into the reserved guard page) is a genuine stack overflow and is
- * left for the normal handler to report.
- */
-#define RF_CORO_STACK_MAGIC 0x52464353544B3031ULL /* "RFCSTK01" */
-
-typedef struct {
-    uint64_t  magic;
-    uintptr_t commit_lo; /* first byte of the demand-committed body          */
-    uintptr_t commit_hi; /* one past the last byte of the region (body top)  */
-} rf_coro_stack_header;
-
-static size_t g_rf_page = 0; /* cached system page size, set when the handler is installed */
-
-/* Catch the access violation on the first touch of a reserved body page and commit it, so the stack
- * grows on demand. Strictly bounds-checked against our own regions (magic + range); anything else —
- * including faults the .NET host or the trace handler must see — passes through untouched. */
-static LONG WINAPI rf_coro_commit_handler(EXCEPTION_POINTERS* ep)
-{
-    if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION) {
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-    uintptr_t fault = (uintptr_t)ep->ExceptionRecord->ExceptionInformation[1]; /* faulting address */
-
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery((void*)fault, &mbi, sizeof(mbi)) == 0 || mbi.AllocationBase == NULL) {
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-    /* The region base (header page) must itself be committed before we dereference it, so a fault in
-     * unrelated memory can never make us read garbage and mistake it for one of ours. */
-    void* base = mbi.AllocationBase;
-    MEMORY_BASIC_INFORMATION hmbi;
-    if (VirtualQuery(base, &hmbi, sizeof(hmbi)) == 0 || hmbi.State != MEM_COMMIT) {
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-    rf_coro_stack_header* hdr = (rf_coro_stack_header*)base;
-    if (hdr->magic != RF_CORO_STACK_MAGIC) {
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-    if (fault < hdr->commit_lo || fault >= hdr->commit_hi) {
-        return EXCEPTION_CONTINUE_SEARCH; /* into the guard page = real overflow; not ours to commit */
-    }
-    size_t pg = g_rf_page ? g_rf_page : 4096u;
-    void* page = (void*)(fault & ~((uintptr_t)pg - 1));
-    if (VirtualAlloc(page, pg, MEM_COMMIT, PAGE_READWRITE) == NULL) {
-        return EXCEPTION_CONTINUE_SEARCH; /* commit limit truly exhausted — let it surface */
-    }
-    return EXCEPTION_CONTINUE_EXECUTION;
-}
-
-/* Install the demand-commit handler exactly once. First=1 so it runs before the trace handler and a
- * demand-commit fault never prints a spurious AccessViolation. */
-static void rf_coro_install_commit_handler(void)
-{
-    static volatile LONG installed = 0;
-    if (InterlockedCompareExchange(&installed, 1, 0) == 0) {
-        SYSTEM_INFO si;
-        GetSystemInfo(&si);
-        g_rf_page = (size_t)si.dwPageSize;
-        AddVectoredExceptionHandler(1, rf_coro_commit_handler);
-    }
-}
-#endif
-
-/* Allocate a demand-committed coroutine stack of (at least) `usable` bytes and hand back the usable
- * region to give co_derive. A no-access GUARD PAGE sits just below the usable region (the stack
- * grows downward into it), so a stack overflow faults cleanly instead of silently scribbling on the
- * neighbouring allocation. Only the pages the stack actually touches are committed (Windows: via the
- * handler above; POSIX: by the kernel, MAP_NORESERVE), so a generous reserve is cheap. *region /
- * *region_size capture the WHOLE mapping (header + guard included) for rf_coro_stack_free. Returns
- * NULL on failure (the caller raises a runtime error).
- *
- * All targets reach here: every libco backend we build (amd64.c / aarch64.c, including the Windows
- * clang-cl build) uses a caller-supplied buffer via co_derive — only the Windows fiber backend
- * refuses one, and we never select it. */
+/* Allocate a demand-paged coroutine stack of (at least) `usable` bytes and hand back the usable
+ * region to give co_derive. POSIX only — Windows uses native fibers (the OS manages their stacks).
+ * A no-access GUARD PAGE sits just below the usable region (the stack grows downward into it), so a
+ * stack overflow faults cleanly instead of silently scribbling on the neighbouring allocation. The
+ * mapping is MAP_NORESERVE, so the kernel commits pages only as the stack actually touches them and a
+ * generous reserve stays cheap. *region / *region_size capture the WHOLE mapping (guard included) for
+ * rf_coro_stack_free. Returns NULL on failure (the caller raises a runtime error). */
 static void* rf_coro_stack_alloc(size_t usable, void** region, size_t* region_size)
 {
-#if defined(_WIN32)
-    SYSTEM_INFO si;
-    GetSystemInfo(&si);
-    size_t pg = (size_t)si.dwPageSize;
-    size_t header = pg;
-    size_t guard = pg;
-    size_t body = (usable + pg - 1) & ~(pg - 1);
-    size_t total = header + guard + body;
-
-    /* RESERVE only: address space, no commit charge / no pagefile backing until pages are touched. */
-    char* base = (char*)VirtualAlloc(NULL, total, MEM_RESERVE, PAGE_NOACCESS);
-    if (base == NULL) {
-        return NULL;
-    }
-    /* Commit + stamp the header page so the commit handler can recognise this region. */
-    if (VirtualAlloc(base, header, MEM_COMMIT, PAGE_READWRITE) == NULL) {
-        VirtualFree(base, 0, MEM_RELEASE);
-        return NULL;
-    }
-    rf_coro_stack_header* hdr = (rf_coro_stack_header*)base;
-    hdr->magic     = RF_CORO_STACK_MAGIC;
-    hdr->commit_lo = (uintptr_t)(base + header + guard);
-    hdr->commit_hi = (uintptr_t)(base + total);
-
-    /* Commit just the TOP page (where the stack starts) so co_derive's initial context write doesn't
-     * fault; the guard page stays reserved (overflow → fault → reported), the rest commits on demand
-     * as the stack grows — so a parked coroutine charges only the pages it has actually used. */
-    size_t initial = body < pg ? body : pg;
-    if (VirtualAlloc(base + total - initial, initial, MEM_COMMIT, PAGE_READWRITE) == NULL) {
-        VirtualFree(base, 0, MEM_RELEASE);
-        return NULL;
-    }
-    rf_coro_install_commit_handler();
-
-    *region = base;
-    *region_size = total;
-    return base + header + guard; /* usable body start */
-#else
     long pgl = sysconf(_SC_PAGESIZE);
     size_t pg = (pgl > 0) ? (size_t)pgl : 4096u;
     size_t guard = pg;
@@ -299,24 +169,18 @@ static void* rf_coro_stack_alloc(size_t usable, void** region, size_t* region_si
     *region = base;
     *region_size = total;
     return (char*)base + guard;
-#endif
 }
 
 /* Release a stack mapping from rf_coro_stack_alloc. NOT co_delete: that frees the libco handle with
- * LIBCO_FREE (plain free), but our stack is an mmap / VirtualAlloc region, not malloc'd. */
+ * LIBCO_FREE (plain free), but our stack is an mmap region, not malloc'd. */
 static void rf_coro_stack_free(void* region, size_t region_size)
 {
     if (region == NULL) {
         return;
     }
-#if defined(_WIN32)
-    (void)region_size;
-    VirtualFree(region, 0, MEM_RELEASE);
-#else
     munmap(region, region_size);
-#endif
 }
-#endif
+#endif /* HAVE_LIBCO && !_WIN32 */
 
 rf_coro* rf_coro_create(rf_context_entry_fn entry, void* userdata, size_t stack_size)
 {
