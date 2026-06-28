@@ -66,6 +66,19 @@ int rf_async_runtime_run_once(rf_async_runtime* runtime);
 int rf_async_runtime_run_default(rf_async_runtime* runtime);
 void rf_async_runtime_stop(rf_async_runtime* runtime);
 
+/* Coroutine I/O parking: read a whole file off the libuv threadpool while the calling coroutine is
+ * parked (siblings keep running). Returns a malloc'd NUL-terminated buffer (caller frees), with the
+ * byte count readable via rf_io_get_result_len; NULL + length 0 on error. Falls back to a synchronous
+ * read outside a scheduler-driven coroutine. */
+char* rf_io_read_file_all(const char* path, int32_t path_len);
+uintptr_t rf_io_get_result_len(void);
+/* Write data_len bytes to a file (truncating) while the calling coroutine is parked; the payload is
+ * copied so the caller's buffer need not outlive the call. Returns bytes written, or -1 on error.
+ * Falls back to a synchronous write outside a scheduler-driven coroutine. */
+int64_t rf_io_write_file_all(const char* path, int32_t path_len, const char* data, int64_t data_len);
+/* Eagerly start the async I/O loop on the main thread at process startup (called by rf_runtime_init). */
+void rf_io_runtime_init(void);
+
 const char* rf_task_kind_name(rf_task_kind kind);
 const char* rf_task_status_name(rf_task_status status);
 const char* rf_task_completion_name(rf_task_completion_kind kind);

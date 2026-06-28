@@ -31,6 +31,15 @@
 #include "libco.h"
 #endif
 
+/* A coroutine context-switch backend is available whenever we can run coroutines at all: native
+ * Windows fibers on _WIN32, libco elsewhere. The SHARED coroutine machinery (cancellation frames,
+ * abandon, rf_coro_current, the cooperative yield) gates on THIS, not on HAVE_LIBCO — so it never
+ * depends on libco being linked on Windows, where libco is unused (the backend is fibers). The
+ * backend-SPECIFIC parts still gate on `_WIN32` (fibers) vs `HAVE_LIBCO && !_WIN32` (libco). */
+#if defined(_WIN32) || defined(HAVE_LIBCO)
+  #define RF_HAVE_CORO 1
+#endif
+
 #include "rf_sync.h" /* portable rf_mutex / rf_cond — shared with the task↔coro bridge */
 
 /* Runtime error + stack trace + exit(1) (stacktrace.c). We raise this on a hard allocation failure so
@@ -62,7 +71,10 @@ struct rf_coro {
     uint64_t wake_ns;              /* monotonic deadline this coroutine is parked until         */
     int in_ready;                  /* 1 while queued in the ready FIFO (dedups external wakes)  */
     int counted_done;              /* 1 once its completion has decremented live (idempotent)   */
-#ifdef HAVE_LIBCO
+#if defined(_WIN32)
+    void* fiber;                   /* Windows fiber backing this coroutine (CreateFiberEx)        */
+    void* resumer_fiber;           /* fiber to switch back to on yield/finish                     */
+#elif defined(HAVE_LIBCO)
     cothread_t thread;             /* libco context for this coroutine's own stack        */
     cothread_t resumer;            /* context to switch back to on yield/finish           */
     void* stack_region;            /* whole stack mapping (guard page included) for teardown     */
@@ -70,21 +82,54 @@ struct rf_coro {
 #endif
 };
 
-#ifdef HAVE_LIBCO
-
-/* Platform memory primitives for demand-paged coroutine stacks (rf_coro_stack_alloc). */
-#if defined(_WIN32)
-  #include <windows.h>
-#else
-  #include <sys/mman.h>
-  #include <unistd.h>
-#endif
-
-/* The coroutine currently executing on THIS OS thread. NULL when running ordinary
- * (non-coroutine) code. Set by resume immediately before switching in so the trampoline and
- * yield can recover their own rf_coro* without libco passing an argument (co entry is
- * void(*)(void)). Thread-local: each OS thread drives its own coroutines independently. */
+/* The coroutine currently executing on THIS OS thread. NULL when running ordinary (non-coroutine)
+ * code. Set by resume immediately before switching in so the trampoline, yield, cf_push/pop,
+ * rf_coro_current, and the scheduler can recover their own rf_coro*. Thread-local: each OS thread
+ * drives its own coroutines independently. Needed by BOTH the Windows fiber and libco backends. */
 static _Thread_local rf_coro* g_current_coro = NULL;
+
+#if defined(_WIN32)
+/* ---- Windows backend: native fibers ----------------------------------------------------------
+ * A coroutine is a Windows fiber (CreateFiberEx) with a small initial commit and a large reserve.
+ * Windows manages the fiber's stack like a thread stack: cheap up front (so very many coroutines
+ * coexist) and demand-paged GUARD-PAGE GROWTH on deep calls — so ANY normal routine, including deep
+ * C-runtime calls like fopen, works inside a coroutine. This replaces the VEH-demand-committed libco
+ * stacks used on POSIX, whose user-mode fault handler could not run once a single large stack-pointer
+ * drop (fopen's path buffer) exhausted the committed region. */
+#include <windows.h>
+
+static _Thread_local int g_thread_is_fiber = 0;
+
+/* Make THIS OS thread a fiber so SwitchToFiber works. Idempotent: if the thread is already a fiber,
+ * ConvertThreadToFiber fails with ERROR_ALREADY_FIBER, which is fine — we only need to BE one. */
+static void rf_coro_ensure_thread_is_fiber(void)
+{
+    if (!g_thread_is_fiber) {
+        ConvertThreadToFiber(NULL);
+        g_thread_is_fiber = 1;
+    }
+}
+
+/* Fiber bootstrap (the CreateFiberEx start routine). Runs the user entry to completion on the
+ * fiber's own Windows-managed stack, marks COMPLETED, then switches back to the resumer. It must
+ * NEVER return — a fiber proc that returns terminates the whole OS thread — so the trailing
+ * SwitchToFiber does not return: a COMPLETED coroutine is never resumed again, and $destroy deletes
+ * the fiber. `self` comes from the fiber parameter. */
+static void __stdcall rf_coro_fiber_proc(void* param)
+{
+    rf_coro* self = (rf_coro*)param;
+    self->entry(self->userdata);
+    self->status = RF_CORO_COMPLETED;
+    SwitchToFiber(self->resumer_fiber);
+}
+#endif /* _WIN32 fiber backend */
+
+#if defined(HAVE_LIBCO) && !defined(_WIN32)
+
+/* Platform memory primitives for demand-paged coroutine stacks (rf_coro_stack_alloc). POSIX only —
+ * Windows uses fibers above. */
+#include <sys/mman.h>
+#include <unistd.h>
 
 /* libco bootstrap. Runs on the coroutine's own stack the first time it is resumed. Recovers
  * `self` from the thread-local that resume just set, runs the user entry to completion, marks
@@ -289,7 +334,19 @@ rf_coro* rf_coro_create(rf_context_entry_fn entry, void* userdata, size_t stack_
     coro->userdata = userdata;
     coro->status = RF_CORO_NEW;
 
-#ifdef HAVE_LIBCO
+#if defined(_WIN32)
+    /* Fiber with a small initial commit + large reserve: cheap per coroutine, and Windows grows the
+     * stack on demand (guard-page growth) so deep native calls inside the coroutine are safe.
+     * FIBER_FLAG_FLOAT_SWITCH preserves x87/SSE state across switches (required for correctness). */
+    SIZE_T reserve = (stack_size == 0) ? (SIZE_T)RF_CORO_DEFAULT_STACK : (SIZE_T)stack_size;
+    SIZE_T commit = 4u * 1024u;
+    coro->fiber = CreateFiberEx(commit, reserve, FIBER_FLAG_FLOAT_SWITCH, rf_coro_fiber_proc, coro);
+    if (coro->fiber == NULL) {
+        free(coro);
+        __rf_throw("OutOfMemoryError", "Failed to create coroutine fiber");
+        return NULL; /* unreachable */
+    }
+#elif defined(HAVE_LIBCO)
     size_t reserve = (stack_size == 0) ? (size_t)RF_CORO_DEFAULT_STACK : stack_size;
     void* region;
     size_t region_size;
@@ -327,7 +384,18 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
         return RF_CORO_COMPLETED;
     }
 
-#ifdef HAVE_LIBCO
+#if defined(_WIN32)
+    rf_coro_ensure_thread_is_fiber();      /* this OS thread must be a fiber to SwitchToFiber */
+    coro->resumer_fiber = GetCurrentFiber();
+    rf_coro* prev = g_current_coro;
+    g_current_coro = coro;
+    coro->status = RF_CORO_RUNNING;
+
+    SwitchToFiber(coro->fiber); /* runs fiber_proc (first time) or returns from yield */
+
+    g_current_coro = prev;   /* the coroutine parked or finished; restore our context */
+    return coro->status;     /* PARKED (yielded) or COMPLETED (entry returned)        */
+#elif defined(HAVE_LIBCO)
     coro->resumer = co_active();
     rf_coro* prev = g_current_coro;
     g_current_coro = coro;
@@ -353,7 +421,15 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
  * The public rf_coro_yield (cooperative) is defined after the scheduler, since it re-queues. */
 static void rf_coro_switch_out(void)
 {
-#ifdef HAVE_LIBCO
+#if defined(_WIN32)
+    rf_coro* self = g_current_coro;
+    if (self == NULL) {
+        return; /* not inside a coroutine — yielding the OS thread is meaningless here */
+    }
+    self->status = RF_CORO_PARKED;
+    SwitchToFiber(self->resumer_fiber);
+    /* Resumed: resume() has already set status back to RUNNING and g_current_coro to self. */
+#elif defined(HAVE_LIBCO)
     rf_coro* self = g_current_coro;
     if (self == NULL) {
         return; /* not inside a coroutine — yielding the OS thread is meaningless here */
@@ -377,7 +453,11 @@ void rf_coro_delete(rf_coro* coro)
     if (coro == NULL) {
         return;
     }
-#ifdef HAVE_LIBCO
+#if defined(_WIN32)
+    if (coro->fiber != NULL) {
+        DeleteFiber(coro->fiber); /* frees the Windows-managed fiber stack */
+    }
+#elif defined(HAVE_LIBCO)
     if (coro->thread != NULL) {
         /* Release the stack mapping ourselves (guard page included). We must NOT co_delete it:
          * co_delete frees the handle with plain free(), but our stack came from mmap/VirtualAlloc. */
@@ -394,7 +474,7 @@ void rf_coro_cf_push(rf_cancel_frame* frame, void* value_ptr, rf_destroy_fn dest
     if (frame == NULL) {
         return;
     }
-#ifdef HAVE_LIBCO
+#ifdef RF_HAVE_CORO
     rf_coro* self = g_current_coro;
     if (self == NULL) {
         return; /* not inside a coroutine: nothing to abandon, so nothing to track */
@@ -411,7 +491,7 @@ void rf_coro_cf_push(rf_cancel_frame* frame, void* value_ptr, rf_destroy_fn dest
 
 void rf_coro_cf_pop(rf_cancel_frame* frame)
 {
-#ifdef HAVE_LIBCO
+#ifdef RF_HAVE_CORO
     rf_coro* self = g_current_coro;
     if (self == NULL || self->cf_top != frame) {
         return; /* unbalanced pop (or outside a coroutine): leave the stack intact */
@@ -450,12 +530,12 @@ void rf_coro_abandon(rf_coro* coro)
     rf_coro_delete(coro);
 }
 
-/* The coroutine running on this OS thread, or NULL outside any coroutine. Bridges the
- * libco-gated g_current_coro so the scheduler (compiled regardless of HAVE_LIBCO) and the
- * task↔coro await bridge (task_runtime.c) can recover the running coroutine. */
+/* The coroutine running on this OS thread, or NULL outside any coroutine. Exposes the
+ * backend-agnostic g_current_coro so the scheduler and the task↔coro await bridge (task_runtime.c)
+ * can recover the running coroutine regardless of which backend (fiber or libco) is in use. */
 rf_coro* rf_coro_current(void)
 {
-#ifdef HAVE_LIBCO
+#ifdef RF_HAVE_CORO
     return g_current_coro;
 #else
     return NULL;
@@ -663,7 +743,7 @@ void rf_sched_park_external(void)
  * This is the primitive the may-suspend analysis seeds on. */
 void rf_coro_yield(void)
 {
-#ifdef HAVE_LIBCO
+#ifdef RF_HAVE_CORO
     rf_coro* self = g_current_coro;
     if (self == NULL) {
         return; /* not inside a coroutine */

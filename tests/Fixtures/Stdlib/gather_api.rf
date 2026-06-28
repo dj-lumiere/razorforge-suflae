@@ -1,0 +1,38 @@
+module Tests/Stdlib/GatherApi
+
+# v0.2.0 gather! — the twin of race!. Where race! returns the FIRST finisher, gather! drives the whole
+# Agent set CONCURRENTLY and waits for ALL of them, returning their results in INPUT order. The set is
+# a heterogeneous List[Agent[T]] (coroutine-backed + thread-backed); coroutine competitors progress on
+# this thread's scheduler and thread competitors run on their OS threads, so the total wait is the
+# slowest agent, not the sum. The list is consumed (`steal`); completed agents are freed at teardown.
+
+import IO/Console
+
+# Coroutine agent: parks `x` ms, then returns x*10.
+suspended routine compute(x: S64) -> S64
+  waitfor(Duration.from_milliseconds(ms: x))
+  return x * 10
+
+# Thread agent: parks `x` ms on its own OS thread, then returns x+100.
+threaded routine twork(x: S64) -> S64
+  waitfor(Duration.from_milliseconds(ms: x))
+  return x + 100
+
+routine start()
+  # All-coroutine set: results come back in INPUT order even though the middle one finishes first.
+  var coros = List[Agent[S64]]()
+  coros.add_last(value: compute(x: 30))
+  coros.add_last(value: compute(x: 5))
+  coros.add_last(value: compute(x: 15))
+  danger!
+    var rs = gather!(of: steal coros)
+    show(f"coros => {rs[0]} {rs[1]} {rs[2]}")
+
+  # Mixed coroutine + thread set: both run at once, gathered in order.
+  var mixed = List[Agent[S64]]()
+  mixed.add_last(value: compute(x: 10))
+  mixed.add_last(value: twork(x: 20))
+  danger!
+    var rs2 = gather!(of: steal mixed)
+    show(f"mixed => {rs2[0]} {rs2[1]}")
+  return

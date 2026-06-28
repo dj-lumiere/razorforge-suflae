@@ -1,0 +1,26 @@
+module Tests/Stdlib/CoroAsyncReadApi
+
+# v0.2.0 async I/O parking (libuv backend). `read_text` reads a whole file off the libuv
+# threadpool; called inside a `suspended routine` the coroutine PARKS while the worker reads, so a
+# sibling coroutine keeps progressing on the same scheduler thread. Proven here by the read returning
+# the file contents AND a sibling ticker (which parks on timers) completing — no deadlock, no block.
+
+import IO/Console
+import IO/File
+
+suspended routine read_it(path: Text) -> Text
+  return read_text(path: path)
+
+suspended routine ticker(n: S64) -> S64
+  var i = 0
+  while i < n
+    waitfor(2ms)        # parks under the scheduler while the I/O read is in flight
+    i = i + 1
+  return i
+
+routine start()
+  var r = read_it(path: "tests/Fixtures/Stdlib/coro_async_read_data.txt")
+  var t = ticker(n: 3)
+  show(f"read => {r.retrieve!()}")
+  show(f"ticks => {t.retrieve!()}")
+  return

@@ -1,0 +1,24 @@
+module Tests/Stdlib/CoroAsyncWriteApi
+
+# v0.2.0 async I/O parking (libuv backend), write side. `write_text` writes a whole file off
+# the libuv threadpool; called inside a `suspended routine` the coroutine PARKS while the worker
+# writes (the read side does the same). Proven here by a round trip: write the file in one coroutine,
+# then read it back in another and confirm the contents. The output path uses the gitignored `.out`
+# extension so the test leaves no tracked artifact.
+
+import IO/Console
+import IO/File
+
+suspended routine do_write(path: Text, content: Text) -> S64
+  return write_text(path: path, content: content)
+
+suspended routine do_read(path: Text) -> Text
+  return read_text(path: path)
+
+routine start()
+  var p = "tests/Fixtures/Stdlib/coro_async_write.out"
+  var n = do_write(path: p, content: "written by coroutine").retrieve!()
+  show(f"wrote => {n}")
+  var back = do_read(path: p).retrieve!()
+  show(f"read => {back}")
+  return

@@ -19,7 +19,7 @@ if %ERRORLEVEL% neq 0 (
     set "RF_CLANGXX=C:/Program Files/LLVM/bin/clang++.exe"
 )
 
-cmake .. -G "Ninja" -DCMAKE_C_COMPILER="%RF_CLANG%" -DCMAKE_CXX_COMPILER="%RF_CLANGXX%" -DCMAKE_BUILD_TYPE=Release
+cmake .. -G "Ninja" -DCMAKE_C_COMPILER="%RF_CLANG%" -DCMAKE_CXX_COMPILER="%RF_CLANGXX%" -DCMAKE_BUILD_TYPE=Release -DRAZORFORGE_BUILD_VENDOR_LIBUV=ON
 
 if %ERRORLEVEL% neq 0 (
     echo CMake configuration failed!

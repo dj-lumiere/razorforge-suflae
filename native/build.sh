@@ -7,7 +7,7 @@ mkdir -p build
 cd build
 
 echo "Configuring with CMake..."
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DRAZORFORGE_BUILD_VENDOR_LIBUV=ON
 
 echo "Building libraries..."
 cmake --build . --config Release
