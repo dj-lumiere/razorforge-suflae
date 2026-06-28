@@ -15,6 +15,29 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    /// <summary>
+    /// Resolves which call argument initializes the field <paramref name="fieldName"/> declared at
+    /// position <paramref name="positionalIndex"/>. Named arguments are matched by name (so a
+    /// constructor or record literal written out of field-declaration order binds each value to the
+    /// correct field); otherwise the positional argument at the field's index is used. Returns null
+    /// when neither is available (the field keeps its zero value).
+    /// </summary>
+    private static Expression? FindConstructorArgForField(List<Expression> arguments,
+        string fieldName, int positionalIndex)
+    {
+        foreach (Expression a in arguments)
+        {
+            if (a is NamedArgumentExpression na && na.Name == fieldName)
+                return a;
+        }
+
+        if (positionalIndex < arguments.Count &&
+            arguments[index: positionalIndex] is not NamedArgumentExpression)
+            return arguments[index: positionalIndex];
+
+        return null;
+    }
+
     private string EmitEntityAllocation(StringBuilder sb, EntityTypeInfo entity,
         List<string>? memberVariableValues = null)
     {
@@ -331,12 +354,17 @@ public partial class LlvmCodeGenerator
         // Multi-member-variable record: build struct value
         string typeName = GetRecordTypeName(record: record);
         string result = "zeroinitializer";
-        for (int i = 0; i < arguments.Count && i < record.MemberVariables.Count; i++)
+        for (int i = 0; i < record.MemberVariables.Count; i++)
         {
-            // Unwrap NamedArgumentExpression if present
-            Expression arg = arguments[index: i] is NamedArgumentExpression named
-                ? named.Value
-                : arguments[index: i];
+            // Named arguments may be written in any order; bind each field to the argument whose
+            // name matches it (falling back to positional for unnamed args). Without this, a record
+            // literal/constructor written out of field-declaration order silently stored each value
+            // into the wrong field.
+            Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
+                fieldName: record.MemberVariables[index: i].Name, positionalIndex: i);
+            if (fieldArg == null)
+                continue;
+            Expression arg = fieldArg is NamedArgumentExpression named ? named.Value : fieldArg;
             string value = EmitExpression(sb: sb, expr: arg);
             TypeInfo fieldType = record.MemberVariables[index: i].Type;
             // Bool fields are stored as i8 in the aggregate — zext the i1 value to its storage form.
@@ -368,12 +396,15 @@ public partial class LlvmCodeGenerator
         string entityPtr = NextTemp();
         EmitLine(sb: sb, line: $"  {entityPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
 
-        // Initialize fields
-        for (int i = 0; i < arguments.Count && i < entity.MemberVariables.Count; i++)
+        // Initialize fields. Named arguments may be written in any order; bind each field to the
+        // argument whose name matches it (falling back to positional for unnamed args).
+        for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
-            Expression arg = arguments[index: i] is NamedArgumentExpression named
-                ? named.Value
-                : arguments[index: i];
+            Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
+                fieldName: entity.MemberVariables[index: i].Name, positionalIndex: i);
+            if (fieldArg == null)
+                continue;
+            Expression arg = fieldArg is NamedArgumentExpression named ? named.Value : fieldArg;
             string value = EmitExpression(sb: sb, expr: arg);
             string fieldType = GetLlvmType(type: entity.MemberVariables[index: i].Type);
             string fieldPtr = NextTemp();
@@ -405,11 +436,14 @@ public partial class LlvmCodeGenerator
         string crashablePtr = NextTemp();
         EmitLine(sb: sb, line: $"  {crashablePtr} = call ptr @rf_allocate_dynamic(i64 {size})");
 
-        for (int i = 0; i < arguments.Count && i < crashable.MemberVariables.Count; i++)
+        for (int i = 0; i < crashable.MemberVariables.Count; i++)
         {
-            Expression arg = arguments[index: i] is NamedArgumentExpression named
-                ? named.Value
-                : arguments[index: i];
+            // Named arguments may be written in any order; bind each field by matching name.
+            Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
+                fieldName: crashable.MemberVariables[index: i].Name, positionalIndex: i);
+            if (fieldArg == null)
+                continue;
+            Expression arg = fieldArg is NamedArgumentExpression named ? named.Value : fieldArg;
             string value = EmitExpression(sb: sb, expr: arg);
             string fieldType = GetLlvmType(type: crashable.MemberVariables[index: i].Type);
             string fieldPtr = NextTemp();

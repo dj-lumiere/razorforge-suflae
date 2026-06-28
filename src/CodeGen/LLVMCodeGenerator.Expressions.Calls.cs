@@ -284,19 +284,26 @@ public partial class LlvmCodeGenerator
             return EmitSuspendedSpawn(sb: sb, routine: routine, arguments: arguments);
         }
 
-        // Evaluate all arguments
+        // Evaluate arguments and bind them to parameters. RazorForge evaluates arguments in
+        // PARAMETER-DECLARATION order regardless of the call-site writing order; named arguments
+        // may be reordered and may skip middle parameters that have defaults. So: pre-collect the
+        // written-order argument types for overload normalization (no emission yet), bind each
+        // written argument to its declared slot (by name, else positionally), then emit slot-by-
+        // slot in declaration order — supplying defaults for unprovided slots. Emitting in
+        // declaration order also makes argument side effects run in declaration order, not writing
+        // order. (Previously args were emitted positionally by writing order, which silently
+        // miscompiled reordered named calls and misaligned middle-omitted named defaults.)
         var argValues = new List<string>();
         var argTypes = new List<string>();
         var argTypeInfos = new List<TypeInfo>();
 
+        // Written-order argument types for overload normalization. Mirrors the CPtr handling below
+        // so a bare-routine -> CPtr reference contributes the CPtr type (it never has its own
+        // expression type).
+        var writtenArgTypes = new List<TypeInfo>();
         for (int argIdx = 0; argIdx < arguments.Count; argIdx++)
         {
             Expression arg = arguments[index: argIdx];
-
-            // FFI routine -> CPtr coercion: a bare top-level routine name passed where a CPtr is
-            // expected lowers to the routine's bare C function pointer (its native symbol already
-            // has C ABI; no closure thunk). SA gates this to non-capturing references. Unwrap a
-            // NamedArgumentExpression and match the parameter by name (named args may be reordered).
             Expression argInner = arg is NamedArgumentExpression namedArg ? namedArg.Value : arg;
             TypeInfo? paramTy = arg is NamedArgumentExpression na
                 ? routine?.Parameters.FirstOrDefault(predicate: p => p.Name == na.Name)?.Type
@@ -304,18 +311,12 @@ public partial class LlvmCodeGenerator
                     ? routine.Parameters[index: argIdx].Type
                     : null;
             if (paramTy?.Name == "CPtr"
-                && argInner is IdentifierExpression routineRef
-                && _registry.LookupRoutineByName(name: routineRef.Name) is { } refRoutine)
+                && argInner is IdentifierExpression cptrRef
+                && _registry.LookupRoutineByName(name: cptrRef.Name) is not null)
             {
-                GenerateRoutineDeclaration(routine: refRoutine);
-                argValues.Add(item: $"@{MangleRoutineName(routine: refRoutine)}");
-                argTypeInfos.Add(item: paramTy);
-                argTypes.Add(item: "ptr");
+                writtenArgTypes.Add(item: paramTy);
                 continue;
             }
-
-            string value = EmitExpression(sb: sb, expr: arg);
-            argValues.Add(item: value);
 
             TypeInfo? argType = GetExpressionType(expr: arg);
             if (argType == null)
@@ -324,42 +325,126 @@ public partial class LlvmCodeGenerator
                     message:
                     $"Cannot determine type for argument in function call to '{functionName}'");
             }
-
-            argTypeInfos.Add(item: argType);
-            argTypes.Add(item: GetLlvmType(type: argType));
+            writtenArgTypes.Add(item: argType);
         }
 
         routine = NormalizeResolvedRoutineReference(routine: routine,
             receiverType: null,
             returnType: resolvedReturnType,
-            argTypes: argTypeInfos);
+            argTypes: writtenArgTypes);
 
         if (routine != null)
         {
-            int explicitCount = Math.Min(val1: argValues.Count, val2: routine.Parameters.Count);
-            for (int i = 0; i < explicitCount; i++)
-            {
-                (argValues[i], argTypes[i]) = CoerceCallArgumentToParameter(sb: sb,
-                    argValue: argValues[i],
-                    actualType: argTypeInfos[i],
-                    parameterType: routine.Parameters[index: i].Type,
-                    callee: routine);
-            }
-        }
+            int paramCount = routine.Parameters.Count;
 
-        // Supply default arguments for parameters not covered by explicit arguments
-        if (routine != null)
-        {
-            for (int i = argValues.Count; i < routine.Parameters.Count; i++)
+            // Bind each written argument to its declared parameter slot (named by name, else by
+            // position). Unmatched names fall back to position defensively (SA validates names).
+            var slotArg = new Expression?[paramCount];
+            for (int argIdx = 0; argIdx < arguments.Count; argIdx++)
             {
-                ParameterInfo param = routine.Parameters[index: i];
-                if (param.HasDefaultValue)
+                Expression a = arguments[index: argIdx];
+                int p = argIdx;
+                if (a is NamedArgumentExpression na)
                 {
-                    string value = EmitExpression(sb: sb, expr: param.DefaultValue!);
+                    p = -1;
+                    for (int k = 0; k < paramCount; k++)
+                    {
+                        if (routine.Parameters[index: k].Name == na.Name)
+                        {
+                            p = k;
+                            break;
+                        }
+                    }
+
+                    if (p < 0)
+                    {
+                        p = argIdx;
+                    }
+                }
+
+                if (p >= 0 && p < paramCount)
+                {
+                    slotArg[p] = a;
+                }
+            }
+
+            // Emit slot-by-slot in declaration order: provided argument (evaluated here) or default.
+            for (int p = 0; p < paramCount; p++)
+            {
+                ParameterInfo param = routine.Parameters[index: p];
+                Expression? bound = slotArg[p];
+                if (bound != null)
+                {
+                    // FFI routine -> CPtr coercion: a bare top-level routine name passed where a
+                    // CPtr is expected lowers to the routine's bare C function pointer (its native
+                    // symbol already has C ABI; no closure thunk). SA gates this to non-capturing
+                    // references.
+                    Expression argInner =
+                        bound is NamedArgumentExpression nb ? nb.Value : bound;
+                    if (param.Type?.Name == "CPtr"
+                        && argInner is IdentifierExpression routineRef
+                        && _registry.LookupRoutineByName(name: routineRef.Name) is { } refRoutine)
+                    {
+                        GenerateRoutineDeclaration(routine: refRoutine);
+                        argValues.Add(item: $"@{MangleRoutineName(routine: refRoutine)}");
+                        argTypeInfos.Add(item: param.Type);
+                        argTypes.Add(item: "ptr");
+                        continue;
+                    }
+
+                    string value = EmitExpression(sb: sb, expr: bound);
+                    TypeInfo? argType = GetExpressionType(expr: bound);
+                    if (argType == null)
+                    {
+                        throw new InvalidOperationException(
+                            message:
+                            $"Cannot determine type for argument in function call to '{functionName}'");
+                    }
+
+                    (string coercedValue, string coercedType) = CoerceCallArgumentToParameter(
+                        sb: sb,
+                        argValue: value,
+                        actualType: argType,
+                        parameterType: param.Type,
+                        callee: routine);
+                    argValues.Add(item: coercedValue);
+                    argTypes.Add(item: coercedType);
+                    argTypeInfos.Add(item: argType);
+                }
+                else if (param.HasDefaultValue)
+                {
+                    string value = EmitParameterDefault(sb: sb, param: param);
                     argValues.Add(item: value);
                     argTypeInfos.Add(item: param.Type);
                     argTypes.Add(item: GetParameterLlvmType(type: param.Type));
                 }
+                else
+                {
+                    // No argument and no default: SA should have rejected this call. Stop rather
+                    // than fabricate a value and emit a malformed call.
+                    break;
+                }
+            }
+        }
+        else
+        {
+            // Unresolved/dynamic callee: no parameter info to bind against — emit in writing order.
+            for (int argIdx = 0; argIdx < arguments.Count; argIdx++)
+            {
+                Expression arg = arguments[index: argIdx];
+                string value = EmitExpression(sb: sb, expr: arg);
+                argValues.Add(item: value);
+
+                TypeInfo? argType = GetExpressionType(expr: arg);
+                if (argType == null)
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Cannot determine type for argument in function call to '{functionName}'");
+                }
+
+                argTypeInfos.Add(item: argType);
+                argTypes.Add(item: GetLlvmType(type: argType));
             }
         }
 
@@ -790,11 +875,13 @@ public partial class LlvmCodeGenerator
             ? new List<TypeInfo> { receiverType }
             : new List<TypeInfo>();
 
+        // Collect explicit argument TYPES in writing order (for overload resolution below). The
+        // VALUES are emitted later, in parameter-declaration order, so member-call arguments
+        // evaluate in declaration order — matching free routines — regardless of the call-site
+        // writing order. argValues/argTypes hold only the receiver for now; the reordered slot loop
+        // (or the unresolved-method fallback) rebuilds them.
         foreach (Expression arg in arguments)
         {
-            string value = EmitExpression(sb: sb, expr: arg);
-            argValues.Add(item: value);
-
             TypeInfo? argType = GetExpressionType(expr: arg);
             if (argType == null)
             {
@@ -804,8 +891,6 @@ public partial class LlvmCodeGenerator
             }
 
             argTypeInfos.Add(item: argType);
-            string llvmArgType = GetLlvmType(type: argType);
-            argTypes.Add(item: llvmArgType);
         }
 
         // Synthesized/lowered bodies (programmatic $eq/$cmp/$hash, operator-lowered calls) never
@@ -868,83 +953,137 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Supply default arguments for trailing parameters not covered by explicit
-        // arguments (same contract as EmitRoutineCall's free-function fill — SA only
-        // VALIDATES that unbound parameters have defaults; materializing them is
-        // codegen's job). method.Parameters excludes the implicit receiver, so compare
-        // against the explicit-argument count only. Without this, defaulted member
-        // calls (e.g. `Decimal.pi()`, `d.sin()`) emit fewer arguments than the callee
-        // reads — the callee then consumes garbage register contents.
-        if (method is { IsGenericDefinition: false })
-        {
-            for (int i = argValues.Count - receiverSkip; i < method.Parameters.Count; i++)
-            {
-                ParameterInfo param = method.Parameters[index: i];
-                if (!param.HasDefaultValue)
-                    break;
-
-                // Parameter defaults are raw declaration-site AST: PresetInliningPass
-                // only rewrites routine bodies, so a preset-named default (e.g.
-                // `precision: S32 = DECIMAL_DEFAULT_PRECISION`) arrives un-inlined —
-                // resolve it the same way the pass does. Bare literal defaults may
-                // also lack a ResolvedType (never SA-analyzed); stamp the parameter
-                // type so literal emission doesn't misclassify them.
-                Expression defaultExpr = param.DefaultValue!;
-                if (defaultExpr is IdentifierExpression presetId &&
-                    _registry.LookupVariable(presetId.Name) is
-                        { IsPreset: true, PresetValue: not null } presetVar)
-                {
-                    defaultExpr = presetVar.PresetValue is LiteralExpression presetLit
-                        ? presetLit with
-                        {
-                            ResolvedType = presetId.ResolvedType ??
-                                presetVar.PresetValue.ResolvedType ?? param.Type
-                        }
-                        : presetVar.PresetValue;
-                }
-
-                if (defaultExpr is LiteralExpression { ResolvedType: null } bareLit)
-                    defaultExpr = bareLit with { ResolvedType = param.Type };
-
-                // Parameter defaults never pass through LiteralLoweringPass, so numeric
-                // literals still carry the Undecided* tokens that EmitLiteral deliberately
-                // refuses (un-lowered literals in bodies are pipeline bugs). Normalize them
-                // to the concrete token here — the parameter's declared type provides the
-                // context an in-body literal would have gotten from lowering.
-                defaultExpr = defaultExpr switch
-                {
-                    LiteralExpression { LiteralType: TokenType.UndecidedInteger } undInt =>
-                        undInt with { LiteralType = TokenType.IntegerLiteral },
-                    LiteralExpression { LiteralType: TokenType.UndecidedDecimal } undDec =>
-                        undDec with
-                        {
-                            LiteralType = param.Type.Name switch
-                            {
-                                "D32" => TokenType.D32Literal,
-                                "D64" => TokenType.D64Literal,
-                                "D128" => TokenType.D128Literal,
-                                _ => TokenType.DecimalLiteral
-                            }
-                        },
-                    _ => defaultExpr
-                };
-
-                string value = EmitExpression(sb: sb, expr: defaultExpr);
-                argValues.Add(item: value);
-                argTypeInfos.Add(item: param.Type);
-                argTypes.Add(item: GetParameterLlvmType(type: param.Type));
-            }
-        }
-
-        // Method-level generics on regular method calls (e.g., method has [T] on itself, not the owner)
-        // Infer type args from concrete argument types and monomorphize.
-        // Skip when typeArguments != null -> caller provided explicit type args (from GenericCallLoweringPass).
-        // LLVM intrinsic template method call (e.g., buf.read![U8](offset)).
+        // LLVM intrinsic template method call (e.g., buf.read![U8](offset)) — emits its own
+        // arguments (and reorders named args internally), so it bypasses the deferred slot loop
+        // below. Checked here, after the method is fully resolved, so the slot loop never emits its
+        // arguments a second time.
         if (method?.LlvmIrTemplate != null)
         {
             return EmitLlvmIntrinsicCall(sb: sb, routine: method,
                 receiver: receiver, arguments: arguments, typeArguments: typeArguments,
                 resolvedReturnType: member.ResolvedType);
+        }
+
+        // Emit explicit arguments in PARAMETER-DECLARATION order, supplying defaults for any
+        // unprovided slot (same contract as EmitRoutineCall's free-function fill — SA only
+        // VALIDATES that unbound parameters have defaults; materializing them is codegen's job).
+        // Named arguments may be written out of order or may skip middle parameters that have
+        // defaults; binding each value to its declared slot fixes the silent miscompile of
+        // reordered named calls (e.g. `k.sub3(c:1, a:100, b:10)`) and the misalignment of
+        // middle-omitted named defaults. Because emission happens HERE, in declaration order, the
+        // arguments' side effects also run in declaration order (matching free routines). The
+        // receiver (if present) stays at index 0.
+        if (method is { IsGenericDefinition: false })
+        {
+            int paramCount = method.Parameters.Count;
+
+            // Bind each written explicit argument to its declared slot (named by name, else by
+            // position). Unmatched names fall back to position defensively (SA validates names).
+            var slotArgIndex = new int[paramCount];
+            for (int s = 0; s < paramCount; s++)
+            {
+                slotArgIndex[s] = -1;
+            }
+
+            for (int j = 0; j < arguments.Count; j++)
+            {
+                Expression a = arguments[index: j];
+                int p = j;
+                if (a is NamedArgumentExpression na)
+                {
+                    p = -1;
+                    for (int k = 0; k < paramCount; k++)
+                    {
+                        if (method.Parameters[index: k].Name == na.Name)
+                        {
+                            p = k;
+                            break;
+                        }
+                    }
+
+                    if (p < 0)
+                    {
+                        p = j;
+                    }
+                }
+
+                if (p >= 0 && p < paramCount)
+                {
+                    slotArgIndex[p] = j;
+                }
+            }
+
+            var reorderedValues = new List<string>();
+            var reorderedTypes = new List<string>();
+            var reorderedTypeInfos = new List<TypeInfo>();
+            if (methodTakesReceiver)
+            {
+                reorderedValues.Add(item: argValues[index: 0]);
+                reorderedTypes.Add(item: argTypes[index: 0]);
+                reorderedTypeInfos.Add(item: argTypeInfos[index: 0]);
+            }
+
+            for (int p = 0; p < paramCount; p++)
+            {
+                ParameterInfo param = method.Parameters[index: p];
+                int boundArg = slotArgIndex[p];
+                if (boundArg >= 0)
+                {
+                    // Emit the bound argument HERE (in declaration order) so its side effects run
+                    // in declaration order.
+                    Expression boundExpr = arguments[index: boundArg];
+                    string boundValue = EmitExpression(sb: sb, expr: boundExpr);
+                    TypeInfo? boundType = GetExpressionType(expr: boundExpr);
+                    if (boundType == null)
+                    {
+                        throw new InvalidOperationException(
+                            message:
+                            $"Cannot determine type for argument in method call to '{member.PropertyName}'");
+                    }
+
+                    reorderedValues.Add(item: boundValue);
+                    reorderedTypes.Add(item: GetLlvmType(type: boundType));
+                    reorderedTypeInfos.Add(item: boundType);
+                    continue;
+                }
+
+                if (!param.HasDefaultValue)
+                {
+                    // No argument and no default: SA should have rejected this. Stop rather than
+                    // fabricate a value and emit a malformed call.
+                    break;
+                }
+
+                string value = EmitParameterDefault(sb: sb, param: param);
+                reorderedValues.Add(item: value);
+                reorderedTypeInfos.Add(item: param.Type);
+                reorderedTypes.Add(item: GetParameterLlvmType(type: param.Type));
+            }
+
+            argValues = reorderedValues;
+            argTypes = reorderedTypes;
+            argTypeInfos = reorderedTypeInfos;
+        }
+        else
+        {
+            // Method unresolved or still a generic definition — the declaration-order slot loop
+            // doesn't apply (no parameter list to bind against, or this is a synthesized/operator
+            // body with positional args). Emit explicit arguments in writing order so the call (or
+            // the error path below) has its values. (argTypeInfos already holds their types.)
+            foreach (Expression arg in arguments)
+            {
+                string value = EmitExpression(sb: sb, expr: arg);
+                TypeInfo? argType = GetExpressionType(expr: arg);
+                if (argType == null)
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Cannot determine type for argument in method call to '{member.PropertyName}'");
+                }
+
+                argValues.Add(item: value);
+                argTypes.Add(item: GetLlvmType(type: argType));
+            }
         }
 
         // Build the call -> for resolved generic types (e.g., List[Character].add_last),
@@ -1132,6 +1271,63 @@ public partial class LlvmCodeGenerator
             ConsumeTransferredCallOwnership(arguments: arguments);
             return result;
         }
+    }
+
+    /// <summary>
+    /// Materializes a parameter's default value as an LLVM value at a call site, returning the value
+    /// name. Parameter defaults are raw declaration-site AST that never pass through the lowering
+    /// passes (PresetInliningPass / LiteralLoweringPass / ExpressionLoweringPass only rewrite routine
+    /// BODIES), so this applies the same normalizations a body expression would have received from
+    /// the pipeline: construct empty collection literals inline, inline preset-named defaults, stamp
+    /// the parameter type onto bare literals, and normalize Undecided* literal tokens to the concrete
+    /// form (EmitLiteral deliberately refuses Undecided* tokens). Shared by the free-routine and
+    /// member-call default fill.
+    /// </summary>
+    private string EmitParameterDefault(StringBuilder sb, ParameterInfo param)
+    {
+        Expression defaultExpr = param.DefaultValue!;
+
+        // Empty collection-literal default on an owned collection param: construct inline
+        // (see TryEmitEmptyCollectionDefault) — these never pass through ExpressionLoweringPass.
+        if (TryEmitEmptyCollectionDefault(sb: sb, paramType: param.Type,
+                defaultValue: defaultExpr, out string collDefaultValue))
+            return collDefaultValue;
+
+        if (defaultExpr is IdentifierExpression presetId &&
+            _registry.LookupVariable(presetId.Name) is
+                { IsPreset: true, PresetValue: not null } presetVar)
+        {
+            defaultExpr = presetVar.PresetValue is LiteralExpression presetLit
+                ? presetLit with
+                {
+                    ResolvedType = presetId.ResolvedType ??
+                        presetVar.PresetValue.ResolvedType ?? param.Type
+                }
+                : presetVar.PresetValue;
+        }
+
+        if (defaultExpr is LiteralExpression { ResolvedType: null } bareLit)
+            defaultExpr = bareLit with { ResolvedType = param.Type };
+
+        defaultExpr = defaultExpr switch
+        {
+            LiteralExpression { LiteralType: TokenType.UndecidedInteger } undInt =>
+                undInt with { LiteralType = TokenType.IntegerLiteral },
+            LiteralExpression { LiteralType: TokenType.UndecidedDecimal } undDec =>
+                undDec with
+                {
+                    LiteralType = param.Type.Name switch
+                    {
+                        "D32" => TokenType.D32Literal,
+                        "D64" => TokenType.D64Literal,
+                        "D128" => TokenType.D128Literal,
+                        _ => TokenType.DecimalLiteral
+                    }
+                },
+            _ => defaultExpr
+        };
+
+        return EmitExpression(sb: sb, expr: defaultExpr);
     }
 
     /// <summary>

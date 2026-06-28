@@ -244,6 +244,26 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         var calls = new List<object>();
         CollectCalls(node: frame.Decl.Body, sink: calls);
 
+        // Parameter default values never appear in any routine body (they are filled at call sites),
+        // so walk them here too. A collection-literal default (e.g. `d: Dict[K,V] = {:}`) must seed
+        // the collection's $create/add, since codegen constructs it inline at the call site
+        // (TryEmitEmptyCollectionDefault) and would otherwise reference a pruned routine. Default
+        // values are never SA-analyzed, so a collection-literal default has a null ResolvedType —
+        // stamp it from the parameter's resolved type so EnqueueImplicitLoweringCallees can resolve
+        // the collection's $create.
+        foreach (var defParam in frame.Decl.Parameters)
+        {
+            if (defParam.DefaultValue == null) continue;
+            if (defParam.DefaultValue is ListLiteralExpression or SetLiteralExpression
+                    or DictLiteralExpression
+                && defParam.DefaultValue.ResolvedType == null
+                && defParam.Type?.ResolvedType != null)
+            {
+                defParam.DefaultValue.ResolvedType = defParam.Type.ResolvedType;
+            }
+            CollectCalls(node: defParam.DefaultValue, sink: calls);
+        }
+
         // Pull var-decl types into _localTypes by walking the body once.
         CollectLocalVarTypes(node: frame.Decl.Body, map: _localTypes);
 

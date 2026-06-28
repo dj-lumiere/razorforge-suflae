@@ -297,6 +297,74 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Reorders spawn-call arguments into the routine's parameter-declaration order. Named
+    /// arguments may be written in any order; the argpack marshalling below binds args to
+    /// parameters positionally, so without this a reordered named spawn call would pack values into
+    /// the wrong parameter slots. Only applied when every parameter is provided (spawns do not
+    /// materialize defaults); otherwise the original list is returned unchanged.
+    /// </summary>
+    private static List<Expression> ReorderCallArgsToParamOrder(List<Expression> arguments,
+        RoutineInfo routine)
+    {
+        int paramCount = routine.Parameters.Count;
+        if (arguments.Count != paramCount)
+            return arguments;
+
+        bool anyNamed = false;
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            if (arguments[index: i] is NamedArgumentExpression)
+            {
+                anyNamed = true;
+                break;
+            }
+        }
+
+        if (!anyNamed)
+            return arguments;
+
+        var ordered = new Expression?[paramCount];
+        var leftovers = new List<Expression>();
+        foreach (Expression a in arguments)
+        {
+            int p = -1;
+            if (a is NamedArgumentExpression na)
+            {
+                for (int k = 0; k < paramCount; k++)
+                {
+                    if (routine.Parameters[index: k].Name == na.Name)
+                    {
+                        p = k;
+                        break;
+                    }
+                }
+            }
+
+            if (p >= 0 && ordered[p] == null)
+                ordered[p] = a;
+            else
+                leftovers.Add(item: a);
+        }
+
+        // Fill any slots not claimed by name with the remaining (positional) args, in order.
+        int next = 0;
+        var result = new List<Expression>(capacity: paramCount);
+        foreach (Expression? slot in ordered)
+        {
+            if (slot != null)
+            {
+                result.Add(item: slot);
+            }
+            else if (next < leftovers.Count)
+            {
+                result.Add(item: leftovers[index: next++]);
+            }
+        }
+
+        return result.Count == paramCount ? result : arguments;
+    }
+
+    /// <summary>
     /// Lowers a <c>threaded routine foo(args)</c> call: boxes the arguments, creates an OS-thread
     /// task, and spawns it on the generated entry thunk. The expression value is the
     /// <c>rf_task*</c> handle (<c>Task[T]</c> lowers to <c>ptr</c>).
@@ -304,6 +372,7 @@ public partial class LlvmCodeGenerator
     private string EmitThreadedSpawn(StringBuilder sb, RoutineInfo routine,
         List<Expression> arguments)
     {
+        arguments = ReorderCallArgsToParamOrder(arguments: arguments, routine: routine);
         EnsureTaskRuntimeDeclares();
         GenerateRoutineDeclaration(routine: routine);
         string entryThunk = EnsureThreadEntryThunk(routine: routine);
@@ -405,6 +474,7 @@ public partial class LlvmCodeGenerator
     private string EmitSuspendedSpawn(StringBuilder sb, RoutineInfo routine,
         List<Expression> arguments)
     {
+        arguments = ReorderCallArgsToParamOrder(arguments: arguments, routine: routine);
         EnsureTaskRuntimeDeclares();
         _rfRoutineDeclarations[key: "rf_coro_create"] = "declare ptr @rf_coro_create(ptr, ptr, i64)";
         GenerateRoutineDeclaration(routine: routine);

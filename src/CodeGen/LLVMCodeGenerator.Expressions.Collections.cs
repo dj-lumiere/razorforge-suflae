@@ -52,6 +52,62 @@ public partial class LlvmCodeGenerator
             arguments: list.Elements);
     }
 
+    private static readonly string[] OwnedCollectionBaseNames =
+    {
+        "List", "Dict", "Set", "Deque", "SortedDict", "SortedSet", "SortedList",
+        "SecureDict", "SecureSet", "BitList", "PriorityQueue"
+    };
+
+    /// <summary>
+    /// Resolves an owned collection parameter type to its concrete collection type for emitting a
+    /// collection-literal default. Unwraps the transparent <c>Owned</c> wrapper; a borrow or
+    /// reference-counting wrapper (Referring/Viewing/Modifying/Controlling/Retained/Tracked) is NOT
+    /// plainly owned and returns false — for those we do not inline-construct a default (the callee
+    /// would not free it, so a temporary would leak). Returns true with <paramref name="collType"/>
+    /// set for a plainly-owned collection.
+    /// </summary>
+    private static bool TryGetOwnedCollectionType(TypeInfo? paramType, out TypeInfo collType)
+    {
+        collType = null!;
+        if (paramType == null) return false;
+        TypeInfo t = paramType;
+        while (t is WrapperTypeInfo wrapper)
+        {
+            if (wrapper.Name == "Owned") { t = wrapper.InnerType; continue; }
+            return false;
+        }
+        string baseName = GetGenericBaseName(type: t) ?? t.Name;
+        if (Array.IndexOf(array: OwnedCollectionBaseNames, value: baseName) >= 0)
+        {
+            collType = t;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Emits a parameter default value that is an EMPTY collection literal (<c>{:}</c> / <c>[]</c> /
+    /// <c>{}</c>) on a plainly-owned collection parameter, returning the created collection register.
+    /// Collection literals are normally lowered by ExpressionLoweringPass, but default values are
+    /// never lowered — so we construct an empty collection inline here ($create, no adds). Because the
+    /// parameter is owned, the callee frees it via its own $destroy, so there is no caller-side
+    /// teardown gap. Returns false (caller falls back to EmitExpression) for non-empty literals or
+    /// non-owned params. Non-empty collection defaults remain unsupported (the element expressions are
+    /// never SA-analyzed, so they lack a ResolvedType for inline emission).
+    /// </summary>
+    private bool TryEmitEmptyCollectionDefault(StringBuilder sb, TypeInfo? paramType,
+        Expression? defaultValue, out string value)
+    {
+        value = "";
+        bool isEmptyLiteral = defaultValue is ListLiteralExpression { Elements.Count: 0 }
+            or SetLiteralExpression { Elements.Count: 0 }
+            or DictLiteralExpression { Pairs.Count: 0 };
+        if (!isEmptyLiteral) return false;
+        if (!TryGetOwnedCollectionType(paramType: paramType, out TypeInfo collType)) return false;
+        value = EmitCollectionCreate(sb: sb, resolvedType: collType);
+        return true;
+    }
+
     /// <summary>
     /// Emits a collection literal constructor: Array[T,N] (insertvalue), BitArray[N] (bit packing),
     /// or entity collection (create + add calls).
