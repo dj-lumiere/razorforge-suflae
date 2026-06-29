@@ -1,0 +1,58 @@
+module Tests/Stdlib/CancelAllApi
+
+# v0.2.x structured concurrency, RF-native shape: a `List[Agent[T]]` bound to a name IS the scope —
+# ownership already guarantees no child outlives it (the list's teardown abandons every in-flight
+# Agent). So the structured-concurrency operations are MEMBER routines on that list: `agents.race!()`,
+# `agents.gather!()`, `agents.cancel_all()`. They BORROW the list (no consume, no hidden steal);
+# cleanup stays with the list's own teardown. This fixture exercises abandon-on-scope-exit,
+# `gather!`, and `cancel_all` (+ gather to wait out the cooperative wind-down).
+
+import IO/Console
+
+# Coroutine child: parks `x` ms, then returns x*10.
+suspended routine compute(x: S64) -> S64
+  waitfor(Duration.from_milliseconds(ms: x))
+  return x * 10
+
+# Cooperative worker: spins, polling for cancellation; the moment it is asked to stop it returns -1.
+# The bound is a safety ceiling — in practice it exits at the first poll after cancel_all.
+threaded routine cancellable() -> S64
+  var i = 0_s64
+  while i < 1000000000
+    if cancellation_requested()
+      return -1
+    i = i + 1
+  return i
+
+# Builds a scope (a plain List), adopts a long-running child, and returns WITHOUT gathering. At this
+# routine's return the List is torn down and the un-awaited child is abandoned cleanly — the
+# no-orphans guarantee, from ownership alone, no wrapper needed.
+routine spawn_and_abandon()
+  var agents = List[Agent[S64]]()
+  agents.add_last(value: compute(x: 100000))
+  return
+
+routine start()
+  # 1. Abandon-on-exit: the list drops a never-awaited child cleanly.
+  spawn_and_abandon()
+  show("abandon => ok")
+
+  # 2. gather! over an all-coroutine set: results in input order though the middle one finishes first.
+  var coros = List[Agent[S64]]()
+  coros.add_last(value: compute(x: 30))
+  coros.add_last(value: compute(x: 5))
+  coros.add_last(value: compute(x: 15))
+  danger!
+    var rs = coros.gather!()
+    show(f"coros => {rs[0]} {rs[1]} {rs[2]}")
+
+  # 3. cancel_all!: two worker threads spin until asked to stop. cancel_all! sets each cancel flag,
+  #    then waits out the wind-down — each worker observes the flag and returns -1.
+  var jobs = List[Agent[S64]]()
+  jobs.add_last(value: cancellable())
+  jobs.add_last(value: cancellable())
+  waitfor(Duration.from_milliseconds(ms: 20))
+  danger!
+    var rc = jobs.cancel_all!()
+    show(f"cancel => {rc[0]} {rc[1]}")
+  return

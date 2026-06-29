@@ -917,7 +917,8 @@ public sealed partial class SemanticVerifier
                     {
                         List<TypeInfo>? inferredMethodTypeArgs =
                             InferMethodGenericTypeArguments(genericMethod: method,
-                                arguments: call.Arguments);
+                                arguments: call.Arguments,
+                                receiverType: dispatchType);
                         if (inferredMethodTypeArgs != null)
                         {
                             method = _registry.GetOrCreateRoutineResolution(genericDef: method,

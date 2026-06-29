@@ -915,7 +915,7 @@ public sealed partial class SemanticVerifier
     /// owner-type bindings from a routine's name string when the AST does not
     /// carry the owner as a separate node. Returns null on malformed input.
     /// </summary>
-    private static TypeExpression? ParseTypeExpressionString(string text,
+    internal static TypeExpression? ParseTypeExpressionString(string text,
         SourceLocation location)
     {
         text = text.Trim();

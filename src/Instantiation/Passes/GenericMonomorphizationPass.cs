@@ -234,6 +234,24 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             foreach ((string bodyKey, MonomorphizedBody mb) in ctx.InstantiatedGenericBodies.ToList())
             {
                 if (!_walkedBodyKeys.Add(item: bodyKey) || mb.Ast?.Body == null) continue;
+                // A `throw X` in an emitted body needs X's crash_message live: codegen's EmitThrow
+                // calls it directly with no source CallExpression. RoutineReachabilityPass handles
+                // throws in bodies it walks, but bodies emitted HERE (e.g. a specialized-receiver
+                // member's retrieve!/race! that throws TaskSpawnError) were never walked by it.
+                AstWalker.Walk(root: mb.Ast.Body, visit: node =>
+                {
+                    if (node is not ThrowStatement throwStmt) return;
+                    TypeInfo? errorType = throwStmt.Error.ResolvedType
+                        ?? (throwStmt.Error is CreatorExpression cre ? cre.ConstructedType : null);
+                    if (errorType == null) return;
+                    RoutineInfo? crashMsg =
+                        ctx.Registry.LookupMethod(type: errorType, methodName: "crash_message");
+                    if (crashMsg != null && ctx.LiveRoutineKeys.Count > 0
+                        && ctx.LiveRoutineKeys.Add(item: crashMsg.RegistryKey))
+                    {
+                        changed = true;
+                    }
+                });
                 AstWalker.WalkExpressions(root: mb.Ast.Body, visit: expr =>
                 {
                     CollectConcreteOwnerTypes(t: expr.ResolvedType, sink: newOwners);
@@ -1199,6 +1217,12 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 else
                     ownerAstName = ownerType.Name;
             }
+            // Specialized-receiver member (e.g. List[Agent[V]].gather!): the AST decl is indexed
+            // under its receiver PATTERN "List[Agent[V]]", not "List[T]". Format MeType to match.
+            if (resolvedRoutine.GenericDefinition?.MeType is { } mePat)
+            {
+                ownerAstName = FormatReceiverPatternAstName(type: mePat);
+            }
             astName = $"{ownerAstName}.{resolvedRoutine.Name}";
         }
         else
@@ -1214,10 +1238,66 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         return astName;
     }
 
+    /// <summary>Formats a specialized-receiver pattern (a method's MeType, e.g. List[Agent[V]]) into
+    /// the short AST-name form used by the routine index ("List[Agent[V]]"), stripping module
+    /// prefixes so it matches how the declaration's receiver was written in source.</summary>
+    private string FormatReceiverPatternAstName(TypeInfo type)
+    {
+        if (type is GenericParameterTypeInfo) return type.Name;
+        string baseName = type.Name;
+        int bracket = baseName.IndexOf(value: '[');
+        if (bracket >= 0) baseName = baseName[..bracket];
+        int dot = baseName.LastIndexOf(value: '.');
+        if (dot >= 0) baseName = baseName[(dot + 1)..];
+        if (type.TypeArguments is { Count: > 0 } args)
+        {
+            return baseName + "[" +
+                string.Join(separator: ", ", values: args.Select(selector: FormatReceiverPatternAstName)) + "]";
+        }
+        return baseName;
+    }
+
+    /// <summary>Recursively unifies a MeType pattern (List[Agent[V]]) against the concrete owner
+    /// (List[Agent[S64]]), recording method-generic bindings (V → S64) into <paramref name="into"/>.</summary>
+    private static void UnifyMePatternIntoSubs(TypeInfo pattern, TypeInfo concrete,
+        List<string>? genericParams, Dictionary<string, TypeInfo> into)
+    {
+        if (genericParams is not { Count: > 0 }) return;
+        if (pattern is GenericParameterTypeInfo gp)
+        {
+            if (genericParams.Contains(item: gp.Name) && !into.ContainsKey(key: gp.Name) &&
+                concrete is not GenericParameterTypeInfo)
+            {
+                into[key: gp.Name] = concrete;
+            }
+            return;
+        }
+        if (pattern.TypeArguments is { Count: > 0 } pArgs &&
+            concrete.TypeArguments is { Count: > 0 } cArgs)
+        {
+            for (int i = 0; i < pArgs.Count && i < cArgs.Count; i++)
+            {
+                UnifyMePatternIntoSubs(pattern: pArgs[index: i], concrete: cArgs[index: i],
+                    genericParams: genericParams, into: into);
+            }
+        }
+    }
+
     private Dictionary<string, TypeInfo> BuildResolvedRoutineTypeSubstitutions(
         RoutineInfo resolvedRoutine)
     {
         var typeSubs = new Dictionary<string, TypeInfo>();
+
+        // Specialized-receiver member: bind the receiver-derived method generics (V → S64) by
+        // unifying the generic definition's MeType (List[Agent[V]]) against the concrete owner
+        // (List[Agent[S64]]), so the body rewriter substitutes V even though it carries no
+        // method-type-arg suffix.
+        if (resolvedRoutine.GenericDefinition?.MeType is { } mePattern &&
+            resolvedRoutine.OwnerType is { } resolvedOwnerForMe)
+        {
+            UnifyMePatternIntoSubs(pattern: mePattern, concrete: resolvedOwnerForMe,
+                genericParams: resolvedRoutine.GenericDefinition.GenericParameters, into: typeSubs);
+        }
 
         if (resolvedRoutine.GenericDefinition?.OwnerType is GenericParameterTypeInfo universalOwner &&
             resolvedRoutine.OwnerType != null)

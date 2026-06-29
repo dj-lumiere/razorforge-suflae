@@ -140,6 +140,14 @@ public sealed partial class SemanticVerifier
             // For extension methods (routine Type.method), check the routine's owner type
             case "me":
             {
+                // Specialized-receiver member (e.g. `routine List[Agent[V]].gather!()`): `me` is the
+                // resolved specialized receiver so member access like `me[i]` yields Agent[V], not the
+                // generic def's raw element. (OwnerType stays the generic def for registration.)
+                if (_currentRoutine.MeType != null)
+                {
+                    return _currentRoutine.MeType;
+                }
+
                 // Generic type parameter owners (e.g., T in "routine T.view()") —
                 // return the GenericParameterTypeInfo directly, no registry lookup needed
                 if (_currentRoutine.OwnerType is GenericParameterTypeInfo)

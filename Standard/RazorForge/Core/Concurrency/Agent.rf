@@ -162,30 +162,35 @@ dangerous routine Agent[T].$destroy()
     rf_task_destroy(task: me.agent)
   return
 
-### Races a set of Agents, driving them CONCURRENTLY until the FIRST one finishes, and returns that
-### winner's value. CONSUMES the list — call it `race!(of: steal agents)`: ownership transfers in, so
-### at this routine's return the List tears down. The winner (completed) is freed; every loser is
-### ABANDONED — a parked coroutine runs its cancellation shadow stack (instant), while a still-running
-### worker thread (which cannot be killed) is joined then discarded (so `race!` may pause at return
-### until a losing thread finishes). Mixed coroutine/thread sets are supported: coroutine competitors
-### progress on this thread's scheduler, thread competitors signal the loop the moment they complete.
-### Competitors are read only as temporaries, so nothing aliases an Agent or double-frees.
-### :param of: The Agents to race; ownership is transferred (`steal` at the call site).
+# --- Structured concurrency over a set of Agents -----------------------------------------------
+# A `List[Agent[T]]` bound to a name IS the structured-concurrency scope: ownership already
+# guarantees no child outlives it (the list's teardown abandons every still-running Agent). So the
+# scope operations are MEMBER routines on that list — `race!` / `gather!` / `cancel_all` — read as
+# `agents.gather!()`. They BORROW the list (`me` is by-reference): they never consume or free it, so
+# there is no hidden ownership transfer; cleanup stays with the list's own teardown at scope exit.
+# Each Agent is read only as a temporary (`me[i]`), so nothing aliases an Agent or double-frees.
+
+### Races the Agents, driving them CONCURRENTLY until the FIRST one finishes, and returns that
+### winner's value. BORROWS the list — call it `agents.race!()`. The losers are not freed here; they
+### are ABANDONED when the list itself tears down at the enclosing scope's return (a parked coroutine
+### runs its cancellation shadow stack; a still-running worker thread is joined then discarded). To
+### drop the losers promptly, race inside a routine that returns the winner, so the list tears down
+### right after. Mixed coroutine/thread sets are supported.
 ### :throws: {TaskSpawnError} if the set is empty (there is nothing to race).
 ### :returns: The value produced by the first Agent to finish.
-routine race![T](of: ?List[Agent[T]]) -> ?T
+routine List[Agent[V]].race!() -> ?V
   danger!
-    var n = of.count()
+    var n = me.count()
     if n == 0_u64
       throw TaskSpawnError()
 
     var race = rf_race_begin()
     var i = 0_u64
     while i < n
-      if of[i].is_coro()
-        rf_race_add_coro(race: race, coro: of[i].coro_handle())
+      if me[i].is_coro()
+        rf_race_add_coro(race: race, coro: me[i].coro_handle())
       else
-        rf_race_add_task(race: race, task: of[i].task_handle())
+        rf_race_add_task(race: race, task: me[i].task_handle())
       i = i + 1
 
     # Drive until the first competitor completes; `winner` indexes the List in add order. Both kinds
@@ -193,28 +198,51 @@ routine race![T](of: ?List[Agent[T]]) -> ?T
     var winner = rf_race_wait(race: race)
     rf_race_end(race: race)
     var w = U64(winner)
-    var payload = rf_task_result_payload(task: of[w].task_handle())
-    var value = Hijacked[T](from: payload).extract()
+    var payload = rf_task_result_payload(task: me[w].task_handle())
+    var value = Hijacked[V](from: payload).extract()
     rf_invalidate(ptr: payload)
     return value
 
-### Drives a set of Agents CONCURRENTLY and waits for ALL of them to finish, returning their results
-### in INPUT order. The twin of `race!` (which returns the first finisher); `gather!` returns every
-### finisher. CONSUMES the list — call it `gather!(of: steal agents)`. Each Agent is driven with the
-### same uncolored `retrieve!` logic, so coroutine competitors progress on this thread's scheduler and
-### thread competitors run on their OS threads; total wait is the SLOWEST agent, not the sum (they all
-### run at once — we merely collect in order). FAIL-FAST: if any Agent's routine throws, that throw
-### propagates out of `gather!` and the remaining (un-retrieved) Agents are ABANDONED when the stolen
-### list tears down at return. An empty set yields an empty list (there is nothing to wait for).
-### :param of: The Agents to gather; ownership is transferred (`steal` at the call site).
+### Drives the Agents CONCURRENTLY and waits for ALL of them to finish, returning their results in
+### INPUT order. The twin of `race!` (first finisher); `gather!` returns every finisher. BORROWS the
+### list — call it `agents.gather!()`. Each Agent is driven with the same uncolored `retrieve!` logic,
+### so coroutine children progress on this thread's scheduler and thread children run on their OS
+### threads; total wait is the SLOWEST child, not the sum. FAIL-FAST: if any Agent's routine throws,
+### that throw propagates out and the remaining children are abandoned when the list tears down at
+### scope exit. An empty set yields an empty list.
 ### :returns: The values produced by every Agent, in the order they appear in the list.
-routine gather![T](of: ?List[Agent[T]]) -> ?List[T]
+routine List[Agent[V]].gather!() -> ?List[V]
   danger!
-    var n = of.count()
-    var results = List[T]()
+    var n = me.count()
+    var results = List[V]()
     var i = 0_u64
     while i < n
-      var value = of[i].retrieve!()
+      var value = me[i].retrieve!()
+      results.add_last(value: value)
+      i = i + 1
+    return results
+
+### Requests cooperative cancellation of EVERY Agent in the set, then waits out the wind-down,
+### returning each Agent's final value in input order (a cooperative worker returns its own sentinel
+### when it observes the request). BORROWS the list — call it `agents.cancel_all!()`. It sets a cancel
+### flag on each Agent (in native memory, through the handle), then drives them to completion with the
+### same uncolored logic as `gather!`: a worker thread observes the flag via `cancellation_requested()`
+### (the only way to halt one — a thread cannot be killed) and returns; a coroutine observes it at its
+### next `waitfor` returning early. `!` because the wind-down join can surface a child's throw. To
+### cancel WITHOUT waiting, simply let the list tear down at scope exit (abandon-all).
+### :returns: Each Agent's final value, in input order.
+routine List[Agent[V]].cancel_all!() -> ?List[V]
+  danger!
+    var n = me.count()
+    var i = 0u64
+    while i < n
+      me[i].request_cancel()
+      i = i + 1
+    # Wait out the wind-down (same uncolored drive as gather!), collecting each final value.
+    var results = List[V]()
+    i = 0u64
+    while i < n
+      var value = me[i].retrieve!()
       results.add_last(value: value)
       i = i + 1
     return results

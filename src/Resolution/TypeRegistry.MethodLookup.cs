@@ -393,6 +393,7 @@ public sealed partial class TypeRegistry
         {
             Kind = routine.Kind,
             OwnerType = routine.OwnerType,
+            MeType = routine.MeType,
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
@@ -478,6 +479,36 @@ public sealed partial class TypeRegistry
                 overloadList[index: idx] = updatedRoutine;
             else if (!overloadList.Contains(item: updatedRoutine))
                 overloadList.Add(item: updatedRoutine);
+        }
+    }
+
+    /// <summary>
+    /// Recursively unifies a specialized-receiver pattern (a method's <c>MeType</c>, e.g.
+    /// <c>List[Agent[V]]</c>) against the concrete receiver (<c>List[Agent[S64]]</c>), recording
+    /// each method generic parameter's binding (V → S64) into <paramref name="into"/>. Used so a
+    /// member declared on a specialized generic instantiation resolves to a fully concrete method.
+    /// </summary>
+    private static void UnifyReceiverGenerics(TypeInfo pattern, TypeInfo concrete,
+        List<string>? genericParams, Dictionary<string, TypeInfo> into)
+    {
+        if (genericParams is not { Count: > 0 }) return;
+        if (pattern is GenericParameterTypeInfo gp)
+        {
+            if (genericParams.Contains(item: gp.Name) && !into.ContainsKey(key: gp.Name) &&
+                concrete is not GenericParameterTypeInfo)
+            {
+                into[key: gp.Name] = concrete;
+            }
+            return;
+        }
+        if (pattern.TypeArguments is { Count: > 0 } pArgs &&
+            concrete.TypeArguments is { Count: > 0 } cArgs)
+        {
+            for (int i = 0; i < pArgs.Count && i < cArgs.Count; i++)
+            {
+                UnifyReceiverGenerics(pattern: pArgs[index: i], concrete: cArgs[index: i],
+                    genericParams: genericParams, into: into);
+            }
         }
     }
 
@@ -993,6 +1024,18 @@ public sealed partial class TypeRegistry
                 resolvedOwner.TypeArguments[index: i];
         }
 
+        // Specialized-receiver member (e.g. `routine List[Agent[V]].gather!()`): the method's
+        // generic param V is determined by the receiver PATTERN (MeType = List[Agent[V]]), not by a
+        // call-site `[..]`. Unify MeType against the concrete owner (List[Agent[S64]]) to bind V=S64
+        // and fold it into the owner substitution. This makes the resolved method FULLY CONCRETE
+        // (V dropped from method generics, no `[S64]` mangle suffix), so SA, reachability, GMP and
+        // codegen all key on the same name — `Core.List[Agent[S64]].gather`.
+        if (method.MeType is { } mePattern)
+        {
+            UnifyReceiverGenerics(pattern: mePattern, concrete: resolvedOwner,
+                genericParams: method.GenericParameters, into: substitution2);
+        }
+
         if (substitution2.Count == 0)
         {
             return method;
@@ -1113,6 +1156,10 @@ public sealed partial class TypeRegistry
         {
             Kind = method.Kind,
             OwnerType = resolvedOwner,
+            // Carry the specialized-receiver pattern (e.g. List[Agent[V]]) unchanged: V is a method
+            // generic param, not an owner param, so owner substitution leaves it intact. Receiver-
+            // based method-generic inference at the call site needs this pattern to bind V.
+            MeType = method.MeType,
             Parameters = substitutedParams2,
             ReturnType = substitutedReturn2,
             IsFailable = method.IsFailable,
