@@ -56,6 +56,22 @@ routine Agent[T].coro_handle() -> CPtr
 routine Agent[T].task_handle() -> Address
   return me.agent
 
+### Requests cooperative cancellation of this agent — sets a flag in NATIVE memory (reached through
+### the handle) and returns; it NEVER frees or unwinds (teardown stays in `$destroy`, the sole
+### freer). A coroutine observes the request at its next suspend point (`waitfor` returns early) or
+### via `cancellation_requested()`; a worker thread observes it only by polling
+### `cancellation_requested()` (a thread cannot be killed). Internal plumbing for `Nursery[T].cancel`,
+### read through a member routine so it works on a `List[Agent[T]]` element accessed as a temporary
+### (the flag persists in C even though the RF `Agent` copy does not).
+dangerous routine Agent[T].request_cancel()
+  if me.kind is AgentKind.CORO
+    if not me.coro.is_none()
+      rf_coro_request_cancel(coro: me.coro)
+    return
+  if me.spawned
+    rf_task_request_cancel(task: me.agent)
+  return
+
 ### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve!()` on a
 ### thread-backed Agent. The returned value is a TEMPORARY copy aliasing the same worker — use it
 ### inline (never bind it to a name alongside the original, or both would tear the worker down).
@@ -209,6 +225,11 @@ routine gather![T](of: ?List[Agent[T]]) -> ?List[T]
 ### thing in either context, which is why it is preferable to a raw `sleep`.
 ### :param duration: How long to wait.
 routine waitfor(duration: Duration)
+  # Interruptible: once cancellation has been requested for this agent, waitfor is a no-op so a
+  # cooperative loop (`while ...: waitfor(...); if cancellation_requested(): return`) exits promptly
+  # instead of sleeping out the full duration.
+  if rf_cancel_requested() != 0_u32
+    return
   danger!
     var total = duration.total_nanoseconds()
     if rf_in_coroutine() != 0_u32
@@ -218,3 +239,11 @@ routine waitfor(duration: Duration)
       var nanos = U32(total - secs * 1000000000)
       rf_waitfor_duration(secs: secs, ns: nanos)
   return
+
+### Whether cooperative cancellation has been requested for the currently-running agent — a
+### `suspended` coroutine or a `threaded` worker. An agent body polls this and returns early to stop
+### cooperatively; this is the ONLY way to halt a CPU-bound worker thread (a thread cannot be killed).
+### A coroutine's `waitfor` also honors the request by returning early. Outside any agent it is always
+### false. :returns: true if cancellation was requested for this agent.
+routine cancellation_requested() -> Bool
+  return rf_cancel_requested() != 0_u32

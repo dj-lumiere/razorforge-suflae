@@ -106,6 +106,25 @@ dangerous external("C") routine rf_coro_delete(coro: CPtr)
 dangerous external("C") routine rf_waitfor_duration(secs: S64, ns: U32)
 
 # ============================================================================
+# Cooperative cancellation (structured concurrency). cancel() sets a flag only —
+# it never frees or unwinds; teardown stays in Agent[T].$destroy (single freer).
+# An agent body observes the request via cancellation_requested() and returns
+# early; waitfor returns early when its agent's flag is set.
+# ============================================================================
+
+### Requests cooperative cancellation of a coroutine-backed agent. Sets a flag; the coroutine
+### observes it at its next suspend point (waitfor returns early) or via a poll, and returns on
+### its own. Never frees.
+dangerous external("C") routine rf_coro_request_cancel(coro: CPtr)
+### Requests cooperative cancellation of a thread-backed agent. Sets a flag the worker polls. Never
+### frees — $destroy still joins the worker at teardown.
+dangerous external("C") routine rf_task_request_cancel(task: Address)
+### Whether cancellation has been requested for the agent (coroutine OR worker thread) running on
+### THIS thread. The backing for the `cancellation_requested()` free routine. Reads only
+### thread-local state. :returns: 1 if requested, else 0.
+external("C") routine rf_cancel_requested() -> U32
+
+# ============================================================================
 # Cooperative coroutine scheduler (v0.2.0 async). Drives many coroutines on one
 # OS thread; a parked coroutine waits without blocking the thread.
 # ============================================================================

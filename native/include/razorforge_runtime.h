@@ -145,6 +145,11 @@ void rf_task_complete_timeout(rf_task* task);
 void rf_task_request_cancel(rf_task* task);
 bool rf_task_is_cancel_requested(rf_task* task);
 
+/* Unified cooperative-cancellation poll for the agent (coroutine OR worker thread) running on this
+ * OS thread: returns 1 if cancellation has been requested for it, else 0. Backs the stdlib
+ * cancellation_requested(); reads only thread-local state, never frees or unwinds. */
+uint32_t rf_cancel_requested(void);
+
 void rf_task_mark_result_consumed(rf_task* task);
 bool rf_task_is_result_consumed(rf_task* task);
 
@@ -226,6 +231,13 @@ void rf_coro_abandon(rf_coro* coro);
 
 /* The coroutine running on this OS thread, or NULL outside any coroutine. */
 rf_coro* rf_coro_current(void);
+
+/* Cooperative cancellation request for a coroutine (structured concurrency). request_cancel sets a
+ * flag only — it never frees or unwinds; teardown stays in rf_coro_abandon at $destroy. The
+ * coroutine observes the request at a suspend point (waitfor returns early) or via rf_cancel_requested
+ * in a yield-free loop, and returns on its own. */
+void rf_coro_request_cancel(rf_coro* coro);
+uint32_t rf_coro_is_cancel_requested(rf_coro* coro);
 
 /* ---------------------------------------------------------------------------
  * Single-thread cooperative scheduler (v0.2.0 async). Drives many coroutines on

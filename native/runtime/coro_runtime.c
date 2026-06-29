@@ -65,6 +65,7 @@ struct rf_coro {
     uint64_t wake_ns;              /* monotonic deadline this coroutine is parked until         */
     int in_ready;                  /* 1 while queued in the ready FIFO (dedups external wakes)  */
     int counted_done;              /* 1 once its completion has decremented live (idempotent)   */
+    int cancel_requested;          /* 1 once cooperative cancellation has been requested        */
 #if defined(_WIN32)
     void* fiber;                   /* Windows fiber backing this coroutine (CreateFiberEx)        */
     void* resumer_fiber;           /* fiber to switch back to on yield/finish                     */
@@ -310,6 +311,27 @@ rf_coro_status rf_coro_status_get(rf_coro* coro)
         return RF_CORO_COMPLETED;
     }
     return coro->status;
+}
+
+/* ---- Cooperative cancellation request (structured concurrency) ---------------------------- */
+/* These NEVER free or unwind — they only set/read a flag. Actual teardown stays exclusively in
+ * the host's rf_coro_abandon / rf_task join at $destroy (the single-freer invariant). A coroutine
+ * observes the request at a suspend point (waitfor returns early) or by polling rf_cancel_requested
+ * in a yield-free loop, and returns on its own. */
+void rf_coro_request_cancel(rf_coro* coro)
+{
+    if (coro == NULL) {
+        return;
+    }
+    coro->cancel_requested = 1;
+}
+
+uint32_t rf_coro_is_cancel_requested(rf_coro* coro)
+{
+    if (coro == NULL) {
+        return 0u;
+    }
+    return coro->cancel_requested ? 1u : 0u;
 }
 
 void rf_coro_delete(rf_coro* coro)

@@ -91,6 +91,12 @@ struct rf_task
 
 static rf_U64 rf_next_task_id = 1;
 
+/* The threaded task running on THIS OS worker thread, or NULL on a non-worker thread. Set by the
+ * worker entry around the user routine so a free-standing cancellation_requested() inside a threaded
+ * body can find its own task without threading the handle through every call. Thread-local: each
+ * worker sees only its own task. (Coroutines use g_current_coro in coro_runtime.c, symmetrically.) */
+static _Thread_local rf_task* g_current_task = NULL;
+
 static rf_task_node* rf_task_node_new(rf_task* task)
 {
     rf_task_node* node = (rf_task_node*)calloc(1, sizeof(rf_task_node));
@@ -342,7 +348,9 @@ static void* rf_threaded_task_main(void* raw)
 
     if (start_data->entry != NULL)
     {
+        g_current_task = start_data->task;
         start_data->entry(start_data->task, start_data->userdata);
+        g_current_task = NULL;
     }
 
     free(start_data);
@@ -671,6 +679,23 @@ rf_Bool rf_task_is_cancel_requested(rf_task* task)
 {
     if (task == NULL) return false;
     return task->cancel_requested;
+}
+
+/* Unified cooperative-cancellation poll for the agent body running on THIS thread, regardless of
+ * kind: a scheduler-driven coroutine consults its own coro flag, a worker thread its own task flag.
+ * Returns 1 if cancellation has been requested, else 0. The backing for the stdlib free routine
+ * cancellation_requested(); an agent body calls it in a loop and returns early to stop cooperatively.
+ * Reads only thread-local state — never frees, never unwinds. */
+rf_U32 rf_cancel_requested(void)
+{
+    rf_coro* self = rf_coro_current();
+    if (self != NULL) {
+        return rf_coro_is_cancel_requested(self);
+    }
+    if (g_current_task != NULL) {
+        return g_current_task->cancel_requested ? 1u : 0u;
+    }
+    return 0u;
 }
 
 void rf_task_mark_result_consumed(rf_task* task)
