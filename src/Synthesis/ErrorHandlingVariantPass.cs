@@ -215,6 +215,10 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     {
         return body switch
         {
+            // `pierce` stays a crash even inside a try_/check_ variant — it pierces through the
+            // recovery surface, so it is NOT rewritten into a recoverable return.
+            ThrowStatement { IsFatal: true } => body,
+
             ThrowStatement ts =>
                 new VariantReturnStatement(kind, VariantSiteKind.FromThrow, ts.Error, ts.Location),
 

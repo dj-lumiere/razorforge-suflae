@@ -671,7 +671,12 @@ public partial class Parser
 
         if (Match(type: TokenType.Throw))
         {
-            return ParseThrowStatement();
+            return ParseThrowStatement(isFatal: false);
+        }
+
+        if (Match(type: TokenType.Pierce))
+        {
+            return ParseThrowStatement(isFatal: true);
         }
 
         // Using block (scoped resource management with indented body)

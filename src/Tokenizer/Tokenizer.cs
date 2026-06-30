@@ -180,6 +180,7 @@ public partial class Tokenizer
             [key: "continue"] = TokenType.Continue,
             [key: "return"] = TokenType.Return,
             [key: "throw"] = TokenType.Throw,
+            [key: "pierce"] = TokenType.Pierce,
             [key: "absent"] = TokenType.Absent,
             [key: "becomes"] = TokenType.Becomes,
 

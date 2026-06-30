@@ -186,6 +186,11 @@ public sealed class ErrorHandlingGenerator
     {
         switch (statement)
         {
+            case ThrowStatement { IsFatal: true }:
+                // `pierce` is an uncatchable crash — it does not make the routine recoverably
+                // failable, so it contributes no throw/variant surface.
+                break;
+
             case ThrowStatement ts:
                 analysis.HasThrow = true;
                 if (ts.Error?.ResolvedType is { } thrownType)

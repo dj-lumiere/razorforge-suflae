@@ -445,6 +445,7 @@ _ => GrammarDiagnosticCode.UnexpectedToken
                     case TokenType.For:
                     case TokenType.Return:
                     case TokenType.Throw:
+                    case TokenType.Pierce:
                     case TokenType.Absent:
                         return;
                 }

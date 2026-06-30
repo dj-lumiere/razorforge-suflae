@@ -385,11 +385,14 @@ public sealed partial class SemanticVerifier
             return;
         }
 
-        if (!_currentRoutine.IsFailable)
+        // `pierce` (IsFatal) is a fatal, uncatchable crash: it does NOT require the routine to be
+        // failable and generates no variants. Only the recoverable `throw` needs the `!` contract.
+        if (!throwStmt.IsFatal && !_currentRoutine.IsFailable)
         {
             ReportError(code: SemanticDiagnosticCode.ThrowOutsideFailableFunction,
                 message: "Throw statement in a non-failable routine: add '!' suffix to signal " +
-                         "callers and enable safe variant generation.",
+                         "callers and enable safe variant generation, or use `pierce` for an " +
+                         "uncatchable fatal crash.",
                 location: throwStmt.Location);
         }
 
@@ -412,8 +415,9 @@ public sealed partial class SemanticVerifier
                 location: throwStmt.Error.Location);
         }
 
-        // Mark routine as having throw statements (for variant generation)
-        if (_currentRoutine.IsFailable)
+        // Mark routine as having throw statements (for variant generation). A `pierce` never triggers
+        // variant generation — it is a crash, not a recoverable failure.
+        if (!throwStmt.IsFatal && _currentRoutine.IsFailable)
             _currentRoutine.HasThrow = true;
     }
 

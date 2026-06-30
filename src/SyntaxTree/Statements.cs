@@ -209,9 +209,17 @@ public record BecomesStatement(Expression Value, SourceLocation Location)
 /// </code>
 /// Builder generates safe variants: try_divide() -> s32?, check_divide() -> Result[s32]
 /// </remarks>
-public record ThrowStatement(Expression Error, SourceLocation Location)
+public record ThrowStatement(Expression Error, SourceLocation Location, bool IsFatal = false)
     : Statement(Location: Location)
 {
+    /// <summary>
+    /// When true this is a `pierce` (fatal, uncatchable crash): it does NOT make the routine failable,
+    /// is NOT rewritten into a recoverable return in try_/check_/lookup_ variants, and pierces through
+    /// every handler to abort. When false this is a recoverable `throw`. Codegen is identical (both
+    /// lower to rf_crash) — the difference is purely in the error-handling/variant machinery.
+    /// </summary>
+    public bool IsFatal { get; init; } = IsFatal;
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

@@ -883,16 +883,18 @@ public partial class Parser
     /// Used with Crashable types for error handling.
     /// </summary>
     /// <returns>A <see cref="ThrowStatement"/> AST node.</returns>
-    private ThrowStatement ParseThrowStatement()
+    private ThrowStatement ParseThrowStatement(bool isFatal)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // throw requires an error expression (Crashable type)
+        // throw/pierce both require an error expression (a crashable-kind type). `pierce` (isFatal)
+        // marks a fatal, uncatchable crash — no `!`, no try_/check_ variants; `throw` is a recoverable
+        // failure that propagates.
         Expression error = ParseExpression();
 
         ConsumeStatementTerminator();
 
-        return new ThrowStatement(Error: error, Location: location);
+        return new ThrowStatement(Error: error, Location: location, IsFatal: isFatal);
     }
 
     /// <summary>
