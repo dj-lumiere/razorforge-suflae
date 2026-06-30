@@ -30,13 +30,11 @@ routine start()
   var mixed = List[Agent[S64]]()
   mixed.add_last(value: quick(x: 41))
   mixed.add_last(value: slow(x: 10))
-  danger!
-    show(f"mixed => {mixed.race!()}")
+  show(f"mixed => {mixed.race!()}")
 
   # All-coroutine set: the shortest nap wins (returns its own label, 7).
   var coros = List[Agent[S64]]()
   coros.add_last(value: nap(label: 3, ms: 40))
   coros.add_last(value: nap(label: 7, ms: 5))
-  danger!
-    show(f"coros => {coros.race!()}")
+  show(f"coros => {coros.race!()}")
   return

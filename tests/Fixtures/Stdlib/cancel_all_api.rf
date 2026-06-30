@@ -42,9 +42,8 @@ routine start()
   coros.add_last(value: compute(x: 30))
   coros.add_last(value: compute(x: 5))
   coros.add_last(value: compute(x: 15))
-  danger!
-    var rs = coros.gather!()
-    show(f"coros => {rs[0]} {rs[1]} {rs[2]}")
+  var rs = coros.gather!()
+  show(f"coros => {rs[0]} {rs[1]} {rs[2]}")
 
   # 3. cancel_all!: two worker threads spin until asked to stop. cancel_all! sets each cancel flag,
   #    then waits out the wind-down — each worker observes the flag and returns -1.
@@ -52,7 +51,6 @@ routine start()
   jobs.add_last(value: cancellable())
   jobs.add_last(value: cancellable())
   waitfor(Duration.from_milliseconds(ms: 20))
-  danger!
-    var rc = jobs.cancel_all!()
-    show(f"cancel => {rc[0]} {rc[1]}")
+  var rc = jobs.cancel_all!()
+  show(f"cancel => {rc[0]} {rc[1]}")
   return
