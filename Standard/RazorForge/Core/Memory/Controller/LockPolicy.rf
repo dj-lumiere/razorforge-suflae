@@ -28,6 +28,15 @@ protocol LockPolicy
   ### Removes the claimer previously admitted with `add_claimer`.
   routine Me.remove_claimer()
 
+  ### Tries to admit an inspector WITHOUT blocking: returns `true` if the shared read hold was taken
+  ### immediately, `false` if a writer holds it right now. The fallible counterpart to `add_inspector`,
+  ### driving `Shared.try_inspect`. `ReadOnly` always succeeds (immutable data).
+  routine Me.try_add_inspector() -> Bool
+
+  ### Tries to admit the claimer WITHOUT blocking: returns `true` if the exclusive hold was taken
+  ### immediately, `false` if any reader or writer holds it right now. Drives `Shared.try_claim`.
+  routine Me.try_add_claimer() -> Bool
+
 ### Aborts the program for a re-entrant exclusive lock acquisition (the calling thread already
 ### holds the lock — the spin would never end). Called by the lock policies when owner-thread
 ### tracking detects self-deadlock; infallible-acquire callers stay plain (`@crash_only` does not

@@ -44,6 +44,16 @@ routine Exclusive.release()
 routine Exclusive.is_locked() -> Bool
   return me.locked.load() != 0_u8
 
+### Tries to acquire the lock with a SINGLE non-blocking attempt: returns `true` if the flag flipped
+### free→held (now owned by this thread), `false` if it was already held. No spin, so no re-entrant
+### self-deadlock to detect — a re-entrant try simply returns `false`.
+### :returns: `true` if the lock was acquired.
+routine Exclusive.try_acquire() -> Bool
+  if me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
+    me.owner.store(desired: rf_current_thread_id())
+    return true
+  return false
+
 # ============================================================================
 # Uniform LockPolicy interface — there is one lock, so inspector == claimer.
 # ============================================================================
@@ -67,3 +77,13 @@ routine Exclusive.add_claimer()
 routine Exclusive.remove_claimer()
   me.release()
   return
+
+### Non-blocking inspector admission — there is one lock, so it is just `try_acquire`.
+### :returns: `true` if admitted.
+routine Exclusive.try_add_inspector() -> Bool
+  return me.try_acquire()
+
+### Non-blocking claimer admission — one lock, so just `try_acquire`.
+### :returns: `true` if admitted.
+routine Exclusive.try_add_claimer() -> Bool
+  return me.try_acquire()

@@ -108,6 +108,16 @@ routine ShareController[T, P].remove_claimer()
   me.lock.remove_claimer()
   return
 
+### Non-blocking inspector admission through the lock (drives `Shared.try_inspect`).
+### :returns: `true` if a read hold was taken without waiting.
+routine ShareController[T, P].try_add_inspector() -> Bool
+  return me.lock.try_add_inspector()
+
+### Non-blocking claimer admission through the lock (drives `Shared.try_claim`).
+### :returns: `true` if the exclusive hold was taken without waiting.
+routine ShareController[T, P].try_add_claimer() -> Bool
+  return me.lock.try_add_claimer()
+
 ### Destroys the managed entity. Call only when the strong count reaches zero.
 ### Runs the entity's own `$destroy` (the sole free under unified teardown); does not also
 ### `invalidate`, which would double-free a self-freeing entity.
