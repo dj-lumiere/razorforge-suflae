@@ -1,0 +1,23 @@
+module Tests/Stdlib/ChannelTryFeedApi
+
+# v0.3.0 channels — graceful (non-throwing) send. Because `feed!` is failable, the builder auto-
+# generates `try_feed` (returns Bool: true on success, false instead of throwing ChannelClosedError).
+# This is the channel half of the fallible send/receive surface (the receive half is `try_next` on the
+# drain iterator, used by for-loops). No hand-written variant needed.
+
+import IO/Console
+
+routine start()
+  var (feeder, hop) = make_hopper[S64](capacity: 4)
+  danger!
+    discard feeder.try_feed(item: 7)         # ok -> true
+    discard feeder.try_feed(item: 8)
+  feeder.close()
+  var after_close = feeder.try_feed(item: 9)  # closed -> false, no throw
+  show(f"after_close={after_close}")
+
+  var total = 0_s64
+  for v in hop
+    total = total + v
+  show(f"drained={total}")                    # 7 + 8 = 15 (the post-close feed was rejected)
+  return
