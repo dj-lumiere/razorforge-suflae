@@ -297,6 +297,74 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Reorders spawn-call arguments into the routine's parameter-declaration order. Named
+    /// arguments may be written in any order; the argpack marshalling below binds args to
+    /// parameters positionally, so without this a reordered named spawn call would pack values into
+    /// the wrong parameter slots. Only applied when every parameter is provided (spawns do not
+    /// materialize defaults); otherwise the original list is returned unchanged.
+    /// </summary>
+    private static List<Expression> ReorderCallArgsToParamOrder(List<Expression> arguments,
+        RoutineInfo routine)
+    {
+        int paramCount = routine.Parameters.Count;
+        if (arguments.Count != paramCount)
+            return arguments;
+
+        bool anyNamed = false;
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            if (arguments[index: i] is NamedArgumentExpression)
+            {
+                anyNamed = true;
+                break;
+            }
+        }
+
+        if (!anyNamed)
+            return arguments;
+
+        var ordered = new Expression?[paramCount];
+        var leftovers = new List<Expression>();
+        foreach (Expression a in arguments)
+        {
+            int p = -1;
+            if (a is NamedArgumentExpression na)
+            {
+                for (int k = 0; k < paramCount; k++)
+                {
+                    if (routine.Parameters[index: k].Name == na.Name)
+                    {
+                        p = k;
+                        break;
+                    }
+                }
+            }
+
+            if (p >= 0 && ordered[p] == null)
+                ordered[p] = a;
+            else
+                leftovers.Add(item: a);
+        }
+
+        // Fill any slots not claimed by name with the remaining (positional) args, in order.
+        int next = 0;
+        var result = new List<Expression>(capacity: paramCount);
+        foreach (Expression? slot in ordered)
+        {
+            if (slot != null)
+            {
+                result.Add(item: slot);
+            }
+            else if (next < leftovers.Count)
+            {
+                result.Add(item: leftovers[index: next++]);
+            }
+        }
+
+        return result.Count == paramCount ? result : arguments;
+    }
+
+    /// <summary>
     /// Lowers a <c>threaded routine foo(args)</c> call: boxes the arguments, creates an OS-thread
     /// task, and spawns it on the generated entry thunk. The expression value is the
     /// <c>rf_task*</c> handle (<c>Task[T]</c> lowers to <c>ptr</c>).
@@ -304,6 +372,7 @@ public partial class LlvmCodeGenerator
     private string EmitThreadedSpawn(StringBuilder sb, RoutineInfo routine,
         List<Expression> arguments)
     {
+        arguments = ReorderCallArgsToParamOrder(arguments: arguments, routine: routine);
         EnsureTaskRuntimeDeclares();
         GenerateRoutineDeclaration(routine: routine);
         string entryThunk = EnsureThreadEntryThunk(routine: routine);
@@ -372,23 +441,179 @@ public partial class LlvmCodeGenerator
         string spawned = NextTemp();
         EmitLine(sb: sb, line: $"  {spawned} = and i1 {createOk}, {spawnOk}");
 
-        // Build the Task[T] record value: { task_handle, deadline (zero), has_deadline (false),
-        // spawned }. deadline/has_deadline stay at their zeroinitializer defaults.
-        TypeInfo taskType = _registry.GetOrCreateResolution(
-            genericDef: _registry.LookupType(name: "Task")!,
+        // Build the Agent[T] record value (kind THREAD): { kind=1, coro=null, agent=task_handle,
+        // deadline (zero), has_deadline (false), spawned }. Fields: kind@0 (AgentKind choice -> i32),
+        // coro@1 (CPtr, stays null), agent@2 (Address -> i64), deadline@3, has_deadline@4, spawned@5.
+        TypeInfo agentType = _registry.GetOrCreateResolution(
+            genericDef: _registry.LookupType(name: "Agent")!,
             typeArguments: [routine.ReturnType!]);
-        string recLlvm = GetLlvmType(type: taskType);
-        // Address lowers to i64, so the handle pointer must be ptrtoint'd into field 0.
+        string recLlvm = GetLlvmType(type: agentType);
+        // kind = THREAD (1).
+        string rKind = NextTemp();
+        EmitLine(sb: sb, line: $"  {rKind} = insertvalue {recLlvm} zeroinitializer, i32 1, 0");
+        // agent (field 2) is an Address (i64) — ptrtoint the task handle in.
         string taskInt = NextTemp();
         EmitLine(sb: sb, line: $"  {taskInt} = ptrtoint ptr {task} to i64");
-        string r0 = NextTemp();
-        EmitLine(sb: sb, line: $"  {r0} = insertvalue {recLlvm} zeroinitializer, i64 {taskInt}, 0");
-        // `spawned` (field 3) is a Bool, stored as i8 — zext the i1.
+        string rAgent = NextTemp();
+        EmitLine(sb: sb, line: $"  {rAgent} = insertvalue {recLlvm} {rKind}, i64 {taskInt}, 2");
+        // `spawned` (field 5) is a Bool, stored as i8 — zext the i1.
         string spawnedByte = NextTemp();
         EmitLine(sb: sb, line: $"  {spawnedByte} = zext i1 {spawned} to i8");
         string r1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i8 {spawnedByte}, 3");
+        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {rAgent}, i8 {spawnedByte}, 5");
         return r1;
+    }
+
+    /// <summary>
+    /// Spawns a `suspended routine` as a stackful coroutine and returns a `Coroutine[T]` handle
+    /// { coro: CPtr, result: Address }. Mirrors <see cref="EmitThreadedSpawn"/> but the execution
+    /// mechanism is a coroutine (rf_coro_create) instead of an OS thread; the result is still boxed
+    /// into a task block (reusing the Task result machinery), which the coroutine's entry thunk
+    /// completes. The coroutine does NOT start here — `Coroutine[T].retrieve!()` drives it.
+    /// </summary>
+    private string EmitSuspendedSpawn(StringBuilder sb, RoutineInfo routine,
+        List<Expression> arguments)
+    {
+        arguments = ReorderCallArgsToParamOrder(arguments: arguments, routine: routine);
+        EnsureTaskRuntimeDeclares();
+        _rfRoutineDeclarations[key: "rf_coro_create"] = "declare ptr @rf_coro_create(ptr, ptr, i64)";
+        GenerateRoutineDeclaration(routine: routine);
+        string thunk = EnsureCoroEntryThunk(routine: routine);
+
+        int n = Math.Min(val1: arguments.Count, val2: routine.Parameters.Count);
+        var values = new List<string>();
+        var types = new List<string>();
+        for (int i = 0; i < n; i++)
+        {
+            string v = EmitExpression(sb: sb, expr: arguments[index: i]);
+            TypeInfo actual = GetExpressionType(expr: arguments[index: i])
+                              ?? routine.Parameters[index: i].Type!;
+            (string cv, string _) = CoerceCallArgumentToParameter(sb: sb, argValue: v,
+                actualType: actual, parameterType: routine.Parameters[index: i].Type, callee: routine);
+            values.Add(item: cv);
+            types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
+        }
+
+        string argpack = "ptr null";
+        if (values.Count > 0)
+        {
+            string packType = EnsureArgpackType(routine: routine);
+            string szp = NextTemp();
+            EmitLine(sb: sb, line: $"  {szp} = getelementptr {packType}, ptr null, i32 1");
+            string sz = NextTemp();
+            EmitLine(sb: sb, line: $"  {sz} = ptrtoint ptr {szp} to i64");
+            string pack = NextTemp();
+            EmitLine(sb: sb, line: $"  {pack} = call ptr @rf_allocate_dynamic(i64 {sz})");
+            for (int i = 0; i < values.Count; i++)
+            {
+                string fp = NextTemp();
+                EmitLine(sb: sb, line: $"  {fp} = getelementptr {packType}, ptr {pack}, i32 0, i32 {i}");
+                EmitLine(sb: sb, line: $"  store {types[index: i]} {values[index: i]}, ptr {fp}");
+            }
+            argpack = $"ptr {pack}";
+        }
+
+        // Result holder: a suspended-kind task block (0). The coro thunk completes it.
+        string task = NextTemp();
+        EmitLine(sb: sb, line: $"  {task} = call ptr @rf_task_create(i32 0)");
+
+        // userdata = { ptr task, ptr argpack } handed to the coroutine entry.
+        string udszp = NextTemp();
+        EmitLine(sb: sb, line: $"  {udszp} = getelementptr {{ ptr, ptr }}, ptr null, i32 1");
+        string udsz = NextTemp();
+        EmitLine(sb: sb, line: $"  {udsz} = ptrtoint ptr {udszp} to i64");
+        string ud = NextTemp();
+        EmitLine(sb: sb, line: $"  {ud} = call ptr @rf_allocate_dynamic(i64 {udsz})");
+        EmitLine(sb: sb, line: $"  store ptr {task}, ptr {ud}");
+        string udf1 = NextTemp();
+        EmitLine(sb: sb, line: $"  {udf1} = getelementptr {{ ptr, ptr }}, ptr {ud}, i32 0, i32 1");
+        EmitLine(sb: sb, line: $"  store {argpack}, ptr {udf1}");
+
+        string coro = NextTemp();
+        EmitLine(sb: sb, line: $"  {coro} = call ptr @rf_coro_create(ptr {thunk}, ptr {ud}, i64 0)");
+
+        // Spawn it onto this thread's implicit scheduler immediately, so siblings spawned earlier
+        // run concurrently while one handle is retrieved. retrieve!() then drives the loop until
+        // just this coroutine finishes (run-until-this-handle).
+        _rfRoutineDeclarations[key: "rf_sched_spawn_default"] = "declare void @rf_sched_spawn_default(ptr)";
+        EmitLine(sb: sb, line: $"  call void @rf_sched_spawn_default(ptr {coro})");
+
+        // Build Agent[T] (kind CORO): { kind=0, coro: CPtr@1 (ptr), agent: Address@2 (i64) }. kind
+        // stays 0 (CORO) from the zeroinitializer; coro and the result block fill fields 1 and 2.
+        TypeInfo agentType = _registry.GetOrCreateResolution(
+            genericDef: _registry.LookupType(name: "Agent")!,
+            typeArguments: [routine.ReturnType!]);
+        string recLlvm = GetLlvmType(type: agentType);
+        string rCoro = NextTemp();
+        EmitLine(sb: sb, line: $"  {rCoro} = insertvalue {recLlvm} zeroinitializer, ptr {coro}, 1");
+        string taskInt = NextTemp();
+        EmitLine(sb: sb, line: $"  {taskInt} = ptrtoint ptr {task} to i64");
+        string r1 = NextTemp();
+        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {rCoro}, i64 {taskInt}, 2");
+        return r1;
+    }
+
+    /// <summary>
+    /// Emits the coroutine entry thunk <c>@&lt;routine&gt;$coro_entry(ptr %ud)</c> matching the C
+    /// <c>rf_context_entry_fn</c> signature. <c>ud = { ptr task, ptr argpack }</c>: it unpacks the
+    /// args, calls the real routine, heap-boxes the result, completes the task, and frees ud/argpack.
+    /// </summary>
+    private string EnsureCoroEntryThunk(RoutineInfo routine)
+    {
+        string mangled = MangleRoutineName(routine: routine);
+        string realRef = $"@{mangled}";
+        string raw = mangled.StartsWith(value: '"') ? mangled[1..^1] : mangled;
+        string thunkRaw = $"{raw}$coro_entry";
+        string thunkSym = $"@{Q(name: thunkRaw)}";
+        if (!_emittedRoutineValueThunks.Add(item: thunkRaw))
+            return thunkSym;
+
+        string retType = routine.ReturnType != null ? GetLlvmType(type: routine.ReturnType) : "void";
+        StringBuilder b = _auxRoutineDefinitions;
+        b.Append(value: $"define void {thunkSym}(ptr %ud) {{\n");
+        b.Append(value: "entry:\n");
+        b.Append(value: "  %task = load ptr, ptr %ud\n");
+        b.Append(value: "  %apf = getelementptr { ptr, ptr }, ptr %ud, i32 0, i32 1\n");
+        b.Append(value: "  %argpack = load ptr, ptr %apf\n");
+
+        var callArgs = new List<string>();
+        if (routine.Parameters.Count > 0)
+        {
+            string packType = EnsureArgpackType(routine: routine);
+            for (int i = 0; i < routine.Parameters.Count; i++)
+            {
+                string pt = GetParameterLlvmType(type: routine.Parameters[index: i].Type);
+                b.Append(value: $"  %fp{i} = getelementptr {packType}, ptr %argpack, i32 0, i32 {i}\n");
+                b.Append(value: $"  %a{i} = load {pt}, ptr %fp{i}\n");
+                callArgs.Add(item: $"{pt} %a{i}");
+            }
+        }
+
+        string argList = string.Join(separator: ", ", values: callArgs);
+        if (retType == "void")
+        {
+            b.Append(value: $"  call void {realRef}({argList})\n");
+            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr null)\n");
+        }
+        else
+        {
+            b.Append(value: $"  %r = call {retType} {realRef}({argList})\n");
+            b.Append(value: $"  %bsz.p = getelementptr {retType}, ptr null, i32 1\n");
+            b.Append(value: "  %bsz = ptrtoint ptr %bsz.p to i64\n");
+            b.Append(value: "  %box = call ptr @rf_allocate_dynamic(i64 %bsz)\n");
+            b.Append(value: $"  store {retType} %r, ptr %box\n");
+            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr %box)\n");
+        }
+
+        if (routine.Parameters.Count > 0)
+        {
+            b.Append(value: "  %apint = ptrtoint ptr %argpack to i64\n");
+            b.Append(value: "  call void @rf_invalidate(i64 %apint)\n");
+        }
+        b.Append(value: "  %udint = ptrtoint ptr %ud to i64\n");
+        b.Append(value: "  call void @rf_invalidate(i64 %udint)\n");
+        b.Append(value: "  ret void\n}\n");
+        return thunkSym;
     }
 
     /// <summary>
@@ -517,6 +742,20 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitCall(StringBuilder sb, CallExpression call)
     {
+        // v0.2.0 5b-2: cancellation markers inserted by CancellationInstrumentationPass. Recognised
+        // before any normal resolution and lowered to rf_coro_cf_push / rf_coro_cf_pop. They are
+        // void; the empty result is discarded by the enclosing ExpressionStatement.
+        if (call.Callee is IdentifierExpression
+            { Name: Compiler.Postprocessing.Passes.CancellationInstrumentationPass.PushMarker })
+        {
+            return EmitCancelPush(sb: sb, call: call);
+        }
+        if (call.Callee is IdentifierExpression
+            { Name: Compiler.Postprocessing.Passes.CancellationInstrumentationPass.PopMarker })
+        {
+            return EmitCancelPop(sb: sb, call: call);
+        }
+
         EmitTraceLocUpdate(sb: sb, location: call.Location);
 
         return call.Callee switch
@@ -539,6 +778,69 @@ public partial class LlvmCodeGenerator
             _ => throw new NotImplementedException(
                 message: $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
         };
+    }
+
+    /// <summary>
+    /// Lowers a <c>__rf_cf_push(local)</c> marker: allocate a cancellation node for the owned local
+    /// and push it onto the coroutine's shadow stack with the local's value and its <c>$destroy</c>.
+    /// The value pushed is exactly the <c>me</c> the inline <c>$destroy</c> would receive: the loaded
+    /// pointer for an entity, the alloca address for a value-type record. Returns "" (void).
+    /// </summary>
+    private string EmitCancelPush(StringBuilder sb, CallExpression call)
+    {
+        string local = ((IdentifierExpression)call.Arguments[index: 0]).Name;
+        if (!_localVarLlvmNames.TryGetValue(key: local, value: out string? unique)
+            || !_localVariables.TryGetValue(key: local, value: out TypeInfo? type))
+        {
+            return ""; // not a tracked local (e.g. a param) — leave untracked (first-cut limitation)
+        }
+
+        RoutineInfo? destroy = _registry.LookupMethod(type: type, methodName: "$destroy");
+        if (destroy == null)
+        {
+            return "";
+        }
+        GenerateRoutineDeclaration(routine: destroy);
+        string mangled = MangleRoutineName(routine: destroy);
+
+        string valuePtr;
+        if (type is EntityTypeInfo)
+        {
+            valuePtr = NextTemp();
+            EmitLine(sb: sb, line: $"  {valuePtr} = load ptr, ptr %{unique}.addr");
+        }
+        else
+        {
+            valuePtr = $"%{unique}.addr";
+        }
+
+        string node = $"%{unique}.cfnode";
+        EmitEntryAlloca(llvmName: node, llvmType: "{ ptr, ptr, ptr }");
+        // Register the declare alongside the call (idempotent) — EnsureTaskRuntimeDeclares only runs
+        // for threaded/waitfor IR, but cancellation markers fire for any may-suspend routine.
+        _rfRoutineDeclarations[key: "rf_coro_cf_push"] =
+            "declare void @rf_coro_cf_push(ptr, ptr, ptr)";
+        EmitLine(sb: sb,
+            line: $"  call void @rf_coro_cf_push(ptr {node}, ptr {valuePtr}, ptr @{mangled})");
+        _cfNodes[key: local] = node;
+        return "";
+    }
+
+    /// <summary>
+    /// Lowers a <c>__rf_cf_pop(local)</c> marker: unlink the local's cancellation node before its
+    /// inline <c>$destroy</c> runs (so abandon never double-frees it). No-op if the local was never
+    /// pushed (e.g. a param). Returns "" (void).
+    /// </summary>
+    private string EmitCancelPop(StringBuilder sb, CallExpression call)
+    {
+        string local = ((IdentifierExpression)call.Arguments[index: 0]).Name;
+        if (!_cfNodes.TryGetValue(key: local, value: out string? node))
+        {
+            return "";
+        }
+        _rfRoutineDeclarations[key: "rf_coro_cf_pop"] = "declare void @rf_coro_cf_pop(ptr)";
+        EmitLine(sb: sb, line: $"  call void @rf_coro_cf_pop(ptr {node})");
+        return "";
     }
 
     /// <summary>

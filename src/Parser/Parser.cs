@@ -430,6 +430,11 @@ public partial class Parser
         {
             asyncStatus = AsyncStatus.Threaded;
         }
+        // Concurrency modifier: suspended routine foo() — a stackful coroutine (v0.2 async).
+        else if (_language == Language.RazorForge && Match(type: TokenType.Suspended))
+        {
+            asyncStatus = AsyncStatus.Suspended;
+        }
 
         // Routine (function) declaration
         if (Match(type: TokenType.Routine))

@@ -505,6 +505,9 @@ public sealed partial class StdlibLoader
         string routineName = routine.Name;
         TypeInfo? ownerType = null;
         string methodName = routineName;
+        // Receiver text for a GENERIC specialization (e.g. "List[Agent[V]]"); resolved into MeType
+        // once the generic context is built, so `me` is typed as the specialized receiver.
+        string? meTypeName = null;
 
         int dotIndex = routineName.IndexOf(value: '.');
         if (dotIndex > 0)
@@ -541,8 +544,28 @@ public sealed partial class StdlibLoader
                 }
                 else
                 {
-                    // Concrete specialization: List[Byte] -> owner is List[Byte]
-                    ownerType = registry.LookupType(name: typeName) ?? baseDef;
+                    // Specialized receiver. Distinguish a GENERIC specialization (List[Agent[V]] —
+                    // brackets reference a routine generic param) from a fully-CONCRETE one (List[Byte]).
+                    bool hasGenericParamInReceiver = routine.GenericParameters?.Any(predicate: gp =>
+                        registry.LookupType(name: gp) is null &&
+                        registry.LookupType(name: $"{moduleName}.{gp}") is null &&
+                        System.Text.RegularExpressions.Regex.IsMatch(
+                            input: bracketContent,
+                            pattern: $@"\b{System.Text.RegularExpressions.Regex.Escape(str: gp)}\b")) ?? false;
+                    if (hasGenericParamInReceiver)
+                    {
+                        // GENERIC specialization (e.g. List[Agent[V]]): register under the generic def
+                        // (so call-site lookup on List[Agent[S64]] finds it), and remember the receiver
+                        // text so `me` is typed as the specialized receiver (MeType) below — making
+                        // member access like `me[i]` yield Agent[V] instead of List's raw element.
+                        ownerType = baseDef;
+                        meTypeName = methodName is "$create" or "$create!" ? null : typeName;
+                    }
+                    else
+                    {
+                        // Concrete specialization (List[Byte]) -> owner is the concrete resolution.
+                        ownerType = registry.LookupType(name: typeName) ?? baseDef;
+                    }
                 }
             }
             else
@@ -629,10 +652,30 @@ public sealed partial class StdlibLoader
                 moduleName: moduleName)
             : null;
 
+        // Resolve the specialized receiver (e.g. List[Agent[V]]) with the generic context now in
+        // scope, so `me` is typed as the specialized receiver. OwnerType stays the generic def.
+        TypeInfo? meType = null;
+        if (meTypeName != null)
+        {
+            TypeExpression? recvExpr =
+                Verification.SemanticVerifier.ParseTypeExpressionString(
+                    text: meTypeName, location: routine.Location);
+            if (recvExpr != null)
+            {
+                TypeInfo? resolvedRecv = ResolveSimpleType(registry: registry,
+                    typeExpr: recvExpr, genericParams: ctx, moduleName: moduleName);
+                if (resolvedRecv != null && resolvedRecv is not ErrorTypeInfo)
+                {
+                    meType = resolvedRecv;
+                }
+            }
+        }
+
         // Use just the method name (not "S32.$add", just "$add")
         var routineInfo = new RoutineInfo(name: methodName)
         {
             OwnerType = ownerType,
+            MeType = meType,
             Parameters = parameters,
             ReturnType = returnType,
             Module = moduleName,

@@ -99,7 +99,74 @@ public sealed class StdlibApiTests
         throw new Xunit.Sdk.XunitException(sb.ToString());
     }
 
+    /// <summary>
+    /// Builds and runs a fixture, returning its stdout. Retries a SPURIOUS external kill — a
+    /// `buildandrun` process terminated mid-compile by the environment (SIGTERM/SIGKILL under
+    /// transient memory/scheduling pressure during a long sequential run), recognisable by a
+    /// non-zero exit with NO stdout AND NO stderr (no compiler diagnostic, no program output).
+    /// Genuine failures are NOT retried: a real compile error prints diagnostics to stderr and a
+    /// real runtime crash prints output / a trace, so they carry output and are deterministic — the
+    /// retry gate (empty output) never matches them, so a broken fixture still fails on attempt 1.
+    /// </summary>
+    private const int MaxRunAttempts = 2;
+
     private static string RunFixture(string rfPath)
+    {
+        string fixture = Path.GetFileName(rfPath);
+        FixtureRun last = default;
+
+        for (int attempt = 1; attempt <= MaxRunAttempts; attempt++)
+        {
+            last = RunFixtureOnce(rfPath);
+
+            if (last.TimedOut)
+            {
+                // A hang is a real defect, never an environmental blip — surface it immediately.
+                throw new Xunit.Sdk.XunitException(
+                    $"buildandrun timed out after {last.TimeoutMs / 1000}s for {fixture}.\n" +
+                    $"--- stdout (partial) ---\n{last.Stdout}\n--- stderr (partial) ---\n{last.Stderr}");
+            }
+
+            if (last.ExitCode == 0)
+            {
+                return last.Stdout;
+            }
+
+            bool spuriousKill = last.Stdout.Length == 0 && last.Stderr.Length == 0;
+            if (!spuriousKill)
+            {
+                // Real failure (compile diagnostic or runtime output present) — fail fast.
+                throw new Xunit.Sdk.XunitException(
+                    $"buildandrun failed for {fixture} (exit={last.ExitCode}).\n" +
+                    $"--- stdout ---\n{last.Stdout}\n--- stderr ---\n{last.Stderr}");
+            }
+
+            // Silent external kill: log and retry — but only after a SUBSTANTIAL backoff. The kill
+            // came from a transient memory spike; the killed process's pages are already reclaimed,
+            // and waiting several seconds lets the spike fully clear before we re-spawn a heavy
+            // compile. (A short backoff re-spawns INTO the live pressure and can tip the test host
+            // over too — so the wait is load-relieving, not cosmetic.)
+            Console.Error.WriteLine(
+                $"[StdlibApiTests] {fixture}: spurious kill (exit={last.ExitCode}, no output) " +
+                $"on attempt {attempt}/{MaxRunAttempts}; backing off then retrying.");
+            if (attempt < MaxRunAttempts)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                System.Threading.Thread.Sleep(4000);
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException(
+            $"buildandrun for {fixture} was killed with no output (exit={last.ExitCode}) on all " +
+            $"{MaxRunAttempts} attempts — likely sustained environmental resource pressure, not a " +
+            $"fixture failure (it produced no compiler diagnostic and no program output).");
+    }
+
+    private readonly record struct FixtureRun(
+        int ExitCode, string Stdout, string Stderr, bool TimedOut, int TimeoutMs);
+
+    private static FixtureRun RunFixtureOnce(string rfPath)
     {
         // Invoke the already-built compiler assembly directly. Using
         // `dotnet run --project …` here would re-evaluate the project file on
@@ -114,6 +181,15 @@ public sealed class StdlibApiTests
             UseShellExecute = false,
             WorkingDirectory = RepoRoot
         };
+        // Each buildandrun child compiles the entire (~180-file) stdlib and runs opt -O2/-O3 on a
+        // large module — the heaviest memory user in the e2e suite. By default .NET uses SERVER GC,
+        // which reserves a managed heap PER CORE; multiplied across ~150 sequential children plus the
+        // test host, that peak exhausts memory on constrained machines and the OS OOM-kills processes
+        // across the tree (the "exit=143, no output" spurious kills, and occasionally the test host
+        // itself). Force WORKSTATION GC + aggressive memory conservation on the child to slash its
+        // footprint; it stays single-fixture sequential, so the small GC-throughput trade is invisible.
+        psi.Environment["DOTNET_gcServer"] = "0";
+        psi.Environment["DOTNET_GCConserveMemory"] = "9";
         using var p = Process.Start(psi)!;
         var stdoutTask = p.StandardOutput.ReadToEndAsync();
         var stderrTask = p.StandardError.ReadToEndAsync();
@@ -121,21 +197,12 @@ public sealed class StdlibApiTests
         if (!p.WaitForExit(timeoutMs))
         {
             try { p.Kill(entireProcessTree: true); } catch { }
-            throw new Xunit.Sdk.XunitException(
-                $"buildandrun timed out after {timeoutMs / 1000}s for {Path.GetFileName(rfPath)}.\n" +
-                $"--- stdout (partial) ---\n{stdoutTask.Result}\n--- stderr (partial) ---\n{stderrTask.Result}");
-        }
-        string stdout = stdoutTask.Result;
-        string stderr = stderrTask.Result;
-
-        if (p.ExitCode != 0)
-        {
-            throw new Xunit.Sdk.XunitException(
-                $"buildandrun failed for {Path.GetFileName(rfPath)} (exit={p.ExitCode}).\n" +
-                $"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+            return new FixtureRun(ExitCode: -1, Stdout: stdoutTask.Result, Stderr: stderrTask.Result,
+                TimedOut: true, TimeoutMs: timeoutMs);
         }
 
-        return stdout;
+        return new FixtureRun(ExitCode: p.ExitCode, Stdout: stdoutTask.Result,
+            Stderr: stderrTask.Result, TimedOut: false, TimeoutMs: timeoutMs);
     }
 
     private static string NormalizeNewlines(string s) =>

@@ -146,11 +146,17 @@ public class CompilerPipelineInputEdgeCaseTests
     /// surfaces algorithmic regressions in seconds instead of bleeding CI throughput.
     /// Repro source mirrored at <c>playground/deeply_nested_repro.rf</c>.
     /// </remarks>
-    [Fact(Timeout = 30_000)]
+    // Timeout is generous (not the ~6 s baseline) on purpose: the work is a full fresh stdlib
+    // semantic analysis, and the macOS/ARM64 CI runners are slow and contended enough to spike
+    // several-fold. A true algorithmic regression (exponential in nesting) would run for minutes or
+    // hang, so a 2-minute cap still surfaces it while tolerating runner variance.
+    [Fact(Timeout = 120_000)]
     public async Task Codegen_DeeplyNestedSource_GeneratesRoutineDefinitionAsync()
     {
-        // Wrapped in Task.Run so xUnit's Timeout attribute can actually abort runaway work.
-        // Without async, Timeout in xUnit 2.x silently has no effect on sync test bodies.
+        // Task.Run (not a custom large-stack thread): depth 32 fits a default stack on every
+        // platform, and a 64 MB-stack thread is pathologically slow to set up on macOS (eager stack
+        // commit), which previously turned a passing 6 s test into a 30 s+ timeout. Task.Run also
+        // keeps xUnit's Timeout effective on the async body.
         string llvmIr = await Task.Run(function: () =>
             GenerateIr(source: CreateDeeplyNestedSource(nestingDepth: 32)));
 

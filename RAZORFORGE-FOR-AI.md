@@ -1,13 +1,13 @@
 # RazorForge — Reference for AI Assistants
 
-You are reading this because RazorForge (v0.0.1-alpha, 2026) is **not in your
+You are reading this because RazorForge (v0.2.0, 2026) is **not in your
 training data**. Do not guess syntax from Rust/Swift/Python intuitions — this
 file lists exactly where those intuitions are wrong. Everything here is taken
 from programs that compile and run in CI.
 
 When unsure, consult ground truth in the repo/package:
 
-- `tests/Fixtures/Stdlib/*.rf` — 90+ complete programs with expected output (the cookbook).
+- `tests/Fixtures/Stdlib/*.rf` — 140+ complete programs with expected output (the cookbook).
 - `Standard/RazorForge/` — the standard library sources (`.rf`), including every public API.
 
 ---
@@ -337,6 +337,65 @@ routine start()
   show("DONE")
   return
 ```
+
+## 14. Concurrency
+
+Two kinds of concurrent routine. **Calling one starts it immediately and returns an `Agent[T]`
+handle** (not the value) — there is no separate `spawn`/`async` keyword:
+
+- `suspended routine f(...) -> T` — a stackful coroutine on this thread's scheduler. Cheap; you can
+  have very many. *Cooperative*: it yields to siblings only when it **parks** (at `waitfor`,
+  `retrieve!`, or async I/O). A CPU-bound `suspended` routine that never parks starves the others —
+  use `suspended` for waiting-heavy work.
+- `threaded routine f(...) -> T` — a real OS thread (true parallelism, OS-preempted). Heavier; use
+  for CPU-bound work you want on another core.
+
+```razorforge
+import IO/Console
+
+suspended routine fetch(id: S64) -> S64
+  waitfor(50ms)                  # parks this coroutine; siblings run meanwhile
+  return id * 10
+
+routine start()
+  var a = fetch(id: 1)           # call = start NOW + get an Agent[S64]
+  danger!
+    show(f"result => {a.retrieve!()}")   # drive to completion, get the value
+  return
+```
+
+Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
+
+- `agent.retrieve!() -> T` — wait for it and take the value. **Uncolored**: inside a coroutine it
+  PARKS (siblings keep running); on a plain thread it blocks. Same call, both contexts. Failable.
+- `waitfor(d)` — wait `d` (parks in a coroutine, sleeps on a thread). Durations: `50ms`, `5s`, or
+  `Duration.from_milliseconds(ms: n)`.
+- `agent.waitfor(d).retrieve!()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
+  `agent.waitfor(d).try_retrieve()` returns `None` on timeout instead of throwing.
+- `race![T](of: ?List[Agent[T]]) -> ?T` — drive all, return the FIRST finisher; losers abandoned.
+- `gather![T](of: ?List[Agent[T]]) -> ?List[T]` — drive all, wait for ALL; results in input order.
+- `race!`/`gather!` **consume** the list — pass it with `steal`: `gather!(of: steal agents)`.
+- A `List[Agent[T]]` may mix coroutine- and thread-backed agents (one `Agent[T]` type backs both).
+- **Dropping** an Agent without retrieving ABANDONS it: a parked coroutine runs its `$destroy`
+  teardown; a running thread is joined then discarded.
+
+```razorforge
+var jobs = List[Agent[S64]]()
+jobs.add_last(value: fetch(id: 1))
+jobs.add_last(value: fetch(id: 2))
+danger!
+  var results = gather!(of: steal jobs)   # both run concurrently; wait for all
+  show(f"{results[0]} {results[1]}")
+```
+
+Async file I/O (uncolored — parks a coroutine while waiting), in `IO/File`:
+`read_text(path: Text) -> Text` and `write_text(path: Text, content: Text) -> S64`. Prefer these to
+opening a `FileHandle` inside a coroutine.
+
+**Not implemented yet** (do not generate these — they do not exist): async networking
+(sockets/HTTP/WebSocket) and channels. They are on the roadmap, not in the language today.
+
+---
 
 When generating RazorForge: start from the closest fixture in
 `tests/Fixtures/Stdlib/`, keep arguments named, end every routine with

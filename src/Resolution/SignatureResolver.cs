@@ -325,6 +325,35 @@ internal sealed class SignatureResolver
             routine.GenericConstraints = allConstraints;
         }
 
+        // Specialized-receiver member: if the receiver is a generic instantiation whose top-level
+        // type arguments are concrete types (not the owner's own bare generic params) — e.g.
+        // `List[Agent[V]]` — resolve it (the routine's generic params, incl. V, are in scope here)
+        // so `me` is typed as the specialized receiver and member access like `me[i]` yields the
+        // specialized element (`Agent[V]`) instead of the generic def's raw element. OwnerType stays
+        // the generic definition so registration and call-site lookup key on the base type.
+        TypeSymbol? meType = null;
+        if (pending.Kind == RoutineKind.MemberRoutine
+            && refreshedOwnerType is EntityTypeInfo or RecordTypeInfo
+            && pending.RoutineName is not ("$create" or "$create!")
+            && routine.Name.Contains(value: '.'))
+        {
+            string recvText = routine.Name[..routine.Name.IndexOf(value: '.')];
+            if (recvText.Contains(value: '['))
+            {
+                TypeExpression? recvExpr = SemanticVerifier.ParseTypeExpressionString(
+                    text: recvText, location: routine.Location);
+                bool isSpecialized = recvExpr?.GenericArguments is { Count: > 0 } args
+                    && args.Any(predicate: a => a.Name != null
+                        && !(filteredGenericParams?.Contains(item: a.Name) ?? false)
+                        && _sa._registry.LookupType(name: a.Name) is not null);
+                if (isSpecialized)
+                {
+                    TypeSymbol resolvedRecv = _typeResolver.ResolveType(typeExpr: recvExpr!);
+                    if (resolvedRecv is not ErrorTypeInfo) meType = resolvedRecv;
+                }
+            }
+        }
+
         _sa._currentRoutine = prevRoutine;
 
         // Create the final RoutineInfo with fully resolved signature
@@ -332,6 +361,7 @@ internal sealed class SignatureResolver
         {
             Kind = pending.Kind,
             OwnerType = refreshedOwnerType,
+            MeType = meType,
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,

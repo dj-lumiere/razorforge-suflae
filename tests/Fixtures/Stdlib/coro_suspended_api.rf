@@ -1,0 +1,26 @@
+module Tests/Stdlib/CoroSuspendedApi
+
+# v0.2.0 suspended-routine surface: calling a `suspended routine` creates a stackful coroutine and
+# yields a Coroutine[T] handle; `retrieve!()` drives it to completion (pumping through every
+# rf_coro_yield) and returns its value. Dropping a never-retrieved handle abandons it.
+
+import IO/Console
+
+suspended routine compute(x: S64) -> S64
+  return x * 2
+
+suspended routine counter() -> S64
+  var n = 10_s64
+  rf_coro_yield()
+  n = n + 5_s64
+  rf_coro_yield()
+  n = n + 5_s64
+  return n
+
+routine start()
+  var c = compute(x: 21)
+  show(f"compute => {c.retrieve!()}")
+
+  var k = counter()
+  show(f"counter => {k.retrieve!()}")
+  return

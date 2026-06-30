@@ -388,16 +388,27 @@ public sealed partial class SemanticVerifier
                                             ErrorTypeInfo.Instance;
                     call.IsInFlight = routine.IsInFlightReturn;
 
-                    // A `threaded routine` call spawns an OS thread and yields a `Task[T]`
-                    // handle (T = the routine's own return type). The handle is awaited via the
-                    // stdlib `Task[T].retrieve!()` / `.waitfor(deadline)` methods. (v0.1.)
+                    // A `threaded routine` call spawns an OS thread and yields an `Agent[T]`
+                    // handle (T = the routine's own return type, kind THREAD). The handle is awaited
+                    // via the stdlib `Agent[T].retrieve!()` / `.waitfor(deadline)` methods.
                     if (routine.AsyncStatus == AsyncStatus.Threaded)
                     {
                         ValidateThreadedRoutineArguments(routine: routine,
                             location: call.Location);
-                        TypeSymbol? taskDef = _registry.LookupType(name: "Task");
-                        return taskDef != null
-                            ? _registry.GetOrCreateResolution(genericDef: taskDef,
+                        TypeSymbol? agentDef = _registry.LookupType(name: "Agent");
+                        return agentDef != null
+                            ? _registry.GetOrCreateResolution(genericDef: agentDef,
+                                typeArguments: [returnType])
+                            : returnType;
+                    }
+
+                    // A `suspended routine` call creates a stackful coroutine and yields an
+                    // `Agent[T]` handle (kind CORO), driven to completion via `Agent[T].retrieve!()`.
+                    if (routine.AsyncStatus == AsyncStatus.Suspended)
+                    {
+                        TypeSymbol? agentDef = _registry.LookupType(name: "Agent");
+                        return agentDef != null
+                            ? _registry.GetOrCreateResolution(genericDef: agentDef,
                                 typeArguments: [returnType])
                             : returnType;
                     }
@@ -906,7 +917,8 @@ public sealed partial class SemanticVerifier
                     {
                         List<TypeInfo>? inferredMethodTypeArgs =
                             InferMethodGenericTypeArguments(genericMethod: method,
-                                arguments: call.Arguments);
+                                arguments: call.Arguments,
+                                receiverType: dispatchType);
                         if (inferredMethodTypeArgs != null)
                         {
                             method = _registry.GetOrCreateRoutineResolution(genericDef: method,

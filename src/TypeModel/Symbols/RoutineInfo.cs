@@ -143,6 +143,17 @@ public sealed class RoutineInfo
     /// <summary>The type that owns this routine (for member routines and extension routines).</summary>
     public TypeSymbol? OwnerType { get; init; }
 
+    /// <summary>
+    /// For a member routine declared on a SPECIALIZED generic instantiation — e.g.
+    /// <c>routine List[Agent[V]].gather!()</c> — the resolved specialized receiver type
+    /// (<c>List[Agent[V]]</c> with <c>V</c> a routine generic parameter). <c>me</c> is typed as this,
+    /// so member access like <c>me[i]</c> yields the specialized element (<c>Agent[V]</c>) instead of
+    /// the generic definition's raw element parameter. Null for ordinary members, where <c>me</c> is
+    /// <see cref="OwnerType"/>. <see cref="OwnerType"/> stays the generic definition so registration
+    /// and call-site lookup key on the base type.
+    /// </summary>
+    public TypeSymbol? MeType { get; init; }
+
     /// <summary>Parameters of this routine.</summary>
     public List<ParameterInfo> Parameters { get; init; } = [];
 

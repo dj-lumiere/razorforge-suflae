@@ -507,6 +507,7 @@ public partial class LlvmCodeGenerator
         _localVarLlvmNames.Clear();
         _varNameCounts.Clear();
         _localEntityVars.Clear();
+        _cfNodes.Clear();
         _localRcRecordVars.Clear();
         _localRetainedVars.Clear();
         _currentRoutineEntryAllocas.Clear();

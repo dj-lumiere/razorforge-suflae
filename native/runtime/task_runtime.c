@@ -1,5 +1,6 @@
 #include "types.h"
 #include "../include/razorforge_runtime.h"
+#include "rf_sync.h" /* portable rf_mutex for the task↔coro await handshake */
 
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,10 @@
 #include <pthread.h>
 #include <time.h>
 #endif
+
+/* Runtime error + stack trace + exit(1) (stacktrace.c). Raised on a control-structure allocation
+ * failure instead of returning NULL/0 that would crash or silently mis-spawn downstream. */
+extern void __rf_throw(const char* error_type, const char* message);
 
 /* Stable identifier for the calling OS thread. The exact value is opaque — only equality across
  * calls on the same thread matters (lock re-entrancy detection). */
@@ -69,14 +74,33 @@ struct rf_task
     rf_U32 prerequisite_count;
     rf_U32 prerequisites_remaining;
     rf_U64 task_id;
+
+    /* Coroutine awaiting this task (set by rf_task_await_coro, cleared+woken at completion). When
+     * a scheduler-driven coroutine retrieves a threaded Task it parks instead of blocking the
+     * thread; the worker wakes it here. coro_lock makes register-vs-complete race-free. */
+    rf_mutex coro_lock;
+    rf_sched* coro_sched;
+    rf_coro* coro_waiter;
+
+    /* A scheduler driving a `race!` over a set that includes this task. On completion the worker
+     * signals this scheduler's run loop (no specific coroutine — the racing loop re-polls all
+     * competitors under the scheduler lock). Set/cleared by rf_task_race_register under coro_lock;
+     * read under coro_lock at completion, the same race-free pattern as coro_sched/coro_waiter. */
+    rf_sched* race_sched;
 };
 
 static rf_U64 rf_next_task_id = 1;
 
+/* The threaded task running on THIS OS worker thread, or NULL on a non-worker thread. Set by the
+ * worker entry around the user routine so a free-standing cancellation_requested() inside a threaded
+ * body can find its own task without threading the handle through every call. Thread-local: each
+ * worker sees only its own task. (Coroutines use g_current_coro in coro_runtime.c, symmetrically.) */
+static _Thread_local rf_task* g_current_task = NULL;
+
 static rf_task_node* rf_task_node_new(rf_task* task)
 {
     rf_task_node* node = (rf_task_node*)calloc(1, sizeof(rf_task_node));
-    if (node == NULL) return NULL;
+    if (node == NULL) { __rf_throw("OutOfMemoryError", "Failed to allocate task queue node"); return NULL; }
     node->task = task;
     return node;
 }
@@ -119,6 +143,29 @@ static rf_Bool rf_task_is_completed(rf_task* task)
 
 static void rf_task_signal_completion(rf_task* task)
 {
+    if (task == NULL) return;
+
+    /* Wake a coroutine awaiting this task (if one parked via rf_task_await_coro). Done under
+     * coro_lock and BEFORE the thread-backend signal: register-vs-complete is race-free because
+     * await_coro re-checks completion under the same lock, and the status store happens-before this
+     * locked read (program order). Reads + clears the slot so a redundant signal can't double-wake. */
+    rf_mutex_lock(&task->coro_lock);
+    rf_sched* waking_sched = task->coro_sched;
+    rf_coro* waiter = task->coro_waiter;
+    rf_sched* race_sched = task->race_sched;
+    task->coro_sched = NULL;
+    task->coro_waiter = NULL;
+    rf_mutex_unlock(&task->coro_lock);
+    if (waking_sched != NULL && waiter != NULL) {
+        rf_sched_wake(waking_sched, waiter);
+    }
+    /* Also wake a `race!` loop driving a set that includes this task: it parks on the scheduler
+     * cond with no specific awaiter coroutine, so signal the cond and let it re-poll. Left set
+     * (not cleared) so a later spurious signal is harmless; race! clears it when the loop ends. */
+    if (race_sched != NULL) {
+        rf_sched_signal(race_sched);
+    }
+
     rf_thread_backend* backend = rf_task_thread_backend(task);
     if (backend == NULL) return;
 
@@ -131,10 +178,102 @@ static void rf_task_signal_completion(rf_task* task)
 #endif
 }
 
+/* Register the CURRENT scheduler-driven coroutine as the awaiter of `task`, so the worker thread
+ * wakes it via rf_sched_wake when the task completes. Returns 1 if the task is ALREADY complete
+ * (the caller should read the result without parking), 0 if registered (the caller should
+ * rf_sched_park_external, to be woken on completion). The completion check is under coro_lock, so
+ * it cannot lose a wake against a task finishing concurrently. Call only inside a coroutine driven
+ * by a scheduler (rf_in_coroutine() != 0); outside one it conservatively reports "complete" (1) so
+ * the caller falls back to a blocking wait. */
+/* Register (s != NULL) or clear (s == NULL) the scheduler that a `race!` over a set including this
+ * task is driving, so the worker can signal that loop on completion. Idempotent; under coro_lock so
+ * it cannot race a concurrent completion read. */
+void rf_task_race_register(rf_task* task, rf_sched* s)
+{
+    if (task == NULL) return;
+    rf_mutex_lock(&task->coro_lock);
+    task->race_sched = s;
+    rf_mutex_unlock(&task->coro_lock);
+}
+
+rf_U32 rf_task_await_coro(rf_task* task)
+{
+    if (task == NULL) return 1;
+
+    rf_sched* sched = rf_sched_current();
+    rf_coro* self = rf_coro_current();
+    if (sched == NULL || self == NULL) {
+        return 1; /* not on a scheduler-driven coroutine — caller must block-wait instead */
+    }
+
+    rf_mutex_lock(&task->coro_lock);
+    if (rf_task_is_completed(task)) {
+        rf_mutex_unlock(&task->coro_lock);
+        return 1;
+    }
+    task->coro_sched = sched;
+    task->coro_waiter = self;
+    rf_mutex_unlock(&task->coro_lock);
+    return 0;
+}
+
+/* Timed await: like rf_task_await_coro but bounded by `timeout_ns`. Parks the current coroutine on
+ * a deadline timer that is ALSO externally wakeable, looping until the task completes or the
+ * deadline elapses — without blocking the scheduler thread (siblings run meanwhile). Returns:
+ *   1 = task completed (read the result),
+ *   0 = deadline elapsed first (the caller should treat this as a timeout),
+ *   2 = not on a scheduler-driven coroutine (the caller must fall back to a blocking timed wait).
+ * The awaiter slot is cleared on timeout (under coro_lock, with a final completion re-check) so a
+ * later completion cannot wake a coroutine that already moved on. */
+rf_U32 rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns)
+{
+    if (task == NULL) return 1;
+
+    rf_sched* sched = rf_sched_current();
+    rf_coro* self = rf_coro_current();
+    if (sched == NULL || self == NULL) {
+        return 2; /* not on a scheduler-driven coroutine — caller block-waits with the deadline */
+    }
+
+    uint64_t deadline = rf_monotonic_now_ns() + timeout_ns;
+    for (;;) {
+        /* Register + check completion atomically (same race-freedom as rf_task_await_coro). */
+        rf_mutex_lock(&task->coro_lock);
+        if (rf_task_is_completed(task)) {
+            rf_mutex_unlock(&task->coro_lock);
+            return 1;
+        }
+        task->coro_sched = sched;
+        task->coro_waiter = self;
+        rf_mutex_unlock(&task->coro_lock);
+
+        uint64_t now = rf_monotonic_now_ns();
+        if (now >= deadline) {
+            /* Deadline reached. Final completion check + deregister, atomically: if the task just
+             * completed, prefer the value (return 1); otherwise clear our awaiter slot so a later
+             * completion does not wake us after we have returned. */
+            rf_mutex_lock(&task->coro_lock);
+            if (rf_task_is_completed(task)) {
+                rf_mutex_unlock(&task->coro_lock);
+                return 1;
+            }
+            if (task->coro_waiter == self) {
+                task->coro_sched = NULL;
+                task->coro_waiter = NULL;
+            }
+            rf_mutex_unlock(&task->coro_lock);
+            return 0;
+        }
+
+        /* Park until the timer fires OR the worker wakes us; then re-check both conditions. */
+        rf_sched_park_deadline(deadline - now);
+    }
+}
+
 static rf_thread_backend* rf_thread_backend_create(void)
 {
     rf_thread_backend* backend = (rf_thread_backend*)calloc(1, sizeof(rf_thread_backend));
-    if (backend == NULL) return NULL;
+    if (backend == NULL) { __rf_throw("OutOfMemoryError", "Failed to allocate thread backend"); return NULL; }
 
 #ifdef _WIN32
     backend->completion_event = CreateEventA(NULL, TRUE, FALSE, NULL);
@@ -209,7 +348,9 @@ static void* rf_threaded_task_main(void* raw)
 
     if (start_data->entry != NULL)
     {
+        g_current_task = start_data->task;
         start_data->entry(start_data->task, start_data->userdata);
+        g_current_task = NULL;
     }
 
     free(start_data);
@@ -260,12 +401,13 @@ const char* rf_task_completion_name(rf_task_completion_kind kind)
 rf_task* rf_task_create(rf_task_kind kind)
 {
     rf_task* task = (rf_task*)calloc(1, sizeof(rf_task));
-    if (task == NULL) return NULL;
+    if (task == NULL) { __rf_throw("OutOfMemoryError", "Failed to allocate task"); return NULL; }
 
     task->kind = kind;
     task->status = RF_TASK_NEW;
     task->completion.kind = RF_TASK_COMPLETION_PENDING;
     task->task_id = rf_next_task_id++;
+    rf_mutex_init(&task->coro_lock);
 
     if (kind == RF_TASK_THREADED)
     {
@@ -299,6 +441,7 @@ void rf_task_destroy(rf_task* task)
     }
 
     rf_thread_backend_destroy((rf_thread_backend*)task->wait_backend);
+    rf_mutex_destroy(&task->coro_lock);
     free(task);
 }
 
@@ -434,7 +577,8 @@ int rf_task_spawn_threaded(rf_task* task, rf_task_entry_fn entry, void* userdata
     start_data = (rf_thread_start_data*)calloc(1, sizeof(rf_thread_start_data));
     if (start_data == NULL)
     {
-        return 0;
+        __rf_throw("OutOfMemoryError", "Failed to allocate thread start data");
+        return 0; /* unreachable */
     }
 
     start_data->task = task;
@@ -535,6 +679,23 @@ rf_Bool rf_task_is_cancel_requested(rf_task* task)
 {
     if (task == NULL) return false;
     return task->cancel_requested;
+}
+
+/* Unified cooperative-cancellation poll for the agent body running on THIS thread, regardless of
+ * kind: a scheduler-driven coroutine consults its own coro flag, a worker thread its own task flag.
+ * Returns 1 if cancellation has been requested, else 0. The backing for the stdlib free routine
+ * cancellation_requested(); an agent body calls it in a loop and returns early to stop cooperatively.
+ * Reads only thread-local state — never frees, never unwinds. */
+rf_U32 rf_cancel_requested(void)
+{
+    rf_coro* self = rf_coro_current();
+    if (self != NULL) {
+        return rf_coro_is_cancel_requested(self);
+    }
+    if (g_current_task != NULL) {
+        return g_current_task->cancel_requested ? 1u : 0u;
+    }
+    return 0u;
 }
 
 void rf_task_mark_result_consumed(rf_task* task)

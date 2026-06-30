@@ -119,10 +119,24 @@ public partial class LlvmCodeGenerator
     /// The struct size is unchanged (an <c>i1</c> already occupied a byte), so field offsets are stable.
     /// </summary>
     private string GetFieldStorageLlvmType(TypeInfo type) =>
-        FieldNeedsBoolStorage(type: type) ? "i8" : GetLlvmType(type: type);
+        FieldNeedsBoolStorage(type: type) ? "i8" : GetValueLlvmType(type: type);
 
     /// <summary>True when a record field's register type is <c>i1</c> (Bool) and needs <c>i8</c> storage.</summary>
     private bool FieldNeedsBoolStorage(TypeInfo type) => GetLlvmType(type: type) is "i1";
+
+    /// <summary>
+    /// The LLVM type for STORING a value of <paramref name="type"/> (an alloca, a struct field, a
+    /// by-value parameter). Identical to <see cref="GetLlvmType"/> except for <c>Blank</c>: Blank is
+    /// <c>@llvm("void")</c>, and <c>void</c> is illegal as a value (you cannot <c>alloca void</c> or
+    /// put a <c>void</c> field in a struct). A stored Blank is the empty record <c>{}</c> — a real
+    /// zero-size value. Direct routine RETURNS keep using <see cref="GetLlvmType"/> (so void-returning
+    /// routines stay <c>void</c>); only Blank-as-a-VALUE uses this.
+    /// </summary>
+    private string GetValueLlvmType(TypeInfo type)
+    {
+        string t = GetLlvmType(type: type);
+        return t == "void" ? "{}" : t;
+    }
 
     /// <summary>zext an <c>i1</c> Bool value to its <c>i8</c> storage form before writing an aggregate field.</summary>
     private string CoerceBoolToStorage(System.Text.StringBuilder sb, string value, TypeInfo fieldType)

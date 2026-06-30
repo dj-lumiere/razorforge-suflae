@@ -9,7 +9,9 @@ namespace Compiler.Instantiation;
 public sealed class InstantiationPipeline(InstantiationContext ctx)
 {
     /// <summary>
-    /// Runs generic reachability, closure expansion, and canonical body generation.
+    /// Runs generic reachability, closure expansion, and canonical body generation. The may-suspend
+    /// analysis over the graph <see cref="RoutineReachabilityPass"/> populates runs in
+    /// <c>SemanticVerifier</c> after this (so it also covers the timed pass-by-pass path).
     /// </summary>
     public void Run()
     {

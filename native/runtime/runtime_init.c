@@ -4,8 +4,13 @@
 #include <windows.h>
 #endif
 
+/* Start the async I/O event loop on the main thread (async_io.c). Done here so libuv init never runs
+ * on a demand-paged coroutine green stack, which the Windows deep-frame CRT/Win32 paths reject. */
+extern void rf_io_runtime_init(void);
+
 void rf_runtime_init(void)
 {
+    rf_io_runtime_init();
 #ifdef _WIN32
     SetConsoleCP(65001);
     SetConsoleOutputCP(65001);

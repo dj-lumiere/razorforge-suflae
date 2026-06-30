@@ -5,6 +5,7 @@ using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
+using Verification;
 using TypeInfo = TypeModel.Types.TypeInfo;
 
 namespace Compiler.Instantiation.Passes;
@@ -243,6 +244,26 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         var calls = new List<object>();
         CollectCalls(node: frame.Decl.Body, sink: calls);
 
+        // Parameter default values never appear in any routine body (they are filled at call sites),
+        // so walk them here too. A collection-literal default (e.g. `d: Dict[K,V] = {:}`) must seed
+        // the collection's $create/add, since codegen constructs it inline at the call site
+        // (TryEmitEmptyCollectionDefault) and would otherwise reference a pruned routine. Default
+        // values are never SA-analyzed, so a collection-literal default has a null ResolvedType —
+        // stamp it from the parameter's resolved type so EnqueueImplicitLoweringCallees can resolve
+        // the collection's $create.
+        foreach (var defParam in frame.Decl.Parameters)
+        {
+            if (defParam.DefaultValue == null) continue;
+            if (defParam.DefaultValue is ListLiteralExpression or SetLiteralExpression
+                    or DictLiteralExpression
+                && defParam.DefaultValue.ResolvedType == null
+                && defParam.Type?.ResolvedType != null)
+            {
+                defParam.DefaultValue.ResolvedType = defParam.Type.ResolvedType;
+            }
+            CollectCalls(node: defParam.DefaultValue, sink: calls);
+        }
+
         // Pull var-decl types into _localTypes by walking the body once.
         CollectLocalVarTypes(node: frame.Decl.Body, map: _localTypes);
 
@@ -271,10 +292,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 IdentifierExpression id => ResolveRoutineValueRef(id: id, frame: frame),
                 _ => null
             };
-            if (resolved == null) continue;
+            if (resolved == null)
+            {
+                if (node is CallExpression indirectCe) NoteIfIndirectCall(caller: frame.Routine, ce: indirectCe);
+                continue;
+            }
 
             RoutineInfo concreteCallee = SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs);
             EnqueueCallee(callee: concreteCallee);
+            RecordSuspendEdge(caller: frame.Routine, callee: concreteCallee);
 
             // Pure synthesized $represent / try_next / wrapper-forwarders also have call sites
             // we may need to walk later; their bodies live in VariantBodies under the generic-def
@@ -307,8 +333,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     IdentifierExpression id => ResolveRoutineValueRef(id: id, frame: frame),
                     _ => null
                 };
-                if (resolved == null) continue;
-                EnqueueCallee(callee: SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs));
+                if (resolved == null)
+                {
+                    if (node is CallExpression indirectCe) NoteIfIndirectCall(caller: frame.Routine, ce: indirectCe);
+                    continue;
+                }
+                RoutineInfo variantCallee = SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs);
+                EnqueueCallee(callee: variantCallee);
+                RecordSuspendEdge(caller: frame.Routine, callee: variantCallee);
             }
         }
     }
@@ -697,6 +729,48 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         };
     }
 
+    /// <summary>
+    /// Additively records a caller→callee edge into the v0.2.0 may-suspend call graph and seeds the
+    /// caller's <see cref="CallGraphNode.DirectlySuspends"/> flag when the callee is a coroutine
+    /// suspend primitive (<see cref="SuspendPrimitives"/>). This is pure side data consumed later by
+    /// <see cref="MaySuspendAnalysis"/>: it never reads or mutates the live set, the worklist, or any
+    /// resolution state, so it cannot change reachability or codegen. <c>callsOnMe</c> is irrelevant
+    /// to suspension (it propagates across every call), so edges are recorded with it false.
+    ///
+    /// Edges are recorded only at the three real-call sites (the two ProcessFrame loops and the
+    /// synthesized-body walk). Display/operator/wired/f-string seed paths reach only pure value
+    /// routines that never suspend — a v0.2.0 invariant — so their missing incoming edges are sound.
+    /// </summary>
+    private void RecordSuspendEdge(RoutineInfo caller, RoutineInfo callee)
+    {
+        ctx.MaySuspendGraph.AddEdge(caller: caller, callee: callee, callsOnMe: false);
+        if (SuspendPrimitives.IsSuspendPrimitive(routine: callee))
+        {
+            ctx.MaySuspendGraph.GetOrCreateNode(routine: caller).DirectlySuspends = true;
+        }
+    }
+
+    /// <summary>
+    /// Marks <paramref name="caller"/> as having an indirect call when <paramref name="ce"/> invokes
+    /// a routine VALUE (a first-class routine or lambda held in a variable/parameter/field) rather
+    /// than a statically-named routine — i.e. its callee expression itself evaluates to a
+    /// <see cref="RoutineTypeInfo"/>. The static graph cannot see such a target, so the may-suspend
+    /// analysis treats the caller conservatively as may-suspend (design §6): over-approximation only
+    /// adds shadow-stack push/pops, never miscompiles teardown. Only reached when static resolution
+    /// already failed, so direct calls (which carry a ResolvedRoutine) never land here.
+    ///
+    /// NOTE (5b hardening): protocol/virtual dispatch that fails to devirtualize still resolves to
+    /// the protocol method (non-null) and so is NOT flagged here yet. That is sound for v0.2.0 (no
+    /// suspending protocol impls exist); tighten before any such impl ships.
+    /// </summary>
+    private void NoteIfIndirectCall(RoutineInfo caller, CallExpression ce)
+    {
+        if (ce.Callee.ResolvedType is RoutineTypeInfo)
+        {
+            ctx.MaySuspendGraph.GetOrCreateNode(routine: caller).HasIndirectCall = true;
+        }
+    }
+
     private void EnqueueCallee(RoutineInfo callee)
     {
         // Mark live first — synthesized leafs (no AST body) still need to be in the live set
@@ -866,7 +940,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                                 _ => null
                             };
                             if (resolved == null) continue;
-                            EnqueueCallee(callee: SubstituteRoutine(routine: resolved, typeSubs: subs));
+                            RoutineInfo synthSubCallee = SubstituteRoutine(routine: resolved, typeSubs: subs);
+                            EnqueueCallee(callee: synthSubCallee);
+                            RecordSuspendEdge(caller: callee, callee: synthSubCallee);
                         }
                     }
                     finally

@@ -3,6 +3,9 @@
 
 #include <stdlib.h>
 
+/* Runtime error + stack trace + exit(1) (stacktrace.c). */
+extern void __rf_throw(const char* error_type, const char* message);
+
 struct rf_context_runtime
 {
     rf_U64 reserved;
@@ -28,7 +31,12 @@ rf_runtime_backend_state rf_context_backend_state(void)
 
 rf_context_runtime* rf_context_runtime_create(void)
 {
-    return (rf_context_runtime*)calloc(1, sizeof(rf_context_runtime));
+    rf_context_runtime* runtime = (rf_context_runtime*)calloc(1, sizeof(rf_context_runtime));
+    if (runtime == NULL) {
+        __rf_throw("OutOfMemoryError", "Failed to allocate context runtime");
+        return NULL; /* unreachable */
+    }
+    return runtime;
 }
 
 void rf_context_runtime_destroy(rf_context_runtime* runtime)

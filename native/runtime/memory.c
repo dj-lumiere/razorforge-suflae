@@ -13,6 +13,17 @@
 typedef uintptr_t rf_address;
 typedef size_t rf_size_t;
 
+/* Runtime error + stack trace + exit(1) (stacktrace.c). On a heap-allocation failure we raise this
+ * instead of returning NULL, which would otherwise be dereferenced and crash with no diagnosis. */
+extern void __rf_throw(const char* error_type, const char* message);
+
+static void rf_oom(const char* what, uint64_t bytes)
+{
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Failed to %s %llu bytes", what, (unsigned long long)bytes);
+    __rf_throw("OutOfMemoryError", buf); /* prints + stack trace + exit(1); does not return */
+}
+
 /*
  * Dynamic memory allocation with zero-initialization and error handling
  */
@@ -21,8 +32,8 @@ void* rf_allocate_dynamic(uint64_t bytes)
     void* ptr = calloc(bytes, 1);
     if (!ptr)
     {
-        fprintf(stderr, "\033[91mRazorForge: Failed to allocate %zu bytes\033[0m\n", (size_t)bytes);
-        return NULL;
+        rf_oom("allocate", bytes);
+        return NULL; /* unreachable: rf_oom exits */
     }
     return ptr;
 }
@@ -36,8 +47,8 @@ void* rf_allocate_dynamic_uninit(uint64_t bytes)
     void* ptr = malloc(bytes);
     if (!ptr)
     {
-        fprintf(stderr, "\033[91mRazorForge: Failed to allocate %zu bytes\033[0m\n", (size_t)bytes);
-        return NULL;
+        rf_oom("allocate", bytes);
+        return NULL; /* unreachable */
     }
     return ptr;
 }
@@ -60,10 +71,10 @@ void* rf_reallocate_dynamic(void* ptr, uint64_t bytes)
 {
     void* new_ptr = realloc(ptr, bytes);
 
-    if (!new_ptr && bytes != 0)
+    if (!new_ptr && bytes != 0) /* realloc to 0 returning NULL is a valid free, not a failure */
     {
-        fprintf(stderr, "\033[91mRazorForge: Failed to reallocate to %zu bytes\033[0m\n", (size_t)bytes);
-        return NULL;
+        rf_oom("reallocate to", bytes);
+        return NULL; /* unreachable */
     }
 
     return new_ptr;

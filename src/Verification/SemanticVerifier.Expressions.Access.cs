@@ -365,7 +365,17 @@ public sealed partial class SemanticVerifier
                                      getItem.OwnerType?.GenericParameters;
             }
 
-            if (lookupType.TypeArguments is { Count: > 0 } &&
+            // Only substitute when `$getitem` came from the GENERIC DEFINITION (its ReturnType is the
+            // bare owner param, e.g. List[T]'s `T`). If it was resolved against the instantiated
+            // owner, its ReturnType is ALREADY expressed in the resolution's type arguments —
+            // re-substituting would double-apply. That double-application is silent for `List[S64]`
+            // (S64 mentions no param) but corrupts `List[Box[T]]`: the owner's formal param name "T"
+            // collides with the routine's own "T" inside the element `Box[T]`, yielding a wrongly
+            // nested `Box[Box[T]]`. Guard on the owner carrying type arguments (= already resolved).
+            bool methodAlreadyResolved = getItem.OwnerType is { TypeArguments.Count: > 0 };
+
+            if (!methodAlreadyResolved &&
+                lookupType.TypeArguments is { Count: > 0 } &&
                 ownerGenericParams is { Count: > 0 })
             {
                 var substitutions = new Dictionary<string, TypeSymbol>();

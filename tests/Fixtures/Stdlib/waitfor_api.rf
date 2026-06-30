@@ -1,0 +1,13 @@
+module Tests/Stdlib/WaitforApi
+
+# Standalone `waitfor(d)` — an uncolored timed wait. On a plain thread (here) it sleeps the
+# thread; inside a scheduler-driven coroutine the same call parks instead (see
+# coro_scheduler_api). Called directly, not awaited.
+
+import IO/Console
+
+routine start()
+  show(value: "before")
+  waitfor(10ms)
+  show(value: "after")
+  return

@@ -1,0 +1,37 @@
+module Tests/Stdlib/CoroGenericMemberApi
+
+# v0.2.0 generic-member cancellation instrumentation. A may-suspend method on a GENERIC type
+# (Holder[T].process, monomorphized to Holder[S64].process, which yields) owns an entity `b`.
+# Abandon while parked inside it must tear `b` down — proving 5b-2 instruments monomorphized
+# generic bodies, not just source declarations.
+
+import IO/Console
+
+entity Box
+  value: S64
+
+dangerous routine Box.$destroy()
+  show(value: "Box destroyed")
+  me.hijack().invalidate()
+  return
+
+entity Holder[T]
+  item: T
+
+routine Holder[T].process()
+  var b = Box(value: 5)
+  rf_coro_yield()
+  return
+
+routine coro_body(ud: CPtr)
+  var h = Holder[S64](item: 1)
+  h.process()
+  return
+
+routine start()
+  danger!
+    var co = rf_coro_create(entry: coro_body, userdata: cptr_none(), stack_size: 0)
+    discard rf_coro_resume(coro: co)
+    rf_coro_abandon(coro: co)
+  show(value: "done")
+  return

@@ -805,7 +805,7 @@ public sealed partial class SemanticVerifier
     /// Infers method-level generic type arguments for an already owner-resolved method.
     /// </summary>
     private List<TypeInfo>? InferMethodGenericTypeArguments(RoutineInfo genericMethod,
-        List<Expression> arguments)
+        List<Expression> arguments, TypeSymbol? receiverType = null)
     {
         if (genericMethod.GenericParameters == null ||
             genericMethod.GenericParameters.Count == 0)
@@ -814,6 +814,16 @@ public sealed partial class SemanticVerifier
         }
 
         var inferred = new TypeSymbol?[genericMethod.GenericParameters.Count];
+
+        // Receiver-based inference for a member declared on a SPECIALIZED generic instantiation
+        // (e.g. `routine List[Agent[V]].gather!()`): unify the method's MeType pattern
+        // (List[Agent[V]]) against the actual receiver (List[Agent[S64]]) to bind generic params
+        // (V) that appear only in the receiver, not in any value parameter.
+        if (genericMethod.MeType is { } mePattern && receiverType != null)
+        {
+            InferMethodTypeArgumentsFromTypes(paramType: mePattern, argType: receiverType,
+                genericParameters: genericMethod.GenericParameters, inferred: inferred);
+        }
         int argCount = Math.Min(val1: genericMethod.Parameters.Count, val2: arguments.Count);
         for (int i = 0; i < argCount; i++)
         {

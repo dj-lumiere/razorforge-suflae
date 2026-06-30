@@ -391,11 +391,20 @@ public sealed partial class SemanticVerifier
 
             if (!IsAssignableTo(source: argType, target: paramType))
             {
+                // Routine -> CPtr coercion (FFI): a NON-CAPTURING routine reference is a C function
+                // pointer at the ABI level, so it satisfies a `CPtr` parameter (codegen emits the
+                // routine's bare symbol). Restricted to a bare top-level routine NAME — that cannot
+                // capture an environment, which a C `void*` could not carry anyway. Routine-typed
+                // locals and lambdas are excluded (they may be closures).
+                if (IsBareRoutineRefToCPtr(argExpr: argExpr, argType: argType, paramType: paramType))
+                {
+                    // accept — handled by codegen as a bare function-pointer reference.
+                }
                 // Skip mismatch when paramType still references an unresolved method-level generic
                 // (e.g. `Routine[(S64,), U]` for `select[U]`). The caller runs
                 // InferMethodGenericTypeArguments after AnalyzeCallArguments and substitutes the
                 // method; without this guard we'd report a spurious error before inference resolves U.
-                if (!ContainsUnresolvedMethodGeneric(type: paramType,
+                else if (!ContainsUnresolvedMethodGeneric(type: paramType,
                         genericParameters: routine.GenericParameters))
                 {
                     ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
@@ -563,6 +572,20 @@ public sealed partial class SemanticVerifier
     private static bool IsAssignableTarget(Expression target)
     {
         return target is IdentifierExpression or MemberExpression or IndexExpression;
+    }
+
+    /// <summary>
+    /// True when <paramref name="argExpr"/> is a bare top-level routine NAME being passed where a
+    /// <c>CPtr</c> is expected — the FFI routine-pointer → C-function-pointer coercion. A bare
+    /// routine reference cannot capture, so its native symbol is a valid C function pointer; codegen
+    /// emits <c>ptr @&lt;routine&gt;</c>. Excludes routine-typed locals and lambdas (possible closures).
+    /// </summary>
+    private bool IsBareRoutineRefToCPtr(Expression argExpr, TypeSymbol argType, TypeSymbol paramType)
+    {
+        return paramType.Name == "CPtr"
+               && argType is RoutineTypeInfo
+               && argExpr is IdentifierExpression id
+               && _registry.LookupRoutineByName(name: id.Name) != null;
     }
 
     /// <summary>

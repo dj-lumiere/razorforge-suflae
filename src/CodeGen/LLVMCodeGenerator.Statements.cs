@@ -163,7 +163,7 @@ public partial class LlvmCodeGenerator
                 $"Cannot determine type for variable '{varDecl.Name}' (declared type: {typeText}, initializer: {initializerText})");
         }
 
-        string llvmType = GetLlvmType(type: varType);
+        string llvmType = GetValueLlvmType(type: varType);
 
         // Generate unique LLVM name for this variable (handles shadowing/redeclaration)
         string uniqueName;
@@ -272,6 +272,14 @@ public partial class LlvmCodeGenerator
         }
 
         string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
+
+        // Blank initializer: the expression (e.g. a Blank-returning call) ran for its side effects
+        // but produces no value — `void` carries nothing. Store the unit `{}` into the {} alloca.
+        if (GetLlvmType(type: varType) == "void")
+        {
+            EmitLine(sb: sb, line: $"  store {{}} zeroinitializer, ptr {varPtr}");
+            return;
+        }
 
         // When the declaration has an explicit type annotation, the initializer may have a
         // different LLVM type (e.g., var e: U32 = exp where exp: S128 -> trunc i128 to i32).
@@ -514,7 +522,7 @@ public partial class LlvmCodeGenerator
         string llvmName = _localVarLlvmNames.TryGetValue(key: varName, value: out string? unique)
             ? unique
             : varName;
-        string llvmType = GetLlvmType(type: varType);
+        string llvmType = GetValueLlvmType(type: varType);
         string varPtr = $"%{llvmName}.addr";
 
         // Release old value's RC fields before overwrite

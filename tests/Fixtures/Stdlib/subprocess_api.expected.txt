@@ -1,0 +1,4 @@
+direct => ok=true
+echo => ok=true has_output=true
+gathered => 0 5 0
+ok => true false true

@@ -77,6 +77,21 @@ public sealed class InstantiationContext
     /// </summary>
     public HashSet<string> LiveOwnerTypeNames { get; } = new(comparer: StringComparer.Ordinal);
 
+    /// <summary>
+    /// Call graph used by the v0.2.0 may-suspend effect analysis. Populated additively by
+    /// <c>RoutineReachabilityPass</c> as it resolves callees (caller→callee edges, plus the
+    /// <see cref="Verification.CallGraphNode.DirectlySuspends"/> seed when a callee is a suspend
+    /// primitive). Consumed by <see cref="Verification.MaySuspendAnalysis"/> after that pass.
+    /// </summary>
+    public Verification.CallGraph MaySuspendGraph { get; } = new();
+
+    /// <summary>
+    /// Result of the may-suspend fixpoint: registry keys of routines that can transitively reach a
+    /// coroutine suspend point, and therefore need cancellation-frame instrumentation in Phase 5.
+    /// Empty for any program that never reaches a suspend primitive (i.e. all current code).
+    /// </summary>
+    public HashSet<string> MaySuspendRoutineKeys { get; } = new(comparer: StringComparer.Ordinal);
+
     /// <summary>When true, passes print per-iteration diagnostics to stderr.</summary>
     public bool SaTiming { get; set; }
 

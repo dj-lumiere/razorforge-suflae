@@ -11,7 +11,7 @@
 set(LIBUV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libuv")
 set(LIBUV_INCLUDE_DIR "${LIBUV_DIR}/include")
 set(LIBUV_SRC_DIR "${LIBUV_DIR}/src")
-option(RAZORFORGE_BUILD_VENDOR_LIBUV "Build vendored libuv sources into uv_a" OFF)
+option(RAZORFORGE_BUILD_VENDOR_LIBUV "Build vendored libuv sources into uv_a" ON)
 
 if(EXISTS "${LIBUV_INCLUDE_DIR}/uv.h")
     message(STATUS "Found libuv")

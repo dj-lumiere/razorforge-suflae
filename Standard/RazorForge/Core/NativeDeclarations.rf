@@ -68,12 +68,122 @@ dangerous external("C") routine rf_task_wait(task: Address) -> S32
 dangerous external("C") routine rf_task_wait_within(task: Address, secs: S64, ns: U32) -> S32
 ### :returns: the boxed result payload pointer set by the task's entry thunk.
 dangerous external("C") routine rf_task_result_payload(task: Address) -> Address
+### Reads a task's status (0 new, 1 ready, 2 running, 3 parked, 4 completed). Used by Agent[T].$destroy
+### to decide between freeing a completed worker and joining one still in flight.
+dangerous external("C") routine rf_task_status_get(task: Address) -> U32
 ### Releases a task control block.
 dangerous external("C") routine rf_task_destroy(task: Address)
 ### Opaque, stable identifier for the calling OS thread (lock re-entrancy detection). Safe: takes
 ### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
 ### the same thread.
 external("C") routine rf_current_thread_id() -> U64
+
+# ============================================================================
+# Stackful coroutine substrate (v0.2.0 — single coroutine, no scheduler).
+# Runtime-internal: these underlie Suflae's concurrency layer, not application API.
+# rf_coro_yield is THE suspend primitive the may-suspend analysis seeds on.
+# ============================================================================
+
+### Allocates a coroutine running `entry(userdata)`. `entry` is a C function pointer — a
+### non-capturing routine coerces to `CPtr`. `stack_size` of 0 picks a default.
+### :returns: an opaque coroutine handle as a `CPtr` (null on failure). Does not start it.
+dangerous external("C") routine rf_coro_create(entry: CPtr, userdata: CPtr, stack_size: U64) -> CPtr
+### Switches into the coroutine, blocking the caller until it parks or finishes.
+### :returns: the resulting status (2 = parked, 3 = completed).
+dangerous external("C") routine rf_coro_resume(coro: CPtr) -> U32
+### Parks the coroutine currently running on this OS thread, switching back to its resumer.
+### Safe: takes no pointers; a no-op outside a coroutine. THIS is the suspend point.
+external("C") routine rf_coro_yield()
+### Reads a coroutine's status (0 new, 1 running, 2 parked, 3 completed, 4 cancelled).
+dangerous external("C") routine rf_coro_status_get(coro: CPtr) -> U32
+### Abandons a parked (or never-started) coroutine: walks its cancellation shadow stack
+### innermost-first, runs each teardown thunk once, then frees the coroutine and its stack.
+dangerous external("C") routine rf_coro_abandon(coro: CPtr)
+### Frees a completed (or never-started) coroutine and its stack. Use rf_coro_abandon for a parked one.
+dangerous external("C") routine rf_coro_delete(coro: CPtr)
+### Blocks the calling thread for the given duration. The synchronous-sleep backing for the
+### `waitfor` routine; a `suspended` waitfor will instead park on a timer (v0.3.0 scheduler).
+dangerous external("C") routine rf_waitfor_duration(secs: S64, ns: U32)
+
+# ============================================================================
+# Cooperative cancellation (structured concurrency). cancel() sets a flag only —
+# it never frees or unwinds; teardown stays in Agent[T].$destroy (single freer).
+# An agent body observes the request via cancellation_requested() and returns
+# early; waitfor returns early when its agent's flag is set.
+# ============================================================================
+
+### Requests cooperative cancellation of a coroutine-backed agent. Sets a flag; the coroutine
+### observes it at its next suspend point (waitfor returns early) or via a poll, and returns on
+### its own. Never frees.
+dangerous external("C") routine rf_coro_request_cancel(coro: CPtr)
+### Requests cooperative cancellation of a thread-backed agent. Sets a flag the worker polls. Never
+### frees — $destroy still joins the worker at teardown.
+dangerous external("C") routine rf_task_request_cancel(task: Address)
+### Whether cancellation has been requested for the agent (coroutine OR worker thread) running on
+### THIS thread. The backing for the `cancellation_requested()` free routine. Reads only
+### thread-local state. :returns: 1 if requested, else 0.
+external("C") routine rf_cancel_requested() -> U32
+
+# ============================================================================
+# Cooperative coroutine scheduler (v0.2.0 async). Drives many coroutines on one
+# OS thread; a parked coroutine waits without blocking the thread.
+# ============================================================================
+
+### Creates a scheduler. :returns: an opaque `rf_sched*` handle as a `CPtr`.
+dangerous external("C") routine rf_sched_create() -> CPtr
+### Frees a scheduler.
+dangerous external("C") routine rf_sched_destroy(sched: CPtr)
+### Queues a NEW coroutine to run on the scheduler (starts on its first resume by the run loop).
+dangerous external("C") routine rf_sched_spawn(sched: CPtr, coro: CPtr)
+### Parks the coroutine currently running under the loop for `delay_ns`, then resumes it. Called
+### from inside a coroutine (e.g. by waitfor). A no-op outside a running scheduler/coroutine.
+external("C") routine rf_sched_park_timer(delay_ns: U64)
+### Parks the current coroutine with no scheduler-side wake: only rf_sched_wake re-queues it.
+### How a coroutine awaits work on another OS thread without blocking the scheduler thread.
+external("C") routine rf_sched_park_external()
+### Makes a parked coroutine runnable again. Safe to call from ANY thread — the bridge a worker
+### thread uses to hand a result back to a coroutine awaiting it on the scheduler thread.
+dangerous external("C") routine rf_sched_wake(sched: CPtr, coro: CPtr)
+### Drives all spawned coroutines to completion on this thread (returns when none remain).
+dangerous external("C") routine rf_sched_run(sched: CPtr)
+### Spawns a NEW coroutine onto THIS thread's implicit scheduler (created lazily). Emitted at a
+### `suspended routine` call site so the coroutine is ready before any retrieve! drives the loop.
+dangerous external("C") routine rf_sched_spawn_default(coro: CPtr)
+### Drives this thread's implicit scheduler until `coro` finishes, leaving siblings parked. The
+### engine behind Agent[T].retrieve!() (run-until-this-handle: siblings progress concurrently).
+dangerous external("C") routine rf_sched_run_until_default(coro: CPtr)
+### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
+### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
+dangerous external("C") routine rf_sched_unschedule_default(coro: CPtr) -> U32
+### Registers the current scheduler-driven coroutine as `task`'s awaiter. Returns 1 if the task is
+### already complete (read the result, don't park), 0 if registered (park via rf_sched_park_external;
+### the worker wakes you on completion). Outside a scheduler-driven coroutine returns 1 (block-wait).
+dangerous external("C") routine rf_task_await_coro(task: Address) -> U32
+### Timed variant: parks (deadline timer + externally wakeable) until the task completes or
+### `timeout_ns` elapses. Returns 1 if completed (read the result), 0 if it timed out, 2 if not on a
+### scheduler-driven coroutine (the caller should block-wait with the deadline instead).
+dangerous external("C") routine rf_task_await_coro_deadline(task: Address, timeout_ns: U64) -> U32
+### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
+### Safe: reads only thread-local scheduler state. Lets `waitfor` be uncolored.
+external("C") routine rf_in_coroutine() -> U32
+
+# ============================================================================
+# race! competitor set (v0.2.0). Built one entry per Agent in List order, then
+# driven on this thread's implicit scheduler until the first competitor finishes.
+# Underlies the stdlib `race![T](of: ?List[Agent[T]])`.
+# ============================================================================
+
+### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as a `CPtr`.
+dangerous external("C") routine rf_race_begin() -> CPtr
+### Appends a coroutine competitor (Agent of kind CORO), preserving add (List) order.
+dangerous external("C") routine rf_race_add_coro(race: CPtr, coro: CPtr)
+### Appends a thread competitor (Agent of kind THREAD), preserving add (List) order.
+dangerous external("C") routine rf_race_add_task(race: CPtr, task: Address)
+### Drives the scheduler until one competitor completes; :returns: its index in add (List) order, or
+### -1 if the set is empty. Thread competitors' completions wake the loop; no wake can be lost.
+dangerous external("C") routine rf_race_wait(race: CPtr) -> S64
+### Frees the competitor set. Does NOT touch the Agents themselves (the caller still owns them).
+dangerous external("C") routine rf_race_end(race: CPtr)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
@@ -660,6 +770,56 @@ external("C") routine rf_file_read_all(fd: S32) -> Hijacked[Byte]
 ### :param fd: The file descriptor to read from.
 ### :returns: A pointer to the captured byte buffer.
 external("C") routine rf_file_read_line(fd: S32) -> Hijacked[Byte]
+### Reads a whole file asynchronously off the libuv threadpool. Inside a suspended routine the calling
+### coroutine parks while the read runs (siblings keep progressing); outside one it reads inline.
+### :param path: The null-terminated file path.
+### :param path_len: The path length in bytes.
+### :returns: A pointer to the captured byte buffer (length via `rf_io_get_result_len`).
+external("C") routine rf_io_read_file_all(path: CStr, path_len: S32) -> Hijacked[Byte]
+### Returns the byte length of the most recent async I/O buffer result.
+### :returns: The length of the current async result buffer in bytes.
+external("C") routine rf_io_get_result_len() -> U64
+### Writes a whole file asynchronously off the libuv threadpool, truncating any existing contents.
+### Inside a suspended routine the calling coroutine parks while the write runs (siblings keep
+### progressing); outside one it writes inline. The payload is copied, so the caller's buffer need not
+### outlive the call.
+### :param path: The null-terminated file path.
+### :param path_len: The path length in bytes.
+### :param data: Pointer to the bytes to write.
+### :param data_len: The number of bytes to write.
+### :returns: The number of bytes written, or a negative value on error.
+external("C") routine rf_io_write_file_all(path: CStr, path_len: S32, data: Hijacked[Byte], data_len: S64) -> S64
+### Runs a shell command, capturing stdout/stderr, while the calling coroutine parks (siblings keep
+### progressing); blocks on a plain thread. Returns the child's exit code (-1 if it could not be
+### spawned). The captured streams + signal are read via the accessors below.
+### :param command: The null-terminated command line, run via the platform shell.
+### :param command_len: The command length in bytes.
+### :returns: The child's exit code, or -1 on spawn failure.
+external("C") routine rf_proc_run(command: CStr, command_len: S32) -> S64
+### Returns the signal that killed the most recent `rf_proc_run` child, or 0 if it exited normally.
+external("C") routine rf_proc_term_signal() -> S32
+### Returns the captured stdout buffer of the most recent `rf_proc_run` (length via `rf_proc_output_len`).
+external("C") routine rf_proc_output() -> Hijacked[Byte]
+### Returns the byte length of the most recent `rf_proc_run` stdout capture.
+external("C") routine rf_proc_output_len() -> U64
+### Returns the captured stderr buffer of the most recent `rf_proc_run` (length via `rf_proc_errors_len`).
+external("C") routine rf_proc_errors() -> Hijacked[Byte]
+### Returns the byte length of the most recent `rf_proc_run` stderr capture.
+external("C") routine rf_proc_errors_len() -> U64
+### Begins an argv subprocess builder (no shell), setting argv[0] to `file`. Returns an opaque handle.
+### :param file: The executable to run.
+### :param file_len: The file length in bytes.
+### :returns: An opaque builder handle for `rf_proc_add_arg`/`rf_proc_set_cwd`/`rf_proc_run_built`.
+external("C") routine rf_proc_begin(file: CStr, file_len: S32) -> CPtr
+### Appends an argument to a subprocess builder.
+external("C") routine rf_proc_add_arg(builder: CPtr, arg: CStr, arg_len: S32)
+### Sets the working directory for a subprocess builder (empty = inherit the parent's).
+external("C") routine rf_proc_set_cwd(builder: CPtr, cwd: CStr, cwd_len: S32)
+### Adds an environment override (KEY=VALUE), merged into the parent environment at launch.
+external("C") routine rf_proc_add_env(builder: CPtr, key: CStr, key_len: S32, val: CStr, val_len: S32)
+### Launches a built subprocess (no shell), capturing stdout/stderr like `rf_proc_run`, and consumes
+### the builder. Parks the calling coroutine while it runs. Returns the exit code, or -1 on failure.
+external("C") routine rf_proc_run_built(builder: CPtr) -> S64
 ### Reads up to `count` bytes from a file into a runtime-managed buffer.
 ### :param fd: The file descriptor to read from.
 ### :param count: The maximum number of bytes to read.
