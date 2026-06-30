@@ -1,0 +1,31 @@
+module Tests/Stdlib/SignalCasterApi
+
+# v0.3.0 SignalCaster — wake handoff. A waiter coroutine takes the monitor lock and `wait`s, which
+# parks it (releasing the lock); a caster coroutine then `cast_one`s, waking it. Driving the waiter
+# with retrieve! runs both on this thread's scheduler: the waiter parks first (FIFO), the caster casts,
+# the waiter resumes and finishes. If the cast did not wake the wait, the waiter would hang forever, so
+# the program completing at all is the assertion. Handles are clones of one monitor.
+
+import IO/Console
+
+suspended routine waiter(sig: SignalCaster) -> S64
+  sig.lock()
+  sig.wait()        # parks here until a cast wakes us; the lock is released while parked
+  sig.unlock()
+  return 1
+
+suspended routine caster(sig: SignalCaster) -> S64
+  sig.cast_one()    # wake the parked waiter (called without holding the lock)
+  return 2
+
+routine start()
+  var sig = SignalCaster()
+
+  var w = waiter(sig: steal sig.clone())
+  var c = caster(sig: steal sig)
+
+  danger!
+    var wr = w.retrieve!()   # waiter parks -> caster casts -> waiter wakes and returns
+    var cr = c.retrieve!()
+    show(f"waiter={wr} caster={cr}")
+  return

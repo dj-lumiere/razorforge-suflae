@@ -128,6 +128,7 @@ public static class SuspendPrimitives
         Yield,
         "rf_channel_feed",
         "rf_channel_next",
+        "rf_signal_wait",
     };
 
     /// <summary>

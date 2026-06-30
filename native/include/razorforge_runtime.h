@@ -356,6 +356,34 @@ void rf_channel_close(rf_channel* chan);
 /* Buffered item count — test/diagnostic snapshot only, not a synchronization primitive. */
 uint64_t rf_channel_count(rf_channel* chan);
 
+/* ---- SignalCaster: a condition-variable monitor ----------------------------------------- */
+
+/* A self-contained monitor (internal mutex + wait set). wait is UNCOLORED: it parks a coroutine
+ * (rf_sched_park_external + rf_sched_wake) or blocks a plain thread on the internal condvar, releasing
+ * and re-acquiring the monitor lock around the suspend. Refcounted so it can be shared across agents.
+ * Backed by signal_runtime.c. */
+typedef struct rf_signal rf_signal;
+
+/* Create a monitor (refcount 1). Throws OutOfMemoryError on allocation failure. */
+rf_signal* rf_signal_create(void);
+/* Handle refcounting: clone adds a ref, drop releases one; the struct frees at 0. */
+void rf_signal_add_ref(rf_signal* sig);
+void rf_signal_drop(rf_signal* sig);
+
+/* Acquire / release the monitor lock that guards the caller's shared predicate. */
+void rf_signal_lock(rf_signal* sig);
+void rf_signal_unlock(rf_signal* sig);
+
+/* Wait for a cast — MUST hold the monitor lock. Atomically drops the lock, suspends (coroutine park
+ * or thread condvar), and re-acquires the lock before returning. Callers re-check the predicate in a
+ * loop. This is a suspend primitive (see SuspendPrimitives in MaySuspendAnalysis). */
+void rf_signal_wait(rf_signal* sig);
+
+/* Wake one / all waiter(s). Call after updating the predicate (typically just after unlock), NOT while
+ * holding the monitor lock — these acquire it internally. */
+void rf_signal_cast_one(rf_signal* sig);
+void rf_signal_cast_all(rf_signal* sig);
+
 #ifdef __cplusplus
 }
 #endif

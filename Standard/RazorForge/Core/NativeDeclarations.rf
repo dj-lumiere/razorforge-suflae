@@ -199,6 +199,31 @@ dangerous external("C") routine rf_channel_close(chan: CPtr)
 dangerous external("C") routine rf_channel_count(chan: CPtr) -> U64
 
 # ============================================================================
+# SignalCaster (v0.3.0). A condition-variable monitor: internal mutex + wait set.
+# wait parks a coroutine (rf_sched_park_external + rf_sched_wake) or blocks a thread
+# on the condvar, releasing/re-acquiring the monitor lock around the suspend. Underlies
+# the stdlib `SignalCaster` (Concurrency/SignalCaster.rf).
+# ============================================================================
+
+### Creates a monitor (refcount 1). :returns: an opaque `rf_signal*` handle as a `CPtr`.
+dangerous external("C") routine rf_signal_create() -> CPtr
+### Adds a handle reference (for clone).
+dangerous external("C") routine rf_signal_add_ref(sig: CPtr)
+### Drops a handle reference; the monitor frees at 0.
+dangerous external("C") routine rf_signal_drop(sig: CPtr)
+### Acquires the monitor lock that guards the caller's shared predicate.
+dangerous external("C") routine rf_signal_lock(sig: CPtr)
+### Releases the monitor lock.
+dangerous external("C") routine rf_signal_unlock(sig: CPtr)
+### Waits for a cast — MUST hold the monitor lock. Drops the lock, parks (coroutine) or blocks
+### (thread), and re-acquires the lock before returning. Re-check the predicate in a loop.
+dangerous external("C") routine rf_signal_wait(sig: CPtr)
+### Wakes one waiter. Call after updating the predicate (not while holding the lock).
+dangerous external("C") routine rf_signal_cast_one(sig: CPtr)
+### Wakes all waiters. Call after updating the predicate (not while holding the lock).
+dangerous external("C") routine rf_signal_cast_all(sig: CPtr)
+
+# ============================================================================
 # race! competitor set (v0.2.0). Built one entry per Agent in List order, then
 # driven on this thread's implicit scheduler until the first competitor finishes.
 # Underlies the stdlib `race![T](of: ?List[Agent[T]])`.
