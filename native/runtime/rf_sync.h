@@ -79,6 +79,16 @@ static inline void rf_cond_signal(rf_cond* c)
     pthread_cond_signal(c);
 #endif
 }
+/* Wake ALL waiters — needed when a single state change can satisfy several blocked threads (e.g. a
+ * channel close releasing every blocked producer and consumer at once). */
+static inline void rf_cond_broadcast(rf_cond* c)
+{
+#ifdef _WIN32
+    WakeAllConditionVariable(c);
+#else
+    pthread_cond_broadcast(c);
+#endif
+}
 /* Wait on the cond with the mutex held; returns after a signal or `timeout_ns` elapses. */
 static inline void rf_cond_wait_ns(rf_cond* c, rf_mutex* m, uint64_t timeout_ns)
 {

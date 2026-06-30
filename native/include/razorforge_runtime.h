@@ -326,6 +326,36 @@ void rf_sched_run_until_default(rf_coro* target);
  * reference + live count instead of dangling. */
 int rf_sched_unschedule_default(rf_coro* coro);
 
+/* ---- Channels: streaming conduit (`Hopper[T]` / `Conveyor[T]`) --------------------------- */
+
+/* Refcounted ring buffer carrying payload pointers between agents. feed (full) and next (empty)
+ * park the caller inside a coroutine (rf_sched_park_external + rf_sched_wake) or block it on a plain
+ * thread — the same uncolored contract as retrieve!/waitfor. Backed by channel_runtime.c. */
+typedef struct rf_channel rf_channel;
+
+/* Create a channel. capacity = buffered slots; 0 = rendezvous (feed waits for a taker). Throws
+ * OutOfMemoryError on a capacity*sizeof(slot) overflow or allocation failure. Starts with one
+ * producer ref + one consumer ref (the Feeder + receiver returned by make_*). */
+rf_channel* rf_channel_create(uint64_t capacity);
+
+/* Handle refcounting: a clone adds a ref on its side; a drop releases one. Last Feeder drop
+ * auto-closes; the struct frees when both producer and consumer refs reach 0. */
+void rf_channel_add_feeder(rf_channel* chan);
+void rf_channel_drop_feeder(rf_channel* chan);
+void rf_channel_add_consumer(rf_channel* chan);
+void rf_channel_drop_consumer(rf_channel* chan);
+
+/* Send: 1 on success, 0 if closed or consumer-less (RF lowers 0 to a failable throw). Backpressure:
+ * blocks/parks while full. Receive: returns a payload, or NULL when closed AND drained. */
+uint32_t rf_channel_feed(rf_channel* chan, void* payload);
+void* rf_channel_next(rf_channel* chan);
+
+/* Explicit early close (drop auto-closes too). Not dangerous; double-close is a no-op. */
+void rf_channel_close(rf_channel* chan);
+
+/* Buffered item count — test/diagnostic snapshot only, not a synchronization primitive. */
+uint64_t rf_channel_count(rf_channel* chan);
+
 #ifdef __cplusplus
 }
 #endif

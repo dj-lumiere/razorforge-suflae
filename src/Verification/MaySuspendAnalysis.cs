@@ -109,13 +109,26 @@ public sealed class MaySuspendAnalysis
 /// <summary>
 /// Single source of truth for which routines are coroutine suspend primitives. v0.2.0 ships no
 /// suspend keyword (design §8); the substrate is the native <c>rf_coro_*</c> functions declared in
-/// <c>Core/NativeDeclarations.rf</c>. The park point is <c>rf_coro_yield</c>; later versions lower
-/// <c>retrieve!</c> / channel receives onto the same primitive and should extend this set.
+/// <c>Core/NativeDeclarations.rf</c>. The park point is <c>rf_coro_yield</c>; v0.3.0 channels add
+/// <c>rf_channel_feed</c> / <c>rf_channel_next</c>, which park the calling coroutine internally
+/// (rf_sched_park_external) on a full/empty buffer exactly like a yield.
 /// </summary>
 public static class SuspendPrimitives
 {
     /// <summary>The native park primitive — switches the running coroutine out to its resumer.</summary>
     public const string Yield = "rf_coro_yield";
+
+    /// <summary>
+    /// Channel send/receive (v0.3.0). Both park the calling coroutine inside the native runtime when
+    /// the buffer is full / empty, so a routine reaching either may suspend and needs the same
+    /// teardown-across-park instrumentation as one reaching <see cref="Yield"/>.
+    /// </summary>
+    private static readonly HashSet<string> PrimitiveNames = new()
+    {
+        Yield,
+        "rf_channel_feed",
+        "rf_channel_next",
+    };
 
     /// <summary>
     /// Whether <paramref name="routine"/> is a suspend primitive (the seed for
@@ -124,6 +137,6 @@ public static class SuspendPrimitives
     /// </summary>
     public static bool IsSuspendPrimitive(RoutineInfo routine)
     {
-        return routine is { OwnerType: null, Name: Yield };
+        return routine is { OwnerType: null } && PrimitiveNames.Contains(routine.Name);
     }
 }

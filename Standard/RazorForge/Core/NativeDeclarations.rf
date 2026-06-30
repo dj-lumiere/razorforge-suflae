@@ -168,6 +168,37 @@ dangerous external("C") routine rf_task_await_coro_deadline(task: Address, timeo
 external("C") routine rf_in_coroutine() -> U32
 
 # ============================================================================
+# Channels (v0.3.0). A refcounted ring buffer carrying payload pointers between
+# agents. feed (full) and next (empty) park inside a coroutine (rf_sched_park_external
+# + rf_sched_wake) or block on a condvar on a plain thread — uncolored. Underlies the
+# stdlib `Hopper[T]` / `Conveyor[T]` surface (Channels.rf).
+# ============================================================================
+
+### Creates a channel. `capacity` = buffered slots; 0 = rendezvous. Starts with one producer ref +
+### one consumer ref. Throws OutOfMemoryError on a capacity*slot overflow or allocation failure.
+### :returns: an opaque `rf_channel*` handle as a `CPtr`.
+dangerous external("C") routine rf_channel_create(capacity: U64) -> CPtr
+### Adds a producer (Feeder) reference.
+dangerous external("C") routine rf_channel_add_feeder(chan: CPtr)
+### Drops a producer reference. The last Feeder dropping auto-closes the channel.
+dangerous external("C") routine rf_channel_drop_feeder(chan: CPtr)
+### Adds a consumer (Hopper / LineWorker) reference.
+dangerous external("C") routine rf_channel_add_consumer(chan: CPtr)
+### Drops a consumer reference. The struct frees once both producer and consumer refs reach 0.
+dangerous external("C") routine rf_channel_drop_consumer(chan: CPtr)
+### Sends one payload pointer. Returns 1 on success, 0 if the channel is closed or has no consumers.
+### Blocks/parks while the buffer is full (backpressure); for a rendezvous channel additionally waits
+### until a consumer takes the item.
+dangerous external("C") routine rf_channel_feed(chan: CPtr, payload: Address) -> U32
+### Receives one payload pointer, or null (Address 0) when the channel is closed AND drained. Parks
+### while the buffer is empty.
+dangerous external("C") routine rf_channel_next(chan: CPtr) -> Address
+### Explicit early close (drop auto-closes too). Not dangerous semantically; double-close is a no-op.
+dangerous external("C") routine rf_channel_close(chan: CPtr)
+### Buffered item count — diagnostic snapshot only, not a synchronization primitive.
+dangerous external("C") routine rf_channel_count(chan: CPtr) -> U64
+
+# ============================================================================
 # race! competitor set (v0.2.0). Built one entry per Agent in List order, then
 # driven on this thread's implicit scheduler until the first competitor finishes.
 # Underlies the stdlib `race![T](of: ?List[Agent[T]])`.
