@@ -75,6 +75,13 @@ routine Feeder[T].close()
     rf_channel_close(chan: me.chan)
   return
 
+### Whether the channel has been closed (a subsequent `feed!` would throw). Racy: another agent could
+### close it the instant after you check, so prefer handling `feed!`'s failure to gating on this.
+### :returns: `true` if the channel is closed.
+routine Feeder[T].is_closed() -> Bool
+  danger!
+    return rf_channel_is_closed(chan: me.chan) != 0_u32
+
 ### Drops this producer reference; the last one closes the channel.
 dangerous routine Feeder[T].$destroy()
   rf_channel_drop_feeder(chan: me.chan)
@@ -95,6 +102,31 @@ relates ChannelDrain[T] as Iter
 routine Hopper[T].$iter() -> ?ChannelDrain[T]
   danger!
     return ChannelDrain[T](chan: me.chan)
+
+### The number of buffered items right now. A racy snapshot for diagnostics/heuristics — never a
+### synchronization decision (it can change the instant after you read it).
+### :returns: The current buffered item count.
+routine Hopper[T].count() -> U64
+  danger!
+    return rf_channel_count(chan: me.chan)
+
+### Whether the buffer is currently empty. Racy snapshot (see `count`).
+### :returns: `true` if no items are buffered.
+routine Hopper[T].is_empty() -> Bool
+  danger!
+    return rf_channel_count(chan: me.chan) == 0_u64
+
+### Whether the channel has been closed (it may still hold buffered items to drain).
+### :returns: `true` if closed.
+routine Hopper[T].is_closed() -> Bool
+  danger!
+    return rf_channel_is_closed(chan: me.chan) != 0_u32
+
+### The buffered capacity this channel was created with (0 = rendezvous).
+### :returns: The buffer capacity.
+routine Hopper[T].capacity() -> U64
+  danger!
+    return rf_channel_capacity(chan: me.chan)
 
 ### Drops this consumer reference; the channel frees once no producers and no consumers remain.
 dangerous routine Hopper[T].$destroy()
@@ -120,6 +152,27 @@ routine LineWorker[T].clone() -> LineWorker[T]
 routine LineWorker[T].$iter() -> ?ChannelDrain[T]
   danger!
     return ChannelDrain[T](chan: me.chan)
+
+### The number of buffered items right now (racy snapshot — diagnostics only, not synchronization).
+### :returns: The current buffered item count.
+routine LineWorker[T].count() -> U64
+  danger!
+    return rf_channel_count(chan: me.chan)
+
+### Whether the buffer is currently empty (racy snapshot). :returns: `true` if no items are buffered.
+routine LineWorker[T].is_empty() -> Bool
+  danger!
+    return rf_channel_count(chan: me.chan) == 0_u64
+
+### Whether the channel has been closed (may still hold buffered items). :returns: `true` if closed.
+routine LineWorker[T].is_closed() -> Bool
+  danger!
+    return rf_channel_is_closed(chan: me.chan) != 0_u32
+
+### The buffered capacity this channel was created with (0 = rendezvous). :returns: The capacity.
+routine LineWorker[T].capacity() -> U64
+  danger!
+    return rf_channel_capacity(chan: me.chan)
 
 ### Drops this consumer reference; the channel frees once no producers and no consumers remain.
 dangerous routine LineWorker[T].$destroy()

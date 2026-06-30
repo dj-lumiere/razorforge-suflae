@@ -299,7 +299,7 @@ void* rf_channel_next(rf_channel* chan)
     return payload;
 }
 
-/* Snapshot of buffered item count (test/diagnostic helper; not a synchronization primitive). */
+/* Snapshot of buffered item count (introspection — racy by nature, not a synchronization primitive). */
 uint64_t rf_channel_count(rf_channel* chan)
 {
     if (chan == NULL) return 0;
@@ -307,4 +307,22 @@ uint64_t rf_channel_count(rf_channel* chan)
     uint64_t n = chan->count;
     rf_mutex_unlock(&chan->lock);
     return n;
+}
+
+/* 1 if the channel has been closed (explicitly or by the last Feeder dropping). A closed channel may
+ * still hold buffered items to drain. Introspection snapshot. */
+uint32_t rf_channel_is_closed(rf_channel* chan)
+{
+    if (chan == NULL) return 1;
+    rf_mutex_lock(&chan->lock);
+    uint32_t closed = chan->closed ? 1u : 0u;
+    rf_mutex_unlock(&chan->lock);
+    return closed;
+}
+
+/* The buffered capacity the channel was created with (0 = rendezvous). Constant; introspection. */
+uint64_t rf_channel_capacity(rf_channel* chan)
+{
+    if (chan == NULL) return 0;
+    return chan->capacity;
 }

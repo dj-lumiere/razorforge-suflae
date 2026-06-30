@@ -56,6 +56,26 @@ routine Agent[T].coro_handle() -> CPtr
 routine Agent[T].task_handle() -> Address
   return me.agent
 
+### Whether the work has finished (its value is ready to `retrieve!` without waiting). A racy snapshot
+### for polling/heuristics, not a synchronization decision — it can flip to true the instant after you
+### read it. Branches on kind: a coroutine is done at status COMPLETED (3); a thread at COMPLETED (4).
+### :returns: `true` if the work has completed.
+routine Agent[T].is_done() -> Bool
+  if me.kind is AgentKind.CORO
+    if me.coro.is_none()
+      return true
+    danger!
+      return rf_coro_status_get(coro: me.coro) == 3_u32
+  if not me.spawned
+    return false
+  danger!
+    return rf_task_status_get(task: me.agent) == 4_u32
+
+### Whether the work was spawned and has not yet finished. Racy snapshot (see `is_done`).
+### :returns: `true` if still in flight.
+routine Agent[T].is_running() -> Bool
+  return not me.is_done()
+
 ### Requests cooperative cancellation of this agent — sets a flag in NATIVE memory (reached through
 ### the handle) and returns; it NEVER frees or unwinds (teardown stays in `$destroy`, the sole
 ### freer). A coroutine observes the request at its next suspend point (`waitfor` returns early) or

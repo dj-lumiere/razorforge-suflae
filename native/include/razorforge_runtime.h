@@ -353,8 +353,11 @@ void* rf_channel_next(rf_channel* chan);
 /* Explicit early close (drop auto-closes too). Not dangerous; double-close is a no-op. */
 void rf_channel_close(rf_channel* chan);
 
-/* Buffered item count — test/diagnostic snapshot only, not a synchronization primitive. */
+/* Introspection snapshots (racy by nature, not synchronization primitives): buffered item count,
+ * whether the channel is closed, and the buffered capacity it was created with (0 = rendezvous). */
 uint64_t rf_channel_count(rf_channel* chan);
+uint32_t rf_channel_is_closed(rf_channel* chan);
+uint64_t rf_channel_capacity(rf_channel* chan);
 
 /* ---- SignalCaster: a condition-variable monitor ----------------------------------------- */
 
