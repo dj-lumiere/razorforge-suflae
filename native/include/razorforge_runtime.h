@@ -382,6 +382,10 @@ void rf_signal_unlock(rf_signal* sig);
  * loop. This is a suspend primitive (see SuspendPrimitives in MaySuspendAnalysis). */
 void rf_signal_wait(rf_signal* sig);
 
+/* Timed wait — like rf_signal_wait but bounded by timeout_ns. Returns 1 if woken before the deadline
+ * (re-check the predicate), 0 if the deadline elapsed. Also a suspend primitive. */
+uint32_t rf_signal_wait_deadline(rf_signal* sig, uint64_t timeout_ns);
+
 /* Wake one / all waiter(s). Call after updating the predicate (typically just after unlock), NOT while
  * holding the monitor lock — these acquire it internally. */
 void rf_signal_cast_one(rf_signal* sig);

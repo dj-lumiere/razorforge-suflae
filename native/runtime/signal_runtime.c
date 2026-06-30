@@ -115,6 +115,36 @@ void rf_signal_wait(rf_signal* sig)
     }
 }
 
+/* Timed wait: like rf_signal_wait but bounded by `timeout_ns`. Returns 1 if woken by a cast (or a
+ * spurious wake) before the deadline — re-check your predicate — and 0 if the deadline elapsed first.
+ * MUST hold the monitor lock; releases and re-acquires it around the suspend, as wait does. */
+uint32_t rf_signal_wait_deadline(rf_signal* sig, uint64_t timeout_ns)
+{
+    if (sig == NULL) return 0;
+
+    uint64_t deadline = rf_monotonic_now_ns() + timeout_ns;
+    rf_sched* sched = rf_sched_current();
+    rf_coro* self = rf_coro_current();
+    if (sched != NULL && self != NULL) {
+        /* Coroutine: park on a deadline timer that a cast can also wake (rf_sched_park_deadline). On
+         * resume, the clock tells cast from timeout — woken early means a cast, else the timer fired. */
+        rf_signal_waiter node = { sched, self, sig->waiters };
+        sig->waiters = &node;
+        rf_mutex_unlock(&sig->lock);
+        rf_sched_park_deadline(timeout_ns);
+        rf_mutex_lock(&sig->lock);
+        rf_signal_waiter** p = &sig->waiters;
+        while (*p != NULL) {
+            if (*p == &node) { *p = node.next; break; }
+            p = &(*p)->next;
+        }
+    } else {
+        /* Plain thread: a timed condvar wait. */
+        rf_cond_wait_ns(&sig->cond, &sig->lock, timeout_ns);
+    }
+    return rf_monotonic_now_ns() >= deadline ? 0u : 1u;
+}
+
 /* Wake one waiter. Prefer a parked coroutine if any (the most local), else signal one thread. Spurious
  * over-wakes are harmless — every waiter re-checks its predicate under the lock. */
 void rf_signal_cast_one(rf_signal* sig)

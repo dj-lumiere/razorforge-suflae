@@ -222,6 +222,9 @@ dangerous external("C") routine rf_signal_unlock(sig: CPtr)
 ### Waits for a cast — MUST hold the monitor lock. Drops the lock, parks (coroutine) or blocks
 ### (thread), and re-acquires the lock before returning. Re-check the predicate in a loop.
 dangerous external("C") routine rf_signal_wait(sig: CPtr)
+### Timed wait. Returns 1 if woken before the deadline (re-check the predicate), 0 if it timed out.
+### MUST hold the lock; releases/re-acquires it around the suspend.
+dangerous external("C") routine rf_signal_wait_deadline(sig: CPtr, timeout_ns: U64) -> U32
 ### Wakes one waiter. Call after updating the predicate (not while holding the lock).
 dangerous external("C") routine rf_signal_cast_one(sig: CPtr)
 ### Wakes all waiters. Call after updating the predicate (not while holding the lock).

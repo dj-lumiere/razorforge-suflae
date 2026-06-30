@@ -53,6 +53,16 @@ routine SignalCaster.wait()
     rf_signal_wait(sig: me.sig)
   return
 
+### Like `wait`, but gives up after `deadline`. MUST hold the lock. Returns `true` if a cast (or a
+### spurious wake) arrived in time — re-check your predicate — and `false` if the deadline elapsed
+### first, so a loop can stop waiting. UNCOLORED: parks a coroutine on a timer / does a timed thread
+### wait. The timeout is per call, so a spurious wake restarts the clock.
+### :param deadline: How long to wait before giving up.
+### :returns: `true` if woken in time, `false` on timeout.
+routine SignalCaster.wait_within(deadline: Duration) -> Bool
+  danger!
+    return rf_signal_wait_deadline(sig: me.sig, timeout_ns: U64(deadline.total_nanoseconds())) != 0_u32
+
 ### Wakes one waiting agent. Call after making the condition true and releasing the lock.
 routine SignalCaster.cast_one()
   danger!

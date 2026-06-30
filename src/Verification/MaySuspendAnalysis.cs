@@ -129,6 +129,7 @@ public static class SuspendPrimitives
         "rf_channel_feed",
         "rf_channel_next",
         "rf_signal_wait",
+        "rf_signal_wait_deadline",
     };
 
     /// <summary>
