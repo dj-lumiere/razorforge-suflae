@@ -273,7 +273,10 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
             UsingStatement us => us with
             {
-                Body = TransformBodyCore(body: us.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
+                Body = TransformBodyCore(body: us.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly),
+                FallbackBody = us.FallbackBody != null
+                    ? TransformBodyCore(body: us.FallbackBody, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
+                    : null
             },
 
             DangerStatement danger => danger with

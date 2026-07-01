@@ -739,6 +739,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         var sb = new StringBuilder();
         sb.AppendLine($"{I}using {node.Resource.Accept(this)} as {node.Name}");
         sb.Append(PrintBodyOf(node.Body));
+        if (node.FallbackBody != null)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"{I}fallback");
+            sb.Append(PrintBodyOf(node.FallbackBody));
+        }
         return sb.ToString().TrimEnd();
     }
 

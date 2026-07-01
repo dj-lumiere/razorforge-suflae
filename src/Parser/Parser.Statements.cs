@@ -1005,17 +1005,54 @@ public partial class Parser
         // Parse the indented body
         Statement body = ParseBody();
 
-        // Build nested UsingStatements from inside out (last resource is innermost)
+        // Optional `fallback` block — the contention branch of a fallible `using`
+        // (runs when the resource's non-blocking `$try_enter()` fails to acquire; no
+        // resource is held on that path). Single-resource only.
+        //
+        // `fallback` is a CONTEXTUAL keyword: it stays a normal identifier everywhere else
+        // (it's a common variable name — e.g. `unwrap_or(fallback:)`). It is only the block
+        // keyword here, recognised as an identifier `fallback` immediately followed by an
+        // indented block right after a `using` body.
+        Statement? fallbackBody = null;
+        if (IsContextualFallbackBlock())
+        {
+            Advance(); // consume the `fallback` identifier
+            if (resources.Count > 1)
+                throw ThrowParseError(
+                    message: "'fallback' is only allowed on a single-resource 'using' " +
+                             "(a fallible acquisition binds exactly one resource).");
+            fallbackBody = ParseBody();
+        }
+
+        // Build nested UsingStatements from inside out (last resource is innermost).
+        // `fallback` (single-resource only) attaches to the sole using.
         Statement result = body;
         for (int i = resources.Count - 1; i >= 0; i--)
         {
             result = new UsingStatement(Resource: resources[index: i].Resource,
                 Name: resources[index: i].Name,
                 Body: result,
-                Location: location);
+                Location: location,
+                FallbackBody: i == 0 ? fallbackBody : null);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Recognises the contextual `fallback` block that may follow a `using` body: a bare
+    /// identifier <c>fallback</c> immediately followed by an indented block. Requiring the
+    /// following INDENT keeps a real identifier `fallback` used as an ordinary statement
+    /// (rare, but legal) from being misread as the keyword.
+    /// </summary>
+    private bool IsContextualFallbackBlock()
+    {
+        if (CurrentToken is not { Type: TokenType.Identifier, Text: "fallback" })
+            return false;
+        // After `fallback` comes either INDENT directly, or NEWLINE then INDENT.
+        return PeekToken(offset: 1).Type == TokenType.Indent
+               || (PeekToken(offset: 1).Type == TokenType.Newline
+                   && PeekToken(offset: 2).Type == TokenType.Indent);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════

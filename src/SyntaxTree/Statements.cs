@@ -933,7 +933,8 @@ public record UsingStatement(
     Expression Resource,
     string Name,
     Statement Body,
-    SourceLocation Location) : Statement(Location: Location)
+    SourceLocation Location,
+    Statement? FallbackBody = null) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

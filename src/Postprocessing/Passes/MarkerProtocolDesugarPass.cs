@@ -377,6 +377,7 @@ internal sealed class MarkerProtocolDesugarPass
                 break;
             case UsingStatement us:
                 WalkStatement(us.Body);
+                if (us.FallbackBody != null) WalkStatement(us.FallbackBody);
                 break;
             case DangerStatement danger:
                 WalkStatement(danger.Body);

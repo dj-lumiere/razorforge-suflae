@@ -268,9 +268,13 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             case UsingStatement usingStmt:
             {
                 Statement newBody = LowerStatement(stmt: usingStmt.Body);
+                Statement? fb = usingStmt.FallbackBody != null
+                    ? LowerStatement(stmt: usingStmt.FallbackBody)
+                    : null;
                 return ReferenceEquals(newBody, usingStmt.Body)
+                       && ReferenceEquals(fb, usingStmt.FallbackBody)
                     ? stmt
-                    : usingStmt with { Body = newBody };
+                    : usingStmt with { Body = newBody, FallbackBody = fb };
             }
 
             case DangerStatement danger:

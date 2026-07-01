@@ -176,8 +176,10 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
             {
                 Expression res = LowerExpression(u.Resource);
                 Statement body = LowerStatement(u.Body);
-                bool changed = !ReferenceEquals(res, u.Resource) || !ReferenceEquals(body, u.Body);
-                return changed ? u with { Resource = res, Body = body } : stmt;
+                Statement? fb = u.FallbackBody != null ? LowerStatement(u.FallbackBody) : null;
+                bool changed = !ReferenceEquals(res, u.Resource) || !ReferenceEquals(body, u.Body)
+                               || !ReferenceEquals(fb, u.FallbackBody);
+                return changed ? u with { Resource = res, Body = body, FallbackBody = fb } : stmt;
             }
 
             case DangerStatement d:

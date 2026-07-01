@@ -171,10 +171,12 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 var (hoisted, loweredRes) = LowerExpr(u.Resource);
                 Statement body = LowerStatementFull(u.Body);
+                Statement? fb = u.FallbackBody != null ? LowerStatementFull(u.FallbackBody) : null;
                 bool changed = !ReferenceEquals(loweredRes, u.Resource)
-                               || !ReferenceEquals(body, u.Body);
+                               || !ReferenceEquals(body, u.Body)
+                               || !ReferenceEquals(fb, u.FallbackBody);
                 if (!changed && hoisted.Count == 0) return ([], stmt);
-                return (hoisted, u with { Resource = loweredRes, Body = body });
+                return (hoisted, u with { Resource = loweredRes, Body = body, FallbackBody = fb });
             }
 
             case DangerStatement d:

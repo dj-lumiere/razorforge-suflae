@@ -183,7 +183,12 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
             case UsingStatement u:
             {
                 Statement body = ExpandStatement(stmt: u.Body, crashableTypes: crashableTypes);
-                return !ReferenceEquals(body, u.Body) ? u with { Body = body } : u;
+                Statement? fb = u.FallbackBody != null
+                    ? ExpandStatement(stmt: u.FallbackBody, crashableTypes: crashableTypes)
+                    : null;
+                return !ReferenceEquals(body, u.Body) || !ReferenceEquals(fb, u.FallbackBody)
+                    ? u with { Body = body, FallbackBody = fb }
+                    : u;
             }
 
             case DangerStatement d:

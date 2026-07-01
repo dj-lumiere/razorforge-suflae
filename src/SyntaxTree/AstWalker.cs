@@ -119,6 +119,7 @@ public static class AstWalker
             case UsingStatement s:
                 yield return s.Resource;
                 yield return s.Body;
+                if (s.FallbackBody != null) yield return s.FallbackBody;
                 break;
             case AbsentStatement:
             case PassStatement:

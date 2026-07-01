@@ -599,6 +599,20 @@ public sealed partial class SemanticVerifier
                     _registry.LookupMethod(type: resourceType, methodName: "$enter");
                 if (enterMethod?.ReturnType is { IsBlank: false } enterReturn)
                     boundType = enterReturn;
+
+                // A `fallback` branch drives a non-blocking acquisition — the resource must
+                // provide `$try_enter` (returns Bool: did the hold succeed?). Types whose entry
+                // can only block (no `$try_enter`) cannot take a `fallback`.
+                if (usingStmt.FallbackBody != null &&
+                    _registry.LookupMethod(type: resourceType, methodName: "$try_enter") == null)
+                {
+                    ReportError(code: SemanticDiagnosticCode.UsingFallbackRequiresTryEnter,
+                        message:
+                        $"'using ... fallback' requires the resource type '{resourceType.Name}' to " +
+                        "provide '$try_enter' (a non-blocking acquisition). This type only supports " +
+                        "blocking entry — drop the 'fallback' branch.",
+                        location: usingStmt.Location);
+                }
             }
         }
 
@@ -620,6 +634,15 @@ public sealed partial class SemanticVerifier
         // Pop the MT access hold now that the scope has closed (readers-XOR-writer, RF-S630).
         if (accessHandle != null)
             _activeAccessHolds.RemoveAt(index: _activeAccessHolds.Count - 1);
+
+        // The `fallback` branch runs when acquisition fails: no hold is taken and the bound
+        // name is NOT in scope. Analyze it in its own fresh scope, outside the access hold.
+        if (usingStmt.FallbackBody != null)
+        {
+            _registry.EnterScope(kind: ScopeKind.Block, name: "using-fallback");
+            AnalyzeStatement(statement: usingStmt.FallbackBody);
+            _registry.ExitScope();
+        }
     }
 
     /// <summary>

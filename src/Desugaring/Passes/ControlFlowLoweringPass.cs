@@ -188,7 +188,10 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             case UsingStatement u:
             {
                 Statement body = LowerStatement(stmt: u.Body);
-                return !ReferenceEquals(body, u.Body) ? u with { Body = body } : u;
+                Statement? fb = u.FallbackBody != null ? LowerStatement(stmt: u.FallbackBody) : null;
+                return !ReferenceEquals(body, u.Body) || !ReferenceEquals(fb, u.FallbackBody)
+                    ? u with { Body = body, FallbackBody = fb }
+                    : u;
             }
 
             case DangerStatement d:

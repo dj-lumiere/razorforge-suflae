@@ -470,7 +470,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // monomorphized (whether or not that `$unwrap` is failable).
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$unwrap");
                 break;
-            case UsingStatement:
+            case UsingStatement usingNode:
                 // `using r.view() as v` lowers (in Phase 7 — after this pass) to
                 // `__uf.$enter()` ... `__uf.$exit()`. Seed both on the resource type so they
                 // make it into the live set; codegen later emits calls to the same symbols.
@@ -478,6 +478,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // is a no-op when LookupMethod returns null.
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$enter");
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$exit");
+                // A `fallback` branch lowers the entry to `__uf.$try_enter()` instead of `$enter`.
+                if (usingNode.FallbackBody != null)
+                    EnqueueMethodIfPresent(owner: collectionType, methodName: "$try_enter");
                 break;
         }
     }

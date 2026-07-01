@@ -173,7 +173,13 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 return d with { Body = (BlockStatement)TransformStatement(d.Body) };
 
             case UsingStatement u:
-                return u with { Body = TransformStatement(u.Body) };
+                return u with
+                {
+                    Body = TransformStatement(u.Body),
+                    FallbackBody = u.FallbackBody != null
+                        ? TransformStatement(u.FallbackBody)
+                        : null
+                };
 
             case WhenStatement whenStmt:
             {

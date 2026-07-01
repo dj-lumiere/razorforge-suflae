@@ -168,7 +168,13 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             // UsingLoweringPass injects. (In already-lowered stdlib bodies the `using` is gone; its
             // `__uf_` temporaries are skipped by IsUsingBinding instead.)
             case UsingStatement u:
-                return u with { Body = LowerStatement(u.Body, Copy(live), loopBoundary) };
+                return u with
+                {
+                    Body = LowerStatement(u.Body, Copy(live), loopBoundary),
+                    FallbackBody = u.FallbackBody != null
+                        ? LowerStatement(u.FallbackBody, Copy(live), loopBoundary)
+                        : null
+                };
 
             case ReturnStatement or AbsentStatement or ThrowStatement or VariantReturnStatement:
                 return PrefixDestroys(stmt, live, from: 0, skip: ReturnedName(stmt));

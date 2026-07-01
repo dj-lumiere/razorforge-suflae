@@ -1473,7 +1473,10 @@ internal static class GenericAstRewriter
             UsingStatement us => us with
             {
                 Resource = RewriteExpression(expr: us.Resource, ctx: ctx),
-                Body = RewriteStatement(stmt: us.Body, ctx: ctx)
+                Body = RewriteStatement(stmt: us.Body, ctx: ctx),
+                FallbackBody = us.FallbackBody != null
+                    ? RewriteStatement(stmt: us.FallbackBody, ctx: ctx)
+                    : null
             },
 
             DestructuringStatement destruct => destruct with

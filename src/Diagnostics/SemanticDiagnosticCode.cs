@@ -621,6 +621,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Lambda captures variable without declaring it in 'given' clause.</summary>
     LambdaCaptureWithoutGiven = 610,
 
+    /// <summary>A `using ... fallback` target must have `$try_enter` (non-blocking acquisition).</summary>
+    UsingFallbackRequiresTryEnter = 611,
+
     /// <summary>Using target must have $enter/$exit for resource management.</summary>
     UsingTargetMissingEnterExit = 612,
 

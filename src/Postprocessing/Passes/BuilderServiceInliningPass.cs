@@ -319,7 +319,10 @@ internal sealed class BuilderServiceInliningPass
             case UsingStatement us:
             {
                 Statement body = LowerStatement(us.Body);
-                return ReferenceEquals(body, us.Body) ? stmt : us with { Body = body };
+                Statement? fb = us.FallbackBody != null ? LowerStatement(us.FallbackBody) : null;
+                return ReferenceEquals(body, us.Body) && ReferenceEquals(fb, us.FallbackBody)
+                    ? stmt
+                    : us with { Body = body, FallbackBody = fb };
             }
 
             case DangerStatement danger:

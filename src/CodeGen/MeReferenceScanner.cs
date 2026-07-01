@@ -137,7 +137,8 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
             ScanPattern(pattern: c.Pattern) || c.Body.Accept(visitor: this));
     public bool VisitDangerStatement(DangerStatement node) => node.Body.Accept(visitor: this);
     public bool VisitUsingStatement(UsingStatement node) =>
-        node.Resource.Accept(visitor: this) || node.Body.Accept(visitor: this);
+        node.Resource.Accept(visitor: this) || node.Body.Accept(visitor: this) ||
+        node.FallbackBody?.Accept(visitor: this) == true;
     public bool VisitDiscardStatement(DiscardStatement node) =>
         node.Expression.Accept(visitor: this);
 

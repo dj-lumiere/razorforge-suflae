@@ -34,6 +34,15 @@ routine Claiming[T, P].$enter() -> Claiming[T, P]
     ctrl.add_claimer()
   return me
 
+### Called on entry to a *fallible* `using ... fallback` block: attempts the exclusive claimer hold
+### once, without blocking. Returns `true` if the hold was acquired (the `using` body runs and `$exit`
+### will release it) or `false` on contention (the `fallback` branch runs; nothing is held).
+### :returns: `true` if the exclusive hold was acquired, `false` otherwise.
+routine Claiming[T, P].$try_enter() -> Bool
+  danger!
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    return ctrl.try_add_claimer()
+
 ### Called on exit from the `using` block (and on every escape): releases the claimer hold.
 routine Claiming[T, P].$exit()
   danger!
