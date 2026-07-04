@@ -483,8 +483,8 @@ public class ParserErrorTests
     [Fact]
     public void Parse_ReservedPrefix_Try_ShouldParse()
     {
-        // try_ prefix is reserved but parser should accept it
-        // Semantic analyzer should reject
+        // try_ is only reserved on collision with a failable base's synthesized variant; the
+        // parser always accepts the name regardless.
         string source = """
                         routine try_something()
                           pass
@@ -493,7 +493,6 @@ public class ParserErrorTests
 
         Program program = Parse(source: source);
         Assert.NotNull(@object: program);
-        // Semantic analysis will reject this
     }
     /// <summary>
     /// Verifies that the parser accepts reserved prefix check so semantic analysis can validate it.

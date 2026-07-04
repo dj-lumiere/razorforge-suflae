@@ -239,6 +239,16 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// Looks up the routine registered under an exact <see cref="RoutineInfo.RegistryKey"/>.
+    /// Unlike <see cref="LookupRoutineOverload"/> this applies no Core-prefix or generic
+    /// fallbacks — it answers "is this precise owner+name+signature slot occupied?", which
+    /// reserved-variant collision detection needs to compare a generated variant against any
+    /// hand-written routine sharing its key.
+    /// </summary>
+    public RoutineInfo? GetRoutineByExactKey(string registryKey) =>
+        _routines.TryGetValue(key: registryKey, value: out RoutineInfo? routine) ? routine : null;
+
+    /// <summary>
     /// Looks up a routine by its full name.
     /// </summary>
     /// <param name="fullName">The fully qualified name of the routine.</param>

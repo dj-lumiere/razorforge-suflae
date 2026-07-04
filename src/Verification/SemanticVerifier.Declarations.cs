@@ -560,18 +560,13 @@ public sealed partial class SemanticVerifier
                 location: routine.Location);
         }
 
-        // Validate reserved prefixes (try_, check_, lookup_) for user functions
+        // Reserved-prefix collisions (try_/check_/lookup_ shadowing a compiler-generated
+        // failable variant) are validated in CheckReservedVariantCollision, which runs after
+        // all routines are registered — the failable base may be declared later in the file,
+        // so it isn't reliably visible here at collection time.
         string baseName = routineName.Contains(value: '.')
             ? routineName[(routineName.IndexOf(value: '.') + 1)..]
             : routineName;
-
-        if (IsReservedRoutinePrefix(name: baseName))
-        {
-            ReportError(code: SemanticDiagnosticCode.ReservedRoutinePrefix,
-                message: $"Routine name '{baseName}' uses a reserved prefix. " +
-                         "Prefixes 'try_', 'check_', and 'lookup_' are reserved for auto-generated error handling variants.",
-                location: routine.Location);
-        }
 
         // Validate $ prefixed names are known built-in methods
         if (IsUnknownWiredMethod(name: baseName))
@@ -665,16 +660,6 @@ public sealed partial class SemanticVerifier
             RoutineName: routineName,
             Module: GetCurrentModuleName(),
             FilePath: _currentFilePath));
-    }
-
-    /// <summary>
-    /// Checks if a routine name uses a reserved prefix.
-    /// </summary>
-    private static bool IsReservedRoutinePrefix(string name)
-    {
-        return name.StartsWith(value: "try_", comparisonType: StringComparison.Ordinal) ||
-               name.StartsWith(value: "check_", comparisonType: StringComparison.Ordinal) ||
-               name.StartsWith(value: "lookup_", comparisonType: StringComparison.Ordinal);
     }
 
     #endregion

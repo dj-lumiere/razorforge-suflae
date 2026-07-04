@@ -315,11 +315,11 @@ public class TypeResolutionTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for reserved function prefix and reports the expected error.
+    /// The try_/check_/lookup_ prefixes are collision-only: with no failable base of the same
+    /// signature to shadow, a try_-prefixed routine is allowed (e.g. the lock idiom `try_lock`).
     /// </summary>
-
     [Fact]
-    public void Analyze_ReservedFunctionPrefix_ReportsError()
+    public void Analyze_ReservedFunctionPrefix_NoFailableBase_Allowed()
     {
         string source = """
                         routine try_something()
@@ -328,17 +328,14 @@ public class TypeResolutionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "reserved",
-                comparisonType: StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for reserved function prefix check and reports the expected error.
+    /// A check_-prefixed routine is allowed when no failable base of the same signature exists.
     /// </summary>
-
     [Fact]
-    public void Analyze_ReservedFunctionPrefix_Check_ReportsError()
+    public void Analyze_ReservedFunctionPrefix_Check_NoFailableBase_Allowed()
     {
         string source = """
                         routine check_value()
@@ -347,14 +344,14 @@ public class TypeResolutionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for reserved function prefix lookup and reports the expected error.
+    /// A lookup_-prefixed routine is allowed when no failable base of the same signature exists.
     /// </summary>
-
     [Fact]
-    public void Analyze_ReservedFunctionPrefix_Lookup_ReportsError()
+    public void Analyze_ReservedFunctionPrefix_Lookup_NoFailableBase_Allowed()
     {
         string source = """
                         routine lookup_item()
@@ -363,7 +360,8 @@ public class TypeResolutionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
     }
 
     #endregion
