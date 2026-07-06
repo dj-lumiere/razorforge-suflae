@@ -258,7 +258,7 @@ public partial class LlvmCodeGenerator
         // record, so call sites expect the record by value, not a pointer. Use
         // the named struct type so the SSA value matches the call signature.
         string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"{loaded} = load %Record.Bytes, ptr {constName}");
+        EmitLine(sb: sb, line: $"{loaded} = load %Record.Core.Bytes, ptr {constName}");
         return loaded;
     }
 
@@ -610,7 +610,7 @@ public partial class LlvmCodeGenerator
         // Use the named struct type so the SSA value matches the call signature.
         // The optimizer collapses redundant loads of the same global.
         string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"{loaded} = load %Record.Text, ptr {constName}");
+        EmitLine(sb: sb, line: $"{loaded} = load %Record.Core.Text, ptr {constName}");
         return loaded;
     }
 

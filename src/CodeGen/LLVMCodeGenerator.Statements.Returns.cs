@@ -514,13 +514,13 @@ public partial class LlvmCodeGenerator
             // field 1 (count) directly from the SSA struct.
             string textVal = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {textVal} = call %Record.Text @{mangledCrash}({llvmReceiverType} {errorVal})");
+                line: $"  {textVal} = call %Record.Core.Text @{mangledCrash}({llvmReceiverType} {errorVal})");
             dataPtr = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {dataPtr} = extractvalue %Record.Text {textVal}, 0");
+                line: $"  {dataPtr} = extractvalue %Record.Core.Text {textVal}, 0");
             msgLen = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {msgLen} = extractvalue %Record.Text {textVal}, 1");
+                line: $"  {msgLen} = extractvalue %Record.Core.Text {textVal}, 1");
         }
 
         string typeCStr = EmitCStringConstant(value: typeName);

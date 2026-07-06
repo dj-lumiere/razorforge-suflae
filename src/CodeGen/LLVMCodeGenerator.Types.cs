@@ -248,17 +248,22 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string GetRecordTypeName(RecordTypeInfo record)
     {
-        return $"%{Q(name: $"Record.{record.Name}")}";
+        // Module-qualified (TypeInfo.FullName) so same-named records in different modules never
+        // collide into one LLVM struct name (which LLVM would silently rename to `.0`).
+        return $"%{Q(name: $"Record.{record.FullName}")}";
     }
 
-    /// <summary>The bare LLVM struct name for an entity — no generation side effect. Used INSIDE
-    /// GenerateEntityType (where ensuring would re-enter) and other name-only contexts.</summary>
+    /// <summary>The LLVM struct name for an entity — no generation side effect. Used INSIDE
+    /// GenerateEntityType (where ensuring would re-enter) and other name-only contexts. Uses the
+    /// module-qualified <see cref="TypeInfo.FullName"/> (e.g. <c>Entity.Random.Random</c>,
+    /// <c>Entity.Core.List[Core.S64]</c>) so same-named entities in different modules never collide
+    /// into one LLVM struct name (which LLVM would silently rename to <c>.0</c> and miscompile).</summary>
     private static string RawEntityTypeName(EntityTypeInfo entity)
-        => $"%{Q(name: $"Entity.{entity.Name}")}";
+        => $"%{Q(name: $"Entity.{entity.FullName}")}";
 
     /// <summary>The bare LLVM struct name for a crashable — no generation side effect.</summary>
     private static string RawCrashableTypeName(CrashableTypeInfo crashable)
-        => $"%{Q(name: $"Crashable.{crashable.Name}")}";
+        => $"%{Q(name: $"Crashable.{crashable.FullName}")}";
 
     /// <summary>
     /// Gets the LLVM struct type name for an entity, ensuring its struct definition is emitted on
@@ -296,7 +301,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>The bare LLVM struct name for a variant — no generation side effect.</summary>
     private static string RawVariantTypeName(VariantTypeInfo variant)
-        => $"%{Q(name: $"Variant.{variant.Name}")}";
+        => $"%{Q(name: $"Variant.{variant.FullName}")}";
 
     /// <summary>
     /// Gets the LLVM struct type name for a variant, ensuring its struct (tag + payload) is emitted
@@ -333,7 +338,8 @@ public partial class LlvmCodeGenerator
             if (resolved != null)
                 return GetLlvmType(type: resolved);
         }
-        return $"%{Q(name: $"Record.Maybe[{valueType.FullName}]")}";
+        // Carriers live in `module Core`; match the module-qualified canonical name (GetRecordTypeName).
+        return $"%{Q(name: $"Record.Core.Maybe[{valueType.FullName}]")}";
     }
 
     /// <summary>
@@ -348,7 +354,8 @@ public partial class LlvmCodeGenerator
             if (resolved != null)
                 return GetLlvmType(type: resolved);
         }
-        return $"%{Q(name: $"Record.Lookup[{valueType.FullName}]")}";
+        // Carriers live in `module Core`; match the module-qualified canonical name (GetRecordTypeName).
+        return $"%{Q(name: $"Record.Core.Lookup[{valueType.FullName}]")}";
     }
 
     /// <summary>
@@ -363,7 +370,8 @@ public partial class LlvmCodeGenerator
             if (resolved != null)
                 return GetLlvmType(type: resolved);
         }
-        return $"%{Q(name: $"Record.Result[{valueType.FullName}]")}";
+        // Carriers live in `module Core`; match the module-qualified canonical name (GetRecordTypeName).
+        return $"%{Q(name: $"Record.Core.Result[{valueType.FullName}]")}";
     }
 
     /// <summary>Returns true if <paramref name="type"/> is a Maybe[T], Result[T], or Lookup[T] carrier.</summary>

@@ -546,7 +546,7 @@ public class CompilerPipelineLoweringTests
         Assert.DoesNotContain(expectedSubstring: "call i64 @rf_allocate_dynamic_uninit({ i64 }",
             actualString: llvmIr);
         Assert.DoesNotContain(
-            expectedSubstring: "call i64 @rf_allocate_dynamic_uninit(%Record.ByteSize",
+            expectedSubstring: "call i64 @rf_allocate_dynamic_uninit(%Record.Core.ByteSize",
             actualString: llvmIr);
     }
 
@@ -637,7 +637,7 @@ public class CompilerPipelineLoweringTests
 
         string llvmIr = generator.Generate();
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define %\"Record.Maybe[Core.U8]\" @Collections.BitList.try_to_u8");
+            functionMarker: "define %\"Record.Core.Maybe[Core.U8]\" @Collections.BitList.try_to_u8");
         Assert.Contains(expectedSubstring: "call i64 @\"Core.Hijacked[Core.U64].extract\"",
             actualString: tryToU8Body);
         Assert.DoesNotContain(expectedSubstring: "@\"Core.Hijacked[Core.Bytes].extract\"",
