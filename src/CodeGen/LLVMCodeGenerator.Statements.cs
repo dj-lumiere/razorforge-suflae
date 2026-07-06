@@ -26,6 +26,9 @@ public partial class LlvmCodeGenerator
     /// <returns>True if the statement terminates the current block.</returns>
     private bool EmitStatement(StringBuilder sb, Statement stmt)
     {
+        SourceLocation? savedLoc = PushDebugLoc(sb: sb, loc: stmt.Location);
+        try
+        {
         switch (stmt)
         {
             case BlockStatement block:
@@ -98,6 +101,11 @@ public partial class LlvmCodeGenerator
             default:
                 throw new NotImplementedException(
                     message: $"Statement type not implemented: {stmt.GetType().Name}");
+        }
+        }
+        finally
+        {
+            PopDebugLoc(sb: sb, prev: savedLoc);
         }
     }
 

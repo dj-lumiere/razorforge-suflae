@@ -30,6 +30,43 @@ public partial class LlvmCodeGenerator
     /// <summary>A recorded DISubprogram: source file/dir (forward-slashed) plus the routine's start line.</summary>
     private readonly record struct DebugSubprogram(string File, string Directory, int Line);
 
+    /// <summary>Layer-2 per-expression location cursor. Push/PopDebugLoc emit <c>; !diloc L C</c>
+    /// markers into the instruction stream as codegen descends/ascends the AST; ApplyDebugInfo reads
+    /// them (finer than the call-site trace cursor) to give each instruction its own line+column, then
+    /// strips them from the output.</summary>
+    private SourceLocation? _currentDbgLoc;
+
+    /// <summary>Emits a location marker for <paramref name="loc"/> if it differs from the current
+    /// cursor, and returns the previous cursor so the caller can restore it (see PopDebugLoc). No-op
+    /// unless debug mode.</summary>
+    private SourceLocation? PushDebugLoc(StringBuilder sb, SourceLocation? loc)
+    {
+        SourceLocation? prev = _currentDbgLoc;
+        if (ShouldEmitDebugInfo && loc is not null &&
+            (loc.Line != prev?.Line || loc.Column != prev?.Column))
+        {
+            sb.Append(value: "  ; !diloc ").Append(value: loc.Line).Append(value: ' ')
+              .Append(value: loc.Column).Append(value: '\n');
+            _currentDbgLoc = loc;
+        }
+
+        return prev;
+    }
+
+    /// <summary>Restores the cursor saved by PushDebugLoc, re-emitting its marker so instructions the
+    /// parent node emits *after* a child get the parent's location. No-op unless debug mode.</summary>
+    private void PopDebugLoc(StringBuilder sb, SourceLocation? prev)
+    {
+        if (ShouldEmitDebugInfo && prev is not null &&
+            (prev.Line != _currentDbgLoc?.Line || prev.Column != _currentDbgLoc?.Column))
+        {
+            sb.Append(value: "  ; !diloc ").Append(value: prev.Line).Append(value: ' ')
+              .Append(value: prev.Column).Append(value: '\n');
+        }
+
+        _currentDbgLoc = prev;
+    }
+
     /// <summary>Records a DISubprogram descriptor for an RF routine define. No-op unless debug mode.</summary>
     private void RecordDebugSubprogram(string funcName, SourceLocation? location)
     {
@@ -113,6 +150,18 @@ public partial class LlvmCodeGenerator
 
         foreach (string line in ir.Split(separator: '\n'))
         {
+            // Layer-2 fine-grained location markers: update the cursor and strip them from output.
+            if (TryParseLocMarker(line: line, line2: out int ml, col: out int mc))
+            {
+                if (curSub >= 0)
+                {
+                    curLine = ml;
+                    curCol = mc;
+                }
+
+                continue;
+            }
+
             if (line.StartsWith(value: "define ", comparisonType: StringComparison.Ordinal))
             {
                 string? sym = ExtractDefineSymbol(line: line);
@@ -205,6 +254,21 @@ public partial class LlvmCodeGenerator
         return brace < 0
             ? line
             : $"{line[..brace].TrimEnd()} !dbg !{sub} {line[brace..]}";
+    }
+
+    /// <summary>Parses a <c>  ; !diloc L C</c> Layer-2 location marker.</summary>
+    private static bool TryParseLocMarker(string line, out int line2, out int col)
+    {
+        line2 = 0;
+        col = 0;
+        ReadOnlySpan<char> t = line.AsSpan().TrimStart();
+        if (!t.StartsWith(value: "; !diloc "))
+            return false;
+        string[] parts = t[("; !diloc ".Length)..].ToString()
+            .Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 &&
+               int.TryParse(s: parts[0], result: out line2) &&
+               int.TryParse(s: parts[1], result: out col);
     }
 
     private static readonly Regex TraceLocPattern =

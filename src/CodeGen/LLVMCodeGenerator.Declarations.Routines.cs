@@ -440,6 +440,7 @@ public partial class LlvmCodeGenerator
             $"define {returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;
         RecordDebugSubprogram(funcName: funcName, location: routineInfo.Location);
+        _currentDbgLoc = null; // reset the Layer-2 location cursor at each routine boundary
         EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();

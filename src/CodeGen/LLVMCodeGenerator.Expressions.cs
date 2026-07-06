@@ -26,6 +26,9 @@ public partial class LlvmCodeGenerator
     /// <returns>The temporary value name produced for the expression.</returns>
     private string EmitExpression(StringBuilder sb, Expression expr)
     {
+        SourceLocation? savedLoc = PushDebugLoc(sb: sb, loc: expr.Location);
+        try
+        {
         return expr switch
         {
             // TODO: This should be eliminated by lowering pass
@@ -53,6 +56,11 @@ public partial class LlvmCodeGenerator
             _ => throw new NotImplementedException(
                 message: $"Expression type not implemented: {expr.GetType().Name}")
         };
+        }
+        finally
+        {
+            PopDebugLoc(sb: sb, prev: savedLoc);
+        }
     }
 
     /// <summary>
