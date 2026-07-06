@@ -1564,7 +1564,10 @@ public partial class LlvmCodeGenerator
         var normalized = output.ToString()
                                .Replace(oldValue: "\r\n", newValue: "\n")
                                .Replace(oldValue: "\r", newValue: "\n");
-        return ApplyTbaa(normalized);
+        // TBAA first (tags loads/stores), then line-tables debug info (tags instructions + define
+        // headers). Both are text post-passes that append their own metadata block; DI numbers itself
+        // above TBAA's fixed !0..!22. ApplyDebugInfo is a no-op outside debug builds.
+        return ApplyDebugInfo(ApplyTbaa(normalized));
     }
 
     #endregion

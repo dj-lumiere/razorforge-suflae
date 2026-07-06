@@ -439,6 +439,7 @@ public partial class LlvmCodeGenerator
         string defineHeader =
             $"define {returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;
+        RecordDebugSubprogram(funcName: funcName, location: routineInfo.Location);
         EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();
