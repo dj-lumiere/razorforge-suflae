@@ -1,0 +1,132 @@
+module Random
+
+### A seedable pseudo-random number generator built on xoshiro256**.
+###
+### The generator keeps 256 bits of state (four `U64` words) advanced by the
+### xoshiro256** scrambler. Seeding runs a single `U64` seed through splitmix64
+### to spread entropy across all four state words, so even a small or
+### zero-valued seed produces a well-distributed stream.
+###
+### The output is deterministic for a given seed: the same seed always replays
+### the same sequence. This is a statistical generator for simulations, games,
+### sampling, and shuffling — it is NOT cryptographically secure.
+entity Random
+  ### Stores state word 0 of the xoshiro256** state.
+  secret s0: U64
+  ### Stores state word 1 of the xoshiro256** state.
+  secret s1: U64
+  ### Stores state word 2 of the xoshiro256** state.
+  secret s2: U64
+  ### Stores state word 3 of the xoshiro256** state.
+  secret s3: U64
+
+### Runs one round of the splitmix64 mixer, used to expand a seed into the
+### four xoshiro256** state words.
+### :param x: The running splitmix64 accumulator.
+### :returns: The next well-mixed `U64` output.
+routine splitmix64_next(x: U64) -> U64
+  var z = x +% 0x9E3779B97F4A7C15_u64
+  z = (z ^ (z >>> 30u32)) *% 0xBF58476D1CE4E5B9_u64
+  z = (z ^ (z >>> 27u32)) *% 0x94D049BB133111EB_u64
+  return z ^ (z >>> 31u32)
+
+### Creates a generator seeded from a single `U64` value.
+### The seed is expanded through splitmix64 so all four state words are
+### well-distributed regardless of how small or patterned the seed is.
+### :param seed: The seed value; equal seeds replay equal streams.
+### :returns: A fresh `Random` generator.
+routine make_random(seed: U64) -> ?Random
+  var acc = seed
+  acc = splitmix64_next(x: acc)
+  var w0 = acc
+  acc = splitmix64_next(x: acc)
+  var w1 = acc
+  acc = splitmix64_next(x: acc)
+  var w2 = acc
+  acc = splitmix64_next(x: acc)
+  var w3 = acc
+  return Random(s0: w0, s1: w1, s2: w2, s3: w3)
+
+### Advances the generator and returns the next 64-bit output.
+### This is the core primitive; all other draws derive from it.
+### :returns: The next uniformly distributed `U64` in the full 64-bit range.
+routine Random.next_u64() -> U64
+  var result = (me.s1 *% 5u64).rotate_left(bits: 7u32) *% 9u64
+  var t = me.s1 <<< 17u32
+  me.s2 = me.s2 ^ me.s0
+  me.s3 = me.s3 ^ me.s1
+  me.s1 = me.s1 ^ me.s2
+  me.s0 = me.s0 ^ me.s3
+  me.s2 = me.s2 ^ t
+  me.s3 = me.s3.rotate_left(bits: 45u32)
+  return result
+
+### Advances the generator and returns the next 32-bit output.
+### Uses the high 32 bits of a fresh 64-bit draw, which carry the strongest
+### statistical quality in xoshiro256**.
+### :returns: The next uniformly distributed `U32` in the full 32-bit range.
+routine Random.next_u32() -> U32
+  return int_truncate[U64, U32](me.next_u64() >>> 32u32)
+
+### Advances the generator and returns the next double in the half-open unit
+### interval `[0.0, 1.0)`.
+### Uses the top 53 bits of a fresh draw, matching the mantissa width of `F64`.
+### :returns: A uniformly distributed `F64` in `[0.0, 1.0)`.
+routine Random.next_f64() -> F64
+  return F64(from: me.next_u64() >>> 11u32) / 9007199254740992.0_f64
+
+### Returns whether a Bernoulli trial with the given success probability
+### succeeds. A probability of `0.0` never succeeds and `1.0` always does.
+### :param probability: The success probability; values outside `[0.0, 1.0)` are
+###   handled by clamping behaviour (`<= 0.0` never succeeds, `>= 1.0` always
+###   succeeds).
+### :returns: `true` with the given probability, otherwise `false`.
+routine Random.chance(probability: F64) -> Bool
+  return me.next_f64() < probability
+
+### Returns a uniformly distributed value in the half-open range
+### `[low, high)`, advancing the generator once.
+### :param low: The inclusive lower bound.
+### :param high: The exclusive upper bound.
+### :returns: A `U64` in `[low, high)`.
+### :throws: if `high <= low` (empty range) — the modulo has no valid width.
+routine Random.range!(low: U64, high: U64) -> U64
+  var span = high -% low
+  return low +% (me.next_u64() % span)
+
+### Returns a uniformly chosen element from any indexable collection, drawing
+### one value from `rng` to select the position.
+### The generator is borrowed mutably (`rng.modify()` at the call site) so its
+### state advances with each pick; the collection is only read.
+### :param rng: The generator to draw from, as a mutable borrow.
+### :returns: The element at a uniformly random index.
+### :absent: The collection is empty.
+@readonly
+routine MutableIndexable[T].pick!(rng: Modifying[Random]) -> ?T
+  var n = me.count()
+  if n == 0u64
+    absent
+  return me[rng.next_u64() % n]
+
+### Shuffles this list in place using an unbiased Fisher-Yates pass, drawing one
+### value from `rng` per element.
+### Elements are moved (never copied), so lists of owned entities shuffle safely.
+### :param rng: The generator to draw from, as a mutable borrow.
+routine List[T].shuffle(rng: Modifying[Random]) -> Blank
+  var n = me.count()
+  if n <= 1u64
+    return
+  var i = n -% 1u64
+  while i > 0u64
+    # j is uniform in [0, i]; the +1 span is provably nonzero, so the unchecked
+    # modulo cannot divide by zero.
+    var j = 0u64
+    danger!
+      j = (rng.next_u64()).$mod_unchecked(you: i +% 1u64)
+    if j != i
+      var a = me.get_raw(index: i)
+      var b = me.get_raw(index: j)
+      me.set_raw(index: i, value: b)
+      me.set_raw(index: j, value: a)
+    i = i -% 1u64
+  return

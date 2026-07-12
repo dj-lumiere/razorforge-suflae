@@ -156,6 +156,11 @@ static void rf_task_signal_completion(rf_task* task)
     task->coro_sched = NULL;
     task->coro_waiter = NULL;
     rf_mutex_unlock(&task->coro_lock);
+    if (waking_sched != NULL) {
+        /* This clears the coro_sched promise armed in rf_task_await_coro / _deadline (sched->NULL
+         * transition): disarm its cross-waker before the wake. */
+        rf_sched_disarm_cross_waker(waking_sched);
+    }
     if (waking_sched != NULL && waiter != NULL) {
         rf_sched_wake(waking_sched, waiter);
     }
@@ -211,9 +216,17 @@ rf_U32 rf_task_await_coro(rf_task* task)
         rf_mutex_unlock(&task->coro_lock);
         return 1;
     }
+    /* Registering an awaiter promises the worker thread will wake this scheduler on completion. Arm a
+     * cross-waker on the first NULL->sched transition so the run loop does not read the impending park
+     * as a deadlock; the matching disarm is in rf_task_signal_completion (or the timeout deregister).
+     * Arm AFTER releasing coro_lock — the arm takes the scheduler lock, kept strictly outer-to-inner. */
+    int arm = (task->coro_sched == NULL);
     task->coro_sched = sched;
     task->coro_waiter = self;
     rf_mutex_unlock(&task->coro_lock);
+    if (arm) {
+        rf_sched_arm_cross_waker(sched);
+    }
     return 0;
 }
 
@@ -243,9 +256,16 @@ rf_U32 rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns)
             rf_mutex_unlock(&task->coro_lock);
             return 1;
         }
+        /* Arm the cross-waker on the first NULL->sched transition (same accounting as the plain
+         * await), so signal_completion's disarm stays balanced. A re-registration after a bare timer
+         * wake finds coro_sched already set and does not double-arm. */
+        int arm = (task->coro_sched == NULL);
         task->coro_sched = sched;
         task->coro_waiter = self;
         rf_mutex_unlock(&task->coro_lock);
+        if (arm) {
+            rf_sched_arm_cross_waker(sched);
+        }
 
         uint64_t now = rf_monotonic_now_ns();
         if (now >= deadline) {
@@ -255,13 +275,18 @@ rf_U32 rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns)
             rf_mutex_lock(&task->coro_lock);
             if (rf_task_is_completed(task)) {
                 rf_mutex_unlock(&task->coro_lock);
-                return 1;
+                return 1; /* signal_completion already disarmed our cross-waker */
             }
+            int disarm = 0;
             if (task->coro_waiter == self) {
+                disarm = (task->coro_sched != NULL); /* clear our own promise (sched->NULL) */
                 task->coro_sched = NULL;
                 task->coro_waiter = NULL;
             }
             rf_mutex_unlock(&task->coro_lock);
+            if (disarm) {
+                rf_sched_disarm_cross_waker(sched);
+            }
             return 0;
         }
 

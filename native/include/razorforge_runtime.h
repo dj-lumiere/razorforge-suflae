@@ -282,6 +282,17 @@ void rf_sched_run_until(rf_sched* sched, rf_coro* target);
  * gives a `race!` loop on completing a competitor task. Safe to call from ANY thread. */
 void rf_sched_signal(rf_sched* sched);
 
+/* Cross-thread wake bookkeeping for the deadlock diagnostic. A coroutine that parks awaiting a wake
+ * from ANOTHER thread — a threaded Task's completion, an async-I/O finish, a SignalCaster cast, or a
+ * `race!` thread competitor — arms one of these before parking and disarms once the wake resolves;
+ * the count is the number of such outstanding cross-thread wake promises. The run loop uses it to
+ * tell a genuine all-coroutine deadlock (nothing runnable AND no cross-thread wake can ever arrive)
+ * apart from a legitimate wait on another thread. Channel parks do NOT arm it: the RF-S632 entity
+ * aliasing barrier keeps a channel's counterpart on the SAME scheduler, so a channel wake is never
+ * cross-thread. Both are safe to call from any thread; disarm is clamped at zero. */
+void rf_sched_arm_cross_waker(rf_sched* sched);
+void rf_sched_disarm_cross_waker(rf_sched* sched);
+
 /* ---- race!: drive a heterogeneous Agent set until the first competitor finishes -------------- */
 
 /* An opaque competitor set built incrementally by the stdlib `race!`, one entry per Agent in List

@@ -101,7 +101,11 @@ void rf_signal_wait(rf_signal* sig)
         rf_signal_waiter node = { sched, self, sig->waiters };
         sig->waiters = &node;
         rf_mutex_unlock(&sig->lock);
+        /* A cast on any thread wakes us cross-thread (rf_sched_wake): arm/disarm a cross-waker around
+         * the park so the run loop does not read this wait as a deadlock. */
+        rf_sched_arm_cross_waker(sched);
         rf_sched_park_external();
+        rf_sched_disarm_cross_waker(sched);
         rf_mutex_lock(&sig->lock);
         /* Unlink self. */
         rf_signal_waiter** p = &sig->waiters;

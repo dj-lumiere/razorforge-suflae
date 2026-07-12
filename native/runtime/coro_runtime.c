@@ -441,7 +441,11 @@ struct rf_sched {
     rf_coro* ready_tail;
     rf_coro* timers;       /* coroutines parked on a deadline, sorted ascending */
     int live;              /* coroutines spawned but not yet completed          */
-    rf_mutex lock;         /* guards ready_head/tail + live against worker threads */
+    int cross_wakers;      /* outstanding promises that ANOTHER thread will wake this loop
+                            * (threaded await / async I/O / signal cast / race competitor). Lets
+                            * the run loop tell a real all-coroutine deadlock apart from a
+                            * legitimate cross-thread wait — see rf_sched_arm_cross_waker. */
+    rf_mutex lock;         /* guards ready_head/tail + live + cross_wakers against worker threads */
     rf_cond cond;          /* run loop waits here; an external wake signals it      */
 };
 
@@ -668,6 +672,34 @@ void rf_sched_wake(rf_sched* s, rf_coro* c)
     rf_mutex_unlock(&s->lock);
 }
 
+/* Arm one outstanding cross-thread wake promise on `s` (see razorforge_runtime.h). A coroutine calls
+ * this just before parking to await a wake that will arrive from ANOTHER thread, so the run loop does
+ * not mistake the wait for a deadlock. Safe from any thread. */
+void rf_sched_arm_cross_waker(rf_sched* s)
+{
+    if (s == NULL) {
+        return;
+    }
+    rf_mutex_lock(&s->lock);
+    s->cross_wakers++;
+    rf_mutex_unlock(&s->lock);
+}
+
+/* Disarm one cross-thread wake promise on `s` (the wake resolved, or the wait was abandoned). Clamped
+ * at zero so a stray unpaired disarm can never underflow into a phantom "wake still pending" (which
+ * would only ever suppress a real deadlock report — never cause a spurious one). Safe from any thread. */
+void rf_sched_disarm_cross_waker(rf_sched* s)
+{
+    if (s == NULL) {
+        return;
+    }
+    rf_mutex_lock(&s->lock);
+    if (s->cross_wakers > 0) {
+        s->cross_wakers--;
+    }
+    rf_mutex_unlock(&s->lock);
+}
+
 /* Resume one ready coroutine if any (returns 1), else block until something can make progress and
  * return 0. Caller holds s->lock; this drops it around the resume / the cond wait and re-takes it.
  * The shared body of rf_sched_run and rf_sched_run_until. */
@@ -705,8 +737,22 @@ static int rf_sched_step(rf_sched* s)
             rf_sched_push_ready(s, t);
         }
     } else {
-        /* Nothing ready and no timer: everyone left is parked externally, so the only thing that
-         * can make progress is a cross-thread wake. Block until it arrives. */
+        /* Nothing ready and no timer: everyone left is parked externally. The only thing that can
+         * make progress is a cross-thread wake — and if none is outstanding, none can ever arrive:
+         * every live coroutine is blocked on a send/receive/signal whose counterpart is itself a
+         * parked coroutine on THIS loop. That is a genuine deadlock; diagnose it (locked decision
+         * §0.4) instead of blocking forever in silence. A channel park deliberately does NOT arm a
+         * cross-waker (RF-S632 keeps its counterpart on this same scheduler), so an all-coroutine
+         * channel deadlock — a full-buffer feed whose only consumer is also parked — lands here. */
+        if (s->live > 0 && s->cross_wakers == 0) {
+            rf_mutex_unlock(&s->lock);
+            __rf_throw("DeadlockError",
+                       "all coroutines are parked and none is runnable — no send, receive, or wake "
+                       "can ever make progress (deadlock)");
+            return 0; /* unreachable: __rf_throw exits */
+        }
+        /* A cross-thread wake is outstanding (threaded await / async I/O / signal / race): block
+         * until it arrives. */
         rf_cond_wait_forever(&s->cond, &s->lock);
     }
     return 0;
@@ -834,6 +880,10 @@ intptr_t rf_race_wait(rf_race* r)
     for (intptr_t i = 0; i < r->count; i++) {
         if (r->kinds[i] == 1) {
             rf_task_race_register((rf_task*)r->handles[i], s);
+            /* Each thread competitor promises to signal this loop on completion (rf_sched_signal via
+             * race_sched). Arm a cross-waker so the rf_sched_step below — which blocks on the cond
+             * when no coroutine competitor is runnable — is not read as a deadlock. */
+            rf_sched_arm_cross_waker(s);
         }
     }
 
@@ -866,6 +916,7 @@ intptr_t rf_race_wait(rf_race* r)
     for (intptr_t i = 0; i < r->count; i++) {
         if (r->kinds[i] == 1) {
             rf_task_race_register((rf_task*)r->handles[i], NULL);
+            rf_sched_disarm_cross_waker(s); /* balance the arm above */
         }
     }
 

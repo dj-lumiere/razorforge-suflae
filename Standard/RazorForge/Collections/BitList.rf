@@ -30,7 +30,7 @@ import BuilderService
 ### | Iteration | O(N) |
 ###
 ### :see: {BitArray[N]} for a compile-time-sized, value-semantic alternative.
-entity BitList obeys Iterable[Bool], MutableIndexable[Bool]
+entity BitList obeys Iterable[Bool], MutableIndexable[Bool], Sized
 relates BitListIterator as Iter
   ### Stores the heap-allocated word buffer that packs the bits.
   secret data: Hijacked[U64]      # Heap-allocated word array (64 bits per U64)
