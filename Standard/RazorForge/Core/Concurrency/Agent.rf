@@ -117,7 +117,7 @@ routine Agent[T].retrieve!() -> ?T
     danger!
       rf_sched_run_until_default(coro: me.coro)
       var payload = rf_task_result_payload(task: me.agent)
-      var value = Hijacked[T](from: payload).extract()
+      var value = Hijacked[T](from: payload).peek()
       rf_invalidate(ptr: payload)
       return value
 
@@ -151,7 +151,7 @@ routine Agent[T].retrieve!() -> ?T
         discard rf_task_wait(task: me.agent)
 
     var payload = rf_task_result_payload(task: me.agent)
-    var value = Hijacked[T](from: payload).extract()
+    var value = Hijacked[T](from: payload).peek()
     rf_invalidate(ptr: payload)
     return value
 
@@ -219,7 +219,7 @@ routine List[Agent[V]].race!() -> ?V
     rf_race_end(race: race)
     var w = U64(winner)
     var payload = rf_task_result_payload(task: me[w].task_handle())
-    var value = Hijacked[V](from: payload).extract()
+    var value = Hijacked[V](from: payload).peek()
     rf_invalidate(ptr: payload)
     return value
 

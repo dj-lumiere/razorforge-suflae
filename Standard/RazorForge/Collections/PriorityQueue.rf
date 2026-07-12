@@ -89,7 +89,7 @@ routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> ?PriorityQu
 @inline
 routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> ?TPriority
   danger!
-    return me.priorities.offset(TPriority.data_size() * index).extract()
+    return me.priorities.offset(TPriority.data_size() * index).peek()
 
 ### Writes `value` into the priority buffer at `index` without bounds checking.
 ### :param index: The zero-based heap position to update.
@@ -97,7 +97,7 @@ routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> ?TPri
 @inline
 routine PriorityQueue[TPriority, TElement].set_priority_raw(index: U64, value: TPriority)
   danger!
-    me.priorities.offset(TPriority.data_size() * index).inject(value)
+    me.priorities.offset(TPriority.data_size() * index).poke(value)
   return
 
 ### Returns the element at `index` without bounds checking.
@@ -108,7 +108,7 @@ routine PriorityQueue[TPriority, TElement].set_priority_raw(index: U64, value: T
 @inline
 routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> ?TElement
   danger!
-    return me.elements.offset(TElement.data_size() * index).extract()
+    return me.elements.offset(TElement.data_size() * index).peek()
 
 ### Writes `value` into the element buffer at `index` without bounds checking.
 ### :param index: The zero-based heap position to update.
@@ -116,7 +116,7 @@ routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> ?TElem
 @inline
 routine PriorityQueue[TPriority, TElement].set_element_raw(index: U64, value: TElement)
   danger!
-    me.elements.offset(TElement.data_size() * index).inject(value)
+    me.elements.offset(TElement.data_size() * index).poke(value)
   return
 
 ### Returns the full heap entry at `index` as a `PQEntry`.
@@ -426,8 +426,8 @@ routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority
   lateinit var p: TPriority
   lateinit var e: TElement
   danger!
-    p = me.priorities.offset(TPriority.data_size() * me.index).extract()
-    e = me.elements.offset(TElement.data_size() * me.index).extract()
+    p = me.priorities.offset(TPriority.data_size() * me.index).peek()
+    e = me.elements.offset(TElement.data_size() * me.index).peek()
   var _result = PQEntry[TPriority, TElement](priority: p, element: e)
   me.index = me.index + 1u64
   return _result
@@ -459,8 +459,8 @@ dangerous routine PriorityQueue[TPriority, TElement].$destroy()
   # types; frees owned entity priorities/elements.
   var i = 0u64
   while i < me.count
-    me.priorities.offset(TPriority.data_size() * i).extract().$destroy()
-    me.elements.offset(TElement.data_size() * i).extract().$destroy()
+    me.priorities.offset(TPriority.data_size() * i).peek().$destroy()
+    me.elements.offset(TElement.data_size() * i).peek().$destroy()
     i = i + 1u64
   me.priorities.invalidate()
   me.elements.invalidate()

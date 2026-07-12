@@ -52,11 +52,11 @@ entity Feeder[T]
 routine Feeder[T].feed!(item: T)
   danger!
     var box = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size()))
-    box.inject(value: item)
+    box.poke(value: item)
     var ok = rf_channel_feed(chan: me.chan, payload: box.address())
     if ok == 0_u32
       # Undelivered: reclaim the item, then the box, before reporting the closed channel.
-      var orphan = box.extract()
+      var orphan = box.peek()
       box.invalidate()
       throw ChannelClosedError()
   return
@@ -196,6 +196,6 @@ routine ChannelDrain[T].$next!() -> ?T
     var box = hijacked_from[T](rf_channel_next(chan: me.chan))
     if box.is_none()
       absent
-    var value = box.extract()
+    var value = box.peek()
     box.invalidate()
     return value

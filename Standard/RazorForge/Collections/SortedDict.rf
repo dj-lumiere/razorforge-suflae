@@ -97,7 +97,7 @@ dangerous routine BTreeDictNode[K, V].children_base() -> Hijacked[Hijacked[BTree
 @readonly
 routine BTreeDictNode[K, V].key_get(i: U64) -> ?K
   danger!
-    return me.keys_base().stride(count: i.S64()).extract()
+    return me.keys_base().stride(count: i.S64()).peek()
 
 ### Returns the value at slot `i`.
 ### :param i: Zero-based entry index.
@@ -105,7 +105,7 @@ routine BTreeDictNode[K, V].key_get(i: U64) -> ?K
 @readonly
 routine BTreeDictNode[K, V].value_get(i: U64) -> ?V
   danger!
-    return me.values_base().stride(count: i.S64()).extract()
+    return me.values_base().stride(count: i.S64()).peek()
 
 ### Builds a {DictEntry[K, V]} from the entry at slot `i`, taking OWNED copies of the key and value.
 ### The key/value are bound to locals first so the copy pass injects a retaining `$copy` (a bare
@@ -124,7 +124,7 @@ routine BTreeDictNode[K, V].entry_get(i: U64) -> DictEntry[K, V]
 ### :param value: The key to store.
 routine BTreeDictNode[K, V].key_set(i: U64, value: K)
   danger!
-    me.keys_base().stride(count: i.S64()).inject(value: value)
+    me.keys_base().stride(count: i.S64()).poke(value: value)
   return
 
 ### Writes `value` to the value slot at position `i`.
@@ -132,7 +132,7 @@ routine BTreeDictNode[K, V].key_set(i: U64, value: K)
 ### :param value: The value to store.
 routine BTreeDictNode[K, V].value_set(i: U64, value: V)
   danger!
-    me.values_base().stride(count: i.S64()).inject(value: value)
+    me.values_base().stride(count: i.S64()).poke(value: value)
   return
 
 ### Returns a non-owning pointer to the child node at slot `i`.
@@ -143,7 +143,7 @@ routine BTreeDictNode[K, V].value_set(i: U64, value: V)
 ### :returns: The `?Hijacked[BTreeDictNode[K, V]]` child-node pointer stored in slot `i`.
 @readonly
 dangerous routine BTreeDictNode[K, V].children_get(i: U64) -> ?Hijacked[BTreeDictNode[K, V]]
-  return me.children_base().stride(count: i.S64()).extract()
+  return me.children_base().stride(count: i.S64()).peek()
 
 ### Recursively frees this node's subtree (post-order): destroys each child node, tears down each
 ### stored key and value, then frees this node's own allocation. Visited inline (never bound to a
@@ -176,7 +176,7 @@ dangerous routine SortedDict[K, V].$destroy()
 ### :param value: The child-node pointer to store.
 routine BTreeDictNode[K, V].children_set(i: U64, value: Hijacked[BTreeDictNode[K, V]])
   danger!
-    me.children_base().stride(count: i.S64()).inject(value: value)
+    me.children_base().stride(count: i.S64()).poke(value: value)
   return
 
 ### Appends a key-value pair after the last entry and increments the entry count.
@@ -184,8 +184,8 @@ routine BTreeDictNode[K, V].children_set(i: U64, value: Hijacked[BTreeDictNode[K
 ### :param v: The value to append.
 routine BTreeDictNode[K, V].entries_add_last(k: K, v: V)
   danger!
-    me.keys_base().stride(count: me.key_count.S64()).inject(value: k)
-    me.values_base().stride(count: me.key_count.S64()).inject(value: v)
+    me.keys_base().stride(count: me.key_count.S64()).poke(value: k)
+    me.values_base().stride(count: me.key_count.S64()).poke(value: v)
   me.key_count = me.key_count +% 1u64
   return
 
@@ -193,7 +193,7 @@ routine BTreeDictNode[K, V].entries_add_last(k: K, v: V)
 ### :param value: The child-node pointer to append.
 routine BTreeDictNode[K, V].children_add_last(value: Hijacked[BTreeDictNode[K, V]])
   danger!
-    me.children_base().stride(count: me.child_count.S64()).inject(value: value)
+    me.children_base().stride(count: me.child_count.S64()).poke(value: value)
   me.child_count = me.child_count +% 1u64
   return
 
@@ -215,8 +215,8 @@ routine BTreeDictNode[K, V].entries_add_at(i: U64, k: K, v: V)
       var vdst_addr = vbase.stride(count: (i +% 1u64).S64()).get_address()
       rf_copy_bytes_at(dest: kdst_addr, src: ksrc_addr, size: k_elem_size * shift_count)
       rf_copy_bytes_at(dest: vdst_addr, src: vsrc_addr, size: v_elem_size * shift_count)
-    kbase.stride(count: i.S64()).inject(value: k)
-    vbase.stride(count: i.S64()).inject(value: v)
+    kbase.stride(count: i.S64()).poke(value: k)
+    vbase.stride(count: i.S64()).poke(value: v)
   me.key_count = me.key_count +% 1u64
   return
 
@@ -232,7 +232,7 @@ routine BTreeDictNode[K, V].children_add_at(i: U64, value: Hijacked[BTreeDictNod
       var src_addr = base.stride(count: i.S64()).get_address()
       var dst_addr = base.stride(count: (i +% 1u64).S64()).get_address()
       rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * shift_count)
-    base.stride(count: i.S64()).inject(value: value)
+    base.stride(count: i.S64()).poke(value: value)
   me.child_count = me.child_count +% 1u64
   return
 

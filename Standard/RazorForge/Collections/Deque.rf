@@ -102,7 +102,7 @@ routine Deque[T].physical_index(logical_index: U64) -> U64
 routine Deque[T].read_at(physical_idx: U64) -> ?T
   var byte_offset = T.data_size() * physical_idx
   danger!
-    return me.data.offset(byte_offset).extract()
+    return me.data.offset(byte_offset).peek()
 
 ### Writes `value` into physical slot `physical_idx` without bounds checking.
 ### :param physical_idx: The slot index inside the backing buffer.
@@ -110,7 +110,7 @@ routine Deque[T].read_at(physical_idx: U64) -> ?T
 routine Deque[T].write_at(physical_idx: U64, value: T)
   var byte_offset = T.data_size() * physical_idx
   danger!
-    me.data.offset(byte_offset).inject(value)
+    me.data.offset(byte_offset).poke(value)
   return
 
 # ============================================================================
@@ -246,7 +246,7 @@ routine Deque[T].reserve(new_capacity: U64)
       var old_idx = me.physical_index(i)
       var value = me.read_at(old_idx)
       var new_byte_offset = T.data_size() * i
-      _new_data.offset(new_byte_offset).inject(value)
+      _new_data.offset(new_byte_offset).poke(value)
       i = i +% 1u64
 
     me.data = _new_data
@@ -354,7 +354,7 @@ routine DequeEmitter[T].$next!() -> ?T
   var physical = (me.start +% me.index) & (me.capacity -% 1u64)
   lateinit var _result: T
   danger!
-    _result = me.data.offset(T.data_size() * physical).extract()
+    _result = me.data.offset(T.data_size() * physical).peek()
   me.index = me.index + 1u64
   return _result
 
@@ -443,7 +443,7 @@ dangerous routine Deque[T].$destroy()
   var i = 0u64
   while i < me.count
     var physical = (me.start +% i) & (me.capacity -% 1u64)
-    me.data.offset(T.data_size() * physical).extract().$destroy()
+    me.data.offset(T.data_size() * physical).peek().$destroy()
     i = i + 1u64
   me.data.invalidate()
   me.hijack().invalidate()

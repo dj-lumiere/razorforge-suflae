@@ -64,7 +64,7 @@ routine Bytes.$create(from_list: List[Byte]) -> Bytes
     loop
       if i >= n
         break
-      buf.stride(count: S64(i)).inject(value: from_list[i])
+      buf.stride(count: S64(i)).poke(value: from_list[i])
       i += 1u64
     return Bytes(data: buf, count: n, ctrl: ImmutableSharedController().hijack())
 
@@ -74,7 +74,7 @@ routine Bytes.$create(from_list: List[Byte]) -> Bytes
 routine Bytes.$create(from_byte: Byte) -> Bytes
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size()))
-    buf.inject(value: from_byte)
+    buf.poke(value: from_byte)
     return Bytes(data: buf, count: 1u64, ctrl: ImmutableSharedController().hijack())
 
 ### Creates a byte sequence by copying a null-terminated byte buffer.
@@ -85,7 +85,7 @@ routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
   danger!
     var len: U64 = 0u64
     loop
-      if ptr.stride(count: S64(len)).extract() == BYTE_NULL
+      if ptr.stride(count: S64(len)).peek() == BYTE_NULL
         break
       len += 1u64
     if len == 0u64
@@ -168,7 +168,7 @@ routine Bytes.$getitem!(index: U64) -> Byte
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   danger!
-    return me.data.stride(count: S64(index)).extract()
+    return me.data.stride(count: S64(index)).peek()
 
 # String operations
 
@@ -327,7 +327,7 @@ routine List[Byte].$create(source: Bytes) -> ?List[Byte]
     if i >= source.count
       break
     danger!
-      result.add_last(source.data.stride(count: S64(i)).extract())
+      result.add_last(source.data.stride(count: S64(i)).peek())
     i += 1u64
   return steal result
 
@@ -627,7 +627,7 @@ routine BytesUtf8Iterator.$next!() -> Character
     if me.index >= me.byte_count
       absent
 
-    var b0 = U32(me.data.stride(count: S64(me.index)).extract().codepoint())
+    var b0 = U32(me.data.stride(count: S64(me.index)).peek().codepoint())
     var codepoint: U32 = 0u32
 
     when
@@ -637,7 +637,7 @@ routine BytesUtf8Iterator.$next!() -> Character
       (b0 & 0xE0u32) == 0xC0u32 =>
         if me.index + 1u64 >= me.byte_count
           throw MalformedUtf8Error(index: me.index, reason: "truncated 2-byte sequence")
-        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
+        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).peek().codepoint())
         if (b1 & 0xC0u32) != 0x80u32 or b0 < 0xC2u32
           throw MalformedUtf8Error(index: me.index, reason: "invalid 2-byte sequence")
         codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
@@ -645,8 +645,8 @@ routine BytesUtf8Iterator.$next!() -> Character
       (b0 & 0xF0u32) == 0xE0u32 =>
         if me.index + 2u64 >= me.byte_count
           throw MalformedUtf8Error(index: me.index, reason: "truncated 3-byte sequence")
-        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
-        var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).extract().codepoint())
+        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).peek().codepoint())
+        var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).peek().codepoint())
         if (b1 & 0xC0u32) != 0x80u32 or (b2 & 0xC0u32) != 0x80u32
           throw MalformedUtf8Error(index: me.index, reason: "invalid 3-byte sequence")
         var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
@@ -657,9 +657,9 @@ routine BytesUtf8Iterator.$next!() -> Character
       (b0 & 0xF8u32) == 0xF0u32 =>
         if me.index + 3u64 >= me.byte_count
           throw MalformedUtf8Error(index: me.index, reason: "truncated 4-byte sequence")
-        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
-        var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).extract().codepoint())
-        var b3 = U32(me.data.stride(count: S64(me.index + 3u64)).extract().codepoint())
+        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).peek().codepoint())
+        var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).peek().codepoint())
+        var b3 = U32(me.data.stride(count: S64(me.index + 3u64)).peek().codepoint())
         if (b1 & 0xC0u32) != 0x80u32 or (b2 & 0xC0u32) != 0x80u32 or (b3 & 0xC0u32) != 0x80u32
           throw MalformedUtf8Error(index: me.index, reason: "invalid 4-byte sequence")
         var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
@@ -681,7 +681,7 @@ routine BytesUtf8LossyIterator.$next!() -> Character
     if me.index >= me.byte_count
       absent
 
-    var b0 = U32(me.data.stride(count: S64(me.index)).extract().codepoint())
+    var b0 = U32(me.data.stride(count: S64(me.index)).peek().codepoint())
     var codepoint: U32 = 0u32
 
     when
@@ -690,7 +690,7 @@ routine BytesUtf8LossyIterator.$next!() -> Character
         me.index += 1u64
       (b0 & 0xE0u32) == 0xC0u32 =>
         if me.index + 1u64 < me.byte_count
-          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
+          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).peek().codepoint())
           if (b1 & 0xC0u32) == 0x80u32 and b0 >= 0xC2u32
             codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
             me.index += 2u64
@@ -702,8 +702,8 @@ routine BytesUtf8LossyIterator.$next!() -> Character
           me.index += 1u64
       (b0 & 0xF0u32) == 0xE0u32 =>
         if me.index + 2u64 < me.byte_count
-          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
-          var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).extract().codepoint())
+          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).peek().codepoint())
+          var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).peek().codepoint())
           var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32
           if is_valid
             var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
@@ -721,9 +721,9 @@ routine BytesUtf8LossyIterator.$next!() -> Character
           me.index += 1u64
       (b0 & 0xF8u32) == 0xF0u32 =>
         if me.index + 3u64 < me.byte_count
-          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
-          var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).extract().codepoint())
-          var b3 = U32(me.data.stride(count: S64(me.index + 3u64)).extract().codepoint())
+          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).peek().codepoint())
+          var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).peek().codepoint())
+          var b3 = U32(me.data.stride(count: S64(me.index + 3u64)).peek().codepoint())
           var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32 and (b3 & 0xC0u32) == 0x80u32
           if is_valid
             var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
@@ -758,7 +758,7 @@ routine Bytes.to_cstr() -> CStr
     var buffer = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * (len + 1u64)))
     if len > 0u64
       rf_copy_bytes_at(dest: buffer.address(), src: me.data.address(), size: Byte.data_size() * len)
-    buffer.stride(count: S64(len)).inject(value: BYTE_NULL)
+    buffer.stride(count: S64(len)).poke(value: BYTE_NULL)
     return CStr(from_ptr: buffer.address())
 
 ### Encodes this text as UTF-8 and returns a newly allocated null-terminated C

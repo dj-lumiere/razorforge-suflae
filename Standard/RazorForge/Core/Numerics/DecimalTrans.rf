@@ -12,7 +12,7 @@ module Core
 # The two radix adapters are the substance here:
 #   decimalfixed_to_f512 (dec->bin): load coeff exactly into the engine, multiply by 10^exp
 #     computed by binary-exponentiation of 10.0 in F512 (no big-int 10^k table).
-#   f512_to_decimala (bin->dec): scale |x|*10^(76-decexp) to ~10^77, extract the integer
+#   f512_to_decimala (bin->dec): scale |x|*10^(76-decexp) to ~10^77, peek the integer
 #     with round-half-even, hand the 77-digit coeff to Decimal's decfinA (rounds to 70).
 #
 # SUPPORTED RANGE: values whose magnitude keeps 10^(76-decexp) inside F512's range

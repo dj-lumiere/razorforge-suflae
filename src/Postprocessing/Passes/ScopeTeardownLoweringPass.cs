@@ -456,7 +456,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     // -----------------------------------------------------------------------------
     // Move pre-scan: a binding whose ownership leaves the routine is never torn down here.
     // A binding is "moved" when it is: stolen; consumed by `.retain()`/`.track()` (bare entity)
-    // written into storage by a store primitive (`inject`/`store_element_ref`/`store`); or assigned
+    // written into storage by a store primitive (`poke`/`store_element_ref`/`store`); or assigned
     // into another binding/field. These are all unambiguous ownership transfers — unlike general
     // argument passing (which is usually a borrow), so we do NOT treat plain call args as moves.
     // (`load_element_ref` is a READ, not a store, so it is excluded.)
@@ -464,7 +464,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 
     private static readonly System.Collections.Generic.HashSet<string> StorePrimitives =
         new(comparer: System.StringComparer.Ordinal)
-            { "inject", "store_element_ref", "store" };
+            { "poke", "store_element_ref", "store" };
 
     private void CollectMovedNames(Statement stmt)
     {

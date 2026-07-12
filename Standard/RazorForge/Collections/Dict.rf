@@ -123,9 +123,9 @@ dangerous routine Dict[K, V].$destroy()
   # in DictIterator.$next!). No-op for value types; frees owned entity keys/values.
   var p = 0u64
   while p < me.entries_used
-    if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
-      me.keys.offset(K.data_size() * p).extract().$destroy()
-      me.vals.offset(V.data_size() * p).extract().$destroy()
+    if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+      me.keys.offset(K.data_size() * p).peek().$destroy()
+      me.vals.offset(V.data_size() * p).peek().$destroy()
     p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()
@@ -150,21 +150,21 @@ routine Dict[K, V].h1(hash: U64) -> U64
 @readonly
 routine Dict[K, V].read_index(slot: U64) -> U64
   danger!
-    return me.indices.offset(U64.data_size() * slot).extract()
+    return me.indices.offset(U64.data_size() * slot).peek()
 
 @readonly
 routine Dict[K, V].read_key_at(ei: U64) -> ?K
   danger!
-    return me.keys.offset(K.data_size() * ei).extract()
+    return me.keys.offset(K.data_size() * ei).peek()
 
 @readonly
 routine Dict[K, V].read_val_at(ei: U64) -> ?V
   danger!
-    return me.vals.offset(V.data_size() * ei).extract()
+    return me.vals.offset(V.data_size() * ei).peek()
 
 routine Dict[K, V].write_val_at(ei: U64, val: V)
   danger!
-    me.vals.offset(V.data_size() * ei).inject(val)
+    me.vals.offset(V.data_size() * ei).poke(val)
   return
 
 @readonly
@@ -175,12 +175,12 @@ routine Dict[K, V].find_slot(key: K) -> U64
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
         return me.capacity
       if c == target
-        var ei = me.indices.offset(U64.data_size() * i).extract()
-        if me.keys.offset(K.data_size() * ei).extract() == key
+        var ei = me.indices.offset(U64.data_size() * i).peek()
+        if me.keys.offset(K.data_size() * ei).peek() == key
           return i
       i = (i +% 1u64) & mask
   return me.capacity
@@ -191,14 +191,14 @@ routine Dict[K, V].insert_index_raw(h: U64, entry_index: U64)
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
-        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
-        me.indices.offset(U64.data_size() * i).inject(entry_index)
+        me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+        me.indices.offset(U64.data_size() * i).poke(entry_index)
         return
       if c == CTRL_TOMBSTONED
-        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
-        me.indices.offset(U64.data_size() * i).inject(entry_index)
+        me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+        me.indices.offset(U64.data_size() * i).poke(entry_index)
         me.deleted = me.deleted -% 1u64
         return
       i = (i +% 1u64) & mask
@@ -248,14 +248,14 @@ routine Dict[K, V].rehash()
   var i = 0u64
   while i < old_entries_used
     danger!
-      var live = old_entry_live.offset(ByteSize(bytes: i)).extract()
+      var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
       if live == ENTRY_LIVE
-        var k = old_keys.offset(K.data_size() * i).extract()
-        var v = old_vals.offset(V.data_size() * i).extract()
+        var k = old_keys.offset(K.data_size() * i).peek()
+        var v = old_vals.offset(V.data_size() * i).peek()
         var new_ei = me.entries_used
-        me.keys.offset(K.data_size() * new_ei).inject(k)
-        me.vals.offset(V.data_size() * new_ei).inject(v)
-        me.entry_live.offset(ByteSize(bytes: new_ei)).inject(ENTRY_LIVE)
+        me.keys.offset(K.data_size() * new_ei).poke(k)
+        me.vals.offset(V.data_size() * new_ei).poke(v)
+        me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
         me.insert_index_raw(h: k.$hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
         me.count = me.count +% 1u64
@@ -308,9 +308,9 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
     return false
   var ei = me.entries_used
   danger!
-    me.keys.offset(K.data_size() * ei).inject(key)
-    me.vals.offset(V.data_size() * ei).inject(value)
-    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_LIVE)
+    me.keys.offset(K.data_size() * ei).poke(key)
+    me.vals.offset(V.data_size() * ei).poke(value)
+    me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
   me.insert_index_raw(h: key.$hash(k0: me.k0, k1: me.k1), entry_index: ei)
   me.count = me.count +% 1u64
@@ -322,8 +322,8 @@ routine Dict[K, V].remove(key: K) -> Bool
     return false
   var ei = me.read_index(slot)
   danger!
-    me.ctrl.offset(ByteSize(bytes: slot)).inject(CTRL_TOMBSTONED)
-    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_DEAD)
+    me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
+    me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
   me.count = me.count -% 1u64
   me.deleted = me.deleted +% 1u64
   return true
@@ -365,8 +365,8 @@ routine Dict[K, V].keys() -> ?List[K]
   var i = 0u64
   while i < me.entries_used
     danger!
-      if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
-        result.add_last(me.keys.offset(K.data_size() * i).extract())
+      if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
+        result.add_last(me.keys.offset(K.data_size() * i).peek())
     i = i +% 1u64
   return steal result
 
@@ -378,8 +378,8 @@ routine Dict[K, V].values() -> ?List[V]
   var i = 0u64
   while i < me.entries_used
     danger!
-      if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
-        result.add_last(me.vals.offset(V.data_size() * i).extract())
+      if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
+        result.add_last(me.vals.offset(V.data_size() * i).peek())
     i = i +% 1u64
   return steal result
 
@@ -391,9 +391,9 @@ routine Dict[K, V].entries() -> ?List[DictEntry[K, V]]
   var i = 0u64
   while i < me.entries_used
     danger!
-      if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
-        var k = me.keys.offset(K.data_size() * i).extract()
-        var v = me.vals.offset(V.data_size() * i).extract()
+      if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
+        var k = me.keys.offset(K.data_size() * i).peek()
+        var v = me.vals.offset(V.data_size() * i).peek()
         result.add_last(DictEntry[K, V](key: k, value: v))
     i = i +% 1u64
   return steal result
@@ -426,9 +426,9 @@ routine DictIterator[K, V].$next!() -> DictEntry[K, V]
     while me.pos < me.entries_used
       var p = me.pos
       me.pos = me.pos + 1u64
-      if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
-        var k = me.keys.offset(K.data_size() * p).extract()
-        var v = me.vals.offset(V.data_size() * p).extract()
+      if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+        var k = me.keys.offset(K.data_size() * p).peek()
+        var v = me.vals.offset(V.data_size() * p).peek()
         return DictEntry[K, V](key: k, value: v)
   absent
 
@@ -474,14 +474,14 @@ needs V obeys Equatable
   var i = 0u64
   while i < me.entries_used
     danger!
-      if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
-        var k = me.keys.offset(K.data_size() * i).extract()
-        var v = me.vals.offset(V.data_size() * i).extract()
+      if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
+        var k = me.keys.offset(K.data_size() * i).peek()
+        var v = me.vals.offset(V.data_size() * i).peek()
         var slot = other.find_slot(k)
         if slot >= other.capacity
           return false
-        var other_ei = other.indices.offset(U64.data_size() * slot).extract()
-        var other_v = other.vals.offset(V.data_size() * other_ei).extract()
+        var other_ei = other.indices.offset(U64.data_size() * slot).peek()
+        var other_v = other.vals.offset(V.data_size() * other_ei).peek()
         if v != other_v
           return false
     i = i +% 1u64

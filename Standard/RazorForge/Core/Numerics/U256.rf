@@ -190,8 +190,8 @@ routine udiv256_sticky(num: U256, den: U256) -> U256
       a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
       rem: rem.hijack())
-    var q = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](qa.hijack()).extract()
-    var r = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).extract()
+    var q = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](qa.hijack()).peek()
+    var r = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).peek()
     if int_ne[U256](a: r, b: 0)
       return bit_or[U256](a: q, b: zero_extend[U64, U256](1_u64))
     return q
@@ -216,8 +216,8 @@ routine udivrem256(num: U256, den: U256) -> UDR256
       a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
       rem: rem.hijack())
-    var q = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](qa.hijack()).extract()
-    var r = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).extract()
+    var q = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](qa.hijack()).peek()
+    var r = reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).peek()
     return UDR256(q: q, r: r)
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).

@@ -72,7 +72,7 @@ routine Text.$create(from_list: List[Character]) -> Text
     loop
       if i >= n
         break
-      buf.stride(count: S64(i)).inject(value: from_list[i])
+      buf.stride(count: S64(i)).poke(value: from_list[i])
       i += 1u64
     return Text(
       data: buf,
@@ -87,7 +87,7 @@ routine Text.$create(from_list: List[Character]) -> Text
 routine Text.$create(from_character: Character) -> Text
   danger!
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size()))
-    buf.inject(value: from_character)
+    buf.poke(value: from_character)
     return Text(
       data: buf,
       count: 1u64,
@@ -183,7 +183,7 @@ routine Text.$getitem!(index: U64) -> Character
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   danger!
-    return me.data.stride(count: S64(index)).extract()
+    return me.data.stride(count: S64(index)).peek()
 
 # String operations
 
@@ -206,7 +206,7 @@ routine Text.concat(other: Text) -> Text
       loop
         if i >= other_count
           break
-        buf.stride(count: S64(me.count + i)).inject(value: other[i])
+        buf.stride(count: S64(me.count + i)).poke(value: other[i])
         i += 1u64
     return Text(
       data: buf,

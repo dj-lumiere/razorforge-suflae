@@ -76,7 +76,7 @@ record Box
 
 routine Box.set_via_hijack(v: S64)
   danger!
-    me.value.hijack().inject(v)
+    me.value.hijack().poke(v)
   return
 
 routine start()

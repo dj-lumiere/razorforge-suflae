@@ -182,7 +182,7 @@ routine Duration.total_days() -> S64
   return me.seconds // SECONDS_PER_DAY
 
 # ============================================================================
-# Component accessors (extract individual components of the duration)
+# Component accessors (peek individual components of the duration)
 # ============================================================================
 
 ### Returns the days component.

@@ -123,7 +123,7 @@ routine Set[T].h1(hash: U64) -> U64
 @readonly
 routine Set[T].read_index(slot: U64) -> U64
   danger!
-    return me.indices.offset(U64.data_size() * slot).extract()
+    return me.indices.offset(U64.data_size() * slot).peek()
 
 @readonly
 routine Set[T].find_slot(value: T) -> U64
@@ -133,12 +133,12 @@ routine Set[T].find_slot(value: T) -> U64
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
         return me.capacity
       if c == target
-        var ei = me.indices.offset(U64.data_size() * i).extract()
-        if me.slots.offset(T.data_size() * ei).extract() == value
+        var ei = me.indices.offset(U64.data_size() * i).peek()
+        if me.slots.offset(T.data_size() * ei).peek() == value
           return i
       i = (i +% 1u64) & mask
   return me.capacity
@@ -149,14 +149,14 @@ routine Set[T].insert_index_raw(h: U64, entry_index: U64)
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
-        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
-        me.indices.offset(U64.data_size() * i).inject(entry_index)
+        me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+        me.indices.offset(U64.data_size() * i).poke(entry_index)
         return
       if c == CTRL_TOMBSTONED
-        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
-        me.indices.offset(U64.data_size() * i).inject(entry_index)
+        me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+        me.indices.offset(U64.data_size() * i).poke(entry_index)
         me.deleted = me.deleted -% 1u64
         return
       i = (i +% 1u64) & mask
@@ -204,12 +204,12 @@ routine Set[T].rehash()
   var i = 0u64
   while i < old_entries_used
     danger!
-      var live = old_entry_live.offset(ByteSize(bytes: i)).extract()
+      var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
       if live == ENTRY_LIVE
-        var val = old_slots.offset(T.data_size() * i).extract()
+        var val = old_slots.offset(T.data_size() * i).peek()
         var new_ei = me.entries_used
-        me.slots.offset(T.data_size() * new_ei).inject(val)
-        me.entry_live.offset(ByteSize(bytes: new_ei)).inject(ENTRY_LIVE)
+        me.slots.offset(T.data_size() * new_ei).poke(val)
+        me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
         me.insert_index_raw(h: val.$hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
         me.count = me.count +% 1u64
@@ -257,8 +257,8 @@ routine Set[T].add(value: T) -> Bool
     return false
   var ei = me.entries_used
   danger!
-    me.slots.offset(T.data_size() * ei).inject(value)
-    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_LIVE)
+    me.slots.offset(T.data_size() * ei).poke(value)
+    me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
   me.insert_index_raw(h: value.$hash(k0: me.k0, k1: me.k1), entry_index: ei)
   me.count = me.count +% 1u64
@@ -270,8 +270,8 @@ routine Set[T].remove(value: T) -> Bool
     return false
   var ei = me.read_index(slot)
   danger!
-    me.ctrl.offset(ByteSize(bytes: slot)).inject(CTRL_TOMBSTONED)
-    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_DEAD)
+    me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
+    me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
   me.count = me.count -% 1u64
   me.deleted = me.deleted +% 1u64
   return true
@@ -302,8 +302,8 @@ routine SetIterator[T].$next!() -> ?T
     while me.pos < me.entries_used
       var p = me.pos
       me.pos = me.pos + 1u64
-      if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
-        return me.slots.offset(T.data_size() * p).extract()
+      if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+        return me.slots.offset(T.data_size() * p).peek()
   absent
 
 # ============================================================================
@@ -428,8 +428,8 @@ dangerous routine Set[T].$destroy()
   # this frees them. Must run before invalidating `slots`/`entry_live`.
   var p = 0u64
   while p < me.entries_used
-    if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
-      me.slots.offset(T.data_size() * p).extract().$destroy()
+    if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+      me.slots.offset(T.data_size() * p).peek().$destroy()
     p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()

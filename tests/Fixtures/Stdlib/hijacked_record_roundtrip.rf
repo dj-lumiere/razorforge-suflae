@@ -1,7 +1,7 @@
 module Tests/Stdlib/HijackedRecordRoundtrip
 import IO/Console
 
-# Tests Hijacked[Record].extract() / .inject() round-trip for two record shapes:
+# Tests Hijacked[Record].peek() / .poke() round-trip for two record shapes:
 # 1. A primitive-shaped record (F128 via @llvm("fp128")) — relevant to the
 #    f128_t out-param plan for fixing the rf_parse_F128 ABI mismatch.
 # 2. A multi-field user record (Point) — verifies hijack of normal records.
@@ -15,19 +15,19 @@ routine start()
   var f: F128 = 3.14f128
   danger!
     var hf = f.hijack()
-    var back = hf.extract()
+    var back = hf.peek()
     show(f"F128 original = {f}")
-    show(f"F128 via hijack/extract = {back}")
-    hf.inject(value: 2.71f128)
-  show(f"F128 after inject = {f}")
+    show(f"F128 via hijack/peek = {back}")
+    hf.poke(value: 2.71f128)
+  show(f"F128 after poke = {f}")
 
   # ── Multi-field user record: Point ───────────────────────────────────
   var p: Point = Point(x: 10_s64, y: 20_s64)
   danger!
     var hp = p.hijack()
-    var p2 = hp.extract()
+    var p2 = hp.peek()
     show(f"Point original = ({p.x}, {p.y})")
-    show(f"Point via hijack/extract = ({p2.x}, {p2.y})")
-    hp.inject(value: Point(x: 99_s64, y: 100_s64))
-  show(f"Point after inject = ({p.x}, {p.y})")
+    show(f"Point via hijack/peek = ({p2.x}, {p2.y})")
+    hp.poke(value: Point(x: 99_s64, y: 100_s64))
+  show(f"Point after poke = ({p.x}, {p.y})")
   return

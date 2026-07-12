@@ -417,7 +417,7 @@ internal sealed class WrapperForwardingPass
 
         if (dataFieldName != null)
         {
-            // Record-struct wrapper: me.data.extract().method(...)
+            // Record-struct wrapper: me.data.peek().method(...)
             // Skip the `raw` variable entirely — no type inference needed.
             var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
                 { ResolvedType = wrapperType };
@@ -429,12 +429,12 @@ internal sealed class WrapperForwardingPass
                 ResolvedType = wrapperDataType
             };
             RoutineInfo? extractMethod = wrapperDataType != null
-                ? _registry.LookupMethod(type: wrapperDataType, methodName: "extract")
+                ? _registry.LookupMethod(type: wrapperDataType, methodName: "peek")
                 : null;
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: dataAccess,
-                    PropertyName: "extract",
+                    PropertyName: "peek",
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -594,15 +594,15 @@ internal sealed class WrapperForwardingPass
         }
         else
         {
-            // Pointer wrapper: var raw = Hijacked[T](me); raw.as_entity()/extract().method(...)
+            // Pointer wrapper: var raw = Hijacked[T](me); raw.as_entity()/peek().method(...)
             // Entity inner types: as_entity() reinterprets the ptr directly as T (no dereference)
             //   — correct for T where me IS the entity ptr, not a slot holding one.
-            // Record inner types: extract() dereferences the ptr to load the value — correct
+            // Record inner types: peek() dereferences the ptr to load the value — correct
             //   for Hijacked[RecordType] where the ptr points to a heap/stack slot.
             // innerIsEntity is determined from the concrete inner type at the call site so
             //   generic-def forwarder bodies (where innerType is GenericParameterTypeInfo)
             //   get the correct access method even before T is substituted.
-            string accessMethodName = innerIsEntity ? "as_entity" : "extract";
+            string accessMethodName = innerIsEntity ? "as_entity" : "peek";
             var hijackedCall = new CreatorExpression(
                 TypeName: "Hijacked",
                 TypeArguments:

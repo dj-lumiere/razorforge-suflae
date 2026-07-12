@@ -887,7 +887,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    /// <summary>Builds <c>subject.value.extract()</c> -> extracts the entity from <c>Maybe[T entity]</c>.</summary>
+    /// <summary>Builds <c>subject.value.peek()</c> -> extracts the entity from <c>Maybe[T entity]</c>.</summary>
     private static CallExpression MakeEntityMaybeRead(Expression subject, TypeInfo subjectType,
         TypeInfo entityType, SourceLocation loc)
     {
@@ -896,7 +896,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         {
             ResolvedType = hijackedType
         };
-        var readMember = new MemberExpression(Object: valueAccess, PropertyName: "extract", Location: loc)
+        var readMember = new MemberExpression(Object: valueAccess, PropertyName: "peek", Location: loc)
         {
             ResolvedType = entityType
         };
