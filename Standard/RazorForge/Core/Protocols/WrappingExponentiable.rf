@@ -10,4 +10,4 @@ protocol WrappingExponentiable
   ### :param you: The exponent value.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$pow_wrap(you: Me) -> ?Me
+  routine Me.$pow_wrap(you: Me) -> Me

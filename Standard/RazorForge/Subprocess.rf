@@ -63,7 +63,7 @@ routine run_process(command: Text) -> ProcessResult
 ###   the default empty `{:}` inherits the parent environment unchanged.
 ### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
 routine run_program(file: Text, args: Referring[List[Text]], cwd: Text = "",
-                    env: ?Dict[Text, Text] = {:}) -> ProcessResult
+                    env: Dict[Text, Text] = {:}) -> ProcessResult
   var fcstr = CStr(from: file)
   var builder = rf_proc_begin(file: fcstr, file_len: fcstr.count().S32!())
   for arg in args

@@ -45,7 +45,7 @@ routine Viewing[T].$exit()
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`.
 ### :returns: The inner entity as `?T`.
 @[readonly, inline]
-routine Viewing[T].$refer() -> ?T
+routine Viewing[T].$refer() -> T
   danger!
     return Hijacked[T](me).as_entity()
 

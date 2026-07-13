@@ -35,7 +35,7 @@ routine splitmix64_next(x: U64) -> U64
 ### well-distributed regardless of how small or patterned the seed is.
 ### :param seed: The seed value; equal seeds replay equal streams.
 ### :returns: A fresh `Random` generator.
-routine make_random(seed: U64) -> ?Random
+routine make_random(seed: U64) -> Random
   var acc = seed
   acc = splitmix64_next(x: acc)
   var w0 = acc
@@ -102,7 +102,7 @@ routine Random.range!(low: U64, high: U64) -> U64
 ### :returns: The element at a uniformly random index.
 ### :absent: The collection is empty.
 @readonly
-routine MutableIndexable[T].pick!(rng: Modifying[Random]) -> ?T
+routine MutableIndexable[T].pick!(rng: Modifying[Random]) -> T
   var n = me.count()
   if n == 0u64
     absent

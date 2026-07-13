@@ -13,9 +13,9 @@ relates Value
   ### :returns: The associated value.
   ### :throws: absent if `key` is not present in the map.
   @readonly
-  routine Me.$getitem!(key: Referring[Me/Key]) -> ?Me/Value
+  routine Me.$getitem!(key: Referring[Me/Key]) -> Me/Value
   ### Replaces the value at an existing `key` with `value`.
   ### :param key: The key to update (must already exist).
   ### :param value: The replacement value.
   ### :throws: absent if `key` is not present in the map.
-  routine Me.$setitem!(key: Referring[Me/Key], value: ?Me/Value)
+  routine Me.$setitem!(key: Referring[Me/Key], value: Me/Value)

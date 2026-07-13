@@ -17,7 +17,7 @@ relates IntersectEmitter[T, S/Iter] as Iter
 ### Materializes `other` into a set and returns an iterator that filters `source` against it.
 ### :returns: The resulting `IntersectEmitter[T, S/Iter]` value.
 @readonly
-routine IntersectIterator[T, S, SO].$iter() -> ?IntersectEmitter[T, S/Iter]
+routine IntersectIterator[T, S, SO].$iter() -> IntersectEmitter[T, S/Iter]
 needs T obeys Hashable, Comparable
   danger!
     var other_set = me.other.as_entity().Set()
@@ -36,7 +36,7 @@ needs SE obeys Iterator[T]
 ### Returns the next source element that is also present in the membership set.
 ### Source elements not found in the set are consumed and discarded.
 ### :returns: The resulting `T` value.
-routine IntersectEmitter[T, SE].$next!() -> ?T
+routine IntersectEmitter[T, SE].$next!() -> T
 needs T obeys Hashable, Comparable
   danger!
     loop
@@ -48,7 +48,7 @@ needs T obeys Hashable, Comparable
 ### :param other: The iterable that defines the membership set.
 ### :returns: The resulting `IntersectIterator[T, Me, SO]` value.
 @readonly
-routine Iterable[T].intersect[SO](other: Referring[SO]) -> ?IntersectIterator[T, Me, SO]
+routine Iterable[T].intersect[SO](other: Referring[SO]) -> IntersectIterator[T, Me, SO]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   danger!
@@ -71,7 +71,7 @@ relates ExcludeEmitter[T, S/Iter] as Iter
 ### Materializes `other` into a set and returns an iterator that removes matching elements.
 ### :returns: The resulting `ExcludeEmitter[T, S/Iter]` value.
 @readonly
-routine ExcludeIterator[T, S, SO].$iter() -> ?ExcludeEmitter[T, S/Iter]
+routine ExcludeIterator[T, S, SO].$iter() -> ExcludeEmitter[T, S/Iter]
 needs T obeys Hashable, Comparable
   danger!
     var other_set = me.other.as_entity().Set()
@@ -90,7 +90,7 @@ needs SE obeys Iterator[T]
 ### Returns the next source element that is not present in the exclusion set.
 ### Source elements found in the set are consumed and discarded.
 ### :returns: The resulting `T` value.
-routine ExcludeEmitter[T, SE].$next!() -> ?T
+routine ExcludeEmitter[T, SE].$next!() -> T
 needs T obeys Hashable, Comparable
   danger!
     loop
@@ -102,7 +102,7 @@ needs T obeys Hashable, Comparable
 ### :param other: The iterable that defines the exclusion set.
 ### :returns: The resulting `ExcludeIterator[T, Me, SO]` value.
 @readonly
-routine Iterable[T].exclude[SO](other: Referring[SO]) -> ?ExcludeIterator[T, Me, SO]
+routine Iterable[T].exclude[SO](other: Referring[SO]) -> ExcludeIterator[T, Me, SO]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   danger!
@@ -113,7 +113,7 @@ needs T obeys Hashable, Comparable
 ### :param other: The iterable to concatenate before deduplication.
 ### :returns: The resulting `DistinctIterator[T, ExtendIterator[T, Me, SO]]` value.
 @readonly
-routine Iterable[T].union[SO](other: Referring[SO]) -> ?DistinctIterator[T, ExtendIterator[T, Me, SO]]
+routine Iterable[T].union[SO](other: Referring[SO]) -> DistinctIterator[T, ExtendIterator[T, Me, SO]]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   return me.extend(other).distinct()

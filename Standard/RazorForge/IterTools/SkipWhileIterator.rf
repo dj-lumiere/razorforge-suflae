@@ -16,7 +16,7 @@ relates SkipWhileEmitter[T, S/Iter] as Iter
 ### The returned emitter tracks whether it is still in the skipping phase.
 ### :returns: The resulting `SkipWhileEmitter[T, S/Iter]` value.
 @readonly
-routine SkipWhileIterator[T, S].$iter() -> ?SkipWhileEmitter[T, S/Iter]
+routine SkipWhileIterator[T, S].$iter() -> SkipWhileEmitter[T, S/Iter]
   danger!
     return SkipWhileEmitter[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, skipping: true)
 
@@ -35,7 +35,7 @@ needs SE obeys Iterator[T]
 ### Returns the next value after any remaining skippable prefix has been consumed.
 ### After the first predicate failure, later values are yielded without rechecking earlier skip state.
 ### :returns: The resulting `T` value.
-routine SkipWhileEmitter[T, SE].$next!() -> ?T
+routine SkipWhileEmitter[T, SE].$next!() -> T
   danger!
     if me.skipping
       loop
@@ -49,6 +49,6 @@ routine SkipWhileEmitter[T, SE].$next!() -> ?T
 ### :param predicate: The predicate that controls the initial skipping phase.
 ### :returns: The resulting `SkipWhileIterator[T, Me]` value.
 @readonly
-routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> ?SkipWhileIterator[T, Me]
+routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> SkipWhileIterator[T, Me]
   danger!
     return SkipWhileIterator[T, Me](source: me.hijack(), predicate: predicate)

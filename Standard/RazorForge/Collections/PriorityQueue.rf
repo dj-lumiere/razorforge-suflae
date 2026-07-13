@@ -55,7 +55,7 @@ needs TPriority obeys Comparable
 
 ### Creates an empty priority queue with no allocated backing storage.
 ### Storage is acquired lazily on the first insertion or explicit `reserve`.
-routine PriorityQueue[TPriority, TElement].$create() -> ?PriorityQueue[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority, TElement]
   return PriorityQueue[TPriority, TElement](
     priorities: hijacked_none[TPriority](),
     elements: hijacked_none[TElement](),
@@ -66,7 +66,7 @@ routine PriorityQueue[TPriority, TElement].$create() -> ?PriorityQueue[TPriority
 ### Creates an empty priority queue with storage pre-allocated for `capacity` entries.
 ### Use this when the expected queue size is known and early reallocations should be avoided.
 ### :param capacity: The number of entries to reserve space for.
-routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> ?PriorityQueue[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQueue[TPriority, TElement]
   var priority_byte_size = TPriority.data_size() * capacity
   var element_byte_size = TElement.data_size() * capacity
   danger!
@@ -87,7 +87,7 @@ routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> ?PriorityQu
 ### :param index: The zero-based heap position to read.
 ### :returns: The priority stored at that heap node.
 @inline
-routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> ?TPriority
+routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> TPriority
   danger!
     return me.priorities.offset(TPriority.data_size() * index).peek()
 
@@ -106,7 +106,7 @@ routine PriorityQueue[TPriority, TElement].set_priority_raw(index: U64, value: T
 ### :returns: The element stored at that heap node.
 @readonly
 @inline
-routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> ?TElement
+routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> TElement
   danger!
     return me.elements.offset(TElement.data_size() * index).peek()
 
@@ -290,7 +290,7 @@ routine PriorityQueue[TPriority, TElement].add(element: TElement, priority: TPri
 ### The last heap entry is moved to the root and sifted down to restore heap order.
 ### :returns: The element associated with the minimum priority.
 ### :absent: The queue is empty.
-routine PriorityQueue[TPriority, TElement].remove!() -> ?TElement
+routine PriorityQueue[TPriority, TElement].remove!() -> TElement
   if me.is_empty()
     absent
 
@@ -309,7 +309,7 @@ routine PriorityQueue[TPriority, TElement].remove!() -> ?TElement
 ### Returns the element at the front of the queue without removing it.
 ### :returns: The element with the smallest priority.
 ### :absent: The queue is empty.
-routine PriorityQueue[TPriority, TElement].peek!() -> ?TElement
+routine PriorityQueue[TPriority, TElement].peek!() -> TElement
   if me.is_empty()
     absent
   return me.get_element_raw(0u64)
@@ -317,7 +317,7 @@ routine PriorityQueue[TPriority, TElement].peek!() -> ?TElement
 ### Returns the smallest priority currently in the queue without removing its entry.
 ### :returns: The minimum priority value.
 ### :absent: The queue is empty.
-routine PriorityQueue[TPriority, TElement].peek_priority!() -> ?TPriority
+routine PriorityQueue[TPriority, TElement].peek_priority!() -> TPriority
   if me.is_empty()
     absent
   return me.get_priority_raw(0u64)
@@ -352,7 +352,7 @@ needs TPriority obeys Cloneable
 
 ### Removes all entries and returns their elements in dequeue order (smallest priority first).
 ### :returns: A `List[TElement]` whose order matches repeated `remove!()` calls.
-routine PriorityQueue[TPriority, TElement].drain() -> ?List[TElement]
+routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
   var result = List[TElement](me.count())
   while not me.is_empty()
     result.add_last(me.remove!())
@@ -381,7 +381,7 @@ needs TElement obeys Equatable
 ### Use `drain()` on a copy if you need priority order without consuming the queue.
 ### :param source: The queue to copy entries from.
 ### :returns: A `List[PQEntry[TPriority, TElement]]` in heap array order.
-routine List[PQEntry[TPriority, TElement]].$create(source: PriorityQueue[TPriority, TElement]) -> ?List[PQEntry[TPriority, TElement]]
+routine List[PQEntry[TPriority, TElement]].$create(source: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
   var result = List[PQEntry[TPriority, TElement]](source.count())
   var i = 0u64
   while i < source.count()
@@ -408,7 +408,7 @@ entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriori
   secret index: U64
 
 @readonly
-routine PriorityQueue[TPriority, TElement].$iter() -> ?PriorityQueueIterator[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPriority, TElement]
   danger!
     return PriorityQueueIterator[TPriority, TElement](
       priorities: me.priorities,

@@ -83,7 +83,7 @@ dangerous routine BTreeListNode[T].children_base() -> Hijacked[Hijacked[BTreeLis
 ### :param i: Zero-based key index.
 ### :returns: The key value at position `i`.
 @readonly
-routine BTreeListNode[T].keys_get(i: U64) -> ?T
+routine BTreeListNode[T].keys_get(i: U64) -> T
   danger!
     return me.keys_base().stride(count: i.S64()).peek()
 
@@ -99,7 +99,7 @@ routine BTreeListNode[T].keys_set(i: U64, value: T)
 ### :param i: Zero-based child index.
 ### :returns: The child node at position `i`.
 @readonly
-routine BTreeListNode[T].children_get(i: U64) -> ?Hijacked[BTreeListNode[T]]
+routine BTreeListNode[T].children_get(i: U64) -> Hijacked[BTreeListNode[T]]
   danger!
     return me.children_base().stride(count: i.S64()).peek()
 
@@ -257,7 +257,7 @@ routine BTreeListNode[T].children_add_range_from(other: Referring[BTreeListNode[
 # Creators
 # ============================================================================
 
-routine BTreeListNode[T].$create(is_leaf: Bool) -> ?BTreeListNode[T]
+routine BTreeListNode[T].$create(is_leaf: Bool) -> BTreeListNode[T]
   return BTreeListNode[T](
     keys: zero_value[Array[T, 63]](),
     children: zero_value[Array[Hijacked[BTreeListNode[T]], 64]](),
@@ -267,7 +267,7 @@ routine BTreeListNode[T].$create(is_leaf: Bool) -> ?BTreeListNode[T]
     is_leaf: is_leaf
   )
 
-routine SortedList[T].$create() -> ?SortedList[T]
+routine SortedList[T].$create() -> SortedList[T]
   return SortedList[T](
     root: none,
     count: 0u64
@@ -565,7 +565,7 @@ dangerous routine SortedList[T].remove_from_node(node: Controlling[BTreeListNode
 ### :param idx: Index of the separator key whose left child to descend.
 ### :returns: The in-order predecessor key.
 @inline
-dangerous routine SortedList[T].get_predecessor(node: Referring[BTreeListNode[T]], idx: U64) -> ?T
+dangerous routine SortedList[T].get_predecessor(node: Referring[BTreeListNode[T]], idx: U64) -> T
   var current = node.children_get(idx).as_entity()
   while not current.is_leaf
     current = current.children_get(current.children_count() -% 1u64).as_entity()
@@ -576,7 +576,7 @@ dangerous routine SortedList[T].get_predecessor(node: Referring[BTreeListNode[T]
 ### :param idx: Index of the separator key whose right child to descend.
 ### :returns: The in-order successor key.
 @inline
-dangerous routine SortedList[T].get_successor(node: Referring[BTreeListNode[T]], idx: U64) -> ?T
+dangerous routine SortedList[T].get_successor(node: Referring[BTreeListNode[T]], idx: U64) -> T
   var current = node.children_get(idx +% 1u64).as_entity()
   while not current.is_leaf
     current = current.children_get(0u64).as_entity()
@@ -690,7 +690,7 @@ routine SortedList[T].remove_all(value: T) -> U64
 ### :returns: The element at that rank.
 ### :throws: {IndexOutOfBoundsError} if `rank >= count()`.
 @readonly
-routine SortedList[T].get_by_rank!(rank: U64) -> ?T
+routine SortedList[T].get_by_rank!(rank: U64) -> T
   if rank >= me.count
     throw IndexOutOfBoundsError(index: rank, count: me.count)
   danger!
@@ -702,7 +702,7 @@ routine SortedList[T].get_by_rank!(rank: U64) -> ?T
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
 ### :returns: The element at that rank.
 @readonly
-dangerous routine SortedList[T].get_at_subtree_rank(node: Referring[BTreeListNode[T]], rank: U64) -> ?T
+dangerous routine SortedList[T].get_at_subtree_rank(node: Referring[BTreeListNode[T]], rank: U64) -> T
   if node.is_leaf
     return node.keys_get(rank)
 
@@ -730,7 +730,7 @@ dangerous routine SortedList[T].get_at_subtree_rank(node: Referring[BTreeListNod
 ### :param max_val: Inclusive upper bound.
 ### :returns: A {List[T]} of all matching elements in sorted order.
 @readonly
-routine SortedList[T].range(min_val: T, max_val: T) -> ?List[T]
+routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
     pass
@@ -767,7 +767,7 @@ dangerous routine SortedList[T].range_collect(node: Referring[BTreeListNode[T]],
 ### :returns: The minimum element.
 ### :absent: The list is empty.
 @readonly
-routine SortedList[T].min!() -> ?T
+routine SortedList[T].min!() -> T
   if me.is_empty()
     absent
   danger!
@@ -780,7 +780,7 @@ routine SortedList[T].min!() -> ?T
 ### :returns: The maximum element.
 ### :absent: The list is empty.
 @readonly
-routine SortedList[T].max!() -> ?T
+routine SortedList[T].max!() -> T
   if me.is_empty()
     absent
   danger!
@@ -793,14 +793,14 @@ routine SortedList[T].max!() -> ?T
 ### :returns: The first (minimum) element.
 ### :absent: The list is empty.
 @readonly
-routine SortedList[T].first!() -> ?T
+routine SortedList[T].first!() -> T
   return me.min!()
 
 ### Returns the largest element. Alias for {SortedList[T].max!()}.
 ### :returns: The last (maximum) element.
 ### :absent: The list is empty.
 @readonly
-routine SortedList[T].last!() -> ?T
+routine SortedList[T].last!() -> T
   return me.max!()
 
 # ============================================================================
@@ -808,14 +808,14 @@ routine SortedList[T].last!() -> ?T
 # ============================================================================
 
 @readonly
-routine SortedList[T].$iter() -> ?SortedListIterator[T]
+routine SortedList[T].$iter() -> SortedListIterator[T]
   danger!
     return SortedListIterator[T](list: me.hijack(), index: 0u64)
 
 ### Creates a {List[T]} from all elements of `from` in ascending sorted order.
 ### :param from: The sorted list to convert.
 ### :returns: A new {List[T]} containing all elements in ascending order.
-routine List[T].$create(from: SortedList[T]) -> ?List[T]
+routine List[T].$create(from: SortedList[T]) -> List[T]
   var result = List[T](capacity: from.count)
   if from.root is None
     pass
@@ -846,7 +846,7 @@ entity SortedListIterator[T] obeys Iterator[T]
   list: Hijacked[SortedList[T]]
   index: U64
 
-routine SortedListIterator[T].$next!() -> ?T
+routine SortedListIterator[T].$next!() -> T
   danger!
     if me.index >= me.list.as_entity().count()
       absent

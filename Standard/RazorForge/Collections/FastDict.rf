@@ -67,7 +67,7 @@ relates V as Value
 # ============================================================================
 
 ### Creates an empty dictionary using the default initial table size.
-routine FastDict[K, V].$create() -> ?FastDict[K, V]
+routine FastDict[K, V].$create() -> FastDict[K, V]
   var cap = FAST_DICT_INITIAL_CAPACITY
   var ecap = FAST_DICT_INITIAL_ENTRIES
   var dict = FastDict[K, V](
@@ -94,7 +94,7 @@ routine FastDict[K, V].$create() -> ?FastDict[K, V]
 ### Creates an empty dictionary pre-sized to hold at least `capacity` live entries without rehashing.
 ### Both the probe table and the entries array are rounded up to the next power-of-two.
 ### :param capacity: Minimum number of live entries to accommodate before the first rehash.
-routine FastDict[K, V].$create(capacity: U64) -> ?FastDict[K, V]
+routine FastDict[K, V].$create(capacity: U64) -> FastDict[K, V]
   var cap = FAST_DICT_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -153,7 +153,7 @@ routine FastDict[K, V].read_index(slot: U64) -> U64
 ### :param ei: The entry index to read from.
 ### :returns: The key at that entry.
 @readonly
-routine FastDict[K, V].read_key_at(ei: U64) -> ?K
+routine FastDict[K, V].read_key_at(ei: U64) -> K
   danger!
     return me.keys.offset(K.data_size() * ei).peek()
 
@@ -161,7 +161,7 @@ routine FastDict[K, V].read_key_at(ei: U64) -> ?K
 ### :param ei: The entry index to read from.
 ### :returns: The value at that entry.
 @readonly
-routine FastDict[K, V].read_val_at(ei: U64) -> ?V
+routine FastDict[K, V].read_val_at(ei: U64) -> V
   danger!
     return me.vals.offset(V.data_size() * ei).peek()
 
@@ -376,7 +376,7 @@ routine FastDict[K, V].remove(key: K) -> Bool
 ### :param default_value: The fallback value returned when `key` is not present.
 ### :returns: The mapped value if found, otherwise `default_value`.
 @readonly
-routine FastDict[K, V].get_or_default(key: K, default_value: V) -> ?V
+routine FastDict[K, V].get_or_default(key: K, default_value: V) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     return default_value
@@ -391,7 +391,7 @@ routine FastDict[K, V].get_or_default(key: K, default_value: V) -> ?V
 ### :returns: The value mapped to `key`.
 ### :absent: The key is not present in the dictionary.
 @readonly
-routine FastDict[K, V].$getitem!(key: Referring[K]) -> ?V
+routine FastDict[K, V].$getitem!(key: Referring[K]) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
@@ -402,7 +402,7 @@ routine FastDict[K, V].$getitem!(key: Referring[K]) -> ?V
 ### :param key: The key to update.
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
-routine FastDict[K, V].$setitem!(key: Referring[K], value: ?V)
+routine FastDict[K, V].$setitem!(key: Referring[K], value: V)
   if key notin me
     absent
   var slot = me.find_slot(key)
@@ -416,7 +416,7 @@ routine FastDict[K, V].$setitem!(key: Referring[K], value: ?V)
 ### Returns all live keys in insertion order.
 ### :returns: A {List[K]} of every key; order matches the sequence in which the keys were first added.
 @readonly
-routine FastDict[K, V].keys() -> ?List[K]
+routine FastDict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   var i = 0u64
   while i < me.entries_used
@@ -429,7 +429,7 @@ routine FastDict[K, V].keys() -> ?List[K]
 ### Returns all live values in insertion order.
 ### :returns: A {List[V]} of every value; order matches the corresponding `keys()` call.
 @readonly
-routine FastDict[K, V].values() -> ?List[V]
+routine FastDict[K, V].values() -> List[V]
   var result = List[V](me.count)
   var i = 0u64
   while i < me.entries_used
@@ -442,7 +442,7 @@ routine FastDict[K, V].values() -> ?List[V]
 ### Returns all live entries in insertion order.
 ### :returns: A {List[DictEntry[K, V]]} of every key-value pair; order matches the sequence in which the keys were first added.
 @readonly
-routine FastDict[K, V].entries() -> ?List[DictEntry[K, V]]
+routine FastDict[K, V].entries() -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
   while i < me.entries_used
@@ -461,7 +461,7 @@ routine FastDict[K, V].entries() -> ?List[DictEntry[K, V]]
 ### Returns an iterator over all live entries in insertion order.
 ### Order is stable across lookups and value updates; removing and re-adding a key places the entry at the new end.
 @readonly
-routine FastDict[K, V].$iter() -> ?FastDictIterator[K, V]
+routine FastDict[K, V].$iter() -> FastDictIterator[K, V]
   danger!
     return FastDictIterator[K, V](
       keys: me.keys,

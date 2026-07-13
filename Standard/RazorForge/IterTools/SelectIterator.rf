@@ -18,7 +18,7 @@ relates SelectEmitter[T, U, S/Iter] as Iter
 ### source value.
 ### :returns: The resulting `SelectEmitter[T, U, S/Iter]` value.
 @readonly
-routine SelectIterator[T, U, S].$iter() -> ?SelectEmitter[T, U, S/Iter]
+routine SelectIterator[T, U, S].$iter() -> SelectEmitter[T, U, S/Iter]
   danger!
     return SelectEmitter[T, U, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform)
 
@@ -36,7 +36,7 @@ needs SE obeys Iterator[T]
 ### Returns the next projected value from the mapped sequence.
 ### The transform runs once for each successfully yielded source value.
 ### :returns: The resulting `U` value.
-routine SelectEmitter[T, U, SE].$next!() -> ?U
+routine SelectEmitter[T, U, SE].$next!() -> U
   danger!
     var item = me.source.as_entity().$next!()
     return me.transform(item)
@@ -47,6 +47,6 @@ routine SelectEmitter[T, U, SE].$next!() -> ?U
 ### :param transform: The routine used to map each source value to a result value.
 ### :returns: The resulting `SelectIterator[T, U, Me]` value.
 @readonly
-routine Iterable[T].select[U](transform: Routine[(T,), U]) -> ?SelectIterator[T, U, Me]
+routine Iterable[T].select[U](transform: Routine[(T,), U]) -> SelectIterator[T, U, Me]
   danger!
     return SelectIterator[T, U, Me](source: me.hijack(), transform: transform)

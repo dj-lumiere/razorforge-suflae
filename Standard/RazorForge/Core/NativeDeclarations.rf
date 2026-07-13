@@ -233,7 +233,7 @@ dangerous external("C") routine rf_signal_cast_all(sig: CPtr)
 # ============================================================================
 # race! competitor set (v0.2.0). Built one entry per Agent in List order, then
 # driven on this thread's implicit scheduler until the first competitor finishes.
-# Underlies the stdlib `race![T](of: ?List[Agent[T]])`.
+# Underlies the stdlib `race![T](of: List[Agent[T]])`.
 # ============================================================================
 
 ### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as a `CPtr`.

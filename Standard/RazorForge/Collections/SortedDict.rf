@@ -95,7 +95,7 @@ dangerous routine BTreeDictNode[K, V].children_base() -> Hijacked[Hijacked[BTree
 ### :param i: Zero-based entry index.
 ### :returns: The key at position `i`.
 @readonly
-routine BTreeDictNode[K, V].key_get(i: U64) -> ?K
+routine BTreeDictNode[K, V].key_get(i: U64) -> K
   danger!
     return me.keys_base().stride(count: i.S64()).peek()
 
@@ -103,7 +103,7 @@ routine BTreeDictNode[K, V].key_get(i: U64) -> ?K
 ### :param i: Zero-based entry index.
 ### :returns: The value at position `i`.
 @readonly
-routine BTreeDictNode[K, V].value_get(i: U64) -> ?V
+routine BTreeDictNode[K, V].value_get(i: U64) -> V
   danger!
     return me.values_base().stride(count: i.S64()).peek()
 
@@ -142,7 +142,7 @@ routine BTreeDictNode[K, V].value_set(i: U64, value: V)
 ### :param i: Zero-based child index.
 ### :returns: The `?Hijacked[BTreeDictNode[K, V]]` child-node pointer stored in slot `i`.
 @readonly
-dangerous routine BTreeDictNode[K, V].children_get(i: U64) -> ?Hijacked[BTreeDictNode[K, V]]
+dangerous routine BTreeDictNode[K, V].children_get(i: U64) -> Hijacked[BTreeDictNode[K, V]]
   return me.children_base().stride(count: i.S64()).peek()
 
 ### Recursively frees this node's subtree (post-order): destroys each child node, tears down each
@@ -327,7 +327,7 @@ routine BTreeDictNode[K, V].children_add_range_from(other: Referring[BTreeDictNo
 # Creators
 # ============================================================================
 
-routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> ?BTreeDictNode[K, V]
+routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
     entry_keys: zero_value[Array[K, 63]](),
     entry_values: zero_value[Array[V, 63]](),
@@ -338,7 +338,7 @@ routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> ?BTreeDictNode[K, V]
     is_leaf: is_leaf
   )
 
-routine SortedDict[K, V].$create() -> ?SortedDict[K, V]
+routine SortedDict[K, V].$create() -> SortedDict[K, V]
   return SortedDict[K, V](
     root: none,
     count: 0u64
@@ -422,7 +422,7 @@ dangerous routine SortedDict[K, V].search_node(node: Referring[BTreeDictNode[K, 
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
-routine SortedDict[K, V].$getitem!(key: Referring[K]) -> ?V
+routine SortedDict[K, V].$getitem!(key: Referring[K]) -> V
   if me.root is None
     throw KeyNotFoundError(key: key.$represent())
   danger!
@@ -435,7 +435,7 @@ routine SortedDict[K, V].$getitem!(key: Referring[K]) -> ?V
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
-dangerous routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[K, V]], key: K) -> ?V
+dangerous routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[K, V]], key: K) -> V
   var i = me.lower_bound(node: node, key: key)
   if i < node.keys_count() and key == node.key_get(i)
     return node.value_get(i)
@@ -447,7 +447,7 @@ dangerous routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[
 ### :param key: The key to update.
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
-routine SortedDict[K, V].$setitem!(key: Referring[K], value: ?V)
+routine SortedDict[K, V].$setitem!(key: Referring[K], value: V)
   if key notin me
     absent
   discard me.add(key: key, value: value)
@@ -815,7 +815,7 @@ dangerous routine SortedDict[K, V].get_by_rank_node(node: Referring[BTreeDictNod
 ### :param default: The fallback value returned when `key` is absent.
 ### :returns: The mapped value if found, otherwise `default`.
 @readonly
-routine SortedDict[K, V].get_or(key: K, default: V) -> ?V
+routine SortedDict[K, V].get_or(key: K, default: V) -> V
   if me.root is None
     return default
   danger!
@@ -828,7 +828,7 @@ routine SortedDict[K, V].get_or(key: K, default: V) -> ?V
 ### :param default: The fallback value returned when `key` is absent.
 ### :returns: The mapped value if found, otherwise `default`.
 @readonly
-dangerous routine SortedDict[K, V].get_or_from_node(node: Referring[BTreeDictNode[K, V]], key: K, default: V) -> ?V
+dangerous routine SortedDict[K, V].get_or_from_node(node: Referring[BTreeDictNode[K, V]], key: K, default: V) -> V
   var i = me.lower_bound(node: node, key: key)
   if i < node.keys_count() and key == node.key_get(i)
     return node.value_get(i)
@@ -888,7 +888,7 @@ routine SortedDict[K, V].last!() -> DictEntry[K, V]
 ### Returns all keys in ascending order.
 ### :returns: A {List[K]} of every key, sorted from smallest to largest.
 @readonly
-routine SortedDict[K, V].keys() -> ?List[K]
+routine SortedDict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   if me.root is None
     pass
@@ -916,7 +916,7 @@ dangerous routine SortedDict[K, V].collect_keys(node: Referring[BTreeDictNode[K,
 ### Returns all values in key-ascending order.
 ### :returns: A {List[V]} of every value, ordered by their corresponding keys.
 @readonly
-routine SortedDict[K, V].values() -> ?List[V]
+routine SortedDict[K, V].values() -> List[V]
   var result = List[V](me.count)
   if me.root is None
     pass
@@ -973,14 +973,14 @@ dangerous routine SortedDict[K, V].get_by_rank(node: Referring[BTreeDictNode[K, 
 # ============================================================================
 
 @readonly
-routine SortedDict[K, V].$iter() -> ?SortedDictIterator[K, V]
+routine SortedDict[K, V].$iter() -> SortedDictIterator[K, V]
   danger!
     return SortedDictIterator[K, V](dict: me.hijack(), index: 0u64)
 
 ### Creates a {List[DictEntry[K, V]]} from all entries of `from` in ascending key order.
 ### :param from: The sorted dictionary to convert.
 ### :returns: A new list of all entries in key-ascending order.
-routine List[DictEntry[K, V]].$create(from: SortedDict[K, V]) -> ?List[DictEntry[K, V]]
+routine List[DictEntry[K, V]].$create(from: SortedDict[K, V]) -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](from.count)
   if from.root is None
     pass

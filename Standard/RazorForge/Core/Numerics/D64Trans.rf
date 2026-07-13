@@ -14,7 +14,7 @@ module Core
 
 ### Builds the engine value of a U64 integer with the given sign (exact; <=64 bits
 ### fits the 113-bit significand). value = mant * 2^(exp-125), MSB at bit 126.
-routine uf128_from_u64(c: U64, sign: Bool) -> ?UnpackedFloat[U128, U256, 128]
+routine uf128_from_u64(c: U64, sign: Bool) -> UnpackedFloat[U128, U256, 128]
   if int_eq[U64](a: c, b: 0_u64)
     return UnpackedFloat[U128, U256, 128].zero(sign: sign)
   var cw = zero_extend[U64, U128](c)

@@ -93,7 +93,7 @@ needs W is U64
 ### instantiation off the call, which the reachability pass prunes for the widest tier (U1024,
 ### reached only through nested generic-member instantiations) — keying on the receiver type
 ### seeds every width, exactly like `low_mask`/`from_words`.
-common routine T.to_width(s: S64) -> ?T
+common routine T.to_width(s: S64) -> T
   return zero_extend[U64, T](reinterpret_bits[S64, U64](s))
 
 ### Tests bit `pos` of `me`.
@@ -101,13 +101,13 @@ routine T.bit(pos: S64) -> Bool
   return int_ne[T](a: bit_and[T](a: me, b: shift_left[T](value: 1, bits: T.to_width(s: pos))), b: 0)
 
 ### Logical left (s>=0) or right (s<0) shift of `me` by an S64 amount.
-routine T.shift(s: S64) -> ?T
+routine T.shift(s: S64) -> T
   if signed_ge[S64](a: s, b: 0_s64)
     return shift_left[T](value: me, bits: T.to_width(s: s))
   return shift_right_unsigned[T](me, T.to_width(s: sub[S64](a: 0_s64, b: s)))
 
 ### The mask `(1 << n) - 1` as a `T`.
-common routine T.low_mask(n: S64) -> ?T
+common routine T.low_mask(n: S64) -> T
   return sub[T](a: shift_left[T](value: 1, bits: T.to_width(s: n)), b: 1)
 
 ### Boolean XOR (for sign combination).
@@ -130,7 +130,7 @@ common routine UnpackedFloat[M, L, W].clz_wide(v: L) -> S64
 ### Builds an unpacked value from its mantissa, exponent, and classification. The class is the
 ### single source of sign/zero/inf/nan state (see `SignedFpClass`); pass a class directly (e.g.
 ### `POSITIVE_NORMAL`), or fold the legacy boolean quartet through `SignedFpClass.from_flags`.
-common routine UnpackedFloat[M, L, W].make(mant: M, exp: S64, fpclass: SignedFpClass) -> ?UnpackedFloat[M, L, W]
+common routine UnpackedFloat[M, L, W].make(mant: M, exp: S64, fpclass: SignedFpClass) -> UnpackedFloat[M, L, W]
   return UnpackedFloat[M, L, W](mant: mant, exp: exp, fpclass: fpclass)
 
 # The class predicates live as member routines on the (non-generic) `SignedFpClass` choice — see
@@ -155,17 +155,17 @@ routine UnpackedFloat[M, L, W].isnan() -> Bool
   return me.fpclass.is_nan()
 
 ### Positive or negative zero.
-common routine UnpackedFloat[M, L, W].zero(sign: Bool) -> ?UnpackedFloat[M, L, W]
+common routine UnpackedFloat[M, L, W].zero(sign: Bool) -> UnpackedFloat[M, L, W]
   return UnpackedFloat[M, L, W].make(mant: zero_extend[U64, M](0_u64), exp: 0_s64, fpclass: SignedFpClass.from_flags(sign: sign, iszero: true, isinf: false, isnan: false))
 
 ### Positive or negative infinity.
-common routine UnpackedFloat[M, L, W].inf(sign: Bool) -> ?UnpackedFloat[M, L, W]
+common routine UnpackedFloat[M, L, W].inf(sign: Bool) -> UnpackedFloat[M, L, W]
   # mantissa = the leading bit at position W-2 (canonical normalized leading-bit slot).
   var lead = shift_left[M](value: 1, bits: M.to_width(s: sub[S64](a: reinterpret_bits[U64, S64](W), b: 2_s64)))
   return UnpackedFloat[M, L, W].make(mant: lead, exp: -1_s64, fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: true, isnan: false))
 
 ### The canonical quiet NaN.
-common routine UnpackedFloat[M, L, W].nan() -> ?UnpackedFloat[M, L, W]
+common routine UnpackedFloat[M, L, W].nan() -> UnpackedFloat[M, L, W]
   # mantissa = 0b11 at bit W-2 -> leading bit set plus the quiet bit just below it.
   var m = shift_left[M](value: 3, bits: M.to_width(s: sub[S64](a: reinterpret_bits[U64, S64](W), b: 3_s64)))
   return UnpackedFloat[M, L, W].make(mant: m, exp: -1_s64, fpclass: SignedFpClass.from_flags(sign: false, iszero: false, isinf: false, isnan: true))
@@ -175,15 +175,15 @@ common routine UnpackedFloat[M, L, W].nan() -> ?UnpackedFloat[M, L, W]
 # ============================================================================
 
 ### Arithmetic negation.
-routine UnpackedFloat[M, L, W].neg() -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].neg() -> UnpackedFloat[M, L, W]
   return UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, fpclass: SignedFpClass.from_flags(sign: not me.sign(), iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan()))
 
 ### Absolute value.
-routine UnpackedFloat[M, L, W].abs() -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].abs() -> UnpackedFloat[M, L, W]
   return UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, fpclass: SignedFpClass.from_flags(sign: false, iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan()))
 
 ### Multiplies by `2^e` by adjusting the exponent (TLFloat `ldexp_`).
-routine UnpackedFloat[M, L, W].ldexp(e: S64) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].ldexp(e: S64) -> UnpackedFloat[M, L, W]
   if me.iszero()
     return me
   var y = add[S64](a: me.exp, b: e)
@@ -305,11 +305,11 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
   return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, fpclass: SignedFpClass.from_flags(sign: rsign2, iszero: amzero, isinf: false, isnan: false))
 
 ### Returns `me + you`.
-routine UnpackedFloat[M, L, W].add(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].add(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.faddsub(you: you, negate: false)
 
 ### Returns `me - you`.
-routine UnpackedFloat[M, L, W].sub(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.faddsub(you: you, negate: true)
 
 # ============================================================================
@@ -317,7 +317,7 @@ routine UnpackedFloat[M, L, W].sub(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloa
 # ============================================================================
 
 ### Returns `me * you`.
-routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   if me.isnan() or you.isnan() or (me.iszero() and you.isinf()) or (me.isinf() and you.iszero()) or me.isinf() or you.isinf()
     if me.isnan()
       return me
@@ -356,7 +356,7 @@ routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloa
 # ============================================================================
 
 ### Returns `me / you`.
-routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   if me.isnan()
     return me
   if you.isnan()
@@ -419,19 +419,19 @@ routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloa
 # ============================================================================
 
 ### Wired `+` — returns `me + you`.
-routine UnpackedFloat[M, L, W].$add(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].$add(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.add(you: you)
 
 ### Wired `-` — returns `me - you`.
-routine UnpackedFloat[M, L, W].$sub(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].$sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.sub(you: you)
 
 ### Wired `*` — returns `me * you`.
-routine UnpackedFloat[M, L, W].$mul(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].$mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.mul(you: you)
 
 ### Wired `/` — returns `me / you`.
-routine UnpackedFloat[M, L, W].$truediv(you: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].$truediv(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.div(you: you)
 
 # ============================================================================
@@ -439,19 +439,19 @@ routine UnpackedFloat[M, L, W].$truediv(you: UnpackedFloat[M, L, W]) -> ?Unpacke
 # ============================================================================
 
 ### Returns 1 (when `cond`) or 0, as a `T`.
-common routine T.from_bool(cond: Bool) -> ?T
+common routine T.from_bool(cond: Bool) -> T
   if cond
     return T.to_width(s: 1_s64)
   return T.to_width(s: 0_s64)
 
 ### Clears the low `n` bits of `me`.
-routine T.clear_low(n: S64) -> ?T
+routine T.clear_low(n: S64) -> T
   return bit_and[T](a: me, b: bit_xor[T](a: T.low_mask(n: n), b: sub[T](a: 0, b: 1)))
 
 ### Integer square root of `v` over the wide type `L` (restoring bitwise method). A common
 ### routine on the engine type (not a bare-`L` member) so the W-parametrized instantiation is
 ### reachability-seeded like `clz_wide` — a bare `L.isqrt[W]()` member is pruned before codegen.
-common routine UnpackedFloat[M, L, W].isqrt_wide(v: L) -> ?L
+common routine UnpackedFloat[M, L, W].isqrt_wide(v: L) -> L
   var wb = reinterpret_bits[U64, S64](W)
   var rem = v
   var res = L.to_width(s: 0_s64)
@@ -473,7 +473,7 @@ common routine UnpackedFloat[M, L, W].isqrt_wide(v: L) -> ?L
 # ============================================================================
 
 ### Returns `me*b + c` with a single rounding to nbmant bits.
-routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M, L, W]) -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   if me.isnan() or me.isinf() or b.isnan() or b.isinf() or c.isnan() or c.isinf()
     if me.isnan()
       return me
@@ -575,7 +575,7 @@ routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M
 ### faithful-rounded scratch, so ~1 ULP is within contract. me must be > 0, finite, normal.
 ### Normalize me = v * 2^(2k) with v in [1,4); seed 1/sqrt(v) to ~2 bits; iterate
 ### y <- y*(3 - v*y^2)/2; return (v*y) * 2^k.
-routine UnpackedFloat[M, L, W].sqrt_newton() -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].sqrt_newton() -> UnpackedFloat[M, L, W]
   var e1 = add[S64](a: me.exp, b: 1_s64)
   var twok = bit_and[S64](a: e1, b: -2_s64)
   var k = signed_div[S64](a: twok, b: 2_s64)
@@ -593,7 +593,7 @@ routine UnpackedFloat[M, L, W].sqrt_newton() -> ?UnpackedFloat[M, L, W]
 
 ### Returns the correctly-rounded square root (NaN-of-negative, ±0 and +inf pass through).
 ### W>=256 routes to the quadratic Newton path; narrower W uses the bitwise `L.isqrt`.
-routine UnpackedFloat[M, L, W].sqrt() -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].sqrt() -> UnpackedFloat[M, L, W]
   if me.isnan()
     return me
   if me.iszero()
@@ -635,7 +635,7 @@ routine UnpackedFloat[M, L, W].sqrt() -> ?UnpackedFloat[M, L, W]
 # ============================================================================
 
 ### Truncates toward zero to an integer.
-routine UnpackedFloat[M, L, W].trunc() -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].trunc() -> UnpackedFloat[M, L, W]
   if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = reinterpret_bits[U64, S64](W)
@@ -648,7 +648,7 @@ routine UnpackedFloat[M, L, W].trunc() -> ?UnpackedFloat[M, L, W]
   return UnpackedFloat[M, L, W].make(mant: bit_and[M](a: me.mant, b: mask), exp: me.exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: false, isinf: false, isnan: false))
 
 ### Rounds to nearest integer, ties away from zero (TLFloat `round`).
-routine UnpackedFloat[M, L, W].round() -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].round() -> UnpackedFloat[M, L, W]
   if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = reinterpret_bits[U64, S64](W)
@@ -668,7 +668,7 @@ routine UnpackedFloat[M, L, W].round() -> ?UnpackedFloat[M, L, W]
   return UnpackedFloat[M, L, W].make(mant: m, exp: exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: false, isinf: false, isnan: false))
 
 ### Rounds to nearest integer, ties to even (TLFloat `rint`).
-routine UnpackedFloat[M, L, W].rint() -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].rint() -> UnpackedFloat[M, L, W]
   if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = reinterpret_bits[U64, S64](W)
@@ -693,7 +693,7 @@ routine UnpackedFloat[M, L, W].rint() -> ?UnpackedFloat[M, L, W]
 # ============================================================================
 
 ### Builds an unpacked value from a non-negative 64-bit integer.
-common routine UnpackedFloat[M, L, W].from_u64(v: U64) -> ?UnpackedFloat[M, L, W]
+common routine UnpackedFloat[M, L, W].from_u64(v: U64) -> UnpackedFloat[M, L, W]
   if v == 0_u64
     return UnpackedFloat[M, L, W].zero(sign: false)
   var wb = reinterpret_bits[U64, S64](W)
@@ -712,7 +712,7 @@ common routine UnpackedFloat[M, L, W].from_u64(v: U64) -> ?UnpackedFloat[M, L, W
   return UnpackedFloat[M, L, W].make(mant: m, exp: sub[S64](a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: false, iszero: int_eq[M](a: m, b: 0), isinf: false, isnan: false))
 
 ### Builds an unpacked value from a signed 64-bit integer.
-common routine UnpackedFloat[M, L, W].from_s64(src: S64) -> ?UnpackedFloat[M, L, W]
+common routine UnpackedFloat[M, L, W].from_s64(src: S64) -> UnpackedFloat[M, L, W]
   if src == 0_s64
     return UnpackedFloat[M, L, W].zero(sign: false)
   var sign = signed_lt[S64](a: src, b: 0_s64)
@@ -755,7 +755,7 @@ routine UnpackedFloat[M, L, W].iseven() -> Bool
   return me.ldexp(e: -1_s64).isint()
 
 ### Nudges the magnitude down by one ULP (toward zero) — TLFloat `toward0`.
-routine UnpackedFloat[M, L, W].toward0() -> ?UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].toward0() -> UnpackedFloat[M, L, W]
   if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = reinterpret_bits[U64, S64](W)
@@ -793,7 +793,7 @@ routine UnpackedFloat[M, L, W].eq(you: UnpackedFloat[M, L, W]) -> Bool
 # ============================================================================
 
 ### Returns `10^a` as an unpacked value.
-common routine UnpackedFloat[M, L, W].exp10i(a: S64) -> ?UnpackedFloat[M, L, W]
+common routine UnpackedFloat[M, L, W].exp10i(a: S64) -> UnpackedFloat[M, L, W]
   var neg = signed_lt[S64](a: a, b: 0_s64)
   var e = if neg then sub[S64](a: 0_s64, b: a) else a
   var r = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
@@ -814,33 +814,33 @@ routine UnpackedFloat[M, L, W].frexp() -> UFExp[M, L, W]
   return UFExp[M, L, W](item0: fr, item1: add[S64](a: me.exp, b: 2_s64))
 
 ### Builds an `M`-typed value from two U64 halves (low, then high<<64).
-common routine M.from_words2(h1: U64, h0: U64) -> ?M
+common routine M.from_words2(h1: U64, h0: U64) -> M
   return bit_or[M](a: zero_extend[U64, M](h0), b: shift_left[M](value: zero_extend[U64, M](h1), bits: 64))
 
 ### Builds an `M`-typed value from four U64 halves (h3..h0, most significant first).
-common routine M.from_words4(h3: U64, h2: U64, h1: U64, h0: U64) -> ?M
+common routine M.from_words4(h3: U64, h2: U64, h1: U64, h0: U64) -> M
   return bit_or[M](a: M.from_words2(h1: h1, h0: h0), b: shift_left[M](value: M.from_words2(h1: h3, h0: h2), bits: 128))
 
 ### Builds an `M`-typed value from eight U64 halves (h7..h0, most significant first).
-common routine M.from_words8(h7: U64, h6: U64, h5: U64, h4: U64, h3: U64, h2: U64, h1: U64, h0: U64) -> ?M
+common routine M.from_words8(h7: U64, h6: U64, h5: U64, h4: U64, h3: U64, h2: U64, h1: U64, h0: U64) -> M
   return bit_or[M](a: M.from_words4(h3: h3, h2: h2, h1: h1, h0: h0), b: shift_left[M](value: M.from_words4(h3: h7, h2: h6, h1: h5, h0: h4), bits: 256))
 
 ### Builds an `M`-typed mantissa from a single 128-bit literal — quad-tier constants write one
 ### `0x…_u128` instead of two U64 halves. Limbs are extracted via U64 (always a valid widening into
 ### any M, unlike a direct same-width/narrowing cast) and reassembled by `from_words2`.
-common routine M.from_u128(v: U128) -> ?M
+common routine M.from_u128(v: U128) -> M
   return M.from_words2(h1: int_truncate[U128, U64](shift_right_unsigned[U128](v, U128.to_width(s: 64_s64))), h0: int_truncate[U128, U64](v))
 
 ### Builds an `M`-typed mantissa from a single 256-bit literal — octuple-tier constants write one
 ### `0x…_u256` instead of four U64 halves.
-common routine M.from_u256(v: U256) -> ?M
+common routine M.from_u256(v: U256) -> M
   return M.from_words4(h3: int_truncate[U256, U64](shift_right_unsigned[U256](v, U256.to_width(s: 192_s64))), h2: int_truncate[U256, U64](shift_right_unsigned[U256](v, U256.to_width(s: 128_s64))), h1: int_truncate[U256, U64](shift_right_unsigned[U256](v, U256.to_width(s: 64_s64))), h0: int_truncate[U256, U64](v))
 
 ### Builds an `M`-typed 512-bit mantissa from a high and low 256-bit half — dec-tier constants write
 ### two `0x…_u256` literals instead of eight U64 halves.
-common routine M.from_u256x2(hi: U256, lo: U256) -> ?M
+common routine M.from_u256x2(hi: U256, lo: U256) -> M
   return M.from_words8(h7: int_truncate[U256, U64](shift_right_unsigned[U256](hi, U256.to_width(s: 192_s64))), h6: int_truncate[U256, U64](shift_right_unsigned[U256](hi, U256.to_width(s: 128_s64))), h5: int_truncate[U256, U64](shift_right_unsigned[U256](hi, U256.to_width(s: 64_s64))), h4: int_truncate[U256, U64](hi), h3: int_truncate[U256, U64](shift_right_unsigned[U256](lo, U256.to_width(s: 192_s64))), h2: int_truncate[U256, U64](shift_right_unsigned[U256](lo, U256.to_width(s: 128_s64))), h1: int_truncate[U256, U64](shift_right_unsigned[U256](lo, U256.to_width(s: 64_s64))), h0: int_truncate[U256, U64](lo))
 
 ### Bitwise complement of `me`.
-routine T.bit_not() -> ?T
+routine T.bit_not() -> T
   return bit_xor[T](a: me, b: sub[T](a: 0, b: 1))

@@ -26,7 +26,7 @@ module Core
 
 ### Builds the engine value of a non-negative U256 integer (exact; coeff <= 233 bits
 ### fits the 489-bit significand). value = mant * 2^(exp-509), mant MSB at bit 510.
-routine uf512_from_u256(c: U256) -> ?UnpackedFloat[U512, U1024, 512]
+routine uf512_from_u256(c: U256) -> UnpackedFloat[U512, U1024, 512]
   if int_eq[U256](a: c, b: 0)
     return UnpackedFloat[U512, U1024, 512].zero(sign: false)
   var cw = zero_extend[U256, U512](c)

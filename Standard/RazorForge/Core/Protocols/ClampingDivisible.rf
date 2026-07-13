@@ -11,4 +11,4 @@ protocol ClampingDivisible
   ### :param you: The other value to divide by.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$truediv_clamp(you: Me) -> ?Me
+  routine Me.$truediv_clamp(you: Me) -> Me

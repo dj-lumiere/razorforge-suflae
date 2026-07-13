@@ -15,7 +15,7 @@ relates EnumerateEmitter[T, S/Iter] as Iter
 ### Returns the stateful iterator that produces indexed tuples lazily.
 ### :returns: The resulting `EnumerateEmitter[T, S/Iter]` value.
 @readonly
-routine EnumerateIterator[T, S].$iter() -> ?EnumerateEmitter[T, S/Iter]
+routine EnumerateIterator[T, S].$iter() -> EnumerateEmitter[T, S/Iter]
   danger!
     return EnumerateEmitter[T, S/Iter](source: me.source.as_entity().$iter(), index: me.start_index)
 
@@ -43,7 +43,7 @@ routine EnumerateEmitter[T, SE].$next!() -> Tuple[U64, T]
 ### The first yielded index is `0`.
 ### :returns: The resulting `EnumerateIterator[T, Me]` value.
 @readonly
-routine Iterable[T].enumerate() -> ?EnumerateIterator[T, Me]
+routine Iterable[T].enumerate() -> EnumerateIterator[T, Me]
   danger!
     return EnumerateIterator[T, Me](source: me.hijack(), start_index: 0u64)
 
@@ -52,6 +52,6 @@ routine Iterable[T].enumerate() -> ?EnumerateIterator[T, Me]
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `EnumerateIterator[T, Me]` value.
 @readonly
-routine Iterable[T].enumerate(start: U64) -> ?EnumerateIterator[T, Me]
+routine Iterable[T].enumerate(start: U64) -> EnumerateIterator[T, Me]
   danger!
     return EnumerateIterator[T, Me](source: me.hijack(), start_index: start)

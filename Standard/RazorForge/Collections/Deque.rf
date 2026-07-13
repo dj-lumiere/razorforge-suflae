@@ -50,7 +50,7 @@ relates DequeEmitter[T] as Iter
 
 ### Creates an empty deque with no allocated storage.
 ### The backing buffer is acquired lazily on first insertion.
-routine Deque[T].$create() -> ?Deque[T]
+routine Deque[T].$create() -> Deque[T]
   return Deque[T](
     data: hijacked_none[U8](),
     start: 0u64,
@@ -62,7 +62,7 @@ routine Deque[T].$create() -> ?Deque[T]
 ### The requested capacity is rounded up to the next power of two so index wrapping
 ### can use a bitmask.
 ### :param capacity: The minimum number of elements to reserve space for.
-routine Deque[T].$create(capacity: U64) -> ?Deque[T]
+routine Deque[T].$create(capacity: U64) -> Deque[T]
   var actual = 1u64
   while actual < capacity
     actual = actual *% 2u64
@@ -99,7 +99,7 @@ routine Deque[T].physical_index(logical_index: U64) -> U64
 ### :param physical_idx: The slot index inside the backing buffer.
 ### :returns: The element stored in that slot.
 @readonly
-routine Deque[T].read_at(physical_idx: U64) -> ?T
+routine Deque[T].read_at(physical_idx: U64) -> T
   var byte_offset = T.data_size() * physical_idx
   danger!
     return me.data.offset(byte_offset).peek()
@@ -164,7 +164,7 @@ routine Deque[T].add_first(value: T)
 ### Removes and returns the element at the logical back of the deque.
 ### :returns: The element that was at the back.
 ### :absent: The deque is empty.
-routine Deque[T].remove_last!() -> ?T
+routine Deque[T].remove_last!() -> T
   # Remove and return back element - O(1)
   if me.is_empty()
     absent
@@ -175,7 +175,7 @@ routine Deque[T].remove_last!() -> ?T
 ### Removes and returns the element at the logical front of the deque.
 ### :returns: The element that was at the front.
 ### :absent: The deque is empty.
-routine Deque[T].remove_first!() -> ?T
+routine Deque[T].remove_first!() -> T
   # Remove and return front element - O(1)
   if me.is_empty()
     absent
@@ -188,7 +188,7 @@ routine Deque[T].remove_first!() -> ?T
 ### :returns: The current front element.
 ### :absent: The deque is empty.
 @readonly
-routine Deque[T].first!() -> ?T
+routine Deque[T].first!() -> T
   # Peek at front element without removing
   if me.is_empty()
     absent
@@ -198,7 +198,7 @@ routine Deque[T].first!() -> ?T
 ### :returns: The current back element.
 ### :absent: The deque is empty.
 @readonly
-routine Deque[T].last!() -> ?T
+routine Deque[T].last!() -> T
   # Peek at back element without removing
   if me.is_empty()
     absent
@@ -264,7 +264,7 @@ routine Deque[T].reserve(new_capacity: U64)
 ### :returns: The element at that logical position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
-routine Deque[T].$getitem!(index: U64) -> ?T
+routine Deque[T].$getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var physical_idx = me.physical_index(index)
@@ -274,7 +274,7 @@ routine Deque[T].$getitem!(index: U64) -> ?T
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement element.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-routine Deque[T].$setitem!(index: U64, value: ?T)
+routine Deque[T].$setitem!(index: U64, value: T)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var physical_idx = me.physical_index(index)
@@ -335,7 +335,7 @@ entity DequeEmitter[T] obeys Iterator[T]
   secret index: U64
 
 @readonly
-routine Deque[T].$iter() -> ?DequeEmitter[T]
+routine Deque[T].$iter() -> DequeEmitter[T]
   danger!
     return DequeEmitter[T](
       data: me.data,
@@ -348,7 +348,7 @@ routine Deque[T].$iter() -> ?DequeEmitter[T]
 ### Returns the next element from the iterator in front-to-back order.
 ### :returns: The next logical element.
 ### :absent: All elements captured at iterator creation have been yielded.
-routine DequeEmitter[T].$next!() -> ?T
+routine DequeEmitter[T].$next!() -> T
   if me.index >= me.count
     absent
   var physical = (me.start +% me.index) & (me.capacity -% 1u64)
@@ -366,7 +366,7 @@ routine DequeEmitter[T].$next!() -> ?T
 ### :param default_value: The fallback to return when no element is stored.
 ### :returns: The front element if present; `default_value` otherwise.
 @readonly
-routine Deque[T].first_or_default(default_value: T) -> ?T
+routine Deque[T].first_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
   return me.first!()
@@ -375,7 +375,7 @@ routine Deque[T].first_or_default(default_value: T) -> ?T
 ### :param default_value: The fallback to return when no element is stored.
 ### :returns: The back element if present; `default_value` otherwise.
 @readonly
-routine Deque[T].last_or_default(default_value: T) -> ?T
+routine Deque[T].last_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
   return me.last!()

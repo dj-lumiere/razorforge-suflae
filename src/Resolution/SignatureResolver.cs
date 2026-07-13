@@ -281,18 +281,15 @@ internal sealed class SignatureResolver
                 location: routine.ReturnType?.Location ?? routine.Location);
         }
 
-        // Post-Owned-retirement: bare entity / generic-param in return position must use `?T`.
-        // Bound `T` is for lvalue/slot storage; returns produce values "in flight" (rvalue).
-        // Generic params require the mark because the instantiated T may be an entity; for
-        // records the `?` is a no-op, so requiring it costs nothing.
-        bool isRvalueReturn = routine.ReturnType?.IsRvalue ?? false;
-        if (!isRvalueReturn && returnType is EntityTypeInfo or GenericParameterTypeInfo)
-        {
-            _sa.ReportError(code: SemanticDiagnosticCode.BareEntityReturnMissingRvalueMark,
-                message: $"Return type '{returnType.Name}' must use the rvalue mark `?{returnType.Name}` " +
-                         "in return position.",
-                location: routine.ReturnType?.Location ?? routine.Location);
-        }
+        // Entity / generic-param returns are ALWAYS rvalue (in-flight) — INFERRED, not required
+        // (RF-S803 relaxed 2026-07-13). A return produces a value, and single ownership means an
+        // entity leaves a routine only by MOVE (implicit return-move) — there is no bound-lvalue-copy
+        // mode for entities. The move-vs-link distinction that actually matters is already carried by
+        // the type shape (bare `T` = move, borrow-wrapper = link) plus `steal` at use sites, so the
+        // `?T` return mark is redundant with position and is now inferred. The explicit mark is still
+        // accepted for back-compat; for records the rvalue bit is a no-op.
+        bool isRvalueReturn = (routine.ReturnType?.IsRvalue ?? false)
+            || returnType is EntityTypeInfo or GenericParameterTypeInfo;
 
         // Merge implicit generics with explicit generics
         List<string> allGenericParams = filteredGenericParams?.ToList() ?? [];
@@ -365,7 +362,7 @@ internal sealed class SignatureResolver
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
-            IsInFlightReturn = routine.ReturnType?.IsRvalue ?? false,
+            IsInFlightReturn = isRvalueReturn,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
             GenericParameters = allGenericParams.Count > 0
                 ? allGenericParams

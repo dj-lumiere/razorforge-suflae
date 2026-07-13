@@ -43,7 +43,7 @@ relates ListEmitter[T] as Iter
 
 # Creators
 
-routine List[T].$create() -> ?List[T]
+routine List[T].$create() -> List[T]
   return List[T](
     data: hijacked_none[T](),
     count: 0u64,
@@ -54,7 +54,7 @@ routine List[T].$create() -> ?List[T]
 ### No elements are initialized, but the backing allocation is made immediately to
 ### avoid the first few growth steps.
 ### :param capacity: The initial capacity to reserve.
-routine List[T].$create(capacity: U64) -> ?List[T]
+routine List[T].$create(capacity: U64) -> List[T]
   var byte_size = T.data_size() * capacity
   danger!
     var ptr = rf_allocate_dynamic_uninit(byte_size)
@@ -70,7 +70,7 @@ routine List[T].$create(capacity: U64) -> ?List[T]
 ### :param count: The number of elements to produce.
 ### :param fill_value: The value to copy into each slot.
 ### :returns: A list containing `count` copies of `fill_value`.
-routine List[T].$create(count: U64, fill_value: T) -> ?List[T]
+routine List[T].$create(count: U64, fill_value: T) -> List[T]
 needs T is Cloneable
   if count == 0u64
     return List[T]()
@@ -153,7 +153,7 @@ routine List[T].add_range(other: Referring[Iterable[T]])
 ### :returns: The element that was at the back.
 ### :absent: The list is empty.
 @migratable
-routine List[T].remove_last!() -> ?T
+routine List[T].remove_last!() -> T
   if me.is_empty()
     absent
 
@@ -201,7 +201,7 @@ routine List[T].add_at!(index: U64, value: T)
 ### :returns: The element that was at the front.
 ### :absent: The list is empty.
 @migratable
-routine List[T].remove_first!() -> ?T
+routine List[T].remove_first!() -> T
   if me.is_empty()
     absent
   return me.remove_at!(0u64)
@@ -211,7 +211,7 @@ routine List[T].remove_first!() -> ?T
 ### :returns: The element that was at `index`.
 ### :throws: {IndexOutOfBoundsError} if `index` is out of range.
 @migratable
-routine List[T].remove_at!(index: U64) -> ?T
+routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
 
@@ -233,7 +233,7 @@ routine List[T].remove_at!(index: U64) -> ?T
 ### :returns: The current first element.
 ### :absent: The list is empty.
 @readonly
-routine List[T].first!() -> ?T
+routine List[T].first!() -> T
   if me.is_empty()
     absent
   danger!
@@ -243,7 +243,7 @@ routine List[T].first!() -> ?T
 ### :returns: The current last element.
 ### :absent: The list is empty.
 @readonly
-routine List[T].last!() -> ?T
+routine List[T].last!() -> T
   if me.is_empty()
     absent
   var byte_offset = T.data_size() * (me.count - 1u64)
@@ -259,7 +259,7 @@ routine List[T].last!() -> ?T
 ### :returns: The element at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
-routine List[T].$getitem!(index: U64) -> ?T
+routine List[T].$getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
@@ -270,7 +270,7 @@ routine List[T].$getitem!(index: U64) -> ?T
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-routine List[T].$setitem!(index: U64, value: ?T)
+routine List[T].$setitem!(index: U64, value: T)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
@@ -286,7 +286,7 @@ routine List[T].$setitem!(index: U64, value: ?T)
 ### Only call this when the index is already proven to be in range.
 @readonly
 @inline
-routine List[T].get_raw(index: U64) -> ?T
+routine List[T].get_raw(index: U64) -> T
   danger!
     return me.data.offset(T.data_size() * index).peek()
 
@@ -341,11 +341,11 @@ entity ListEmitter[T] obeys Iterator[T]
   secret index: U64
 
 @readonly
-routine List[T].$iter() -> ?ListEmitter[T]
+routine List[T].$iter() -> ListEmitter[T]
   danger!
     return ListEmitter[T](data: me.data, count: me.count(), index: 0u64)
 
-routine ListEmitter[T].$next!() -> ?T
+routine ListEmitter[T].$next!() -> T
   if me.index >= me.count
     absent
   danger!
@@ -558,7 +558,7 @@ routine List[T].sort_by(compare: Routine[(T, T), Bool])
 ### The original list is left unchanged.
 ### :returns: A new `List[T]` whose elements are in ascending order.
 @readonly
-routine List[T].sorted() -> ?List[T]
+routine List[T].sorted() -> List[T]
 needs T obeys Comparable
   var copy = List[T](capacity: me.count)
   copy.add_range!(source: me, from: 0u64, count: me.count)
@@ -570,7 +570,7 @@ needs T obeys Comparable
 ### :param compare: A two-argument routine that returns `true` when its first argument precedes its second.
 ### :returns: A new `List[T]` whose elements are ordered according to `compare`.
 @readonly
-routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> ?List[T]
+routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> List[T]
   var copy = List[T](capacity: me.count)
   copy.add_range!(source: me, from: 0u64, count: me.count)
   copy.sort_by(compare)

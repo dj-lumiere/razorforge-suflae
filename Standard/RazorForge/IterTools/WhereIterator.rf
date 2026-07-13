@@ -18,7 +18,7 @@ relates WhereEmitter[T, S/Iter] as Iter
 ### Source values are examined only as the caller requests more output values.
 ### :returns: The resulting `WhereEmitter[T, S/Iter]` value.
 @readonly
-routine WhereIterator[T, S].$iter() -> ?WhereEmitter[T, S/Iter]
+routine WhereIterator[T, S].$iter() -> WhereEmitter[T, S/Iter]
   danger!
     return WhereEmitter[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, inverted: me.inverted)
 
@@ -37,7 +37,7 @@ needs SE obeys Iterator[T]
 ### Returns the next value that satisfies the effective filter condition.
 ### Source values are consumed and discarded until one passes the filter.
 ### :returns: The resulting `T` value.
-routine WhereEmitter[T, SE].$next!() -> ?T
+routine WhereEmitter[T, SE].$next!() -> T
   danger!
     loop
       var item = me.source.as_entity().$next!()
@@ -52,7 +52,7 @@ routine WhereEmitter[T, SE].$next!() -> ?T
 ### :param predicate: The filter predicate.
 ### :returns: The resulting `WhereIterator[T, Me]` value.
 @readonly
-routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> ?WhereIterator[T, Me]
+routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterator[T, Me]
   danger!
     return WhereIterator[T, Me](source: me.hijack(), predicate: predicate, inverted: false)
 
@@ -61,6 +61,6 @@ routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> ?WhereIterator[T, M
 ### :param predicate: The filter predicate.
 ### :returns: The resulting `WhereIterator[T, Me]` value.
 @readonly
-routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> ?WhereIterator[T, Me]
+routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereIterator[T, Me]
   danger!
     return WhereIterator[T, Me](source: me.hijack(), predicate: predicate, inverted: true)

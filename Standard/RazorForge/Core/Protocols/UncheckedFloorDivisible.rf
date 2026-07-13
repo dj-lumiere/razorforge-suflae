@@ -12,11 +12,11 @@ protocol UncheckedFloorDivisible
   ### :param you: The divisor.
   ### :returns: The resulting `Me` value.
   @readonly
-  dangerous routine Me.$floordiv_unchecked(you: Me) -> ?Me
+  dangerous routine Me.$floordiv_unchecked(you: Me) -> Me
 
   ### Returns the unchecked remainder after floor division.
   ### Division by zero or `MIN_VALUE % -1` is undefined behavior.
   ### :param you: The divisor.
   ### :returns: The resulting `Me` value.
   @readonly
-  dangerous routine Me.$mod_unchecked(you: Me) -> ?Me
+  dangerous routine Me.$mod_unchecked(you: Me) -> Me

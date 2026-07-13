@@ -13,22 +13,18 @@ public partial class Parser
     /// <summary>
     /// Parses a type expression.
     /// Supports: named types, generic types (Type[T]),
-    /// Me (self type), nullable types (T? = Maybe[T]),
-    /// and rvalue entity types (?T = in-flight entity, return position only).
+    /// Me (self type), and nullable types (T? = Maybe[T]).
     /// </summary>
+    /// <remarks>
+    /// The old `?T` rvalue-entity prefix was removed 2026-07-13: it was redundant with position and
+    /// the move-vs-link distinction (bare entity = move, borrow-wrapper = link), and confusable with
+    /// the `T?` Maybe suffix. Entity rvalue-ness is now inferred (see SignatureResolver return
+    /// inference); moves are marked by `steal` at use sites.
+    /// </remarks>
     /// <returns>A <see cref="TypeExpression"/> AST node.</returns>
     private TypeExpression ParseType()
     {
-        // Handle rvalue prefix: ?T entity rvalue (in-flight, return-position only).
-        // SA enforces position validity; the parser only records the mark.
-        bool isRvalue = Match(type: TokenType.Question);
-
         TypeExpression baseType = ParseBaseType();
-
-        if (isRvalue)
-        {
-            baseType = baseType with { IsRvalue = true };
-        }
 
         // Handle nullable suffix: T? Maybe[T]
         if (Match(type: TokenType.Question))

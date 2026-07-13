@@ -8,7 +8,7 @@ import IO/Console
 entity Resource obeys Enterable
   tag: S64
 
-routine Resource.$create(tag: S32) -> ?Resource
+routine Resource.$create(tag: S32) -> Resource
   show(f"  create({tag})")
   return Resource(tag: S64(tag))
 
@@ -16,7 +16,7 @@ dangerous routine Resource.$destroy()
   show(f"  destroy({me.tag})")
   return
 
-routine Resource.$enter() -> ?Resource
+routine Resource.$enter() -> Resource
   show(f"  $enter({me.tag})")
   return me
 

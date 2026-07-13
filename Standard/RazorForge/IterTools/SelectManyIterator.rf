@@ -20,7 +20,7 @@ relates SelectManyEmitter[T, U, Sub, S/Iter] as Iter
 ### Returns the stateful iterator that drives the flat-map expansion.
 ### :returns: The resulting `SelectManyEmitter[T, U, Sub, S/Iter]` value.
 @readonly
-routine SelectManyIterator[T, U, Sub, S].$iter() -> ?SelectManyEmitter[T, U, Sub, S/Iter]
+routine SelectManyIterator[T, U, Sub, S].$iter() -> SelectManyEmitter[T, U, Sub, S/Iter]
   var buffer = List[U]()
   danger!
     return SelectManyEmitter[T, U, Sub, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform, buffer: steal buffer, buffer_index: 0u64)
@@ -47,7 +47,7 @@ needs Sub obeys Iterable[U]
 ### The emitter calls `$next!` on the outer source whenever the buffer is exhausted.
 ### :returns: The resulting `U` value.
 @migratable
-routine SelectManyEmitter[T, U, Sub, SE].$next!() -> ?U
+routine SelectManyEmitter[T, U, Sub, SE].$next!() -> U
   danger!
     loop
       if me.buffer_index < me.buffer.count()
@@ -66,7 +66,7 @@ routine SelectManyEmitter[T, U, Sub, SE].$next!() -> ?U
 ### :param transform: The routine that maps each source element to an inner iterable.
 ### :returns: The resulting `SelectManyIterator[T, U, Sub, Me]` value.
 @readonly
-routine Iterable[T].select_many[U, Sub](transform: Routine[(T,), Sub]) -> ?SelectManyIterator[T, U, Sub, Me]
+routine Iterable[T].select_many[U, Sub](transform: Routine[(T,), Sub]) -> SelectManyIterator[T, U, Sub, Me]
 needs Sub obeys Iterable[U]
   danger!
     return SelectManyIterator[T, U, Sub, Me](source: me.hijack(), transform: transform)

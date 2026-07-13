@@ -17,7 +17,7 @@ relates TakeWhileEmitter[T, S/Iter] as Iter
 ### never resumes after termination.
 ### :returns: The resulting `TakeWhileEmitter[T, S/Iter]` value.
 @readonly
-routine TakeWhileIterator[T, S].$iter() -> ?TakeWhileEmitter[T, S/Iter]
+routine TakeWhileIterator[T, S].$iter() -> TakeWhileEmitter[T, S/Iter]
   danger!
     return TakeWhileEmitter[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, done: false)
 
@@ -38,7 +38,7 @@ needs SE obeys Iterator[T]
 ### calls.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the predicate has failed or the source ends first.
-routine TakeWhileEmitter[T, SE].$next!() -> ?T
+routine TakeWhileEmitter[T, SE].$next!() -> T
   danger!
     if me.done
       absent
@@ -53,6 +53,6 @@ routine TakeWhileEmitter[T, SE].$next!() -> ?T
 ### :param predicate: The predicate that controls when iteration stops.
 ### :returns: The resulting `TakeWhileIterator[T, Me]` value.
 @readonly
-routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> ?TakeWhileIterator[T, Me]
+routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> TakeWhileIterator[T, Me]
   danger!
     return TakeWhileIterator[T, Me](source: me.hijack(), predicate: predicate)

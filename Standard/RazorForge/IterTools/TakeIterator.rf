@@ -16,7 +16,7 @@ relates TakeEmitter[T, S/Iter] as Iter
 ### yield.
 ### :returns: The resulting `TakeEmitter[T, S/Iter]` value.
 @readonly
-routine TakeIterator[T, S].$iter() -> ?TakeEmitter[T, S/Iter]
+routine TakeIterator[T, S].$iter() -> TakeEmitter[T, S/Iter]
   danger!
     return TakeEmitter[T, S/Iter](source: me.source.as_entity().$iter(), remaining: me.limit)
 
@@ -35,7 +35,7 @@ needs SE obeys Iterator[T]
 ### source still has more values available.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the take limit has been exhausted or the source ends first.
-routine TakeEmitter[T, SE].$next!() -> ?T
+routine TakeEmitter[T, SE].$next!() -> T
   danger!
     if me.remaining == 0u64
       absent
@@ -48,6 +48,6 @@ routine TakeEmitter[T, SE].$next!() -> ?T
 ### :param count: The maximum number of values to take.
 ### :returns: The resulting `TakeIterator[T, Me]` value.
 @readonly
-routine Iterable[T].take(count: U64) -> ?TakeIterator[T, Me]
+routine Iterable[T].take(count: U64) -> TakeIterator[T, Me]
   danger!
     return TakeIterator[T, Me](source: me.hijack(), limit: count)

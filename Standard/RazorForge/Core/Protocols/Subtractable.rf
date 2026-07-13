@@ -10,4 +10,4 @@ protocol Subtractable
   ### :param you: The value to subtract.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$sub!(you: Me) -> ?Me
+  routine Me.$sub!(you: Me) -> Me

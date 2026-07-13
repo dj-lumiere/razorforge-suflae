@@ -19,7 +19,7 @@ module Core
 protocol Enterable
   ### Called on entry to the `using` scope. Returns the value the scope binds (usually `me`).
   ### :returns: The entered value as `?Me`.
-  routine Me.$enter!() -> ?Me
+  routine Me.$enter!() -> Me
 
   ### Called on every exit from the `using` scope (normal end and every escape). Infallible —
   ### teardown must always be able to run.

@@ -13,7 +13,7 @@ relates ReverseEmitter[T] as Iter
 ### Materializes the source into a buffer and returns an iterator that walks it backwards.
 ### :returns: The resulting `ReverseEmitter[T]` value.
 @readonly
-routine ReverseIterator[T, S].$iter() -> ?ReverseEmitter[T]
+routine ReverseIterator[T, S].$iter() -> ReverseEmitter[T]
   danger!
     var buffer = me.source.as_entity().List()
     var n = buffer.count()
@@ -30,7 +30,7 @@ entity ReverseEmitter[T] obeys Iterator[T]
 ### Returns the next element counting backward through the buffer.
 ### Signals absence once all elements have been yielded.
 ### :returns: The resulting `T` value.
-routine ReverseEmitter[T].$next!() -> ?T
+routine ReverseEmitter[T].$next!() -> T
   if me.index == 0u64
     absent
   me.index = me.index - 1u64
@@ -40,6 +40,6 @@ routine ReverseEmitter[T].$next!() -> ?T
 ### The source is fully consumed when the returned adapter is first iterated.
 ### :returns: The resulting `ReverseIterator[T, Me]` value.
 @readonly
-routine Iterable[T].reverse() -> ?ReverseIterator[T, Me]
+routine Iterable[T].reverse() -> ReverseIterator[T, Me]
   danger!
     return ReverseIterator[T, Me](source: me.hijack())

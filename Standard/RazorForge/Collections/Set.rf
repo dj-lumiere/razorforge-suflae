@@ -53,10 +53,10 @@ relates SetIterator[T] as Iter
 # Creators
 # ============================================================================
 
-routine Set[T].$create() -> ?Set[T]
+routine Set[T].$create() -> Set[T]
   return Set[T](key: SecureHashKey.random())
 
-routine Set[T].$create(key: SecureHashKey) -> ?Set[T]
+routine Set[T].$create(key: SecureHashKey) -> Set[T]
   var cap = SET_INITIAL_CAPACITY
   var ecap = SET_INITIAL_ENTRIES
   var set = Set[T](
@@ -80,7 +80,7 @@ routine Set[T].$create(key: SecureHashKey) -> ?Set[T]
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal set
 
-routine Set[T].$create(key: SecureHashKey, capacity: U64) -> ?Set[T]
+routine Set[T].$create(key: SecureHashKey, capacity: U64) -> Set[T]
   var cap = SET_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -281,7 +281,7 @@ routine Set[T].remove(value: T) -> Bool
 # ============================================================================
 
 @readonly
-routine Set[T].$iter() -> ?SetIterator[T]
+routine Set[T].$iter() -> SetIterator[T]
   danger!
     return SetIterator[T](
       slots: me.slots,
@@ -297,7 +297,7 @@ entity SetIterator[T] obeys Iterator[T]
   secret entries_used: U64
   secret pos: U64
 
-routine SetIterator[T].$next!() -> ?T
+routine SetIterator[T].$next!() -> T
   danger!
     while me.pos < me.entries_used
       var p = me.pos
@@ -311,7 +311,7 @@ routine SetIterator[T].$next!() -> ?T
 # ============================================================================
 
 @readonly
-routine Set[T].union(other: Referring[Set[T]]) -> ?Set[T]
+routine Set[T].union(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T](key: SecureHashKey.random(), capacity: me.count +% other.count)
   for val in me
     discard result.add(val)
@@ -320,7 +320,7 @@ routine Set[T].union(other: Referring[Set[T]]) -> ?Set[T]
   return steal result
 
 @readonly
-routine Set[T].intersection(other: Referring[Set[T]]) -> ?Set[T]
+routine Set[T].intersection(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
   for val in me
     if val in other
@@ -328,7 +328,7 @@ routine Set[T].intersection(other: Referring[Set[T]]) -> ?Set[T]
   return steal result
 
 @readonly
-routine Set[T].difference(other: Referring[Set[T]]) -> ?Set[T]
+routine Set[T].difference(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
   for val in me
     if val notin other
@@ -336,7 +336,7 @@ routine Set[T].difference(other: Referring[Set[T]]) -> ?Set[T]
   return steal result
 
 @readonly
-routine Set[T].symmetric_difference(other: Referring[Set[T]]) -> ?Set[T]
+routine Set[T].symmetric_difference(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
   for val in me
     if val notin other
@@ -373,7 +373,7 @@ routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
 ### Creates a {List[T]} from all elements of `from` in insertion order.
 ### :param from: The set to copy elements from.
 ### :returns: A new {List[T]} containing all elements of `from`.
-routine List[T].$create(from: Set[T]) -> ?List[T]
+routine List[T].$create(from: Set[T]) -> List[T]
   var result = List[T](capacity: from.count)
   for val in from
     result.add_last(val)

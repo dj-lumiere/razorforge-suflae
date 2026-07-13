@@ -25,7 +25,7 @@ needs T is EntityType, P obeys LockPolicy
 ### Creates a new controller with one strong reference, no weak references, and a fresh lock.
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `ShareController[T, P]` value.
-dangerous routine ShareController[T, P].$create(data: Hijacked[T]) -> ?ShareController[T, P]
+dangerous routine ShareController[T, P].$create(data: Hijacked[T]) -> ShareController[T, P]
   return ShareController[T, P](
     strong_count: 1_u64,
     weak_count: 0_u64,

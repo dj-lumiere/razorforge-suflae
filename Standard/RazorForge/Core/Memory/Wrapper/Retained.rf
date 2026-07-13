@@ -77,7 +77,7 @@ routine Retained[T].weak_count() -> U32
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`.
 ### :returns: The inner entity as `?T`.
 @[readonly, inline]
-routine Retained[T].$refer() -> ?T
+routine Retained[T].$refer() -> T
   danger!
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
     return ctrl.borrow_data().as_entity()
@@ -86,7 +86,7 @@ routine Retained[T].$refer() -> ?T
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
 ### :returns: The inner entity as `?T`.
 @inline
-routine Retained[T].$control() -> ?T
+routine Retained[T].$control() -> T
   danger!
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
     return ctrl.borrow_data().as_entity()

@@ -9,4 +9,4 @@ protocol TextRepeatable
   ### :param you: The repeat count.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$mul(you: Integral) -> ?Me
+  routine Me.$mul(you: Integral) -> Me

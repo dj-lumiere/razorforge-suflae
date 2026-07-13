@@ -18,7 +18,7 @@ relates ZipEmitter[T, U, S1/Iter, S2/Iter] as Iter
 ### Returns the stateful iterator that produces paired tuples lazily.
 ### :returns: The resulting `ZipEmitter[T, U, S1/Iter, S2/Iter]` value.
 @readonly
-routine ZipIterator[T, U, S1, S2].$iter() -> ?ZipEmitter[T, U, S1/Iter, S2/Iter]
+routine ZipIterator[T, U, S1, S2].$iter() -> ZipEmitter[T, U, S1/Iter, S2/Iter]
   danger!
     return ZipEmitter[T, U, S1/Iter, S2/Iter](first: me.first.as_entity().$iter(), second: me.second.as_entity().$iter())
 
@@ -50,7 +50,7 @@ routine ZipEmitter[T, U, SE1, SE2].$next!() -> Tuple[T, U]
 ### :param other: The second source iterable to zip with.
 ### :returns: The resulting `ZipIterator[T, U, Me, S2]` value.
 @readonly
-routine Iterable[T].zip[U, S2](other: Referring[S2]) -> ?ZipIterator[T, U, Me, S2]
+routine Iterable[T].zip[U, S2](other: Referring[S2]) -> ZipIterator[T, U, Me, S2]
 needs S2 obeys Iterable[U]
   danger!
     return ZipIterator[T, U, Me, S2](first: me.hijack(), second: other.hijack())

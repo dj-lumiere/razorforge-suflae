@@ -9,4 +9,4 @@ protocol ScalarFloorDivisible
   ### :param you: The scalar divisor.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$floordiv(you: Integral) -> ?Me
+  routine Me.$floordiv(you: Integral) -> Me

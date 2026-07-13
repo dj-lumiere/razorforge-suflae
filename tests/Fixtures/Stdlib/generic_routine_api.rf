@@ -3,10 +3,10 @@ import IO/Console
 
 # Free generic functions with type constraints.
 
-routine identity[T](x: T) -> ?T
+routine identity[T](x: T) -> T
   return x
 
-routine min_of[T](a: T, b: T) -> ?T
+routine min_of[T](a: T, b: T) -> T
 needs T obeys Ordered
   if a < b
     return a

@@ -10,4 +10,4 @@ needs T is EntityType
   ### Implicitly inserted by the compiler at call sites whose target parameter is
   ### `Controlling[T]` and whose argument is any obeyer of `Controlling[T]`.
   ### :returns: The inner entity as `?T` (scoped borrow shape).
-  routine Me.$control() -> ?T
+  routine Me.$control() -> T

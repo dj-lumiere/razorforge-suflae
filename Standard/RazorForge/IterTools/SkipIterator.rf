@@ -15,7 +15,7 @@ relates SkipEmitter[T, S/Iter] as Iter
 ### The returned emitter defers the actual skipping until iteration begins.
 ### :returns: The resulting `SkipEmitter[T, S/Iter]` value.
 @readonly
-routine SkipIterator[T, S].$iter() -> ?SkipEmitter[T, S/Iter]
+routine SkipIterator[T, S].$iter() -> SkipEmitter[T, S/Iter]
   danger!
     return SkipEmitter[T, S/Iter](source: me.source.as_entity().$iter(), remaining: me.count)
 
@@ -32,7 +32,7 @@ needs SE obeys Iterator[T]
 ### Returns the next value after any remaining skipped prefix has been consumed.
 ### Values are discarded only until `remaining` reaches zero.
 ### :returns: The resulting `T` value.
-routine SkipEmitter[T, SE].$next!() -> ?T
+routine SkipEmitter[T, SE].$next!() -> T
   danger!
     while me.remaining > 0u64
       me.source.as_entity().$next!()
@@ -43,6 +43,6 @@ routine SkipEmitter[T, SE].$next!() -> ?T
 ### :param count: The number of leading values to discard.
 ### :returns: The resulting `SkipIterator[T, Me]` value.
 @readonly
-routine Iterable[T].skip(count: U64) -> ?SkipIterator[T, Me]
+routine Iterable[T].skip(count: U64) -> SkipIterator[T, Me]
   danger!
     return SkipIterator[T, Me](source: me.hijack(), count: count)

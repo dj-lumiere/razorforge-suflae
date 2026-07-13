@@ -40,7 +40,7 @@ dangerous routine Maybe[T].$destroy()
 ### Use this when absence is a logic error rather than an expected branch.
 ### :returns: The contained `T` value.
 ### :throws: {AbsentValueError} if this `Maybe` is absent.
-routine Maybe[T].$unwrap!() -> ?T
+routine Maybe[T].$unwrap!() -> T
   if not me.is_present()
     throw AbsentValueError()
   return me.value
@@ -49,7 +49,7 @@ routine Maybe[T].$unwrap!() -> ?T
 ### This avoids branching at the call site when a fixed fallback is acceptable.
 ### :param fallback: The fallback value to return when absent.
 ### :returns: The contained `T` value, or `fallback` if this `Maybe` is absent.
-routine Maybe[T].$unwrap_or(fallback: T) -> ?T
+routine Maybe[T].$unwrap_or(fallback: T) -> T
   if not me.is_present()
     return fallback
   return me.value

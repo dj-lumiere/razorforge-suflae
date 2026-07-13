@@ -9,4 +9,4 @@ protocol Cloneable
   ### value while giving the result its own valid lifetime and invariants.
   ### :returns: A clone of this value.
   @readonly
-  routine Me.clone() -> ?Me
+  routine Me.clone() -> Me

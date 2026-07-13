@@ -110,7 +110,7 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
 ### :throws: {TaskSpawnError} if the work could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
-routine Agent[T].retrieve!() -> ?T
+routine Agent[T].retrieve!() -> T
   if me.kind is AgentKind.CORO
     if me.coro.is_none()
       throw TaskSpawnError()
@@ -198,7 +198,7 @@ dangerous routine Agent[T].$destroy()
 ### right after. Mixed coroutine/thread sets are supported.
 ### :throws: {TaskSpawnError} if the set is empty (there is nothing to race).
 ### :returns: The value produced by the first Agent to finish.
-routine List[Agent[V]].race!() -> ?V
+routine List[Agent[V]].race!() -> V
   danger!
     var n = me.count()
     if n == 0_u64
@@ -231,7 +231,7 @@ routine List[Agent[V]].race!() -> ?V
 ### that throw propagates out and the remaining children are abandoned when the list tears down at
 ### scope exit. An empty set yields an empty list.
 ### :returns: The values produced by every Agent, in the order they appear in the list.
-routine List[Agent[V]].gather!() -> ?List[V]
+routine List[Agent[V]].gather!() -> List[V]
   danger!
     var n = me.count()
     var results = List[V]()
@@ -251,7 +251,7 @@ routine List[Agent[V]].gather!() -> ?List[V]
 ### next `waitfor` returning early. `!` because the wind-down join can surface a child's throw. To
 ### cancel WITHOUT waiting, simply let the list tear down at scope exit (abandon-all).
 ### :returns: Each Agent's final value, in input order.
-routine List[Agent[V]].cancel_all!() -> ?List[V]
+routine List[Agent[V]].cancel_all!() -> List[V]
   danger!
     var n = me.count()
     var i = 0u64

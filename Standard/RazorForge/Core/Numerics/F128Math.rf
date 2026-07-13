@@ -891,7 +891,7 @@ routine F128.acosh_unchecked() -> F128
 # ============================================================================
 
 ### Reads `nbytes` table bytes starting at `start`, MSB-first, into an `L`.
-common routine L.read_table_bytes(start: S64, nbytes: S64) -> ?L
+common routine L.read_table_bytes(start: S64, nbytes: S64) -> L
   var acc = L.to_width(s: 0_s64)
   var i = 0_s64
   while signed_lt[S64](a: i, b: nbytes)

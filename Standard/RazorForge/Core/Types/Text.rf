@@ -633,7 +633,7 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
 ### :param separator: The separator to use.
 ### :returns: The resulting `List[Text]` value.
 @readonly
-routine Text.split(separator: Character) -> ?List[Text]
+routine Text.split(separator: Character) -> List[Text]
   var parts = List[Text]()
   var current = List[Character]()
   for i in 0u64 til me.count
@@ -650,7 +650,7 @@ routine Text.split(separator: Character) -> ?List[Text]
 ### :param separator: The separator to use.
 ### :returns: The resulting `List[Text]` value.
 @readonly
-routine Text.split(separator: Text) -> ?List[Text]
+routine Text.split(separator: Text) -> List[Text]
   if separator.is_empty()
     var parts = List[Text]()
     for i in 0u64 til me.count
@@ -706,7 +706,7 @@ routine Text.join(parts: List[Text]) -> Text
 ### Windows line endings are normalized to `\n` before splitting.
 ### :returns: The resulting `List[Text]` value.
 @readonly
-routine Text.lines() -> ?List[Text]
+routine Text.lines() -> List[Text]
   var normalized = me.replace(old: "\r\n", new: "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
@@ -714,7 +714,7 @@ routine Text.lines() -> ?List[Text]
 ### Consecutive whitespace is treated as a single separator.
 ### :returns: The resulting `List[Text]` value.
 @readonly
-routine Text.words() -> ?List[Text]
+routine Text.words() -> List[Text]
   var parts = List[Text]()
   var current = List[Character]()
   for i in 0u64 til me.count

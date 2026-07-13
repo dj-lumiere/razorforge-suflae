@@ -9,4 +9,4 @@ protocol Parsable
   ### conforming type.
   ### :param from: The source text to parse.
   ### :returns: The resulting `Me` value.
-  routine Me.$create!(from: Text) -> ?Me
+  routine Me.$create!(from: Text) -> Me

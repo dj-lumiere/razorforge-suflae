@@ -13,7 +13,7 @@ relates DistinctEmitter[T, S/Iter] as Iter
 ### Returns the stateful iterator that tracks already-seen values across calls.
 ### :returns: The resulting `DistinctEmitter[T, S/Iter]` value.
 @readonly
-routine DistinctIterator[T, S].$iter() -> ?DistinctEmitter[T, S/Iter]
+routine DistinctIterator[T, S].$iter() -> DistinctEmitter[T, S/Iter]
 needs T obeys Hashable, Comparable
   var seen = Set[T]()
   danger!
@@ -33,7 +33,7 @@ needs SE obeys Iterator[T]
 ### Source values that have already been seen are discarded until a new one is found.
 ### :returns: The resulting `T` value.
 @migratable
-routine DistinctEmitter[T, SE].$next!() -> ?T
+routine DistinctEmitter[T, SE].$next!() -> T
 needs T obeys Hashable, Comparable
   danger!
     loop
@@ -45,7 +45,7 @@ needs T obeys Hashable, Comparable
 ### Returns a lazy adapter that suppresses duplicate values.
 ### :returns: The resulting `DistinctIterator[T, Me]` value.
 @readonly
-routine Iterable[T].distinct() -> ?DistinctIterator[T, Me]
+routine Iterable[T].distinct() -> DistinctIterator[T, Me]
 needs T obeys Hashable, Comparable
   danger!
     return DistinctIterator[T, Me](source: me.hijack())
@@ -67,7 +67,7 @@ relates DistinctByEmitter[T, U, S/Iter] as Iter
 ### Returns the stateful iterator that tracks already-seen keys across calls.
 ### :returns: The resulting `DistinctByEmitter[T, U, S/Iter]` value.
 @readonly
-routine DistinctByIterator[T, U, S].$iter() -> ?DistinctByEmitter[T, U, S/Iter]
+routine DistinctByIterator[T, U, S].$iter() -> DistinctByEmitter[T, U, S/Iter]
 needs U obeys Hashable, Comparable
   var seen = Set[U]()
   danger!
@@ -90,7 +90,7 @@ needs SE obeys Iterator[T]
 ### Elements are consumed and discarded until one with a fresh key is found.
 ### :returns: The resulting `T` value.
 @migratable
-routine DistinctByEmitter[T, U, SE].$next!() -> ?T
+routine DistinctByEmitter[T, U, SE].$next!() -> T
 needs U obeys Hashable, Comparable
   danger!
     loop
@@ -104,7 +104,7 @@ needs U obeys Hashable, Comparable
 ### :param key: The routine that extracts the comparison key from each element.
 ### :returns: The resulting `DistinctByIterator[T, U, Me]` value.
 @readonly
-routine Iterable[T].distinct_by[U](key: Routine[(T,), U]) -> ?DistinctByIterator[T, U, Me]
+routine Iterable[T].distinct_by[U](key: Routine[(T,), U]) -> DistinctByIterator[T, U, Me]
 needs U obeys Hashable, Comparable
   danger!
     return DistinctByIterator[T, U, Me](source: me.hijack(), key: key)

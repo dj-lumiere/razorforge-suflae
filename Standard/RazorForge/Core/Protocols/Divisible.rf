@@ -10,4 +10,4 @@ protocol Divisible
   ### :param you: The divisor.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$truediv!(you: Me) -> ?Me
+  routine Me.$truediv!(you: Me) -> Me

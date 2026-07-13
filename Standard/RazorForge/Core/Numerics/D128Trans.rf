@@ -20,7 +20,7 @@ module Core
 ### Builds the engine value of a U128 integer with the given sign (exact; coeff
 ### <= 113 bits fits the 237-bit significand). value = mant * 2^(exp-253), MSB at
 ### bit 254 (W-2). Width constants mirror uf512_from_u256 with W=256.
-routine uf256_from_u128(c: U128, sign: Bool) -> ?UnpackedFloat[U256, U512, 256]
+routine uf256_from_u128(c: U128, sign: Bool) -> UnpackedFloat[U256, U512, 256]
   if int_eq[U128](a: c, b: 0_u128)
     return UnpackedFloat[U256, U512, 256].zero(sign: sign)
   var cw = zero_extend[U128, U256](c)

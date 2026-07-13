@@ -95,7 +95,7 @@ routine BitArray[N].$getitem!(index: U64) -> Bool
 ### :param index: The zero-based bit position to update.
 ### :param value: The new bit value.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
-routine BitArray[N].$setitem!(index: U64, value: ?Bool)
+routine BitArray[N].$setitem!(index: U64, value: Bool)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: N)
   var byte_idx = unsigned_div[U64](index, 8u64)
@@ -252,13 +252,13 @@ needs N is U64
   index: U64
 
 @readonly
-routine BitArray[N].$iter() -> ?BitArrayIterator[N]
+routine BitArray[N].$iter() -> BitArrayIterator[N]
   return BitArrayIterator[N](bits: me, index: 0u64)
 
 ### Returns the next bit from the iterator in ascending index order.
 ### :returns: The bit at the current index.
 ### :absent: All `N` bits have been yielded.
-routine BitArrayIterator[N].$next!() -> ?Bool
+routine BitArrayIterator[N].$next!() -> Bool
   if me.index >= N
     absent
   var value = me.bits[me.index]

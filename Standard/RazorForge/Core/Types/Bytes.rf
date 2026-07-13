@@ -267,7 +267,7 @@ routine Bytes.find!(byte: Byte) -> U64
 ### :param separator: The separator to use.
 ### :returns: The resulting `List[Bytes]` value.
 @readonly
-routine Bytes.split(separator: Byte) -> ?List[Bytes]
+routine Bytes.split(separator: Byte) -> List[Bytes]
   var parts = List[Bytes]()
   var current = List[Byte]()
   for i in 0u64 til me.count
@@ -320,7 +320,7 @@ routine Bytes.repeat(times: U64) -> Bytes
 ### Creates a mutable byte list by copying the contents of `Bytes`.
 ### :param source: The byte sequence to convert.
 ### :returns: The resulting `List[Byte]` value.
-routine List[Byte].$create(source: Bytes) -> ?List[Byte]
+routine List[Byte].$create(source: Bytes) -> List[Byte]
   var result = List[Byte](source.count)
   var i: U64 = 0u64
   loop
@@ -776,7 +776,7 @@ routine Text.to_cstr() -> CStr
 ### Encodes this text value as UTF-16 code units.
 ### :returns: The resulting `List[U16]` value.
 @readonly
-routine Text.encode_as_utf16() -> ?List[U16]
+routine Text.encode_as_utf16() -> List[U16]
   var result = List[U16]()
   var len = me.count()
   var i: U64 = 0u64

@@ -59,7 +59,7 @@ routine Inspecting[T, P].$exit()
 ### controller to reach the managed entity.
 ### :returns: The guarded entity as `?T`.
 @[readonly, inline]
-routine Inspecting[T, P].$refer() -> ?T
+routine Inspecting[T, P].$refer() -> T
   danger!
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return ctrl.borrow_data().as_entity()

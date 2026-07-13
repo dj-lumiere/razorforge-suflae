@@ -9,4 +9,4 @@ protocol WrappingAddable
   ### :param you: The other value to add.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$add_wrap(you: Me) -> ?Me
+  routine Me.$add_wrap(you: Me) -> Me

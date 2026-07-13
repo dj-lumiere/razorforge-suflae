@@ -42,7 +42,7 @@ entity FileHandle obeys Enterable
 ### :param mode: The mode to use for the opened file.
 ### :returns: The resulting `FileHandle` value.
 ### :throws: May throw {IOError}.
-routine open!(path: Text, mode: FileMode = FileMode.READ) -> ?FileHandle
+routine open!(path: Text, mode: FileMode = FileMode.READ) -> FileHandle
   var cstr = CStr(from: path)
   var mode_val = mode.S32()
   var fd = rf_file_open(cstr, cstr.count().S32!(), mode_val)
@@ -162,7 +162,7 @@ routine FileHandle.is_eof() -> Bool
 
 ### Enters a `using` scope with this file handle, passing it through as the bound value.
 ### :returns: This handle as `?FileHandle`.
-routine FileHandle.$enter() -> ?FileHandle
+routine FileHandle.$enter() -> FileHandle
   return me
 
 ### Closes the file handle when leaving a `using` scope.

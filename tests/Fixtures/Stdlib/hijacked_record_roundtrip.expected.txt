@@ -1,6 +1,6 @@
 F128 original = 3.14
-F128 via hijack/extract = 3.14
-F128 after inject = 2.71
+F128 via hijack/peek = 3.14
+F128 after poke = 2.71
 Point original = (10, 20)
-Point via hijack/extract = (10, 20)
-Point after inject = (99, 100)
+Point via hijack/peek = (10, 20)
+Point after poke = (99, 100)
