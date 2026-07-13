@@ -454,12 +454,27 @@ public sealed partial class SemanticVerifier
                 }
             }
 
-            // NOTE: a call-site "bare entity passed to a consuming param needs `steal`" check used
-            // to live here, but it false-positived on borrow parameters: a `Referring[T]` /
-            // `Controlling[T]` parameter binding has its ResolvedType stripped to the inner entity
-            // `T`, so the check could not distinguish a borrow param from a consuming one and
-            // flagged legitimate stdlib borrows (FastSet.is_subset, List.add_range). Re-add only
-            // with a reliable borrow-vs-consume signal (e.g. an unstripped declared-type marker).
+            // Bare entity passed to a CONSUMING parameter needs an explicit `steal` (RF-S413).
+            // The old check false-positived because it looked at a stripped type; the reliable
+            // signal is STRUCTURAL and read here at Phase 5, BEFORE MarkerProtocolDesugarPass strips
+            // borrow params to their inner `T`: a consuming param is bare `EntityTypeInfo`, while
+            // every borrow is a Protocol (`Referring`/`Controlling`) or a Record wrapper
+            // (`Viewing`/`Modifying`/…) — never bare `EntityTypeInfo`. So gating on
+            // `paramType is EntityTypeInfo` excludes all borrow forms with no name list. Verb-wrapped
+            // arguments (`steal x`, `x.clone()`, `x.share()`) are Steal/Call expressions, not
+            // Identifier/Member, so they are excluded automatically. Safety comes from move tracking;
+            // this check makes the destructive transfer visible in source.
+            if (_registry.Language == Language.RazorForge
+                && argValue is IdentifierExpression or MemberExpression
+                && argType is EntityTypeInfo
+                && paramType is EntityTypeInfo)
+            {
+                ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
+                    message:
+                    $"Cannot pass entity '{argType.Name}' to consuming parameter '{param.Name}' of " +
+                    $"'{routine.Name}' directly. Use 'steal' for ownership transfer, or pass a borrow.",
+                    location: argValue.Location);
+            }
         }
     }
 
