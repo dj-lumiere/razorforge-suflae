@@ -399,6 +399,15 @@ public record LoopStatement(
     {
         return visitor.VisitLoopStatement(node: this);
     }
+
+    /// <summary>
+    /// True when <see cref="Compiler.Desugaring.Passes.ControlFlowLoweringPass"/> synthesized this
+    /// loop as the body of a lowered <c>for x in coll</c> — i.e. its body is a
+    /// <see cref="WhenStatement"/> over an <c>iter.try_next()</c> call. Marks the loop so the
+    /// <c>IteratorInlineLoweringPass</c> can find the iterator-advance loops to rewrite, instead of
+    /// brittle shape-matching against every <c>loop</c>.
+    /// </summary>
+    public bool IsIteratorForLoop { get; init; }
 }
 
 /// <summary>

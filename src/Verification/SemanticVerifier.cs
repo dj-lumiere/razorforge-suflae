@@ -709,6 +709,14 @@ public sealed partial class SemanticVerifier
             variantBodies: _variantBodies,
             target: _target,
             buildMode: _buildMode);
+        // Inline simple iterator `$next!` bodies into their for-loops before the rest of Phase 7
+        // lowering, replacing the `try_next` call with the spliced advance. By Phase 7 the concrete
+        // `$next!` bodies are already monomorphized (Phase 6 ran), so the lookup succeeds; the
+        // spliced body then flows through the normal Phase 7 lowering below. Composed/filtering
+        // iterators fall back to the existing `try_next` loop.
+        new Compiler.Instantiation.Passes.IteratorInlineLoweringPass(
+                registry: _registry, monoBodies: _instantiatedGenericBodies)
+            .Run(program: program);
         new PostprocessingPipeline(ctx: ctx).Run(program: program);
 
         // Owned rvalue-temporary teardown for user code, now that Phase 7 has lowered when→if so the

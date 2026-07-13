@@ -75,6 +75,12 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // that never went through Phase 4 desugaring. Lower them before subsequent passes.
         new Compiler.Desugaring.Passes.ControlFlowLoweringPass(ctx: adapter)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
+        // Inline simple iterator `$next!` bodies into their for-loops, replacing the `try_next`
+        // call with the spliced advance. Runs AFTER ControlFlowLowering (which produced the flagged
+        // iterator loops) and AFTER monomorphization (so the concrete `$next!` bodies exist in
+        // InstantiatedGenericBodies for lookup). Composed/filtering iterators fall back to try_next.
+        new IteratorInlineLoweringPass(registry: ctx.Registry, monoBodies: adapter.InstantiatedGenericBodies)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
         new BuilderServiceInliningPass(ctx: adapter).RunOnInstantiatedGenericBodies();
         // Operator lowering for instantiated bodies: GMP's clones inherit unlowered

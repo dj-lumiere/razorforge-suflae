@@ -442,7 +442,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             var whenStmt = new WhenStatement(Expression: tryNextCall,
                 Clauses: [noneClause, elseClause], Location: loc);
             var loopStmt = new LoopStatement(
-                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc);
+                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc)
+                { IsIteratorForLoop = true };
 
             // var _lf_exhausted_N: Bool = false
             Statement exhaustedVarStmt = new DeclarationStatement(
@@ -481,7 +482,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             var whenStmt = new WhenStatement(Expression: tryNextCall,
                 Clauses: [noneClause, elseClause], Location: loc);
             var loopStmt = new LoopStatement(
-                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc);
+                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc)
+                { IsIteratorForLoop = true };
 
             return new BlockStatement(Statements: [iterVarStmt, loopStmt], Location: loc);
         }
