@@ -586,10 +586,35 @@ internal partial class Program
             var analyzer = new SemanticVerifier(language: language);
             List<SemanticError> stdlibErrors = analyzer.ValidateStdlibBodies();
 
-            if (stdlibErrors.Count == 0)
+            // Compiler↔stdlib name-contract check: every routine/type/field name the compiler
+            // hard-codes against the stdlib must still resolve. A rename that breaks a contract
+            // fails HERE (loudly) instead of silently miscompiling at runtime.
+            List<string> contractErrors = analyzer.CheckRuntimeContract();
+
+            if (stdlibErrors.Count == 0 && contractErrors.Count == 0)
             {
                 Console.WriteLine(value: "All stdlib routine bodies validated successfully!");
                 return 0;
+            }
+
+            if (contractErrors.Count > 0)
+            {
+                Console.WriteLine(
+                    value: $"=== RUNTIME-CONTRACT ERRORS ({contractErrors.Count}) ===");
+                Console.WriteLine(
+                    value: "  A name the compiler hard-codes against the stdlib no longer resolves.");
+                Console.WriteLine(
+                    value: "  Update src/Resolution/RuntimeContract.cs to match the stdlib rename.");
+                foreach (string contractError in contractErrors)
+                {
+                    Console.WriteLine(value: $"    - {contractError}");
+                }
+
+                Console.WriteLine();
+                if (stdlibErrors.Count == 0)
+                {
+                    return 1;
+                }
             }
 
             // Group errors by file

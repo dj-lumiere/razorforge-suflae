@@ -951,7 +951,7 @@ public sealed partial class SemanticVerifier
                     // later use is a hard error (UseAfterSteal). `.retain()` on an existing
                     // RC handle (`Retained[T]`, `Shared[T]`, ...) is a refcount bump and the
                     // source remains valid.
-                    if (member.PropertyName is "retain" or "track" &&
+                    if (member.PropertyName is Compiler.Resolution.RuntimeContract.RefCount.Retain or Compiler.Resolution.RuntimeContract.RefCount.Track &&
                         member.Object is IdentifierExpression consumedId)
                     {
                         string baseName = GetBaseTypeName(typeName: objectType.Name);
@@ -1036,7 +1036,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #98: .hijack() on Shared/Watched requires danger! block
-                    if (member.PropertyName == "hijack" && !InDangerBlock &&
+                    if (member.PropertyName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && !InDangerBlock &&
                         (IsSharedType(type: objectType) || IsWatchedType(type: objectType)))
                     {
                         ReportError(code: SemanticDiagnosticCode.SnatchRequiresDanger,

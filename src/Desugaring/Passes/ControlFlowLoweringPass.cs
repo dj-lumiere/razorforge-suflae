@@ -311,7 +311,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         CallExpression tryNextCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: tryNextReceiver,
-                PropertyName: "try_next",
+                PropertyName: Compiler.Resolution.RuntimeContract.TryNext,
                 Location: loc),
             Arguments: [],
             Location: loc) { IsSynthesizedLowering = true };
@@ -338,7 +338,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 // Carry the concrete emitter type onto the receiver so reachability/codegen see it.
                 tryNextReceiver.ResolvedType = iteratorType;
                 RoutineInfo? tryNextMethod =
-                    ctx.Registry.LookupMethod(type: iteratorType, methodName: "try_next");
+                    ctx.Registry.LookupMethod(type: iteratorType, methodName: Compiler.Resolution.RuntimeContract.TryNext);
                 if (tryNextMethod != null)
                     tryNextCallExpr = tryNextCallExpr with
                     {

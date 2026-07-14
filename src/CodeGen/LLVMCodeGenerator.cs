@@ -93,11 +93,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
     // TODO: It shouldn't know about all these types because they are going to be llvm ptr anyway.
-    private static readonly HashSet<string> WrapperTypeNames =
-    [
-        "Viewing", "Modifying", "Retained", "Tracked", "Inspecting", "Claiming", "Shared",
-        "Watched", "Hijacked"
-    ];
+    private static readonly IReadOnlySet<string> WrapperTypeNames = RuntimeContract.WrapperTypes;
 
     /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>
     private readonly List<(Program Program, string FilePath, string Module)>
@@ -226,8 +222,8 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// True when the current function returns its value through a hidden <c>ptr sret(%T) %sret</c>
-    /// first parameter rather than by value (the ABI Indirect return form — see
-    /// internal-wiki/v0.1.x-struct-abi-boundary-coercion.md). When set, every <c>return</c> stores
+    /// first parameter rather than by value (the ABI Indirect return form of the struct-ABI
+    /// boundary-coercion design). When set, every <c>return</c> stores
     /// through <c>%sret</c> and emits <c>ret void</c>.
     /// </summary>
     private bool _currentReturnViaSret;

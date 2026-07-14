@@ -66,21 +66,19 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// <summary>The reference primitives whose result is a borrow of a referent owned elsewhere —
     /// a temporary produced by one of these owns nothing, so it must not be torn down. Mirrors
     /// <see cref="ScopeTeardownLoweringPass"/>'s view-verb exclusion.</summary>
-    private static readonly HashSet<string> ViewVerbs =
-        new(comparer: System.StringComparer.Ordinal) { "as_entity", "$refer", "$control" };
+    private static readonly IReadOnlySet<string> ViewVerbs = RuntimeContract.ViewVerbs;
 
     /// <summary>Method verbs that consume their receiver (ownership moves into the RC controller),
     /// so the receiver must NOT be torn down here.</summary>
-    private static readonly HashSet<string> ConsumingReceiverVerbs =
-        new(comparer: System.StringComparer.Ordinal) { "retain", "track" };
+    private static readonly IReadOnlySet<string> ConsumingReceiverVerbs =
+        RuntimeContract.ConsumingReceiverVerbs;
 
     /// <summary>Borrow/view wrapper names whose value points INTO another value, so a method
     /// returning one may alias its receiver — freeing the receiver would then dangle it. The owning
     /// RC wrappers (Retained/Tracked/Shared/Watched) are NOT here: they carry a refcounted controller,
     /// so an aliasing owned result is balanced by refcount.</summary>
-    private static readonly HashSet<string> BorrowWrapperNames =
-        new(comparer: System.StringComparer.Ordinal)
-            { "Viewing", "Modifying", "Inspecting", "Claiming", "Hijacked" };
+    private static readonly IReadOnlySet<string> BorrowWrapperNames =
+        RuntimeContract.BorrowWrapperNames;
 
     private sealed record Spill(string Name, TypeInfo Type, RoutineInfo Destroy, Expression Init);
 
@@ -307,8 +305,8 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
 
     /// <summary>RC-wrapper base names whose reassignment release is handled by codegen's
     /// EmitVariableAssignment (EmitRetainedVarRelease) — excluded so we never double-release.</summary>
-    private static readonly HashSet<string> RcWrapperBaseNames =
-        new(comparer: System.StringComparer.Ordinal) { "Retained", "Tracked", "Shared", "Watched" };
+    private static readonly IReadOnlySet<string> RcWrapperBaseNames =
+        RuntimeContract.RcWrapperBaseNames;
 
     /// <summary>True for a managed-leaf record target whose old value codegen does NOT release on
     /// reassignment: a record with a retaining <c>$copy</c> (Text/Decimal, or one carrying such a

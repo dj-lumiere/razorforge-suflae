@@ -704,7 +704,7 @@ public partial class LlvmCodeGenerator
         // making subsequent `.extract()`/`.inject()` operate on dead stack. Intercepting at
         // the caller keeps the Hijacked bound to the caller's storage. Same lvalue-shape
         // restrictions and pointer-shaped-record exclusion as the `get_address` intercept.
-        if (member.PropertyName == "hijack" && arguments.Count == 0)
+        if (member.PropertyName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && arguments.Count == 0)
         {
             TypeInfo? receiverTypeForHijack = GetExpressionType(expr: member.Object);
             if (receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: false } || receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: true } primShape

@@ -2,7 +2,7 @@
  * coro_runtime.c — v0.2.0 stackful coroutine primitive (Phase 1: context-switch spike).
  *
  * Thin, ABI-neutral wrapper over the vendored libco context switch. Exposes the four
- * substrate primitives the v0.2.0 design (internal-wiki/v0.2.0-coroutine-primitive.md §8)
+ * substrate primitives the v0.2.0 design (§8)
  * names: create / resume / yield / delete. The cancellation shadow stack + rf_coro_abandon
  * (Phase 3) and the compiler instrumentation (Phases 4-5) build ON TOP of this; they are
  * deliberately NOT here yet.

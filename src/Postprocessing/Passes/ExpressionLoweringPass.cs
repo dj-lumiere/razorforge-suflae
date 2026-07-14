@@ -1052,7 +1052,9 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         Expression colRef = MakeRef(tempName, listType, loc);
 
         // List, Deque, BitList append at the end; everything else uses add().
-        string addMethod = baseName is "List" or "Deque" or "BitList" ? "add_last" : "add";
+        string addMethod = baseName is "List" or "Deque" or "BitList"
+            ? Compiler.Resolution.RuntimeContract.Collection.AddLast
+            : Compiler.Resolution.RuntimeContract.Collection.Add;
 
         foreach (Expression elem in list.Elements)
         {
@@ -1093,7 +1095,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         {
             var (h, lowered) = LowerExpr(elem);
             hoisted.AddRange(h);
-            hoisted.Add(MakeCollectionAddCall(colRef, setType, "add", [lowered], loc));
+            hoisted.Add(MakeCollectionAddCall(colRef, setType, Compiler.Resolution.RuntimeContract.Collection.Add, [lowered], loc));
         }
 
         Expression result = !ReferenceEquals(resolvedType, setType)
@@ -1134,7 +1136,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             List<Expression> args = isPriorityQueue
                 ? [loweredVal, loweredKey]
                 : [loweredKey, loweredVal];
-            hoisted.Add(MakeCollectionAddCall(colRef, dictType, "add", args, loc));
+            hoisted.Add(MakeCollectionAddCall(colRef, dictType, Compiler.Resolution.RuntimeContract.Collection.Add, args, loc));
         }
 
         Expression result = !ReferenceEquals(resolvedType, dictType)
@@ -1253,7 +1255,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         var maybeCreator = new CreatorExpression(
             TypeName: "Maybe",
             TypeArguments: typeArgs,
-            MemberVariables: [("present", trueLit), ("value", init)],
+            MemberVariables: [(Compiler.Resolution.RuntimeContract.Carrier.PresentField, trueLit), (Compiler.Resolution.RuntimeContract.Carrier.ValueField, init)],
             Location: init.Location)
         {
             ResolvedType = targetType,
@@ -1659,7 +1661,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (isNoneCheck && IsMaybeRecord(operandType))
         {
             var presentAccess = new MemberExpression(
-                Object: loweredExpr, PropertyName: "present", Location: ipe.Location)
+                Object: loweredExpr, PropertyName: Compiler.Resolution.RuntimeContract.Carrier.PresentField, Location: ipe.Location)
             {
                 ResolvedType = boolType
             };

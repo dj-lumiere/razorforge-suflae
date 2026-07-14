@@ -168,7 +168,7 @@ void rf_waitfor_duration(int64_t duration_seconds, uint32_t duration_nanoseconds
 
 /* ---------------------------------------------------------------------------
  * v0.2.0 stackful coroutine primitive (Phase 1: context-switch spike).
- * Single coroutine, no scheduler. See internal-wiki/v0.2.0-coroutine-primitive.md.
+ * Single coroutine, no scheduler.
  * --------------------------------------------------------------------------- */
 typedef enum rf_coro_status {
     RF_CORO_NEW = 0,        /* created, never resumed                        */

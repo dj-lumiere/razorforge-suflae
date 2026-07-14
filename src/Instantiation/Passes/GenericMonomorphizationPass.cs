@@ -245,7 +245,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                         ?? (throwStmt.Error is CreatorExpression cre ? cre.ConstructedType : null);
                     if (errorType == null) return;
                     RoutineInfo? crashMsg =
-                        ctx.Registry.LookupMethod(type: errorType, methodName: "crash_message");
+                        ctx.Registry.LookupMethod(type: errorType, methodName: Compiler.Resolution.RuntimeContract.CrashMessage);
                     if (crashMsg != null && ctx.LiveRoutineKeys.Count > 0
                         && ctx.LiveRoutineKeys.Add(item: crashMsg.RegistryKey))
                     {
@@ -559,7 +559,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// actual culprit.
     private static readonly HashSet<string> _gateBypassNames =
         new(collection: Compiler.Resolution.WiredRoutineCatalog.AlwaysLiveNames,
-            comparer: StringComparer.Ordinal) { "try_next" };
+            comparer: StringComparer.Ordinal) { Compiler.Resolution.RuntimeContract.TryNext };
 
     private static bool IsWiredRoutineName(string name) => _gateBypassNames.Contains(name);
 

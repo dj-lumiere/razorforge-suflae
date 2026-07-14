@@ -1696,7 +1696,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var call = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: "crash_message",
+                PropertyName: Compiler.Resolution.RuntimeContract.CrashMessage,
                 Location: _synthLoc),
             Arguments: [],
             Location: _synthLoc);
@@ -1721,7 +1721,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var crashMsgCall = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: "crash_message",
+                PropertyName: Compiler.Resolution.RuntimeContract.CrashMessage,
                 Location: _synthLoc),
             Arguments: [],
             Location: _synthLoc);
@@ -2121,12 +2121,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
             { ResolvedType = owner };
         var hijackCall = new CallExpression(
-            Callee: new MemberExpression(Object: meRef, PropertyName: "hijack",
+            Callee: new MemberExpression(Object: meRef, PropertyName: Compiler.Resolution.RuntimeContract.RawPointer.Hijack,
                 Location: _synthLoc) { ResolvedType = hijackedType },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = hijackedType };
         var invalidateCall = new CallExpression(
-            Callee: new MemberExpression(Object: hijackCall, PropertyName: "invalidate",
+            Callee: new MemberExpression(Object: hijackCall, PropertyName: Compiler.Resolution.RuntimeContract.RawPointer.Invalidate,
                 Location: _synthLoc) { ResolvedType = blankType },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = blankType };

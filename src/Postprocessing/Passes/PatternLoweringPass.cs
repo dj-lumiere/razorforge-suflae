@@ -73,7 +73,7 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 {
-    private const string ValueFieldName = "value";
+    private const string ValueFieldName = Compiler.Resolution.RuntimeContract.Carrier.ValueField;
     private const string TypeIdFieldName = "type_id";
 
     /// <summary>
@@ -790,7 +790,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private MemberExpression MakePresentAccess(Expression subject, SourceLocation loc)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
-        return new MemberExpression(Object: subject, PropertyName: "present", Location: loc)
+        return new MemberExpression(Object: subject, PropertyName: Compiler.Resolution.RuntimeContract.Carrier.PresentField, Location: loc)
         {
             ResolvedType = boolType
         };
@@ -876,7 +876,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         {
             ResolvedType = hijackedType
         };
-        var isNoneMember = new MemberExpression(Object: valueAccess, PropertyName: "is_none",
+        var isNoneMember = new MemberExpression(Object: valueAccess, PropertyName: Compiler.Resolution.RuntimeContract.RawPointer.IsNone,
             Location: loc)
         {
             ResolvedType = boolType
@@ -896,7 +896,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         {
             ResolvedType = hijackedType
         };
-        var readMember = new MemberExpression(Object: valueAccess, PropertyName: "peek", Location: loc)
+        var readMember = new MemberExpression(Object: valueAccess, PropertyName: Compiler.Resolution.RuntimeContract.RawPointer.Peek, Location: loc)
         {
             ResolvedType = entityType
         };

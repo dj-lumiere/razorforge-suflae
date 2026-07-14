@@ -438,8 +438,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     /// <c>Hijacked[T].as_entity()</c> and the <c>$refer</c>/<c>$control</c> marker-protocol coercions.
     /// A binding initialized by one of these owns nothing and must NOT be torn down.
     /// </summary>
-    private static readonly System.Collections.Generic.HashSet<string> ViewVerbs =
-        new(comparer: System.StringComparer.Ordinal) { "as_entity", "$refer", "$control" };
+    private static readonly IReadOnlySet<string> ViewVerbs = RuntimeContract.ViewVerbs;
 
     /// <summary>
     /// True for a binding that holds a borrowed <c>?T</c> view — <c>var ctrl = ptr.as_entity()</c>,
@@ -462,9 +461,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     // (`load_element_ref` is a READ, not a store, so it is excluded.)
     // -----------------------------------------------------------------------------
 
-    private static readonly System.Collections.Generic.HashSet<string> StorePrimitives =
-        new(comparer: System.StringComparer.Ordinal)
-            { "poke", "store_element_ref", "store" };
+    private static readonly IReadOnlySet<string> StorePrimitives = RuntimeContract.StorePrimitives;
 
     private void CollectMovedNames(Statement stmt)
     {
@@ -483,7 +480,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                 {
                     Callee: MemberExpression
                     {
-                        PropertyName: "retain" or "track",
+                        PropertyName: RuntimeContract.RefCount.Retain or RuntimeContract.RefCount.Track,
                         Object: IdentifierExpression { ResolvedType: EntityTypeInfo } recv
                     }
                 }:

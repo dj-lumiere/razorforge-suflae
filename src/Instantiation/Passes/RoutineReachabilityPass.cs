@@ -132,9 +132,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 WrapperTypeInfo w => w.Name,
                 _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
             };
-            if (ownerBase is "Retained" or "Tracked")
+            if (ownerBase is RuntimeContract.Retained or RuntimeContract.Tracked)
             {
-                string copyVerb = ownerBase == "Retained" ? "retain" : "track";
+                string copyVerb = ownerBase == RuntimeContract.Retained
+                    ? RuntimeContract.RefCount.Retain
+                    : RuntimeContract.RefCount.Track;
                 RoutineInfo? copy = ctx.Registry.LookupMethod(type: type, methodName: copyVerb);
                 if (copy != null) EnqueueCallee(callee: copy);
             }
@@ -145,7 +147,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             // the synthesized call resolves.
             if (type is { Name: "Text", Module: "Core" })
             {
-                RoutineInfo? replace = ctx.Registry.LookupMethod(type: type, methodName: "replace");
+                RoutineInfo? replace = ctx.Registry.LookupMethod(type: type, methodName: RuntimeContract.Collection.Replace);
                 if (replace != null) EnqueueCallee(callee: replace);
             }
         }
@@ -424,13 +426,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 if (baseName is "Array" or "BitArray") return;
                 // List/Deque/BitList → add_last; everything else → add (mirrors
                 // ExpressionLoweringPass.LowerListLiteral).
-                string addMethod = baseName is "List" or "Deque" or "BitList" ? "add_last" : "add";
+                string addMethod = baseName is "List" or "Deque" or "BitList"
+                    ? RuntimeContract.Collection.AddLast
+                    : RuntimeContract.Collection.Add;
                 EnqueueMethodIfPresent(owner: collectionType, methodName: addMethod);
                 EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;
             }
             case SetLiteralExpression or DictLiteralExpression:
-                EnqueueMethodIfPresent(owner: collectionType, methodName: "add");
+                EnqueueMethodIfPresent(owner: collectionType, methodName: RuntimeContract.Collection.Add);
                 EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;
             case IndexExpression ixNode:
@@ -451,8 +455,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     // (U64) form is already seeded above.
                     if (idxType is { Name: "BackIndex" })
                     {
-                        EnqueueMethodIfPresent(owner: collectionType, methodName: "count");
-                        EnqueueMethodIfPresent(owner: idxType, methodName: "resolve");
+                        EnqueueMethodIfPresent(owner: collectionType, methodName: RuntimeContract.Collection.Count);
+                        EnqueueMethodIfPresent(owner: idxType, methodName: RuntimeContract.Resolve);
                     }
                     else
                     {
@@ -1410,7 +1414,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         TypeInfo? errorType = throwStmt.Error.ResolvedType
             ?? (throwStmt.Error is CreatorExpression cre ? cre.ConstructedType : null);
         if (errorType == null) return;
-        RoutineInfo? crashMsg = ctx.Registry.LookupMethod(type: errorType, methodName: "crash_message");
+        RoutineInfo? crashMsg = ctx.Registry.LookupMethod(type: errorType, methodName: RuntimeContract.CrashMessage);
         if (crashMsg != null) EnqueueCallee(callee: crashMsg);
     }
 

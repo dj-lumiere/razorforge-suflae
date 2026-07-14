@@ -124,8 +124,7 @@ public partial class LlvmCodeGenerator
 
         // Struct returns classified Indirect by the target ABI go through a hidden sret pointer.
         // For external("C") this matches the platform C ABI (Win-x64 MSVC: structs > 8 bytes);
-        // for RF routines it is the ABI boundary-coercion return form (see
-        // internal-wiki/v0.1.x-struct-abi-boundary-coercion.md). The declaration, definition,
+        // for RF routines it is the ABI boundary-coercion return form. The declaration, definition,
         // every return, and every call site must agree — see ReturnsViaSret / _currentReturnViaSret.
         bool needsSret = isCExtern
             ? NeedsCExternSret(routine: routine)

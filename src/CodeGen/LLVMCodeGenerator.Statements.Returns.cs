@@ -501,7 +501,7 @@ public partial class LlvmCodeGenerator
         string dataPtr = "null";
         string msgLen = "0";
         ResolvedMemberRoutine? resolvedCrash = errorType != null
-            ? ResolveMemberRoutine(receiverType: errorType, methodName: "crash_message")
+            ? ResolveMemberRoutine(receiverType: errorType, methodName: Compiler.Resolution.RuntimeContract.CrashMessage)
             : null;
         if (resolvedCrash != null)
         {

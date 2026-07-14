@@ -11,8 +11,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <summary>
 /// v0.2.0 Phase 5b-2 (Mechanism C): inserts coroutine cancellation push/pop markers into the
 /// bodies of may-suspend routines, so a coroutine abandoned while parked tears down exactly the
-/// owned values it had constructed (the design's cancellation shadow stack —
-/// <c>internal-wiki/v0.2.0-coroutine-primitive.md</c>).
+/// owned values it had constructed (the design's cancellation shadow stack).
 ///
 /// <para>The markers are sentinel <see cref="CallExpression"/>s (<c>__rf_cf_push(local)</c> /
 /// <c>__rf_cf_pop(local)</c>) — no new AST node and no visitor surface. This pass runs LAST (after

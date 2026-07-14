@@ -200,7 +200,7 @@ internal sealed class IteratorInlineLoweringPass
         // try_next() call with a NonePattern clause + an ElsePattern clause.
         if (loop.Body is not BlockStatement { Statements: [WhenStatement when] }) return null;
         if (when.Expression is not CallExpression tryNextCall) return null;
-        if (tryNextCall.Callee is not MemberExpression { PropertyName: "try_next", Object: { } recvExpr })
+        if (tryNextCall.Callee is not MemberExpression { PropertyName: RuntimeContract.TryNext, Object: { } recvExpr })
             return null;
 
         // Iterator local name (`_lf_iter_N`).

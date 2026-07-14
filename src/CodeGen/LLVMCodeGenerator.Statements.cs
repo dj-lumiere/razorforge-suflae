@@ -238,7 +238,7 @@ public partial class LlvmCodeGenerator
                 {
                     Callee: MemberExpression
                     {
-                        PropertyName: "retain",
+                        PropertyName: Compiler.Resolution.RuntimeContract.RefCount.Retain,
                         Object: IdentifierExpression { Name: var srcEntityName }
                     }
                 })
@@ -901,7 +901,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
 
-            RoutineInfo? retainMethod = _registry.LookupMethod(type: w, methodName: "retain");
+            RoutineInfo? retainMethod = _registry.LookupMethod(type: w, methodName: Compiler.Resolution.RuntimeContract.RefCount.Retain);
             if (retainMethod == null)
             {
                 continue;
@@ -932,7 +932,7 @@ public partial class LlvmCodeGenerator
         if (IsMaybeType(type: recordType))
         {
             MemberVariableInfo? presentField = recordType.MemberVariables
-                .FirstOrDefault(f => f.Name == "present");
+                .FirstOrDefault(f => f.Name == Compiler.Resolution.RuntimeContract.Carrier.PresentField);
             if (presentField != null)
             {
                 // Maybe `present` is a Bool stored as i8 — trunc to i1 for the branch.
@@ -994,14 +994,10 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>Copy verb per RC wrapper (the method that bumps the appropriate count).</summary>
-    private static string? RcCopyVerb(string wrapperBase) => wrapperBase switch
-    {
-        "Retained" => "retain",
-        "Tracked" => "track",
-        "Shared" => "share",
-        "Watched" => "watch",
-        _ => null
-    };
+    private static string? RcCopyVerb(string wrapperBase) =>
+        Compiler.Resolution.RuntimeContract.RcCopyVerb.TryGetValue(key: wrapperBase, value: out string? verb)
+            ? verb
+            : null;
 
     /// <summary>
     /// Bumps the count for an RC wrapper variable by calling its copy verb.

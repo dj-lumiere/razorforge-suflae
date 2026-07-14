@@ -1080,9 +1080,9 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         TypeInfo targetType, SourceLocation location)
     {
         // receiver.count() -> U64
-        RoutineInfo? countRoutine = ctx.Registry.LookupMethod(type: targetType, methodName: "count");
+        RoutineInfo? countRoutine = ctx.Registry.LookupMethod(type: targetType, methodName: Compiler.Resolution.RuntimeContract.Collection.Count);
         var countCall = new CallExpression(
-            Callee: new MemberExpression(Object: loweredObj, PropertyName: "count",
+            Callee: new MemberExpression(Object: loweredObj, PropertyName: Compiler.Resolution.RuntimeContract.Collection.Count,
                 Location: location),
             Arguments: [],
             Location: location)
@@ -1097,10 +1097,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         // backIndex.resolve!(count) -> U64 (failable: throws IndexOutOfBoundsError on overshoot)
         TypeInfo? backIndexType = backIndex.ResolvedType;
         RoutineInfo? resolveRoutine = backIndexType != null
-            ? ctx.Registry.LookupMethod(type: backIndexType, methodName: "resolve", isFailable: true)
+            ? ctx.Registry.LookupMethod(type: backIndexType, methodName: Compiler.Resolution.RuntimeContract.Resolve, isFailable: true)
             : null;
         return new CallExpression(
-            Callee: new MemberExpression(Object: backIndex, PropertyName: "resolve",
+            Callee: new MemberExpression(Object: backIndex, PropertyName: Compiler.Resolution.RuntimeContract.Resolve,
                 Location: location),
             Arguments: [countCall],
             Location: location)

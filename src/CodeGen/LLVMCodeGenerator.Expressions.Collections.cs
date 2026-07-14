@@ -187,7 +187,9 @@ public partial class LlvmCodeGenerator
         string addMemberRoutineName;
         bool isMapType = baseName is "Dict" or "SortedDict" or "SecureDict";
         bool isSequenceType = baseName is "List" or "Deque" or "BitList";
-        addMemberRoutineName = isSequenceType ? "add_last" : "add";
+        addMemberRoutineName = isSequenceType
+            ? Compiler.Resolution.RuntimeContract.Collection.AddLast
+            : Compiler.Resolution.RuntimeContract.Collection.Add;
 
         ResolvedMemberRoutine? resolvedAdd = ResolveMemberRoutine(receiverType: resolvedType, methodName: addMemberRoutineName);
         if (resolvedAdd == null) return collectionPtr;

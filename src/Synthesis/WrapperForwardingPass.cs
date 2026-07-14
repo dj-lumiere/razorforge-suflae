@@ -50,35 +50,15 @@ internal sealed class WrapperForwardingPass
     /// All wrapper types recognized by the compiler for layout/dispatch purposes
     /// (codegen write-through, GMP body selection, auto-wired registration, etc.).
     /// </summary>
-    private static readonly HashSet<string> WrapperTypes =
-    [
-        "Viewing",    // Read-only single-threaded token
-        "Modifying",  // Exclusive write single-threaded token
-        "Inspecting", // Read-only multi-threaded token
-        "Claiming",   // Exclusive write multi-threaded token
-        "Shared",    // Reference-counted multi-threaded handle
-        "Watched",   // Weak reference multi-threaded handle
-        "Retained",  // Reference-counted handle
-        "Tracked",   // Weak reference handle
-        "Hijacked",  // Unmanaged raw pointer handle
-    ];
+    private static readonly IReadOnlySet<string> WrapperTypes = RuntimeContract.WrapperTypes;
 
     /// <summary>
     /// Wrapper types that transparently forward inner-type methods. Hijacked[T] is the
-    /// raw-pointer escape hatch — callers must explicitly use extract() / as_entity() — so
+    /// raw-pointer escape hatch — callers must explicitly use peek() / as_entity() — so
     /// it is excluded here even though it is a wrapper for layout purposes.
     /// </summary>
-    private static readonly HashSet<string> ForwardingWrapperTypes =
-    [
-        "Viewing",
-        "Modifying",
-        "Inspecting",
-        "Claiming",
-        "Shared",
-        "Watched",
-        "Retained",
-        "Tracked",
-    ];
+    private static readonly IReadOnlySet<string> ForwardingWrapperTypes =
+        RuntimeContract.ForwardingWrapperTypes;
 
     /// <summary>
     /// Method names that codegen invokes implicitly on wrappers without going through
@@ -88,8 +68,8 @@ internal sealed class WrapperForwardingPass
     /// </summary>
     private static readonly HashSet<string> ImplicitlyInvokedMethods =
     [
-        "retain",
-        "release",
+        RuntimeContract.RefCount.Retain,
+        RuntimeContract.RefCount.Release,
         "$destroy",
         // Operators/hashing/display: invoked from generic stdlib container
         // bodies after monomorphization, so they bypass SA's lazy synthesis
@@ -115,11 +95,8 @@ internal sealed class WrapperForwardingPass
     /// <summary>
     /// Read-only wrapper types that can only access @readonly methods.
     /// </summary>
-    private static readonly HashSet<string> ReadOnlyWrapperTypes =
-    [
-        "Viewing",    // Read-only single-threaded token
-        "Inspecting"  // Read-only multi-threaded token
-    ];
+    private static readonly IReadOnlySet<string> ReadOnlyWrapperTypes =
+        RuntimeContract.ReadOnlyWrapperTypes;
 
     public WrapperForwardingPass(TypeRegistry registry,
         Dictionary<string, (RoutineInfo Routine, Statement Body)> synthesizedBodies,
@@ -429,12 +406,12 @@ internal sealed class WrapperForwardingPass
                 ResolvedType = wrapperDataType
             };
             RoutineInfo? extractMethod = wrapperDataType != null
-                ? _registry.LookupMethod(type: wrapperDataType, methodName: "peek")
+                ? _registry.LookupMethod(type: wrapperDataType, methodName: RuntimeContract.RawPointer.Peek)
                 : null;
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: dataAccess,
-                    PropertyName: "peek",
+                    PropertyName: RuntimeContract.RawPointer.Peek,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -485,7 +462,7 @@ internal sealed class WrapperForwardingPass
                 ],
                 Location: _synthLoc);
             var hijackedCtrlCtor = new CreatorExpression(
-                TypeName: "Hijacked",
+                TypeName: RuntimeContract.Hijacked,
                 TypeArguments: [controllerTypeExpr],
                 MemberVariables:
                     [("", new IdentifierExpression(Name: "me", Location: _synthLoc))],
@@ -518,26 +495,26 @@ internal sealed class WrapperForwardingPass
                     typeArguments: [innerType])
                 : retainControllerDef;
             TypeSymbol hijackedCtrlType = new WrapperTypeInfo(
-                wrapperName: "Hijacked",
+                wrapperName: RuntimeContract.Hijacked,
                 innerType: retainControllerType ?? innerType,
                 isReadOnly: false);
             TypeSymbol hijackedInnerType = new WrapperTypeInfo(
-                wrapperName: "Hijacked",
+                wrapperName: RuntimeContract.Hijacked,
                 innerType: innerType,
                 isReadOnly: false);
             RoutineInfo? ctrlRevealMethod = _registry.LookupMethod(
-                type: hijackedCtrlType, methodName: "as_entity");
+                type: hijackedCtrlType, methodName: RuntimeContract.RawPointer.AsEntity);
             RoutineInfo? borrowDataMethod = retainControllerType != null
-                ? _registry.LookupMethod(type: retainControllerType, methodName: "borrow_data")
+                ? _registry.LookupMethod(type: retainControllerType, methodName: RuntimeContract.RefCount.BorrowData)
                 : null;
             RoutineInfo? innerRevealMethod = _registry.LookupMethod(
-                type: hijackedInnerType, methodName: "as_entity");
+                type: hijackedInnerType, methodName: RuntimeContract.RawPointer.AsEntity);
 
             var ctrlCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "raw", Location: _synthLoc)
                         { ResolvedType = hijackedCtrlType },
-                    PropertyName: "as_entity",
+                    PropertyName: RuntimeContract.RawPointer.AsEntity,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -557,7 +534,7 @@ internal sealed class WrapperForwardingPass
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "ctrl", Location: _synthLoc)
                         { ResolvedType = retainControllerType },
-                    PropertyName: "borrow_data",
+                    PropertyName: RuntimeContract.RefCount.BorrowData,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -568,7 +545,7 @@ internal sealed class WrapperForwardingPass
             var innerRevealCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: borrowCall,
-                    PropertyName: "as_entity",
+                    PropertyName: RuntimeContract.RawPointer.AsEntity,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -602,9 +579,9 @@ internal sealed class WrapperForwardingPass
             // innerIsEntity is determined from the concrete inner type at the call site so
             //   generic-def forwarder bodies (where innerType is GenericParameterTypeInfo)
             //   get the correct access method even before T is substituted.
-            string accessMethodName = innerIsEntity ? "as_entity" : "peek";
+            string accessMethodName = innerIsEntity ? RuntimeContract.RawPointer.AsEntity : RuntimeContract.RawPointer.Peek;
             var hijackedCall = new CreatorExpression(
-                TypeName: "Hijacked",
+                TypeName: RuntimeContract.Hijacked,
                 TypeArguments:
                 [
                     new TypeExpression(Name: genericParamName, GenericArguments: null,
@@ -622,7 +599,7 @@ internal sealed class WrapperForwardingPass
                     Location: _synthLoc),
                 Location: _synthLoc);
             TypeSymbol hijackedInnerType = new WrapperTypeInfo(
-                wrapperName: "Hijacked",
+                wrapperName: RuntimeContract.Hijacked,
                 innerType: innerType,
                 isReadOnly: false);
             RoutineInfo? accessMethod = _registry.LookupMethod(type: hijackedInnerType,

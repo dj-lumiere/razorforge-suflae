@@ -6,7 +6,7 @@ namespace Verification;
 
 /// <summary>
 /// The may-suspend effect analysis — the instrumentation gate for v0.2.0 coroutine
-/// abandon-teardown (design doc <c>internal-wiki/v0.2.0-coroutine-primitive.md</c> §6).
+/// abandon-teardown (coroutine-primitive design, §6).
 ///
 /// A routine is <b>may-suspend</b> if it can ever be parked at a coroutine suspend point. That is
 /// true when it: (a) directly invokes a suspend primitive (<see cref="SuspendPrimitives"/>), (b)

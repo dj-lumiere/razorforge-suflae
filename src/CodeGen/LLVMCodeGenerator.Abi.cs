@@ -15,7 +15,7 @@ namespace Compiler.CodeGen;
 /// their ABI representation at each call boundary. This file is the single place that ABI knowledge
 /// lives; field access elsewhere keeps the natural struct layout untouched.
 ///
-/// See internal-wiki/v0.1.x-struct-abi-boundary-coercion.md for the full 3-ABI matrix and phasing.
+/// The struct-ABI boundary-coercion design covers the full 3-ABI matrix and phasing.
 /// Phase 1 implements only <see cref="AbiKind.Direct"/> vs <see cref="AbiKind.Indirect"/>; register
 /// coercion (CoerceToInt / CoercePair / HFA) for small/medium structs is deferred to later phases —
 /// until then anything not Indirect stays Direct (LLVM's natural lowering, which already happens to

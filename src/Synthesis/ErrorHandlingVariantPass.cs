@@ -470,14 +470,14 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
         presentCondition = new MemberExpression(
             Object: new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = carrier },
-            PropertyName: "present", Location: loc);
+            PropertyName: RuntimeContract.Carrier.PresentField, Location: loc);
 
         if (bindName != null)
         {
             TypeInfo? valueType = carrier.TypeArguments[index: 0];
             Expression valueAccess = new MemberExpression(
                 Object: new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = carrier },
-                PropertyName: "value", Location: loc)
+                PropertyName: RuntimeContract.Carrier.ValueField, Location: loc)
             { ResolvedType = valueType };
 
             bindStmt = new DeclarationStatement(

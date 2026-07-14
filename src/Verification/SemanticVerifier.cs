@@ -857,6 +857,15 @@ public sealed partial class SemanticVerifier
     /// block user builds.
     /// </summary>
     /// <returns>List of errors found in stdlib routine bodies.</returns>
+    /// <summary>Runs the <see cref="Compiler.Resolution.RuntimeContractCheck"/> against the loaded
+    /// stdlib registry: asserts every name the compiler hard-codes against the stdlib still resolves.
+    /// Call AFTER <see cref="ValidateStdlibBodies"/> (which loads and analyzes the stdlib). Returns a
+    /// description per broken contract; empty means all contracts hold.</summary>
+    public List<string> CheckRuntimeContract()
+    {
+        return Compiler.Resolution.RuntimeContractCheck.Check(registry: _registry);
+    }
+
     public List<SemanticError> ValidateStdlibBodies()
     {
         int errorsBefore = _errors.Count;
