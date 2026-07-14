@@ -1037,7 +1037,7 @@ public sealed partial class SemanticVerifier
                         IsOwnedOf(type: inner, out TypeSymbol ownedInner))
                     {
                         return _registry.GetOrCreateWrapperType(
-                            wrapperName: "Modifying",
+                            wrapperName: Compiler.Resolution.RuntimeContract.Modifying,
                             innerType: ownedInner,
                             isReadOnly: false);
                     }

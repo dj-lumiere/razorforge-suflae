@@ -207,7 +207,7 @@ public sealed class MutationInference
         };
 
         MemberVariableInfo? field = fields?.FirstOrDefault(predicate: f => f.Name == fieldName);
-        return field?.Type.Name.StartsWith(value: "Hijacked", comparisonType: StringComparison.Ordinal) == true;
+        return field?.Type.Name.StartsWith(value: Compiler.Resolution.RuntimeContract.Hijacked, comparisonType: StringComparison.Ordinal) == true;
     }
 
     /// <summary>

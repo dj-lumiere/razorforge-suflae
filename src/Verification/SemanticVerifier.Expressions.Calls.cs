@@ -955,7 +955,7 @@ public sealed partial class SemanticVerifier
                         member.Object is IdentifierExpression consumedId)
                     {
                         string baseName = GetBaseTypeName(typeName: objectType.Name);
-                        bool consumesSource = baseName == "Owned" || objectType is EntityTypeInfo;
+                        bool consumesSource = baseName == Compiler.Resolution.RuntimeContract.Owned || objectType is EntityTypeInfo;
                         if (consumesSource)
                         {
                             _deadrefVariables.Add(item: consumedId.Name);
@@ -1068,7 +1068,7 @@ public sealed partial class SemanticVerifier
                     // a function argument, an unbound statement — with RF-S629. (The "cannot bind to a
                     // var" half is already enforced for inline-only tokens at var-declaration sites.)
                     if (method.ReturnType is { } mtReturn &&
-                        GetBaseTypeName(typeName: mtReturn.Name) is "Inspecting" or "Claiming" &&
+                        GetBaseTypeName(typeName: mtReturn.Name) is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
                         !ReferenceEquals(objA: call, objB: _usingResourceNode))
                     {
                         ReportError(code: SemanticDiagnosticCode.MtTokenRequiresUsing,

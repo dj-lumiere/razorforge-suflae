@@ -58,7 +58,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// <summary>
         /// Read-only single-threaded wrapper. Provides unmodifiable view of the inner value.
         /// </summary>
-        public static readonly WrapperTypeInfo ViewingDefinition = new(wrapperName: "Viewing",
+        public static readonly WrapperTypeInfo ViewingDefinition = new(wrapperName: Compiler.Resolution.RuntimeContract.Viewing,
             innerType: ErrorTypeInfo.Instance, // Placeholder, will be resolved with actual type
             isReadOnly: true) { GenericParameters = ["T"], Module = "Core" };
 
@@ -66,7 +66,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Exclusive-write single-threaded wrapper. Provides modifiable access with exclusive ownership.
         /// </summary>
         public static readonly WrapperTypeInfo ModifyingDefinition = new(
-            wrapperName: "Modifying",
+            wrapperName: Compiler.Resolution.RuntimeContract.Modifying,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -74,7 +74,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Read-only multi-threaded wrapper. Thread-safe unmodifiable view.
         /// </summary>
         public static readonly WrapperTypeInfo InspectingDefinition = new(
-            wrapperName: "Inspecting",
+            wrapperName: Compiler.Resolution.RuntimeContract.Inspecting,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: true) { GenericParameters = ["T"], Module = "Core" };
 
@@ -82,7 +82,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Exclusive-write multi-threaded wrapper. Thread-safe modifiable access with exclusive ownership.
         /// </summary>
         public static readonly WrapperTypeInfo ClaimingDefinition = new(
-            wrapperName: "Claiming",
+            wrapperName: Compiler.Resolution.RuntimeContract.Claiming,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -90,7 +90,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Reference-counted single-threaded handle. Shared ownership with automatic cleanup.
         /// </summary>
         public static readonly WrapperTypeInfo RetainedDefinition = new(
-            wrapperName: "Retained",
+            wrapperName: Compiler.Resolution.RuntimeContract.Retained,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -98,7 +98,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Weak single-threaded handle. Non-owning reference that can become invalid.
         /// </summary>
         public static readonly WrapperTypeInfo TrackedWeakDefinition = new(
-            wrapperName: "Tracked",
+            wrapperName: Compiler.Resolution.RuntimeContract.Tracked,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -106,7 +106,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Reference-counted wrapper. Shared ownership with automatic cleanup.
         /// </summary>
         public static readonly WrapperTypeInfo SharedDefinition = new(
-            wrapperName: "Shared",
+            wrapperName: Compiler.Resolution.RuntimeContract.Shared,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -114,7 +114,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Weak-reference wrapper. Non-owning reference that can become invalid.
         /// </summary>
         public static readonly WrapperTypeInfo WatchedDefinition = new(
-            wrapperName: "Watched",
+            wrapperName: Compiler.Resolution.RuntimeContract.Watched,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -122,7 +122,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Unsafe raw-pointer wrapper. Danger zone only.
         /// </summary>
         public static readonly WrapperTypeInfo HijackedDefinition = new(
-            wrapperName: "Hijacked",
+            wrapperName: Compiler.Resolution.RuntimeContract.Hijacked,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 

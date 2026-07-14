@@ -850,10 +850,10 @@ internal sealed class TypeBodyResolver
 
     private static readonly HashSet<string> StorableWrapperTypes =
     [
-        "Hijacked", // Unmanaged raw pointer handle
-        "Retained", // Reference-counted handle
-        "Shared",   // Reference-counted multi-threaded handle
-        "Tracked",  // Weak reference handle
-        "Watched",  // Weak reference multi-threaded handle
+        Compiler.Resolution.RuntimeContract.Hijacked, // Unmanaged raw pointer handle
+        Compiler.Resolution.RuntimeContract.Retained, // Reference-counted handle
+        Compiler.Resolution.RuntimeContract.Shared,   // Reference-counted multi-threaded handle
+        Compiler.Resolution.RuntimeContract.Tracked,  // Weak reference handle
+        Compiler.Resolution.RuntimeContract.Watched,  // Weak reference multi-threaded handle
     ];
 }

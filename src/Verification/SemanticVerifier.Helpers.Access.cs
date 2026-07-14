@@ -28,10 +28,10 @@ public sealed partial class SemanticVerifier
         string baseName = GetBaseTypeName(typeName: type.Name);
         return baseName switch
         {
-            "Viewing" => "read-only token (Viewing)",
-            "Modifying" => "exclusive write token (Modifying)",
-            "Inspecting" => "shared read token (Inspecting)",
-            "Claiming" => "exclusive shared write token (Claiming)",
+            Compiler.Resolution.RuntimeContract.Viewing => "read-only token (Viewing)",
+            Compiler.Resolution.RuntimeContract.Modifying => "exclusive write token (Modifying)",
+            Compiler.Resolution.RuntimeContract.Inspecting => "shared read token (Inspecting)",
+            Compiler.Resolution.RuntimeContract.Claiming => "exclusive shared write token (Claiming)",
             _ => "token"
         };
     }

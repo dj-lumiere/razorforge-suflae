@@ -12,10 +12,10 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
-    private const string ModifyingWrapperName = "Modifying";
-    private const string ClaimingWrapperName = "Claiming";
-    private const string ViewingWrapperName = "Viewing";
-    private const string InspectingWrapperName = "Inspecting";
+    private const string ModifyingWrapperName = Compiler.Resolution.RuntimeContract.Modifying;
+    private const string ClaimingWrapperName = Compiler.Resolution.RuntimeContract.Claiming;
+    private const string ViewingWrapperName = Compiler.Resolution.RuntimeContract.Viewing;
+    private const string InspectingWrapperName = Compiler.Resolution.RuntimeContract.Inspecting;
     private const string ScopedNoEscapeHint = "(none — scoped, can't escape)";
 
     private bool IsNestedModifying(Expression source)
@@ -65,7 +65,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsSharedType(TypeSymbol type)
     {
-        return type.Name == "Shared";
+        return type.Name == Compiler.Resolution.RuntimeContract.Shared;
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsWatchedType(TypeSymbol type)
     {
-        return type.Name == "Watched";
+        return type.Name == Compiler.Resolution.RuntimeContract.Watched;
     }
 
     /// <summary>
@@ -85,11 +85,11 @@ public sealed partial class SemanticVerifier
         ModifyingWrapperName,  // Exclusive write single-threaded token
         InspectingWrapperName, // Read-only multi-threaded token
         ClaimingWrapperName,   // Exclusive write multi-threaded token
-        "Shared",    // Reference-counted multi-threaded handle
-        "Watched",   // Weak reference multi-threaded handle
-        "Retained",  // Reference-counted handle
-        "Tracked",   // Weak reference handle
-        "Hijacked",  // Unmanaged raw pointer handle
+        Compiler.Resolution.RuntimeContract.Shared,    // Reference-counted multi-threaded handle
+        Compiler.Resolution.RuntimeContract.Watched,   // Weak reference multi-threaded handle
+        Compiler.Resolution.RuntimeContract.Retained,  // Reference-counted handle
+        Compiler.Resolution.RuntimeContract.Tracked,   // Weak reference handle
+        Compiler.Resolution.RuntimeContract.Hijacked,  // Unmanaged raw pointer handle
     ];
 
     /// <summary>
@@ -227,10 +227,10 @@ public sealed partial class SemanticVerifier
     private static readonly Dictionary<string, string> NonTriviallyCopyableWrappers =
         new(StringComparer.Ordinal)
         {
-            ["Retained"] = "a.retain()",
-            ["Tracked"] = "a.track()",
-            ["Shared"] = "a.share()",
-            ["Watched"] = "a.watch()",
+            [Compiler.Resolution.RuntimeContract.Retained] = "a.retain()",
+            [Compiler.Resolution.RuntimeContract.Tracked] = "a.track()",
+            [Compiler.Resolution.RuntimeContract.Shared] = "a.share()",
+            [Compiler.Resolution.RuntimeContract.Watched] = "a.watch()",
             [ViewingWrapperName] = ScopedNoEscapeHint,
             [ModifyingWrapperName] = ScopedNoEscapeHint,
             [InspectingWrapperName] = ScopedNoEscapeHint,
@@ -254,7 +254,7 @@ public sealed partial class SemanticVerifier
     /// independent copy) so unsynchronized state can never alias across the thread boundary.
     /// </summary>
     private static bool IsThreadShareable(TypeSymbol type) =>
-        GetBaseTypeName(typeName: type.Name) is "Atomic" or "Shared" or "Watched";
+        GetBaseTypeName(typeName: type.Name) is Compiler.Resolution.RuntimeContract.Atomic or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched;
 
     private static bool IsTriviallyCopyable(TypeSymbol type)
     {

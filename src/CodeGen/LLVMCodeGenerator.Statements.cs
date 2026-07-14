@@ -678,7 +678,7 @@ public partial class LlvmCodeGenerator
             // to `me.head!!.prev = ...` etc. on Retained/Tracked would store into the
             // controller's strong_count slot instead of the wrapped entity's field.
             if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == "Retained" || wrapBaseName == "Tracked"))
+                (wrapBaseName == Compiler.Resolution.RuntimeContract.Retained || wrapBaseName == Compiler.Resolution.RuntimeContract.Tracked))
             {
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RetainController[{innerEntity.FullName}]")
@@ -710,7 +710,7 @@ public partial class LlvmCodeGenerator
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
                         {
-                            Name: "Hijacked", TypeArguments.Count: > 0
+                            Name: Compiler.Resolution.RuntimeContract.Hijacked, TypeArguments.Count: > 0
                         } hijacked &&
                         hijacked.TypeArguments![index: 0] is EntityTypeInfo fieldInner &&
                         fieldInner.FullName == innerEntity.FullName)
@@ -878,7 +878,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>RC wrapper base names that require copy/release on var binding.</summary>
     private static readonly HashSet<string> RcWrapperBaseNames =
-        ["Retained", "Tracked", "Shared", "Watched"];
+        [Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Tracked, Compiler.Resolution.RuntimeContract.Shared, Compiler.Resolution.RuntimeContract.Watched];
 
     /// <summary>
     /// Emits retain calls for all RC wrapper fields in a record.

@@ -1513,8 +1513,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// so overload disambiguation must compare the inner type, not the wrapper.</summary>
     private static readonly HashSet<string> BorrowWrapperNames = new(System.StringComparer.Ordinal)
     {
-        "Referring", "Viewing", "Controlling", "Modifying", "Hijacked",
-        "Inspecting", "Claiming", "Retained", "Tracked", "Shared"
+        Compiler.Resolution.RuntimeContract.Referring, Compiler.Resolution.RuntimeContract.Viewing, Compiler.Resolution.RuntimeContract.Controlling, Compiler.Resolution.RuntimeContract.Modifying, Compiler.Resolution.RuntimeContract.Hijacked,
+        Compiler.Resolution.RuntimeContract.Inspecting, Compiler.Resolution.RuntimeContract.Claiming, Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Tracked, Compiler.Resolution.RuntimeContract.Shared
     };
 
     /// <summary>Base type name for overload matching: strips generic args and unwraps a leading

@@ -1297,15 +1297,15 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
     private static TypeInfo? UnwrapOwnershipWrapper(TypeInfo? type)
     {
-        if (type is WrapperTypeInfo { Name: "Owned" or "Retained" or "Tracked" } w)
+        if (type is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked } w)
             return w.InnerType;
         // T / Retained[T] / Tracked[T] are declared as `record T` in stdlib, so
         // they surface as RecordTypeInfo, not WrapperTypeInfo. Match by base name + single
         // TypeArgument and return the inner collection so downstream lowering sees the actual
         // base (BitList, SortedSet, …) instead of the Owned envelope.
         if (type is RecordTypeInfo { TypeArguments: { Count: 1 } recArgs } rec
-            && (rec.GenericDefinition?.Name is "Owned" or "Retained" or "Tracked"
-                || GetCollectionBaseName(rec) is "Owned" or "Retained" or "Tracked"))
+            && (rec.GenericDefinition?.Name is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked
+                || GetCollectionBaseName(rec) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked))
         {
             return recArgs[0];
         }

@@ -1904,7 +1904,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 when owner is RecordTypeInfo or EntityTypeInfo or CrashableTypeInfo:
             {
                 TypeInfo? fieldInfoType = ctx.Registry.LookupType(name: "FieldInfo");
-                TypeInfo? ownedDef = ctx.Registry.LookupType(name: "Owned");
+                TypeInfo? ownedDef = ctx.Registry.LookupType(name: Compiler.Resolution.RuntimeContract.Owned);
                 TypeInfo? listDef = ctx.Registry.LookupType(name: "List");
                 if (fieldInfoType == null || ownedDef == null || listDef == null) return false;
                 TypeInfo ownedFieldInfo = ctx.Registry.GetOrCreateResolution(
@@ -2116,7 +2116,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     private ExpressionStatement BuildEntitySelfFree(TypeInfo owner, TypeInfo? blankType)
     {
         TypeInfo hijackedType = ctx.Registry.GetOrCreateWrapperType(
-            wrapperName: "Hijacked", innerType: owner, isReadOnly: false);
+            wrapperName: Compiler.Resolution.RuntimeContract.Hijacked, innerType: owner, isReadOnly: false);
 
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
             { ResolvedType = owner };

@@ -723,7 +723,7 @@ public sealed partial class SemanticVerifier
         // readers-XOR-writer check keys on the shared DATA, not the variable name — a clone
         // (`var s2 = s.share()`) inherits `s`'s identity and so conflicts with it.
         if (_registry.Language == Language.RazorForge &&
-            GetBaseTypeName(typeName: varType.Name) is "Shared" or "Watched")
+            GetBaseTypeName(typeName: varType.Name) is Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched)
         {
             RecordSharedHandleIdentity(name: varDecl.Name, initializer: varDecl.Initializer);
         }

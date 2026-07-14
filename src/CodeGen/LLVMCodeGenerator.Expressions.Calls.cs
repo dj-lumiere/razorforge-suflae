@@ -806,7 +806,7 @@ public partial class LlvmCodeGenerator
         // $control/$represent/$diagnose/$destroy, owned by the token itself) keep the controller ptr.
         if (method is { OwnerType: { } methodOwner } &&
             receiverType is RecordTypeInfo tokenRec &&
-            GetGenericBaseName(type: tokenRec) is "Inspecting" or "Claiming" &&
+            GetGenericBaseName(type: tokenRec) is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
             tokenRec.TypeArguments is { Count: > 1 } &&
             tokenRec.TypeArguments[index: 0] is EntityTypeInfo tokenInner &&
             methodOwner.FullName == tokenInner.FullName)

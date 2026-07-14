@@ -561,7 +561,7 @@ public partial class LlvmCodeGenerator
             // dereferencing the controller first; otherwise `ra.value` reads
             // controller.strong_count (offset 0) instead of the actual field.
             if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == "Retained" || wrapBaseName == "Tracked"))
+                (wrapBaseName == Compiler.Resolution.RuntimeContract.Retained || wrapBaseName == Compiler.Resolution.RuntimeContract.Tracked))
             {
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RetainController[{innerEntity.FullName}]")
@@ -581,7 +581,7 @@ public partial class LlvmCodeGenerator
                 }
             }
             else if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == "Inspecting" || wrapBaseName == "Claiming") &&
+                (wrapBaseName == Compiler.Resolution.RuntimeContract.Inspecting || wrapBaseName == Compiler.Resolution.RuntimeContract.Claiming) &&
                 wrapperRecord.TypeArguments is { Count: > 1 })
             {
                 // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets
@@ -620,7 +620,7 @@ public partial class LlvmCodeGenerator
                 for (int fi = 0; fi < wrapperRecord.MemberVariables.Count; fi++)
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
-                        { Name: "Hijacked", TypeArguments.Count: > 0
+                        { Name: Compiler.Resolution.RuntimeContract.Hijacked, TypeArguments.Count: > 0
                         } hijacked
                         && hijacked.TypeArguments![index: 0] is EntityTypeInfo fieldInner
                         && fieldInner.FullName == innerEntity.FullName)
@@ -1088,8 +1088,8 @@ public partial class LlvmCodeGenerator
         if (typeExpr.GenericArguments is { Count: > 0 } genericArgs)
         {
             if (genericArgs.Count == 1 &&
-                typeExpr.Name is "Hijacked" or "Viewing" or "Modifying" or "Inspecting" or
-                    "Claiming" or "Retained" or "Shared" or "Tracked" or "Watched")
+                typeExpr.Name is Compiler.Resolution.RuntimeContract.Hijacked or Compiler.Resolution.RuntimeContract.Viewing or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Inspecting or
+                    Compiler.Resolution.RuntimeContract.Claiming or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Watched)
             {
                 TypeInfo? innerType = ResolveEntityMemberTypeFromAst(typeExpr: genericArgs[index: 0],
                     moduleName: moduleName,
@@ -1099,7 +1099,7 @@ public partial class LlvmCodeGenerator
                     return null;
                 }
 
-                bool isReadOnly = typeExpr.Name is "Viewing" or "Inspecting";
+                bool isReadOnly = typeExpr.Name is Compiler.Resolution.RuntimeContract.Viewing or Compiler.Resolution.RuntimeContract.Inspecting;
                 return _registry.GetOrCreateWrapperType(wrapperName: typeExpr.Name,
                     innerType: innerType,
                     isReadOnly: isReadOnly);

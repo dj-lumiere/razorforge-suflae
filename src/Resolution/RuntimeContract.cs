@@ -141,6 +141,15 @@ public static class RuntimeContract
         Resolve, CrashMessage,
     ];
 
+    /// <summary>Additional wrapper / marker-protocol TYPE-name contracts that must each resolve to a
+    /// registered type (checked alongside <see cref="WrapperTypes"/> by <see cref="RuntimeContractCheck"/>).
+    /// <see cref="Owned"/> is intentionally excluded — it is a compiler-internal wrapper name with no
+    /// declared stdlib type, so it cannot be resolution-checked.</summary>
+    public static readonly IReadOnlyList<string> StdlibTypeContracts =
+    [
+        Atomic, Controlling, Referring,
+    ];
+
     // =====================================================================================
     // C-TIER — name→behavior heuristics. Teardown/codegen change behavior by matching these
     // name SETS. These stay name-based for now; the deep fix derives them from the signature
@@ -191,6 +200,17 @@ public static class RuntimeContract
     public const string Watched = "Watched";
     /// <summary>Unmanaged raw-pointer handle.</summary>
     public const string Hijacked = "Hijacked";
+
+    // Related wrapper / marker-protocol type names that appear in the same type-identity checks as
+    // the nine borrow wrappers above, but are NOT part of the borrow-wrapper contract sets.
+    /// <summary>Owning value wrapper (compiler-internal; not a declared stdlib type).</summary>
+    public const string Owned = "Owned";
+    /// <summary>Atomic value wrapper.</summary>
+    public const string Atomic = "Atomic";
+    /// <summary>Marker protocol whose coercion mints a controlling borrow (<see cref="Control"/>).</summary>
+    public const string Controlling = "Controlling";
+    /// <summary>Marker protocol whose coercion mints a referring borrow (<see cref="Refer"/>).</summary>
+    public const string Referring = "Referring";
 
     /// <summary>All wrapper types recognized for layout/dispatch. Mirrors WrapperForwardingPass.WrapperTypes
     /// and LLVMCodeGenerator.WrapperTypeNames.</summary>

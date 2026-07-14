@@ -750,14 +750,14 @@ public sealed partial class SemanticVerifier
     /// </remarks>
     private static readonly HashSet<string> _markerProtocolBlessedWrappers = new(comparer: StringComparer.Ordinal)
     {
-        "Retained", "Viewing", "Modifying", "Hijacked", "Tracked",
+        Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Viewing, Compiler.Resolution.RuntimeContract.Modifying, Compiler.Resolution.RuntimeContract.Hijacked, Compiler.Resolution.RuntimeContract.Tracked,
         // Deferred concurrency wrappers (planned for v0.2+):
-        "Shared", "Watched", "Inspecting", "Claiming",
+        Compiler.Resolution.RuntimeContract.Shared, Compiler.Resolution.RuntimeContract.Watched, Compiler.Resolution.RuntimeContract.Inspecting, Compiler.Resolution.RuntimeContract.Claiming,
     };
 
     private static readonly HashSet<string> _markerProtocolNames = new(comparer: StringComparer.Ordinal)
     {
-        "Referring", "Controlling",
+        Compiler.Resolution.RuntimeContract.Referring, Compiler.Resolution.RuntimeContract.Controlling,
     };
 
     /// <summary>

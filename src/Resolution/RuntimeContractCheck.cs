@@ -58,12 +58,12 @@ public static class RuntimeContractCheck
             }
         }
 
-        // 3. Wrapper TYPE-name contracts must each resolve to a registered type.
-        foreach (string typeName in RuntimeContract.WrapperTypes)
+        // 3. Wrapper / marker-protocol TYPE-name contracts must each resolve to a registered type.
+        foreach (string typeName in RuntimeContract.WrapperTypes.Concat(second: RuntimeContract.StdlibTypeContracts))
         {
             if (registry.LookupType(name: typeName) is null)
             {
-                errors.Add(item: $"wrapper-type contract '{typeName}' resolves to NO registered type");
+                errors.Add(item: $"type contract '{typeName}' resolves to NO registered type");
             }
         }
 

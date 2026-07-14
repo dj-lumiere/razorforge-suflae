@@ -440,7 +440,7 @@ internal sealed class WrapperForwardingPass
                 : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
             innerStatements = [callStmt];
         }
-        else if (GetBaseTypeName(typeName: wrapperType.Name) is "Retained" or "Tracked")
+        else if (GetBaseTypeName(typeName: wrapperType.Name) is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
         {
             // RC wrappers: `me` is a ptr to `RetainController[T]`, NOT to T directly. Reaching
             // T requires double-indirection through the controller's `data: Hijacked[T]` field:

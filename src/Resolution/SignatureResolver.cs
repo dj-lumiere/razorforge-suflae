@@ -934,6 +934,6 @@ internal sealed class SignatureResolver
             return false;
         }
         string baseName = GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name);
-        return baseName is "Referring" or "Controlling";
+        return baseName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
     }
 }

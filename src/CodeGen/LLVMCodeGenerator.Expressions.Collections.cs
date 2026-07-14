@@ -20,7 +20,7 @@ public partial class LlvmCodeGenerator
     private static TypeInfo UnwrapCollectionStorageType(TypeInfo type)
     {
         TypeInfo current = type;
-        while (current is WrapperTypeInfo { Name: "Owned" } wrapper)
+        while (current is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned } wrapper)
         {
             current = wrapper.InnerType;
         }
@@ -73,7 +73,7 @@ public partial class LlvmCodeGenerator
         TypeInfo t = paramType;
         while (t is WrapperTypeInfo wrapper)
         {
-            if (wrapper.Name == "Owned") { t = wrapper.InnerType; continue; }
+            if (wrapper.Name == Compiler.Resolution.RuntimeContract.Owned) { t = wrapper.InnerType; continue; }
             return false;
         }
         string baseName = GetGenericBaseName(type: t) ?? t.Name;

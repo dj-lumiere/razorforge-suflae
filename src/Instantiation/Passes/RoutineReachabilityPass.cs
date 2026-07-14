@@ -412,7 +412,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // collection type the lowering will actually call methods on.
         TypeInfo collectionType = concreteType;
         while (collectionType.TypeArguments is { Count: 1 } args
-               && GetCollectionBaseNameForReachability(collectionType) is "Owned" or "Retained" or "Tracked")
+               && GetCollectionBaseNameForReachability(collectionType) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
         {
             collectionType = args[0];
         }
@@ -791,7 +791,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // destructor is never made reachable, because no method on `Tracked[Node]` is called
         // explicitly in user code.
         if (callee.ReturnType is { } retType
-            && GetCollectionBaseNameForReachability(retType) is "Owned" or "Retained" or "Tracked")
+            && GetCollectionBaseNameForReachability(retType) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
         {
             _liveOwnerTypes.Add(item: retType);
         }

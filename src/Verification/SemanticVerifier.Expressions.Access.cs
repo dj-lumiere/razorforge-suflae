@@ -45,7 +45,7 @@ public sealed partial class SemanticVerifier
     private static bool IsReadOnlyTransparentProtocol(TypeSymbol type)
     {
         return type is ProtocolTypeInfo proto &&
-               GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name) == "Referring";
+               GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name) == Compiler.Resolution.RuntimeContract.Referring;
     }
 
     private TypeSymbol AnalyzeMemberExpression(MemberExpression member)

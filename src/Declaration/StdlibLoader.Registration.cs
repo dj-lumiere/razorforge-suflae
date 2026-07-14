@@ -744,8 +744,8 @@ public sealed partial class StdlibLoader
                     string baseName = m.Type!.Name.Contains('[')
                         ? m.Type.Name[..m.Type.Name.IndexOf('[')]
                         : m.Type.Name;
-                    return baseName is "Hijacked" or "Viewing" or "Modifying"
-                        or "Retained" or "Tracked" or "Shared" or "Watched";
+                    return baseName is Compiler.Resolution.RuntimeContract.Hijacked or Compiler.Resolution.RuntimeContract.Viewing or Compiler.Resolution.RuntimeContract.Modifying
+                        or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched;
                 });
             if (allMembersPtrWrapper)
             {

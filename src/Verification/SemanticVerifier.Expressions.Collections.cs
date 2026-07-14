@@ -31,7 +31,7 @@ public sealed partial class SemanticVerifier
             // `Owned[SortedSet[S64]]` etc. Use base-name extraction since instantiated record
             // types have Name like "Foo", not bare "Owned".
             if (current is RecordTypeInfo { TypeArguments: { Count: 1 } recArgs } recRT
-                && GetTypeBaseName(recRT) is "Owned" or "Retained" or "Tracked")
+                && GetTypeBaseName(recRT) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
             {
                 current = recArgs[0];
                 continue;
@@ -62,7 +62,7 @@ public sealed partial class SemanticVerifier
     {
         if (!wrapForBinding) return type;
         return type is EntityTypeInfo
-            ? _registry.GetOrCreateWrapperType(wrapperName: "Owned",
+            ? _registry.GetOrCreateWrapperType(wrapperName: Compiler.Resolution.RuntimeContract.Owned,
                 innerType: type,
                 isReadOnly: false)
             : type;
@@ -877,8 +877,8 @@ public sealed partial class SemanticVerifier
         // bare-generic inner so wrappers around constructed types (e.g. `Referring[List[T]]`) keep
         // the normal element-wise unification that binds their inner params (T) correctly.
         if (paramType is { TypeArguments: [GenericParameterTypeInfo markerParam] } &&
-            ProtocolBaseName(type: paramType) is "Referring" or "Controlling" &&
-            ProtocolBaseName(type: argType) is not ("Referring" or "Controlling"))
+            ProtocolBaseName(type: paramType) is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling &&
+            ProtocolBaseName(type: argType) is not (Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling))
         {
             int markerIdx = genericParameters.ToList().IndexOf(item: markerParam.Name);
             if (markerIdx >= 0 && inferred[markerIdx] == null)

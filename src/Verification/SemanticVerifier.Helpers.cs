@@ -433,7 +433,7 @@ public sealed partial class SemanticVerifier
             // no copy/move is happening at the call site, so no verb is required.
             string paramBase = GetBaseTypeName(typeName: paramType.Name);
             bool paramIsBorrow = paramType.Category == TypeCategory.Protocol &&
-                                 paramBase is "Referring" or "Controlling";
+                                 paramBase is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
             if (_registry.Language == Language.RazorForge &&
                 argValue is IdentifierExpression or MemberExpression &&
                 !IsTriviallyCopyable(type: argType) &&
@@ -700,17 +700,17 @@ public sealed partial class SemanticVerifier
             // both; Viewing is readonly so accepted only by Referring; Hijacked needs explicit
             // .as_entity() — never accepted by implicit borrow coercion.
             string targetBase = GetBaseTypeName(typeName: target.Name);
-            if ((targetBase == "Referring" || targetBase == "Controlling") &&
+            if ((targetBase == Compiler.Resolution.RuntimeContract.Referring || targetBase == Compiler.Resolution.RuntimeContract.Controlling) &&
                 target.TypeArguments is { Count: 1 } borrowArgs)
             {
                 TypeSymbol borrowInner = borrowArgs[index: 0];
                 if (TryGetOwnershipWrapperInner(type: source, wrapperBase: out string? srcWrapper,
                         inner: out TypeSymbol? srcInner))
                 {
-                    bool wrapperAllowed = targetBase == "Referring"
-                        ? srcWrapper is "Retained" or "Modifying" or "Viewing"
-                            or "Controlling" or "Referring"
-                        : srcWrapper is "Retained" or "Modifying" or "Controlling";
+                    bool wrapperAllowed = targetBase == Compiler.Resolution.RuntimeContract.Referring
+                        ? srcWrapper is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Viewing
+                            or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Referring
+                        : srcWrapper is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Controlling;
                     if (wrapperAllowed && srcInner != null &&
                         (srcInner.FullName == borrowInner.FullName ||
                          srcInner.Name == borrowInner.Name))
@@ -792,8 +792,8 @@ public sealed partial class SemanticVerifier
         out TypeSymbol? inner)
     {
         string baseName = GetBaseTypeName(typeName: type.Name);
-        if (baseName is "Retained" or "Tracked" or "Modifying" or "Viewing"
-            or "Controlling" or "Referring" or "Hijacked")
+        if (baseName is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Viewing
+            or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Hijacked)
         {
             if (type is WrapperTypeInfo { InnerType: not null } w)
             {
@@ -815,13 +815,13 @@ public sealed partial class SemanticVerifier
 
     private static bool IsOwnedOf(TypeSymbol type, out TypeSymbol inner)
     {
-        if (type is WrapperTypeInfo { Name: "Owned" } wrapped)
+        if (type is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned } wrapped)
         {
             inner = wrapped.InnerType;
             return true;
         }
 
-        if (GetBaseTypeName(typeName: type.Name) == "Owned" &&
+        if (GetBaseTypeName(typeName: type.Name) == Compiler.Resolution.RuntimeContract.Owned &&
             type.TypeArguments is { Count: 1 } args)
         {
             inner = args[index: 0];
@@ -945,7 +945,7 @@ public sealed partial class SemanticVerifier
     private static TypeSymbol UnwrapBorrowProtocol(TypeSymbol type)
     {
         if (type.Category == TypeCategory.Protocol &&
-            GetBaseTypeName(typeName: type.Name) is "Referring" or "Controlling" &&
+            GetBaseTypeName(typeName: type.Name) is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling &&
             type.TypeArguments is { Count: > 0 } args)
         {
             return args[index: 0];
@@ -1470,8 +1470,8 @@ public sealed partial class SemanticVerifier
         ProtocolTypeInfo def = proto.GenericDefinition ?? proto;
         string baseName = GetBaseTypeName(typeName: def.Name);
         string methodName;
-        if (baseName == "Controlling") methodName = "$control";
-        else if (baseName == "Referring") methodName = "$refer";
+        if (baseName == Compiler.Resolution.RuntimeContract.Controlling) methodName = "$control";
+        else if (baseName == Compiler.Resolution.RuntimeContract.Referring) methodName = "$refer";
         else return;
 
         // Pass-through: the argument is already typed as the same marker protocol. No

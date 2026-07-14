@@ -152,15 +152,15 @@ public static class BackendReprResolver
         string baseName = typeName.Split(separator: '[', count: 2)[0];
         return baseName switch
         {
-            "Viewing" => PointerFlavor.Viewing,
-            "Modifying" => PointerFlavor.Modifying,
-            "Inspecting" => PointerFlavor.Inspecting,
-            "Claiming" => PointerFlavor.Claiming,
-            "Retained" => PointerFlavor.Retained,
-            "Tracked" => PointerFlavor.Tracked,
-            "Shared" => PointerFlavor.Shared,
-            "Watched" => PointerFlavor.Watched,
-            "Hijacked" => PointerFlavor.Hijacked,
+            Compiler.Resolution.RuntimeContract.Viewing => PointerFlavor.Viewing,
+            Compiler.Resolution.RuntimeContract.Modifying => PointerFlavor.Modifying,
+            Compiler.Resolution.RuntimeContract.Inspecting => PointerFlavor.Inspecting,
+            Compiler.Resolution.RuntimeContract.Claiming => PointerFlavor.Claiming,
+            Compiler.Resolution.RuntimeContract.Retained => PointerFlavor.Retained,
+            Compiler.Resolution.RuntimeContract.Tracked => PointerFlavor.Tracked,
+            Compiler.Resolution.RuntimeContract.Shared => PointerFlavor.Shared,
+            Compiler.Resolution.RuntimeContract.Watched => PointerFlavor.Watched,
+            Compiler.Resolution.RuntimeContract.Hijacked => PointerFlavor.Hijacked,
             _ => PointerFlavor.Raw
         };
     }

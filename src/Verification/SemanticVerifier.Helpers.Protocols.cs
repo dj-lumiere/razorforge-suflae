@@ -166,7 +166,7 @@ public sealed partial class SemanticVerifier
             {
                 string baseProto =
                     GetBaseTypeName(typeName: protoType.GenericDefinition?.Name ?? protoType.Name);
-                if (baseProto is "Referring" or "Controlling")
+                if (baseProto is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling)
                 {
                     return true;
                 }
@@ -401,7 +401,7 @@ public sealed partial class SemanticVerifier
         foreach (TypeSymbol proto in protocols)
         {
             string baseName = GetBaseTypeName(typeName: proto.Name);
-            if (baseName is "Referring" or "Controlling" && proto.TypeArguments is { Count: 1 })
+            if (baseName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling && proto.TypeArguments is { Count: 1 })
                 return proto.TypeArguments[index: 0];
         }
 

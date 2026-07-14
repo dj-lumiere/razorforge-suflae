@@ -283,7 +283,7 @@ public sealed partial class SemanticVerifier
         }
 
         // T is explicitly stealable — ownership transfer is its design purpose
-        bool isOwned = operandType is WrapperTypeInfo { Name: "Owned" };
+        bool isOwned = operandType is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned };
 
         // `steal` on a record is a no-op — records are value-typed and have no
         // ownership to transfer. Returning the operand type as-is lets stdlib
@@ -328,7 +328,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsMemoryToken(TypeSymbol type)
     {
-        return type.Name is "Viewing" or "Modifying";
+        return type.Name is Compiler.Resolution.RuntimeContract.Viewing or Compiler.Resolution.RuntimeContract.Modifying;
     }
 
     /// <summary>
@@ -336,12 +336,12 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static string GetMemoryTokenKind(TypeSymbol type)
     {
-        if (type.Name.StartsWith(value: "Viewing"))
+        if (type.Name.StartsWith(value: Compiler.Resolution.RuntimeContract.Viewing))
         {
             return "Viewing[T]";
         }
 
-        if (type.Name.StartsWith(value: "Modifying"))
+        if (type.Name.StartsWith(value: Compiler.Resolution.RuntimeContract.Modifying))
         {
             return "Modifying[T]";
         }
@@ -354,7 +354,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsHijacked(TypeSymbol type)
     {
-        return type.Name == "Hijacked";
+        return type.Name == Compiler.Resolution.RuntimeContract.Hijacked;
     }
 
     /// <summary>

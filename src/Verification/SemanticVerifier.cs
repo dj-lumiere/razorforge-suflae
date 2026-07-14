@@ -739,7 +739,7 @@ public sealed partial class SemanticVerifier
         {
             if (t is not ProtocolTypeInfo p) return false;
             string n = (p.GenericDefinition ?? p).Name;
-            return n is "Referring" or "Controlling";
+            return n is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
         }
 
         static bool ContainsMarker(TypeInfo? t, HashSet<TypeInfo> seen)
