@@ -288,6 +288,19 @@ routine waitfor(duration: Duration)
       rf_waitfor_duration(secs: secs, ns: nanos)
   return
 
+### Cooperatively hands the current turn back to the scheduler, then immediately re-queues this
+### coroutine as READY — the scheduler runs the other ready coroutines once before resuming here on
+### the next tick. Unlike `waitfor`, it waits for NOTHING: it gives up the turn but stays runnable, so
+### resumption is unconditional (no timer, no event). Use it to interleave a long yield-free stretch
+### of CPU work with siblings; prefer `waitfor` or a channel op when there is an actual event to await.
+### UNCOLORED: outside a scheduler-driven coroutine (a plain thread) there is no turn to yield, so it
+### is a no-op.
+routine yield_now()
+  danger!
+    if rf_in_coroutine() != 0_u32
+      rf_coro_yield()
+  return
+
 ### Whether cooperative cancellation has been requested for the currently-running agent — a
 ### `suspended` coroutine or a `threaded` worker. An agent body polls this and returns early to stop
 ### cooperatively; this is the ONLY way to halt a CPU-bound worker thread (a thread cannot be killed).
