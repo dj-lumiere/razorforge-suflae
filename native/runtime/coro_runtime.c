@@ -47,6 +47,15 @@
  * (or, at scale, a machine wedged under commit pressure). */
 extern void __rf_throw(const char* error_type, const char* message);
 
+/* Per-coroutine shadow-stack handoff (stacktrace.c). A coroutine owns its own RF-level call-chain
+ * shadow stack so a stack trace stays correct when the M:N scheduler migrates it between OS workers.
+ * create returns an opaque handle (NULL when tracing is off — then the thread default is used, and
+ * is never pushed to); activate swaps it in on resume and returns the previous handle to restore on
+ * switch-out; destroy frees it at teardown. */
+extern void* __rf_stack_coro_create(void);
+extern void  __rf_stack_coro_destroy(void* handle);
+extern void* __rf_stack_activate(void* handle);
+
 /* Default coroutine stack reserve, in bytes, when the caller passes stack_size == 0. This is a
  * VIRTUAL reserve, not committed up front: pages back the stack only as it actually grows into them,
  * so a parked shallow coroutine charges roughly the pages it has touched — NOT a full megabyte —
@@ -66,6 +75,8 @@ struct rf_coro {
     int in_ready;                  /* 1 while queued in the ready FIFO (dedups external wakes)  */
     int counted_done;              /* 1 once its completion has decremented live (idempotent)   */
     int cancel_requested;          /* 1 once cooperative cancellation has been requested        */
+    void* shadow_stack;            /* this coroutine's RF-level call-chain shadow stack (migrates
+                                    * with it across workers); NULL when tracing is off         */
 #if defined(_WIN32)
     void* fiber;                   /* Windows fiber backing this coroutine (CreateFiberEx)        */
     void* resumer_fiber;           /* fiber to switch back to on yield/finish                     */
@@ -198,6 +209,7 @@ rf_coro* rf_coro_create(rf_context_entry_fn entry, void* userdata, size_t stack_
     coro->entry = entry;
     coro->userdata = userdata;
     coro->status = RF_CORO_NEW;
+    coro->shadow_stack = __rf_stack_coro_create(); /* NULL when tracing is off */
 
 #if defined(_WIN32)
     /* Fiber with a small initial commit + large reserve: cheap per coroutine, and Windows grows the
@@ -254,20 +266,24 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
     coro->resumer_fiber = GetCurrentFiber();
     rf_coro* prev = g_current_coro;
     g_current_coro = coro;
+    void* prev_shadow = __rf_stack_activate(coro->shadow_stack); /* call chain follows the coroutine */
     coro->status = RF_CORO_RUNNING;
 
     SwitchToFiber(coro->fiber); /* runs fiber_proc (first time) or returns from yield */
 
+    __rf_stack_activate(prev_shadow); /* restore the resumer's call chain */
     g_current_coro = prev;   /* the coroutine parked or finished; restore our context */
     return coro->status;     /* PARKED (yielded) or COMPLETED (entry returned)        */
 #elif defined(HAVE_LIBCO)
     coro->resumer = co_active();
     rf_coro* prev = g_current_coro;
     g_current_coro = coro;
+    void* prev_shadow = __rf_stack_activate(coro->shadow_stack); /* call chain follows the coroutine */
     coro->status = RF_CORO_RUNNING;
 
     co_switch(coro->thread); /* runs trampoline (first time) or returns from yield */
 
+    __rf_stack_activate(prev_shadow); /* restore the resumer's call chain */
     g_current_coro = prev;   /* the coroutine parked or finished; restore our context */
     return coro->status;     /* PARKED (yielded) or COMPLETED (entry returned)        */
 #else
@@ -350,6 +366,7 @@ void rf_coro_delete(rf_coro* coro)
         rf_coro_stack_free(coro->stack_region, coro->stack_region_size);
     }
 #endif
+    __rf_stack_coro_destroy(coro->shadow_stack); /* free the migrating call-chain stack */
     free(coro);
 }
 

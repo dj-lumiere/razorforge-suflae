@@ -88,8 +88,36 @@ typedef struct
 #  define RF_THREAD_LOCAL __thread
 #endif
 
-static RF_THREAD_LOCAL rf_RoutineRecord rf_runtime_stack[RF_RUNTIME_STACK_MAX];
-static RF_THREAD_LOCAL rf_U32 rf_runtime_stack_depth = 0;
+/* The RF-level call chain: an array of routine records + a depth. A coroutine owns ONE of these so
+ * its call chain travels WITH it — the M:N scheduler may park a coroutine on one OS worker and
+ * resume it on another, and the shadow stack is the coroutine's state, not the thread's. Storing it
+ * thread-locally (as this once did) corrupts the push/pop balance and produces a wrong trace the
+ * moment a coroutine changes threads. */
+typedef struct rf_shadow_stack
+{
+    rf_RoutineRecord records[RF_RUNTIME_STACK_MAX];
+    rf_U32 depth;
+} rf_shadow_stack;
+
+/* Per-OS-thread default: the call chain of code running OUTSIDE any coroutine (a worker's own
+ * frames, or the main thread before it enters async). One per thread, so it never migrates. */
+static RF_THREAD_LOCAL rf_shadow_stack rf_thread_shadow;
+
+/* The shadow stack push/pop/capture currently operate on. NULL until first touch, then the thread
+ * default; a coroutine swaps it to its own (via __rf_stack_activate) on resume and restores it on
+ * switch-out, so the active stack always matches whoever is running on this thread right now. */
+static RF_THREAD_LOCAL rf_shadow_stack* rf_active_shadow = NULL;
+
+/* Resolve the active shadow stack, materializing the thread default on first touch. */
+static rf_shadow_stack* rf_shadow(void)
+{
+    rf_shadow_stack* s = rf_active_shadow;
+    if (s == NULL)
+    {
+        s = rf_active_shadow = &rf_thread_shadow;
+    }
+    return s;
+}
 
 // ============================================================================
 // Symbol tables (set by builder-generated code at startup)
@@ -265,14 +293,15 @@ void __rf_set_trace_mode(int mode)
 void __rf_stack_push(rf_U32 file_id, rf_U32 routine_id, rf_U32 type_id,
                      rf_U32 line_no, rf_U32 column_no)
 {
-    if (rf_runtime_stack_depth >= RF_RUNTIME_STACK_MAX)
+    rf_shadow_stack* s = rf_shadow();
+    if (s->depth >= RF_RUNTIME_STACK_MAX)
     {
         fprintf(stderr, "\033[31m\nRazorForge Runtime Error: Stack overflow (depth > %d)\n\033[0m",
                 RF_RUNTIME_STACK_MAX);
         fflush(stderr);
         exit(1);
     }
-    rf_RoutineRecord* r = &rf_runtime_stack[rf_runtime_stack_depth++];
+    rf_RoutineRecord* r = &s->records[s->depth++];
     r->file_id    = file_id;
     r->routine_id = routine_id;
     r->type_id    = type_id;
@@ -282,7 +311,44 @@ void __rf_stack_push(rf_U32 file_id, rf_U32 routine_id, rf_U32 type_id,
 
 void __rf_stack_pop(void)
 {
-    if (rf_runtime_stack_depth > 0) rf_runtime_stack_depth--;
+    rf_shadow_stack* s = rf_shadow();
+    if (s->depth > 0) s->depth--;
+}
+
+// ============================================================================
+// Shadow-stack ownership handoff for the M:N scheduler
+// ----------------------------------------------------------------------------
+// A coroutine owns its own shadow stack so its RF-level call chain survives migration across OS
+// worker threads. coro_runtime.c drives these three at the context-switch boundary.
+// ============================================================================
+
+// Allocate an empty shadow stack for a new coroutine, or NULL when tracing is off (RF_TRACE_NONE
+// emits no push/pop, so the coroutine needs none — this avoids a per-coroutine allocation at the
+// scale where many coroutines coexist). A NULL handle means "use the thread default", harmless
+// because in that mode the default is never pushed to.
+void* __rf_stack_coro_create(void)
+{
+    if (rf_trace_mode == RF_TRACE_NONE)
+    {
+        return NULL;
+    }
+    return calloc(1, sizeof(rf_shadow_stack)); // depth = 0
+}
+
+// Free a coroutine's shadow stack at teardown. NULL-safe.
+void __rf_stack_coro_destroy(void* handle)
+{
+    free(handle);
+}
+
+// Make `handle` (a coroutine's shadow stack, or NULL for the thread default) the active shadow
+// stack, returning the previously-active handle so the caller restores it on switch-out. This swap
+// is what makes the call chain follow the coroutine across workers.
+void* __rf_stack_activate(void* handle)
+{
+    rf_shadow_stack* prev = rf_shadow(); // materialize + read current
+    rf_active_shadow = (handle != NULL) ? (rf_shadow_stack*)handle : &rf_thread_shadow;
+    return prev;
 }
 
 // ============================================================================
@@ -292,10 +358,11 @@ void __rf_stack_pop(void)
 void __rf_stack_capture(rf_RoutineTrace* out)
 {
     if (!out) return;
-    rf_U32 n = rf_runtime_stack_depth < RF_ROUTINE_TRACE_MAX_RECORDS
-               ? rf_runtime_stack_depth : RF_ROUTINE_TRACE_MAX_RECORDS;
+    rf_shadow_stack* s = rf_shadow();
+    rf_U32 n = s->depth < RF_ROUTINE_TRACE_MAX_RECORDS
+               ? s->depth : RF_ROUTINE_TRACE_MAX_RECORDS;
     for (rf_U32 i = 0; i < n; i++)
-        out->records[i] = rf_runtime_stack[rf_runtime_stack_depth - 1 - i];
+        out->records[i] = s->records[s->depth - 1 - i];
     for (rf_U32 i = n; i < RF_ROUTINE_TRACE_MAX_RECORDS; i++)
         memset(&out->records[i], 0, sizeof(rf_RoutineRecord));
     out->depth = n;
@@ -317,16 +384,17 @@ static const char* get_type_name(rf_U32 id)
 
 static void print_shadow_stack(void)
 {
-    if (rf_runtime_stack_depth == 0)
+    rf_shadow_stack* s = rf_shadow();
+    if (s->depth == 0)
     {
         fprintf(stderr, "  <stack empty>\n");
         return;
     }
     fprintf(stderr, "Stack trace:\n");
-    for (rf_U32 i = 0; i < rf_runtime_stack_depth; i++)
+    for (rf_U32 i = 0; i < s->depth; i++)
     {
-        rf_U32 idx = rf_runtime_stack_depth - 1 - i;
-        const rf_RoutineRecord* r = &rf_runtime_stack[idx];
+        rf_U32 idx = s->depth - 1 - i;
+        const rf_RoutineRecord* r = &s->records[idx];
         const char* file    = get_file_name(r->file_id);
         const char* routine = get_routine_name(r->routine_id);
         const char* type    = get_type_name(r->type_id);
