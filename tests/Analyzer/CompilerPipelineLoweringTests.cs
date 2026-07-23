@@ -178,12 +178,12 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> ?T
+                        routine Box[T].fetch() -> T
                           return me.value
 
                         routine start() -> S32
                           var box = Box[S32](value: 7_s32)
-                          return box.peek()
+                          return box.fetch()
                         """;
 
         Program program = Parse(source: source);
@@ -192,9 +192,11 @@ public class CompilerPipelineLoweringTests
 
         Assert.Empty(collection: result.Errors);
 
+        // `fetch` (not `peek`) — `peek` now also names the stdlib `Hijacked[T].peek` accessor, whose
+        // many monomorphizations would make this filter ambiguous.
         MonomorphizedBody body = Assert.Single(
             collection: result.InstantiatedGenericBodies.Values.Where(candidate =>
-                candidate.Info.Name == "peek"));
+                candidate.Info.Name == "fetch"));
 
         Assert.False(condition: ContainsGenericPlaceholder(type: body.Info.OwnerType));
         Assert.DoesNotContain(body.Info.Parameters,
@@ -249,10 +251,10 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> ?T
+                        routine Box[T].peek() -> T
                           return me.value
 
-                        routine Box[T].copy_value() -> ?T
+                        routine Box[T].copy_value() -> T
                           return me.peek()
 
                         routine start() -> S32
@@ -638,9 +640,9 @@ public class CompilerPipelineLoweringTests
         string llvmIr = generator.Generate();
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
             functionMarker: "define %\"Record.Core.Maybe[Core.U8]\" @Collections.BitList.try_to_u8");
-        Assert.Contains(expectedSubstring: "call i64 @\"Core.Hijacked[Core.U64].extract\"",
+        Assert.Contains(expectedSubstring: "call i64 @\"Core.Hijacked[Core.U64].peek\"",
             actualString: tryToU8Body);
-        Assert.DoesNotContain(expectedSubstring: "@\"Core.Hijacked[Core.Bytes].extract\"",
+        Assert.DoesNotContain(expectedSubstring: "@\"Core.Hijacked[Core.Bytes].peek\"",
             actualString: tryToU8Body);
         Assert.DoesNotContain(expectedSubstring: "@Core.Bytes.$bitand", actualString: tryToU8Body);
     }
@@ -768,7 +770,7 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> ?T
+                        routine Box[T].peek() -> T
                           return me.value
 
                         routine make_box() -> Box[S32]
@@ -803,7 +805,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         dangerous routine test(ptr: Hijacked[S64]) -> S64
-                          return ptr.extract()
+                          return ptr.peek()
                         """;
 
         Program program = Parse(source: source);
@@ -821,7 +823,7 @@ public class CompilerPipelineLoweringTests
         string llvmIr = generator.Generate();
         Assert.Contains(expectedSubstring: "define i64 @\"test(Core.Hijacked[Core.S64])\"(ptr %ptr)",
             actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "@\"Core.Hijacked[Core.S64].extract\"",
+        Assert.Contains(expectedSubstring: "@\"Core.Hijacked[Core.S64].peek\"",
             actualString: llvmIr);
     }
 
@@ -1148,7 +1150,7 @@ public class CompilerPipelineLoweringTests
                         needs N is Address
                           data: T
 
-                        routine Buffer[T, N].first() -> ?T
+                        routine Buffer[T, N].first() -> T
                           return me.data
 
                         routine start(buf: Buffer[U8, WIDTH]) -> U8
