@@ -282,6 +282,24 @@ public sealed partial class SemanticVerifier
             return operandType;
         }
 
+        // Check for a single-threaded reference-counted handle (Retained/Tracked). These are SHARED
+        // ownership, not unique — multiple handles to the same non-atomic control block can coexist,
+        // so `steal` (an exclusive-transfer marker) is a category error: moving one handle proves
+        // nothing about the others. Clone with `.retain()`/`.track()`, or convert to `Shared`/
+        // `Watched` (atomic Arc) to move ownership across a coroutine/thread boundary.
+        if (GetBaseTypeName(typeName: operandType.Name) is
+            Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
+        {
+            ReportError(code: SemanticDiagnosticCode.StealSharedOwnership,
+                message:
+                $"Cannot steal '{operandType.Name}' - a reference-counted handle is shared ownership, " +
+                "not unique, so it cannot be exclusively moved. Clone it with `.retain()`/`.track()`, " +
+                "or use `Shared`/`Watched` to move ownership across a coroutine/thread boundary.",
+                location: steal.Location);
+            steal.ResolvedType = operandType;
+            return operandType;
+        }
+
         // T is explicitly stealable — ownership transfer is its design purpose
         bool isOwned = operandType is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned };
 

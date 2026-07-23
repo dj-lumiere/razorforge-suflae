@@ -610,6 +610,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot steal Hijacked type.</summary>
     StealHijacked = 605,
 
+    /// <summary>Cannot steal a reference-counted handle (Retained/Tracked) — shared ownership, not unique.</summary>
+    StealSharedOwnership = 617,
+
     /// <summary>Cannot capture scope-bound token in lambda.</summary>
     LambdaCaptureToken = 606,
 

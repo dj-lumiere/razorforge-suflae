@@ -393,7 +393,9 @@ public sealed partial class SemanticVerifier
                     // via the stdlib `Agent[T].retrieve!()` / `.waitfor(deadline)` methods.
                     if (routine.AsyncStatus == AsyncStatus.Threaded)
                     {
-                        ValidateThreadedRoutineArguments(routine: routine,
+                        ValidateAsyncRoutineArguments(routine: routine,
+                            arguments: call.Arguments,
+                            boundaryKind: "threaded",
                             location: call.Location);
                         TypeSymbol? agentDef = _registry.LookupType(name: "Agent");
                         return agentDef != null
@@ -404,8 +406,14 @@ public sealed partial class SemanticVerifier
 
                     // A `suspended routine` call creates a stackful coroutine and yields an
                     // `Agent[T]` handle (kind CORO), driven to completion via `Agent[T].retrieve!()`.
+                    // Under M:N a coroutine may run on any worker in parallel with its siblings, so
+                    // the same crossing rule as `threaded` applies to its arguments (RF-S632).
                     if (routine.AsyncStatus == AsyncStatus.Suspended)
                     {
+                        ValidateAsyncRoutineArguments(routine: routine,
+                            arguments: call.Arguments,
+                            boundaryKind: "suspended",
+                            location: call.Location);
                         TypeSymbol? agentDef = _registry.LookupType(name: "Agent");
                         return agentDef != null
                             ? _registry.GetOrCreateResolution(genericDef: agentDef,

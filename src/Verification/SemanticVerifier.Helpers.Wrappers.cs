@@ -247,14 +247,21 @@ public sealed partial class SemanticVerifier
     /// is now subsumed by the protocol's auto-derivation rule.
     /// </summary>
     /// <summary>
-    /// True when a type carries its own cross-thread synchronization and may therefore be passed
-    /// to a <c>threaded routine</c> by reference (the worker aliases the spawner's cell). Exactly
-    /// the atomic / shared-ownership wrappers — <c>Atomic[T]</c>, <c>Shared[T,P]</c>,
-    /// <c>Watched[T,P]</c>. Every other type must be trivially copyable (passed by value as an
-    /// independent copy) so unsynchronized state can never alias across the thread boundary.
+    /// True when a type carries its own cross-thread synchronization and may therefore cross an
+    /// async spawn boundary (<c>threaded</c> OR <c>suspended</c> under M:N — both are potentially
+    /// parallel) by reference, aliasing the spawner's cell safely. These are the atomic /
+    /// shared-ownership wrappers — <c>Atomic[T]</c>, <c>Shared[T,P]</c>, <c>Watched[T,P]</c> (atomic
+    /// refcount) — plus the <em>multi-threaded</em> lock-backed tokens <c>Inspecting[T,P]</c>
+    /// (read-only) and <c>Claiming[T,P]</c> (exclusive), whose mutex/rwlock makes concurrent access
+    /// sound. The single-threaded tokens <c>Viewing</c>/<c>Modifying</c> are deliberately NOT here —
+    /// they are unsynchronized (see the 2×2 in <c>internal-wiki/v0.3.x-mn-scheduler.md</c> §4). Every
+    /// other type must be trivially copyable (passed by value as an independent copy) or
+    /// <c>steal</c>-moved so unsynchronized state can never alias across the boundary.
     /// </summary>
     private static bool IsThreadShareable(TypeSymbol type) =>
-        GetBaseTypeName(typeName: type.Name) is Compiler.Resolution.RuntimeContract.Atomic or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched;
+        GetBaseTypeName(typeName: type.Name) is Compiler.Resolution.RuntimeContract.Atomic
+            or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched
+            or Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
 
     private static bool IsTriviallyCopyable(TypeSymbol type)
     {
