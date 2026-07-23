@@ -190,7 +190,7 @@ public sealed class MultiFileModuleImportTests
                     routine con_id(x: S32) -> S32
                       return x
 
-                    routine gen_id[T](x: T) -> ?T
+                    routine gen_id[T](x: T) -> T
                       return x
                     """),
             ]);

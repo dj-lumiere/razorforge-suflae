@@ -54,7 +54,7 @@ public class StabilizationPlanTests
                         record Store[T]
                           item: T
 
-                        routine Store[T].transform[U](func_val: U) -> ?U
+                        routine Store[T].transform[U](func_val: U) -> U
                           return func_val
 
                         routine test()
@@ -78,7 +78,7 @@ public class StabilizationPlanTests
                         record Slot[T]
                           data: T
 
-                        routine Slot[T].peek() -> ?T
+                        routine Slot[T].peek() -> T
                           return me.data
 
                         routine test()
@@ -144,7 +144,7 @@ public class StabilizationPlanTests
                         routine Pair[T].label() -> Text
                           return "pair"
 
-                        routine Pair[T].get_first() -> ?T
+                        routine Pair[T].get_first() -> T
                           return me.first
 
                         routine test()
@@ -177,7 +177,7 @@ public class StabilizationPlanTests
                         routine Container[T].describe() -> Text
                           return "container"
 
-                        routine Container[T].get_item() -> ?T
+                        routine Container[T].get_item() -> T
                           return me.item
 
                         routine test()
@@ -333,7 +333,7 @@ public class StabilizationPlanTests
                         routine Stack[T].push(item: T) -> Stack[T]
                           return Stack[T](top: item)
 
-                        routine Stack[T].peek() -> ?T
+                        routine Stack[T].peek() -> T
                           return me.top
 
                         routine test()
@@ -420,7 +420,7 @@ public class StabilizationPlanTests
                         record Wrapper[T]
                           value: T
 
-                        routine Wrapper[T].get() -> ?T
+                        routine Wrapper[T].get() -> T
                           return me.value
 
                         routine test()
@@ -449,7 +449,7 @@ public class StabilizationPlanTests
                         record Wrapper[T]
                           inner: T
 
-                        routine Wrapper[T].unwrap() -> ?T
+                        routine Wrapper[T].unwrap() -> T
                           return me.inner
 
                         routine test()

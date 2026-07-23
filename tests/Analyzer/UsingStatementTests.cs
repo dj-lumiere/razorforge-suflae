@@ -82,7 +82,7 @@ public class UsingStatementTests
                         entity Connection obeys Enterable
                           tag: S32
 
-                        routine Connection.$enter() -> ?Connection
+                        routine Connection.$enter() -> Connection
                           return me
 
                         routine Connection.$exit()
@@ -258,7 +258,7 @@ public class UsingStatementTests
                         entity Container[T] obeys Enterable
                           item: T
 
-                        routine Container[T].$enter() -> ?Container[T]
+                        routine Container[T].$enter() -> Container[T]
                           return me
 
                         routine Container[T].$exit()

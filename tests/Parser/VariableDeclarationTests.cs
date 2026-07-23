@@ -655,7 +655,7 @@ public class VariableDeclarationTests
     public void Parse_SubjectlessWhenInitializerLambdaArgument()
     {
         string source = """
-                        routine test(items: ?List[S64])
+                        routine test(items: List[S64])
                           var label = when
                             items.any(pred: x => x > 0) => "has positives"
                             else => "none"

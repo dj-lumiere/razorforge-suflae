@@ -92,7 +92,7 @@ public class EnterableConformanceTests
                         entity Session obeys Enterable
                           secret n: S32
 
-                        routine Session.$enter() -> ?Session
+                        routine Session.$enter() -> Session
                           return me
 
                         routine Session.$exit()
