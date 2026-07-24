@@ -1,0 +1,47 @@
+module Tests/Stdlib/CoroMigrationApi
+
+# v0.3.x M:N scheduler (step 2b) — proves coroutines MIGRATE across the worker pool. A coroutine is no
+# longer pinned to the OS thread that started it: it may park on one worker and resume on another. Each
+# probe records its worker's OS thread id (rf_current_thread_id) BEFORE and AFTER a park; if the two
+# differ, that coroutine ran on two different workers. Across 40 probes parked together on an N-worker
+# pool, at least one is overwhelmingly certain to migrate (the same timing-robustness the race! fixture
+# relies on). The verdict is core-count-ROBUST so the snapshot is stable on any host: a single-worker
+# pool CANNOT migrate (that is correct), and only a multi-worker pool that pins every coroutine to its
+# birth worker — the exact 2b regression — is reported BROKEN.
+
+import IO/Console
+
+# Returns 1 if this coroutine resumed on a different worker than it started on, else 0.
+suspended routine probe() -> S64
+  var w0 = rf_current_thread_id()
+  waitfor(5ms)                       # park under the pool; some worker picks us back up
+  var w1 = rf_current_thread_id()
+  return if w0 == w1 then 0_s64 else 1_s64
+
+routine start()
+  var workers = rf_sched_worker_count()
+
+  var probes = List[Agent[S64]]()
+  var i = 0_s64
+  while i < 40_s64
+    probes.add_last(value: probe())
+    i = i + 1_s64
+  var results = probes.gather!()
+
+  var migrated = 0_s64
+  var completed = 0_s64
+  var k = 0_s64
+  while k < 40_s64
+    migrated = migrated + results[k]
+    completed = completed + 1_s64
+    k = k + 1_s64
+  show(f"probes completed: {completed}")
+
+  # A single-worker pool never migrates (correct); a multi-worker pool must migrate at least one of 40
+  # parked probes, else coroutines are pinned to their birth worker (the 2b bug).
+  var ok = workers <= 1_u64 or migrated > 0_s64
+  if ok
+    show("scheduler migration: ok")
+  else
+    show("scheduler migration: BROKEN")
+  return
