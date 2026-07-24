@@ -155,6 +155,9 @@ dangerous external("C") routine rf_sched_run_until_default(coro: CPtr)
 ### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
 ### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
 dangerous external("C") routine rf_sched_unschedule_default(coro: CPtr) -> U32
+### Number of worker threads driving the process pool (fixed host-core-count, min 1). Creates the pool
+### on first call. Coroutine migration across workers can only occur when this is > 1.
+external("C") routine rf_sched_worker_count() -> U64
 ### Registers the current scheduler-driven coroutine as `task`'s awaiter. Returns 1 if the task is
 ### already complete (read the result, don't park), 0 if registered (park via rf_sched_park_external;
 ### the worker wakes you on completion). Outside a scheduler-driven coroutine returns 1 (block-wait).

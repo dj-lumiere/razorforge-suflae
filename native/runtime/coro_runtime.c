@@ -1388,3 +1388,12 @@ uint64_t rf_monotonic_now_ns(void)
 {
     return rf_now_ns();
 }
+
+// Number of worker threads driving the process pool (the fixed host-core-count, min 1). Creates the
+// pool on first call so the count is always the real one. Exposed for introspection and for
+// core-count-robust concurrency tests: migration can only occur when this is > 1.
+uint64_t rf_sched_worker_count(void)
+{
+    rf_sched* s = rf_sched_thread_default();
+    return (s != NULL) ? (uint64_t)s->workers_total : 1u;
+}

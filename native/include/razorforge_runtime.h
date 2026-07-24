@@ -338,6 +338,10 @@ void rf_sched_run_until_default(rf_coro* target);
  * reference + live count instead of dangling. */
 int rf_sched_unschedule_default(rf_coro* coro);
 
+/* Number of worker threads driving the process pool (fixed host-core-count, min 1). Creates the pool
+ * on first call. Coroutine migration across workers can only occur when this is > 1. */
+uint64_t rf_sched_worker_count(void);
+
 /* ---- Channels: streaming conduit (`Hopper[T]` / `Conveyor[T]`) --------------------------- */
 
 /* Refcounted ring buffer carrying payload pointers between agents. feed (full) and next (empty)
