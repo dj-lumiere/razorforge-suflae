@@ -129,8 +129,9 @@ uint32_t rf_task_await_coro(rf_task* task);
  * scheduler-driven coroutine (block-wait with the deadline instead). */
 uint32_t rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns);
 /* Register (s != NULL) / clear (s == NULL) the scheduler a `race!` over a set including this task is
- * driving, so the worker signals that loop on completion (see rf_race_wait). */
-void rf_task_race_register(rf_task* task, rf_sched* s);
+ * driving, plus the racing coroutine `coro` (NULL for a top-level thread racer). On completion the
+ * worker wakes `coro` by name if set, else signals that loop's cond (see rf_race_wait). */
+void rf_task_race_register(rf_task* task, rf_sched* s, rf_coro* coro);
 int rf_task_spawn_threaded(rf_task* task, rf_task_entry_fn entry, void* userdata);
 
 void rf_task_mark_ready(rf_task* task);

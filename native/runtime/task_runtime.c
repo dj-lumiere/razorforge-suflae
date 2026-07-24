@@ -82,11 +82,14 @@ struct rf_task
     rf_sched* coro_sched;
     rf_coro* coro_waiter;
 
-    /* A scheduler driving a `race!` over a set that includes this task. On completion the worker
-     * signals this scheduler's run loop (no specific coroutine — the racing loop re-polls all
-     * competitors under the scheduler lock). Set/cleared by rf_task_race_register under coro_lock;
-     * read under coro_lock at completion, the same race-free pattern as coro_sched/coro_waiter. */
+    // A scheduler driving a `race!` over a set that includes this task, plus the racing coroutine (if
+    // the race! runs inside one). On completion the worker wakes the racer: rf_sched_wake(race_sched,
+    // race_waiter) when race_waiter is set (a coroutine racer re-polls after being re-queued), else
+    // rf_sched_signal(race_sched) (a top-level thread racer parked on the pool cond re-polls). Set/
+    // cleared together by rf_task_race_register under coro_lock; read under coro_lock at completion,
+    // the same race-free pattern as coro_sched/coro_waiter.
     rf_sched* race_sched;
+    rf_coro* race_waiter;
 };
 
 static rf_U64 rf_next_task_id = 1;
@@ -153,6 +156,7 @@ static void rf_task_signal_completion(rf_task* task)
     rf_sched* waking_sched = task->coro_sched;
     rf_coro* waiter = task->coro_waiter;
     rf_sched* race_sched = task->race_sched;
+    rf_coro* race_waiter = task->race_waiter;
     task->coro_sched = NULL;
     task->coro_waiter = NULL;
     rf_mutex_unlock(&task->coro_lock);
@@ -164,11 +168,16 @@ static void rf_task_signal_completion(rf_task* task)
     if (waking_sched != NULL && waiter != NULL) {
         rf_sched_wake(waking_sched, waiter);
     }
-    /* Also wake a `race!` loop driving a set that includes this task: it parks on the scheduler
-     * cond with no specific awaiter coroutine, so signal the cond and let it re-poll. Left set
-     * (not cleared) so a later spurious signal is harmless; race! clears it when the loop ends. */
+    // Also wake a `race!` over a set that includes this task. A coroutine racer (race_waiter set) is
+    // parked external — wake it by name so the worker re-queues it. A top-level thread racer parks on
+    // the pool cond with no awaiter coroutine — signal the cond and let it re-poll. Left set (not
+    // cleared) so a later spurious wake is harmless; race! clears it when the loop ends.
     if (race_sched != NULL) {
-        rf_sched_signal(race_sched);
+        if (race_waiter != NULL) {
+            rf_sched_wake(race_sched, race_waiter);
+        } else {
+            rf_sched_signal(race_sched);
+        }
     }
 
     rf_thread_backend* backend = rf_task_thread_backend(task);
@@ -190,14 +199,16 @@ static void rf_task_signal_completion(rf_task* task)
  * it cannot lose a wake against a task finishing concurrently. Call only inside a coroutine driven
  * by a scheduler (rf_in_coroutine() != 0); outside one it conservatively reports "complete" (1) so
  * the caller falls back to a blocking wait. */
-/* Register (s != NULL) or clear (s == NULL) the scheduler that a `race!` over a set including this
- * task is driving, so the worker can signal that loop on completion. Idempotent; under coro_lock so
- * it cannot race a concurrent completion read. */
-void rf_task_race_register(rf_task* task, rf_sched* s)
+// Register (s != NULL) or clear (s == NULL) the scheduler that a `race!` over a set including this task
+// is driving, plus the racing coroutine `coro` (NULL for a top-level thread racer). On completion the
+// worker wakes `coro` by name if set, else signals the scheduler's cond. Idempotent; under coro_lock so
+// it cannot race a concurrent completion read.
+void rf_task_race_register(rf_task* task, rf_sched* s, rf_coro* coro)
 {
     if (task == NULL) return;
     rf_mutex_lock(&task->coro_lock);
     task->race_sched = s;
+    task->race_waiter = coro;
     rf_mutex_unlock(&task->coro_lock);
 }
 

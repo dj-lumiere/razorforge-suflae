@@ -26,6 +26,7 @@
 #else
 #include <time.h>
 #include <errno.h>
+#include <unistd.h> // sysconf(_SC_NPROCESSORS_ONLN) — pool worker count
 #endif
 
 #ifdef HAVE_LIBCO
@@ -66,6 +67,40 @@ extern void* __rf_stack_activate(void* handle);
  * therefore safe — the stack grows on demand up to this reserve. (Design §9.2.) */
 #define RF_CORO_DEFAULT_STACK (1024u * 1024u)
 
+// Per-coroutine scheduling state — the worker-safe park/wake state machine (M:N build step 2b). With
+// N>1 workers, two threads can try to make the same coroutine runnable at once: a wake (from another
+// worker or a task thread) racing the worker that is STILL running it. Only one owner may ever push a
+// coroutine onto a run queue, so every "make runnable" goes through rf_sched_make_ready under s->lock
+// and is a pure function of this state:
+//   IDLE     — parked (external wait, or on the timer list) or freshly created; not queued, not running
+//   QUEUED   — sitting in the injector, waiting to be popped; a wake is a no-op (already runnable)
+//   RUNNING  — a worker popped it and is executing it (s->lock dropped); a wake records NOTIFIED
+//              instead of enqueuing — the running worker re-queues it when it parks
+//   NOTIFIED — was RUNNING when a wake arrived; the worker re-queues it on park, IGNORING its park
+//              intent (the wake means "become runnable again")
+//   DONE     — completed; never runnable again (a stray wake is dropped)
+// This replaces the old single `in_ready` flag (which was just "state == QUEUED" and could not tell a
+// parked coroutine apart from a running one — the exact ambiguity that lets N>1 double-resume).
+typedef enum {
+    RF_SCHED_IDLE = 0,
+    RF_SCHED_QUEUED,
+    RF_SCHED_RUNNING,
+    RF_SCHED_NOTIFIED,
+    RF_SCHED_DONE
+} rf_sched_state;
+
+// What a coroutine asked its worker to do when it switched out. The park primitives run INSIDE the
+// coroutine (on the worker) and only RECORD an intent — they do NOT touch the injector/timer list
+// themselves. The worker applies the intent AFTER rf_coro_resume returns, under s->lock, so a wake
+// that arrived meanwhile (state == NOTIFIED) cleanly overrides it (requeue instead of park). At N=1
+// this was safe to do inline; at N>1 the record-then-apply split is what closes the wake-vs-park race.
+typedef enum {
+    RF_PARK_NONE = 0,  // not parking (a completion, or nothing pending)
+    RF_PARK_TIMER,     // insert into the timer list at wake_ns
+    RF_PARK_EXTERNAL,  // leave IDLE in no list; only rf_sched_wake re-queues it
+    RF_PARK_YIELD      // cooperative yield: re-queue immediately, behind the other ready coros
+} rf_park_intent;
+
 struct rf_coro {
     rf_context_entry_fn entry;     /* user routine to run inside the coroutine            */
     void* userdata;                /* opaque argument handed to entry                     */
@@ -73,7 +108,8 @@ struct rf_coro {
     rf_cancel_frame* cf_top;       /* top of the cancellation shadow stack (NULL = empty) */
     struct rf_coro* sched_next;    /* scheduler link: ready queue OR timer list (one at a time) */
     uint64_t wake_ns;              /* monotonic deadline this coroutine is parked until         */
-    int in_ready;                  /* 1 while queued in the injector (dedups external wakes)   */
+    rf_sched_state sched_state;    // worker-safe park/wake state (M:N step 2b); replaces in_ready
+    rf_park_intent park_intent;    // recorded by a park primitive; applied by the worker post-resume
     int counted_done;              /* 1 once its completion has decremented live (idempotent)   */
     int cancel_requested;          /* 1 once cooperative cancellation has been requested        */
     struct rf_coro* awaiter;       /* a coroutine parked in retrieve! awaiting THIS one's completion;
@@ -484,7 +520,14 @@ struct rf_sched {
                             * coroutine parked with no waker while `waiters == 0` is merely idle
                             * (pending teardown), NOT a deadlock. Incremented around each blocking
                             * wait in rf_sched_run_until_default / rf_race_wait. */
-    rf_mutex lock;         /* guards the injector + live + cross_wakers + waiters across workers */
+    // number of worker threads that drive this scheduler (M:N step 2b). The pool sets it to the host
+    // core count; a directly-driven rf_sched (rf_sched_run, native tests) leaves the default 1.
+    int workers_total;
+    // workers currently parked on `cond` with nothing runnable. A deadlock is only real when EVERY
+    // worker is idle (workers_idle == workers_total): with N>1 one idle worker while another still
+    // runs a coroutine is not stuck. Inc/dec around each idle cond-wait in rf_sched_step.
+    int workers_idle;
+    rf_mutex lock;         /* guards the injector + live + cross_wakers + waiters + worker counts */
     rf_cond cond;          /* run loop waits here; an external wake signals it      */
 };
 
@@ -521,12 +564,12 @@ static uint64_t rf_now_ns(void)
 #endif
 }
 
-/* Append to the injector FIFO. Callers hold s->lock. Marks the coroutine queued so a redundant
- * external wake (rf_sched_wake) can't enqueue it twice. */
+// Append to the injector FIFO and mark the coroutine QUEUED. Callers hold s->lock. The QUEUED state
+// is what dedups a redundant wake (rf_sched_make_ready no-ops on an already-queued coroutine).
 static void rf_sched_push_injector(rf_sched* s, rf_coro* c)
 {
     c->sched_next = NULL;
-    c->in_ready = 1;
+    c->sched_state = RF_SCHED_QUEUED;
     if (s->injector_tail != NULL) {
         s->injector_tail->sched_next = c;
     } else {
@@ -535,7 +578,9 @@ static void rf_sched_push_injector(rf_sched* s, rf_coro* c)
     s->injector_tail = c;
 }
 
-/* Pop the head of the injector FIFO (caller holds s->lock), or NULL if empty. */
+// Pop the head of the injector FIFO and mark it RUNNING (caller holds s->lock), or NULL if empty.
+// Only a QUEUED coroutine is ever in the injector, so a pop is the sole QUEUED->RUNNING transition —
+// exactly one worker takes ownership of running it.
 static rf_coro* rf_sched_pop_injector(rf_sched* s)
 {
     rf_coro* c = s->injector_head;
@@ -547,7 +592,7 @@ static rf_coro* rf_sched_pop_injector(rf_sched* s)
         s->injector_tail = NULL;
     }
     c->sched_next = NULL;
-    c->in_ready = 0;
+    c->sched_state = RF_SCHED_RUNNING;
     return c;
 }
 
@@ -580,6 +625,36 @@ static void rf_sched_unlink_timer(rf_sched* s, rf_coro* c)
     }
 }
 
+// Make a coroutine runnable, driving the worker-safe state machine (M:N step 2b). Caller holds
+// s->lock. This is the ONE choke point every wake path funnels through — rf_sched_wake, the awaiter
+// wake at completion, and a race! competitor wake — so the RUNNING->NOTIFIED rule that prevents a
+// second worker from re-queuing (and then double-resuming) a coroutine that is still executing lives
+// in exactly one place:
+//   IDLE     -> unlink from the timer list (no-op if not on it), push to the injector (QUEUED)
+//   RUNNING  -> NOTIFIED: do NOT enqueue; the worker running it re-queues it when it parks
+//   QUEUED   -> already runnable (dedup — the old in_ready check)
+//   NOTIFIED -> already flagged
+//   DONE     -> completed; a stray wake is dropped
+static void rf_sched_make_ready(rf_sched* s, rf_coro* c)
+{
+    if (s == NULL || c == NULL) {
+        return;
+    }
+    switch (c->sched_state) {
+        case RF_SCHED_IDLE:
+            rf_sched_unlink_timer(s, c);   // if it was deadline-parked, take it off the timer list
+            rf_sched_push_injector(s, c);  // -> QUEUED
+            break;
+        case RF_SCHED_RUNNING:
+            c->sched_state = RF_SCHED_NOTIFIED;
+            break;
+        case RF_SCHED_QUEUED:
+        case RF_SCHED_NOTIFIED:
+        case RF_SCHED_DONE:
+            break; // already runnable, already flagged, or gone — nothing to do
+    }
+}
+
 rf_sched* rf_sched_create(void)
 {
     rf_sched* s = (rf_sched*)calloc(1, sizeof(rf_sched));
@@ -589,6 +664,7 @@ rf_sched* rf_sched_create(void)
     }
     rf_mutex_init(&s->lock);
     rf_cond_init(&s->cond);
+    s->workers_total = 1; /* one driver by default (native tests, rf_sched_run); the pool raises it */
     return s;
 }
 
@@ -622,77 +698,70 @@ void rf_sched_spawn(rf_sched* s, rf_coro* c)
     rf_mutex_unlock(&s->lock);
 }
 
-/* Park the coroutine currently running under the loop until `delay_ns` from now, then resume it.
- * Called from inside a coroutine body (e.g. by waitfor). No-op outside a running scheduler. */
+// Park the coroutine currently running under the loop until `delay_ns` from now, then resume it.
+// Called from inside a coroutine body (e.g. by waitfor). No-op outside a running scheduler.
+//
+// We only RECORD the intent (+ deadline) and switch out; the worker inserts us into the timer list
+// post-resume, under s->lock — or, if a wake turned us NOTIFIED meanwhile, re-queues us instead.
+// Doing the timer insert on the worker rather than here is what keeps the park race-free at N>1:
+// there is no window where we sit on the timer list yet are also being enqueued by a racing wake.
 void rf_sched_park_timer(uint64_t delay_ns)
 {
-    rf_sched* s = g_sched;
     rf_coro* self = rf_coro_current();
-    if (s == NULL || self == NULL) {
+    if (g_sched == NULL || self == NULL) {
         return;
     }
-    rf_mutex_lock(&s->lock);
     self->wake_ns = rf_now_ns() + delay_ns;
-    rf_sched_insert_timer(s, self);
-    rf_mutex_unlock(&s->lock);
-    rf_coro_switch_out(); /* switch back to the run loop; it resumes us when the timer fires */
+    self->park_intent = RF_PARK_TIMER;
+    rf_coro_switch_out(); // the worker inserts us on the timer list and resumes us when it fires
 }
 
-/* Park the current coroutine until `delay_ns` from now — BUT, unlike rf_sched_park_timer, it also
- * stays externally wakeable (rf_sched_wake). The run loop resumes it whichever happens first: the
- * timer fires, or a worker thread wakes it (which unlinks it from the timer list). The substrate
- * for a timed await — racing an awaited task's completion against a deadline without blocking the
- * thread. The caller (rf_task_await_coro_deadline) re-checks both conditions after each resume. */
+// Park the current coroutine until `delay_ns` from now — BUT, unlike rf_sched_park_timer, it also
+// stays externally wakeable (rf_sched_wake). The worker resumes it whichever happens first: the timer
+// fires, or a wake unlinks it from the timer list (rf_sched_make_ready's IDLE case). Same RF_PARK_TIMER
+// intent — the external wakeability is automatic, since a wake on an IDLE coroutine unlinks any timer.
+// The substrate for a timed await; the caller (rf_task_await_coro_deadline) re-checks both conditions.
 void rf_sched_park_deadline(uint64_t delay_ns)
 {
-    rf_sched* s = g_sched;
     rf_coro* self = rf_coro_current();
-    if (s == NULL || self == NULL) {
+    if (g_sched == NULL || self == NULL) {
         return;
     }
-    rf_mutex_lock(&s->lock);
     self->wake_ns = rf_now_ns() + delay_ns;
-    rf_sched_insert_timer(s, self);
-    rf_mutex_unlock(&s->lock);
+    self->park_intent = RF_PARK_TIMER;
     rf_coro_switch_out();
 }
 
-/* Park the current coroutine with NO wake condition the scheduler itself can satisfy: it is
- * neither ready nor on a timer. Only an explicit rf_sched_wake (from any thread) re-queues it.
- * This is how a coroutine awaits work running on another OS thread (a `threaded` Task) without
- * blocking the scheduler thread — siblings keep running while it waits. The caller is responsible
- * for arming the waker (handing the worker this scheduler + its own coro handle) BEFORE parking;
- * a wake that arrives first is not lost (it lands in the ready queue, so the next yield-back finds
- * the coroutine ready immediately). */
+// Park the current coroutine with NO wake condition the scheduler itself can satisfy: it is neither
+// ready nor on a timer. Only an explicit rf_sched_wake (from any thread) re-queues it. This is how a
+// coroutine awaits work running on another OS thread (a `threaded` Task) without blocking the worker —
+// siblings keep running while it waits. The caller arms the waker (handing the worker this scheduler +
+// its own coro handle) BEFORE parking; a wake that arrives first is not lost — it lands as NOTIFIED
+// while we are still RUNNING, and the worker re-queues us immediately when we switch out.
 void rf_sched_park_external(void)
 {
-    if (g_sched == NULL || rf_coro_current() == NULL) {
+    rf_coro* self = rf_coro_current();
+    if (g_sched == NULL || self == NULL) {
         return;
     }
-    rf_coro_switch_out(); /* the run loop will not resume us until someone calls rf_sched_wake */
+    self->park_intent = RF_PARK_EXTERNAL;
+    rf_coro_switch_out(); // the worker will not resume us until someone calls rf_sched_wake
 }
 
-/* Cooperative yield (the public suspend primitive): let other ready coroutines run, then continue.
- * Under a scheduler this re-queues the current coroutine to the ready FIFO before switching out, so
- * the run loop resumes it after the others — UNLIKE rf_sched_park_*, which wait for an external
- * condition. Outside a scheduler it is a bare switch back to the resumer (a naive pump re-resumes).
- * This is the primitive the may-suspend analysis seeds on. */
+// Cooperative yield (the public suspend primitive): let other ready coroutines run, then continue.
+// Under a scheduler we record a YIELD intent and switch out; the worker re-queues us behind the other
+// ready coroutines — UNLIKE rf_sched_park_*, which wait for an external condition. Outside a scheduler
+// it is a bare switch back to the resumer (a naive pump re-resumes). The may-suspend analysis seeds on
+// this primitive.
 void rf_coro_yield(void)
 {
 #ifdef RF_HAVE_CORO
     rf_coro* self = g_current_coro;
     if (self == NULL) {
-        return; /* not inside a coroutine */
+        return; // not inside a coroutine
     }
-    rf_sched* s = g_sched;
-    if (s != NULL) {
-        /* Re-queue self so the run loop resumes us again after the other ready coroutines. The
-         * run loop holds no lock while we run, so taking it here is safe. */
-        rf_mutex_lock(&s->lock);
-        if (!self->in_ready) {
-            rf_sched_push_injector(s, self);
-        }
-        rf_mutex_unlock(&s->lock);
+    if (g_sched != NULL) {
+        self->park_intent = RF_PARK_YIELD;
     }
     rf_coro_switch_out();
 #endif
@@ -700,22 +769,23 @@ void rf_coro_yield(void)
 
 /* Make a parked coroutine runnable again. Safe to call from ANY thread — this is the bridge that
  * lets a worker thread hand a result back to a coroutine awaiting it on the scheduler thread.
- * Idempotent per park: the in_ready flag drops a redundant wake. */
+ * The state machine (rf_sched_make_ready) drops a redundant wake and, crucially at N>1, records a
+ * wake to a still-RUNNING coroutine as NOTIFIED instead of enqueuing it a second time. */
 void rf_sched_wake(rf_sched* s, rf_coro* c)
 {
     if (s == NULL || c == NULL) {
         return;
     }
     rf_mutex_lock(&s->lock);
-    /* If it was parked on a deadline timer (rf_sched_park_deadline), unlink it first so the timer
-     * does not later move an already-ready coroutine to ready a second time. No-op for a plain
-     * external park (not in the timer list). */
-    rf_sched_unlink_timer(s, c);
-    if (!c->in_ready) {
-        rf_sched_push_injector(s, c);
-        /* Broadcast so the pool WORKER wakes even when a top-level blocker is also parked on this
-         * cond — a plain signal could wake only the blocker, stranding `c` in the injector (lost
-         * wakeup across the worker↔blocker pair). See rf_sched_spawn. */
+    rf_sched_state before = c->sched_state;
+    // make_ready unlinks any deadline timer (IDLE case) and pushes to the injector, or flags NOTIFIED
+    // if c is still running on a worker.
+    rf_sched_make_ready(s, c);
+    // Only broadcast when this wake actually enqueued c (IDLE->QUEUED). A no-op wake (already QUEUED,
+    // or NOTIFIED — the running worker will requeue) has no new work for a sleeping worker to grab.
+    // Broadcast (not signal) so the pool worker wakes even when a top-level blocker also parks on this
+    // cond — a plain signal could wake only the blocker, stranding c in the injector. See rf_sched_spawn.
+    if (before == RF_SCHED_IDLE) {
         rf_cond_broadcast(&s->cond);
     }
     rf_mutex_unlock(&s->lock);
@@ -754,73 +824,109 @@ void rf_sched_disarm_cross_waker(rf_sched* s)
  * The shared body of rf_sched_run and rf_sched_run_until. */
 static int rf_sched_step(rf_sched* s)
 {
-    rf_coro* c = rf_sched_pop_injector(s);
+    rf_coro* c = rf_sched_pop_injector(s); // QUEUED -> RUNNING
     if (c != NULL) {
-        /* Run user code WITHOUT the lock: it may re-enter the scheduler (spawn, park) and a
-         * worker thread may want to wake someone meanwhile. The coroutine re-registers itself
-         * (timer / external) before yielding, so it is not ready again until its wake fires. */
+        // Run user code WITHOUT the lock: it may re-enter the scheduler (spawn, park) and another
+        // worker (or a task thread) may want to wake someone meanwhile. The coroutine records a park
+        // intent before switching out; we apply it below.
         rf_mutex_unlock(&s->lock);
         rf_coro_status st = rf_coro_resume(c);
         rf_mutex_lock(&s->lock);
-        if (st == RF_CORO_COMPLETED && !c->counted_done) {
-            c->counted_done = 1; /* count each completion exactly once, even if a stray wake */
-            s->live--;           /* re-queued it after it finished (the owner frees it later) */
-            /* Wake whoever is awaiting this coroutine's result. A coroutine parked in retrieve!
-             * (rf_sched_run_until_default's in-coroutine branch) is re-queued to the injector; a
-             * plain thread blocked in the top-level branch (or a race! loop) re-checks after the
-             * broadcast. The broadcast also nudges an idle worker parked on the cond. */
+
+        if (st == RF_CORO_COMPLETED) {
+            c->sched_state = RF_SCHED_DONE; // never runnable again; a stray wake is dropped
+            if (!c->counted_done) {
+                c->counted_done = 1; // count each completion exactly once, even if a stray wake
+                s->live--;           //   re-queued it after it finished (the owner frees it later)
+            }
+            // Wake whoever is awaiting this coroutine's result. A coroutine parked in retrieve!
+            // (rf_sched_run_until_default's in-coroutine branch) or a coroutine racing this one is
+            // re-queued via make_ready (or flagged NOTIFIED if it is itself mid-run on another worker);
+            // a plain thread blocked at top level re-checks after the broadcast. The broadcast also
+            // nudges an idle worker parked on the cond.
             if (c->awaiter != NULL) {
                 rf_coro* w = c->awaiter;
                 c->awaiter = NULL;
-                if (!w->in_ready) {
-                    rf_sched_push_injector(s, w);
-                }
+                rf_sched_make_ready(s, w);
             }
             rf_cond_broadcast(&s->cond);
+            return 1;
         }
+
+        // PARKED. Apply the intent the coroutine recorded before switching out — UNLESS a wake
+        // arrived while it ran (state is now NOTIFIED), in which case the wake wins: re-queue it and
+        // ignore the park intent. This record-then-apply split is the heart of the N>1 safety: the
+        // coroutine never touches the injector/timer list itself, so a wake racing its park is always
+        // resolved here, under the lock, with full knowledge of whether it parked or was notified.
+        if (c->sched_state == RF_SCHED_NOTIFIED) {
+            rf_sched_push_injector(s, c); // -> QUEUED, run again promptly
+        } else {
+            switch (c->park_intent) {
+                case RF_PARK_TIMER:
+                    rf_sched_insert_timer(s, c); // sorted by wake_ns; c stays IDLE until it fires/wakes
+                    c->sched_state = RF_SCHED_IDLE;
+                    break;
+                case RF_PARK_YIELD:
+                    rf_sched_push_injector(s, c); // -> QUEUED, behind the other ready coroutines
+                    break;
+                case RF_PARK_EXTERNAL:
+                case RF_PARK_NONE:
+                default:
+                    c->sched_state = RF_SCHED_IDLE; // in no list; only an explicit wake re-queues it
+                    break;
+            }
+        }
+        c->park_intent = RF_PARK_NONE;
         return 1;
     }
 
-    /* Nothing ready. Wait for the earliest timer if any, otherwise purely for an external wake (a
-     * worker thread signalling). Timers are touched only on this thread, so reading the head under
-     * the lock is fine. */
+    // Nothing ready. Wait for the earliest timer if any, otherwise purely for an external wake.
     if (s->timers != NULL) {
         uint64_t now = rf_now_ns();
         uint64_t deadline = s->timers->wake_ns;
         if (deadline > now) {
+            // Idle on a timer: a pending timer is progress waiting to happen, so this is never a
+            // deadlock — just wait out the nearest deadline (a wake can still interrupt us earlier).
+            s->workers_idle++;
             rf_cond_wait_ns(&s->cond, &s->lock, deadline - now);
+            s->workers_idle--;
         }
         now = rf_now_ns();
         while (s->timers != NULL && s->timers->wake_ns <= now) {
             rf_coro* t = s->timers;
             s->timers = t->sched_next;
             t->sched_next = NULL;
-            rf_sched_push_injector(s, t);
+            rf_sched_push_injector(s, t); // IDLE -> QUEUED
         }
     } else {
-        /* Nothing ready and no timer: everyone left is parked externally. The only thing that can
-         * make progress is a cross-thread wake — and if none is outstanding, none can ever arrive:
-         * every live coroutine is blocked on a send/receive/signal whose counterpart is itself a
-         * parked coroutine on THIS loop. That is a genuine deadlock; diagnose it (locked decision
-         * §0.4) instead of blocking forever in silence. A channel park deliberately does NOT arm a
-         * cross-waker (RF-S632 keeps its counterpart on this same scheduler), so an all-coroutine
-         * channel deadlock — a full-buffer feed whose only consumer is also parked — lands here.
-         *
-         * Guard on `waiters > 0` (step 2a): the pool worker runs continuously, so this branch is
-         * also reached whenever the program is simply idle between bursts with a spawned-but-not-yet-
-         * retrieved coroutine parked in the background. That is NOT a deadlock — nobody is blocked
-         * awaiting it (it is pending teardown at scope exit). Only flag a deadlock when someone is
-         * actually stuck waiting for a completion that can never come. */
-        if (s->live > 0 && s->cross_wakers == 0 && s->waiters > 0) {
+        // Nothing ready and no timer: every live coroutine is parked externally. The only thing that
+        // can make progress is a cross-thread wake — and if none is outstanding, none can ever arrive:
+        // every live coroutine is blocked on a send/receive/signal whose counterpart is itself a
+        // parked coroutine on THIS pool. That is a genuine deadlock; diagnose it (locked decision §0.4)
+        // instead of blocking forever. A channel park deliberately does NOT arm a cross-waker (RF-S632
+        // keeps its counterpart on this same pool), so an all-coroutine channel deadlock lands here.
+        //
+        // Two guards keep this from firing spuriously:
+        //  - waiters > 0 (step 2a): the pool worker runs continuously, so this branch is also reached
+        //    when the program is merely idle between bursts with a background coroutine parked and
+        //    nobody awaiting it (pending teardown). Not a deadlock.
+        //  - workers_idle + 1 == workers_total (step 2b): with N>1 workers, one worker reaching here
+        //    while another is still RUNNING a coroutine is not stuck — that coroutine may yet complete
+        //    or wake someone. Only when THIS worker going idle makes ALL workers idle can nothing else
+        //    make progress. (We have not incremented workers_idle yet, so compare against +1.)
+        if (s->live > 0 && s->cross_wakers == 0 && s->waiters > 0 &&
+            s->workers_idle + 1 == s->workers_total) {
             rf_mutex_unlock(&s->lock);
             __rf_throw("DeadlockError",
                        "all coroutines are parked and none is runnable — no send, receive, or wake "
                        "can ever make progress (deadlock)");
-            return 0; /* unreachable: __rf_throw exits */
+            return 0; // unreachable: __rf_throw exits
         }
-        /* A cross-thread wake is outstanding (threaded await / async I/O / signal / race): block
-         * until it arrives. */
+        // A cross-thread wake is outstanding (threaded await / async I/O / signal / race), or other
+        // workers are still busy: block until work arrives or a worker signals.
+        s->workers_idle++;
         rf_cond_wait_forever(&s->cond, &s->lock);
+        s->workers_idle--;
     }
     return 0;
 }
@@ -935,18 +1041,19 @@ static void rf_race_push(rf_race* r, void* handle, uint8_t kind)
 void rf_race_add_coro(rf_race* r, rf_coro* c) { rf_race_push(r, (void*)c, 0); }
 void rf_race_add_task(rf_race* r, rf_task* t) { rf_race_push(r, (void*)t, 1); }
 
-/* Drive the set until one competitor completes; return its index in add (List) order, or -1 if the
- * set is empty. Registers every thread competitor's race_sched so its completion wakes this loop.
- *
- * Pool model (step 2a): the pool worker drives the coroutine competitors. How this racer waits
- * depends on WHERE it runs:
- *   - Top-level thread (self == NULL): do NOT step the loop (the worker does) — BLOCK on the pool
- *     cond and re-poll. A coroutine competitor's completion broadcasts the cond (rf_sched_step); a
- *     thread competitor's completion signals it via race_sched. Cross-wakers armed for the thread
- *     competitors keep the worker's deadlock detector quiet while they run.
- *   - Inside a coroutine on the worker (self != NULL): the worker IS this thread, so nested-step it
- *     to progress the competitors — the proven single-driver path (N=1). Step 2b converts this to a
- *     park, alongside the worker-safe state machine that N>1 needs. */
+// Drive the set until one competitor completes; return its index in add (List) order, or -1 if the
+// set is empty. The pool worker(s) drive the coroutine competitors; this racer only WAITS to be woken
+// when the first one finishes. How it waits depends on WHERE it runs (step 2b — both paths park/block,
+// never nested-step, so it is correct at N>1):
+//   - Top-level thread (self == NULL): BLOCK on the pool cond and re-poll. A coroutine competitor's
+//     completion broadcasts the cond (rf_sched_step); a thread competitor's completion signals it via
+//     rf_sched_signal (race_sched, race_waiter == NULL).
+//   - Inside a coroutine (self != NULL): PARK external and re-poll on each wake. We register `self` as
+//     the awaiter of every coroutine competitor (its completion re-queues us) and as the race_waiter of
+//     every thread competitor (its completion calls rf_sched_wake(s, self)). Duplicate/spurious wakes
+//     are harmless — we re-poll the whole set under the lock.
+// Either way a cross-waker is armed per thread competitor so the worker's deadlock detector stays quiet
+// while those run on their own OS threads.
 intptr_t rf_race_wait(rf_race* r)
 {
     if (r == NULL || r->count == 0) {
@@ -957,14 +1064,25 @@ intptr_t rf_race_wait(rf_race* r)
 
     for (intptr_t i = 0; i < r->count; i++) {
         if (r->kinds[i] == 1) {
-            rf_task_race_register((rf_task*)r->handles[i], s);
+            rf_task_race_register((rf_task*)r->handles[i], s, self);
             rf_sched_arm_cross_waker(s);
         }
     }
 
     intptr_t winner = -1;
     rf_mutex_lock(&s->lock);
-    s->waiters++; /* blocked awaiting the first competitor — arms the worker's deadlock detector */
+    s->waiters++; // blocked awaiting the first competitor — arms the worker's deadlock detector
+
+    // A coroutine racer parks; point every coroutine competitor's awaiter slot at us so its completion
+    // re-queues us. Set under s->lock (rf_sched_step reads awaiter under the same lock).
+    if (self != NULL) {
+        for (intptr_t i = 0; i < r->count; i++) {
+            if (r->kinds[i] == 0 && r->handles[i] != NULL) {
+                ((rf_coro*)r->handles[i])->awaiter = self;
+            }
+        }
+    }
+
     for (;;) {
         for (intptr_t i = 0; i < r->count; i++) {
             if (r->kinds[i] == 0) {
@@ -984,9 +1102,26 @@ intptr_t rf_race_wait(rf_race* r)
             break;
         }
         if (self != NULL) {
-            rf_sched_step(s); /* on the worker: nested-drive competitors (N=1) */
+            // Park until a competitor wakes us. Drop the lock across the switch out; a completion
+            // racing this park finds us RUNNING and flags NOTIFIED, so the worker re-queues us — no
+            // wake is lost (same guarantee as rf_sched_run_until_default's in-coroutine branch).
+            rf_mutex_unlock(&s->lock);
+            rf_sched_park_external();
+            rf_mutex_lock(&s->lock);
         } else {
-            rf_cond_wait_forever(&s->cond, &s->lock); /* the worker drives; wait to be signalled */
+            rf_cond_wait_forever(&s->cond, &s->lock); // the worker drives; wait to be signalled
+        }
+    }
+
+    // Clear our awaiter registration from any competitor that has not already cleared it at completion.
+    if (self != NULL) {
+        for (intptr_t i = 0; i < r->count; i++) {
+            if (r->kinds[i] == 0 && r->handles[i] != NULL) {
+                rf_coro* c = (rf_coro*)r->handles[i];
+                if (c->awaiter == self) {
+                    c->awaiter = NULL;
+                }
+            }
         }
     }
     s->waiters--;
@@ -994,8 +1129,8 @@ intptr_t rf_race_wait(rf_race* r)
 
     for (intptr_t i = 0; i < r->count; i++) {
         if (r->kinds[i] == 1) {
-            rf_task_race_register((rf_task*)r->handles[i], NULL);
-            rf_sched_disarm_cross_waker(s); /* balance the arm above */
+            rf_task_race_register((rf_task*)r->handles[i], NULL, NULL);
+            rf_sched_disarm_cross_waker(s); // balance the arm above
         }
     }
 
@@ -1029,23 +1164,37 @@ rf_sched* rf_sched_current(void)
     return g_sched;
 }
 
-/* ---- Process-wide scheduler pool (§6) + background worker(s) — M:N build step 2a ---------- */
-/*
- * (internal-wiki/v0.3.x-mn-scheduler.md §8.) Coroutines no longer run on the thread that spawned
- * them. A single PROCESS-WIDE pool (g_pool) owns them and a background WORKER thread drains its
- * injector — resuming coroutines, firing timers, parking when idle. A `suspended routine` call
- * spawns onto the pool; retrieve! (rf_sched_run_until_default) either PARKS (when the caller is
- * itself a coroutine on the worker — the worker keeps driving siblings) or BLOCKS the calling
- * thread on a completion signal (top level). This replaces the old per-thread implicit scheduler
- * and its caller-driven run loop.
- *
- * N=1 for now: exactly ONE worker, so it is the sole thread that ever resumes a coroutine — the
- * existing single-driver queue logic (in_ready dedup, no cross-worker double-resume) stays correct
- * unchanged. Step 2b raises N and adds the worker-safe park/wake state machine a second resuming
- * thread requires. The worker is a daemon (runs for the process lifetime; the OS reaps it at exit),
- * created lazily on first coroutine spawn/drive.
- */
-#define RF_POOL_WORKER_COUNT 1
+// ---- Process-wide scheduler pool (§6) + background workers — M:N build step 2b ----------------
+//
+// (internal-wiki/v0.3.x-mn-scheduler.md §8.) Coroutines no longer run on the thread that spawned them.
+// A single PROCESS-WIDE pool (g_pool) owns them and a fleet of background WORKER threads drains its
+// injector — resuming coroutines, firing timers, parking when idle. A `suspended routine` call spawns
+// onto the pool; retrieve! (rf_sched_run_until_default) either PARKS (when the caller is itself a
+// coroutine on a worker — the workers keep driving siblings) or BLOCKS the calling thread on a
+// completion signal (top level). This replaces the old per-thread implicit scheduler.
+//
+// Step 2b: N = host core count workers (was N=1 in 2a). With several threads resuming coroutines the
+// worker-safe park/wake state machine (rf_sched_state / rf_sched_make_ready) is what keeps a wake from
+// racing a park into a double-resume; the deadlock detector counts idle workers so it only fires when
+// ALL of them are stuck. Workers are daemons (run for the process lifetime; the OS reaps them at exit),
+// created lazily on first coroutine spawn/drive. No config knob — the count is fixed at the core count.
+//
+// Still deferred to later steps: per-worker local deques + work-stealing (step 3; today every worker
+// pulls from the one shared injector), a shared timer min-heap (step 5), and targeted per-worker
+// signalling in place of the broadcast-on-work-add (the broadcast is correct but a thundering herd).
+
+// Number of pool workers = host logical core count (min 1). Fixed for the process; queried once.
+static int rf_host_core_count(void)
+{
+#ifdef _WIN32
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    int n = (int)si.dwNumberOfProcessors;
+#else
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    return (n >= 1) ? (int)n : 1;
+}
 
 static rf_sched* g_pool = NULL;
 
@@ -1073,10 +1222,13 @@ static void* rf_pool_worker_main(void* arg)
 #endif
 }
 
-/* Start the pool's worker thread(s) as daemons (never joined; the OS reaps them at process exit). */
+// Start the pool's worker threads as daemons (never joined; the OS reaps them at process exit). The
+// worker count is recorded on the scheduler first so the deadlock detector's all-idle test is right
+// from the moment the first worker runs.
 static void rf_pool_spawn_workers(rf_sched* s)
 {
-    for (int i = 0; i < RF_POOL_WORKER_COUNT; i++) {
+    s->workers_total = rf_host_core_count();
+    for (int i = 0; i < s->workers_total; i++) {
 #ifdef _WIN32
         uintptr_t h = _beginthreadex(NULL, 0, rf_pool_worker_main, s, 0, NULL);
         if (h == 0) {
@@ -1134,15 +1286,15 @@ void rf_sched_spawn_default(rf_coro* c)
     rf_sched_spawn(rf_sched_thread_default(), c);
 }
 
-/* Await `target` to completion — the retrieve! engine. The pool worker drives coroutines; the
- * caller does NOT step the loop. Two paths:
- *   - Inside a coroutine (running on the worker): PARK until target completes. Register as target's
- *     awaiter and switch out so the worker keeps driving siblings — including target; the worker
- *     re-queues us when target finishes. Re-check under the lock so no wake is lost.
- *   - On a plain thread (top level): BLOCK on the pool cond until the worker drives target to
- *     completion.
- * At N=1 the single worker resumes every coroutine, so a coroutine here never resumes another —
- * no cross-worker double-resume; step 2b's state machine covers N>1. */
+// Await `target` to completion — the retrieve! engine. The pool workers drive coroutines; the caller
+// does NOT step the loop. Two paths:
+//   - Inside a coroutine (running on a worker): PARK until target completes. Register as target's
+//     awaiter and switch out so the workers keep driving siblings — including target; the worker that
+//     completes target re-queues us. Re-check under the lock so no wake is lost.
+//   - On a plain thread (top level): BLOCK on the pool cond until a worker drives target to completion.
+// At N>1 a wake racing our park is resolved by the state machine: a completion firing while we are
+// still RUNNING flags us NOTIFIED, and our worker re-queues us on switch-out rather than parking us —
+// so target->awaiter never strands us. Setting awaiter each loop iteration tolerates a spurious wake.
 void rf_sched_run_until_default(rf_coro* target)
 {
     if (target == NULL) {
@@ -1192,7 +1344,8 @@ static int rf_sched_remove(rf_sched* s, rf_coro* c)
                 s->injector_tail = prev;
             }
             c->sched_next = NULL;
-            c->in_ready = 0;
+            // detached from the injector; about to be abandoned
+            c->sched_state = RF_SCHED_IDLE;
             found = 1;
             break;
         }
