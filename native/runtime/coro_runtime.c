@@ -1454,17 +1454,16 @@ rf_sched* rf_sched_current(void)
 // coroutine on a worker — the workers keep driving siblings) or BLOCKS the calling thread on a
 // completion signal (top level). This replaces the old per-thread implicit scheduler.
 //
-// Step 2b: N = host core count workers (was N=1 in 2a). With several threads resuming coroutines the
-// worker-safe park/wake state machine (rf_sched_state / rf_sched_make_ready) is what keeps a wake from
-// racing a park into a double-resume; the deadlock detector counts idle workers so it only fires when
-// ALL of them are stuck. Workers are daemons (run for the process lifetime; the OS reaps them at exit),
-// created lazily on first coroutine spawn/drive. No config knob — the count is fixed at the core count.
+// Step 2b/3: N = host core count workers (was N=1 in 2a), each with a local deque + work-stealing. The
+// worker-safe park/wake state machine (atomic rf_sched_state / rf_sched_make_ready) keeps a wake racing
+// a park from double-resuming; the deadlock detector counts idle workers so it only fires when ALL are
+// stuck. Workers are daemons (run for the process lifetime; the OS reaps them at exit), created lazily
+// on first coroutine spawn/drive. N is fixed once the pool starts.
 //
-// Still deferred to later steps: per-worker local deques + work-stealing (step 3; today every worker
-// pulls from the one shared injector), a shared timer min-heap (step 5), and targeted per-worker
-// signalling in place of the broadcast-on-work-add (the broadcast is correct but a thundering herd).
+// Still deferred to later steps: a shared timer min-heap (step 5), targeted per-worker signalling in
+// place of the broadcast-on-work-add (correct but a thundering herd), and a Chase–Lev lock-free deque.
 
-// Number of pool workers = host logical core count (min 1). Fixed for the process; queried once.
+// Number of pool workers = host logical core count (min 1), unless RF_WORKERS overrides it.
 static int rf_host_core_count(void)
 {
 #ifdef _WIN32
@@ -1475,6 +1474,25 @@ static int rf_host_core_count(void)
     long n = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
     return (n >= 1) ? (int)n : 1;
+}
+
+// Worker count for the pool: RF_WORKERS if set to a positive integer (clamped to a sane ceiling), else
+// the host core count. The env override is the determinism escape hatch (design §7.5/§9.A): RF_WORKERS=1
+// gives a single worker — no stealing, one local deque drained in order — reducing scheduling to a
+// reproducible baseline for tests, and letting a flaky interleaving be pinned down. An unset / empty /
+// non-positive / unparseable value falls back to the core count. Queried once at pool startup.
+#define RF_WORKERS_MAX 4096
+static int rf_pool_worker_count(void)
+{
+    const char* env = getenv("RF_WORKERS");
+    if (env != NULL && env[0] != '\0') {
+        char* end = NULL;
+        long v = strtol(env, &end, 10);
+        if (end != env && v >= 1) {
+            return (v > RF_WORKERS_MAX) ? RF_WORKERS_MAX : (int)v;
+        }
+    }
+    return rf_host_core_count();
 }
 
 static rf_sched* g_pool = NULL;
@@ -1520,7 +1538,7 @@ static void* rf_pool_worker_main(void* arg)
 // from the moment the first worker runs.
 static void rf_pool_spawn_workers(rf_sched* s)
 {
-    s->workers_total = rf_host_core_count();
+    s->workers_total = rf_pool_worker_count();
 
     // Allocate one local run deque per worker BEFORE starting any worker, so a worker (or a thief)
     // never races deque creation. Indexed by g_worker_id. (Step 3 skeleton: allocated + scanned by
