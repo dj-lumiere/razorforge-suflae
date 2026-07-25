@@ -107,8 +107,10 @@ struct rf_coro {
     void* userdata;                /* opaque argument handed to entry                     */
     rf_coro_status status;         /* NEW -> RUNNING -> {PARKED -> RUNNING}* -> COMPLETED */
     rf_cancel_frame* cf_top;       /* top of the cancellation shadow stack (NULL = empty) */
-    struct rf_coro* sched_next;    /* scheduler link: ready queue OR timer list (one at a time) */
+    struct rf_coro* sched_next;    /* injector FIFO link (the timer structure is now a heap, below) */
     uint64_t wake_ns;              /* monotonic deadline this coroutine is parked until         */
+    int timer_idx;                 /* position in the scheduler's timer min-heap, or -1 if not on it
+                                    * (step 5). Lets an early wake remove it in O(log n).       */
     _Atomic rf_sched_state sched_state; // worker-safe park/wake state (M:N step 2b); ATOMIC as of step
                                    // 3 so a worker's QUEUED->RUNNING pop/steal (under a deque lock, NOT
                                    // s->lock) is race-free against a make_ready reading it under s->lock.
@@ -255,6 +257,7 @@ rf_coro* rf_coro_create(rf_context_entry_fn entry, void* userdata, size_t stack_
     coro->entry = entry;
     coro->userdata = userdata;
     coro->status = RF_CORO_NEW;
+    coro->timer_idx = -1; /* not on any timer heap yet (calloc's 0 would alias heap slot 0) */
     coro->shadow_stack = __rf_stack_coro_create(); /* NULL when tracing is off */
 
 #if defined(_WIN32)
@@ -638,7 +641,10 @@ struct rf_sched {
     rf_coro* injector_head; /* shared submission FIFO — coroutines ready to resume now. At N=1 the
                              * single worker drains this; at N>1 (step 2) all workers pull from it. */
     rf_coro* injector_tail;
-    rf_coro* timers;       /* coroutines parked on a deadline, sorted ascending */
+    rf_coro** timer_heap;  /* min-heap (by wake_ns) of coroutines parked on a deadline (step 5);
+                            * timer_heap[0] is the earliest. Grown on demand; NULL until first use. */
+    int timer_count;       /* number of coroutines currently on the timer heap                  */
+    int timer_cap;         /* allocated capacity of timer_heap                                  */
     int live;              /* coroutines spawned but not yet completed          */
     int cross_wakers;      /* outstanding promises that ANOTHER thread will wake this loop
                             * (threaded await / async I/O / signal cast / race competitor). Lets
@@ -663,7 +669,14 @@ struct rf_sched {
     // together with s->lock's protected fields under a second deque lock — see the lock-ordering note).
     rf_deque* deques;
     rf_mutex lock;         /* guards the injector + live + cross_wakers + waiters + worker counts */
-    rf_cond cond;          /* run loop waits here; an external wake signals it      */
+    rf_cond cond;          /* IDLE WORKERS (and the legacy single-thread driver) wait here. Work-add
+                            * SIGNALS ONE (not broadcast) — the targeted-wake fix for the N-worker
+                            * thundering herd; stealing lets the woken worker grab work off any deque. */
+    rf_cond block_cond;    /* TOP-LEVEL pool blockers (a main/OS thread in retrieve!/race! at top level)
+                            * wait here and re-check their target's status. Broadcast on a completion /
+                            * race signal. Kept separate from `cond` so a single worker-wake can never be
+                            * consumed by a blocker that has no work to do (the old lost-wakeup hazard
+                            * that forced broadcast). Blockers are few, so broadcasting them stays cheap. */
 };
 
 /*
@@ -775,32 +788,113 @@ static void rf_sched_enqueue_ready(rf_sched* s, rf_coro* c)
     }
 }
 
-/* Insert into the timer list keeping it sorted by wake_ns ascending (earliest first). Caller holds
- * s->lock — the timer list is mutated from the scheduler thread (park) AND, for deadline parks that
- * are also externally wakeable, unlinked by rf_sched_wake from a worker thread. */
-static void rf_sched_insert_timer(rf_sched* s, rf_coro* c)
+/* ---- Timer min-heap (M:N step 5) ------------------------------------------------------------- */
+/* An array-backed binary min-heap of coroutines keyed by wake_ns (earliest at index 0), replacing the
+ * O(n)-insert sorted list. Insert / pop-min are O(log n); an early wake removes an arbitrary coroutine
+ * in O(log n) because each coroutine caches its heap slot in c->timer_idx. All ops hold s->lock. */
+
+static void rf_timer_swap(rf_sched* s, int i, int j)
 {
-    rf_coro** link = &s->timers;
-    while (*link != NULL && (*link)->wake_ns <= c->wake_ns) {
-        link = &(*link)->sched_next;
-    }
-    c->sched_next = *link;
-    *link = c;
+    rf_coro* a = s->timer_heap[i];
+    rf_coro* b = s->timer_heap[j];
+    s->timer_heap[i] = b; b->timer_idx = i;
+    s->timer_heap[j] = a; a->timer_idx = j;
 }
 
-/* Remove `c` from the timer list if present (caller holds s->lock). Used when a deadline-parked
- * coroutine is woken by something OTHER than its timer (a worker completing the awaited task), so
- * it does not linger in the timer list and get moved to ready a second time when the timer fires. */
+static void rf_timer_sift_up(rf_sched* s, int i)
+{
+    while (i > 0) {
+        int parent = (i - 1) / 2;
+        if (s->timer_heap[parent]->wake_ns <= s->timer_heap[i]->wake_ns) {
+            break;
+        }
+        rf_timer_swap(s, i, parent);
+        i = parent;
+    }
+}
+
+static void rf_timer_sift_down(rf_sched* s, int i)
+{
+    int n = s->timer_count;
+    for (;;) {
+        int l = 2 * i + 1, r = 2 * i + 2, m = i;
+        if (l < n && s->timer_heap[l]->wake_ns < s->timer_heap[m]->wake_ns) {
+            m = l;
+        }
+        if (r < n && s->timer_heap[r]->wake_ns < s->timer_heap[m]->wake_ns) {
+            m = r;
+        }
+        if (m == i) {
+            break;
+        }
+        rf_timer_swap(s, i, m);
+        i = m;
+    }
+}
+
+/* Insert `c` onto the timer heap by its wake_ns. Caller holds s->lock — the heap is touched from a
+ * worker parking a coroutine (park intent TIMER) AND, for deadline parks that are also externally
+ * wakeable, unlinked by rf_sched_wake from another thread (also under s->lock). */
+static void rf_sched_insert_timer(rf_sched* s, rf_coro* c)
+{
+    if (s->timer_count == s->timer_cap) {
+        int ncap = (s->timer_cap == 0) ? 16 : s->timer_cap * 2;
+        rf_coro** nh = (rf_coro**)realloc(s->timer_heap, (size_t)ncap * sizeof(rf_coro*));
+        if (nh == NULL) {
+            __rf_throw("OutOfMemoryError", "Failed to grow scheduler timer heap");
+            return; /* unreachable */
+        }
+        s->timer_heap = nh;
+        s->timer_cap = ncap;
+    }
+    int i = s->timer_count++;
+    s->timer_heap[i] = c;
+    c->timer_idx = i;
+    rf_timer_sift_up(s, i);
+}
+
+/* Remove and return the earliest-deadline coroutine (heap min), or NULL if the heap is empty. */
+static rf_coro* rf_timer_pop_min(rf_sched* s)
+{
+    if (s->timer_count == 0) {
+        return NULL;
+    }
+    rf_coro* top = s->timer_heap[0];
+    top->timer_idx = -1;
+    int last = --s->timer_count;
+    if (last > 0) {
+        rf_coro* moved = s->timer_heap[last];
+        s->timer_heap[0] = moved; moved->timer_idx = 0;
+        s->timer_heap[last] = NULL;
+        rf_timer_sift_down(s, 0);
+    } else {
+        s->timer_heap[0] = NULL;
+    }
+    return top;
+}
+
+/* Remove `c` from the timer heap if present (caller holds s->lock). Used when a deadline-parked
+ * coroutine is woken by something OTHER than its timer (a worker completing the awaited task), so it
+ * does not linger and get moved to ready a second time when its deadline fires. O(log n) via timer_idx.
+ * The vacated slot is filled by the last element, which may need to move either up or down. */
 static void rf_sched_unlink_timer(rf_sched* s, rf_coro* c)
 {
-    rf_coro** link = &s->timers;
-    while (*link != NULL) {
-        if (*link == c) {
-            *link = c->sched_next;
-            c->sched_next = NULL;
-            return;
-        }
-        link = &(*link)->sched_next;
+    int i = c->timer_idx;
+    if (i < 0 || i >= s->timer_count || s->timer_heap[i] != c) {
+        return; // not on the heap
+    }
+    c->timer_idx = -1;
+    int last = --s->timer_count;
+    if (i == last) {
+        s->timer_heap[last] = NULL;
+        return;
+    }
+    rf_coro* moved = s->timer_heap[last];
+    s->timer_heap[i] = moved; moved->timer_idx = i;
+    s->timer_heap[last] = NULL;
+    rf_timer_sift_up(s, i);
+    if (moved->timer_idx == i) { // sift_up did not move it → it may belong deeper
+        rf_timer_sift_down(s, i);
     }
 }
 
@@ -849,6 +943,7 @@ rf_sched* rf_sched_create(void)
     }
     rf_mutex_init(&s->lock);
     rf_cond_init(&s->cond);
+    rf_cond_init(&s->block_cond);
     s->workers_total = 1; /* one driver by default (native tests, rf_sched_run); the pool raises it */
     return s;
 }
@@ -859,7 +954,9 @@ void rf_sched_destroy(rf_sched* s)
         return;
     }
     rf_cond_destroy(&s->cond);
+    rf_cond_destroy(&s->block_cond);
     rf_mutex_destroy(&s->lock);
+    free(s->timer_heap);
     free(s);
 }
 
@@ -876,12 +973,13 @@ void rf_sched_spawn(rf_sched* s, rf_coro* c)
     rf_mutex_lock(&s->lock);
     rf_sched_enqueue_ready(s, c);
     s->live++;
-    /* Broadcast, not signal: the pool worker AND any top-level blocker (retrieve!/race) wait on this
-     * one cond. A signal could wake a blocker that has no work to do, leaving the worker asleep and
-     * the just-queued coroutine stranded in the injector (lost wakeup). Broadcast wakes the worker
-     * too; spurious blocker wakeups are cheap and re-check their predicate. (Step 2b: targeted
-     * per-worker signalling replaces this once N>1 makes broadcast a thundering herd.) */
-    rf_cond_broadcast(&s->cond);
+    /* Signal ONE idle worker (not broadcast): this is one unit of work, so one worker suffices — a
+     * burst of K spawns emits K signals and wakes up to K workers, giving parallelism without the
+     * N-worker thundering herd. The woken worker re-checks every source (its deque, the injector, a
+     * steal) under s->lock before sleeping, so a signal that races its park is never lost; and if the
+     * work sits on a different worker's deque, stealing lets the woken worker take it. Top-level
+     * blockers wait on block_cond, so they cannot swallow this worker-wake. */
+    rf_cond_signal(&s->cond);
     rf_mutex_unlock(&s->lock);
 }
 
@@ -968,12 +1066,13 @@ void rf_sched_wake(rf_sched* s, rf_coro* c)
     // make_ready unlinks any deadline timer (IDLE case) and pushes to the injector, or flags NOTIFIED
     // if c is still running on a worker.
     rf_sched_make_ready(s, c);
-    // Only broadcast when this wake actually enqueued c (IDLE->QUEUED). A no-op wake (already QUEUED,
-    // or NOTIFIED — the running worker will requeue) has no new work for a sleeping worker to grab.
-    // Broadcast (not signal) so the pool worker wakes even when a top-level blocker also parks on this
-    // cond — a plain signal could wake only the blocker, stranding c in the injector. See rf_sched_spawn.
+    // Only signal when this wake actually enqueued c (IDLE->QUEUED). A no-op wake (already QUEUED, or
+    // NOTIFIED — the running worker will requeue) has no new work for a sleeping worker to grab. Signal
+    // ONE worker (not broadcast): one coroutine became runnable, so one worker suffices; it re-checks
+    // all sources (incl. a steal) before sleeping, so a raced signal is never lost. Top-level blockers
+    // wait on block_cond, not here, so this worker-wake cannot be swallowed by one. See rf_sched_spawn.
     if (before == RF_SCHED_IDLE) {
-        rf_cond_broadcast(&s->cond);
+        rf_cond_signal(&s->cond);
     }
     rf_mutex_unlock(&s->lock);
 }
@@ -1052,15 +1151,16 @@ static void rf_sched_run_coro(rf_sched* s, rf_coro* c)
         }
         // Wake whoever is awaiting this coroutine's result. A coroutine parked in retrieve!
         // (rf_sched_run_until_default's in-coroutine branch) or a coroutine racing this one is
-        // re-queued via make_ready (or flagged NOTIFIED if it is itself mid-run on another worker);
-        // a plain thread blocked at top level re-checks after the broadcast. The broadcast also
-        // nudges an idle worker parked on the cond.
+        // re-queued via make_ready (or flagged NOTIFIED if it is itself mid-run on another worker) —
+        // a signal on `cond` picks it up (also wakes the legacy single-thread driver). A plain thread
+        // blocked at top level waits on block_cond and re-checks its target's status, so broadcast that.
         if (c->awaiter != NULL) {
             rf_coro* w = c->awaiter;
             c->awaiter = NULL;
             rf_sched_make_ready(s, w);
         }
-        rf_cond_broadcast(&s->cond);
+        rf_cond_signal(&s->cond);          // an enqueued awaiter coroutine / the legacy driver
+        rf_cond_broadcast(&s->block_cond); // top-level blockers re-check their target's completion
         rf_mutex_unlock(&s->lock);
         return;
     }
@@ -1154,9 +1254,9 @@ static int rf_sched_step(rf_sched* s)
     }
 
     // Nothing ready. Wait for the earliest timer if any, otherwise purely for an external wake.
-    if (s->timers != NULL) {
+    if (s->timer_count > 0) {
         uint64_t now = rf_now_ns();
-        uint64_t deadline = s->timers->wake_ns;
+        uint64_t deadline = s->timer_heap[0]->wake_ns; // heap min = nearest deadline
         if (deadline > now) {
             // Idle on a timer: a pending timer is progress waiting to happen, so this is never a
             // deadlock — just wait out the nearest deadline (a wake can still interrupt us earlier).
@@ -1165,10 +1265,8 @@ static int rf_sched_step(rf_sched* s)
             s->workers_idle--;
         }
         now = rf_now_ns();
-        while (s->timers != NULL && s->timers->wake_ns <= now) {
-            rf_coro* t = s->timers;
-            s->timers = t->sched_next;
-            t->sched_next = NULL;
+        while (s->timer_count > 0 && s->timer_heap[0]->wake_ns <= now) {
+            rf_coro* t = rf_timer_pop_min(s);
             rf_sched_push_injector(s, t); // IDLE -> QUEUED
         }
     } else {
@@ -1256,18 +1354,20 @@ void rf_sched_run_until(rf_sched* s, rf_coro* target)
     g_sched = prev;
 }
 
-/* Wake a scheduler's run loop without targeting a specific coroutine: just signal its cond. Used by
- * a worker thread completing a task that a `race!` loop is waiting on — the loop holds no awaiter
- * coroutine, it re-polls all competitors under s->lock when woken. Safe to call from ANY thread. */
+/* Wake a scheduler's run loop without targeting a specific coroutine. Used by a worker thread
+ * completing a task that a top-level `race!` loop is waiting on — the loop holds no awaiter coroutine,
+ * it re-polls all competitors under s->lock when woken. Safe to call from ANY thread. */
 void rf_sched_signal(rf_sched* s)
 {
     if (s == NULL) {
         return;
     }
     rf_mutex_lock(&s->lock);
-    /* Broadcast: a race! blocker AND the pool worker share this cond; wake both so neither a stranded
-     * worker nor a sleeping blocker misses the completion (see rf_sched_spawn). */
-    rf_cond_broadcast(&s->cond);
+    /* A top-level race! blocker waits on block_cond (broadcast it — blockers re-poll their whole set);
+     * the legacy single-thread driver waits on `cond` (signal it). A coroutine racer is woken instead
+     * through rf_sched_wake (its awaiter), not here. */
+    rf_cond_broadcast(&s->block_cond);
+    rf_cond_signal(&s->cond);
     rf_mutex_unlock(&s->lock);
 }
 
@@ -1390,7 +1490,9 @@ intptr_t rf_race_wait(rf_race* r)
             rf_sched_park_external();
             rf_mutex_lock(&s->lock);
         } else {
-            rf_cond_wait_forever(&s->cond, &s->lock); // the worker drives; wait to be signalled
+            // Top-level racer: the workers drive the competitors; wait on block_cond (a competitor's
+            // completion broadcasts it via rf_sched_run_coro / rf_sched_signal) and re-poll.
+            rf_cond_wait_forever(&s->block_cond, &s->lock);
         }
     }
 
@@ -1646,8 +1748,10 @@ void rf_sched_run_until_default(rf_coro* target)
         }
         target->awaiter = NULL; /* clear any registration left by a spurious wake */
     } else {
+        // Top-level blocker: the workers drive `target`; wait on block_cond (its completion in
+        // rf_sched_run_coro broadcasts block_cond) and re-check the status.
         while (target->status != RF_CORO_COMPLETED && target->status != RF_CORO_CANCELLED) {
-            rf_cond_wait_forever(&s->cond, &s->lock);
+            rf_cond_wait_forever(&s->block_cond, &s->lock);
         }
     }
     s->waiters--;
@@ -1686,17 +1790,13 @@ static int rf_sched_remove(rf_sched* s, rf_coro* c)
         rlink = &(*rlink)->sched_next;
     }
 
-    /* timer list (only if not found in ready — a coroutine is in at most one) */
-    if (!found) {
-        rf_coro** tlink = &s->timers;
-        while (*tlink != NULL) {
-            if (*tlink == c) {
-                *tlink = c->sched_next;
-                c->sched_next = NULL;
-                found = 1;
-                break;
-            }
-            tlink = &(*tlink)->sched_next;
+    /* timer heap (only if not found in ready — a coroutine is in at most one). O(log n) via timer_idx;
+     * unlink no-ops if c is not actually on the heap, so guard `found` on the count dropping. */
+    if (!found && c->timer_idx >= 0) {
+        int before = s->timer_count;
+        rf_sched_unlink_timer(s, c);
+        if (s->timer_count < before) {
+            found = 1;
         }
     }
 
