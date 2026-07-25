@@ -1,0 +1,46 @@
+module Tests/Stdlib/CoroWorkstealApi
+
+# v0.3.x M:N work-stealing (step 3) — exercises the path coro_migration does NOT: coroutines SPAWNED
+# FROM INSIDE another coroutine. Those children are enqueued on the SPAWNING worker's LOCAL deque (LIFO),
+# then run there or are STOLEN by another worker — the local-deque routing + steal machinery. burst()
+# runs on a worker and spawns 48 children onto its local deque; each child records its worker's OS thread
+# id before and after a short park, so a child that resumed on a different worker than it ran on counts as
+# migrated. The verdict is core-count-ROBUST exactly like coro_migration/race: a single-worker pool never
+# migrates (correct, not BROKEN); only a multi-worker pool that pins every coroutine-spawned child to its
+# birth worker — the step-3 regression — reports BROKEN. (A crash / deadlock / corrupted result in the
+# local-deque or steal machinery would also fail this — the burst would hang or the count go wrong.)
+
+import IO/Console
+
+# Records which worker ran it, parks so any worker can pick it up, then records again; 1 if it moved.
+suspended routine tag() -> S64
+  var w0 = rf_current_thread_id()
+  waitfor(3ms)
+  var w1 = rf_current_thread_id()
+  return if w0 == w1 then 0_s64 else 1_s64
+
+# Runs on a worker; its 48 children pile onto THIS worker's local deque. Returns how many migrated.
+suspended routine burst() -> S64
+  var kids = List[Agent[S64]]()
+  var i = 0_s64
+  while i < 48_s64
+    kids.add_last(value: tag())
+    i = i + 1_s64
+  var moved = kids.gather!()
+  var migrated = 0_s64
+  var j = 0_s64
+  while j < 48_s64
+    migrated = migrated + moved[j]
+    j = j + 1_s64
+  return migrated
+
+routine start()
+  var workers = rf_sched_worker_count()
+  var b = burst()
+  var migrated = b.retrieve!()
+  var ok = workers <= 1_u64 or migrated > 0_s64
+  if ok
+    show("worksteal distribution: ok")
+  else
+    show("worksteal distribution: BROKEN")
+  return

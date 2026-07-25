@@ -1,0 +1,28 @@
+module Tests/Stdlib/CoroParallelApi
+
+# v0.3.x M:N pool — a burst of independent coroutines runs to completion correctly across the worker
+# pool (the "many ready coroutines use all cores" goal, on the correctness side). 100 coroutines each
+# return n*n; gather! collects them in INPUT order; the sum is deterministic (338350) no matter how the
+# pool interleaves or steals them. A crash, deadlock, lost wake, or corrupted result in the local-deque +
+# work-stealing machinery would break the sum or hang — so this is the non-flaky correctness counterpart
+# to the (timing-robust) distribution proof in coro_worksteal.
+
+import IO/Console
+
+suspended routine square(n: S64) -> S64
+  return n * n
+
+routine start()
+  var kids = List[Agent[S64]]()
+  var i = 1_s64
+  while i <= 100_s64
+    kids.add_last(value: square(n: i))
+    i = i + 1_s64
+  var results = kids.gather!()
+  var sum = 0_s64
+  var k = 0_s64
+  while k < 100_s64
+    sum = sum + results[k]
+    k = k + 1_s64
+  show(f"sum of squares 1..100: {sum}")
+  return
