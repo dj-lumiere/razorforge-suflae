@@ -1132,18 +1132,16 @@ static rf_coro* rf_sched_try_steal(rf_sched* s)
 }
 
 // Resume a coroutine this worker has claimed (state already RUNNING) and apply the outcome. Called with
-// NO lock held: user code runs lock-free (it may re-enter the scheduler — spawn, park, wake) and only
-// the post-resume bookkeeping takes s->lock. The record-then-apply split (park primitives merely set
-// park_intent; the worker applies it here under s->lock) is what keeps a wake racing the park safe at
-// N>1 — a wake that arrived during the run left the state NOTIFIED, and that wins over the park intent.
-// A NOTIFIED requeue / a YIELD go through rf_sched_enqueue_ready, so they land on THIS worker's local
-// deque (the coroutine just ran here — cache-hot).
+// NO lock held: user code runs lock-free (it may re-enter the scheduler — spawn, park, wake). The
+// record-then-apply split (park primitives merely set park_intent; the worker applies it here) keeps a
+// wake racing the park safe at N>1 — a wake that arrived during the run left the state NOTIFIED, which
+// wins over the park intent (re-queue).
 static void rf_sched_run_coro(rf_sched* s, rf_coro* c)
 {
     rf_coro_status st = rf_coro_resume(c);
-    rf_mutex_lock(&s->lock);
 
     if (st == RF_CORO_COMPLETED) {
+        rf_mutex_lock(&s->lock);
         atomic_store(&c->sched_state, RF_SCHED_DONE); // never runnable again; a stray wake is dropped
         if (!c->counted_done) {
             c->counted_done = 1; // count each completion exactly once, even if a stray wake
@@ -1165,21 +1163,40 @@ static void rf_sched_run_coro(rf_sched* s, rf_coro* c)
         return;
     }
 
-    // PARKED. Apply the intent the coroutine recorded before switching out — UNLESS a wake arrived
-    // while it ran (state is now NOTIFIED), in which case the wake wins: re-queue it and ignore the
-    // park intent. The coroutine never touches the injector/timer/deque itself, so a wake racing its
-    // park is always resolved here, under the lock, with full knowledge of whether it parked or was
-    // notified.
+    // PARKED. FAST PATH (no s->lock): a NOTIFIED re-queue (a wake raced the park — it wins) or a
+    // cooperative YIELD both just go back onto THIS worker's OWN local deque, which the worker re-pops
+    // on its next loop — so no other worker needs to be signalled and s->lock is not touched at all.
+    // This is safe without the lock because neither races a HARMFUL make_ready: make_ready no-ops on a
+    // NOTIFIED/QUEUED coroutine (so it never re-enqueues or mis-transitions one we are re-queuing), and
+    // a purely-yielding coroutine is nobody's awaiter. It removes s->lock from the hot cooperative-yield
+    // path (measured: that path went negative-scaling on s->lock contention). One trade-off: a re-queue
+    // does not wake an idle sibling to steal, so a worker building a yield backlog while others sleep
+    // relies on the next spawn/completion signal for rebalancing — a latency nuance, not a correctness
+    // issue. TIMER (touches the timer heap), EXTERNAL/NONE (must serialize against make_ready to park as
+    // IDLE without losing a wake), and the legacy no-deque driver fall to the slow path below.
+    rf_park_intent intent = c->park_intent;
+    c->park_intent = RF_PARK_NONE;
+    int notified = (atomic_load(&c->sched_state) == RF_SCHED_NOTIFIED);
+
+    if (g_worker_id >= 0 && s->deques != NULL && (notified || intent == RF_PARK_YIELD)) {
+        atomic_store(&c->sched_state, RF_SCHED_QUEUED);
+        rf_deque_push_bottom(&s->deques[g_worker_id], c);
+        return;
+    }
+
+    // SLOW PATH (s->lock). Re-check NOTIFIED under the lock: a wake may have raced in between the
+    // fast-path check and acquiring the lock, and it still wins.
+    rf_mutex_lock(&s->lock);
     if (atomic_load(&c->sched_state) == RF_SCHED_NOTIFIED) {
-        rf_sched_enqueue_ready(s, c); // -> QUEUED (this worker's local deque), run again promptly
+        rf_sched_enqueue_ready(s, c); // -> QUEUED, run again promptly
     } else {
-        switch (c->park_intent) {
+        switch (intent) {
             case RF_PARK_TIMER:
-                rf_sched_insert_timer(s, c); // sorted by wake_ns; c stays IDLE until it fires/wakes
+                rf_sched_insert_timer(s, c); // c stays IDLE until it fires or is woken
                 atomic_store(&c->sched_state, RF_SCHED_IDLE);
                 break;
             case RF_PARK_YIELD:
-                rf_sched_enqueue_ready(s, c); // -> QUEUED, behind the other ready coroutines
+                rf_sched_enqueue_ready(s, c); // legacy driver (no local deque): injector requeue
                 break;
             case RF_PARK_EXTERNAL:
             case RF_PARK_NONE:
@@ -1188,7 +1205,6 @@ static void rf_sched_run_coro(rf_sched* s, rf_coro* c)
                 break;
         }
     }
-    c->park_intent = RF_PARK_NONE;
     rf_mutex_unlock(&s->lock);
 }
 
