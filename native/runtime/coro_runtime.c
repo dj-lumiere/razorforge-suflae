@@ -504,6 +504,145 @@ rf_coro* rf_coro_current(void)
  * codegen and the task↔coro bridge are untouched.
  */
 
+/* Portable "this static may legitimately be unused in some build" attribute. The step-3 deque
+ * interface (push/pop/steal) lands as a unit; some of its ops are wired one commit later than they
+ * are defined, so tag them rather than leave a -Wunused-function warning in the interim. */
+#if defined(__GNUC__) || defined(__clang__)
+#define RF_MAYBE_UNUSED __attribute__((unused))
+#else
+#define RF_MAYBE_UNUSED
+#endif
+
+/* ---- Per-worker local run deque (M:N build step 3) ------------------------------------------- */
+/*
+ * Each pool worker owns one deque of runnable coroutines. The OWNER pushes and pops at the BOTTOM
+ * (LIFO — the freshest child is cache-hot and should run next); OTHER workers STEAL from the TOP
+ * (FIFO — the oldest work, least likely to still be hot for its parent). This replaces the single
+ * shared injector as the common case, so N workers no longer serialize on one global lock.
+ *
+ * Step 3 starts with a LOCKED RING (one mutex per deque), not a lock-free Chase-Lev deque: the
+ * correctness risk in this step is the make_ready routing + worker-loop lock restructuring + the
+ * QUEUED->RUNNING steal handoff, NOT the deque internals — and a locked ring already confines
+ * contention to {owner, its current thief} instead of the one global injector lock. The container
+ * ops are kept behind this small interface (push_bottom / pop_bottom / steal_top / remove) so the
+ * internals can later be swapped for Chase-Lev without touching the scheduler.
+ *
+ * The ops are pure container operations — they do NOT touch sched_state. The QUEUED/RUNNING state
+ * transitions stay in the scheduler layer (rf_sched_make_ready / the pop path), exactly as for the
+ * injector, so the worker-safe state machine has a single home.
+ *
+ * LOCK ORDERING (load-bearing): a deque lock is only ever taken with s->lock already held (make_ready,
+ * rf_sched_remove) or with NO scheduler lock held (a worker draining/stealing its own or a victim's
+ * deque). Two deque locks are NEVER held at once. This is what keeps stealing deadlock-free.
+ *
+ * STEP-1 SKELETON: the deques exist and rf_sched_remove scans them, but nothing pushes to them yet —
+ * make_ready still routes every wake to the shared injector, so behavior is byte-identical to step 2b.
+ * Local-deque routing (make_ready), worker-loop draining, and stealing turn on in later commits.
+ */
+typedef struct rf_deque {
+    rf_coro** buf;   /* ring buffer of coroutine pointers; cap is a power of two   */
+    size_t cap;      /* capacity (power of two, so an index masks with a bitwise AND) */
+    size_t bottom;   /* owner end: next free push slot (pop reads bottom-1). Monotonic; mask on use. */
+    size_t top;      /* steal end: oldest queued slot. Monotonic; mask on use.    */
+    rf_mutex lock;   /* guards this deque only. Never held together with another deque lock. */
+} rf_deque;
+
+#define RF_DEQUE_INIT_CAP 64u
+
+static void rf_deque_init(rf_deque* d)
+{
+    d->cap = RF_DEQUE_INIT_CAP;
+    d->buf = (rf_coro**)calloc(d->cap, sizeof(rf_coro*));
+    if (d->buf == NULL) {
+        __rf_throw("OutOfMemoryError", "Failed to allocate worker run deque");
+        return; /* unreachable */
+    }
+    d->bottom = 0;
+    d->top = 0;
+    rf_mutex_init(&d->lock);
+}
+
+/* Owner-end push (LIFO). Grows (doubles) the ring when full, re-laying the live entries [top, bottom)
+ * at fresh dense indices. Caller sets sched_state (QUEUED) — this only stores the pointer. */
+static RF_MAYBE_UNUSED void rf_deque_push_bottom(rf_deque* d, rf_coro* c)
+{
+    rf_mutex_lock(&d->lock);
+    if (d->bottom - d->top == d->cap) {
+        size_t n = d->cap;
+        size_t ncap = n * 2u;
+        rf_coro** nb = (rf_coro**)calloc(ncap, sizeof(rf_coro*));
+        if (nb == NULL) {
+            rf_mutex_unlock(&d->lock);
+            __rf_throw("OutOfMemoryError", "Failed to grow worker run deque");
+            return; /* unreachable */
+        }
+        for (size_t i = 0; i < n; i++) {
+            nb[i] = d->buf[(d->top + i) & (d->cap - 1u)];
+        }
+        free(d->buf);
+        d->buf = nb;
+        d->cap = ncap;
+        d->top = 0;
+        d->bottom = n;
+    }
+    d->buf[d->bottom & (d->cap - 1u)] = c;
+    d->bottom++;
+    rf_mutex_unlock(&d->lock);
+}
+
+/* Owner-end pop (LIFO): the most recently pushed coroutine, or NULL if empty. */
+static RF_MAYBE_UNUSED rf_coro* rf_deque_pop_bottom(rf_deque* d)
+{
+    rf_coro* c = NULL;
+    rf_mutex_lock(&d->lock);
+    if (d->bottom != d->top) {
+        d->bottom--;
+        c = d->buf[d->bottom & (d->cap - 1u)];
+        d->buf[d->bottom & (d->cap - 1u)] = NULL;
+    }
+    rf_mutex_unlock(&d->lock);
+    return c;
+}
+
+/* Steal-end pop (FIFO): the oldest queued coroutine, or NULL if empty. Called by a DIFFERENT worker
+ * than the owner; the per-deque lock serializes it against the owner's push/pop (so a one-element
+ * deque can never hand the same coroutine to both — the QUEUED->RUNNING handoff stays exclusive). */
+static RF_MAYBE_UNUSED rf_coro* rf_deque_steal_top(rf_deque* d)
+{
+    rf_coro* c = NULL;
+    rf_mutex_lock(&d->lock);
+    if (d->bottom != d->top) {
+        c = d->buf[d->top & (d->cap - 1u)];
+        d->buf[d->top & (d->cap - 1u)] = NULL;
+        d->top++;
+    }
+    rf_mutex_unlock(&d->lock);
+    return c;
+}
+
+/* Remove an arbitrary coroutine from the deque if present (compacting the hole), returns 1 if found.
+ * O(n) and rare — only $destroy on a spawned-but-unfinished coroutine (rf_sched_remove) walks here. */
+static int rf_deque_remove(rf_deque* d, rf_coro* c)
+{
+    int found = 0;
+    rf_mutex_lock(&d->lock);
+    size_t n = d->bottom - d->top;
+    for (size_t i = 0; i < n; i++) {
+        if (d->buf[(d->top + i) & (d->cap - 1u)] == c) {
+            /* shift [i+1, n) one slot toward top, then drop the last (now duplicate) slot */
+            for (size_t j = i; j + 1u < n; j++) {
+                d->buf[(d->top + j) & (d->cap - 1u)] = d->buf[(d->top + j + 1u) & (d->cap - 1u)];
+            }
+            d->bottom--;
+            d->buf[d->bottom & (d->cap - 1u)] = NULL;
+            found = 1;
+            break;
+        }
+    }
+    rf_mutex_unlock(&d->lock);
+    return found;
+}
+
 struct rf_sched {
     rf_coro* injector_head; /* shared submission FIFO — coroutines ready to resume now. At N=1 the
                              * single worker drains this; at N>1 (step 2) all workers pull from it. */
@@ -527,6 +666,11 @@ struct rf_sched {
     // worker is idle (workers_idle == workers_total): with N>1 one idle worker while another still
     // runs a coroutine is not stuck. Inc/dec around each idle cond-wait in rf_sched_step.
     int workers_idle;
+    // Per-worker local run deques (M:N step 3), one per pool worker (indexed by g_worker_id). NULL for
+    // a directly-driven rf_sched (rf_sched_run / native tests) — those keep using only the injector.
+    // Allocated by rf_pool_spawn_workers once workers_total is fixed. Each has its OWN lock (never held
+    // together with s->lock's protected fields under a second deque lock — see the lock-ordering note).
+    rf_deque* deques;
     rf_mutex lock;         /* guards the injector + live + cross_wakers + waiters + worker counts */
     rf_cond cond;          /* run loop waits here; an external wake signals it      */
 };
@@ -545,6 +689,12 @@ struct rf_sched {
 
 /* The scheduler driving the current OS thread (set for the duration of rf_sched_run). */
 static _Thread_local rf_sched* g_sched = NULL;
+
+/* This thread's pool-worker index, or -1 if it is not a pool worker (the main thread, a `threaded`
+ * task thread, or a directly-driven rf_sched). It selects which local deque a worker drains and, once
+ * routing turns on (step 3), which deque a wake performed BY a worker pushes to. -1 ⇒ route to the
+ * shared injector. Set once at the top of rf_pool_worker_main; never changes for a given thread. */
+static _Thread_local int g_worker_id = -1;
 
 /* Monotonic nanosecond clock — never goes backwards, unaffected by wall-clock changes. */
 static uint64_t rf_now_ns(void)
@@ -1198,13 +1348,24 @@ static int rf_host_core_count(void)
 
 static rf_sched* g_pool = NULL;
 
+/* Heap-passed startup argument for a pool worker: which scheduler it drives and its worker index.
+ * Freed by the worker itself once it has copied both out — the daemon is never joined, so the
+ * spawning thread cannot free it. */
+typedef struct rf_worker_arg {
+    rf_sched* s;
+    int index;
+} rf_worker_arg;
+
 #ifdef _WIN32
 static unsigned __stdcall rf_pool_worker_main(void* arg)
 #else
 static void* rf_pool_worker_main(void* arg)
 #endif
 {
-    rf_sched* s = (rf_sched*)arg;
+    rf_worker_arg* wa = (rf_worker_arg*)arg;
+    rf_sched* s = wa->s;
+    g_worker_id = wa->index; /* identifies this worker's local deque (step 3) */
+    free(wa);
     g_sched = s; /* so rf_sched_current()/park/wake on this worker resolve to the pool */
     rf_mutex_lock(&s->lock);
     for (;;) {
@@ -1228,16 +1389,38 @@ static void* rf_pool_worker_main(void* arg)
 static void rf_pool_spawn_workers(rf_sched* s)
 {
     s->workers_total = rf_host_core_count();
+
+    // Allocate one local run deque per worker BEFORE starting any worker, so a worker (or a thief)
+    // never races deque creation. Indexed by g_worker_id. (Step 3 skeleton: allocated + scanned by
+    // rf_sched_remove, but not yet drained/pushed — routing stays on the injector.)
+    s->deques = (rf_deque*)calloc((size_t)s->workers_total, sizeof(rf_deque));
+    if (s->deques == NULL) {
+        __rf_throw("OutOfMemoryError", "Failed to allocate worker run deques");
+        return; /* unreachable */
+    }
     for (int i = 0; i < s->workers_total; i++) {
+        rf_deque_init(&s->deques[i]);
+    }
+
+    for (int i = 0; i < s->workers_total; i++) {
+        // Each worker gets its own heap arg (scheduler + index); the worker frees it. A daemon thread
+        // is never joined, so this cannot live on the spawning thread's stack.
+        rf_worker_arg* wa = (rf_worker_arg*)malloc(sizeof(rf_worker_arg));
+        if (wa == NULL) {
+            __rf_throw("OutOfMemoryError", "Failed to allocate pool worker startup argument");
+            return; /* unreachable */
+        }
+        wa->s = s;
+        wa->index = i;
 #ifdef _WIN32
-        uintptr_t h = _beginthreadex(NULL, 0, rf_pool_worker_main, s, 0, NULL);
+        uintptr_t h = _beginthreadex(NULL, 0, rf_pool_worker_main, wa, 0, NULL);
         if (h == 0) {
             __rf_throw("TaskSpawnError", "Failed to start scheduler pool worker thread");
         }
         CloseHandle((HANDLE)h);
 #else
         pthread_t tid;
-        if (pthread_create(&tid, NULL, rf_pool_worker_main, s) != 0) {
+        if (pthread_create(&tid, NULL, rf_pool_worker_main, wa) != 0) {
             __rf_throw("TaskSpawnError", "Failed to start scheduler pool worker thread");
         }
         pthread_detach(tid);
@@ -1364,6 +1547,20 @@ static int rf_sched_remove(rf_sched* s, rf_coro* c)
                 break;
             }
             tlink = &(*tlink)->sched_next;
+        }
+    }
+
+    /* per-worker local deques (step 3): a QUEUED coroutine may sit in a worker's local deque instead
+     * of the injector. Scan each (s->lock held → deque lock nested, the sanctioned lock order). Skipped
+     * for a directly-driven rf_sched, which has none. A coroutine is in at most one place, so stop on
+     * the first hit. The deque stores pointers (not via sched_next), so no sched_next fixup is needed. */
+    if (!found && s->deques != NULL) {
+        for (int i = 0; i < s->workers_total; i++) {
+            if (rf_deque_remove(&s->deques[i], c)) {
+                c->sched_state = RF_SCHED_IDLE;
+                found = 1;
+                break;
+            }
         }
     }
 
