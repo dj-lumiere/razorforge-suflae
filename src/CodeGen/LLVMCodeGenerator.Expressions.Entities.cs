@@ -606,6 +606,28 @@ public partial class LlvmCodeGenerator
                     innerPtr = target;
                 }
             }
+            else if (wrapperRecord.HasDirectBackendType &&
+                wrapBaseName == Compiler.Resolution.RuntimeContract.Roaming)
+            {
+                // Roaming[T] is the Roamed lock guard: an `@llvm("ptr")` token targeting
+                // RoamController[T], NOT the entity. Project through the controller's `data` field,
+                // exactly like Claiming, so `g.field` reads the guarded entity rather than
+                // controller.count (the refcount at offset 0).
+                TypeInfo? controllerType = _registry.LookupType(
+                    name: $"RoamController[{innerEntity.FullName}]")
+                    ?? _registry.LookupType(name: $"Core.RoamController[{innerEntity.FullName}]");
+                if (controllerType is EntityTypeInfo controllerEntity)
+                {
+                    innerPtr = EmitEntityMemberVariableRead(sb: sb,
+                        entityPtr: target,
+                        entity: controllerEntity,
+                        memberVariableName: "data");
+                }
+                else
+                {
+                    innerPtr = target;
+                }
+            }
             else if (wrapperRecord.HasDirectBackendType)
             {
                 innerPtr = target;

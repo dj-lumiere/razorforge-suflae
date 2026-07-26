@@ -697,6 +697,26 @@ public partial class LlvmCodeGenerator
                     innerPtr = target;
                 }
             }
+            else if (wrapperRecord.HasDirectBackendType &&
+                wrapBaseName == Compiler.Resolution.RuntimeContract.Roaming)
+            {
+                // Roaming[T] lock guard: project a field WRITE through RoamController[T].data, exactly
+                // like the read path — otherwise `g.field = v` would clobber controller.count (refcount).
+                TypeInfo? controllerType = _registry.LookupType(
+                    name: $"RoamController[{innerEntity.FullName}]")
+                    ?? _registry.LookupType(name: $"Core.RoamController[{innerEntity.FullName}]");
+                if (controllerType is EntityTypeInfo controllerEntity)
+                {
+                    innerPtr = EmitEntityMemberVariableRead(sb: sb,
+                        entityPtr: target,
+                        entity: controllerEntity,
+                        memberVariableName: "data");
+                }
+                else
+                {
+                    innerPtr = target;
+                }
+            }
             else if (wrapperRecord.HasDirectBackendType)
             {
                 innerPtr = target;
