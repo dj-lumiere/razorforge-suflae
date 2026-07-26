@@ -1,0 +1,155 @@
+module Core
+
+### Biased reference-counting controller for {Roamed[T]} — the hybrid of {RetainController[T]}
+### (non-atomic, single-thread) and {ShareController[T, P]} (atomic + lock). Starts in LOCAL mode:
+### one non-atomic `count`, no lock, owner only. On the first escape across a concurrency boundary
+### `promote()` flips it — irreversibly — to ESCAPED mode: `count` becomes atomic and a reentrant,
+### TASK-keyed exclusive lock is armed. The mode flag lives here, at the one address every {Roamed}
+### handle shares, so all handles observe the flip.
+###
+### v1 biased scheme = SINGLE count + one-way flip (the classic dual-counter BRC, which keeps the
+### owner fast even AFTER escape, is a deferred perf optimization). Reentrancy is keyed to the
+### task/coroutine id (NOT the OS thread) because M:N migration moves a coroutine across workers.
+### :typeparam T: The exclusively owned entity type.
+entity RoamController[T]
+needs T is EntityType
+  ### Reference count. Read/written non-atomically in LOCAL mode, atomically once ESCAPED.
+  secret count: U64
+  ### `false` = LOCAL, `true` = ESCAPED. Flipped once by `promote()`. Every handle observes it.
+  secret escaped: Bool
+  ### Raw pointer to the managed entity.
+  secret data: Hijacked[T]
+  ### Exclusive-lock flag (`0` free / `1` held). Armed and used only in ESCAPED mode.
+  secret locked: Atomic[U8]
+  ### Task/coroutine id of the current lock holder (`0` when free). Task-keyed for migration safety.
+  secret holder_task: Atomic[U64]
+  ### Reentrancy depth. Only ever touched by the holder under mutual exclusion, so non-atomic.
+  secret depth: U64
+
+### Creates a controller with one strong reference in LOCAL mode (unlocked, non-atomic).
+### :param data: The raw pointer to the entity; ownership transfers to this controller.
+### :returns: The resulting `RoamController[T]` value.
+dangerous routine RoamController[T].$create(data: Hijacked[T]) -> RoamController[T]
+  return RoamController[T](
+    count: 1_u64,
+    escaped: false,
+    data: data,
+    locked: Atomic[U8](initial: 0_u8),
+    holder_task: Atomic[U64](initial: 0_u64),
+    depth: 0_u64
+  )
+
+# ============================================================================
+# Biased reference counting — branches on mode: non-atomic (LOCAL) vs atomic (ESCAPED).
+# ============================================================================
+
+### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED.
+routine RoamController[T].retain()
+  danger!
+    if me.escaped
+      discard atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
+    else
+      me.count = me.count + 1
+  return
+
+### Drops an alias. At zero the managed entity is destroyed immediately (deterministic teardown).
+### A decrement that does NOT reach zero registers the object as a cycle-collection candidate.
+routine RoamController[T].release()
+  danger!
+    if me.escaped
+      var previous = atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
+      if previous == 1_u64
+        me.drop_data()
+        me.$destroy()
+      else
+        me.mark_cycle_candidate()
+    else
+      me.count = me.count - 1
+      if me.count == 0_u64
+        me.drop_data()
+        me.$destroy()
+      else
+        me.mark_cycle_candidate()
+  return
+
+### Reports this object to the cycle collector as a possible cycle root. The SOLE collector entry
+### point — only `Roamed` decrements reach it, which is what scopes the collector to `Roamed`.
+dangerous routine RoamController[T].mark_cycle_candidate()
+  rf_cc_add_candidate(obj: me.hijack().get_address())
+  return
+
+### Returns the current strong count. Snapshot only.
+### :returns: The number of live strong handles.
+routine RoamController[T].strong_count() -> U64
+  danger!
+    if me.escaped
+      return atomic_load[U64](ptr: me.count.hijack())
+    else
+      return me.count
+
+# ============================================================================
+# Escape — one-way LOCAL -> ESCAPED promotion.
+# ============================================================================
+
+### Flips to ESCAPED (idempotent). Runs on the owner BEFORE the handle is published to another
+### thread (the compiler inserts it at the escape site, pre-spawn), so no concurrent access races
+### the flip. After this, `count` is atomic and the reentrant lock is live.
+dangerous routine RoamController[T].promote()
+  if me.escaped
+    return
+  me.holder_task.store(desired: 0_u64)
+  me.depth = 0_u64
+  me.escaped = true
+  return
+
+### Whether this object has escaped. Drives `Roamed`'s access-lock wrapping.
+### :returns: `true` if ESCAPED.
+routine RoamController[T].is_escaped() -> Bool
+  return me.escaped
+
+# ============================================================================
+# Reentrant, task-keyed exclusive lock — active only in ESCAPED mode.
+# ============================================================================
+
+### Acquires the exclusive lock, spinning while another task holds it. If the CALLING task already
+### holds it, this is a re-entry: the depth is bumped and it returns without re-acquiring — so a
+### member routine calling itself (normal class recursion) never self-deadlocks. Keyed to the
+### task/coroutine id, not the OS thread, so a migrated coroutine still recognizes its own hold.
+dangerous routine RoamController[T].reentrant_acquire()
+  var tid = rf_current_task_id()
+  loop
+    if me.holder_task.load() == tid and me.locked.load() == 1_u8
+      me.depth = me.depth + 1
+      break
+    if me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
+      me.holder_task.store(desired: tid)
+      me.depth = 1_u64
+      break
+  return
+
+### Releases one level of the lock. The lock is freed only when the outermost holder releases (depth
+### reaches zero); the holder is cleared before the flag so a waiter never observes the old id.
+dangerous routine RoamController[T].reentrant_release()
+  me.depth = me.depth - 1
+  if me.depth == 0_u64
+    me.holder_task.store(desired: 0_u64)
+    me.locked.store(desired: 0_u8)
+  return
+
+# ============================================================================
+# Teardown.
+# ============================================================================
+
+### Returns a non-owning pointer to the managed entity.
+### :returns: The resulting `Hijacked[T]` value.
+dangerous routine RoamController[T].data_ptr() -> Hijacked[T]
+  return me.data
+
+### Destroys the managed entity. Call only when the strong count reaches zero.
+dangerous routine RoamController[T].drop_data()
+  me.data.as_entity().$destroy()
+  return
+
+dangerous routine RoamController[T].$destroy()
+  me.hijack().invalidate()
+  return

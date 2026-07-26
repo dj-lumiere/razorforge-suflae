@@ -77,6 +77,14 @@ dangerous external("C") routine rf_task_destroy(task: Address)
 ### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
 ### the same thread.
 external("C") routine rf_current_thread_id() -> U64
+### Identity of the current logical execution context — the coroutine if inside one (stable across
+### worker migration), else the OS thread. The key for {Roamed}'s reentrant, migration-safe lock.
+### Safe: takes no pointers. :returns: a per-context id, equal across calls in the same coroutine/thread.
+external("C") routine rf_current_task_id() -> U64
+### Cycle-collector candidate hook. A {Roamed} strong-decrement that leaves the count > 0 reports the
+### object here as a possible cycle root. Stage-1 stub is a no-op (cycles leak until the collector
+### lands); the sole entry point, so the collector stays scoped to `Roamed`.
+dangerous external("C") routine rf_cc_add_candidate(obj: Address)
 
 # ============================================================================
 # Stackful coroutine substrate (v0.2.0 — single coroutine, no scheduler).

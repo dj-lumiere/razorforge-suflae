@@ -178,6 +178,15 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
+            // A `Roamed` handle crosses the boundary by being PROMOTED, not rejected: passing it across
+            // a concurrency boundary IS the escape event, and codegen inserts `promote()` on the arg
+            // before the spawn (LOCAL -> ESCAPED: atomic refcount + armed reentrant lock). So the same
+            // object is thread-safe by the time the callee touches it — accepted here, no RF-S632.
+            if (GetBaseTypeName(typeName: type.Name) == Compiler.Resolution.RuntimeContract.Roamed)
+            {
+                continue;
+            }
+
             // A bare entity is a heap handle; passing it by copy copies the pointer, so the same
             // object would be aliased across parallel coroutines/threads. A record/tuple that
             // transitively owns a single-threaded RC wrapper (Retained/Tracked) or a scoped token

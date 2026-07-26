@@ -238,10 +238,12 @@ public partial class LlvmCodeGenerator
                 {
                     Callee: MemberExpression
                     {
-                        PropertyName: Compiler.Resolution.RuntimeContract.RefCount.Retain,
+                        PropertyName: var rcMoveVerb,
                         Object: IdentifierExpression { Name: var srcEntityName }
                     }
-                })
+                }
+                && rcMoveVerb is Compiler.Resolution.RuntimeContract.RefCount.Retain
+                    or Compiler.Resolution.RuntimeContract.RefCount.Roam)
             {
                 _localEntityVars.RemoveAll(match: e => e.Name == srcEntityName);
             }
@@ -878,7 +880,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>RC wrapper base names that require copy/release on var binding.</summary>
     private static readonly HashSet<string> RcWrapperBaseNames =
-        [Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Tracked, Compiler.Resolution.RuntimeContract.Shared, Compiler.Resolution.RuntimeContract.Watched];
+        [Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Tracked, Compiler.Resolution.RuntimeContract.Shared, Compiler.Resolution.RuntimeContract.Watched, Compiler.Resolution.RuntimeContract.Roamed];
 
     /// <summary>
     /// Emits retain calls for all RC wrapper fields in a record.

@@ -113,6 +113,18 @@ uint64_t rf_task_id(rf_task* task);
 /* Opaque, stable identifier for the calling OS thread. Used by the lock policies to detect a
  * re-entrant claim (a thread acquiring an exclusive lock it already holds = self-deadlock). */
 uint64_t rf_current_thread_id(void);
+
+/* Identity of the current logical execution context: the coroutine (rf_coro*) if inside one — stable
+ * across worker migration, which is exactly why Roamed's reentrant lock keys on it and NOT the OS
+ * thread — else the OS thread id. Only equality matters. See rf_current_task_id in coro_runtime.c. */
+uint64_t rf_current_task_id(void);
+
+/* Cycle-collector candidate hook. A Roamed strong-decrement that leaves the count > 0 reports the
+ * object here as a possible cycle root. STAGE-1 STUB: no-op (cycles among Roamed objects leak until
+ * the real collector lands). The SOLE collector entry point, so the collector stays scoped to
+ * Roamed — pure-RF programs never call it. */
+void rf_cc_add_candidate(void* obj);
+
 rf_task_kind rf_task_kind_get(rf_task* task);
 rf_task_status rf_task_status_get(rf_task* task);
 rf_task_completion_kind rf_task_completion_kind_get(rf_task* task);

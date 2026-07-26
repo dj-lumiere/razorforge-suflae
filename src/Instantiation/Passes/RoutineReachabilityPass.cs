@@ -132,13 +132,25 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 WrapperTypeInfo w => w.Name,
                 _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
             };
-            if (ownerBase is RuntimeContract.Retained or RuntimeContract.Tracked)
+            if (ownerBase is RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Roamed)
             {
-                string copyVerb = ownerBase == RuntimeContract.Retained
-                    ? RuntimeContract.RefCount.Retain
-                    : RuntimeContract.RefCount.Track;
+                string copyVerb = ownerBase switch
+                {
+                    RuntimeContract.Retained => RuntimeContract.RefCount.Retain,
+                    RuntimeContract.Tracked => RuntimeContract.RefCount.Track,
+                    _ => RuntimeContract.RefCount.Roam
+                };
                 RoutineInfo? copy = ctx.Registry.LookupMethod(type: type, methodName: copyVerb);
                 if (copy != null) EnqueueCallee(callee: copy);
+
+                // Roamed additionally: codegen inserts `promote()` at spawn boundaries (Stage 2b) with
+                // no AST call for reachability to walk — seed it so the body is monomorphized per
+                // concrete Roamed[T]. Its body pulls in the RoamController chain transitively.
+                if (ownerBase == RuntimeContract.Roamed)
+                {
+                    RoutineInfo? promote = ctx.Registry.LookupMethod(type: type, methodName: "promote");
+                    if (promote != null) EnqueueCallee(callee: promote);
+                }
             }
 
             // FStringLoweringPass synthesizes `<diagnose>.replace(old:..., new:...)` for

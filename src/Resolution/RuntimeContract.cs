@@ -68,6 +68,9 @@ public static class RuntimeContract
         public const string Share = "share";
         /// <summary>Multi-threaded weak-count increment (the <c>Watched</c> copy verb).</summary>
         public const string Watch = "watch";
+        /// <summary>Biased-refcount alias verb (the <c>Roamed</c> copy verb; the same name also
+        /// constructs from an entity, mirroring <see cref="Retain"/>'s dual role).</summary>
+        public const string Roam = "roam";
     }
 
     /// <summary>Carrier record field names on <c>Maybe[T]</c>/<c>Result[T]</c>.</summary>
@@ -200,6 +203,11 @@ public static class RuntimeContract
     public const string Watched = "Watched";
     /// <summary>Unmanaged raw-pointer handle.</summary>
     public const string Hijacked = "Hijacked";
+    /// <summary>Biased-reference-counted, auto-promoting handle (Suflae `entity` backing). Registered
+    /// as an RC wrapper for lifetime (retain/release), but deliberately NOT in the forwarding /
+    /// read-only / coercion sets: access is compiler-inserted lock-wrapping, never <c>$refer</c>/
+    /// <c>$control</c> (which would hand out a lock-bypassing raw reference).</summary>
+    public const string Roamed = "Roamed";
 
     // Related wrapper / marker-protocol type names that appear in the same type-identity checks as
     // the nine borrow wrappers above, but are NOT part of the borrow-wrapper contract sets.
@@ -239,7 +247,7 @@ public static class RuntimeContract
     /// TemporaryTeardownPass.RcWrapperBaseNames.</summary>
     public static readonly IReadOnlySet<string> RcWrapperBaseNames =
         new HashSet<string>(comparer: System.StringComparer.Ordinal)
-            { Retained, Tracked, Shared, Watched };
+            { Retained, Tracked, Shared, Watched, Roamed };
 
     /// <summary>Per RC-wrapper base name, the copy verb that bumps the appropriate count. Mirrors
     /// LLVMCodeGenerator.Statements.RcCopyVerb.</summary>
@@ -250,6 +258,7 @@ public static class RuntimeContract
             [Tracked] = RefCount.Track,
             [Shared] = RefCount.Share,
             [Watched] = RefCount.Watch,
+            [Roamed] = RefCount.Roam,
         };
 
     // =====================================================================================

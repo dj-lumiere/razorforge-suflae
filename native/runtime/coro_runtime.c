@@ -378,6 +378,32 @@ rf_coro_status rf_coro_status_get(rf_coro* coro)
     return coro->status;
 }
 
+/* ---- Roamed biased-refcount support (Suflae interop layer) --------------------------------- */
+
+extern uint64_t rf_current_thread_id(void); /* defined in task_runtime.c */
+
+/* Identity of the current logical execution context, for Roamed's reentrant, TASK-keyed lock. A
+ * coroutine's identity is its rf_coro* — stable across worker migration (a coro can resume on a
+ * different worker after a park), which is precisely why we key on it and NOT the OS thread. Off any
+ * coroutine (top-level) we fall back to the OS thread id, which is unique per thread. Only equality
+ * matters; a coro-pointer vs thread-id collision is astronomically unlikely and harmless here. */
+uint64_t rf_current_task_id(void)
+{
+    if (g_current_coro != NULL) {
+        return (uint64_t)(uintptr_t)g_current_coro;
+    }
+    return rf_current_thread_id();
+}
+
+/* Cycle-collector candidate hook — STAGE-1 STUB. Called only from RoamController.release when a
+ * strong decrement leaves the count > 0. No-op for now: candidates are dropped, so cycles among
+ * Roamed objects leak until the real collector lands (Stage 3 replaces this body). Kept as the sole
+ * collector entry point so the collector stays demand-driven and scoped to Roamed. */
+void rf_cc_add_candidate(void* obj)
+{
+    (void)obj;
+}
+
 /* ---- Cooperative cancellation request (structured concurrency) ---------------------------- */
 /* These NEVER free or unwind — they only set/read a flag. Actual teardown stays exclusively in
  * the host's rf_coro_abandon / rf_task join at $destroy (the single-freer invariant). A coroutine
