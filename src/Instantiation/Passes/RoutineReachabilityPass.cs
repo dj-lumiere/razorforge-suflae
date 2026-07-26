@@ -143,13 +143,18 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 RoutineInfo? copy = ctx.Registry.LookupMethod(type: type, methodName: copyVerb);
                 if (copy != null) EnqueueCallee(callee: copy);
 
-                // Roamed additionally: codegen inserts `promote()` at spawn boundaries (Stage 2b) with
-                // no AST call for reachability to walk — seed it so the body is monomorphized per
-                // concrete Roamed[T]. Its body pulls in the RoamController chain transitively.
+                // Roamed additionally: codegen inserts `promote()` (spawn boundaries, Stage 2b) and
+                // `lock_enter`/`lock_exit` (direct field access, Stage 2c) with NO AST call for
+                // reachability to walk — seed them so their bodies are monomorphized per concrete
+                // Roamed[T] (else "declared+called but never defined"). Bodies pull in the
+                // RoamController chain transitively.
                 if (ownerBase == RuntimeContract.Roamed)
                 {
-                    RoutineInfo? promote = ctx.Registry.LookupMethod(type: type, methodName: "promote");
-                    if (promote != null) EnqueueCallee(callee: promote);
+                    foreach (string codegenInserted in new[] { "promote", "lock_enter", "lock_exit" })
+                    {
+                        RoutineInfo? m = ctx.Registry.LookupMethod(type: type, methodName: codegenInserted);
+                        if (m != null) EnqueueCallee(callee: m);
+                    }
                 }
             }
 
