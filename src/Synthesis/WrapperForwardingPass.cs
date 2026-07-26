@@ -212,15 +212,17 @@ internal sealed class WrapperForwardingPass
             return null;
         }
 
-        // Roamed forwarders are synthesized only for NON-failable methods: the manual lock_enter /
-        // lock_exit wrapping cannot release the lock if a failable inner call throws past it. Failable
-        // member access on a Roamed must go through an explicit `using e.claim_roam() as g` guard,
-        // whose `$exit` releases the lock on the throw path.
+        // Roamed forwarders are synthesized only for NON-failable methods: the explicit lock_exit in
+        // the forwarder body is SKIPPED when a failable inner call propagates (early exit), and
+        // synthesized forwarders are not run through ScopeTeardownLoweringPass so an owned-guard
+        // release cannot be inserted either → the lock would leak. Failable member access on a Roamed
+        // is a TODO (needs a `when`-based try_-capture re-propagation in the forwarder).
         if (GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roamed
             && innerMethod.IsFailable)
         {
             return null;
         }
+
 
         string cacheKey = $"{wrapperDef.Name}.{methodName}#{(isFailable ? "!" : "")}";
         if (!_synthesizedForwarderKeys.Add(item: cacheKey))
@@ -587,8 +589,10 @@ internal sealed class WrapperForwardingPass
             if (isRoamed)
             {
                 // Wrap the controller-indirection call with the mode-checked lock: acquire before,
-                // release after. Non-failable only (gated in TrySynthesize), so no throw can skip the
-                // release. Reentrant + task-keyed, so nested Roamed calls on the same task just nest.
+                // release after (EXPLICIT — synthesized forwarder bodies are NOT run through
+                // ScopeTeardownLoweringPass, so an owned-guard's $destroy would never be inserted).
+                // Non-failable ONLY (gated in TrySynthesize): a failable inner call that propagates
+                // would skip the explicit lock_exit → leak. Reentrant + task-keyed → nested calls nest.
                 RoutineInfo? lockEnter = _registry.LookupMethod(type: wrapperType, methodName: "lock_enter");
                 RoutineInfo? lockExit = _registry.LookupMethod(type: wrapperType, methodName: "lock_exit");
                 Statement enterStmt = new ExpressionStatement(
