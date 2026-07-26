@@ -155,6 +155,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                         RoutineInfo? m = ctx.Registry.LookupMethod(type: type, methodName: codegenInserted);
                         if (m != null) EnqueueCallee(callee: m);
                     }
+
+                    // A Roamed FAILABLE forwarder synthesizes `when inner.check_m() { is Crashable e ->
+                    // throw e; ... }`; that re-throw needs Crashable.crash_message on the throw path, but
+                    // the synthesized when-body's ThrowStatement isn't walked for it here. Seed it directly.
+                    if (ctx.Registry.LookupType(name: "Crashable") is { } crashTy &&
+                        ctx.Registry.LookupMethod(type: crashTy, methodName: RuntimeContract.CrashMessage) is { } cm)
+                    {
+                        EnqueueCallee(callee: cm);
+                    }
                 }
             }
 

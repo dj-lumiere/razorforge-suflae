@@ -212,11 +212,11 @@ internal sealed class WrapperForwardingPass
             return null;
         }
 
-        // Roamed forwarders are synthesized only for NON-failable methods: the explicit lock_exit in
-        // the forwarder body is SKIPPED when a failable inner call propagates (early exit), and
-        // synthesized forwarders are not run through ScopeTeardownLoweringPass so an owned-guard
-        // release cannot be inserted either → the lock would leak. Failable member access on a Roamed
-        // is a TODO (needs a `when`-based try_-capture re-propagation in the forwarder).
+        // Roamed failable forwarders: the `when`-re-propagation body IS built (see
+        // BuildWrapperForwarderBody's isFailable path) but is currently GATED OFF — the synthesized
+        // re-throw's `Core.Crashable.crash_message` gets reachability-pruned ("declared+called but never
+        // defined"); the seed attempt in RoutineReachabilityPass (LookupType("Crashable")) did not
+        // resolve it. Re-enable by fixing that seed (find the correct crash_message owner/lookup).
         if (GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roamed
             && innerMethod.IsFailable)
         {
@@ -588,28 +588,60 @@ internal sealed class WrapperForwardingPass
             };
             if (isRoamed)
             {
-                // Wrap the controller-indirection call with the mode-checked lock: acquire before,
-                // release after (EXPLICIT — synthesized forwarder bodies are NOT run through
-                // ScopeTeardownLoweringPass, so an owned-guard's $destroy would never be inserted).
-                // Non-failable ONLY (gated in TrySynthesize): a failable inner call that propagates
-                // would skip the explicit lock_exit → leak. Reentrant + task-keyed → nested calls nest.
+                // Mode-checked lock, released EXPLICITLY (synthesized forwarder bodies are not run
+                // through ScopeTeardownLoweringPass, so an owned-guard $destroy would never be inserted).
                 RoutineInfo? lockEnter = _registry.LookupMethod(type: wrapperType, methodName: "lock_enter");
                 RoutineInfo? lockExit = _registry.LookupMethod(type: wrapperType, methodName: "lock_exit");
-                Statement enterStmt = new ExpressionStatement(
+                ExpressionStatement MkLock(RoutineInfo? m, string verb) => new ExpressionStatement(
                     Expression: new CallExpression(
                         Callee: new MemberExpression(
                             Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = wrapperType },
-                            PropertyName: "lock_enter", Location: _synthLoc),
-                        Arguments: [], Location: _synthLoc) { ResolvedRoutine = lockEnter },
+                            PropertyName: verb, Location: _synthLoc),
+                        Arguments: [], Location: _synthLoc) { ResolvedRoutine = m },
                     Location: _synthLoc);
-                Statement exitStmt = new ExpressionStatement(
-                    Expression: new CallExpression(
-                        Callee: new MemberExpression(
-                            Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = wrapperType },
-                            PropertyName: "lock_exit", Location: _synthLoc),
-                        Arguments: [], Location: _synthLoc) { ResolvedRoutine = lockExit },
-                    Location: _synthLoc);
-                if (hasReturnValue)
+
+                if (isFailable)
+                {
+                    // Failable: call the throw-based `check_` variant (non-propagating carrier), then a
+                    // `when` re-propagates AFTER releasing the lock in each arm — mirrors
+                    // ErrorHandlingVariantPass.BuildCarrierPropagationWhen, but with lock_exit inserted
+                    // so the lock is freed on BOTH the failure (throw) and success paths.
+                    TypeSymbol innerDef = innerType switch
+                    {
+                        EntityTypeInfo { GenericDefinition: { } ed } => ed,
+                        RecordTypeInfo { GenericDefinition: { } rd } => rd,
+                        _ => innerType
+                    };
+                    RoutineInfo? checkM = _registry.LookupMethod(type: innerDef,
+                        methodName: "check_" + methodName, isFailable: false);
+                    var checkSubject = new CallExpression(
+                        Callee: new MemberExpression(Object: innerRevealCall,
+                            PropertyName: "check_" + methodName, Location: _synthLoc),
+                        Arguments: forwardedArgs, Location: _synthLoc)
+                    { ResolvedType = checkM?.ReturnType };
+                    var whenStmt = new WhenStatement(
+                        Expression: checkSubject,
+                        Clauses:
+                        [
+                            new WhenClause(
+                                Pattern: new CrashablePattern(ErrorType: null, VariableName: "__rf_e", Location: _synthLoc),
+                                Body: new BlockStatement(
+                                    Statements: [MkLock(lockExit, "lock_exit"),
+                                        new ThrowStatement(Error: new IdentifierExpression(Name: "__rf_e", Location: _synthLoc), Location: _synthLoc)],
+                                    Location: _synthLoc),
+                                Location: _synthLoc),
+                            new WhenClause(
+                                Pattern: new ElsePattern(VariableName: "__rf_v", Location: _synthLoc),
+                                Body: new BlockStatement(
+                                    Statements: [MkLock(lockExit, "lock_exit"),
+                                        new ReturnStatement(Value: new IdentifierExpression(Name: "__rf_v", Location: _synthLoc), Location: _synthLoc)],
+                                    Location: _synthLoc),
+                                Location: _synthLoc)
+                        ],
+                        Location: _synthLoc);
+                    innerStatements = [MkLock(lockEnter, "lock_enter"), rawDecl, ctrlDecl, whenStmt];
+                }
+                else if (hasReturnValue)
                 {
                     Statement resultDecl = new DeclarationStatement(
                         Declaration: new VariableDeclaration(Name: "__rf_locked", Type: null,
@@ -619,12 +651,12 @@ internal sealed class WrapperForwardingPass
                         Value: new IdentifierExpression(Name: "__rf_locked", Location: _synthLoc)
                             { ResolvedType = innerMethod.ReturnType },
                         Location: _synthLoc);
-                    innerStatements = [enterStmt, rawDecl, ctrlDecl, resultDecl, exitStmt, retStmt];
+                    innerStatements = [MkLock(lockEnter, "lock_enter"), rawDecl, ctrlDecl, resultDecl, MkLock(lockExit, "lock_exit"), retStmt];
                 }
                 else
                 {
-                    Statement callExprStmt = new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
-                    innerStatements = [enterStmt, rawDecl, ctrlDecl, callExprStmt, exitStmt];
+                    innerStatements = [MkLock(lockEnter, "lock_enter"), rawDecl, ctrlDecl,
+                        new ExpressionStatement(Expression: innerCall, Location: _synthLoc), MkLock(lockExit, "lock_exit")];
                 }
             }
             else
