@@ -440,7 +440,7 @@ internal sealed class WrapperForwardingPass
                 : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
             innerStatements = [callStmt];
         }
-        else if (GetBaseTypeName(typeName: wrapperType.Name) is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
+        else if (GetBaseTypeName(typeName: wrapperType.Name) is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Roaming)
         {
             // RC wrappers: `me` is a ptr to `RetainController[T]`, NOT to T directly. Reaching
             // T requires double-indirection through the controller's `data: Hijacked[T]` field:
@@ -453,8 +453,18 @@ internal sealed class WrapperForwardingPass
             // Without this branch, the pointer-wrapper branch below would emit
             // `Hijacked[T](me).as_entity().method(...)`, treating the controller's strong+weak
             // counts (first 8 bytes) as if they were T's first 8 bytes.
+            // A `Roaming` guard indirects through `RoamController.data_ptr()`; Retained/Tracked through
+            // `RetainController.borrow_data()`. Both just reach the inner entity — for `Roaming` the
+            // lock is already held by the enclosing `using` ($enter), so the forwarder only reaches +
+            // calls (release happens at $exit on every path).
+            bool viaRoamController =
+                GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roaming;
+            string controllerName = viaRoamController ? "RoamController" : "RetainController";
+            string dataRevealName = viaRoamController
+                ? "data_ptr"
+                : Compiler.Resolution.RuntimeContract.RefCount.BorrowData;
             var controllerTypeExpr = new TypeExpression(
-                Name: "RetainController",
+                Name: controllerName,
                 GenericArguments:
                 [
                     new TypeExpression(Name: genericParamName, GenericArguments: null,
@@ -489,7 +499,7 @@ internal sealed class WrapperForwardingPass
             // instantiated with whatever binding is at hand, double-wrapping the controller
             // (RetainController[RetainController[X]]) and killing forwarder body emission
             // (undefined symbol at link).
-            TypeSymbol? retainControllerDef = _registry.LookupType(name: "RetainController");
+            TypeSymbol? retainControllerDef = _registry.LookupType(name: controllerName);
             TypeSymbol? retainControllerType = retainControllerDef is { IsGenericDefinition: true }
                 ? _registry.GetOrCreateResolution(genericDef: retainControllerDef,
                     typeArguments: [innerType])
@@ -505,7 +515,7 @@ internal sealed class WrapperForwardingPass
             RoutineInfo? ctrlRevealMethod = _registry.LookupMethod(
                 type: hijackedCtrlType, methodName: RuntimeContract.RawPointer.AsEntity);
             RoutineInfo? borrowDataMethod = retainControllerType != null
-                ? _registry.LookupMethod(type: retainControllerType, methodName: RuntimeContract.RefCount.BorrowData)
+                ? _registry.LookupMethod(type: retainControllerType, methodName: dataRevealName)
                 : null;
             RoutineInfo? innerRevealMethod = _registry.LookupMethod(
                 type: hijackedInnerType, methodName: RuntimeContract.RawPointer.AsEntity);

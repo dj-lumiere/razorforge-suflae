@@ -136,6 +136,19 @@ dangerous routine RoamController[T].reentrant_release()
     me.locked.store(desired: 0_u8)
   return
 
+### Mode-checked lock entry: acquires the reentrant lock only when ESCAPED (a no-op in LOCAL mode,
+### where there is no contention). Drives `Roamed`'s access wrapping and the `Roaming[T]` guard token.
+dangerous routine RoamController[T].guard_enter()
+  if me.escaped
+    me.reentrant_acquire()
+  return
+
+### Mode-checked lock exit: the `guard_enter` counterpart.
+dangerous routine RoamController[T].guard_exit()
+  if me.escaped
+    me.reentrant_release()
+  return
+
 # ============================================================================
 # Teardown.
 # ============================================================================

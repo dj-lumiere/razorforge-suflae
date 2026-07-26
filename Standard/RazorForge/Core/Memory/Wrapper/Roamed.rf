@@ -73,16 +73,24 @@ routine Roamed[T].is_escaped() -> Bool
 ### Enters the access lock: a no-op in LOCAL mode, a reentrant task-keyed acquire in ESCAPED mode.
 dangerous routine Roamed[T].lock_enter()
   var ctrl = Hijacked[RoamController[T]](me).as_entity()
-  if ctrl.is_escaped()
-    ctrl.reentrant_acquire()
+  ctrl.guard_enter()
   return
 
 ### Leaves the access lock: a no-op in LOCAL mode, a reentrant release in ESCAPED mode.
 dangerous routine Roamed[T].lock_exit()
   var ctrl = Hijacked[RoamController[T]](me).as_entity()
-  if ctrl.is_escaped()
-    ctrl.reentrant_release()
+  ctrl.guard_exit()
   return
+
+### Opens a scope-bound access guard over this handle for use with `using`: entering acquires the
+### (mode-checked, reentrant) lock and exiting releases it on EVERY path — normal return, early
+### return, or a failable throw — so the lock spans exactly the `using` block. The guard forwards the
+### inner entity's methods (via `$control`) while held. This is how the compiler will lock-wrap member
+### access in Stage 2c; it is safe because the inner reference is only reachable while the lock is held.
+### :returns: The resulting `Roaming[T]` guard token.
+routine Roamed[T].claim_roam() -> Roaming[T]
+  danger!
+    return Roaming[T](me)
 
 # ============================================================================
 # Inspection / Stage-1 test access
@@ -95,7 +103,7 @@ routine Roamed[T].strong_count() -> U64
     var ctrl = Hijacked[RoamController[T]](me).as_entity()
     return ctrl.strong_count()
 
-### The inner entity as a raw, UNLOCKED `?T` — STAGE-1/2 TEST HATCH ONLY. Real access is lock-wrapped
+### The inner entity as a raw, UNLOCKED reference — STAGE-1/2 TEST HATCH ONLY. Real access is lock-wrapped
 ### by the compiler (Stage 2c); this must never become `$refer`/`$control` (they would hand out a
 ### lock-bypassing reference).
 ### :returns: The inner entity.

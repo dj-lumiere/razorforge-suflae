@@ -208,6 +208,11 @@ public static class RuntimeContract
     /// read-only / coercion sets: access is compiler-inserted lock-wrapping, never <c>$refer</c>/
     /// <c>$control</c> (which would hand out a lock-bypassing raw reference).</summary>
     public const string Roamed = "Roamed";
+    /// <summary>Scope-bound access guard over a <see cref="Roamed"/> (the `Roamed` analogue of
+    /// <see cref="Claiming"/>): <c>Enterable</c> + <c>Controlling</c>, produced by
+    /// <c>Roamed.claim_roam()</c>. Its <c>$enter</c>/<c>$exit</c> take/release the mode-checked
+    /// reentrant lock so member access is lock-wrapped on every exit path.</summary>
+    public const string Roaming = "Roaming";
 
     // Related wrapper / marker-protocol type names that appear in the same type-identity checks as
     // the nine borrow wrappers above, but are NOT part of the borrow-wrapper contract sets.
@@ -224,7 +229,7 @@ public static class RuntimeContract
     /// and LLVMCodeGenerator.WrapperTypeNames.</summary>
     public static readonly IReadOnlySet<string> WrapperTypes =
         new HashSet<string>(comparer: System.StringComparer.Ordinal)
-            { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Hijacked };
+            { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Hijacked, Roaming };
 
     /// <summary>Wrapper types that transparently forward inner-type methods — every wrapper EXCEPT
     /// <see cref="Hijacked"/> (the raw-pointer escape hatch). Mirrors WrapperForwardingPass.ForwardingWrapperTypes.</summary>
@@ -241,7 +246,7 @@ public static class RuntimeContract
     /// may ALIAS its receiver. Mirrors TemporaryTeardownPass.BorrowWrapperNames.</summary>
     public static readonly IReadOnlySet<string> BorrowWrapperNames =
         new HashSet<string>(comparer: System.StringComparer.Ordinal)
-            { Viewing, Modifying, Inspecting, Claiming, Hijacked };
+            { Viewing, Modifying, Inspecting, Claiming, Hijacked, Roaming };
 
     /// <summary>RC-wrapper base names whose refcount release is owned by codegen. Mirrors
     /// TemporaryTeardownPass.RcWrapperBaseNames.</summary>
