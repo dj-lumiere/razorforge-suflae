@@ -212,6 +212,16 @@ internal sealed class WrapperForwardingPass
             return null;
         }
 
+        // Roamed forwarders are synthesized only for NON-failable methods: the manual lock_enter /
+        // lock_exit wrapping cannot release the lock if a failable inner call throws past it. Failable
+        // member access on a Roamed must go through an explicit `using e.claim_roam() as g` guard,
+        // whose `$exit` releases the lock on the throw path.
+        if (GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roamed
+            && innerMethod.IsFailable)
+        {
+            return null;
+        }
+
         string cacheKey = $"{wrapperDef.Name}.{methodName}#{(isFailable ? "!" : "")}";
         if (!_synthesizedForwarderKeys.Add(item: cacheKey))
         {
@@ -440,7 +450,7 @@ internal sealed class WrapperForwardingPass
                 : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
             innerStatements = [callStmt];
         }
-        else if (GetBaseTypeName(typeName: wrapperType.Name) is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Roaming)
+        else if (GetBaseTypeName(typeName: wrapperType.Name) is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Roaming or Compiler.Resolution.RuntimeContract.Roamed)
         {
             // RC wrappers: `me` is a ptr to `RetainController[T]`, NOT to T directly. Reaching
             // T requires double-indirection through the controller's `data: Hijacked[T]` field:
@@ -457,8 +467,9 @@ internal sealed class WrapperForwardingPass
             // `RetainController.borrow_data()`. Both just reach the inner entity — for `Roaming` the
             // lock is already held by the enclosing `using` ($enter), so the forwarder only reaches +
             // calls (release happens at $exit on every path).
-            bool viaRoamController =
-                GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roaming;
+            string wrapBase = GetBaseTypeName(typeName: wrapperType.Name);
+            bool isRoamed = wrapBase == Compiler.Resolution.RuntimeContract.Roamed;
+            bool viaRoamController = isRoamed || wrapBase == Compiler.Resolution.RuntimeContract.Roaming;
             string controllerName = viaRoamController ? "RoamController" : "RetainController";
             string dataRevealName = viaRoamController
                 ? "data_ptr"
@@ -574,10 +585,52 @@ internal sealed class WrapperForwardingPass
                 // ResolvedRoutine intentionally null — see record-struct branch for reasoning.
                 ResolvedType = innerMethod.ReturnType
             };
-            Statement callStmt = hasReturnValue
-                ? new ReturnStatement(Value: innerCall, Location: _synthLoc)
-                : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
-            innerStatements = [rawDecl, ctrlDecl, callStmt];
+            if (isRoamed)
+            {
+                // Wrap the controller-indirection call with the mode-checked lock: acquire before,
+                // release after. Non-failable only (gated in TrySynthesize), so no throw can skip the
+                // release. Reentrant + task-keyed, so nested Roamed calls on the same task just nest.
+                RoutineInfo? lockEnter = _registry.LookupMethod(type: wrapperType, methodName: "lock_enter");
+                RoutineInfo? lockExit = _registry.LookupMethod(type: wrapperType, methodName: "lock_exit");
+                Statement enterStmt = new ExpressionStatement(
+                    Expression: new CallExpression(
+                        Callee: new MemberExpression(
+                            Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = wrapperType },
+                            PropertyName: "lock_enter", Location: _synthLoc),
+                        Arguments: [], Location: _synthLoc) { ResolvedRoutine = lockEnter },
+                    Location: _synthLoc);
+                Statement exitStmt = new ExpressionStatement(
+                    Expression: new CallExpression(
+                        Callee: new MemberExpression(
+                            Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = wrapperType },
+                            PropertyName: "lock_exit", Location: _synthLoc),
+                        Arguments: [], Location: _synthLoc) { ResolvedRoutine = lockExit },
+                    Location: _synthLoc);
+                if (hasReturnValue)
+                {
+                    Statement resultDecl = new DeclarationStatement(
+                        Declaration: new VariableDeclaration(Name: "__rf_locked", Type: null,
+                            Initializer: innerCall, Visibility: VisibilityModifier.Open, Location: _synthLoc),
+                        Location: _synthLoc);
+                    Statement retStmt = new ReturnStatement(
+                        Value: new IdentifierExpression(Name: "__rf_locked", Location: _synthLoc)
+                            { ResolvedType = innerMethod.ReturnType },
+                        Location: _synthLoc);
+                    innerStatements = [enterStmt, rawDecl, ctrlDecl, resultDecl, exitStmt, retStmt];
+                }
+                else
+                {
+                    Statement callExprStmt = new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
+                    innerStatements = [enterStmt, rawDecl, ctrlDecl, callExprStmt, exitStmt];
+                }
+            }
+            else
+            {
+                Statement callStmt = hasReturnValue
+                    ? new ReturnStatement(Value: innerCall, Location: _synthLoc)
+                    : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
+                innerStatements = [rawDecl, ctrlDecl, callStmt];
+            }
         }
         else
         {

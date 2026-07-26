@@ -228,36 +228,36 @@ public static class RuntimeContract
     /// <summary>All wrapper types recognized for layout/dispatch. Mirrors WrapperForwardingPass.WrapperTypes
     /// and LLVMCodeGenerator.WrapperTypeNames.</summary>
     public static readonly IReadOnlySet<string> WrapperTypes =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
-            { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Hijacked, Roaming };
+        new HashSet<string>(comparer: StringComparer.Ordinal)
+            { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Hijacked, Roaming, Roamed };
 
     /// <summary>Wrapper types that transparently forward inner-type methods — every wrapper EXCEPT
     /// <see cref="Hijacked"/> (the raw-pointer escape hatch). Mirrors WrapperForwardingPass.ForwardingWrapperTypes.</summary>
     public static readonly IReadOnlySet<string> ForwardingWrapperTypes =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
-            { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked };
+        new HashSet<string>(comparer: StringComparer.Ordinal)
+            { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Roamed };
 
     /// <summary>Read-only borrow tokens (only <c>@readonly</c> methods reachable). Mirrors
     /// WrapperForwardingPass.ReadOnlyWrapperTypes.</summary>
     public static readonly IReadOnlySet<string> ReadOnlyWrapperTypes =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal) { Viewing, Inspecting };
+        new HashSet<string>(comparer: StringComparer.Ordinal) { Viewing, Inspecting };
 
     /// <summary>Borrow/view wrappers whose value points INTO another value, so a method returning one
-    /// may ALIAS its receiver. Mirrors TemporaryTeardownPass.BorrowWrapperNames.</summary>
-    public static readonly IReadOnlySet<string> BorrowWrapperNames =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
-            { Viewing, Modifying, Inspecting, Claiming, Hijacked, Roaming };
+    /// may ALIAS its receiver. Mirrors TemporaryTeardownPass.ReferringWrapperNAmes.</summary>
+    public static readonly IReadOnlySet<string> ReferringWrapperNAmes =
+        new HashSet<string>(comparer: StringComparer.Ordinal)
+            { Viewing, Modifying, Inspecting, Claiming, Retained, Roaming };
 
     /// <summary>RC-wrapper base names whose refcount release is owned by codegen. Mirrors
     /// TemporaryTeardownPass.RcWrapperBaseNames.</summary>
     public static readonly IReadOnlySet<string> RcWrapperBaseNames =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
+        new HashSet<string>(comparer: StringComparer.Ordinal)
             { Retained, Tracked, Shared, Watched, Roamed };
 
     /// <summary>Per RC-wrapper base name, the copy verb that bumps the appropriate count. Mirrors
     /// LLVMCodeGenerator.Statements.RcCopyVerb.</summary>
     public static readonly IReadOnlyDictionary<string, string> RcCopyVerb =
-        new Dictionary<string, string>(comparer: System.StringComparer.Ordinal)
+        new Dictionary<string, string>(comparer: StringComparer.Ordinal)
         {
             [Retained] = RefCount.Retain,
             [Tracked] = RefCount.Track,
@@ -274,7 +274,7 @@ public static class RuntimeContract
 
     /// <summary>Per-type BuilderService member routines (require <c>import BuilderService</c>).</summary>
     public static readonly IReadOnlySet<string> BuilderPerTypeRoutines =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
+        new HashSet<string>(comparer: StringComparer.Ordinal)
         {
             "type_name", "type_kind", "type_id", "module_name", "is_generic", "is_in_flight",
             "generic_args", "member_variable_count", "member_variable_info", "protocols",
@@ -284,7 +284,7 @@ public static class RuntimeContract
 
     /// <summary>Standalone BuilderService routines (require <c>import BuilderService</c>).</summary>
     public static readonly IReadOnlySet<string> BuilderStandaloneRoutines =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
+        new HashSet<string>(comparer: StringComparer.Ordinal)
         {
             "source_file", "source_line", "source_column", "source_routine", "source_module",
             "source_text", "caller_file", "caller_line", "caller_routine", "target_os",

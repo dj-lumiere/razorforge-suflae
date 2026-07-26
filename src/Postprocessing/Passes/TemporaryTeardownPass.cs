@@ -78,7 +78,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// RC wrappers (Retained/Tracked/Shared/Watched) are NOT here: they carry a refcounted controller,
     /// so an aliasing owned result is balanced by refcount.</summary>
     private static readonly IReadOnlySet<string> BorrowWrapperNames =
-        RuntimeContract.BorrowWrapperNames;
+        RuntimeContract.ReferringWrapperNAmes;
 
     private sealed record Spill(string Name, TypeInfo Type, RoutineInfo Destroy, Expression Init);
 
