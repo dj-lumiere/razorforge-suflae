@@ -90,7 +90,6 @@ public sealed partial class SemanticVerifier
         Compiler.Resolution.RuntimeContract.Retained,  // Reference-counted handle
         Compiler.Resolution.RuntimeContract.Tracked,   // Weak reference handle
         Compiler.Resolution.RuntimeContract.Hijacked,  // Unmanaged raw pointer handle
-        Compiler.Resolution.RuntimeContract.Roaming,   // Scope-bound access guard over a Roamed
         Compiler.Resolution.RuntimeContract.Roamed,    // Biased-RC handle; forwards inner under a lock
     ];
 

@@ -804,40 +804,24 @@ public partial class LlvmCodeGenerator
         // method (owned by the inner T — e.g. `c.bump()`), the callee's `me` must be the entity, so
         // project the receiver through `controller.data`. Token-own methods ($enter/$exit/$refer/
         // $control/$represent/$diagnose/$destroy, owned by the token itself) keep the controller ptr.
-        // `Roaming[T]` (the Roamed lock guard) is the same shape as Inspecting/Claiming but wraps a
-        // single-param `RoamController[T]`, so it needs the same receiver projection.
         if (method is { OwnerType: { } methodOwner } &&
-            receiverType is RecordTypeInfo tokenRec)
+            receiverType is RecordTypeInfo tokenRec &&
+            GetGenericBaseName(type: tokenRec) is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
+            tokenRec.TypeArguments is { Count: > 1 } &&
+            tokenRec.TypeArguments[index: 0] is EntityTypeInfo tokenInner &&
+            methodOwner.FullName == tokenInner.FullName)
         {
-            string tokenBase = GetGenericBaseName(type: tokenRec);
-            EntityTypeInfo? tokenInner = null;
-            string? ctrlName = null;
-            if (tokenBase is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
-                tokenRec.TypeArguments is { Count: > 1 } &&
-                tokenRec.TypeArguments[index: 0] is EntityTypeInfo shareInner)
+            string policyName = tokenRec.TypeArguments[index: 1].FullName;
+            TypeInfo? ctrlType =
+                _registry.LookupType(name: $"ShareController[{tokenInner.FullName}, {policyName}]")
+                ?? _registry.LookupType(
+                    name: $"Core.ShareController[{tokenInner.FullName}, {policyName}]");
+            if (ctrlType is EntityTypeInfo ctrlEntity)
             {
-                tokenInner = shareInner;
-                ctrlName = $"ShareController[{shareInner.FullName}, {tokenRec.TypeArguments[index: 1].FullName}]";
-            }
-            else if (tokenBase == Compiler.Resolution.RuntimeContract.Roaming &&
-                tokenRec.TypeArguments is { Count: > 0 } &&
-                tokenRec.TypeArguments[index: 0] is EntityTypeInfo roamInner)
-            {
-                tokenInner = roamInner;
-                ctrlName = $"RoamController[{roamInner.FullName}]";
-            }
-
-            if (tokenInner != null && ctrlName != null && methodOwner.FullName == tokenInner.FullName)
-            {
-                TypeInfo? ctrlType = _registry.LookupType(name: ctrlName)
-                    ?? _registry.LookupType(name: $"Core.{ctrlName}");
-                if (ctrlType is EntityTypeInfo ctrlEntity)
-                {
-                    receiver = EmitEntityMemberVariableRead(sb: sb,
-                        entityPtr: receiver,
-                        entity: ctrlEntity,
-                        memberVariableName: "data");
-                }
+                receiver = EmitEntityMemberVariableRead(sb: sb,
+                    entityPtr: receiver,
+                    entity: ctrlEntity,
+                    memberVariableName: "data");
             }
         }
 

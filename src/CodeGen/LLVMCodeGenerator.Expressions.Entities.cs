@@ -607,26 +607,32 @@ public partial class LlvmCodeGenerator
                 }
             }
             else if (wrapperRecord.HasDirectBackendType &&
-                wrapBaseName == Compiler.Resolution.RuntimeContract.Roaming)
+                wrapBaseName == Compiler.Resolution.RuntimeContract.Roamed)
             {
-                // Roaming[T] is the Roamed lock guard: an `@llvm("ptr")` token targeting
-                // RoamController[T], NOT the entity. Project through the controller's `data` field,
-                // exactly like Claiming, so `g.field` reads the guarded entity rather than
-                // controller.count (the refcount at offset 0).
+                // Roamed[T] is an `@llvm("ptr")` handle targeting RoamController[T], NOT the entity.
+                // Project the read through the controller's `data` field AND bracket it with the
+                // mode-checked lock (lock_enter/lock_exit) so an ESCAPED object's field touch is
+                // serialized — a no-op while LOCAL. Does the full read + early-returns.
+                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_enter");
+                if (enterM != null)
+                {
+                    GenerateRoutineDeclaration(routine: enterM);
+                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: enterM)}(ptr {target})");
+                }
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RoamController[{innerEntity.FullName}]")
                     ?? _registry.LookupType(name: $"Core.RoamController[{innerEntity.FullName}]");
-                if (controllerType is EntityTypeInfo controllerEntity)
+                string roamEntPtr = controllerType is EntityTypeInfo controllerEntity
+                    ? EmitEntityMemberVariableRead(sb: sb, entityPtr: target, entity: controllerEntity, memberVariableName: "data")
+                    : target;
+                string roamLoaded = EmitEntityMemberVariableRead(sb: sb, entityPtr: roamEntPtr, entity: innerEntity, memberVariableName: propertyName);
+                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_exit");
+                if (exitM != null)
                 {
-                    innerPtr = EmitEntityMemberVariableRead(sb: sb,
-                        entityPtr: target,
-                        entity: controllerEntity,
-                        memberVariableName: "data");
+                    GenerateRoutineDeclaration(routine: exitM);
+                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: exitM)}(ptr {target})");
                 }
-                else
-                {
-                    innerPtr = target;
-                }
+                return roamLoaded;
             }
             else if (wrapperRecord.HasDirectBackendType)
             {

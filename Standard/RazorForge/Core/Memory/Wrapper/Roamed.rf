@@ -82,15 +82,6 @@ dangerous routine Roamed[T].lock_exit()
   ctrl.guard_exit()
   return
 
-### Opens a scope-bound access guard over this handle for use with `using`: entering acquires the
-### (mode-checked, reentrant) lock and exiting releases it on EVERY path — normal return, early
-### return, or a failable throw — so the lock spans exactly the `using` block. The guard forwards the
-### inner entity's methods (via `$control`) while held. This is how the compiler will lock-wrap member
-### access in Stage 2c; it is safe because the inner reference is only reachable while the lock is held.
-### :returns: The resulting `Roaming[T]` guard token.
-routine Roamed[T].claim_roam() -> Roaming[T]
-  danger!
-    return Roaming[T](me)
 
 # ============================================================================
 # Inspection / Stage-1 test access

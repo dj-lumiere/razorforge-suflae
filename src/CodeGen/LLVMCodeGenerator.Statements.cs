@@ -698,24 +698,32 @@ public partial class LlvmCodeGenerator
                 }
             }
             else if (wrapperRecord.HasDirectBackendType &&
-                wrapBaseName == Compiler.Resolution.RuntimeContract.Roaming)
+                wrapBaseName == Compiler.Resolution.RuntimeContract.Roamed)
             {
-                // Roaming[T] lock guard: project a field WRITE through RoamController[T].data, exactly
-                // like the read path — otherwise `g.field = v` would clobber controller.count (refcount).
+                // Roamed[T] handle: project the WRITE through RoamController.data AND bracket it with
+                // the mode-checked lock so an ESCAPED object's field store is serialized (no-op LOCAL).
+                // Does the full write + early-returns.
+                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_enter");
+                if (enterM != null)
+                {
+                    GenerateRoutineDeclaration(routine: enterM);
+                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: enterM)}(ptr {target})");
+                }
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RoamController[{innerEntity.FullName}]")
                     ?? _registry.LookupType(name: $"Core.RoamController[{innerEntity.FullName}]");
-                if (controllerType is EntityTypeInfo controllerEntity)
+                string roamEntPtr = controllerType is EntityTypeInfo controllerEntity
+                    ? EmitEntityMemberVariableRead(sb: sb, entityPtr: target, entity: controllerEntity, memberVariableName: "data")
+                    : target;
+                EmitEntityMemberVariableWrite(sb: sb, entityPtr: roamEntPtr, entity: innerEntity,
+                    memberVariableName: member.PropertyName, value: value, valueType: valueType);
+                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_exit");
+                if (exitM != null)
                 {
-                    innerPtr = EmitEntityMemberVariableRead(sb: sb,
-                        entityPtr: target,
-                        entity: controllerEntity,
-                        memberVariableName: "data");
+                    GenerateRoutineDeclaration(routine: exitM);
+                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: exitM)}(ptr {target})");
                 }
-                else
-                {
-                    innerPtr = target;
-                }
+                return;
             }
             else if (wrapperRecord.HasDirectBackendType)
             {

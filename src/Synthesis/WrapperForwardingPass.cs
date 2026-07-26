@@ -450,7 +450,7 @@ internal sealed class WrapperForwardingPass
                 : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
             innerStatements = [callStmt];
         }
-        else if (GetBaseTypeName(typeName: wrapperType.Name) is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Roaming or Compiler.Resolution.RuntimeContract.Roamed)
+        else if (GetBaseTypeName(typeName: wrapperType.Name) is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Roamed)
         {
             // RC wrappers: `me` is a ptr to `RetainController[T]`, NOT to T directly. Reaching
             // T requires double-indirection through the controller's `data: Hijacked[T]` field:
@@ -467,9 +467,8 @@ internal sealed class WrapperForwardingPass
             // `RetainController.borrow_data()`. Both just reach the inner entity — for `Roaming` the
             // lock is already held by the enclosing `using` ($enter), so the forwarder only reaches +
             // calls (release happens at $exit on every path).
-            string wrapBase = GetBaseTypeName(typeName: wrapperType.Name);
-            bool isRoamed = wrapBase == Compiler.Resolution.RuntimeContract.Roamed;
-            bool viaRoamController = isRoamed || wrapBase == Compiler.Resolution.RuntimeContract.Roaming;
+            bool isRoamed = GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roamed;
+            bool viaRoamController = isRoamed;
             string controllerName = viaRoamController ? "RoamController" : "RetainController";
             string dataRevealName = viaRoamController
                 ? "data_ptr"
