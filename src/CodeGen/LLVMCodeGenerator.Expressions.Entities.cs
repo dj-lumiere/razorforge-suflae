@@ -75,6 +75,17 @@ public partial class LlvmCodeGenerator
             // Store the value
             EmitLine(sb: sb,
                 line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
+
+            // Roamed[T] field: take a strong ref (COPY semantics — the constructor arg keeps its own
+            // reference; the caller skips consuming it). Mirrors the reassignment path
+            // (EmitEntityMemberVariableWrite). Null/none values retain as a no-op (null-safe), so the
+            // zero-init caller (a $create prologue) is unaffected.
+            if (memberVariable.Type is RecordTypeInfo roamedField
+                && GetGenericBaseName(type: roamedField) == Compiler.Resolution.RuntimeContract.Roamed)
+            {
+                EmitRetainedVarRetain(sb: sb, llvmAddr: memberVariablePtr,
+                    recordType: (RecordTypeInfo)memberVariable.Type);
+            }
         }
 
         return rawPtr;
@@ -220,9 +231,19 @@ public partial class LlvmCodeGenerator
         // Field initializers with `steal` transfer ownership from local entity vars into
         // the new entity. Drop the source locals from the cleanup set so the function-exit
         // rf_invalidate pass doesn't free the same allocation now held by the field.
-        foreach ((string _, Expression fieldExpr) in expr.MemberVariables)
+        // Roamed[T] fields are the exception: they use COPY semantics (EmitEntityAllocation retains the
+        // stored value), so their arg is NOT moved — it keeps its own reference and tears down normally.
+        // Consuming it here would drop a ref the field just retained → underflow.
+        foreach ((string fieldName, Expression fieldExpr) in expr.MemberVariables)
         {
-            ConsumeTransferredLocalOwnership(expr: fieldExpr);
+            MemberVariableInfo? fieldInfo = entity.MemberVariables
+                .FirstOrDefault(predicate: mv => mv.Name == fieldName);
+            bool isRoamedField = fieldInfo?.Type is RecordTypeInfo roamedFieldInfo
+                && GetGenericBaseName(type: roamedFieldInfo) == Compiler.Resolution.RuntimeContract.Roamed;
+            if (!isRoamedField)
+            {
+                ConsumeTransferredLocalOwnership(expr: fieldExpr);
+            }
         }
 
         // Allocate and initialize
@@ -398,25 +419,41 @@ public partial class LlvmCodeGenerator
 
         // Initialize fields. Named arguments may be written in any order; bind each field to the
         // argument whose name matches it (falling back to positional for unnamed args).
+        // Roamed[T] fields use COPY semantics: retain the stored value and DON'T consume the arg (it
+        // keeps its own reference). Every other field keeps move/steal semantics — consumed below.
+        var argsToConsume = new List<Expression>();
         for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
+            MemberVariableInfo field = entity.MemberVariables[index: i];
             Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
-                fieldName: entity.MemberVariables[index: i].Name, positionalIndex: i);
+                fieldName: field.Name, positionalIndex: i);
             if (fieldArg == null)
                 continue;
             Expression arg = fieldArg is NamedArgumentExpression named ? named.Value : fieldArg;
             string value = EmitExpression(sb: sb, expr: arg);
-            string fieldType = GetLlvmType(type: entity.MemberVariables[index: i].Type);
+            string fieldType = GetLlvmType(type: field.Type);
             string fieldPtr = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {fieldPtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {i}");
             EmitLine(sb: sb, line: $"  store {fieldType} {value}, ptr {fieldPtr}");
+
+            if (field.Type is RecordTypeInfo roamedField
+                && GetGenericBaseName(type: roamedField) == Compiler.Resolution.RuntimeContract.Roamed)
+            {
+                EmitRetainedVarRetain(sb: sb, llvmAddr: fieldPtr,
+                    recordType: (RecordTypeInfo)field.Type);
+            }
+            else
+            {
+                argsToConsume.Add(item: fieldArg);
+            }
         }
 
         // Field initializers with `steal` transfer ownership from local entity vars into
         // the new entity. Drop the source locals from the cleanup set so the function-exit
-        // rf_invalidate pass doesn't free the same allocation now held by the field.
-        ConsumeTransferredCallOwnership(arguments: arguments);
+        // rf_invalidate pass doesn't free the same allocation now held by the field. (Roamed fields
+        // are excluded — they were retained above, and their arg keeps its own reference.)
+        ConsumeTransferredCallOwnership(arguments: argsToConsume);
 
         return entityPtr;
     }

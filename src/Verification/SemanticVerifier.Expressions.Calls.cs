@@ -19,7 +19,7 @@ public sealed partial class SemanticVerifier
     private const string ModifyMethodName = "modify";
     private const string InspectMethodName = "inspect";
 
-    private TypeSymbol AnalyzeCallExpression(CallExpression call)
+    private TypeSymbol AnalyzeCallExpression(CallExpression call, TypeSymbol? expectedType = null)
     {
         switch (call.Callee)
         {
@@ -113,7 +113,7 @@ public sealed partial class SemanticVerifier
                 {
                     List<TypeInfo>? inferred =
                         InferGenericTypeArguments(genericRoutine: routine,
-                            arguments: call.Arguments);
+                            arguments: call.Arguments, expectedType: expectedType);
                     if (inferred != null)
                     {
                         RoutineInfo? monomorphized = _registry.GetOrCreateRoutineResolution(
@@ -269,9 +269,27 @@ public sealed partial class SemanticVerifier
                     // argument has no expected type and errors S016.
                     TypeSymbol? variantArgContext = callableType is VariantTypeInfo ? callableType : null;
                     var creatorArgTypes = new List<TypeSymbol>(capacity: call.Arguments.Count);
+                    int creatorPosIdx = 0;
                     foreach (Expression arg in call.Arguments)
                     {
-                        creatorArgTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: variantArgContext));
+                        // Each entity-constructor argument's target field type is its expected type, so
+                        // contextual inference works — literals adapt and, critically, a return-type-only
+                        // generic like `roamed_none()` binds its type parameter from the field
+                        // (`next: Roamed[Node]` → T = Node) instead of staying unmonomorphized. Variant
+                        // args keep the variant itself as context (the auto-wrap case above).
+                        TypeSymbol? argExpected = variantArgContext;
+                        if (argExpected == null && callableType is EntityTypeInfo entityCtor)
+                        {
+                            MemberVariableInfo? field = arg is NamedArgumentExpression na
+                                ? entityCtor.MemberVariables
+                                    .FirstOrDefault(predicate: mv => mv.Name == na.Name)
+                                : (creatorPosIdx < entityCtor.MemberVariables.Count
+                                    ? entityCtor.MemberVariables[index: creatorPosIdx]
+                                    : null);
+                            argExpected = field?.Type;
+                        }
+                        creatorArgTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: argExpected));
+                        creatorPosIdx++;
                     }
 
                     RoutineInfo? creator = _registry.LookupMethodOverload(type: callableType,
@@ -437,9 +455,28 @@ public sealed partial class SemanticVerifier
                     // (lets a bare `none` argument resolve to the variant's None arm).
                     TypeSymbol? variantArgContext = type is VariantTypeInfo ? type : null;
                     var argTypes = new List<TypeSymbol>();
+                    int ctorPosIdx = 0;
                     foreach (Expression arg in call.Arguments)
                     {
-                        argTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: variantArgContext));
+                        // Give each entity-constructor argument its target field's type as the expected
+                        // type, so contextual inference works — literals adapt (e.g. `id: 1` → S64) and,
+                        // critically, a return-type-only generic like `roamed_none()` binds its type
+                        // parameter from the field (`next: Roamed[Node]` → T = Node) instead of staying
+                        // an unmonomorphized generic. Mirrors the field-init path
+                        // (ValidateCreatorMemberVariables). Variant args keep the variant as context.
+                        TypeSymbol? argExpected = variantArgContext;
+                        if (argExpected == null && type is EntityTypeInfo entityCtorType)
+                        {
+                            MemberVariableInfo? field = arg is NamedArgumentExpression na
+                                ? entityCtorType.MemberVariables
+                                    .FirstOrDefault(predicate: mv => mv.Name == na.Name)
+                                : (ctorPosIdx < entityCtorType.MemberVariables.Count
+                                    ? entityCtorType.MemberVariables[index: ctorPosIdx]
+                                    : null);
+                            argExpected = field?.Type;
+                        }
+                        argTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: argExpected));
+                        ctorPosIdx++;
                     }
 
                     // C95: Try $create overload match first

@@ -470,6 +470,23 @@ void rf_cc_roots_remove_front(uint64_t n)
     g_cc_roots.count = remaining;
 }
 
+// Removes the roots entry for one controller that is about to be freed. A buffered candidate that
+// reaches count 0 through normal RC release is dead now; freeing it eagerly (deterministic teardown)
+// would leave a dangling pointer in the roots buffer, so the release path calls this first. O(n) find
+// (roots is threshold-bounded), swap-with-last for O(1) removal (candidate order is irrelevant). Order
+// is unaffected during a pass: MarkRoots snapshots and processes roots[0..n] without triggering
+// releases, so any removal here happens outside that index walk.
+void rf_cc_roots_remove(void* ptr)
+{
+    for (uint64_t i = 0; i < g_cc_roots.count; i++) {
+        if (g_cc_roots.items[i] == ptr) {
+            g_cc_roots.items[i] = g_cc_roots.items[g_cc_roots.count - 1];
+            g_cc_roots.count--;
+            return;
+        }
+    }
+}
+
 // scratch protocol — get one controller's children:
 //   rf_cc_scratch_reset(); rf_cc_trace_into_scratch(trace_hook, controller);
 //   for i in 0..rf_cc_scratch_count(): rf_cc_scratch_at(i)   // child controller pointers

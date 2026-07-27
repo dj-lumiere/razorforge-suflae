@@ -23,7 +23,7 @@ namespace Compiler.Desugaring.Passes;
 /// <code>
 ///  {
 /// var _lf_iter_N = iterable.$iter()
-/// loop { when _lf_iter_N.try_next() { is None -> break; else var v -> body } }
+/// loop { when _lf_iter_N.try_emit() { is None -> break; else var v -> body } }
 /// }
 /// </code>
 ///
@@ -33,7 +33,7 @@ namespace Compiler.Desugaring.Passes;
 ///  {
 /// var _lf_iter_N = pairs.$iter()
 /// loop {
-/// when _lf_iter_N.try_next() {
+/// when _lf_iter_N.try_emit() {
 /// is None -> break
 /// else var _lf_elem_M -> { var a = _lf_elem_M.item0; var b = _lf_elem_M.item1; body }
 ///  }
@@ -47,7 +47,7 @@ namespace Compiler.Desugaring.Passes;
 /// var _lf_exhausted_N: Bool = false
 /// var _lf_iter_N = iterable.$iter()
 /// loop {
-/// when _lf_iter_N.try_next() {
+/// when _lf_iter_N.try_emit() {
 /// is None -> { _lf_exhausted_N = true; break }
 /// else var x -> body
 ///  }
@@ -311,15 +311,15 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         CallExpression tryNextCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: tryNextReceiver,
-                PropertyName: Compiler.Resolution.RuntimeContract.TryNext,
+                PropertyName: Compiler.Resolution.RuntimeContract.TryEmit,
                 Location: loc),
             Arguments: [],
             Location: loc) { IsSynthesizedLowering = true };
 
         // When running after SA (stdlib/variant bodies), annotate ResolvedType, ResolvedRoutine,
-        // and LoweringKind on the $iter and try_next calls so CallOverloadResolutionPass doesn't
+        // and LoweringKind on the $iter and try_emit calls so CallOverloadResolutionPass doesn't
         // need to re-classify them (which fails for instantiated bodies where the receiver variable
-        // has no SA-annotated type), and so reachability marks the CONCRETE emitter's try_next.
+        // has no SA-annotated type), and so reachability marks the CONCRETE emitter's try_emit.
         // Skip ErrorTypeInfo: SA suppresses stdlib errors.
         if (forStmt.Iterable.ResolvedType is { } iterType and not ErrorTypeInfo)
         {
@@ -328,9 +328,9 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             {
                 // LookupMethod returns the generic-def `$iter`, whose ReturnType still carries the
                 // owner's params (e.g. `?EnumerateEmitter[T, S/Iter]`). Substitute the concrete
-                // owner's type args so `try_next` resolves on the CONCRETE emitter
+                // owner's type args so `try_emit` resolves on the CONCRETE emitter
                 // (`EnumerateEmitter[Text, ListEmitter[Text]]`); otherwise reachability marks the
-                // unresolved-projection emitter's try_next and the concrete one never generates.
+                // unresolved-projection emitter's try_emit and the concrete one never generates.
                 TypeInfo iteratorType = SubstituteForConcreteOwner(type: rawIteratorType,
                     owner: iterType);
                 iterCallExpr.ResolvedRoutine = iterMethod;
@@ -338,7 +338,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 // Carry the concrete emitter type onto the receiver so reachability/codegen see it.
                 tryNextReceiver.ResolvedType = iteratorType;
                 RoutineInfo? tryNextMethod =
-                    ctx.Registry.LookupMethod(type: iteratorType, methodName: Compiler.Resolution.RuntimeContract.TryNext);
+                    ctx.Registry.LookupMethod(type: iteratorType, methodName: Compiler.Resolution.RuntimeContract.TryEmit);
                 if (tryNextMethod != null)
                     tryNextCallExpr = tryNextCallExpr with
                     {

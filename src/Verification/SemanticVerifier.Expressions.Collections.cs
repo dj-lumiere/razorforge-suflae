@@ -681,7 +681,7 @@ public sealed partial class SemanticVerifier
     /// Returns the inferred type arguments, or null if inference fails.
     /// </summary>
     private List<TypeInfo>? InferGenericTypeArguments(RoutineInfo genericRoutine,
-        List<Expression> arguments)
+        List<Expression> arguments, TypeSymbol? expectedType = null)
     {
         if (genericRoutine.GenericParameters == null ||
             genericRoutine.GenericParameters.Count == 0)
@@ -724,6 +724,20 @@ public sealed partial class SemanticVerifier
         // param is now known (e.g. `zip[U, S2](other: Referring[S2]) needs S2 obeys Iterable[U]` —
         // S2 binds from the argument, then U binds from S2's Iterable conformance).
         InferGenericsFromConstraints(routine: genericRoutine, inferred: typeArgs);
+
+        // Third pass: return-type-directed inference. A type parameter that appears ONLY in the return
+        // type (e.g. `roamed_none[T]() -> Roamed[T]`, `default[T]() -> T`) can never bind from the
+        // arguments; unify the routine's return type against the call's expected type — the field /
+        // parameter / assignment target the result flows into — to fill it. Only used to fill gaps
+        // (already-inferred params from the argument pass win).
+        if (expectedType is not null && expectedType != ErrorTypeInfo.Instance &&
+            genericRoutine.ReturnType is { } returnType)
+        {
+            InferMethodTypeArgumentsFromTypes(paramType: returnType,
+                argType: expectedType,
+                genericParameters: genericRoutine.GenericParameters,
+                inferred: typeArgs);
+        }
 
         // All type args must be inferred
         for (int i = 0; i < typeArgs.Length; i++)

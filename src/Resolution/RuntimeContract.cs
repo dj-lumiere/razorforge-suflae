@@ -20,7 +20,7 @@ namespace Compiler.Resolution;
 /// migrating them to reference these constants (and adding the resolution check) is the follow-up.
 /// The <c>$</c>-wired routine names are intentionally NOT here — they already have a single source of
 /// truth in <see cref="WiredRoutineCatalog"/>. The two marker-protocol verbs <c>$refer</c>/<c>$control</c>
-/// and the iteration <c>try_next</c> are compiler-generated and appear as literals at lowering sites,
+/// and the iteration <c>try_emit</c> are compiler-generated and appear as literals at lowering sites,
 /// so they are cross-referenced here for completeness (their catalog entry, where one exists, stays
 /// canonical).</para>
 /// </summary>
@@ -113,9 +113,9 @@ public static class RuntimeContract
     public const string CrashMessage = "crash_message";
 
     /// <summary>Non-failable iterator step generated for <c>for</c>-lowering (the <c>try_</c> variant of
-    /// failable <c>$next!</c>). Also carried by <see cref="WiredRoutineCatalog"/> (reachability seed);
+    /// failable <c>$emit!</c>). Also carried by <see cref="WiredRoutineCatalog"/> (reachability seed);
     /// listed here because ControlFlowLoweringPass / IteratorInlineLoweringPass match it by literal.</summary>
-    public const string TryNext = "try_next";
+    public const string TryEmit = "try_emit";
 
     // =====================================================================================
     // Marker-protocol verbs — compiler-generated $-names that are NOT in WiredRoutineCatalog
@@ -130,7 +130,7 @@ public static class RuntimeContract
     /// <summary>The routine-name contracts that MUST resolve to a real, declared stdlib routine —
     /// the rename-sensitive set that <c>validate-stdlib</c>'s <see cref="RuntimeContractCheck"/>
     /// asserts. Deliberately EXCLUDES compiler-generated / intrinsic names that have no stdlib
-    /// routine body: <see cref="TryNext"/> (generated from <c>$next</c>), the marker verbs
+    /// routine body: <see cref="TryEmit"/> (generated from <c>$emit</c>), the marker verbs
     /// <see cref="Refer"/>/<see cref="Control"/>, <see cref="DataSize"/> + the BuilderService sets
     /// (folded intrinsics), and the native <see cref="Runtime"/> externs (link-checked C-ABI). The
     /// carrier FIELDS (<see cref="Carrier"/>) are member variables, not routines — checked separately.</summary>

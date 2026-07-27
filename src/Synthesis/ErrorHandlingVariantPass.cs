@@ -190,10 +190,10 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <param name="rewriter">Optional tail-return rewriter; when it succeeds the return is emitted as a passthrough.</param>
     /// <param name="registry">Optional type registry used for try_-variant synthesis when <paramref name="kind"/> is <c>Try</c>.</param>
     /// <param name="nextOnlyPropagation">
-    /// When true, non-tail failable-call propagation is restricted to inner <c>$next</c> calls
+    /// When true, non-tail failable-call propagation is restricted to inner <c>$emit</c> calls
     /// (iterator chaining). Used by the MONOMORPHIZED (path-2) caller, which runs AFTER reachability:
     /// any other <c>try_X</c> it introduces wouldn't be marked live and would LINKERR (e.g. a guarded
-    /// <c>$getitem!</c>), whereas <c>try_next</c> is always emitted for live iterators. When false
+    /// <c>$getitem!</c>), whereas <c>try_emit</c> is always emitted for live iterators. When false
     /// (the global path-1 caller, which runs BEFORE reachability), ALL non-tail failable calls are
     /// propagated — reachability then sees the introduced <c>try_X</c> calls and emits them. Path-1
     /// MUST propagate broadly so a try_ variant whose failability is purely propagated through a
@@ -320,7 +320,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <summary>
     /// Transforms a block's statements, propagating NON-tail failable calls through their safe
     /// variant. The tail-position <paramref name="rewriter"/> only handles <c>return F!(x)</c>; a
-    /// failable call used in statement position — e.g. <c>var item = src.$next!()</c> — would
+    /// failable call used in statement position — e.g. <c>var item = src.$emit!()</c> — would
     /// otherwise be left calling the raw <c>!</c> routine, which HARD-CRASHES on absence (the raw
     /// form lowers <c>absent</c> to <c>rf_crash</c>). Inside a <c>try_</c> variant that inner
     /// absence must instead become this variant's own <c>None</c> return.
@@ -328,7 +328,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// For each such statement the remainder of the block is folded into the success branch of a
     /// plain <c>if</c> over the inner safe variant's Maybe carrier:
     /// <code>
-    /// var __rf_prop_N = src.try_next()      # Maybe[T]
+    /// var __rf_prop_N = src.try_emit()      # Maybe[T]
     /// if __rf_prop_N.present
     ///   var item = __rf_prop_N.value
     ///   &lt;rest of block&gt;
@@ -437,12 +437,12 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
 
         // In the monomorphized (path-2) caller — which runs AFTER reachability — restrict propagation
-        // to inner `$next!` calls: `try_next` is systematically emitted for live iterator instances, so
+        // to inner `$emit!` calls: `try_emit` is systematically emitted for live iterator instances, so
         // the propagated chain always links, whereas an arbitrary `try_X` introduced here wouldn't be
         // marked live and would LINKERR (e.g. a bounds-guarded `$getitem!` in SortedSetIterator, which
         // also can't actually fail). The global (path-1) caller runs BEFORE reachability, so it
         // propagates ALL non-tail failable calls and reachability then emits the introduced variants.
-        if (nextOnly && baseName != "next") return false;
+        if (nextOnly && baseName != "emit") return false;
 
         RoutineInfo? variant = LookupVariantForOverload(registry: registry, owner: owner,
             variantName: $"try_{baseName}", original: failRoutine);
@@ -616,10 +616,10 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <summary>
     /// Builds a registry-based <see cref="VariantCallRewriter"/> for the monomorphized fallback path
     /// (<see cref="Compiler.Instantiation.Passes.GenericMonomorphizationPass"/>), which has no
-    /// per-pass rewriter instance. It rewrites a TAIL-position <c>return src.$next!()</c> into a
-    /// passthrough call to the matching <c>try_/check_/lookup_next</c> variant (resolved via
+    /// per-pass rewriter instance. It rewrites a TAIL-position <c>return src.$emit!()</c> into a
+    /// passthrough call to the matching <c>try_/check_/lookup_emit</c> variant (resolved via
     /// <see cref="TypeRegistry.LookupMethod"/> on the concrete callee owner). Restricted to
-    /// <c>$next</c> for the same reason as <see cref="TryBuildTryPropagation"/>: <c>try_next</c> is
+    /// <c>$emit</c> for the same reason as <see cref="TryBuildTryPropagation"/>: <c>try_emit</c> is
     /// systematically emitted for live iterator instances, so the rewritten chain always links.
     /// </summary>
     public static VariantCallRewriter MakeNextVariantRewriter(TypeRegistry registry)
@@ -638,7 +638,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             if (value is not CallExpression { ResolvedRoutine: { IsFailable: true } callee } call) return false;
 
             string baseName = (callee.OriginalName ?? callee.Name).TrimStart(trimChar: '$');
-            if (baseName != "next") return false;
+            if (baseName != "emit") return false;
             if (callee.OwnerType is not { } owner) return false;
 
             RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"{prefix}_{baseName}",

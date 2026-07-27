@@ -878,9 +878,9 @@ public class CompilerPipelineLoweringTests
 
         var matchingBodies = result.SynthesizedBodies
                                    .Where(pair =>
-                                        pair.Key.Contains("BytesUtf8Iterator.try_next",
+                                        pair.Key.Contains("BytesUtf8Emittable.try_emit",
                                             StringComparison.Ordinal) ||
-                                        pair.Key.Contains("BytesUtf8Iterator.lookup_next",
+                                        pair.Key.Contains("BytesUtf8Emittable.lookup_emit",
                                             StringComparison.Ordinal))
                                    .ToList();
 
@@ -960,11 +960,11 @@ public class CompilerPipelineLoweringTests
         string warnings = errorWriter.ToString();
         Assert.DoesNotContain(
             expectedSubstring:
-            "Warning: Synthesized codegen failed for 'Core.BytesUtf8Iterator.try_next'",
+            "Warning: Synthesized codegen failed for 'Core.BytesUtf8Emittable.try_emit'",
             actualString: warnings);
         Assert.DoesNotContain(
             expectedSubstring:
-            "Warning: Synthesized codegen failed for 'Core.BytesUtf8Iterator.lookup_next'",
+            "Warning: Synthesized codegen failed for 'Core.BytesUtf8Emittable.lookup_emit'",
             actualString: warnings);
     }
 

@@ -34,7 +34,7 @@ public sealed partial class SemanticVerifier
             CompoundAssignmentExpression compound => AnalyzeCompoundAssignment(compound: compound),
             BinaryExpression binary => AnalyzeBinaryExpression(binary: binary),
             UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
-            CallExpression call => AnalyzeCallExpression(call: call),
+            CallExpression call => AnalyzeCallExpression(call: call, expectedType: expectedType),
             MemberExpression member => AnalyzeMemberExpression(member: member),
             OptionalMemberExpression optMember => AnalyzeOptionalMemberExpression(
                 optMember: optMember),

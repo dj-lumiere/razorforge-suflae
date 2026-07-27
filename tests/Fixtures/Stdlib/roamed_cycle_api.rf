@@ -1,0 +1,38 @@
+module Tests/Stdlib/RoamedCycleApi
+import IO/Console
+
+# A destructor beacon: prints when the entity is torn down, so the test can observe reclamation.
+entity Beacon
+  id: S64
+
+dangerous routine Beacon.$destroy()
+  show(f"beacon {me.id} destroyed")
+  return
+
+# A node with a Roamed self/peer edge (`next`) — the strong reference that lets cycles form and leak
+# under plain biased refcounting — plus a non-Roamed Beacon so reclamation is observable.
+entity Node
+  next: Roamed[Node]
+  mark: Beacon
+  id: S64
+
+# Builds a self-cyclic node: `next` points back at the node itself. Both external handles are dropped
+# when this routine returns, leaving the node reachable only through its own `next` edge — a cycle
+# plain refcounting cannot reclaim (its count never reaches zero). `roamed_none()` seeds the field so
+# the node can be constructed before its target exists (T inferred from the field type); `me.next = a`
+# then rewires it (COPY semantics: the field takes a strong reference).
+routine build_self_cycle()
+  danger!
+    var a = Node(next: roamed_none(), mark: Beacon(id: 7_s64), id: 7_s64).roam()
+    a.raw_inner().next = a
+  return
+
+routine start()
+  show("building self-cycle")
+  build_self_cycle()
+  # The node now leaks under refcounting alone. Run the Bacon-Rajan cycle collector: it traces the
+  # `next` edge, finds the node unreachable from outside, and reaps it — running the Beacon destructor.
+  show("collecting")
+  cc_collect()
+  show("DONE")
+  return

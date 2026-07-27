@@ -94,6 +94,9 @@ dangerous external("C") routine rf_cc_roots_clear()
 ### Drops the first `n` (processed) candidates, keeping any appended after the pass snapshotted `n`
 ### (e.g. a candidate reported by a finalizer during reap). Prevents dropping late arrivals.
 dangerous external("C") routine rf_cc_roots_remove_front(n: U64)
+### Drops one candidate about to be freed — a buffered controller reaching count 0 is freed eagerly, so
+### its roots entry must go first or the collector would dereference freed memory.
+dangerous external("C") routine rf_cc_roots_remove(ptr: Address)
 ### Resets the scratch buffer before tracing one controller's children.
 dangerous external("C") routine rf_cc_scratch_reset()
 ### Number of children collected into the scratch buffer by the last trace.
@@ -217,20 +220,20 @@ external("C") routine rf_in_coroutine() -> U32
 
 # ============================================================================
 # Channels (v0.3.0). A refcounted ring buffer carrying payload pointers between
-# agents. feed (full) and next (empty) park inside a coroutine (rf_sched_park_external
+# agents. send (full) and next (empty) park inside a coroutine (rf_sched_park_external
 # + rf_sched_wake) or block on a condvar on a plain thread — uncolored. Underlies the
-# stdlib `Hopper[T]` / `Conveyor[T]` surface (Channels.rf).
+# stdlib `Receiver[T]` / `SharedReceiver[T]` surface (Channels.rf).
 # ============================================================================
 
 ### Creates a channel. `capacity` = buffered slots; 0 = rendezvous. Starts with one producer ref +
 ### one consumer ref. Throws OutOfMemoryError on a capacity*slot overflow or allocation failure.
 ### :returns: an opaque `rf_channel*` handle as a `CPtr`.
 dangerous external("C") routine rf_channel_create(capacity: U64) -> CPtr
-### Adds a producer (Feeder) reference.
+### Adds a producer (Sender) reference.
 dangerous external("C") routine rf_channel_add_feeder(chan: CPtr)
-### Drops a producer reference. The last Feeder dropping auto-closes the channel.
+### Drops a producer reference. The last Sender dropping auto-closes the channel.
 dangerous external("C") routine rf_channel_drop_feeder(chan: CPtr)
-### Adds a consumer (Hopper / LineWorker) reference.
+### Adds a consumer (Receiver / SharedReceiver) reference.
 dangerous external("C") routine rf_channel_add_consumer(chan: CPtr)
 ### Drops a consumer reference. The struct frees once both producer and consumer refs reach 0.
 dangerous external("C") routine rf_channel_drop_consumer(chan: CPtr)

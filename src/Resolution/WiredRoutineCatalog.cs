@@ -55,7 +55,7 @@ public enum WiredKind
     Unwrap,
     /// <summary>Container membership ($contains, $notcontains).</summary>
     Container,
-    /// <summary>Iteration protocol ($iter, $next).</summary>
+    /// <summary>Iteration protocol ($iter, $emit).</summary>
     Iteration,
     /// <summary>Indexing protocol ($getitem, $setitem).</summary>
     Indexing,
@@ -103,7 +103,7 @@ public sealed class WiredEntry
     public bool AlwaysLive { get; init; }
 
     /// <summary>True when this routine carries the failable `!` marker. Failability is a PROPERTY —
-    /// the `!` is never part of the name, key, or symbol (see <c>$getitem</c>/<c>$setitem</c>/<c>$next</c>).
+    /// the `!` is never part of the name, key, or symbol (see <c>$getitem</c>/<c>$setitem</c>/<c>$emit</c>).
     /// Lookups resolve by the bare name and compare this property; they never key on a banged string.</summary>
     public bool Failable { get; init; }
 
@@ -162,8 +162,8 @@ public static class WiredRoutineCatalog
         new() { Name = "$contains",    Kind = WiredKind.Container, Views = Cap | Known | Proto | Seed, Protocols = ["Container"], CapabilityWiredOverride = "$contains" },
         new() { Name = "$notcontains", Kind = WiredKind.Container, Views = Cap | Known | Proto | Seed, Protocols = ["Container"], CapabilityWiredOverride = "$contains" },
         new() { Name = "$iter",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterable"] },
-        new() { Name = "$next",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterator"], Failable = true },
-        new() { Name = "try_next",     Kind = WiredKind.Iteration, Views = Seed },
+        new() { Name = "$emit",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Emittable"], Failable = true },
+        new() { Name = "try_emit",     Kind = WiredKind.Iteration, Views = Seed },
         new() { Name = "$getitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], Failable = true },
         new() { Name = "$setitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["MutableIndexable"], Failable = true },
 
@@ -352,7 +352,7 @@ public static class WiredRoutineCatalog
             ["$ge"] = ("Comparable", "$cmp"), ["$contains"] = ("Container", "$contains"),
             ["$notcontains"] = ("Container", "$contains"), ["$getitem"] = ("Indexable", "$getitem"),
             ["$setitem"] = ("MutableIndexable", "$setitem"), ["$iter"] = ("Iterable", "$iter"),
-            ["$next"] = ("Iterator", "$next"), ["$represent"] = ("Representable", "$represent"),
+            ["$emit"] = ("Emittable", "$emit"), ["$represent"] = ("Representable", "$represent"),
             ["$diagnose"] = ("Diagnosable", "$diagnose"), ["$add"] = ("Addable", "$add"),
             ["$sub"] = ("Subtractable", "$sub"), ["$mul"] = ("Multiplicable", "$mul"),
             ["$truediv"] = ("Divisible", "$truediv"), ["$floordiv"] = ("FloorDivisible", "$floordiv"),
@@ -387,7 +387,7 @@ public static class WiredRoutineCatalog
         "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
         "$bitand", "$bitor", "$bitxor", "$ashl", "$ashr", "$lshl", "$lshr",
         "$neg", "$bitnot", "$unwrap", "$unwrap_or", "$contains", "$notcontains",
-        "$iter", "$next", "$getitem", "$setitem", "$enter", "$exit", "$destroy",
+        "$iter", "$emit", "$getitem", "$setitem", "$enter", "$exit", "$destroy",
         "$represent", "$diagnose", "$hash",
         "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod", "$ipow",
         "$ibitand", "$ibitor", "$ibitxor", "$iashl", "$iashr", "$ilshl", "$ilshr",
@@ -408,7 +408,7 @@ public static class WiredRoutineCatalog
         ["$bitxor"] = ["Bitwiseable"], ["$ashl"] = ["Shiftable"], ["$ashr"] = ["Shiftable"],
         ["$lshl"] = ["Shiftable"], ["$lshr"] = ["Shiftable"], ["$neg"] = ["Negatable"], ["$bitnot"] = ["Invertible"],
         ["$contains"] = ["Container"], ["$notcontains"] = ["Container"], ["$getitem"] = ["Indexable"],
-        ["$setitem"] = ["MutableIndexable"], ["$iter"] = ["Iterable"], ["$next"] = ["Iterator"],
+        ["$setitem"] = ["MutableIndexable"], ["$iter"] = ["Iterable"], ["$emit"] = ["Emittable"],
         ["$iadd"] = ["InPlaceAddable"], ["$isub"] = ["InPlaceSubtractable"], ["$imul"] = ["InPlaceMultiplicable"],
         ["$itruediv"] = ["InPlaceDivisible"], ["$ifloordiv"] = ["InPlaceFloorDivisible"], ["$imod"] = ["InPlaceFloorDivisible"],
         ["$ipow"] = ["InPlaceExponentiable"], ["$ibitand"] = ["InPlaceBitwiseable"], ["$ibitor"] = ["InPlaceBitwiseable"],
@@ -420,7 +420,7 @@ public static class WiredRoutineCatalog
     [
         "$from_literal",
         "$represent", "$diagnose", "$hash", "$copy", "$eq", "$ne", "$cmp", "$lt", "$le", "$gt", "$ge",
-        "$contains", "$notcontains", "$iter", "$next", "try_next",
+        "$contains", "$notcontains", "$iter", "$emit", "try_emit",
         "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow", "$neg",
         "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
         "$add_unchecked", "$sub_unchecked", "$mul_unchecked", "$truediv_unchecked", "$floordiv_unchecked",

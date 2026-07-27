@@ -18,7 +18,7 @@ namespace Compiler.Resolution;
 /// <para>Scope mirrors <see cref="RuntimeContract"/>: it checks the declared-in-stdlib routine names
 /// (<see cref="RuntimeContract.StdlibRoutineContracts"/>), the wrapper TYPE names
 /// (<see cref="RuntimeContract.WrapperTypes"/>), and the <c>Maybe</c> carrier fields. It deliberately
-/// does NOT check compiler-generated / intrinsic names (<c>try_next</c>, <c>$refer</c>/<c>$control</c>,
+/// does NOT check compiler-generated / intrinsic names (<c>try_emit</c>, <c>$refer</c>/<c>$control</c>,
 /// BuilderService/<c>data_size</c>) or the native <c>rf_*</c> externs (link-checked C-ABI).</para>
 /// </summary>
 public static class RuntimeContractCheck
@@ -91,7 +91,7 @@ public static class RuntimeContractCheck
 
     /// <summary>Extracts the bare method name from a possibly owner-qualified, possibly generic,
     /// possibly failable declaration name: <c>Hijacked[T].peek</c> → <c>peek</c>,
-    /// <c>S64.to_width[T]</c> → <c>to_width</c>, <c>make_hopper</c> → <c>make_hopper</c>. Mirrors the
+    /// <c>S64.to_width[T]</c> → <c>to_width</c>, <c>make_channel</c> → <c>make_channel</c>. Mirrors the
     /// split StdlibLoader.Registration performs on the same names.</summary>
     private static string BareMethodName(string name)
     {

@@ -130,6 +130,7 @@ uint64_t rf_cc_roots_count(void);
 void* rf_cc_roots_at(uint64_t i);
 void rf_cc_roots_clear(void);
 void rf_cc_roots_remove_front(uint64_t n);  // drop the first n (processed) candidates, keep late ones
+void rf_cc_roots_remove(void* ptr);         // drop one candidate about to be freed (eager release path)
 // scratch = one controller's children, filled by its trace hook and drained by RF.
 void rf_cc_scratch_reset(void);
 uint64_t rf_cc_scratch_count(void);

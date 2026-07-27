@@ -10,16 +10,16 @@ namespace Compiler.Instantiation.Passes;
 /// <summary>
 /// STEP 1 iterator-advance inlining. Rewrites the loop that
 /// <see cref="Compiler.Desugaring.Passes.ControlFlowLoweringPass"/> emits for a <c>for x in coll</c>
-/// so that the concrete emitter's monomorphized <c>$next!</c> body is spliced directly into the loop
-/// in place of a call to the compiler-generated <c>try_next</c> variant — but ONLY for "simple"
+/// so that the concrete emitter's monomorphized <c>$emit!</c> body is spliced directly into the loop
+/// in place of a call to the compiler-generated <c>try_emit</c> variant — but ONLY for "simple"
 /// iterators (see <see cref="IsSimpleNextBody"/>). Composed / filtering iterators (nested loop or a
-/// nested <c>$next!</c> call in the <c>$next!</c> body) FALL BACK to the existing <c>try_next</c>-based
+/// nested <c>$emit!</c> call in the <c>$emit!</c> body) FALL BACK to the existing <c>try_emit</c>-based
 /// <c>when</c> loop untouched.
 ///
 /// <para>Lowered for-loop shape produced by CFLP (the discriminator):</para>
 /// <code>
 /// loop /*IsIteratorForLoop*/ {
-///   when _lf_iter_N.try_next() {
+///   when _lf_iter_N.try_emit() {
 ///     is None -> break                              # plain for
 ///        (or:  { _lf_exhausted_N = true; break }    # for-else)
 ///     else v -> &lt;bindings + user body&gt;
@@ -30,7 +30,7 @@ namespace Compiler.Instantiation.Passes;
 /// <para>Inlined replacement (simple emitter):</para>
 /// <code>
 /// loop {
-///   &lt;$next! body with:  me -> _lf_iter_N
+///   &lt;$emit! body with:  me -> _lf_iter_N
 ///                        local decls alpha-renamed to _ii{n}_&lt;orig&gt;
 ///                        return v      -> { &lt;bindings&gt; ; &lt;user body&gt; }
 ///                        absent        -> break   (or { _lf_exhausted_N = true; break })
@@ -39,7 +39,7 @@ namespace Compiler.Instantiation.Passes;
 /// </code>
 ///
 /// <para>The spliced body's callees are already live: <see cref="RoutineReachabilityPass"/> walked
-/// the loop's <c>try_next</c> call, and <c>try_next</c> is a transformed copy of <c>$next!</c> with
+/// the loop's <c>try_emit</c> call, and <c>try_emit</c> is a transformed copy of <c>$emit!</c> with
 /// the identical callee set — so no separate liveness seed is needed for inlined loops.</para>
 /// </summary>
 internal sealed class IteratorInlineLoweringPass
@@ -115,7 +115,7 @@ internal sealed class IteratorInlineLoweringPass
             {
                 Statement? inlined = TryInline(loop: loop);
                 if (inlined != null) return inlined;
-                // Fallback: leave the try_next loop untouched, but still recurse into its body
+                // Fallback: leave the try_emit loop untouched, but still recurse into its body
                 // (the user body may itself contain further for-loops).
                 Statement fb = Rewrite(stmt: loop.Body);
                 return ReferenceEquals(fb, loop.Body) ? loop : loop with { Body = fb };
@@ -192,15 +192,15 @@ internal sealed class IteratorInlineLoweringPass
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Inline one flagged loop, or return null to keep the existing try_next lowering.
+    // Inline one flagged loop, or return null to keep the existing try_emit lowering.
     // ---------------------------------------------------------------------------------------------
     private Statement? TryInline(LoopStatement loop)
     {
         // Match the CFLP shape: loop body is a block whose single statement is a `when` over a
-        // try_next() call with a NonePattern clause + an ElsePattern clause.
+        // try_emit() call with a NonePattern clause + an ElsePattern clause.
         if (loop.Body is not BlockStatement { Statements: [WhenStatement when] }) return null;
         if (when.Expression is not CallExpression tryNextCall) return null;
-        if (tryNextCall.Callee is not MemberExpression { PropertyName: RuntimeContract.TryNext, Object: { } recvExpr })
+        if (tryNextCall.Callee is not MemberExpression { PropertyName: RuntimeContract.TryEmit, Object: { } recvExpr })
             return null;
 
         // Iterator local name (`_lf_iter_N`).
@@ -225,22 +225,22 @@ internal sealed class IteratorInlineLoweringPass
         if (noneClause == null || elseClause == null) return null;
         var elsePattern = (ElsePattern)elseClause.Pattern;
 
-        // Resolve the concrete `$next!` on the emitter and fetch its monomorphized body.
+        // Resolve the concrete `$emit!` on the emitter and fetch its monomorphized body.
         RoutineInfo? nextRoutine =
-            _registry.LookupMethod(type: emitterType, methodName: "$next", isFailable: true);
+            _registry.LookupMethod(type: emitterType, methodName: "$emit", isFailable: true);
         if (nextRoutine == null) return null;
         if (!_monoBodies.TryGetValue(key: nextRoutine.RegistryKey, out MonomorphizedBody? nextMono))
             return null;
         Statement nextBody = nextMono.Ast.Body;
 
-        // Gate: only inline SIMPLE $next! bodies.
+        // Gate: only inline SIMPLE $emit! bodies.
         if (!IsSimpleNextBody(stmt: nextBody)) return null;
 
         // Recurse into the user body FIRST (it may contain nested for-loops) so the inlined
         // return-site gets already-lowered nested loops.
         Statement loweredUserBody = Rewrite(stmt: elseClause.Body);
 
-        // Build a fresh alpha-rename map for locals introduced by the $next! body.
+        // Build a fresh alpha-rename map for locals introduced by the $emit! body.
         int inlineId = _inlineCounter++;
         var renameCtx = new NextBodyRewriteContext(
             iterLocalName: iterLocalName,
@@ -249,7 +249,7 @@ internal sealed class IteratorInlineLoweringPass
             loweredUserBody: loweredUserBody,
             noneClauseBody: noneClause.Body);
 
-        // Collect the local names the $next! body declares so identifier references to them are
+        // Collect the local names the $emit! body declares so identifier references to them are
         // renamed consistently. `me` is handled separately (mapped to the iterator local).
         CollectDeclaredLocals(stmt: nextBody, sink: renameCtx.LocalRenames, prefix: renameCtx.RenamePrefix);
 
@@ -258,14 +258,14 @@ internal sealed class IteratorInlineLoweringPass
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Gate: a $next! body is "simple" if, at its OWN control level, it has no nested loop of any kind
-    // and no nested failable `$next!` call anywhere.
+    // Gate: a $emit! body is "simple" if, at its OWN control level, it has no nested loop of any kind
+    // and no nested failable `$emit!` call anywhere.
     // ---------------------------------------------------------------------------------------------
     private static bool IsSimpleNextBody(Statement stmt)
     {
         if (ContainsLoop(stmt: stmt)) return false;
         if (ContainsNestedNextCall(stmt: stmt)) return false;
-        // A monomorphized $next! body may still carry references to the emitter's own generic
+        // A monomorphized $emit! body may still carry references to the emitter's own generic
         // parameters (an unresolved `T` in `lateinit var _result: T`) or const-generics (the `N` in
         // `Array[T, N]` → `U64(N)`) that codegen only resolves inside the emitter routine's own
         // type-substitution frame. Splicing such a body into the caller loses that frame and crashes
@@ -330,9 +330,9 @@ internal sealed class IteratorInlineLoweringPass
     }
 
     /// <summary>
-    /// Detects a call to another iterator's failable <c>$next!</c> — either via its resolved routine
-    /// (OriginalName/Name == <c>$next</c> and failable) or, before resolution, via the callee's
-    /// member name being <c>$next</c>.
+    /// Detects a call to another iterator's failable <c>$emit!</c> — either via its resolved routine
+    /// (OriginalName/Name == <c>$emit</c> and failable) or, before resolution, via the callee's
+    /// member name being <c>$emit</c>.
     /// </summary>
     private static bool IsNextCall(Expression e)
     {
@@ -341,15 +341,15 @@ internal sealed class IteratorInlineLoweringPass
             if (call.ResolvedRoutine is { IsFailable: true } r)
             {
                 string baseName = (r.OriginalName ?? r.Name).TrimStart('$');
-                if (baseName == "next") return true;
+                if (baseName == "emit") return true;
             }
-            if (call.Callee is MemberExpression { PropertyName: "$next" }) return true;
+            if (call.Callee is MemberExpression { PropertyName: "$emit" }) return true;
         }
         return false;
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Deep-clone rewrite of the $next! body. Handles the whitelisted container statements plus the
+    // Deep-clone rewrite of the $emit! body. Handles the whitelisted container statements plus the
     // leaf actions (return / absent / throw). Everything else is deep-cloned with identifiers
     // renamed (me -> iter local, locals -> fresh names).
     // ---------------------------------------------------------------------------------------------
@@ -441,7 +441,7 @@ internal sealed class IteratorInlineLoweringPass
     }
 
     /// <summary>
-    /// Replaces a <c>return v</c> in the $next! body with the loop-variable bindings CFLP builds for
+    /// Replaces a <c>return v</c> in the $emit! body with the loop-variable bindings CFLP builds for
     /// the <c>else v:</c> clause, followed by the (already-lowered) user body.
     /// </summary>
     private Statement BuildReturnReplacement(Expression? retValue, NextBodyRewriteContext ctx,
@@ -468,13 +468,13 @@ internal sealed class IteratorInlineLoweringPass
             Location: loc);
     }
 
-    // The user body is spliced at exactly one return site per simple $next! (simple bodies have a
+    // The user body is spliced at exactly one return site per simple $emit! (simple bodies have a
     // single tail return), so it is used once and need not be cloned. But to be safe against a
-    // $next! body with multiple return statements, deep-clone it each time.
+    // $emit! body with multiple return statements, deep-clone it each time.
     private Statement CloneUserBody(Statement userBody) => userBody;
 
     // ---------------------------------------------------------------------------------------------
-    // Local-declaration collection: gather the names of `var` declarations the $next! body
+    // Local-declaration collection: gather the names of `var` declarations the $emit! body
     // introduces, mapping each to a fresh loop-unique name.
     // ---------------------------------------------------------------------------------------------
     private static void CollectDeclaredLocals(Statement stmt, Dictionary<string, string> sink,
@@ -573,7 +573,7 @@ internal sealed class IteratorInlineLoweringPass
 
             default:
                 // Any statement we don't explicitly clone is returned as-is. Because it may still hold
-                // identifier references, this is a best-effort — but the simple-gate keeps $next!
+                // identifier references, this is a best-effort — but the simple-gate keeps $emit!
                 // bodies to the shapes handled above.
                 return stmt;
         }
@@ -690,7 +690,7 @@ internal sealed class IteratorInlineLoweringPass
 
             default:
                 // Unhandled expression kinds are returned as-is (still referencing the original
-                // identifiers). Acceptable because simple $next! bodies don't reach here; guarded by
+                // identifiers). Acceptable because simple $emit! bodies don't reach here; guarded by
                 // the simple-gate.
                 return expr;
         }
