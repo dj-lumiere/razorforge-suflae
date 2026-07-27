@@ -261,15 +261,29 @@ internal sealed class TypeBodyResolver
                 // on construct/assign, lock-wrapped access, release on teardown, cycle collection). RF keeps
                 // bare single-owner entity fields.
                 if (_sa._registry.Language == TypeModel.Enums.Language.Suflae
-                    && memberVariableType is EntityTypeInfo fieldEntity
                     && _sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is
                         { } roamedDef)
                 {
+                    // A bare entity field `x: E` is a NON-NULL `Roamed[E]` (always points to an entity).
                     // Use the actual `Roamed` RECORD instantiation (RecordTypeInfo), not a WrapperTypeInfo,
-                    // so it matches RF `Roamed[T]` fields and all the Roamed-field codegen fires (the field
-                    // WRITE release-old/retain-new keys on `memberVariable.Type is RecordTypeInfo`).
-                    memberVariableType = _sa._registry.GetOrCreateResolution(
-                        genericDef: roamedDef, typeArguments: [fieldEntity]);
+                    // so it matches RF `Roamed[T]` fields and all the Roamed-field codegen fires.
+                    if (memberVariableType is EntityTypeInfo fieldEntity)
+                    {
+                        memberVariableType = _sa._registry.GetOrCreateResolution(
+                            genericDef: roamedDef, typeArguments: [fieldEntity]);
+                    }
+                    // An OPTIONAL entity field `x: E?` (= `Maybe[E]`) becomes `Maybe[Roamed[E]]` — the
+                    // explicit-nullability form used for cyclic/graph links (`next: Node?`; construct with
+                    // `none`, then `a.next = a`). `none` is already valid for Maybe; no null bare entity.
+                    else if (memberVariableType is RecordTypeInfo
+                                 { GenericDefinition.Name: "Maybe", TypeArguments: [EntityTypeInfo innerEntity] }
+                             && _sa._registry.LookupType(name: "Maybe") is { } maybeDef)
+                    {
+                        TypeInfo roamedInner = _sa._registry.GetOrCreateResolution(
+                            genericDef: roamedDef, typeArguments: [innerEntity]);
+                        memberVariableType = _sa._registry.GetOrCreateResolution(
+                            genericDef: maybeDef, typeArguments: [roamedInner]);
+                    }
                 }
 
                 var memberVariableInfo =

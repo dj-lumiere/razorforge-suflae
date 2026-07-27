@@ -647,6 +647,11 @@ public sealed partial class SemanticVerifier
         {
             if (source is EntityTypeInfo se && IsRoamedOfEntity(type: target, entity: se)) return true;
             if (target is EntityTypeInfo te && IsRoamedOfEntity(type: source, entity: te)) return true;
+            // NOTE (deferred): bare `E` -> `Maybe[Roamed[E]]` (optional field `x: E?` write, e.g. cyclic
+            // `a.next = a`) is intentionally NOT allowed yet — the `Maybe[Roamed]` field-write codegen does
+            // a raw store (isRoamedField keys on `RecordTypeInfo Roamed`, not `Maybe[Roamed]`) → corruption.
+            // Declaration + construction-with-`none` + scalar read of optional entity fields work; wiring
+            // them needs Maybe[Roamed] field-write RC (release-old + retain-new of the inner Roamed).
         }
 
         // Error types are assignable to anything (to reduce cascading errors)
