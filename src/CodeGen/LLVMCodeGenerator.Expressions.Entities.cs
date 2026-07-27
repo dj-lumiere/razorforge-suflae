@@ -1005,21 +1005,40 @@ public partial class LlvmCodeGenerator
         // field owns its own reference — otherwise the count is off by one and teardown double-frees.
         // Both helpers are null-safe (none handle / no old value). This is the reassignment path only;
         // initial construction stores fields directly and never reaches here.
-        bool isRoamedField = memberVariable.Type is RecordTypeInfo roamedField
-            && GetGenericBaseName(type: roamedField) == Compiler.Resolution.RuntimeContract.Roamed;
-        if (isRoamedField)
+        // Locate the Roamed handle whose RC to adjust: the field itself for `Roamed[E]`, or the Maybe's
+        // value slot (offset 1) for an OPTIONAL entity field `Maybe[Roamed[E]]` (`x: E?`). Roamed
+        // release/retain are null-safe, so a `none` Maybe (null value slot) is a no-op — no present-check.
+        string? rcAddr = null;
+        RecordTypeInfo? rcType = null;
+        if (memberVariable.Type is RecordTypeInfo roamedField
+            && GetGenericBaseName(type: roamedField) == Compiler.Resolution.RuntimeContract.Roamed)
         {
-            EmitRetainedVarRelease(sb: sb, llvmAddr: memberVariablePtr,
-                recordType: (RecordTypeInfo)memberVariable.Type);
+            rcAddr = memberVariablePtr;
+            rcType = roamedField;
+        }
+        else if (memberVariable.Type is RecordTypeInfo
+                     { GenericDefinition.Name: "Maybe", TypeArguments: [RecordTypeInfo maybeInner] }
+                 && GetGenericBaseName(type: maybeInner) == Compiler.Resolution.RuntimeContract.Roamed)
+        {
+            string valuePtr = NextTemp();
+            EmitLine(sb: sb,
+                line:
+                $"  {valuePtr} = getelementptr {memberVariableType}, ptr {memberVariablePtr}, i32 0, i32 1");
+            rcAddr = valuePtr;
+            rcType = maybeInner;
+        }
+
+        if (rcType != null)
+        {
+            EmitRetainedVarRelease(sb: sb, llvmAddr: rcAddr!, recordType: rcType);
         }
 
         // Store the value
         EmitLine(sb: sb, line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
 
-        if (isRoamedField)
+        if (rcType != null)
         {
-            EmitRetainedVarRetain(sb: sb, llvmAddr: memberVariablePtr,
-                recordType: (RecordTypeInfo)memberVariable.Type);
+            EmitRetainedVarRetain(sb: sb, llvmAddr: rcAddr!, recordType: rcType);
         }
     }
 
