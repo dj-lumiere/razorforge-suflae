@@ -256,6 +256,18 @@ internal sealed class TypeBodyResolver
                     ? _typeResolver.ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
+                // Suflae: an entity-typed field becomes a `Roamed[E]` biased-RC handle (like SF locals),
+                // so it stores a refcounted handle and the existing Roamed-field machinery applies (retain
+                // on construct/assign, lock-wrapped access, release on teardown, cycle collection). RF keeps
+                // bare single-owner entity fields.
+                if (_sa._registry.Language == TypeModel.Enums.Language.Suflae
+                    && memberVariableType is EntityTypeInfo fieldEntity)
+                {
+                    memberVariableType = _sa._registry.GetOrCreateWrapperType(
+                        wrapperName: Compiler.Resolution.RuntimeContract.Roamed,
+                        innerType: fieldEntity, isReadOnly: false);
+                }
+
                 var memberVariableInfo =
                     new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
                     {

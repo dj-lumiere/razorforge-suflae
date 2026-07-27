@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Enums;
+using TypeModel.Symbols;
 using TypeModel.Types;
 
 namespace Compiler.Postprocessing.Passes;
@@ -235,11 +236,33 @@ internal sealed class SuflaeEntityLoweringPass
                     args.Add(na);
                     if (!ReferenceEquals(na, a)) changed = true;
                 }
+                // A construction `E(...)` stores its args into fields; a borrowed Roamed arg going into a
+                // Roamed field must retain (else the field + the source local both release → double free).
+                if (call.ResolvedType is EntityTypeInfo)
+                {
+                    for (int k = 0; k < args.Count; k++) args[k] = RetainConstructionArg(args[k]);
+                    changed = true;
+                }
+
                 CallExpression lowered = changed ? call with { Callee = callee, Arguments = args } : call;
-                // NOTE: method calls `roamedLocal.method()` still mis-resolve (SA baked the bare-entity
-                // method with the Roamed handle as `me`). Clearing ResolvedRoutine to force re-resolution
-                // does NOT work — CallOverloadResolutionPass doesn't re-resolve a cleared call → codegen
-                // NPE. NEXT: look up the Roamed[E] forwarder directly, or type entities as Roamed in SA.
+
+                // Method call whose receiver became `Roamed[E]`: SA baked the bare-entity method with the
+                // Roamed handle as `me` (so `me.field` reads the RoamController). INTERIM FIX (LOCAL-only,
+                // lock-SKIPPING): project the receiver via `.raw_inner()` so the bare method gets the real
+                // entity. The proper fix is the Roamed[E] forwarder (lock_enter+project+call), which is
+                // SA-synthesized — replace this once method calls resolve against Roamed[E] in SA.
+                if (callee is MemberExpression meCall
+                    && meCall.Object.ResolvedType is WrapperTypeInfo { Name: RuntimeContract.Roamed } roamedRecv
+                    && lowered.ResolvedRoutine is { OwnerType: EntityTypeInfo })
+                {
+                    var rawInner = new CallExpression(
+                        Callee: new MemberExpression(Object: meCall.Object, PropertyName: "raw_inner",
+                            Location: meCall.Location) { ResolvedType = roamedRecv.InnerType },
+                        Arguments: new List<Expression>(),
+                        Location: meCall.Location) { ResolvedType = roamedRecv.InnerType };
+                    return lowered with { Callee = meCall with { Object = rawInner } };
+                }
+
                 return call.ResolvedType is EntityTypeInfo callEntity
                     ? WrapInRoam(inner: lowered, entity: callEntity)
                     : lowered;
@@ -280,9 +303,27 @@ internal sealed class SuflaeEntityLoweringPass
                 return ReferenceEquals(o, un.Operand) ? un : un with { Operand = o };
             }
 
+            case NamedArgumentExpression namedArg:
+            {
+                Expression v = LowerExpression(namedArg.Value);
+                return ReferenceEquals(v, namedArg.Value) ? namedArg : namedArg with { Value = v };
+            }
+
             default:
                 return expr;
         }
+    }
+
+    // A construction arg (a `NamedArgumentExpression` or bare value) whose value is a borrowed Roamed
+    // reference must retain — it is stored into a Roamed field which the constructed entity now co-owns.
+    private Expression RetainConstructionArg(Expression arg)
+    {
+        if (arg is NamedArgumentExpression na)
+        {
+            Expression v = MaybeRoamCopy(na.Value);
+            return ReferenceEquals(v, na.Value) ? na : na with { Value = v };
+        }
+        return MaybeRoamCopy(arg);
     }
 
     // A borrowed reference (identifier / field read) to a Roamed value in a COPY position (var-init or
