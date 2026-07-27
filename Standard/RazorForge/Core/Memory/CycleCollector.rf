@@ -151,6 +151,9 @@ routine cc_free(addr: Address)
 ### Runs one full cycle-collection pass over the current roots buffer: MarkRoots → ScanRoots →
 ### CollectRoots. Empties the roots buffer and reaps every controller found to be cyclic garbage.
 routine cc_collect()
+  # Mark a pass in progress so a candidate reported mid-collection cannot auto-trigger a nested pass.
+  danger!
+    rf_cc_enter_collect()
   # MarkRoots: purple roots seed the trace (MarkGray); anything else is stale and simply un-buffered.
   var gray_roots = List[Address]()
   var n = 0_u64
@@ -199,4 +202,5 @@ routine cc_collect()
       cc_free(addr: rf_cc_reap_at(i: j))
       j = j + 1_u64
     rf_cc_reap_clear()
+    rf_cc_exit_collect()
   return

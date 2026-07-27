@@ -121,6 +121,9 @@ dangerous routine RoamController[T].mark_cycle_candidate()
   me.buffered = true
   me.color = RoamColor.PURPLE
   rf_cc_add_candidate(obj: me.hijack().get_address())
+  # Auto-collect once the candidate set crosses the threshold (guarded against re-entry).
+  if rf_cc_should_collect()
+    cc_collect()
   return
 
 # ============================================================================

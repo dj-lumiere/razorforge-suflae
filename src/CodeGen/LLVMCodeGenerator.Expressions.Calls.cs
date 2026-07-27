@@ -662,6 +662,26 @@ public partial class LlvmCodeGenerator
             return EmitDynamicMemberFieldCall(sb: sb, member: member, arguments: arguments);
         }
 
+        // Intercept `<entity>.roam_trace_ref()` / `.roam_free_ref()` (cycle-collector hook intrinsics):
+        // materialize a closure over the receiver entity's synthesized `$roam_trace_impl` /
+        // `$roam_free_impl` — an unbound member-routine value (methods aren't referenceable in surface
+        // syntax, so the stdlib routine has a `cptr_none()` fallback body that this replaces). The
+        // receiver (`data.as_entity()`) is a pure reinterpret and is intentionally not emitted. The
+        // concrete entity type is available here (post-monomorphization), unlike in earlier passes
+        // where the receiver type is still the generic parameter. See v0.4.x-cycle-collector.md §9.3.
+        if ((member.PropertyName == "roam_trace_ref" || member.PropertyName == "roam_free_ref")
+            && arguments.Count == 0
+            && GetExpressionType(expr: member.Object) is EntityTypeInfo roamRecvEntity)
+        {
+            string implName = member.PropertyName == "roam_trace_ref"
+                ? "$roam_trace_impl"
+                : "$roam_free_impl";
+            RoutineInfo? impl = _registry.GetMethodsForType(type: roamRecvEntity)
+                .FirstOrDefault(predicate: m => m.Name == implName && m.Parameters.Count == 0);
+            if (impl != null)
+                return EmitRoutineValueClosure(sb: sb, routine: impl);
+        }
+
         // Intercept var_name() -> inline the variable name from the receiver expression
         if (member.PropertyName == "var_name" && arguments.Count == 0)
         {

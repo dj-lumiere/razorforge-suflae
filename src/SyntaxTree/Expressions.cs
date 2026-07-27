@@ -234,6 +234,15 @@ public record IdentifierExpression(string Name, SourceLocation Location)
     /// </summary>
     public int? ResolvedFlagsBit { get; set; }
 
+    /// <summary>
+    /// When set, this identifier is a routine-VALUE reference whose routine is already resolved —
+    /// codegen materializes it as a closure directly, skipping name-based lookup. Used for
+    /// references a lowering pass constructs (e.g. an unbound member-routine reference for a cycle-
+    /// collector trace/free hook), where the bare name cannot be resolved by lookup because it needs
+    /// the owner type. <see cref="ResolvedType"/> must be the matching <c>RoutineTypeInfo</c>.
+    /// </summary>
+    public RoutineInfo? ResolvedRoutine { get; set; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
