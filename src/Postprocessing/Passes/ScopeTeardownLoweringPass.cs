@@ -106,12 +106,20 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         // Consuming entity parameters are owned by the routine and torn down at every exit, exactly
         // like a top-level local. (Borrows arrive as Referring/Controlling/Viewing/Modifying wrappers,
         // never as bare EntityTypeInfo, so they are correctly excluded.)
+        //
+        // Suflae exception: a bare EntityTypeInfo parameter is a BORROWED projection (the caller passes
+        // its Roamed handle, peeled to the raw entity via `.raw_inner()` by SuflaeEntityLoweringPass) —
+        // the callee never owns it, so destroying it here double-frees the caller's live entity. Owned
+        // SF handles are always `Roamed[E]` (a record), never bare EntityTypeInfo, so skipping bare
+        // entity params loses nothing.
+        bool isSuflae = ctx.Registry.Language == TypeModel.Enums.Language.Suflae;
         var paramLive = new List<Owned>();
         foreach (Parameter p in r.Parameters)
         {
             if (p.Name == "me") continue;
             if (_movedNames.Contains(item: p.Name)) continue;
             TypeInfo? pt = p.Type?.ResolvedType;
+            if (isSuflae && pt is EntityTypeInfo) continue;
             if (pt != null && TryResolveDestroy(type: pt, out RoutineInfo? d) && d != null)
                 paramLive.Add(item: new Owned(Name: p.Name, Type: pt, Destroy: d));
         }
