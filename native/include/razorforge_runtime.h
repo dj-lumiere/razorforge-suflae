@@ -119,11 +119,28 @@ uint64_t rf_current_thread_id(void);
  * thread — else the OS thread id. Only equality matters. See rf_current_task_id in coro_runtime.c. */
 uint64_t rf_current_task_id(void);
 
-/* Cycle-collector candidate hook. A Roamed strong-decrement that leaves the count > 0 reports the
- * object here as a possible cycle root. STAGE-1 STUB: no-op (cycles among Roamed objects leak until
- * the real collector lands). The SOLE collector entry point, so the collector stays scoped to
- * Roamed — pure-RF programs never call it. */
+// Cycle collector (Bacon-Rajan synchronous recycler) — native buffers backing the RF-side collector
+// (Core/Memory/CycleCollector.rf). See internal-wiki/v0.4.x-cycle-collector.md.
+//
+// rf_cc_add_candidate is the SOLE collector entry point: a Roamed strong-decrement that leaves the
+// count > 0 reports the controller here as a possible cycle root (the RF side dedups via the
+// controller `buffered` flag first). Pure-RF programs with no Roamed cycles never call it.
 void rf_cc_add_candidate(void* obj);
+uint64_t rf_cc_roots_count(void);
+void* rf_cc_roots_at(uint64_t i);
+void rf_cc_roots_clear(void);
+// scratch = one controller's children, filled by its trace hook and drained by RF.
+void rf_cc_scratch_reset(void);
+uint64_t rf_cc_scratch_count(void);
+void* rf_cc_scratch_at(uint64_t i);
+void rf_cc_visit_child(void* child_ctrl);      // called by a per-type trace hook
+// reap = deferred-free buffer for collected white controllers.
+void rf_cc_reap_push(void* ctrl);
+uint64_t rf_cc_reap_count(void);
+void* rf_cc_reap_at(uint64_t i);
+void rf_cc_reap_clear(void);
+void rf_cc_trace_into_scratch(void* trace_hook, void* controller);  // SOLE trace indirect-call site
+void rf_cc_invoke_free(void* free_hook, void* controller);          // free indirect-call site
 
 rf_task_kind rf_task_kind_get(rf_task* task);
 rf_task_status rf_task_status_get(rf_task* task);

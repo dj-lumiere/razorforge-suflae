@@ -38,16 +38,45 @@ needs T is EntityType
     var ctrl = RoamController[T](data: me.hijack()).hijack()
     return Roamed[T](ctrl)
 
-### Returns a new alias to the same object (biased retain). This is what `b = a` lowers to.
+### The absent `Roamed[T]` — a null handle owning nothing. Lets an entity with a `Roamed[T]` field be
+### constructed before the field's target exists (e.g. building a cyclic graph): initialize the field
+### with `roamed_none()`, then assign the real handle once it is available. Retaining, releasing, and
+### tracing all no-op on a none handle.
+### :returns: The absent `Roamed[T]`.
+routine roamed_none[T]() -> Roamed[T]
+needs T is EntityType
+  danger!
+    return Roamed[T](Hijacked[RoamController[T]](from: 0_addr))
+
+### Whether this is the absent handle (owns nothing). :returns: `true` if none.
+@readonly
+routine Roamed[T].is_none() -> Bool
+  danger!
+    return me.controller_address() == 0_addr
+
+### Reinterprets a raw {RoamController[T]} address as a `Roamed[T]` handle WITHOUT retaining — a
+### low-level plumbing / test hatch (Stage-1 cyclic-graph construction). The caller is responsible for
+### the reference count: the returned handle does not add a strong ref.
+### :param addr: The controller address (0 for the absent handle).
+### :returns: The `Roamed[T]` viewing that controller.
+dangerous routine roamed_from_addr[T](addr: Address) -> Roamed[T]
+needs T is EntityType
+  return Roamed[T](Hijacked[RoamController[T]](from: addr))
+
+### Returns a new alias to the same object (biased retain), or the absent handle unchanged. This is
+### what `b = a` lowers to.
 ### :returns: A new handle sharing the same underlying entity.
 routine Roamed[T].roam() -> Roamed[T]
   danger!
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
-    ctrl.retain()
+    if me.controller_address() != 0_addr
+      var ctrl = Hijacked[RoamController[T]](me).as_entity()
+      ctrl.retain()
   return me
 
-### Decrements the strong count, destroying the entity at zero.
+### Decrements the strong count, destroying the entity at zero. A no-op on the absent handle.
 dangerous routine Roamed[T].release()
+  if me.controller_address() == 0_addr
+    return
   var ctrl = Hijacked[RoamController[T]](me).as_entity()
   ctrl.release()
   return
@@ -93,6 +122,23 @@ routine Roamed[T].strong_count() -> U64
   danger!
     var ctrl = Hijacked[RoamController[T]](me).as_entity()
     return ctrl.strong_count()
+
+### Reports this handle's controller to the collector as a traced child. The compiler-synthesized
+### `$roam_trace_impl` calls this for each `Roamed` field of an entity, so the collector sees the
+### object graph's strong edges. A none handle owns no edge and is skipped. Runs inside the (dangerous)
+### synthesized trace, so no `danger!` here.
+dangerous routine Roamed[T].cc_visit_self()
+  if me.controller_address() != 0_addr
+    rf_cc_visit_child(child_ctrl: me.controller_address())
+  return
+
+### The address of the underlying {RoamController[T]} — the collector's currency and a Stage-1 test
+### hatch. `Roamed[T]` is `@llvm("ptr")` and its bit pattern IS the controller pointer, so this is a
+### pure reinterpretation, no load.
+### :returns: The controller address.
+@readonly
+dangerous routine Roamed[T].controller_address() -> Address
+  return Hijacked[RoamController[T]](me).get_address()
 
 ### The inner entity as a raw, UNLOCKED reference — STAGE-1/2 TEST HATCH ONLY. Real access is lock-wrapped
 ### by the compiler (Stage 2c); this must never become `$refer`/`$control` (they would hand out a

@@ -112,6 +112,20 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 continue;
             }
 
+            // Cycle-collector per-type hooks (see AutoWiredRegistrationPass.MaybeRegisterRoamHook).
+            if (routine is { Name: "$roam_trace_impl", Parameters.Count: 0 })
+            {
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildRoamTraceBody(owner: routine.OwnerType);
+                continue;
+            }
+            if (routine is { Name: "$roam_free_impl", Parameters.Count: 0 })
+            {
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildRoamFreeBody(owner: routine.OwnerType);
+                continue;
+            }
+
             switch (routine.OwnerType)
             {
                 case TupleTypeInfo tuple:
@@ -228,6 +242,19 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 {
                     ctx.VariantBodies[key: routine.RegistryKey] =
                         BuildDestroyBody(owner: routine.OwnerType);
+                    continue;
+                }
+
+                if (routine is { Name: "$roam_trace_impl", Parameters.Count: 0 })
+                {
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        BuildRoamTraceBody(owner: routine.OwnerType);
+                    continue;
+                }
+                if (routine is { Name: "$roam_free_impl", Parameters.Count: 0 })
+                {
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        BuildRoamFreeBody(owner: routine.OwnerType);
                     continue;
                 }
 
@@ -2048,6 +2075,95 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Leaf RC/ptr teardown (Hijacked, Retained/Tracked, Viewing/Modifying) lives in hand-written
     /// wrapper destructors and is never reached here (those types keep their own <c>$destroy</c>).
     /// </summary>
+    /// <summary>True if <paramref name="t"/> is a <c>Roamed[U]</c> field type (a biased-RC handle).</summary>
+    private static bool IsRoamedField(TypeInfo? t)
+    {
+        if (t == null) return false;
+        string baseName = t switch
+        {
+            WrapperTypeInfo w => w.Name,
+            RecordTypeInfo { GenericDefinition: { } d } => d.Name,
+            _ => t.Name.Contains(value: '[') ? t.Name[..t.Name.IndexOf(value: '[')] : t.Name
+        };
+        return baseName == Compiler.Resolution.RuntimeContract.Roamed;
+    }
+
+    /// <summary>
+    /// Builds the cycle-collector trace hook <c>$roam_trace_impl()</c> for an entity: one
+    /// <c>me.&lt;field&gt;.cc_visit_self()</c> per <c>Roamed[U]</c> field (reports the field's
+    /// controller to the collector). Non-Roamed fields cannot form strong cycles and are skipped;
+    /// an entity with no Roamed fields gets an empty (return-only) body.
+    /// </summary>
+    private Statement BuildRoamTraceBody(TypeInfo? owner)
+    {
+        var noop = new ReturnStatement(Value: null, Location: _synthLoc);
+        List<MemberVariableInfo>? fields = owner is EntityTypeInfo e ? e.MemberVariables : null;
+        if (fields is null or { Count: 0 })
+            return noop;
+
+        TypeInfo? blankType = ctx.Registry.LookupType(name: "Blank");
+        var statements = new List<Statement>(capacity: fields.Count + 1);
+        foreach (MemberVariableInfo field in fields)
+        {
+            if (!IsRoamedField(t: field.Type))
+                continue;
+            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                { ResolvedType = owner };
+            var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+            var visitCall = new CallExpression(
+                Callee: new MemberExpression(Object: fieldRef, PropertyName: "cc_visit_self",
+                    Location: _synthLoc) { ResolvedType = blankType },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = blankType };
+            statements.Add(item: new ExpressionStatement(Expression: visitCall,
+                Location: _synthLoc));
+        }
+        statements.Add(item: noop);
+        return new BlockStatement(Statements: statements, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the cycle-collector free hook <c>$roam_free_impl()</c> for an entity: tears down each
+    /// NON-Roamed field (its own resources) then frees the entity allocation. Roamed fields are
+    /// deliberately NOT torn down — the collector frees the whole white cycle directly, so recursing
+    /// through a Roamed child's <c>$destroy</c> here would double-free a sibling being reaped in the
+    /// same batch (the finalizer-recursion hazard).
+    /// </summary>
+    private Statement BuildRoamFreeBody(TypeInfo? owner)
+    {
+        var noop = new ReturnStatement(Value: null, Location: _synthLoc);
+        List<MemberVariableInfo>? fields = owner is EntityTypeInfo e ? e.MemberVariables : null;
+
+        TypeInfo? blankType = ctx.Registry.LookupType(name: "Blank");
+        var statements = new List<Statement>(capacity: (fields?.Count ?? 0) + 2);
+        if (fields is { Count: > 0 })
+        {
+            foreach (MemberVariableInfo field in fields)
+            {
+                if (IsRoamedField(t: field.Type))
+                    continue;
+                var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                    { ResolvedType = owner };
+                var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+                    Location: _synthLoc) { ResolvedType = field.Type };
+                var destroyCall = new CallExpression(
+                    Callee: new MemberExpression(Object: fieldRef, PropertyName: "$destroy",
+                        Location: _synthLoc) { ResolvedType = blankType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = blankType };
+                statements.Add(item: new ExpressionStatement(Expression: destroyCall,
+                    Location: _synthLoc));
+            }
+        }
+
+        if (owner is EntityTypeInfo)
+            statements.Add(item: BuildEntitySelfFree(owner: owner!, blankType: blankType));
+
+        statements.Add(item: noop);
+        return new BlockStatement(Statements: statements, Location: _synthLoc);
+    }
+
     private Statement BuildDestroyBody(TypeInfo? owner)
     {
         var noop = new ReturnStatement(Value: null, Location: _synthLoc);

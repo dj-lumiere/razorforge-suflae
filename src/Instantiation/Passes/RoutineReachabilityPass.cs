@@ -329,6 +329,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             RoutineInfo concreteCallee = SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs);
             EnqueueCallee(callee: concreteCallee);
             RecordSuspendEdge(caller: frame.Routine, callee: concreteCallee);
+            EnqueueRoamHookIfNeeded(node: node, callee: concreteCallee, typeSubs: frame.TypeSubs);
 
             // Pure synthesized $represent / try_next / wrapper-forwarders also have call sites
             // we may need to walk later; their bodies live in VariantBodies under the generic-def
@@ -1280,6 +1281,29 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
 
         return ctx.Registry.LookupMethod(type: receiverType, methodName: baseName, isFailable: isFailable);
+    }
+
+    /// <summary>
+    /// A call to the cycle-collector hook intrinsic <c>&lt;entity&gt;.roam_trace_ref()</c> /
+    /// <c>.roam_free_ref()</c> is lowered at codegen to a closure over the receiver entity's
+    /// synthesized <c>$roam_trace_impl</c> / <c>$roam_free_impl</c> (see the intercept in
+    /// <c>EmitMemberRoutineCall</c>). That reference is invisible to normal reachability walking, so
+    /// mark the target impl live here, or its body is never emitted and the thunk links against an
+    /// undefined symbol.
+    /// </summary>
+    private void EnqueueRoamHookIfNeeded(object node, RoutineInfo callee,
+        Dictionary<string, TypeInfo> typeSubs)
+    {
+        if (callee.Name is not ("roam_trace_ref" or "roam_free_ref")) return;
+        if (node is not CallExpression { Callee: MemberExpression member }) return;
+        TypeInfo? recv = member.Object.ResolvedType ?? InferExpressionType(e: member.Object);
+        if (recv is GenericParameterTypeInfo gp && typeSubs.TryGetValue(key: gp.Name, value: out TypeInfo? sub))
+            recv = sub;
+        if (recv is not EntityTypeInfo ent) return;
+        string implName = callee.Name == "roam_trace_ref" ? "$roam_trace_impl" : "$roam_free_impl";
+        RoutineInfo? impl = ctx.Registry.GetMethodsForType(type: ent)
+            .FirstOrDefault(predicate: r => r.Name == implName && r.Parameters.Count == 0);
+        if (impl != null) EnqueueCallee(callee: impl);
     }
 
     /// <summary>

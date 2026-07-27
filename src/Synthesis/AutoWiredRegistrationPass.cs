@@ -102,6 +102,18 @@ internal sealed class AutoWiredRegistrationPass
                     existingMethods: existingMethods);
             }
 
+            // Cycle-collector per-type hooks: every non-wrapper entity gets `$roam_trace_impl()`
+            // (visits its Roamed fields) and `$roam_free_impl()` (tears down non-Roamed fields + frees
+            // the entity). Only entities can be Roamed[T] (RoamController needs `T is EntityType`).
+            // Bodies are synthesized by WiredRoutinePass; unused ones are dead-code-eliminated.
+            if (blankType != null && type.Category == TypeCategory.Entity && !IsWrapperType(type: type))
+            {
+                MaybeRegisterRoamHook(owner: type, name: "$roam_trace_impl", blankType: blankType,
+                    existingMethods: existingMethods);
+                MaybeRegisterRoamHook(owner: type, name: "$roam_free_impl", blankType: blankType,
+                    existingMethods: existingMethods);
+            }
+
             // All types: BuilderService metadata routines
             BuilderInfoProvider.RegisterRoutinesOnType(type: type,
                 existingMethods: existingMethods,
@@ -547,6 +559,34 @@ internal sealed class AutoWiredRegistrationPass
         }
 
         _registry.RegisterRoutine(routine: new RoutineInfo(name: "$destroy")
+        {
+            Kind = RoutineKind.MemberRoutine,
+            OwnerType = owner,
+            Parameters = [],
+            ReturnType = blankType,
+            IsFailable = false,
+            IsDangerous = true,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
+            Visibility = VisibilityModifier.Open,
+            IsSynthesized = true
+        });
+    }
+
+    /// <summary>
+    /// Registers a cycle-collector hook method (<c>$roam_trace_impl</c> / <c>$roam_free_impl</c>) if
+    /// not already user-defined. Marked <c>dangerous</c> (raw controller/pointer work). No params,
+    /// void return; the body is synthesized by <see cref="WiredRoutinePass"/>.
+    /// </summary>
+    private void MaybeRegisterRoamHook(TypeSymbol owner, string name, TypeSymbol blankType,
+        List<RoutineInfo> existingMethods)
+    {
+        if (existingMethods.Any(predicate: m => m.Name == name))
+        {
+            return;
+        }
+
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = owner,

@@ -81,10 +81,38 @@ external("C") routine rf_current_thread_id() -> U64
 ### worker migration), else the OS thread. The key for {Roamed}'s reentrant, migration-safe lock.
 ### Safe: takes no pointers. :returns: a per-context id, equal across calls in the same coroutine/thread.
 external("C") routine rf_current_task_id() -> U64
-### Cycle-collector candidate hook. A {Roamed} strong-decrement that leaves the count > 0 reports the
-### object here as a possible cycle root. Stage-1 stub is a no-op (cycles leak until the collector
-### lands); the sole entry point, so the collector stays scoped to `Roamed`.
+### Cycle collector (Bacon-Rajan) — the SOLE entry point. A {Roamed} strong-decrement that leaves the
+### count > 0 reports the controller here as a possible cycle root (RF dedups via `buffered` first).
+### See internal-wiki/v0.4.x-cycle-collector.md.
 dangerous external("C") routine rf_cc_add_candidate(obj: Address)
+### Number of candidate controllers currently in the roots buffer.
+dangerous external("C") routine rf_cc_roots_count() -> U64
+### The i-th candidate controller in the roots buffer (`Address(0)` if out of range).
+dangerous external("C") routine rf_cc_roots_at(i: U64) -> Address
+### Empties the roots buffer (after a CollectCycles pass consumes it).
+dangerous external("C") routine rf_cc_roots_clear()
+### Resets the scratch buffer before tracing one controller's children.
+dangerous external("C") routine rf_cc_scratch_reset()
+### Number of children collected into the scratch buffer by the last trace.
+dangerous external("C") routine rf_cc_scratch_count() -> U64
+### The i-th child controller in the scratch buffer (`Address(0)` if out of range).
+dangerous external("C") routine rf_cc_scratch_at(i: U64) -> Address
+### Called by a compiler-generated per-type trace, once per {Roamed} field, with its controller.
+dangerous external("C") routine rf_cc_visit_child(child_ctrl: Address)
+### Pushes a collected white controller onto the deferred-free (reap) buffer.
+dangerous external("C") routine rf_cc_reap_push(ctrl: Address)
+### Number of controllers awaiting deferred free in the reap buffer.
+dangerous external("C") routine rf_cc_reap_count() -> U64
+### The i-th controller in the reap buffer (`Address(0)` if out of range).
+dangerous external("C") routine rf_cc_reap_at(i: U64) -> Address
+### Empties the reap buffer.
+dangerous external("C") routine rf_cc_reap_clear()
+### The sole trace indirect-call site: runs the per-type trace hook over a controller, filling scratch
+### with its child controllers.
+dangerous external("C") routine rf_cc_trace_into_scratch(trace_hook: Address, controller: Address)
+### The free indirect-call site: runs the per-type free hook over a white (garbage) controller —
+### type-correct entity `$destroy` then controller free.
+dangerous external("C") routine rf_cc_invoke_free(free_hook: Address, controller: Address)
 
 # ============================================================================
 # Stackful coroutine substrate (v0.2.0 — single coroutine, no scheduler).

@@ -116,6 +116,12 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitRoutineValueClosure(StringBuilder sb, RoutineInfo routine)
     {
+        // Taking a routine as a value references it as a real callee (the adapter thunk calls it), so
+        // its body must be emitted. The thunk is written straight to the aux buffer and never routes
+        // through GenerateRoutineDeclaration, so record the reference here — otherwise a routine used
+        // ONLY as a value (e.g. a synthesized `$roam_*_impl` cycle-collector hook) fails the Phase-C
+        // `_referencedKeys` emission gate and links against an undefined symbol.
+        _referencedKeys.Add(item: routine.RegistryKey);
         string thunkSym = EnsureRoutineValueThunk(routine: routine);
 
         // Closure is just { ptr } — no captures. Allocate 8 bytes and store the thunk pointer.
@@ -130,11 +136,17 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Ensures a closure-ABI adapter thunk exists for a plain free routine used as a value, and
-    /// returns its symbol. The thunk has the routine's signature with a hidden leading
-    /// <c>ptr %__cl</c> (ignored); it forwards the remaining arguments to the real routine. One
-    /// thunk per routine (deduped). Restricted to free routines — a bare method name carries no
-    /// receiver, so method-as-value is not supported here.
+    /// Ensures a closure-ABI adapter thunk exists for a routine used as a value, and returns its
+    /// symbol. The thunk has the routine's signature with a hidden leading <c>ptr %__cl</c>
+    /// (ignored); it forwards the remaining arguments to the real routine. One thunk per routine
+    /// (deduped).
+    ///
+    /// <para>Free routines forward their declared parameters. An <b>unbound entity-method</b>
+    /// reference additionally forwards the receiver as a leading <c>ptr %me</c> — the real method
+    /// symbol takes <c>me</c> first, and the caller (e.g. the cycle collector invoking a per-type
+    /// <c>$roam_trace_impl</c> hook) supplies the entity pointer as that first logical argument.
+    /// Only entity receivers (always <c>ptr</c>) are handled; record-value receivers would need
+    /// their by-value receiver ABI and are not used as values.</para>
     /// </summary>
     private string EnsureRoutineValueThunk(RoutineInfo routine)
     {
@@ -162,6 +174,18 @@ public partial class LlvmCodeGenerator
         var paramDecls = new List<string> { "ptr %__cl" };
         var fwdTypes = new List<string>();
         var fwdValues = new List<string>();
+
+        // Unbound entity-method reference: the real method symbol takes `me` (a `ptr`) first, so the
+        // thunk forwards it as its first logical argument (after the ignored closure slot). The caller
+        // supplies the receiver at call time — e.g. the collector passes the entity address to a
+        // `$roam_trace_impl` / `$roam_free_impl` hook.
+        if (routine.OwnerType is { Category: TypeCategory.Entity })
+        {
+            paramDecls.Add(item: "ptr %me");
+            fwdTypes.Add(item: "ptr");
+            fwdValues.Add(item: "%me");
+        }
+
         for (int i = 0; i < routine.Parameters.Count; i++)
         {
             string pType = GetParameterLlvmType(type: routine.Parameters[index: i].Type);
@@ -688,6 +712,19 @@ public partial class LlvmCodeGenerator
             throw new InvalidOperationException(
                 message:
                 $"Preset identifier '{identifier.Name}' reached LLVM codegen. PresetInliningPass must inline presets before backend entry.");
+        }
+
+        // A pre-resolved routine-VALUE reference (set by a lowering pass, e.g. an unbound member-
+        // routine hook). The routine is already known, so skip name-based lookup — the bare name may
+        // be a method that lookup cannot resolve without the owner type. Falls through the same
+        // closure-materialization path (methods reach EnsureRoutineValueThunk, now method-aware). The
+        // node keeps the surrounding-context type (e.g. CPtr for a hook field), so we gate on the
+        // resolved routine alone rather than its ResolvedType label.
+        if (identifier.ResolvedRoutine is { } preResolved)
+        {
+            return preResolved.IsLambda
+                ? EmitClosureValue(sb: sb, lambda: preResolved)
+                : EmitRoutineValueClosure(sb: sb, routine: preResolved);
         }
 
         if (identifier.ResolvedType is RoutineTypeInfo routineType && TryResolveRoutineReference(
