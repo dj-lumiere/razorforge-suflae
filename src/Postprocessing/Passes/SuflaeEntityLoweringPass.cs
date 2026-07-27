@@ -277,6 +277,18 @@ internal sealed class SuflaeEntityLoweringPass
 
                 CallExpression lowered = changed ? call with { Callee = callee, Arguments = args } : call;
 
+                // Project each Roamed argument that flows into a BARE-entity parameter through
+                // `.raw_inner()`. SF routine/method parameters are NOT Roamed-substituted, so their slot
+                // is a bare `E` and must receive the real entity pointer — passing the RoamController
+                // handle makes the callee read the controller as the entity (`x.field` → crash). Borrow
+                // semantics: no retain, the caller keeps ownership. Skips construction (call.ResolvedType
+                // is EntityTypeInfo), whose args are field stores needing a retained Roamed (handled
+                // above). Mirrors the method-receiver `raw_inner` interim below.
+                if (call.ResolvedType is not EntityTypeInfo && lowered.ResolvedRoutine is { } argRoutine)
+                {
+                    lowered = ProjectRoamedArgsIntoBareParams(call: lowered, routine: argRoutine);
+                }
+
                 // Method call whose receiver became `Roamed[E]`: SA baked the bare-entity method with the
                 // Roamed handle as `me` (so `me.field` reads the RoamController). INTERIM FIX (LOCAL-only,
                 // lock-SKIPPING): project the receiver via `.raw_inner()` so the bare method gets the real
@@ -345,13 +357,71 @@ internal sealed class SuflaeEntityLoweringPass
         }
     }
 
+    // Rewrite each argument that lands in a BARE-entity parameter of `routine` from a Roamed handle to
+    // `arg.raw_inner()` (the real entity pointer). Named args match by parameter name; positional args
+    // map by order over the non-`me` parameters. Non-Roamed args and non-entity params are untouched.
+    private CallExpression ProjectRoamedArgsIntoBareParams(CallExpression call, TypeModel.Symbols.RoutineInfo routine)
+    {
+        var nonMe = new List<TypeModel.Symbols.ParameterInfo>();
+        foreach (TypeModel.Symbols.ParameterInfo p in routine.Parameters)
+            if (p.Name != "me") nonMe.Add(p);
+
+        bool changed = false;
+        var newArgs = new List<Expression>(capacity: call.Arguments.Count);
+        int posIdx = 0;
+        foreach (Expression a in call.Arguments)
+        {
+            TypeModel.Symbols.ParameterInfo? param = null;
+            if (a is NamedArgumentExpression named)
+            {
+                foreach (TypeModel.Symbols.ParameterInfo p in nonMe)
+                    if (p.Name == named.Name) { param = p; break; }
+            }
+            else
+            {
+                if (posIdx < nonMe.Count) param = nonMe[posIdx];
+                posIdx++;
+            }
+
+            if (param?.Type is EntityTypeInfo entity)
+            {
+                Expression projected = ProjectRawInner(arg: a, targetEntity: entity);
+                newArgs.Add(projected);
+                if (!ReferenceEquals(projected, a)) changed = true;
+            }
+            else
+            {
+                newArgs.Add(a);
+            }
+        }
+
+        return changed ? call with { Arguments = newArgs } : call;
+    }
+
+    // Wrap a Roamed-valued argument in `<value>.raw_inner()` : the target bare entity. A non-Roamed arg
+    // (already a bare entity, or a non-entity value) is returned unchanged.
+    private Expression ProjectRawInner(Expression arg, EntityTypeInfo targetEntity)
+    {
+        Expression val = arg is NamedArgumentExpression na ? na.Value : arg;
+        if (!IsRoamedType(val.ResolvedType)) return arg;
+
+        var raw = new CallExpression(
+            Callee: new MemberExpression(Object: val, PropertyName: "raw_inner",
+                Location: val.Location) { ResolvedType = targetEntity },
+            Arguments: new List<Expression>(),
+            Location: val.Location) { ResolvedType = targetEntity };
+
+        return arg is NamedArgumentExpression named
+            ? named with { Value = raw }
+            : raw;
+    }
+
     // True if the type is a `Roamed[E]` handle in either representation the pipeline produces: a
     // WrapperTypeInfo (from this pass's WrapInRoam) or a RecordTypeInfo (from a field read, whose type
     // TypeBodyResolver builds via GetOrCreateResolution).
     private static bool IsRoamedType(TypeInfo? t)
     {
-        return t is WrapperTypeInfo { Name: RuntimeContract.Roamed }
-            || t is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed };
+        return t is WrapperTypeInfo { Name: RuntimeContract.Roamed } or RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed };
     }
 
     // A construction arg (a `NamedArgumentExpression` or bare value) whose value is a borrowed Roamed
