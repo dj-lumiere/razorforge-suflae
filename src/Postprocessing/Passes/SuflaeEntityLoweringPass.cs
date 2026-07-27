@@ -235,10 +235,49 @@ internal sealed class SuflaeEntityLoweringPass
                     args.Add(na);
                     if (!ReferenceEquals(na, a)) changed = true;
                 }
-                Expression lowered = changed ? call with { Callee = callee, Arguments = args } : call;
+                CallExpression lowered = changed ? call with { Callee = callee, Arguments = args } : call;
+                // NOTE: method calls `roamedLocal.method()` still mis-resolve (SA baked the bare-entity
+                // method with the Roamed handle as `me`). Clearing ResolvedRoutine to force re-resolution
+                // does NOT work — CallOverloadResolutionPass doesn't re-resolve a cleared call → codegen
+                // NPE. NEXT: look up the Roamed[E] forwarder directly, or type entities as Roamed in SA.
                 return call.ResolvedType is EntityTypeInfo callEntity
                     ? WrapInRoam(inner: lowered, entity: callEntity)
                     : lowered;
+            }
+
+            // f-string: recurse into each embedded `{ expr }` so entity references inside it retype
+            // (else e.g. `f"{b.size}"` reads `b` as a bare entity — actually the RoamController — and
+            // returns the refcount instead of the field).
+            case InsertedTextExpression fstr:
+            {
+                bool changed = false;
+                var parts = new List<InsertedTextPart>(capacity: fstr.Parts.Count);
+                foreach (InsertedTextPart part in fstr.Parts)
+                {
+                    if (part is ExpressionPart ep)
+                    {
+                        Expression ne = LowerExpression(ep.Expression);
+                        parts.Add(ReferenceEquals(ne, ep.Expression) ? ep : ep with { Expression = ne });
+                        if (!ReferenceEquals(ne, ep.Expression)) changed = true;
+                    }
+                    else { parts.Add(part); }
+                }
+                return changed ? fstr with { Parts = parts } : fstr;
+            }
+
+            case BinaryExpression bin:
+            {
+                Expression l = LowerExpression(bin.Left);
+                Expression r = LowerExpression(bin.Right);
+                return !ReferenceEquals(l, bin.Left) || !ReferenceEquals(r, bin.Right)
+                    ? bin with { Left = l, Right = r }
+                    : bin;
+            }
+
+            case UnaryExpression un:
+            {
+                Expression o = LowerExpression(un.Operand);
+                return ReferenceEquals(o, un.Operand) ? un : un with { Operand = o };
             }
 
             default:

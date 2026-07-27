@@ -411,7 +411,12 @@ public sealed class BuildDriver
                 return null;
             }
 
-            if (!isSuflae && _language == Language.Suflae)
+            // A Suflae project MAY import RazorForge STDLIB modules (SF's Core IS RF's Core; it borrows
+            // the RazorForge stdlib until a Standard/Suflae surface exists) — those `.rf` files are
+            // parsed with the RazorForge grammar below. Importing an arbitrary user `.rf` is still blocked.
+            bool isStdlibFile = Path.GetFullPath(path: filePath).StartsWith(
+                value: Path.GetFullPath(path: _stdlibRoot), comparisonType: StringComparison.OrdinalIgnoreCase);
+            if (!isSuflae && _language == Language.Suflae && !isStdlibFile)
             {
                 _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.LanguageMismatch,
                     Message: $"Cannot import RazorForge file '{filePath}' from Suflae project.",
