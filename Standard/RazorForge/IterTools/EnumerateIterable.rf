@@ -1,0 +1,57 @@
+module Core
+
+### Represents a lazy adapter that pairs each produced element with an index.
+### The emitted index starts at `0` by default or at the caller-supplied offset.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity EnumerateIterable[T, S] obeys Iterable[Tuple[U64, T]]
+needs S obeys Iterable[T]
+relates EnumerateEmittable[T, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+  ### Stores the first index value to assign.
+  secret start_index: U64
+
+### Returns the stateful iterator that produces indexed tuples lazily.
+### :returns: The resulting `EnumerateEmittable[T, S/Iter]` value.
+@readonly
+routine EnumerateIterable[T, S].$iter() -> EnumerateEmittable[T, S/Iter]
+  danger!
+    return EnumerateEmittable[T, S/Iter](source: me.source.as_entity().$iter(), index: me.start_index)
+
+### Iterates over a source sequence, pairing each element with an incrementing index.
+### :typeparam T: The element type of the source sequence.
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity EnumerateEmittable[T, SE] obeys Emittable[Tuple[U64, T]]
+needs SE obeys Emittable[T]
+  ### Stores the iterator over the source sequence (borrowed).
+  secret source: Hijacked[SE]
+  ### Stores the next index value to assign.
+  secret index: U64
+
+### Returns the next value from this iterator.
+### The returned tuple contains the current index followed by the source item.
+### :returns: The resulting `Tuple[U64, T]` value.
+routine EnumerateEmittable[T, SE].$emit!() -> Tuple[U64, T]
+  danger!
+    var item = me.source.as_entity().$emit!()
+    var _result = (me.index, item)
+    me.index = me.index + 1u64
+    return _result
+
+### Returns a lazy enumerating adapter over this iterable.
+### The first yielded index is `0`.
+### :returns: The resulting `EnumerateIterable[T, Me]` value.
+@readonly
+routine Iterable[T].enumerate() -> EnumerateIterable[T, Me]
+  danger!
+    return EnumerateIterable[T, Me](source: me.hijack(), start_index: 0u64)
+
+### Returns a lazy enumerating adapter over this iterable.
+### The first yielded index is `start`.
+### :param start: The inclusive starting position.
+### :returns: The resulting `EnumerateIterable[T, Me]` value.
+@readonly
+routine Iterable[T].enumerate(start: U64) -> EnumerateIterable[T, Me]
+  danger!
+    return EnumerateIterable[T, Me](source: me.hijack(), start_index: start)

@@ -1,0 +1,52 @@
+module IterTools
+
+### Represents a lazy mapping adapter over an input iterable.
+### Each source element is transformed only when requested by iteration.
+### :typeparam T: The source element type.
+### :typeparam U: The projected output type.
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity SelectIterable[T, U, S] obeys Iterable[U]
+needs S obeys Iterable[T]
+relates SelectEmittable[T, U, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+  ### Stores the projection routine applied to each value.
+  secret transform: Routine[(T,), U]
+
+### Returns the stateful iterator that drives this projection adapter.
+### The emitted iterator reuses the same transform routine for every yielded
+### source value.
+### :returns: The resulting `SelectEmittable[T, U, S/Iter]` value.
+@readonly
+routine SelectIterable[T, U, S].$iter() -> SelectEmittable[T, U, S/Iter]
+  danger!
+    return SelectEmittable[T, U, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform)
+
+### Iterates over a source sequence and projects each yielded value through a transform routine.
+### :typeparam T: The source element type.
+### :typeparam U: The projected output type.
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity SelectEmittable[T, U, SE] obeys Emittable[U]
+needs SE obeys Emittable[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
+  ### Stores the transform routine to apply to each input value.
+  secret transform: Routine[(T,), U]
+
+### Returns the next projected value from the mapped sequence.
+### The transform runs once for each successfully yielded source value.
+### :returns: The resulting `U` value.
+routine SelectEmittable[T, U, SE].$emit!() -> U
+  danger!
+    var item = me.source.as_entity().$emit!()
+    return me.transform(item)
+
+### Returns a lazy projection of this iterable.
+### The source sequence is not evaluated until the resulting iterator is
+### consumed.
+### :param transform: The routine used to map each source value to a result value.
+### :returns: The resulting `SelectIterable[T, U, Me]` value.
+@readonly
+routine Iterable[T].select[U](transform: Routine[(T,), U]) -> SelectIterable[T, U, Me]
+  danger!
+    return SelectIterable[T, U, Me](source: me.hijack(), transform: transform)
