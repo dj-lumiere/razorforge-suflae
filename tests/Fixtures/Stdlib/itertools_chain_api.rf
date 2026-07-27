@@ -3,7 +3,7 @@ import IO/Console
 import IterTools
 
 # Multi-adapter chaining: each adapter feeds the next, so a nested emitter
-# (e.g. WhereEmitter wrapping SelectEmitter wrapping ListEmitter) must resolve
+# (e.g. WhereEmittable wrapping SelectEmittable wrapping ListEmittable) must resolve
 # through the associated-type projection. Single-adapter coverage lives in
 # itertools_api.rf; this fixture stresses adapter-over-adapter composition.
 routine start()

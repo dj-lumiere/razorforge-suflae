@@ -49,7 +49,7 @@ needs K obeys Comparable
 ### :see: {SortedList[T]} for a sorted sequence that allows duplicates.
 entity SortedDict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable
 needs K obeys Comparable
-relates SortedDictIterator[K, V] as Iter
+relates SortedDictEmittable[K, V] as Iter
 relates K as Key
 relates V as Value
   secret root: Hijacked[BTreeDictNode[K, V]]?
@@ -973,9 +973,9 @@ dangerous routine SortedDict[K, V].get_by_rank(node: Referring[BTreeDictNode[K, 
 # ============================================================================
 
 @readonly
-routine SortedDict[K, V].$iter() -> SortedDictIterator[K, V]
+routine SortedDict[K, V].$iter() -> SortedDictEmittable[K, V]
   danger!
-    return SortedDictIterator[K, V](dict: me.hijack(), index: 0u64)
+    return SortedDictEmittable[K, V](dict: me.hijack(), index: 0u64)
 
 ### Creates a {List[DictEntry[K, V]]} from all entries of `from` in ascending key order.
 ### :param from: The sorted dictionary to convert.
@@ -1005,17 +1005,17 @@ dangerous routine SortedDict[K, V].collect_inorder(node: Referring[BTreeDictNode
     me.collect_inorder(node: node.children_get(node.children_count() -% 1u64).as_entity(), result: result)
   return
 
-### Iterator that yields entries of a {SortedDict[K, V]} in ascending key order.
+### Emittable that yields entries of a {SortedDict[K, V]} in ascending key order.
 ### Holds a NON-OWNING `Hijacked` pointer to the dict — a cursor borrows its container, it does not
 ### own it. An owning `dict: SortedDict` field would make the iterator's teardown free the whole tree,
 ### double-freeing it against the real owner's scope-exit `$destroy` (containment = ownership).
 ### :typeparam K: The key type.
 ### :typeparam V: The value type.
-entity SortedDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
+entity SortedDictEmittable[K, V] obeys Emittable[DictEntry[K, V]]
   dict: Hijacked[SortedDict[K, V]]
   index: U64
 
-routine SortedDictIterator[K, V].$next!() -> DictEntry[K, V]
+routine SortedDictEmittable[K, V].$emit!() -> DictEntry[K, V]
   danger!
     if me.index >= me.dict.as_entity().count()
       absent

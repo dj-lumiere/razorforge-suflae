@@ -87,7 +87,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Live concrete owner type FullNames from RoutineReachabilityPass. Used to drive Phase C
-    /// monomorphization of synthesized routines (try_next, $represent, $diagnose) for generic owners.
+    /// monomorphization of synthesized routines (try_emit, $represent, $diagnose) for generic owners.
     /// </summary>
     private HashSet<string> _liveOwnerTypeNames = new(comparer: StringComparer.Ordinal);
 
@@ -1099,7 +1099,7 @@ public partial class LlvmCodeGenerator
                 // emit the body with the wrapper's type parameter substituted.
                 if (synthInfo.OwnerType?.IsGenericDefinition == true)
                 {
-                    // Non-wrapper synthesized bodies on generic-def owners (try_next, $represent,
+                    // Non-wrapper synthesized bodies on generic-def owners (try_emit, $represent,
                     // $diagnose, $hash, $eq for generic types like ListEmitter[T], List[T]).
                     // For each live concrete instantiation of this owner, lookup the substituted
                     // method (LookupMethod normalizes generic-def methods onto concrete owners),

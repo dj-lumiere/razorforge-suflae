@@ -10,10 +10,10 @@ suspended routine quick(x: S64) -> S64
   return x * 2
 
 routine start()
-  var (feeder, hop) = make_hopper[S64](capacity: 4)
+  var (feeder, hop) = make_channel[S64](capacity: 4)
   danger!
-    feeder.feed!(item: 10)
-    feeder.feed!(item: 20)
+    feeder.send!(item: 10)
+    feeder.send!(item: 20)
   show(f"cap={hop.capacity()} count={hop.count()} empty={hop.is_empty()} closed={hop.is_closed()}")
 
   feeder.close()

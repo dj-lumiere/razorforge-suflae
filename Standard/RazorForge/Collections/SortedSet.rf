@@ -261,7 +261,7 @@ routine BTreeSetNode[T].children_add_range_from(other: Referring[BTreeSetNode[T]
 ### :see: {SortedDict[K, V]} for a sorted mapping from keys to values.
 entity SortedSet[T] obeys Iterable[T]
 needs T obeys Comparable
-relates SortedSetIterator[T] as Iter
+relates SortedSetEmittable[T] as Iter
   secret root: Hijacked[BTreeSetNode[T]]?
   secret count: U64
 
@@ -921,11 +921,11 @@ routine SortedSet[T].last!() -> T
 # ============================================================================
 
 ### Returns an iterator over the set in ascending sorted order.
-### :returns: The resulting `SortedSetIterator[T]` value.
+### :returns: The resulting `SortedSetEmittable[T]` value.
 @readonly
-routine SortedSet[T].$iter() -> SortedSetIterator[T]
+routine SortedSet[T].$iter() -> SortedSetEmittable[T]
   danger!
-    return SortedSetIterator[T](set: me.hijack(), index: 0u64)
+    return SortedSetEmittable[T](set: me.hijack(), index: 0u64)
 
 ### Materializes the set as a list in ascending order.
 ### :param from: The set to copy values from.
@@ -957,9 +957,9 @@ dangerous routine SortedSet[T].collect_inorder(node: Referring[BTreeSetNode[T]],
   return
 
 ### Walks the elements of a `SortedSet[T]` in ascending sorted order.
-### Each call to `$next!` resolves the element at the current rank from the source set.
+### Each call to `$emit!` resolves the element at the current rank from the source set.
 ### :typeparam T: The element type yielded by the iterator.
-entity SortedSetIterator[T] obeys Iterator[T]
+entity SortedSetEmittable[T] obeys Emittable[T]
   ### The source set being iterated (NON-OWNING borrow — a cursor borrows its container).
   set: Hijacked[SortedSet[T]]
   ### The next sorted rank to yield.
@@ -968,7 +968,7 @@ entity SortedSetIterator[T] obeys Iterator[T]
 ### Returns the next element in ascending set order.
 ### :returns: The element at the current sorted rank.
 ### :absent: All elements have been yielded.
-routine SortedSetIterator[T].$next!() -> T
+routine SortedSetEmittable[T].$emit!() -> T
   danger!
     if me.index >= me.set.as_entity().count()
       absent

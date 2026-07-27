@@ -749,7 +749,7 @@ routine Text.$diagnose() -> Text
 ### Represents the iterator used to traverse a `Text` value.
 ### The iterator reads the text sequentially from the first character to the
 ### last.
-entity TextIterator
+entity TextEmittable
   ### Stores the source text.
   text: Text
   ### Stores the current character index.
@@ -757,16 +757,16 @@ entity TextIterator
 
 ### Returns an iterator over this text value.
 ### The iterator starts at index `0`.
-### :returns: The resulting `TextIterator` value.
+### :returns: The resulting `TextEmittable` value.
 @readonly
-routine Text.$iter() -> TextIterator
-  return TextIterator(text: me, index: 0u64)
+routine Text.$iter() -> TextEmittable
+  return TextEmittable(text: me, index: 0u64)
 
 ### Returns the next character from this iterator.
 ### Each successful call advances the iterator by one character.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
-routine TextIterator.$next!() -> Character
+routine TextEmittable.$emit!() -> Character
   if me.index >= me.text.count
     absent
   var value = me.text[me.index]

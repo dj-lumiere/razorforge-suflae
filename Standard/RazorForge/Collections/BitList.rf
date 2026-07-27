@@ -31,7 +31,7 @@ import BuilderService
 ###
 ### :see: {BitArray[N]} for a compile-time-sized, value-semantic alternative.
 entity BitList obeys Iterable[Bool], MutableIndexable[Bool], Sized
-relates BitListIterator as Iter
+relates BitListEmittable as Iter
   ### Stores the heap-allocated word buffer that packs the bits.
   secret data: Hijacked[U64]      # Heap-allocated word array (64 bits per U64)
   ### Stores the number of logical bits currently present in the list.
@@ -411,15 +411,15 @@ routine BitList.$bitnot() -> BitList
 
 ### Returns an iterator over the logical bits stored in the list.
 ### Bits are yielded from index `0` to `count - 1`.
-### :returns: The resulting `BitListIterator` value.
+### :returns: The resulting `BitListEmittable` value.
 @readonly
-routine BitList.$iter() -> BitListIterator
+routine BitList.$iter() -> BitListEmittable
   danger!
-    return BitListIterator(data: me.data, count: me.count(), index: 0u64)
+    return BitListEmittable(data: me.data, count: me.count(), index: 0u64)
 
 ### Represents an iterator over the logical bits stored in a `BitList`.
 ### The iterator walks the packed word buffer in ascending logical index order.
-entity BitListIterator obeys Iterator[Bool]
+entity BitListEmittable obeys Emittable[Bool]
   ### Raw pointer into the source bit list's packed word buffer.
   secret data: Hijacked[U64]
   ### Bit count captured at iterator creation.
@@ -430,7 +430,7 @@ entity BitListIterator obeys Iterator[Bool]
 ### Returns the next bit from the iterator.
 ### :returns: The resulting `Bool` value.
 ### :absent: Returns absent when the iterator reaches the captured bit count.
-routine BitListIterator.$next!() -> Bool
+routine BitListEmittable.$emit!() -> Bool
   if me.index >= me.count
     absent
   var word_idx = me.index >> 6u32

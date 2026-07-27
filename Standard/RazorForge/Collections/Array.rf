@@ -35,7 +35,7 @@ import BuilderService
 @llvm("[{N} x {T}]")
 record Array[T, N] obeys Comparable, Iterable[T], MutableIndexable[T], Sized
 needs N is U64
-relates ArrayIterator[T, N] as Iter
+relates ArrayEmittable[T, N] as Iter
   # N elements of T stored inline by compiler - no explicit member variables needed
   pass
 
@@ -146,20 +146,20 @@ needs T obeys Equatable
 ### Because `Array` is a record type, the iterator holds its own copy of the array data.
 ### :typeparam T: The element type yielded by the iterator.
 ### :typeparam N: The compile-time element count.
-entity ArrayIterator[T, N] obeys Iterator[T]
+entity ArrayEmittable[T, N] obeys Emittable[T]
   ### Stores the array being iterated.
   list: Array[T, N]
   ### Stores the next logical index to read.
   index: U64
 
 @readonly
-routine Array[T, N].$iter() -> ArrayIterator[T, N]
-  return ArrayIterator[T, N](list: me, index: 0u64)
+routine Array[T, N].$iter() -> ArrayEmittable[T, N]
+  return ArrayEmittable[T, N](list: me, index: 0u64)
 
 ### Returns the next element from the iterator in ascending index order.
 ### :returns: The element at the current index.
 ### :absent: All `N` elements have been yielded.
-routine ArrayIterator[T, N].$next!() -> T
+routine ArrayEmittable[T, N].$emit!() -> T
   if me.index >= U64(N)
     absent
   var value = me.list[me.index]

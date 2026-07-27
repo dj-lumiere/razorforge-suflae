@@ -25,7 +25,7 @@ namespace Compiler.Instantiation.Passes;
 /// <list type="bullet">
 ///   <item><see cref="DesugaringContext.VariantBodies"/> -> WiredRoutinePass-generated
 ///         bodies (<c>$represent</c>, <c>$diagnose</c>) and ErrorHandlingVariantPass
-///         bodies (<c>try_next</c>, etc.).</item>
+///         bodies (<c>try_emit</c>, etc.).</item>
 ///   <item><c>Registry.StdlibPrograms</c> and <c>Registry.UserPrograms</c> AST declarations -> source bodies.</item>
 /// </list>
 /// Pure-synthesized methods (<see cref="RoutineInfo.IsSynthesized"/> = true with no
@@ -448,7 +448,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     {
         // Strategy-B reachability gate at the type level: skip concrete instances that no
         // reachable routine ever owned. This prevents unreachable types like Array[BuildMode, 63]
-        // or BTreeListNode[Text] from emitting try_next/$getitem!/etc. via the wired-routine bypass
+        // or BTreeListNode[Text] from emitting try_emit/$getitem!/etc. via the wired-routine bypass
         // on the per-routine gate.
         //
         // The "reachability ran" signal is LiveRoutineKeys (NOT LiveOwnerTypeNames): reachability
@@ -539,7 +539,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 // Keep codegen's Phase-B live gate in sync with GMP's wired-routine bypass.
                 // LLVMCodeGenerator emits an instantiated body only when its key is in the live set,
                 // with NO wired bypass — so a wired routine emitted here for a live owner that
-                // post-dates RoutineReachabilityPass (e.g. try_next on a chained iterator emitter
+                // post-dates RoutineReachabilityPass (e.g. try_emit on a chained iterator emitter
                 // like SelectEmitter[S64, S64, ListEmitter[S64]]) was never seeded and would be
                 // silently dropped at codegen. Marking the key live closes that gap; non-wired
                 // emissions already have a live key, so this is a no-op for them.
@@ -552,14 +552,14 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// (1) the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$copy</c>, from
     /// <see cref="Compiler.Resolution.WiredRoutineCatalog.AlwaysLiveNames"/>) — scope-exit teardown
     /// inserts <c>$destroy</c> calls that must always have a concrete body, and the matching
-    /// retaining <c>$copy</c> likewise; (2) <c>try_next</c>, reachable only through synthesized
+    /// retaining <c>$copy</c> likewise; (2) <c>try_emit</c>, reachable only through synthesized
     /// for-loop iteration bodies whose owner type (ListEmitter[Byte], etc.) is created post-pass
     /// during GMP body rewriting, so ReachabilityPass cannot trace it. Kept narrow otherwise —
     /// broader sets cascade into derived-op chains ($ne->$eq) where the missing companion is the
     /// actual culprit.
     private static readonly HashSet<string> _gateBypassNames =
         new(collection: Compiler.Resolution.WiredRoutineCatalog.AlwaysLiveNames,
-            comparer: StringComparer.Ordinal) { Compiler.Resolution.RuntimeContract.TryNext };
+            comparer: StringComparer.Ordinal) { Compiler.Resolution.RuntimeContract.TryEmit };
 
     private static bool IsWiredRoutineName(string name) => _gateBypassNames.Contains(name);
 
@@ -959,7 +959,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // Check/Lookup/TryBool are driven by variantStatus. The try_ (Maybe) variant leaves
         // variantStatus null — codegen natively wraps top-level `return`->Some and `absent`->None
         // — but a Maybe variant whose source uses a failable call in NON-tail position (e.g.
-        // `var item = src.$next!()` in EnumerateEmitter) needs that inner call routed through its
+        // `var item = src.$emit!()` in EnumerateEmitter) needs that inner call routed through its
         // own try_ variant; otherwise the raw `!` call hard-crashes at exhaustion. Run the
         // Try-kind transform for Maybe returns so TransformBlockStatements can splice in that
         // propagation. (ListEmitter etc. have no such inner call, so the transform is a no-op for

@@ -397,7 +397,7 @@ routine List[PQEntry[TPriority, TElement]].$create(source: PriorityQueue[TPriori
 ### Iteration order is heap order — NOT priority-sorted order.
 ### :typeparam TPriority: The priority type carried by yielded entries.
 ### :typeparam TElement: The element type carried by yielded entries.
-entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriority, TElement]]
+entity PriorityQueueEmittable[TPriority, TElement] obeys Emittable[PQEntry[TPriority, TElement]]
   ### Raw pointer into the source queue's priority buffer.
   secret priorities: Hijacked[TPriority]
   ### Raw pointer into the source queue's element buffer.
@@ -408,9 +408,9 @@ entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriori
   secret index: U64
 
 @readonly
-routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueEmittable[TPriority, TElement]
   danger!
-    return PriorityQueueIterator[TPriority, TElement](
+    return PriorityQueueEmittable[TPriority, TElement](
       priorities: me.priorities,
       elements: me.elements,
       count: me.count(),
@@ -420,7 +420,7 @@ routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPri
 ### Returns the next heap entry in storage order.
 ### :returns: The next priority–element pair from the heap array.
 ### :absent: All entries captured at iterator creation have been yielded.
-routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority, TElement]
+routine PriorityQueueEmittable[TPriority, TElement].$emit!() -> PQEntry[TPriority, TElement]
   if me.index >= me.count
     absent
   lateinit var p: TPriority

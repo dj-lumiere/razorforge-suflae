@@ -76,17 +76,17 @@ crashable TaskTimeoutError
 routine TaskTimeoutError.crash_message() -> Text
   return "Threaded task did not finish before its deadline."
 
-### Raised when feeding a channel that has been closed, or whose every consumer has gone — the item
+### Raised when sending to a channel that has been closed, or whose every consumer has gone — the item
 ### can never be delivered. Closing itself is not an error (it is the normal end-of-stream signal);
-### only a `feed` after close is.
+### only a `send` after close is.
 crashable ChannelClosedError
   pass
 
-### Returns the default message for feeding a closed channel.
+### Returns the default message for sending to a closed channel.
 ### :returns: The resulting `Text` value.
 @readonly
 routine ChannelClosedError.crash_message() -> Text
-  return "Cannot feed a closed channel (no consumer can receive the item)."
+  return "Cannot send to a closed channel (no consumer can receive the item)."
 
 ### Raised when a thread tries to acquire an exclusive lock it already holds — a re-entrant
 ### `claim()` (or `claim()` while `inspect()`-blocked under exclusion). The acquire would spin

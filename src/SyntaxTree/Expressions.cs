@@ -402,7 +402,7 @@ public record CallExpression(
 
     /// <summary>
     /// True when this call was synthesized by a compiler lowering pass (e.g.
-    /// <c>ControlFlowLoweringPass</c> emitting <c>iter.$iter()</c> / <c>iter.try_next()</c>
+    /// <c>ControlFlowLoweringPass</c> emitting <c>iter.$iter()</c> / <c>iter.try_emit()</c>
     /// for a for-loop). SA uses this to skip checks meant to gate user code from invoking
     /// dunder-private methods directly.
     /// </summary>

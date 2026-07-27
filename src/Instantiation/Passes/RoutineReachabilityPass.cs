@@ -331,12 +331,12 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             RecordSuspendEdge(caller: frame.Routine, callee: concreteCallee);
             EnqueueRoamHookIfNeeded(node: node, callee: concreteCallee, typeSubs: frame.TypeSubs);
 
-            // Pure synthesized $represent / try_next / wrapper-forwarders also have call sites
+            // Pure synthesized $represent / try_emit / wrapper-forwarders also have call sites
             // we may need to walk later; their bodies live in VariantBodies under the generic-def
             // key and are scanned via the synthesized-AST handling below.
         }
 
-        // Variant bodies (synthesized $represent / try_next / wrapper forwarders) for this routine —
+        // Variant bodies (synthesized $represent / try_emit / wrapper forwarders) for this routine —
         // walk if present, using the same typeSubs.
         if (ctx.VariantBodies.TryGetValue(key: frame.Routine.RegistryKey, out Statement? variantBody))
         {
@@ -905,7 +905,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // owner's generic-def shape AND the variant's signature. The lookup above can
                 // miss when the variant body wasn't keyed under the generic-def form we
                 // reconstructed. Use `callee.OriginalName` to find the underlying failable
-                // routine (`$next!`) and walk its body from `ctx.RoutineBodies` — the variant
+                // routine (`$emit!`) and walk its body from `ctx.RoutineBodies` — the variant
                 // body is just a transformed copy of the same statements, so the calls it
                 // makes are identical.
                 if (synthBody == null && callee.OriginalName is { } origName)
@@ -1772,7 +1772,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                         paramCount: routine.Parameters.Count, isFailable: routine.IsFailable)
                     ?? ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
                 if (resolved != null) return TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs);
-                // Synthesized routines (try_next, $represent, $diagnose, wrapper forwarders) live
+                // Synthesized routines (try_emit, $represent, $diagnose, wrapper forwarders) live
                 // only on the generic-def. Manually mark the substituted RegistryKey live so the
                 // codegen Phase B/C gates emit the concrete-form symbol that callers reference.
                 string concreteKey = ComputeConcreteRegistryKey(routine: routine, concreteOwner: concreteOwner, subs: typeSubs);

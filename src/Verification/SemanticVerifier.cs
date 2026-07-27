@@ -655,7 +655,7 @@ public sealed partial class SemanticVerifier
         ComputeMaySuspend(ctx: ctx);
 
         // Classify call expressions (set LoweringKind) in rewritten instantiated generic bodies.
-        // GenericAstRewriter preserves source-AST structure but doesn't re-classify try_next
+        // GenericAstRewriter preserves source-AST structure but doesn't re-classify try_emit
         // and other wired calls — they stay Unknown and cause codegen exceptions if not fixed here.
         var classCtx = new PostprocessingContext(registry: _registry,
             variantBodies: _variantBodies,
@@ -709,11 +709,11 @@ public sealed partial class SemanticVerifier
             variantBodies: _variantBodies,
             target: _target,
             buildMode: _buildMode);
-        // Inline simple iterator `$next!` bodies into their for-loops before the rest of Phase 7
-        // lowering, replacing the `try_next` call with the spliced advance. By Phase 7 the concrete
-        // `$next!` bodies are already monomorphized (Phase 6 ran), so the lookup succeeds; the
+        // Inline simple iterator `$emit!` bodies into their for-loops before the rest of Phase 7
+        // lowering, replacing the `try_emit` call with the spliced advance. By Phase 7 the concrete
+        // `$emit!` bodies are already monomorphized (Phase 6 ran), so the lookup succeeds; the
         // spliced body then flows through the normal Phase 7 lowering below. Composed/filtering
-        // iterators fall back to the existing `try_next` loop.
+        // iterators fall back to the existing `try_emit` loop.
         new Compiler.Instantiation.Passes.IteratorInlineLoweringPass(
                 registry: _registry, monoBodies: _instantiatedGenericBodies)
             .Run(program: program);
@@ -1108,9 +1108,9 @@ public sealed partial class SemanticVerifier
         }
         Mark(label: "Phase 3 per-file -> PreRegisterUserVariants");
 
-        // Phase 3 global: pre-register stdlib failable method variants (try_next, try_recover, etc.)
+        // Phase 3 global: pre-register stdlib failable method variants (try_emit, try_recover, etc.)
         // Must run before Phase 5 user body analysis and before Phase 3 per-file desugaring
-        // (ControlFlowLoweringPass generates try_next calls that Phase 5 must resolve).
+        // (ControlFlowLoweringPass generates try_emit calls that Phase 5 must resolve).
         PreRegisterStdlibVariants();
         Mark(label: "Phase 3 global -> PreRegisterStdlibVariants");
 

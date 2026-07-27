@@ -37,7 +37,7 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Set[T]} for the set counterpart.
 entity Dict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable
 needs K obeys Hashable, Equatable
-relates DictIterator[K, V] as Iter
+relates DictEmittable[K, V] as Iter
 relates K as Key
 relates V as Value
   secret ctrl: Hijacked[U8]
@@ -120,7 +120,7 @@ routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
 ### not recursed into — only the backing arrays are released.
 dangerous routine Dict[K, V].$destroy()
   # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
-  # in DictIterator.$next!). No-op for value types; frees owned entity keys/values.
+  # in DictEmittable.$emit!). No-op for value types; frees owned entity keys/values.
   var p = 0u64
   while p < me.entries_used
     if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
@@ -403,9 +403,9 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$iter() -> DictIterator[K, V]
+routine Dict[K, V].$iter() -> DictEmittable[K, V]
   danger!
-    return DictIterator[K, V](
+    return DictEmittable[K, V](
       keys: me.keys,
       vals: me.vals,
       entry_live: me.entry_live,
@@ -413,15 +413,15 @@ routine Dict[K, V].$iter() -> DictIterator[K, V]
       pos: 0u64
     )
 
-### Iterator that walks the dense entries array of a {Dict[K, V]} in insertion order.
-entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
+### Emittable that walks the dense entries array of a {Dict[K, V]} in insertion order.
+entity DictEmittable[K, V] obeys Emittable[DictEntry[K, V]]
   secret keys: Hijacked[K]
   secret vals: Hijacked[V]
   secret entry_live: Hijacked[U8]
   secret entries_used: U64
   secret pos: U64
 
-routine DictIterator[K, V].$next!() -> DictEntry[K, V]
+routine DictEmittable[K, V].$emit!() -> DictEntry[K, V]
   danger!
     while me.pos < me.entries_used
       var p = me.pos

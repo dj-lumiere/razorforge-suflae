@@ -33,7 +33,7 @@ import BuilderService
 ### :see: {Deque[T]} for efficient double-ended insertion and removal.
 ### :see: {SortedList[T]} for a list that maintains ascending order automatically.
 entity List[T] obeys Iterable[T], MutableIndexable[T], Sized
-relates ListEmitter[T] as Iter
+relates ListEmittable[T] as Iter
   ### Stores the backing buffer.
   secret data: Hijacked[T]
   ### Stores the number of initialized elements.
@@ -332,7 +332,7 @@ routine List[T].clear()
 ### The iterator captures a raw pointer and element count at creation so it does
 ### not hold a live reference to the list; mutations during iteration are unsafe.
 ### :typeparam T: The element type produced by the iterator.
-entity ListEmitter[T] obeys Iterator[T]
+entity ListEmittable[T] obeys Emittable[T]
   ### Stores a pointer into the source list buffer.
   secret data: Hijacked[T]
   ### Stores the element count captured at iterator creation.
@@ -341,11 +341,11 @@ entity ListEmitter[T] obeys Iterator[T]
   secret index: U64
 
 @readonly
-routine List[T].$iter() -> ListEmitter[T]
+routine List[T].$iter() -> ListEmittable[T]
   danger!
-    return ListEmitter[T](data: me.data, count: me.count(), index: 0u64)
+    return ListEmittable[T](data: me.data, count: me.count(), index: 0u64)
 
-routine ListEmitter[T].$next!() -> T
+routine ListEmittable[T].$emit!() -> T
   if me.index >= me.count
     absent
   danger!

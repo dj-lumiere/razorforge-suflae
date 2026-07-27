@@ -36,7 +36,7 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Dict[K, V]} for the dictionary counterpart.
 entity Set[T] obeys Iterable[T]
 needs T obeys Hashable, Equatable
-relates SetIterator[T] as Iter
+relates SetEmittable[T] as Iter
   secret ctrl: Hijacked[U8]
   secret indices: Hijacked[U64]
   secret slots: Hijacked[T]
@@ -281,23 +281,23 @@ routine Set[T].remove(value: T) -> Bool
 # ============================================================================
 
 @readonly
-routine Set[T].$iter() -> SetIterator[T]
+routine Set[T].$iter() -> SetEmittable[T]
   danger!
-    return SetIterator[T](
+    return SetEmittable[T](
       slots: me.slots,
       entry_live: me.entry_live,
       entries_used: me.entries_used,
       pos: 0u64
     )
 
-### Iterator that walks the dense entries array of a {Set[T]} in insertion order.
-entity SetIterator[T] obeys Iterator[T]
+### Emittable that walks the dense entries array of a {Set[T]} in insertion order.
+entity SetEmittable[T] obeys Emittable[T]
   secret slots: Hijacked[T]
   secret entry_live: Hijacked[U8]
   secret entries_used: U64
   secret pos: U64
 
-routine SetIterator[T].$next!() -> T
+routine SetEmittable[T].$emit!() -> T
   danger!
     while me.pos < me.entries_used
       var p = me.pos
@@ -424,7 +424,7 @@ routine Set[T].$eq(other: Referring[Set[T]]) -> Bool
 
 dangerous routine Set[T].$destroy()
   # Tear down each live element before freeing the buffers (mirrors the live-entry scan in
-  # SetIterator.$next!). For value elements `$destroy` is a no-op; for owned entity elements
+  # SetEmittable.$emit!). For value elements `$destroy` is a no-op; for owned entity elements
   # this frees them. Must run before invalidating `slots`/`entry_live`.
   var p = 0u64
   while p < me.entries_used

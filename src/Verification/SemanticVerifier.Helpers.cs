@@ -1123,7 +1123,7 @@ public sealed partial class SemanticVerifier
         // Indexing
         "$getitem", "$setitem",
         // Iteration
-        "$iter", "$next",
+        "$iter", "$emit",
         // Context management
         "$enter", "$exit"
     ];

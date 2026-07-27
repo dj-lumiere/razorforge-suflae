@@ -46,7 +46,7 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Set[T]} for the safe-by-default counterpart used with untrusted input.
 entity FastSet[T] obeys Iterable[T]
 needs T obeys FastHashable, Equatable
-relates FastSetIterator[T] as Iter
+relates FastSetEmittable[T] as Iter
   secret ctrl: Hijacked[U8]
   secret indices: Hijacked[U64]
   secret slots: Hijacked[T]
@@ -372,24 +372,24 @@ routine List[T].$create(from: Referring[FastSet[T]]) -> List[T]
 # ============================================================================
 
 @readonly
-routine FastSet[T].$iter() -> FastSetIterator[T]
+routine FastSet[T].$iter() -> FastSetEmittable[T]
   danger!
-    return FastSetIterator[T](
+    return FastSetEmittable[T](
       slots: me.slots,
       entry_live: me.entry_live,
       entries_used: me.entries_used,
       pos: 0u64
     )
 
-### Iterator that walks the dense entries array of a {FastSet[T]} in insertion order.
+### Emittable that walks the dense entries array of a {FastSet[T]} in insertion order.
 ### Tombstoned (removed) entries are silently skipped.
-entity FastSetIterator[T] obeys Iterator[T]
+entity FastSetEmittable[T] obeys Emittable[T]
   secret slots: Hijacked[T]
   secret entry_live: Hijacked[U8]
   secret entries_used: U64
   secret pos: U64
 
-routine FastSetIterator[T].$next!() -> T
+routine FastSetEmittable[T].$emit!() -> T
   danger!
     while me.pos < me.entries_used
       var p = me.pos
@@ -438,7 +438,7 @@ routine FastSet[T].$eq(other: Referring[FastSet[T]]) -> Bool
   return me.is_subset(other)
 
 dangerous routine FastSet[T].$destroy()
-  # Tear down each live element before freeing the buffers (mirrors FastSetIterator.$next!).
+  # Tear down each live element before freeing the buffers (mirrors FastSetEmittable.$emit!).
   # No-op for value types; frees owned entity elements.
   var p = 0u64
   while p < me.entries_used

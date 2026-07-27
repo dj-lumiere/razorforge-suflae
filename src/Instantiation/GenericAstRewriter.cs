@@ -109,7 +109,7 @@ internal static class GenericAstRewriter
         /// `r` was a protocol-constrained generic param (`__T0 obeys Iterable[S64]`) is typed by SA
         /// as the abstract protocol return (`Iterator[S64]`), but after `__T0 → Range[S64]` the call
         /// re-dispatches to `Range[S64].$iter` returning the CONCRETE `RangeIterator[S64]`. Recording
-        /// that here lets later references (`it.try_next()`) re-dispatch against the concrete iterator
+        /// that here lets later references (`it.try_emit()`) re-dispatch against the concrete iterator
         /// instead of the abstract protocol method (which has no body → linker error). Only used to
         /// concretize references whose stale type is itself a protocol, so other locals are untouched.
         /// </summary>
@@ -1307,8 +1307,8 @@ internal static class GenericAstRewriter
             routine.OwnerType is GenericParameterTypeInfo or ProtocolTypeInfo or { IsGenericDefinition: true })
         {
             // A protocol-owned method is abstract (no body) — after monomorphization the call must
-            // re-dispatch to the concrete implementer (e.g. Iterator[S64].try_next, resolved via a
-            // constrained generic param's $iter, must rebind to RangeIterator[S64].try_next).
+            // re-dispatch to the concrete implementer (e.g. Iterator[S64].try_emit, resolved via a
+            // constrained generic param's $iter, must rebind to RangeIterator[S64].try_emit).
             return true;
         }
 

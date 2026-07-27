@@ -35,7 +35,7 @@ import BuilderService
 @llvm("[{(N+7)//8} x i8]")
 record BitArray[N] obeys Comparable, Iterable[Bool], MutableIndexable[Bool]
 needs N is U64
-relates BitArrayIterator[N] as Iter
+relates BitArrayEmittable[N] as Iter
   pass
 
 ### Reads the byte at `index` from a `BitArray[N]`'s packed storage.
@@ -244,7 +244,7 @@ routine BitArray[N].$diagnose() -> Text
 ### Walks the bits of a fixed-size `BitArray[N]` from index 0 to N - 1.
 ### Because `BitArray` is a record type, the iterator holds its own copy of the packed bits.
 ### :typeparam N: The compile-time bit count.
-entity BitArrayIterator[N] obeys Iterator[Bool]
+entity BitArrayEmittable[N] obeys Emittable[Bool]
 needs N is U64
   ### Stores the bit array being iterated.
   bits: BitArray[N]
@@ -252,13 +252,13 @@ needs N is U64
   index: U64
 
 @readonly
-routine BitArray[N].$iter() -> BitArrayIterator[N]
-  return BitArrayIterator[N](bits: me, index: 0u64)
+routine BitArray[N].$iter() -> BitArrayEmittable[N]
+  return BitArrayEmittable[N](bits: me, index: 0u64)
 
 ### Returns the next bit from the iterator in ascending index order.
 ### :returns: The bit at the current index.
 ### :absent: All `N` bits have been yielded.
-routine BitArrayIterator[N].$next!() -> Bool
+routine BitArrayEmittable[N].$emit!() -> Bool
   if me.index >= N
     absent
   var value = me.bits[me.index]

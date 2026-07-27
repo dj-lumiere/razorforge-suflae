@@ -127,9 +127,9 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Phase 3 global: pre-registers try_/check_/lookup_ stub variants for all failable stdlib
-    /// member routines (e.g., Tracked[T].recover!, ListEmitter[T].$next!).
+    /// member routines (e.g., Tracked[T].recover!, ListEmitter[T].$emit!).
     /// Must run before Phase 5 user-body analysis so that user code calling these variants
-    /// (e.g., <c>rt.try_recover()</c> or desugared for-loop <c>iter.try_next()</c>) resolves
+    /// (e.g., <c>rt.try_recover()</c> or desugared for-loop <c>iter.try_emit()</c>) resolves
     /// without S450. Mirrors <see cref="PreRegisterUserVariants"/> but for stdlib programs.
     /// </summary>
     private void PreRegisterStdlibVariants()
@@ -169,7 +169,7 @@ public sealed partial class SemanticVerifier
     /// (only registered), so <c>_routineBodies</c> would otherwise contain only user-side
     /// failable routines. Downstream passes need stdlib bodies too:
     /// <see cref="ErrorHandlingVariantPass"/> for failable iterators (e.g.
-    /// <c>ListEmitter[T].$next!</c>) and <see cref="Compiler.Instantiation.Passes.ProtocolDefaultImplLoweringPass"/>
+    /// <c>ListEmitter[T].$emit!</c>) and <see cref="Compiler.Instantiation.Passes.ProtocolDefaultImplLoweringPass"/>
     /// for protocol-extension routines (e.g. <c>Iterable[Text].join</c>).
     /// Called before RunPhase4GlobalDesugaring() so the bodies are visible to both phases.
     /// </summary>

@@ -31,7 +31,7 @@ import BuilderService
 ### :see: {List[T]} for a simpler growable sequence optimized for back-only append.
 ### :see: {PriorityQueue[TPriority, TElement]} for priority-ordered removal.
 entity Deque[T] obeys Iterable[T], MutableIndexable[T], Sized
-relates DequeEmitter[T] as Iter
+relates DequeEmittable[T] as Iter
   ### Stores the circular buffer backing the deque.
   ### Elements are laid out in allocation order and interpreted through
   ### `start` and `count` rather than by physical position alone.
@@ -322,7 +322,7 @@ routine Deque[T].rotate_right(n: U64)
 ### The iterator captures a raw pointer, the start index, element count, and capacity
 ### at creation time so the source deque does not need to remain alive during iteration.
 ### :typeparam T: The element type yielded by the iterator.
-entity DequeEmitter[T] obeys Iterator[T]
+entity DequeEmittable[T] obeys Emittable[T]
   ### Raw pointer into the source deque's circular buffer.
   secret data: Hijacked[T]
   ### Front-of-queue physical index captured at iterator creation.
@@ -335,9 +335,9 @@ entity DequeEmitter[T] obeys Iterator[T]
   secret index: U64
 
 @readonly
-routine Deque[T].$iter() -> DequeEmitter[T]
+routine Deque[T].$iter() -> DequeEmittable[T]
   danger!
-    return DequeEmitter[T](
+    return DequeEmittable[T](
       data: me.data,
       start: me.start,
       count: me.count,
@@ -348,7 +348,7 @@ routine Deque[T].$iter() -> DequeEmitter[T]
 ### Returns the next element from the iterator in front-to-back order.
 ### :returns: The next logical element.
 ### :absent: All elements captured at iterator creation have been yielded.
-routine DequeEmitter[T].$next!() -> T
+routine DequeEmittable[T].$emit!() -> T
   if me.index >= me.count
     absent
   var physical = (me.start +% me.index) & (me.capacity -% 1u64)
@@ -439,7 +439,7 @@ needs T obeys Equatable
 
 dangerous routine Deque[T].$destroy()
   # Tear down each live element in logical front-to-back (ring) order before freeing the buffer
-  # (mirrors DequeEmitter.$next!). No-op for value types; frees owned entity elements.
+  # (mirrors DequeEmittable.$emit!). No-op for value types; frees owned entity elements.
   var i = 0u64
   while i < me.count
     var physical = (me.start +% i) & (me.capacity -% 1u64)

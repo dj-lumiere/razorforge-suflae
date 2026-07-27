@@ -15,7 +15,7 @@ namespace Compiler.Instantiation.Passes;
 /// A protocol-extension routine such as
 /// <code>routine Iterable[Text].join(separator: Text) -> Text</code>
 /// carries a real body whose <c>me</c> is typed as the protocol itself. The body's
-/// nested calls (e.g. <c>for part in me</c> -> <c>me.$iter()</c> / <c>me.$next!()</c>)
+/// nested calls (e.g. <c>for part in me</c> -> <c>me.$iter()</c> / <c>me.$emit!()</c>)
 /// cannot resolve statically against an abstract protocol owner; codegen needs the
 /// concrete implementer.
 ///
@@ -528,7 +528,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
 
         // Stdlib bodies are stored raw (no SA annotation). `me` identifiers therefore have
         // ResolvedType=null after cloning, which blocks downstream lowering: ControlFlowLowering
-        // can only set the synthesized `try_next` call's ResolvedType when `forStmt.Iterable`
+        // can only set the synthesized `try_emit` call's ResolvedType when `forStmt.Iterable`
         // (= `me`) carries one — without that, PatternLoweringPass sees subjectType=null and
         // refuses to fold the `is None / else var v` when-chain, leaking a NonePattern into codegen.
         AnnotateMeReferences(node: cloned, implementer: implementer);

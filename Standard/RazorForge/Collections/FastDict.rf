@@ -48,7 +48,7 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Dict[K, V]} for the safe-by-default counterpart used with untrusted input.
 entity FastDict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable
 needs K obeys FastHashable, Equatable
-relates FastDictIterator[K, V] as Iter
+relates FastDictEmittable[K, V] as Iter
 relates K as Key
 relates V as Value
   secret ctrl: Hijacked[U8]         # 1 byte/probe slot: 128=empty, 254=deleted, 0-127=H2
@@ -461,9 +461,9 @@ routine FastDict[K, V].entries() -> List[DictEntry[K, V]]
 ### Returns an iterator over all live entries in insertion order.
 ### Order is stable across lookups and value updates; removing and re-adding a key places the entry at the new end.
 @readonly
-routine FastDict[K, V].$iter() -> FastDictIterator[K, V]
+routine FastDict[K, V].$iter() -> FastDictEmittable[K, V]
   danger!
-    return FastDictIterator[K, V](
+    return FastDictEmittable[K, V](
       keys: me.keys,
       vals: me.vals,
       entry_live: me.entry_live,
@@ -471,11 +471,11 @@ routine FastDict[K, V].$iter() -> FastDictIterator[K, V]
       pos: 0u64
     )
 
-### Iterator that walks the dense entries array of a {FastDict[K, V]} in insertion order.
+### Emittable that walks the dense entries array of a {FastDict[K, V]} in insertion order.
 ### Tombstoned (removed) entries are silently skipped.
 ### :typeparam K: The key type yielded by each entry.
 ### :typeparam V: The value type yielded by each entry.
-entity FastDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
+entity FastDictEmittable[K, V] obeys Emittable[DictEntry[K, V]]
   ### Raw pointer into the source dict's key entries array.
   secret keys: Hijacked[K]
   ### Raw pointer into the source dict's value entries array.
@@ -484,13 +484,13 @@ entity FastDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
   secret entry_live: Hijacked[U8]
   ### Entries-array high-water mark captured at iterator creation.
   secret entries_used: U64
-  ### Current entry index; advances on each call to `$next!`.
+  ### Current entry index; advances on each call to `$emit!`.
   secret pos: U64
 
 ### Advances to the next live entry and returns it.
 ### :returns: The next live {DictEntry[K, V]} in insertion order.
 ### :absent: No live entries remain.
-routine FastDictIterator[K, V].$next!() -> DictEntry[K, V]
+routine FastDictEmittable[K, V].$emit!() -> DictEntry[K, V]
   danger!
     while me.pos < me.entries_used
       var p = me.pos
@@ -563,7 +563,7 @@ needs V obeys Equatable
   return true
 
 dangerous routine FastDict[K, V].$destroy()
-  # Tear down each live key and value before freeing the buffers (mirrors FastDictIterator.$next!).
+  # Tear down each live key and value before freeing the buffers (mirrors FastDictEmittable.$emit!).
   # No-op for value types; frees owned entity keys/values.
   var p = 0u64
   while p < me.entries_used

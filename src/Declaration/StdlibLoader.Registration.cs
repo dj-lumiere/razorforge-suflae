@@ -1534,7 +1534,7 @@ public sealed partial class StdlibLoader
 
             // For failable methods, also expose a `try_X` non-failable variant returning
             // Maybe[T] (or Bool when T is Blank), so call sites typed against the bare
-            // protocol (e.g. for-loop desugaring's `iter.try_next()` where `iter: Iterator[T]`)
+            // protocol (e.g. for-loop desugaring's `iter.try_emit()` where `iter: Iterator[T]`)
             // can resolve. Mirrors ErrorHandlingGenerator.GenerateTryVariant's shape.
             if (isFailable)
             {

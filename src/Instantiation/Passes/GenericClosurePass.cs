@@ -75,10 +75,10 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // that never went through Phase 4 desugaring. Lower them before subsequent passes.
         new Compiler.Desugaring.Passes.ControlFlowLoweringPass(ctx: adapter)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
-        // Inline simple iterator `$next!` bodies into their for-loops, replacing the `try_next`
+        // Inline simple iterator `$emit!` bodies into their for-loops, replacing the `try_emit`
         // call with the spliced advance. Runs AFTER ControlFlowLowering (which produced the flagged
-        // iterator loops) and AFTER monomorphization (so the concrete `$next!` bodies exist in
-        // InstantiatedGenericBodies for lookup). Composed/filtering iterators fall back to try_next.
+        // iterator loops) and AFTER monomorphization (so the concrete `$emit!` bodies exist in
+        // InstantiatedGenericBodies for lookup). Composed/filtering iterators fall back to try_emit.
         new IteratorInlineLoweringPass(registry: ctx.Registry, monoBodies: adapter.InstantiatedGenericBodies)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
@@ -142,7 +142,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // only became reachable through the synthesized iterator-adapter chain (which post-dates
         // RoutineReachabilityPass). Codegen reads these sets from the outer InstantiationContext
         // (result.LiveRoutineKeys) to gate Phase-B emission, so without copying the adapter's
-        // additions back, the freshly-emitted bodies (e.g. chained-emitter try_next) would be
+        // additions back, the freshly-emitted bodies (e.g. chained-emitter try_emit) would be
         // silently dropped at codegen, leaving undefined symbols at link.
         foreach (string key in adapter.LiveRoutineKeys)
             ctx.LiveRoutineKeys.Add(item: key);

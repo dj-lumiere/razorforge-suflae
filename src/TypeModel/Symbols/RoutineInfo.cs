@@ -382,7 +382,7 @@ public sealed class RoutineInfo
 
     /// <summary>
     /// For generated error-handling variants (try_, check_, lookup_), the original routine name
-    /// they were generated from (e.g., "$next" for "try_next", "parse" for "try_parse").
+    /// they were generated from (e.g., "$emit" for "try_emit", "parse" for "try_parse").
     /// </summary>
     public string? OriginalName { get; init; }
 

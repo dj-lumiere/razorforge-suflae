@@ -1,37 +1,37 @@
 module Tests/Stdlib/ChannelWorkerPoolApi
 
-# v0.3.0 channels — worker pool over a Conveyor (multi-consumer). One producer feeds 6 jobs onto a
-# capacity-2 Conveyor; two LineWorkers (clones) draw from it — any free worker takes the next job
+# v0.3.0 channels — worker pool over a SharedReceiver (multi-consumer). One producer feeds 6 jobs onto a
+# capacity-2 SharedReceiver; two LineWorkers (clones) draw from it — any free worker takes the next job
 # (consumer fan-out, NOT broadcast: each job goes to exactly one worker). The split between workers is
-# nondeterministic, but the TOTAL jobs processed is deterministic. When the producer's Feeder drops,
+# nondeterministic, but the TOTAL jobs processed is deterministic. When the producer's Sender drops,
 # the channel auto-closes and both workers' `for` loops end.
 
 import IO/Console
 
-suspended routine feed_jobs(out: Feeder[S64], n: S64) -> S64
+suspended routine feed_jobs(out: Sender[S64], n: S64) -> S64
   var i = 1_s64
   danger!
     while i <= n
-      out.feed!(item: i)
+      out.send!(item: i)
       i = i + 1
   return n
 
 # Counts how many jobs this worker handled (sum of all workers' counts == jobs fed).
-suspended routine worker(belt: LineWorker[S64]) -> S64
+suspended routine worker(belt: SharedReceiver[S64]) -> S64
   var done = 0_s64
   for job in belt
     done = done + 1
   return done
 
 routine start()
-  var (feeder, belt) = make_conveyor[S64](capacity: 2)
+  var (feeder, belt) = make_shared_channel[S64](capacity: 2)
 
   var fj = feed_jobs(out: steal feeder, n: 6)
   var w1 = worker(belt: steal belt.clone())
   var w2 = worker(belt: steal belt)
 
   danger!
-    discard fj.retrieve!()       # drive feeding (channel closes when the Feeder drops)
+    discard fj.retrieve!()       # drive feeding (channel closes when the Sender drops)
     var d1 = w1.retrieve!()
     var d2 = w2.retrieve!()
     show(f"total={d1 + d2}")

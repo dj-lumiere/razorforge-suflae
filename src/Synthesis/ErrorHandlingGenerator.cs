@@ -40,7 +40,7 @@ public sealed class ErrorHandlingGenerator
 
     /// <summary>
     /// Generates a variant name for an original routine.
-    /// Strips the leading '$' from wired routine names so that "$next" -> "try_next" (not "try_$next").
+    /// Strips the leading '$' from wired routine names so that "$emit" -> "try_emit" (not "try_$emit").
     /// </summary>
     /// <param name="prefix">The variant prefix (try, check, lookup).</param>
     /// <param name="original">The original routine.</param>
@@ -253,8 +253,8 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The try_ variant routine info.</returns>
     /// <summary>
     /// Generates only a try_ variant for a failable routine. Used for bodyless protocol
-    /// methods (e.g. <c>Iterator[T].$next!</c>) so that for-loop desugaring's call to
-    /// <c>iter.try_next()</c> resolves when <c>iter</c> is typed as the bare protocol.
+    /// methods (e.g. <c>Iterator[T].$emit!</c>) so that for-loop desugaring's call to
+    /// <c>iter.try_emit()</c> resolves when <c>iter</c> is typed as the bare protocol.
     /// </summary>
     public RoutineInfo GenerateTryVariantStub(RoutineInfo original) =>
         GenerateTryVariant(original: original);

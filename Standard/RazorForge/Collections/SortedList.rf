@@ -47,7 +47,7 @@ needs T obeys Comparable
 ### :see: {SortedDict[K, V]} for sorted key-value storage.
 entity SortedList[T] obeys Iterable[T]
 needs T obeys Comparable
-relates SortedListIterator[T] as Iter
+relates SortedListEmittable[T] as Iter
   secret root: Hijacked[BTreeListNode[T]]?
   secret count: U64
 
@@ -808,9 +808,9 @@ routine SortedList[T].last!() -> T
 # ============================================================================
 
 @readonly
-routine SortedList[T].$iter() -> SortedListIterator[T]
+routine SortedList[T].$iter() -> SortedListEmittable[T]
   danger!
-    return SortedListIterator[T](list: me.hijack(), index: 0u64)
+    return SortedListEmittable[T](list: me.hijack(), index: 0u64)
 
 ### Creates a {List[T]} from all elements of `from` in ascending sorted order.
 ### :param from: The sorted list to convert.
@@ -840,13 +840,13 @@ dangerous routine SortedList[T].collect_inorder(node: Referring[BTreeListNode[T]
     me.collect_inorder(node: node.children_get(node.children_count() -% 1u64).as_entity(), result: result)
   return
 
-### Iterator that yields elements of a {SortedList[T]} in ascending order.
+### Emittable that yields elements of a {SortedList[T]} in ascending order.
 ### :typeparam T: The stored element type.
-entity SortedListIterator[T] obeys Iterator[T]
+entity SortedListEmittable[T] obeys Emittable[T]
   list: Hijacked[SortedList[T]]
   index: U64
 
-routine SortedListIterator[T].$next!() -> T
+routine SortedListEmittable[T].$emit!() -> T
   danger!
     if me.index >= me.list.as_entity().count()
       absent
