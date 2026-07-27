@@ -1819,10 +1819,11 @@ public sealed partial class TypeRegistry
         _currentScope.MarkNonNull(name: name);
     }
 
-    /// <summary>Suflae flow typing: clears a proven-non-none fact for a variable in the current scope.</summary>
-    public void ClearVariableNonNull(string name)
+    /// <summary>Suflae flow typing: records a variable as known-nullable-again in the current scope
+    /// (shadows an outer proven-non-none fact — e.g. after reassigning a possibly-none value).</summary>
+    public void MarkVariableNullableAgain(string name)
     {
-        _currentScope.ClearNonNull(name: name);
+        _currentScope.MarkNullableAgain(name: name);
     }
 
     /// <summary>Suflae flow typing: true if the variable was proven non-none in the current scope chain.</summary>

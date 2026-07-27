@@ -554,10 +554,21 @@ public sealed partial class SemanticVerifier
     {
         TypeSymbol varType;
 
+        // Suflae: an entity-reference annotation (`x: E` / `x: E?`) stores a `Roamed[E]` handle. Track
+        // whether the annotation made this a nullable slot and whether it is a non-null entity slot.
+        bool annotatedNullable = false;
+        bool annotatedNonNullEntity = false;
+
         if (varDecl.Type != null)
         {
             // Explicit type annotation
             varType = ResolveType(typeExpr: varDecl.Type);
+
+            (TypeSymbol resolved, bool isNullable, bool isEntitySlot) =
+                ResolveSuflaeEntityAnnotation(annotated: varType);
+            varType = resolved;
+            annotatedNullable = isNullable;
+            annotatedNonNullEntity = isEntitySlot && !isNullable;
         }
         else if (varDecl.Initializer != null)
         {
@@ -700,11 +711,21 @@ public sealed partial class SemanticVerifier
         // A new declaration shadows any prior steal of the same name in this scope.
         _deadrefVariables.Remove(item: varDecl.Name);
 
-        // Suflae flow typing: a local inferred from a nullable entity read (`var n = a.optField`) or
-        // a `none` literal carries the nullability forward, so member access on it is gated until a
-        // null-check. Only applies when the declaration has no non-null type annotation.
-        bool varIsNullable = varDecl.Type == null && varDecl.Initializer != null &&
-            IsNullableEntityRead(expr: varDecl.Initializer);
+        // Suflae flow typing: a local is nullable when it was annotated `E?`, or (with no annotation)
+        // inferred from a nullable entity read (`var n = a.optField`) or a `none` literal — so member
+        // access on it is gated until a null-check.
+        bool varIsNullable = annotatedNullable ||
+            (varDecl.Type == null && varDecl.Initializer != null &&
+             IsNullableEntityRead(expr: varDecl.Initializer));
+
+        // Suflae: assigning a possibly-none value into a NON-NULL entity variable (`var x: E = <nullable>`
+        // or `var x: E = none`) is rejected — declare the variable optional (`x: E?`) to allow none.
+        if (annotatedNonNullEntity && varDecl.Initializer != null &&
+            IsNullableEntityRead(expr: varDecl.Initializer))
+        {
+            ReportNullableIntoNonNull(target: $"variable '{varDecl.Name}'",
+                value: varDecl.Initializer, optionalHint: $"{varDecl.Name}: <Type>?");
+        }
 
         bool declared = _registry.DeclareVariable(name: varDecl.Name, type: varType,
             isNullable: varIsNullable);

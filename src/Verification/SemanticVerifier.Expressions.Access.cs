@@ -53,17 +53,23 @@ public sealed partial class SemanticVerifier
         TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
         // Suflae flow typing: dereferencing (member access / method call) a possibly-none entity
-        // reference is rejected until it has been null-checked. `x.field` / `x.method(...)` on a
-        // nullable `x` that has not been proven non-none in this flow is an NPE waiting to happen.
-        if (_registry.Language == Language.Suflae &&
-            member.Object is IdentifierExpression nullableReceiver &&
-            _registry.LookupVariable(name: nullableReceiver.Name) is { IsNullable: true } &&
-            !_registry.IsVariableProvenNonNull(name: nullableReceiver.Name))
+        // reference is rejected until it has been null-checked. Covers both a nullable local/param
+        // (`x.field` on an unchecked `x: E?`) and a nullable field-chain (`a.b.c` where `b: E?`) — a
+        // field read is never flow-narrowed (Kotlin doesn't smart-cast mutable fields either), so it
+        // must always be bound to a local and checked there.
+        if (_registry.Language == Language.Suflae && IsNullableEntityRead(expr: member.Object))
         {
+            string receiver = member.Object is IdentifierExpression idRecv
+                ? $"'{idRecv.Name}'"
+                : member.Object is MemberExpression mRecv
+                    ? $"'{mRecv.PropertyName}'"
+                    : "the value";
+            string hint = member.Object is IdentifierExpression idHint
+                ? $"Null-check it first (e.g. 'if {idHint.Name} isnot None' or 'if {idHint.Name} is None: return')."
+                : "Bind it to a local and null-check that local first (e.g. 'var v = …' then 'if v isnot None').";
             ReportError(code: SemanticDiagnosticCode.NullableEntityDeref,
                 message:
-                $"Cannot access member '{member.PropertyName}' on possibly-none entity '{nullableReceiver.Name}'. " +
-                $"Null-check it first (e.g. 'if {nullableReceiver.Name} isnot None' or 'if {nullableReceiver.Name} is None: return').",
+                $"Cannot access member '{member.PropertyName}' on possibly-none entity {receiver}. {hint}",
                 location: member.Location);
         }
 

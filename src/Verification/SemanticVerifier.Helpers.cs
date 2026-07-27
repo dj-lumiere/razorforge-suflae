@@ -384,6 +384,16 @@ public sealed partial class SemanticVerifier
             Expression argExpr = binding.Value;
             TypeSymbol argType = AnalyzeExpression(expression: argExpr, expectedType: paramType);
 
+            // Suflae: a NON-NULL entity parameter rejects a possibly-none argument. Every SF entity
+            // parameter is non-null — a nullable one would be `Maybe[E]`, a distinct type — so any
+            // entity-reference param must be fed a checked (non-none) value. A nullable Roamed arg is
+            // still IsAssignableTo the bare-entity param (the E↔Roamed bridge), so this is the only gate.
+            if (IsEntityRefType(type: paramType) && IsNullableEntityRead(expr: argExpr))
+            {
+                ReportNullableIntoNonNull(target: $"parameter '{param.Name}' of '{routine.Name}'",
+                    value: argExpr, optionalHint: $"{param.Name}: <Type>?");
+            }
+
             if (argType.Category == TypeCategory.Error || paramType.Category == TypeCategory.Error)
             {
                 continue;

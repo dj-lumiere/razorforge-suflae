@@ -287,21 +287,25 @@ public sealed partial class SemanticVerifier
                                     ? entityCtor.MemberVariables[index: creatorPosIdx]
                                     : null);
                             argExpected = field?.Type;
-                            // Suflae: a NON-NULLABLE entity field (`x: E`) rejects `none` — only an
-                            // optional field (`x: E?`) may be a null Roamed handle.
                             Expression argVal = arg is NamedArgumentExpression nav ? nav.Value : arg;
+                            TypeSymbol argAnalyzed =
+                                AnalyzeExpression(expression: arg, expectedType: argExpected);
+                            // Suflae: a NON-NULLABLE entity field (`x: E`) rejects a possibly-none value —
+                            // literal `none` or an unchecked `E?` read. Only an optional field (`x: E?`)
+                            // may hold a null Roamed handle.
                             if (field is { IsNullable: false, Type: RecordTypeInfo
                                     { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed } }
-                                && argVal is LiteralExpression
-                                    { LiteralType: Compiler.Tokenizer.TokenType.NoneValue })
+                                && IsNullableEntityRead(expr: argVal))
                             {
-                                ReportError(code: SemanticDiagnosticCode.AssignmentTypeMismatch,
-                                    message:
-                                    $"Cannot assign 'none' to non-nullable entity field '{field.Name}'. " +
-                                    $"Declare it optional ('{field.Name}: <Type>?') to allow none.",
-                                    location: arg.Location);
+                                ReportNullableIntoNonNull(target: $"field '{field.Name}'",
+                                    value: argVal, optionalHint: $"{field.Name}: <Type>?");
                             }
+
+                            creatorArgTypes.Add(item: argAnalyzed);
+                            creatorPosIdx++;
+                            continue;
                         }
+
                         creatorArgTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: argExpected));
                         creatorPosIdx++;
                     }

@@ -664,6 +664,32 @@ public sealed partial class SemanticVerifier
                         location: location);
                 }
 
+                // Suflae flow typing: reassigning an entity reference re-derives its nullability.
+                if (_registry.Language == Language.Suflae && varInfo != null &&
+                    IsEntityRefType(type: varInfo.Type))
+                {
+                    bool valueNullable = IsNullableEntityRead(expr: value);
+                    if (varInfo.IsNullable)
+                    {
+                        // A nullable local: a possibly-none RHS re-nullifies it (shadowing any prior
+                        // null-check); a non-null RHS proves it non-none for the rest of this flow.
+                        if (valueNullable)
+                        {
+                            _registry.MarkVariableNullableAgain(name: id.Name);
+                        }
+                        else
+                        {
+                            _registry.MarkVariableNonNull(name: id.Name);
+                        }
+                    }
+                    else if (valueNullable)
+                    {
+                        // A non-null local cannot take a possibly-none value.
+                        ReportNullableIntoNonNull(target: $"variable '{id.Name}'", value: value,
+                            optionalHint: $"{id.Name}: <Type>?");
+                    }
+                }
+
                 break;
             }
             // Validate member variable write access (setter visibility)
@@ -685,22 +711,18 @@ public sealed partial class SemanticVerifier
                     memberVariableName: member.PropertyName,
                     location: location);
 
-                // Suflae: a NON-NULLABLE entity field (`x: E`) rejects `o.x = none` — only an
-                // optional field (`x: E?`) may hold a null Roamed handle. Mirrors the construction
-                // check in AnalyzeCallExpression; the field's IsNullable is set in TypeBodyResolver.
+                // Suflae: a NON-NULLABLE entity field (`x: E`) rejects `o.x = <possibly-none>` — literal
+                // `none` or an unchecked `E?` read. Only an optional field (`x: E?`) may hold a null Roamed
+                // handle. Mirrors the construction check; the field's IsNullable is set in TypeBodyResolver.
                 if (_registry.Language == Language.Suflae &&
                     objectType is EntityTypeInfo writeEntity &&
                     writeEntity.LookupMemberVariable(memberVariableName: member.PropertyName) is
                         { IsNullable: false, Type: RecordTypeInfo
                             { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed } } writeField &&
-                    value is LiteralExpression
-                        { LiteralType: Compiler.Tokenizer.TokenType.NoneValue })
+                    IsNullableEntityRead(expr: value))
                 {
-                    ReportError(code: SemanticDiagnosticCode.AssignmentTypeMismatch,
-                        message:
-                        $"Cannot assign 'none' to non-nullable entity field '{writeField.Name}'. " +
-                        $"Declare it optional ('{writeField.Name}: <Type>?') to allow none.",
-                        location: location);
+                    ReportNullableIntoNonNull(target: $"field '{writeField.Name}'",
+                        value: value, optionalHint: $"{writeField.Name}: <Type>?");
                 }
 
                 // Check if we're in a @readonly method trying to modify 'me'

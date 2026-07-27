@@ -28,12 +28,13 @@ public sealed class Scope
     /// <summary>Type narrowings applied in this scope (e.g., after null checks).</summary>
     private readonly Dictionary<string, TypeSymbol> _typeNarrowings = new();
 
-    /// <summary>Suflae flow typing: names of nullable entity references PROVEN non-none within this
-    /// scope by a preceding null-check (e.g. inside `if x isnot none` or after a `if x is none: return`
-    /// guard). Member access on a nullable variable is allowed once it appears here. Scoped like
-    /// narrowings — a mark in a branch scope is discarded on exit; a guard-clause mark lands in the
-    /// enclosing scope and persists.</summary>
-    private readonly HashSet<string> _provenNonNull = new();
+    /// <summary>Suflae flow typing: per-scope nullability facts for nullable entity references. A value
+    /// of <c>true</c> means PROVEN non-none in this scope (e.g. inside `if x isnot None` or after a
+    /// `if x is None: return` guard); <c>false</c> means KNOWN nullable again (e.g. reassigned a
+    /// possibly-none value), which SHADOWS an outer proven fact. Absence falls through to the parent
+    /// scope. Scoped like narrowings — a branch-scope fact is discarded on exit; a guard-clause fact
+    /// lands in the enclosing scope and persists.</summary>
+    private readonly Dictionary<string, bool> _nullabilityFacts = new();
 
     /// <summary>For type scopes, the associated type.</summary>
     public TypeSymbol? AssociatedType { get; init; }
@@ -107,25 +108,27 @@ public sealed class Scope
     /// </summary>
     public void MarkNonNull(string name)
     {
-        _provenNonNull.Add(item: name);
+        _nullabilityFacts[key: name] = true;
     }
 
     /// <summary>
-    /// Suflae flow typing: clears any proven-non-none fact for a variable in this scope (e.g. on
-    /// reassignment). Only affects this scope's own set — an outer scope's fact is not reachable.
+    /// Suflae flow typing: records that a variable is KNOWN nullable again in this scope (e.g. after
+    /// reassigning a possibly-none value). This SHADOWS any proven-non-none fact from an outer scope.
     /// </summary>
-    public void ClearNonNull(string name)
+    public void MarkNullableAgain(string name)
     {
-        _provenNonNull.Remove(item: name);
+        _nullabilityFacts[key: name] = false;
     }
 
     /// <summary>
-    /// Suflae flow typing: true if the variable has been proven non-none in this scope or an enclosing one.
+    /// Suflae flow typing: true if the variable has been proven non-none in the nearest enclosing scope
+    /// that has a fact about it. A nearer <c>false</c> (re-nullified) shadows a farther <c>true</c>.
     /// </summary>
     public bool IsProvenNonNull(string name)
     {
-        return _provenNonNull.Contains(item: name) ||
-            (Parent?.IsProvenNonNull(name: name) ?? false);
+        return _nullabilityFacts.TryGetValue(key: name, value: out bool proven)
+            ? proven
+            : Parent?.IsProvenNonNull(name: name) ?? false;
     }
 
     /// <summary>

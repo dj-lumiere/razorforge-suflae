@@ -242,6 +242,19 @@ public sealed partial class SemanticVerifier
         bool handledBlank = false;
         bool handledCrashable = false;
 
+        // Suflae: `when` is for variants / carriers / values — not entity references. An entity
+        // reference has only two flow states (none / present), for which `if x is None` /
+        // `if x isnot None` is the idiom (and the only shape with a null-check codegen lowering).
+        // Reject `when <entity-ref>` up front so it can't silently miscompile.
+        if (_registry.Language == Language.Suflae && IsEntityRefType(type: matchedType))
+        {
+            ReportError(code: SemanticDiagnosticCode.NullableEntityDeref,
+                message:
+                "Cannot use 'when' on an entity reference. Match its none-state with " +
+                "'if x is None' / 'if x isnot None' instead.",
+                location: whenStmt.Expression.Location);
+        }
+
         foreach (WhenClause clause in whenStmt.Clauses)
         {
             _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");

@@ -53,4 +53,75 @@ public sealed partial class SemanticVerifier
                 return false;
         }
     }
+
+    /// <summary>
+    /// Suflae: true if the type is an entity reference (a bare <c>EntityTypeInfo</c> or a
+    /// <c>Roamed[E]</c> handle) — i.e. something that participates in nullability flow analysis.
+    /// </summary>
+    private bool IsEntityRefType(TypeSymbol type)
+    {
+        return _registry.Language == Language.Suflae &&
+            (type is EntityTypeInfo ||
+             type is RecordTypeInfo
+                 { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed });
+    }
+
+    /// <summary>
+    /// Suflae: reports a possibly-none value flowing into a non-nullable entity slot (field, variable, or
+    /// parameter). The message adapts: a literal <c>none</c> gets the crisp "Cannot assign 'none'" wording,
+    /// any other possibly-none value gets "Cannot assign a possibly-none value … null-check it first".
+    /// Uses <see cref="Compiler.Diagnostics.SemanticDiagnosticCode.AssignmentTypeMismatch"/> (RF-S252),
+    /// consistent with the construction/assignment none-checks.
+    /// </summary>
+    private void ReportNullableIntoNonNull(string target, Expression value, string optionalHint)
+    {
+        bool isLiteralNone = value is LiteralExpression { LiteralType: TokenType.NoneValue };
+        string message = isLiteralNone
+            ? $"Cannot assign 'none' to non-nullable entity {target}. " +
+              $"Declare it optional ('{optionalHint}') to allow none."
+            : $"Cannot assign a possibly-none value to non-nullable entity {target}. " +
+              $"Null-check it first (e.g. 'if v isnot None') or declare it optional ('{optionalHint}').";
+        ReportError(code: Compiler.Diagnostics.SemanticDiagnosticCode.AssignmentTypeMismatch,
+            message: message, location: value.Location);
+    }
+
+    /// <summary>
+    /// Suflae: resolves an entity-reference variable/parameter type annotation into its <c>Roamed[E]</c>
+    /// storage representation, mirroring the field substitution in <c>TypeBodyResolver</c>. A bare
+    /// <c>E</c> annotation is a NON-NULL <c>Roamed[E]</c>; an optional <c>E?</c> (parsed as
+    /// <c>Maybe[E]</c>) is a NULLABLE <c>Roamed[E]</c>.
+    /// </summary>
+    /// <returns>
+    /// (resolved storage type, isNullable, isEntitySlot). For non-Suflae or non-entity annotations the
+    /// type is returned unchanged with both flags false.
+    /// </returns>
+    private (TypeSymbol Type, bool IsNullable, bool IsEntitySlot) ResolveSuflaeEntityAnnotation(
+        TypeSymbol annotated)
+    {
+        if (_registry.Language != Language.Suflae ||
+            _registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is not { } roamedDef)
+        {
+            return (annotated, false, false);
+        }
+
+        switch (annotated)
+        {
+            // bare `E` -> non-null Roamed[E]
+            case EntityTypeInfo entity:
+                return (_registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [entity]),
+                    false, true);
+
+            // `E?` (= Maybe[E]) -> nullable Roamed[E]
+            case RecordTypeInfo { GenericDefinition.Name: "Maybe", TypeArguments: [EntityTypeInfo inner] }:
+                return (_registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [inner]),
+                    true, true);
+
+            // Already a Roamed[E] (e.g. an annotation that spelled the wrapper directly) — non-null slot.
+            case RecordTypeInfo { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed }:
+                return (annotated, false, true);
+
+            default:
+                return (annotated, false, false);
+        }
+    }
 }
