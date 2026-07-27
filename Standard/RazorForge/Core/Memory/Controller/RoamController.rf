@@ -100,15 +100,21 @@ routine RoamController[T].release()
     if me.escaped
       var previous = atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
       if previous == 1_u64
-        me.drop_data()
-        me.$destroy()
+        # Dead at zero — free now UNLESS already a buffered cycle candidate: the roots buffer holds a
+        # pointer to this controller, so freeing here would dangle it (UAF at the next pass). Leave a
+        # buffered zero-count node for the collector to reap as white. (Reading `buffered` on the
+        # escaped path is racy in principle; safe under the Stage-1 single-threaded-collection model.)
+        if not me.buffered
+          me.drop_data()
+          me.$destroy()
       else
         me.mark_cycle_candidate()
     else
       me.count = me.count - 1
       if me.count == 0_u64
-        me.drop_data()
-        me.$destroy()
+        if not me.buffered
+          me.drop_data()
+          me.$destroy()
       else
         me.mark_cycle_candidate()
   return

@@ -961,8 +961,29 @@ public partial class LlvmCodeGenerator
             line:
             $"  {memberVariablePtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {memberVariableIndex}");
 
+        // Roamed[T] field reassignment uses COPY semantics (biased RC — aliasing is free): drop the
+        // old strong ref and take a fresh one on the new value. Unlike the strict wrappers
+        // (Retained/Tracked, which forbid implicit copy so a reassignment MOVES a fresh handle in),
+        // `me.roamed_field = x` must release the overwritten handle and retain the incoming one so the
+        // field owns its own reference — otherwise the count is off by one and teardown double-frees.
+        // Both helpers are null-safe (none handle / no old value). This is the reassignment path only;
+        // initial construction stores fields directly and never reaches here.
+        bool isRoamedField = memberVariable.Type is RecordTypeInfo roamedField
+            && GetGenericBaseName(type: roamedField) == Compiler.Resolution.RuntimeContract.Roamed;
+        if (isRoamedField)
+        {
+            EmitRetainedVarRelease(sb: sb, llvmAddr: memberVariablePtr,
+                recordType: (RecordTypeInfo)memberVariable.Type);
+        }
+
         // Store the value
         EmitLine(sb: sb, line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
+
+        if (isRoamedField)
+        {
+            EmitRetainedVarRetain(sb: sb, llvmAddr: memberVariablePtr,
+                recordType: (RecordTypeInfo)memberVariable.Type);
+        }
     }
 
     /// <summary>

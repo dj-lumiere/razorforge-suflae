@@ -113,6 +113,12 @@ dangerous external("C") routine rf_cc_trace_into_scratch(trace_hook: Address, co
 ### The free indirect-call site: runs the per-type free hook over a white (garbage) controller —
 ### type-correct entity `$destroy` then controller free.
 dangerous external("C") routine rf_cc_invoke_free(free_hook: Address, controller: Address)
+### Whether a collection pass should run now (candidate set reached the threshold, none in progress).
+dangerous external("C") routine rf_cc_should_collect() -> Bool
+### Marks a collection pass in progress (guards against re-entrant auto-triggering).
+dangerous external("C") routine rf_cc_enter_collect()
+### Marks the collection pass finished.
+dangerous external("C") routine rf_cc_exit_collect()
 
 # ============================================================================
 # Stackful coroutine substrate (v0.2.0 — single coroutine, no scheduler).

@@ -472,7 +472,15 @@ public partial class LlvmCodeGenerator
                     member: member,
                     value: value,
                     valueType: GetExpressionType(expr: assign.Value));
-                ConsumeTransferredLocalOwnership(expr: assign.Value);
+                // A Roamed[T] field write uses COPY semantics (retain-new + release-old, emitted in
+                // EmitEntityMemberVariableWrite), so the RHS is NOT moved into the field — it keeps its
+                // own reference and tears down normally. Consuming it here (move semantics, for the
+                // strict Retained/Tracked wrappers) would drop a ref the field just retained → underflow.
+                if (GetGenericBaseName(type: GetExpressionType(expr: member)) is not { } targetBase
+                    || targetBase != Compiler.Resolution.RuntimeContract.Roamed)
+                {
+                    ConsumeTransferredLocalOwnership(expr: assign.Value);
+                }
                 break;
 
             case IndexExpression index:
