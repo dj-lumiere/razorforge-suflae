@@ -58,7 +58,12 @@ public sealed partial class SemanticVerifier
                     bool allowsNone = matchedType is ErrorTypeInfo
                         || IsMaybeType(type: matchedType)
                         || GetCarrierBaseName(type: matchedType) == "Lookup"
-                        || matchedType is VariantTypeInfo;
+                        || matchedType is VariantTypeInfo
+                        // Suflae: a nullable entity reference (`E?`) is a Roamed[E] handle that may be a
+                        // null/none handle, so `is None` / `isnot None` is a legal none-check on it.
+                        || (_registry.Language == Language.Suflae
+                            && matchedType is RecordTypeInfo
+                                { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed });
                     if (!allowsNone)
                     {
                         ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
