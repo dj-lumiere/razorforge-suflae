@@ -2105,6 +2105,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var statements = new List<Statement>(capacity: fields.Count + 1);
         foreach (MemberVariableInfo field in fields)
         {
+            // Both non-null (`x: E`) and optional (`x: E?`) entity fields are bare `Roamed[E]` in Suflae,
+            // so IsRoamedField covers both — the collector traces through a null (none) handle harmlessly.
             if (!IsRoamedField(t: field.Type))
                 continue;
             var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)

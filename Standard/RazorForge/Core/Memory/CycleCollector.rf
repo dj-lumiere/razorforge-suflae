@@ -150,7 +150,10 @@ routine cc_free(addr: Address)
 
 ### Runs one full cycle-collection pass over the current roots buffer: MarkRoots → ScanRoots →
 ### CollectRoots. Empties the roots buffer and reaps every controller found to be cyclic garbage.
-routine cc_collect()
+### Runs one synchronous Bacon-Rajan cycle-collection pass over the buffered candidates and returns the
+### number of objects reclaimed (the size of the reaped white subgraph). 0 means nothing was collected.
+### :returns: The count of objects freed this pass.
+routine cc_collect() -> U64
   # Mark a pass in progress so a candidate reported mid-collection cannot auto-trigger a nested pass.
   danger!
     rf_cc_enter_collect()
@@ -199,12 +202,14 @@ routine cc_collect()
     cc_collect_white(addr: addr)
     i = i + 1_u64
 
+  var reaped = 0_u64
   danger!
     var m = rf_cc_reap_count()
+    reaped = m
     var j = 0_u64
     while j < m
       cc_free(addr: rf_cc_reap_at(i: j))
       j = j + 1_u64
     rf_cc_reap_clear()
     rf_cc_exit_collect()
-  return
+  return reaped

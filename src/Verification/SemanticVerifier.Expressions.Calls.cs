@@ -287,6 +287,20 @@ public sealed partial class SemanticVerifier
                                     ? entityCtor.MemberVariables[index: creatorPosIdx]
                                     : null);
                             argExpected = field?.Type;
+                            // Suflae: a NON-NULLABLE entity field (`x: E`) rejects `none` — only an
+                            // optional field (`x: E?`) may be a null Roamed handle.
+                            Expression argVal = arg is NamedArgumentExpression nav ? nav.Value : arg;
+                            if (field is { IsNullable: false, Type: RecordTypeInfo
+                                    { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed } }
+                                && argVal is LiteralExpression
+                                    { LiteralType: Compiler.Tokenizer.TokenType.NoneValue })
+                            {
+                                ReportError(code: SemanticDiagnosticCode.AssignmentTypeMismatch,
+                                    message:
+                                    $"Cannot assign 'none' to non-nullable entity field '{field.Name}'. " +
+                                    $"Declare it optional ('{field.Name}: <Type>?') to allow none.",
+                                    location: arg.Location);
+                            }
                         }
                         creatorArgTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: argExpected));
                         creatorPosIdx++;

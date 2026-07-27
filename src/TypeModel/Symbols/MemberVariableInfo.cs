@@ -37,6 +37,10 @@ public sealed class MemberVariableInfo
     /// <summary>Whether this member variable has a default value.</summary>
     public bool HasDefaultValue { get; init; }
 
+    /// <summary>Suflae: true when this entity-reference field was declared OPTIONAL (`x: E?`), so it may
+    /// hold a null Roamed handle (none). A non-nullable entity field (`x: E`) must never be none.</summary>
+    public bool IsNullable { get; init; }
+
     /// <summary>Source location where this member variable is defined.</summary>
     public SourceLocation? Location { get; init; }
 
@@ -66,6 +70,7 @@ public sealed class MemberVariableInfo
             Visibility = Visibility,
             Index = Index,
             HasDefaultValue = HasDefaultValue,
+            IsNullable = IsNullable,
             Location = Location,
             Owner = Owner
         };

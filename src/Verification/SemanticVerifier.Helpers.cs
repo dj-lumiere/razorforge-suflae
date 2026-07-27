@@ -645,16 +645,10 @@ public sealed partial class SemanticVerifier
         // `.roam()` / field release-old+retain-new. RazorForge keeps the strict distinction.
         if (_registry.Language == Language.Suflae)
         {
+            // Both `x: E` (non-null) and `x: E?` (optional) fields are `Roamed[E]`, so a bare entity is
+            // assignable to either (the pass inserts the roam). `E?`'s `none` is a null Roamed handle.
             if (source is EntityTypeInfo se && IsRoamedOfEntity(type: target, entity: se)) return true;
             if (target is EntityTypeInfo te && IsRoamedOfEntity(type: source, entity: te)) return true;
-            // bare `E` -> `Maybe[Roamed[E]]` (an OPTIONAL entity field `x: E?`; codegen auto-wraps Some +
-            // RCs the inner Roamed at the Maybe's value slot). Enables cyclic/graph wiring (`a.next = a`).
-            if (source is EntityTypeInfo srcEnt
-                && target is RecordTypeInfo { GenericDefinition.Name: "Maybe", TypeArguments: [{ } maybeInner] }
-                && IsRoamedOfEntity(type: maybeInner, entity: srcEnt))
-            {
-                return true;
-            }
         }
 
         // Error types are assignable to anything (to reduce cascading errors)

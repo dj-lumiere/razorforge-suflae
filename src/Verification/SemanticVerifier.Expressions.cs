@@ -685,6 +685,24 @@ public sealed partial class SemanticVerifier
                     memberVariableName: member.PropertyName,
                     location: location);
 
+                // Suflae: a NON-NULLABLE entity field (`x: E`) rejects `o.x = none` — only an
+                // optional field (`x: E?`) may hold a null Roamed handle. Mirrors the construction
+                // check in AnalyzeCallExpression; the field's IsNullable is set in TypeBodyResolver.
+                if (_registry.Language == Language.Suflae &&
+                    objectType is EntityTypeInfo writeEntity &&
+                    writeEntity.LookupMemberVariable(memberVariableName: member.PropertyName) is
+                        { IsNullable: false, Type: RecordTypeInfo
+                            { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed } } writeField &&
+                    value is LiteralExpression
+                        { LiteralType: Compiler.Tokenizer.TokenType.NoneValue })
+                {
+                    ReportError(code: SemanticDiagnosticCode.AssignmentTypeMismatch,
+                        message:
+                        $"Cannot assign 'none' to non-nullable entity field '{writeField.Name}'. " +
+                        $"Declare it optional ('{writeField.Name}: <Type>?') to allow none.",
+                        location: location);
+                }
+
                 // Check if we're in a @readonly method trying to modify 'me'
                 if (_currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" })

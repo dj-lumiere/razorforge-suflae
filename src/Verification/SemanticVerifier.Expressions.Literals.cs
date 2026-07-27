@@ -34,6 +34,14 @@ public sealed partial class SemanticVerifier
             {
                 return expectedType;
             }
+            // Suflae: `none` against a `Roamed[E]` slot (an OPTIONAL entity reference `x: E?`) is a null
+            // Roamed handle (roamed_none). Entity references carry their own none via a null pointer, so
+            // no Maybe carrier is needed.
+            if (_registry.Language == Language.Suflae
+                && expectedType is RecordTypeInfo { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed })
+            {
+                return expectedType;
+            }
             ReportError(code: SemanticDiagnosticCode.NoneOutsideCarrierSlot,
                 message:
                 $"'none' is only valid where the expected type is Maybe[T], Lookup[T], or a variant with a None arm; got {(expectedType?.Name ?? "no contextual type")}.",

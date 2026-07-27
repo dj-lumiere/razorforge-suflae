@@ -260,6 +260,7 @@ internal sealed class TypeBodyResolver
                 // so it stores a refcounted handle and the existing Roamed-field machinery applies (retain
                 // on construct/assign, lock-wrapped access, release on teardown, cycle collection). RF keeps
                 // bare single-owner entity fields.
+                bool fieldNullable = false;
                 if (_sa._registry.Language == TypeModel.Enums.Language.Suflae
                     && _sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is
                         { } roamedDef)
@@ -272,17 +273,17 @@ internal sealed class TypeBodyResolver
                         memberVariableType = _sa._registry.GetOrCreateResolution(
                             genericDef: roamedDef, typeArguments: [fieldEntity]);
                     }
-                    // An OPTIONAL entity field `x: E?` (= `Maybe[E]`) becomes `Maybe[Roamed[E]]` — the
-                    // explicit-nullability form used for cyclic/graph links (`next: Node?`; construct with
-                    // `none`, then `a.next = a`). `none` is already valid for Maybe; no null bare entity.
+                    // An OPTIONAL entity field `x: E?` (= `Maybe[E]`) becomes a NULLABLE `Roamed[E]`, NOT
+                    // `Maybe[Roamed[E]]`: an entity reference represents "none" as a null Roamed handle
+                    // (roamed_none = nullptr), so no Maybe wrapper is needed — the field is a bare Roamed
+                    // that traces / RCs / frees naturally, `none` = null. `x: E` (bare) is the same
+                    // `Roamed[E]` with a non-null invariant. (Value types still use `Maybe[T]` for `T?`.)
                     else if (memberVariableType is RecordTypeInfo
-                                 { GenericDefinition.Name: "Maybe", TypeArguments: [EntityTypeInfo innerEntity] }
-                             && _sa._registry.LookupType(name: "Maybe") is { } maybeDef)
+                                 { GenericDefinition.Name: "Maybe", TypeArguments: [EntityTypeInfo innerEntity] })
                     {
-                        TypeInfo roamedInner = _sa._registry.GetOrCreateResolution(
-                            genericDef: roamedDef, typeArguments: [innerEntity]);
                         memberVariableType = _sa._registry.GetOrCreateResolution(
-                            genericDef: maybeDef, typeArguments: [roamedInner]);
+                            genericDef: roamedDef, typeArguments: [innerEntity]);
+                        fieldNullable = true;
                     }
                 }
 
@@ -292,6 +293,7 @@ internal sealed class TypeBodyResolver
                         Visibility = memberVariable.Visibility,
                         Index = memberVariableIndex++,
                         HasDefaultValue = memberVariable.Initializer != null,
+                        IsNullable = fieldNullable,
                         Location = memberVariable.Location,
                         Owner = _sa._currentType
                     };
