@@ -571,6 +571,19 @@ public sealed partial class SemanticVerifier
                 elementSelector: kvp => kvp.Value.Body),
             target: _target,
             buildMode: _buildMode);
+
+        // Suflae only: lower `entity E` bindings to a `Roamed[E]` biased-RC backing. MUST run BEFORE
+        // scope-teardown below so teardown inserts `Roamed.$destroy` (→ release → cycle-collector
+        // chain) for entity locals instead of a bare-entity `$destroy` (which double-frees an alias
+        // and never reaches the RC/cc machinery). Also before reachability, so the roam/promote/lock/
+        // cc hooks seed off the live `Roamed` wrapper type. No-op for RazorForge.
+        {
+            var suflaeEntityPass =
+                new Compiler.Postprocessing.Passes.SuflaeEntityLoweringPass(registry: _registry);
+            foreach ((Program program, _, _) in _registry.UserPrograms)
+                suflaeEntityPass.Run(program: program);
+        }
+
         // Insert scope-exit `$destroy()` calls BEFORE reachability (so the calls drive liveness —
         // no manual seeding needed) and BEFORE the marker pass (so Referring[T]/Controlling[T]
         // params are still protocol-typed and excluded as access types, not yet stripped to the
@@ -914,6 +927,12 @@ public sealed partial class SemanticVerifier
         // Mark the registry so that any concrete generic instances created as side-effects
         // of stdlib body analysis are tagged IsStdlibLazy and excluded from GMP iteration.
         // Types the user program actually needs will be materialized when user SA references them.
+        // The stdlib is always RazorForge source (SF ≡ RF grammar; SF's Core IS RF's Core). Analyze
+        // its bodies in RazorForge mode so language-sensitive SA — unsuffixed-literal defaults, the
+        // danger!/extern gates, generic-call resolution — matches how the stdlib was authored. Under
+        // Suflae mode the RF stdlib's generic calls fail to resolve and survive lowering (RF-S954).
+        Language savedLanguage = _registry.Language;
+        _registry.Language = Language.RazorForge;
         _registry.BeginStdlibAnalysis();
         try
         {
@@ -973,6 +992,7 @@ public sealed partial class SemanticVerifier
         finally
         {
             _registry.EndStdlibAnalysis();
+            _registry.Language = savedLanguage;
         }
     }
 

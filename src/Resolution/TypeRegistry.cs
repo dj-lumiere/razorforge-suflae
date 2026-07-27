@@ -33,8 +33,9 @@ public sealed partial class TypeRegistry
     /// <summary>Thread-local ambient registry; set by the constructor so test isolation works without injection.</summary>
     public static TypeRegistry? Ambient => _ambient;
 
-    /// <summary>The language being built.</summary>
-    public Language Language { get; }
+    /// <summary>The language being built. Settable so the stdlib (always RazorForge source) can be
+    /// analyzed in RazorForge mode during a Suflae compile — see SemanticVerifier.AnalyzeStdlibBodies.</summary>
+    public Language Language { get; set; }
 
     #region Type Storage
 
