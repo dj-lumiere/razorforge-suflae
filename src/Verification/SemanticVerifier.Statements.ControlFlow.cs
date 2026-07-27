@@ -29,11 +29,20 @@ public sealed partial class SemanticVerifier
         NarrowingInfo? narrowing = TryExtractNarrowingFromCondition(condition: ifStmt.Condition);
 
         // Analyze then branch (with narrowing if applicable)
-        if (narrowing?.ThenBranchType != null)
+        if (narrowing?.ThenBranchType != null || narrowing is { ThenNonNull: true })
         {
             _registry.EnterScope(kind: ScopeKind.Block, name: "if_then");
-            _registry.NarrowVariable(name: narrowing.VariableName,
-                narrowedType: narrowing.ThenBranchType);
+            if (narrowing.ThenBranchType != null)
+            {
+                _registry.NarrowVariable(name: narrowing.VariableName,
+                    narrowedType: narrowing.ThenBranchType);
+            }
+
+            if (narrowing.ThenNonNull)
+            {
+                _registry.MarkVariableNonNull(name: narrowing.VariableName);
+            }
+
             AnalyzeStatement(statement: ifStmt.ThenStatement);
             _registry.ExitScope();
         }
@@ -45,11 +54,20 @@ public sealed partial class SemanticVerifier
         // Analyze else branch if present (with inverse narrowing if applicable)
         if (ifStmt.ElseStatement != null)
         {
-            if (narrowing?.ElseBranchType != null)
+            if (narrowing?.ElseBranchType != null || narrowing is { ElseNonNull: true })
             {
                 _registry.EnterScope(kind: ScopeKind.Block, name: "if_else");
-                _registry.NarrowVariable(name: narrowing.VariableName,
-                    narrowedType: narrowing.ElseBranchType);
+                if (narrowing.ElseBranchType != null)
+                {
+                    _registry.NarrowVariable(name: narrowing.VariableName,
+                        narrowedType: narrowing.ElseBranchType);
+                }
+
+                if (narrowing.ElseNonNull)
+                {
+                    _registry.MarkVariableNonNull(name: narrowing.VariableName);
+                }
+
                 AnalyzeStatement(statement: ifStmt.ElseStatement);
                 _registry.ExitScope();
             }
@@ -61,11 +79,18 @@ public sealed partial class SemanticVerifier
 
         // Guard clause narrowing: if the then branch definitely exits,
         // apply else narrowing to the remainder of the current scope
-        if (ifStmt.ElseStatement == null && narrowing?.ElseBranchType != null &&
-            HasDefiniteExit(statement: ifStmt.ThenStatement))
+        if (ifStmt.ElseStatement == null && HasDefiniteExit(statement: ifStmt.ThenStatement))
         {
-            _registry.NarrowVariable(name: narrowing.VariableName,
-                narrowedType: narrowing.ElseBranchType);
+            if (narrowing?.ElseBranchType != null)
+            {
+                _registry.NarrowVariable(name: narrowing.VariableName,
+                    narrowedType: narrowing.ElseBranchType);
+            }
+
+            if (narrowing is { ElseNonNull: true })
+            {
+                _registry.MarkVariableNonNull(name: narrowing.VariableName);
+            }
         }
     }
 

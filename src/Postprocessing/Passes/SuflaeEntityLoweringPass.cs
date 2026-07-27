@@ -227,6 +227,32 @@ internal sealed class SuflaeEntityLoweringPass
                 return ReferenceEquals(obj, m.Object) ? m : m with { Object = obj };
             }
 
+            // `x is None` / `x isnot None` on a nullable entity reference (`E?` = Roamed[E]): rewrite
+            // to `x.is_none()` (negated -> `not x.is_none()`). Done HERE (before reachability) so the
+            // Roamed[E].is_none() instance gets seeded/instantiated for the concrete entity; codegen has
+            // no direct IsPattern lowering for a Roamed handle. The frontend already narrowed the flow.
+            case IsPatternExpression ipe
+                when (ipe.Pattern is NonePattern or TypePattern { Type.Name: "None" }):
+            {
+                Expression inner = LowerExpression(ipe.Expression);
+                if (!IsRoamedType(inner.ResolvedType))
+                {
+                    // Not a Roamed operand — leave the IsPattern as-is (Maybe/variant handled downstream).
+                    return ReferenceEquals(inner, ipe.Expression) ? ipe : ipe with { Expression = inner };
+                }
+
+                TypeInfo? boolType = _registry.LookupType(name: "Bool");
+                var isNoneCall = new CallExpression(
+                    Callee: new MemberExpression(Object: inner, PropertyName: "is_none",
+                        Location: ipe.Location) { ResolvedType = boolType },
+                    Arguments: new List<Expression>(),
+                    Location: ipe.Location) { ResolvedType = boolType };
+                if (!ipe.IsNegated)
+                    return isNoneCall;
+                return new UnaryExpression(Operator: UnaryOperator.Not, Operand: isNoneCall,
+                    Location: ipe.Location) { ResolvedType = boolType };
+            }
+
             // A call — INCLUDING a constructor call `E(...)`, which is a CallExpression (not a
             // CreatorExpression) at this phase — that produces a bare SF entity: recurse into its
             // parts, then `.roam()` the whole value.
@@ -317,6 +343,15 @@ internal sealed class SuflaeEntityLoweringPass
             default:
                 return expr;
         }
+    }
+
+    // True if the type is a `Roamed[E]` handle in either representation the pipeline produces: a
+    // WrapperTypeInfo (from this pass's WrapInRoam) or a RecordTypeInfo (from a field read, whose type
+    // TypeBodyResolver builds via GetOrCreateResolution).
+    private static bool IsRoamedType(TypeInfo? t)
+    {
+        return t is WrapperTypeInfo { Name: RuntimeContract.Roamed }
+            || t is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed };
     }
 
     // A construction arg (a `NamedArgumentExpression` or bare value) whose value is a borrowed Roamed

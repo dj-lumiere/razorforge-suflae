@@ -700,7 +700,14 @@ public sealed partial class SemanticVerifier
         // A new declaration shadows any prior steal of the same name in this scope.
         _deadrefVariables.Remove(item: varDecl.Name);
 
-        bool declared = _registry.DeclareVariable(name: varDecl.Name, type: varType);
+        // Suflae flow typing: a local inferred from a nullable entity read (`var n = a.optField`) or
+        // a `none` literal carries the nullability forward, so member access on it is gated until a
+        // null-check. Only applies when the declaration has no non-null type annotation.
+        bool varIsNullable = varDecl.Type == null && varDecl.Initializer != null &&
+            IsNullableEntityRead(expr: varDecl.Initializer);
+
+        bool declared = _registry.DeclareVariable(name: varDecl.Name, type: varType,
+            isNullable: varIsNullable);
 
         if (!declared)
         {

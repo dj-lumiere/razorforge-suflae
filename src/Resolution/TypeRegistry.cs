@@ -1735,11 +1735,12 @@ public sealed partial class TypeRegistry
     /// <returns>True if successful, false if already declared in this scope.</returns>
     /// <param name="presetValue">The preset value.</param>
     public bool DeclareVariable(string name, TypeInfo type, bool isPreset = false,
-        Expression? presetValue = null)
+        Expression? presetValue = null, bool isNullable = false)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
-            IsModifiable = !isPreset, IsPreset = isPreset, PresetValue = presetValue
+            IsModifiable = !isPreset, IsPreset = isPreset, PresetValue = presetValue,
+            IsNullable = isNullable
         };
 
         return _currentScope.DeclareVariable(variable: variable);
@@ -1810,6 +1811,24 @@ public sealed partial class TypeRegistry
     public TypeInfo? GetNarrowedType(string name)
     {
         return _currentScope.GetNarrowedType(name: name);
+    }
+
+    /// <summary>Suflae flow typing: marks a nullable entity reference proven non-none in the current scope.</summary>
+    public void MarkVariableNonNull(string name)
+    {
+        _currentScope.MarkNonNull(name: name);
+    }
+
+    /// <summary>Suflae flow typing: clears a proven-non-none fact for a variable in the current scope.</summary>
+    public void ClearVariableNonNull(string name)
+    {
+        _currentScope.ClearNonNull(name: name);
+    }
+
+    /// <summary>Suflae flow typing: true if the variable was proven non-none in the current scope chain.</summary>
+    public bool IsVariableProvenNonNull(string name)
+    {
+        return _currentScope.IsProvenNonNull(name: name);
     }
 
     /// <summary>

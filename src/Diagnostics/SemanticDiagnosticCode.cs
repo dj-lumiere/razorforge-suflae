@@ -649,6 +649,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot downgrade token permission (e.g., .view() on Modifying/Claiming).</summary>
     TokenDowngradeProhibited = 618,
 
+    /// <summary>Suflae: member access on a possibly-none (`E?`) entity reference that has not been
+    /// null-checked in the current flow. Guard it with `if x isnot none` / `when x is none`.</summary>
+    NullableEntityDeref = 619,
+
     /// <summary>Same entity cannot be modified multiple times in one call.</summary>
     HijackDuplicateInCall = 620,
 

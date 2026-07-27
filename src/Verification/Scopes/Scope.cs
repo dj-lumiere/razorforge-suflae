@@ -28,6 +28,13 @@ public sealed class Scope
     /// <summary>Type narrowings applied in this scope (e.g., after null checks).</summary>
     private readonly Dictionary<string, TypeSymbol> _typeNarrowings = new();
 
+    /// <summary>Suflae flow typing: names of nullable entity references PROVEN non-none within this
+    /// scope by a preceding null-check (e.g. inside `if x isnot none` or after a `if x is none: return`
+    /// guard). Member access on a nullable variable is allowed once it appears here. Scoped like
+    /// narrowings — a mark in a branch scope is discarded on exit; a guard-clause mark lands in the
+    /// enclosing scope and persists.</summary>
+    private readonly HashSet<string> _provenNonNull = new();
+
     /// <summary>For type scopes, the associated type.</summary>
     public TypeSymbol? AssociatedType { get; init; }
 
@@ -93,6 +100,32 @@ public sealed class Scope
         return _typeNarrowings.TryGetValue(key: name, value: out TypeSymbol? type)
             ? type
             : Parent?.GetNarrowedType(name: name);
+    }
+
+    /// <summary>
+    /// Suflae flow typing: marks a nullable entity reference as PROVEN non-none in this scope.
+    /// </summary>
+    public void MarkNonNull(string name)
+    {
+        _provenNonNull.Add(item: name);
+    }
+
+    /// <summary>
+    /// Suflae flow typing: clears any proven-non-none fact for a variable in this scope (e.g. on
+    /// reassignment). Only affects this scope's own set — an outer scope's fact is not reachable.
+    /// </summary>
+    public void ClearNonNull(string name)
+    {
+        _provenNonNull.Remove(item: name);
+    }
+
+    /// <summary>
+    /// Suflae flow typing: true if the variable has been proven non-none in this scope or an enclosing one.
+    /// </summary>
+    public bool IsProvenNonNull(string name)
+    {
+        return _provenNonNull.Contains(item: name) ||
+            (Parent?.IsProvenNonNull(name: name) ?? false);
     }
 
     /// <summary>

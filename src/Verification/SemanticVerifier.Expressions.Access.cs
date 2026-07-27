@@ -51,6 +51,22 @@ public sealed partial class SemanticVerifier
     private TypeSymbol AnalyzeMemberExpression(MemberExpression member)
     {
         TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+        // Suflae flow typing: dereferencing (member access / method call) a possibly-none entity
+        // reference is rejected until it has been null-checked. `x.field` / `x.method(...)` on a
+        // nullable `x` that has not been proven non-none in this flow is an NPE waiting to happen.
+        if (_registry.Language == Language.Suflae &&
+            member.Object is IdentifierExpression nullableReceiver &&
+            _registry.LookupVariable(name: nullableReceiver.Name) is { IsNullable: true } &&
+            !_registry.IsVariableProvenNonNull(name: nullableReceiver.Name))
+        {
+            ReportError(code: SemanticDiagnosticCode.NullableEntityDeref,
+                message:
+                $"Cannot access member '{member.PropertyName}' on possibly-none entity '{nullableReceiver.Name}'. " +
+                $"Null-check it first (e.g. 'if {nullableReceiver.Name} isnot None' or 'if {nullableReceiver.Name} is None: return').",
+                location: member.Location);
+        }
+
         bool hasTransparentTarget = TryGetTransparentProtocolTarget(type: objectType,
             targetType: out TypeSymbol lookupType);
 

@@ -34,6 +34,12 @@ public sealed class VariableInfo
     /// <summary>Source location where this variable is defined.</summary>
     public SourceLocation? Location { get; init; }
 
+    /// <summary>Suflae: true when this local holds a NULLABLE entity reference (`E?` — a Roamed[E]
+    /// handle that may be a null/none handle), inferred from its initializer (a `none` literal or a
+    /// read of a nullable field/local). Flow typing gates member access on such a variable until it
+    /// has been null-checked (see Scope proven-non-null tracking).</summary>
+    public bool IsNullable { get; init; }
+
     /// <summary>
     /// For preset declarations: the constant value expression to inline at use sites.
     /// Null for ordinary variables.
