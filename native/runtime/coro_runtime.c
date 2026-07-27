@@ -452,6 +452,24 @@ uint64_t rf_cc_roots_count(void) { return g_cc_roots.count; }
 void* rf_cc_roots_at(uint64_t i) { return i < g_cc_roots.count ? g_cc_roots.items[i] : NULL; }
 void rf_cc_roots_clear(void) { g_cc_roots.count = 0; }
 
+// Removes the first n candidates (those a pass snapshotted and processed via rf_cc_roots_at(0..n)),
+// keeping any appended AFTER the snapshot — e.g. a candidate reported by a finalizer-triggered release
+// during the reap phase. cc_collect uses this instead of a blanket clear so such late arrivals are not
+// dropped (they'd be buffered=true yet absent from roots → never re-collected). Manual shift (no
+// <string.h> memmove dependency).
+void rf_cc_roots_remove_front(uint64_t n)
+{
+    if (n >= g_cc_roots.count) {
+        g_cc_roots.count = 0;
+        return;
+    }
+    uint64_t remaining = g_cc_roots.count - n;
+    for (uint64_t k = 0; k < remaining; k++) {
+        g_cc_roots.items[k] = g_cc_roots.items[n + k];
+    }
+    g_cc_roots.count = remaining;
+}
+
 // scratch protocol — get one controller's children:
 //   rf_cc_scratch_reset(); rf_cc_trace_into_scratch(trace_hook, controller);
 //   for i in 0..rf_cc_scratch_count(): rf_cc_scratch_at(i)   // child controller pointers

@@ -91,6 +91,9 @@ dangerous external("C") routine rf_cc_roots_count() -> U64
 dangerous external("C") routine rf_cc_roots_at(i: U64) -> Address
 ### Empties the roots buffer (after a CollectCycles pass consumes it).
 dangerous external("C") routine rf_cc_roots_clear()
+### Drops the first `n` (processed) candidates, keeping any appended after the pass snapshotted `n`
+### (e.g. a candidate reported by a finalizer during reap). Prevents dropping late arrivals.
+dangerous external("C") routine rf_cc_roots_remove_front(n: U64)
 ### Resets the scratch buffer before tracing one controller's children.
 dangerous external("C") routine rf_cc_scratch_reset()
 ### Number of children collected into the scratch buffer by the last trace.

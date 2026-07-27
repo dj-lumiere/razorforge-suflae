@@ -174,8 +174,12 @@ routine cc_collect()
       cc_mark_gray(addr: addr)
       gray_roots.add_last(value: addr)
     i = i + 1_u64
+  # Drop exactly the `n` candidates this pass snapshotted — NOT a blanket clear. The reap phase below
+  # can append fresh candidates (a finalizer-triggered release inside `cc_free`), and those must
+  # survive to a later pass; a clear-all would strip them while leaving `buffered=true` → a permanent
+  # leak (they'd never be re-buffered). Also robust if a future change makes MarkRoots add candidates.
   danger!
-    rf_cc_roots_clear()
+    rf_cc_roots_remove_front(n: n)
 
   # ScanRoots
   i = 0_u64
