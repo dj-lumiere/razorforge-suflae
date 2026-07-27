@@ -474,6 +474,37 @@ uint64_t rf_cc_reap_count(void) { return g_cc_reap.count; }
 void* rf_cc_reap_at(uint64_t i) { return i < g_cc_reap.count ? g_cc_reap.items[i] : NULL; }
 void rf_cc_reap_clear(void) { g_cc_reap.count = 0; }
 
+// Auto-collection trigger: run a cycle-collection pass once the candidate (roots) set grows past a
+// threshold (a candidate-set heuristic — CPython's "tracked object" style). Default 128, overridable
+// via RF_CC_THRESHOLD (a positive int; e.g. 1 forces a pass per candidate, a determinism/test knob).
+// g_cc_collecting guards against re-entrant triggering from within a pass.
+static uint64_t g_cc_threshold = 0;   // 0 = not yet resolved (lazy, from env on first check)
+static int g_cc_collecting = 0;
+
+static uint64_t rf_cc_get_threshold(void)
+{
+    if (g_cc_threshold == 0) {
+        g_cc_threshold = 128;
+        const char* env = getenv("RF_CC_THRESHOLD");
+        if (env != NULL) {
+            long v = atol(env);
+            if (v > 0) {
+                g_cc_threshold = (uint64_t)v;
+            }
+        }
+    }
+    return g_cc_threshold;
+}
+
+// True when a collection pass should run now: the candidate set reached the threshold and no pass is
+// already in progress. The RF side (RoamController.mark_cycle_candidate) polls this after buffering.
+int rf_cc_should_collect(void) { return !g_cc_collecting && g_cc_roots.count >= rf_cc_get_threshold(); }
+
+// Bracket a collection pass so a nested candidate report cannot re-trigger one (CycleCollector.cc_collect
+// calls these around the three passes).
+void rf_cc_enter_collect(void) { g_cc_collecting = 1; }
+void rf_cc_exit_collect(void) { g_cc_collecting = 0; }
+
 // An RF routine reference stored in a CPtr is a CLOSURE VALUE: a heap box whose first word is the
 // vthunk pointer `void(*)(void* closure, <args>)`, followed by any captured variables. The hooks the
 // collector calls (trace / free) take one arg, so the vthunk is `void(void* closure, void* arg)`. To

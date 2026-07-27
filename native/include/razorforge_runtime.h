@@ -141,6 +141,10 @@ void* rf_cc_reap_at(uint64_t i);
 void rf_cc_reap_clear(void);
 void rf_cc_trace_into_scratch(void* trace_hook, void* controller);  // SOLE trace indirect-call site
 void rf_cc_invoke_free(void* free_hook, void* controller);          // free indirect-call site
+// Auto-collection trigger (candidate-set threshold; RF_CC_THRESHOLD env, default 128).
+int rf_cc_should_collect(void);
+void rf_cc_enter_collect(void);
+void rf_cc_exit_collect(void);
 
 rf_task_kind rf_task_kind_get(rf_task* task);
 rf_task_status rf_task_status_get(rf_task* task);
