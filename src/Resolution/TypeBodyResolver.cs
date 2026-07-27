@@ -261,11 +261,15 @@ internal sealed class TypeBodyResolver
                 // on construct/assign, lock-wrapped access, release on teardown, cycle collection). RF keeps
                 // bare single-owner entity fields.
                 if (_sa._registry.Language == TypeModel.Enums.Language.Suflae
-                    && memberVariableType is EntityTypeInfo fieldEntity)
+                    && memberVariableType is EntityTypeInfo fieldEntity
+                    && _sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is
+                        { } roamedDef)
                 {
-                    memberVariableType = _sa._registry.GetOrCreateWrapperType(
-                        wrapperName: Compiler.Resolution.RuntimeContract.Roamed,
-                        innerType: fieldEntity, isReadOnly: false);
+                    // Use the actual `Roamed` RECORD instantiation (RecordTypeInfo), not a WrapperTypeInfo,
+                    // so it matches RF `Roamed[T]` fields and all the Roamed-field codegen fires (the field
+                    // WRITE release-old/retain-new keys on `memberVariable.Type is RecordTypeInfo`).
+                    memberVariableType = _sa._registry.GetOrCreateResolution(
+                        genericDef: roamedDef, typeArguments: [fieldEntity]);
                 }
 
                 var memberVariableInfo =

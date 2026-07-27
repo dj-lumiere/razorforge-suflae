@@ -608,6 +608,21 @@ public sealed partial class SemanticVerifier
     /// Handles error types (to suppress cascading errors), generic resolution matching, and protocol conformance.
     /// No implicit numeric or widening conversions are performed.
     /// </summary>
+    /// <summary>True when <paramref name="type"/> is `Roamed[E]` (record or wrapper form) for the given
+    /// entity — used to treat a bare SF entity and its Roamed handle as mutually assignable.</summary>
+    private static bool IsRoamedOfEntity(TypeSymbol type, EntityTypeInfo entity)
+    {
+        string baseName = type switch
+        {
+            RecordTypeInfo { GenericDefinition: { } gd } => gd.Name,
+            WrapperTypeInfo w => w.Name,
+            _ => string.Empty
+        };
+        return baseName == Compiler.Resolution.RuntimeContract.Roamed
+            && type.TypeArguments is [{ } inner]
+            && inner.FullName == entity.FullName;
+    }
+
     private bool IsAssignableTo(TypeSymbol source, TypeSymbol target)
     {
         // Same type
@@ -622,6 +637,16 @@ public sealed partial class SemanticVerifier
         if (source.FullName == target.FullName)
         {
             return true;
+        }
+
+        // Suflae: a bare entity `E` and `Roamed[E]` are the same thing to an SF user (entity FIELDS are
+        // the `Roamed[E]` record at collection; entity LOCALS stay bare `E` in SA until the Phase-6 SF
+        // lowering pass retypes them). Treat them as mutually assignable — the pass + codegen insert the
+        // `.roam()` / field release-old+retain-new. RazorForge keeps the strict distinction.
+        if (_registry.Language == Language.Suflae)
+        {
+            if (source is EntityTypeInfo se && IsRoamedOfEntity(type: target, entity: se)) return true;
+            if (target is EntityTypeInfo te && IsRoamedOfEntity(type: source, entity: te)) return true;
         }
 
         // Error types are assignable to anything (to reduce cascading errors)

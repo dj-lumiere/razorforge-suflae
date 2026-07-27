@@ -107,7 +107,12 @@ internal sealed class SuflaeEntityLoweringPass
 
             case AssignmentStatement assign:
             {
-                Expression v = MaybeRoamCopy(LowerExpression(assign.Value));
+                Expression v = LowerExpression(assign.Value);
+                // Retain a borrowed Roamed value only for a LOCAL target — codegen does NOT auto-retain
+                // an RC-wrapper var reassignment. A FIELD target (`o.inner = x`) is already handled by
+                // codegen's Roamed-field write (release-old + retain-new), so retaining here double-counts.
+                if (assign.Target is IdentifierExpression)
+                    v = MaybeRoamCopy(v);
                 return ReferenceEquals(v, assign.Value) ? stmt : assign with { Value = v };
             }
 
