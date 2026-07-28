@@ -166,6 +166,13 @@ dangerous routine Agent[T].$destroy()
     if not me.coro.is_none()
       var status = rf_coro_status_get(coro: me.coro)
       if status == 3_u32                # RF_CORO_COMPLETED
+        # Detach from the scheduler BEFORE freeing, exactly like the not-completed branch below. A
+        # completed coroutine can STILL sit in a worker's ready deque: a wake that raced its completion
+        # re-queued it after it finished (see coro_runtime.c rf_sched_run_coro — "the owner frees it
+        # later"). Freeing without unscheduling leaves that deque entry dangling; a worker then pops the
+        # freed pointer and rf_coro_resume reads freed memory + co_switch()es a freed stack → jump to
+        # NULL → SIGSEGV (the libco M:N work-stealing crash). Unschedule first purges the stray entry.
+        discard rf_sched_unschedule_default(coro: me.coro)
         rf_coro_delete(coro: me.coro)
       else
         # Never retrieved: detach from the implicit scheduler (drop its ready/live reference) BEFORE
