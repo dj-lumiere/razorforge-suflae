@@ -145,6 +145,21 @@ add_library(razorforge_runtime SHARED
 
 target_include_directories(razorforge_runtime PUBLIC include)
 
+# TLS model for the M:N scheduler. The runtime's `_Thread_local` state (g_current_coro / g_sched /
+# g_worker_id / g_steal_rng …) is read from inside STACKFUL coroutines (libco) that MIGRATE across worker
+# threads under work-stealing. In a SHARED library the default global-dynamic TLS model resolves a
+# `_Thread_local` to an ABSOLUTE per-thread address (via __tls_get_addr) that the compiler may cache in a
+# callee-saved register ACROSS the opaque libco context switch — after the coroutine resumes on a DIFFERENT
+# worker, that cached pointer still targets the ORIGINAL thread's TLS block → use-after-migration → segfault
+# / deadlock (observed: mac+linux libco backend fails the concurrency fixtures while the Windows fiber
+# backend, TEB-based TLS, passes). initial-exec accesses TLS as thread-pointer-relative and re-reads the
+# thread pointer on EVERY access, so a migrated coroutine always sees its current worker's TLS. It is safe
+# here because the runtime is load-time linked into the compiled program (not dlopen'd). Windows uses the
+# fiber backend and clang-cl does not accept -ftls-model, so restrict to non-Windows.
+if(NOT WIN32)
+    target_compile_options(razorforge_runtime PRIVATE -ftls-model=initial-exec)
+endif()
+
 # Link math library
 if(UNIX AND NOT APPLE)
     target_link_libraries(razorforge_runtime m)
