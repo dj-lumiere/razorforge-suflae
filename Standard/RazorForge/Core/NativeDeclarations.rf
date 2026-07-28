@@ -203,6 +203,11 @@ dangerous external("C") routine rf_sched_run_until_default(coro: CPtr)
 ### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
 ### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
 dangerous external("C") routine rf_sched_unschedule_default(coro: CPtr) -> U32
+### Race-free owner-side disposal for an Agent handle's $destroy. Detaches `coro` from the pool and,
+### under the scheduler lock, decides whether the OWNER may free it now (returns 1) or the free was
+### DEFERRED (returns 0) because a worker still holds it (RUNNING / mid-pop) and will free it on
+### completion. Prevents the owner from freeing a coroutine a worker is about to resume (the M:N UAF).
+dangerous external("C") routine rf_sched_dispose_default(coro: CPtr) -> U32
 ### Number of worker threads driving the process pool (fixed host-core-count, min 1). Creates the pool
 ### on first call. Coroutine migration across workers can only occur when this is > 1.
 external("C") routine rf_sched_worker_count() -> U64

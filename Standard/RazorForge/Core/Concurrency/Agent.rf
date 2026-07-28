@@ -165,20 +165,22 @@ dangerous routine Agent[T].$destroy()
   if me.kind is AgentKind.CORO
     if not me.coro.is_none()
       var status = rf_coro_status_get(coro: me.coro)
+      # Dispose race-free against the work-stealing workers. `rf_sched_dispose_default` detaches the
+      # coroutine from the pool and, under the scheduler lock, decides whether WE may free it now (returns
+      # 1) or the free was DEFERRED (returns 0) because a worker still holds it (RUNNING, or mid-pop between
+      # the deque pop and the RUNNING store). Freeing a coroutine a worker is one step from resuming is the
+      # M:N use-after-free (worker co_switch()es a freed stack → jump to NULL → SIGSEGV); deferring lets the
+      # worker free it from its completion path instead. A plain `unschedule + free` cannot see the mid-pop
+      # window and races that resume.
       if status == 3_u32                # RF_CORO_COMPLETED
-        # Detach from the scheduler BEFORE freeing, exactly like the not-completed branch below. A
-        # completed coroutine can STILL sit in a worker's ready deque: a wake that raced its completion
-        # re-queued it after it finished (see coro_runtime.c rf_sched_run_coro — "the owner frees it
-        # later"). Freeing without unscheduling leaves that deque entry dangling; a worker then pops the
-        # freed pointer and rf_coro_resume reads freed memory + co_switch()es a freed stack → jump to
-        # NULL → SIGSEGV (the libco M:N work-stealing crash). Unschedule first purges the stray entry.
-        discard rf_sched_unschedule_default(coro: me.coro)
-        rf_coro_delete(coro: me.coro)
+        if rf_sched_dispose_default(coro: me.coro) == 1_u32
+          rf_coro_delete(coro: me.coro)
       else
-        # Never retrieved: detach from the implicit scheduler (drop its ready/live reference) BEFORE
-        # abandoning, so the scheduler does not dangle on freed memory.
-        discard rf_sched_unschedule_default(coro: me.coro)
-        rf_coro_abandon(coro: me.coro)
+        # Never retrieved. If disposal succeeds now (parked / idle / removed) run its cancellation shadow
+        # stack + free (abandon); if deferred (still RUNNING) the coroutine runs to completion and the
+        # worker frees it — its own scope teardown replaces the abandon walk.
+        if rf_sched_dispose_default(coro: me.coro) == 1_u32
+          rf_coro_abandon(coro: me.coro)
       rf_task_destroy(task: me.agent)
     return
 

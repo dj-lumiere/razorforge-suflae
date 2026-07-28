@@ -117,6 +117,13 @@ struct rf_coro {
                                    // Every access goes through atomic_load/atomic_store (seq_cst).
     rf_park_intent park_intent;    // recorded by a park primitive; applied by the worker post-resume
     int counted_done;              /* 1 once its completion has decremented live (idempotent)   */
+    int owner_released;            /* 1 once the owning Agent handle's $destroy has given up this
+                                    * coroutine WHILE a worker still held it (RUNNING, or mid-pop). The
+                                    * owner could not free it safely (a worker was about to resume it),
+                                    * so it DEFERRED: the worker frees it from the completion path once it
+                                    * finishes. Written+read only under s->lock (rf_sched_dispose / the
+                                    * st==COMPLETED branch of rf_sched_run_coro). Closes the owner-free vs
+                                    * worker-pop use-after-free (the M:N libco migration crash).          */
     int cancel_requested;          /* 1 once cooperative cancellation has been requested        */
     struct rf_coro* awaiter;       /* a coroutine parked in retrieve! awaiting THIS one's completion;
                                     * the pool worker wakes it (pushes to the injector) when this
@@ -1348,9 +1355,16 @@ static void rf_sched_run_coro(rf_sched* s, rf_coro* c)
             c->awaiter = NULL;
             rf_sched_make_ready(s, w);
         }
+        // If the owning Agent handle was $destroy'd WHILE we (a worker) still held this coroutine,
+        // rf_sched_dispose deferred the free to us — we are the last toucher, so free it now. (The result
+        // block is a separate rf_task the owner already freed; the coro struct + stack is ours to reclaim.)
+        int free_now = c->owner_released;
         rf_cond_signal(&s->cond);          // an enqueued awaiter coroutine / the legacy driver
         rf_cond_broadcast(&s->block_cond); // top-level blockers re-check their target's completion
         rf_mutex_unlock(&s->lock);
+        if (free_now) {
+            rf_coro_delete(c); // a completed coroutine already ran its teardown; abandon degenerates to delete
+        }
         return;
     }
 
@@ -1970,13 +1984,11 @@ void rf_sched_run_until_default(rf_coro* target)
  * spawned-but-never-finished coroutine from the scheduler BEFORE rf_coro_abandon frees it — without
  * this the scheduler would hold a dangling pointer / an inflated live count. A coroutine that is
  * already completed is in neither list (already uncounted) → returns 0, no double-decrement. */
-static int rf_sched_remove(rf_sched* s, rf_coro* c)
+/* Body of rf_sched_remove; the caller MUST already hold s->lock (used by rf_sched_dispose, which needs
+ * the removal + the RUNNING/QUEUED state read to be ONE atomic step under s->lock). */
+static int rf_sched_remove_locked(rf_sched* s, rf_coro* c)
 {
-    if (s == NULL || c == NULL) {
-        return 0;
-    }
     int found = 0;
-    rf_mutex_lock(&s->lock);
 
     /* injector FIFO */
     rf_coro** rlink = &s->injector_head;
@@ -2024,8 +2036,49 @@ static int rf_sched_remove(rf_sched* s, rf_coro* c)
     if (found) {
         s->live--;
     }
+    return found;
+}
+
+static int rf_sched_remove(rf_sched* s, rf_coro* c)
+{
+    if (s == NULL || c == NULL) {
+        return 0;
+    }
+    rf_mutex_lock(&s->lock);
+    int found = rf_sched_remove_locked(s, c);
     rf_mutex_unlock(&s->lock);
     return found;
+}
+
+/* Owner-side disposal of a coroutine, race-free against the work-stealing workers. Detaches `c` from
+ * every ready structure and decides, ATOMICALLY under s->lock, whether the OWNER may free `c` now or must
+ * DEFER to the worker that currently holds it. Returns 1 if the caller should free `c` now, 0 if deferred.
+ *
+ * The race this closes (the mac/linux libco M:N crash): a worker pops `c` from a deque under the deque
+ * lock but sets RF_SCHED_RUNNING only AFTER dropping that lock (rf_sched_claim_work). A naive owner
+ * "unschedule then free" can therefore fail to find `c` (already popped) yet be about to free it out from
+ * under the worker that is one instruction away from rf_coro_resume(c) → use-after-free → the worker
+ * co_switch()es a freed stack → jump to NULL. Holding s->lock across the removal + the state read, a `c`
+ * that is RUNNING (a worker has it) or QUEUED-but-no-longer-in-any-structure (a worker is mid-pop) is
+ * DEFERRED: `owner_released` is set and the worker frees `c` from rf_sched_run_coro's completion path. */
+static int rf_sched_dispose(rf_sched* s, rf_coro* c)
+{
+    if (c == NULL) {
+        return 0;
+    }
+    if (s == NULL) {
+        return 1; /* no scheduler → nobody else can touch c → the caller frees it */
+    }
+    rf_mutex_lock(&s->lock);
+    int found = rf_sched_remove_locked(s, c);
+    rf_sched_state st = atomic_load(&c->sched_state);
+    int defer = 0;
+    if (!found && (st == RF_SCHED_RUNNING || st == RF_SCHED_QUEUED)) {
+        c->owner_released = 1;
+        defer = 1;
+    }
+    rf_mutex_unlock(&s->lock);
+    return defer ? 0 : 1;
 }
 
 /* Detach `c` from the process pool (if present). The $destroy-side convenience over rf_sched_remove.
@@ -2034,6 +2087,14 @@ static int rf_sched_remove(rf_sched* s, rf_coro* c)
 int rf_sched_unschedule_default(rf_coro* c)
 {
     return rf_sched_remove(g_pool, c);
+}
+
+/* Process-pool disposal for an Agent handle's $destroy — the race-free replacement for
+ * rf_sched_unschedule_default + free. Returns 1 if the caller (Agent.$destroy) should free `c` now
+ * (rf_coro_delete / rf_coro_abandon), 0 if the free was DEFERRED to the worker still holding `c`. */
+uint32_t rf_sched_dispose_default(rf_coro* c)
+{
+    return (uint32_t)rf_sched_dispose(g_pool, c);
 }
 
 /* The monotonic nanosecond clock the scheduler uses for timers, exposed for the task↔coro deadline
