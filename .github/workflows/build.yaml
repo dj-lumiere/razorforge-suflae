@@ -193,35 +193,37 @@ jobs:
       - name: Test
         run: dotnet test --configuration Release --no-build --verbosity normal
 
-      # TEMPORARY DIAGNOSTIC (libco M:N migration crash): on test failure, build the SEGFAULTING
-      # concurrency fixtures (exit 139) and run each under gdb to capture the crashing thread's
-      # backtrace. Every gdb run is wrapped in `timeout` so a run that instead DEADLOCKS (or completes
-      # slowly) can never hang the step. Exits at the first captured crash. Remove once fixed.
-      - name: Diagnose concurrency segfault (backtrace)
+      # TEMPORARY DIAGNOSTIC (coroutine use-after-free): on test failure, run a segfaulting concurrency
+      # fixture under valgrind memcheck to capture the EXACT provenance of the UAF — the invalid-read
+      # stack + where the block was free'd + where it was originally allocated. --fair-sched=yes keeps
+      # the worker threads genuinely concurrent so the work-stealing free-vs-resume race still triggers.
+      # No rebuild needed (memcheck tracks heap malloc/free + mmap independently). Remove once fixed.
+      - name: Diagnose concurrency UAF (valgrind)
         if: failure()
-        timeout-minutes: 12
+        timeout-minutes: 45
         run: |
           set +e
-          sudo apt-get update -qq && sudo apt-get install -y -qq gdb
+          sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
           RF=$(find . -name RazorForge.dll -path '*Release*net10.0*' | head -1)
           echo "RazorForge.dll = $RF"
-          for FX in channel_workerpool_api coro_migration_api; do
+          for FX in coro_worksteal_api coro_migration_api channel_workerpool_api; do
             echo "==================== $FX ===================="
             dotnet "$RF" build "tests/Fixtures/Stdlib/$FX.rf" 2>&1 | tail -3
             EXE=$(find tests/Fixtures/Stdlib -maxdepth 1 -name "$FX*" -type f -perm -u+x ! -name '*.rf' ! -name '*.ll' ! -name '*.txt' | head -1)
             echo "EXE = $EXE"
             [ -z "$EXE" ] && { echo "no exe built for $FX"; continue; }
-            for i in $(seq 1 25); do
-              timeout 20 gdb -batch -nx -ex run \
-                  -ex 'printf "\n===SIGNAL+BACKTRACE (all threads)===\n"' \
-                  -ex 'thread apply all bt' --args "$EXE" > /tmp/gdb.txt 2>&1
-              if grep -qE 'SIGSEGV|SIGABRT|Program received signal' /tmp/gdb.txt; then
-                echo "#### $FX CRASHED on iteration $i ####"
-                cat /tmp/gdb.txt
+            for i in $(seq 1 6); do
+              echo "--- $FX valgrind run $i ---"
+              timeout 240 valgrind --tool=memcheck --error-limit=no --num-callers=30 \
+                  --fair-sched=yes --child-silent-after-fork=yes \
+                  "$EXE" > /tmp/vg.txt 2>&1
+              if grep -qE 'Invalid (read|write|free)|Process terminating|SIGSEGV' /tmp/vg.txt; then
+                echo "#### $FX: valgrind caught an error on run $i ####"
+                grep -nE 'Invalid (read|write|free)|Process terminating|SIGSEGV|freed|alloc|by 0x|at 0x|in \?\?|Address 0x' /tmp/vg.txt | head -150
                 exit 0
               fi
+              echo "(run $i: no memcheck error captured; tail)"; tail -10 /tmp/vg.txt
             done
-            echo "$FX: no crash captured in 25 runs (tail below)"; tail -6 /tmp/gdb.txt
           done
           exit 0
 
