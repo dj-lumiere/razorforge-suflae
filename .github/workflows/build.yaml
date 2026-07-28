@@ -193,35 +193,35 @@ jobs:
       - name: Test
         run: dotnet test --configuration Release --no-build --verbosity normal
 
-      # TEMPORARY DIAGNOSTIC (libco M:N migration crash): on test failure, build a segfaulting
-      # concurrency fixture and run it under gdb repeatedly to capture the crashing thread's backtrace.
-      # Remove once the root cause is fixed.
+      # TEMPORARY DIAGNOSTIC (libco M:N migration crash): on test failure, build the SEGFAULTING
+      # concurrency fixtures (exit 139) and run each under gdb to capture the crashing thread's
+      # backtrace. Every gdb run is wrapped in `timeout` so a run that instead DEADLOCKS (or completes
+      # slowly) can never hang the step. Exits at the first captured crash. Remove once fixed.
       - name: Diagnose concurrency segfault (backtrace)
         if: failure()
+        timeout-minutes: 12
         run: |
           set +e
           sudo apt-get update -qq && sudo apt-get install -y -qq gdb
           RF=$(find . -name RazorForge.dll -path '*Release*net10.0*' | head -1)
           echo "RazorForge.dll = $RF"
-          for FX in channel_workerpool_api coro_worksteal_api coro_migration_api channel_backpressure_api; do
+          for FX in channel_workerpool_api coro_migration_api; do
             echo "==================== $FX ===================="
             dotnet "$RF" build "tests/Fixtures/Stdlib/$FX.rf" 2>&1 | tail -3
             EXE=$(find tests/Fixtures/Stdlib -maxdepth 1 -name "$FX*" -type f -perm -u+x ! -name '*.rf' ! -name '*.ll' ! -name '*.txt' | head -1)
             echo "EXE = $EXE"
             [ -z "$EXE" ] && { echo "no exe built for $FX"; continue; }
-            CRASHED=0
-            for i in $(seq 1 40); do
-              gdb -batch -nx -ex run -ex 'printf "\n===SIGNAL+BACKTRACE (all threads)===\n"' \
+            for i in $(seq 1 25); do
+              timeout 20 gdb -batch -nx -ex run \
+                  -ex 'printf "\n===SIGNAL+BACKTRACE (all threads)===\n"' \
                   -ex 'thread apply all bt' --args "$EXE" > /tmp/gdb.txt 2>&1
               if grep -qE 'SIGSEGV|SIGABRT|Program received signal' /tmp/gdb.txt; then
                 echo "#### $FX CRASHED on iteration $i ####"
                 cat /tmp/gdb.txt
-                CRASHED=1
-                break
+                exit 0
               fi
             done
-            [ "$CRASHED" = "1" ] && break
-            echo "$FX: no crash in 40 runs (tail below)"; tail -8 /tmp/gdb.txt
+            echo "$FX: no crash captured in 25 runs (tail below)"; tail -6 /tmp/gdb.txt
           done
           exit 0
 
