@@ -193,36 +193,6 @@ jobs:
       - name: Test
         run: dotnet test --configuration Release --no-build --verbosity normal
 
-      # TEMPORARY DIAGNOSTIC (coroutine use-after-free): on test failure, run the segfaulting concurrency
-      # fixtures under gdb to capture the crashing thread's backtrace (fast — valgrind serializes threads
-      # and hides this parallelism race, so it is not useful here). Every gdb run is timeout-wrapped so a
-      # DEADLOCK run cannot hang the step. Exits at the first captured crash. Remove once fixed.
-      - name: Diagnose concurrency segfault (backtrace)
-        if: failure()
-        timeout-minutes: 12
-        run: |
-          set +e
-          sudo apt-get update -qq && sudo apt-get install -y -qq gdb
-          RF=$(find . -name RazorForge.dll -path '*Release*net10.0*' | head -1)
-          echo "RazorForge.dll = $RF"
-          for FX in coro_worksteal_api coro_migration_api channel_workerpool_api; do
-            echo "==================== $FX ===================="
-            dotnet "$RF" build "tests/Fixtures/Stdlib/$FX.rf" 2>&1 | tail -3
-            EXE=$(find tests/Fixtures/Stdlib -maxdepth 1 -name "$FX*" -type f -perm -u+x ! -name '*.rf' ! -name '*.ll' ! -name '*.txt' | head -1)
-            echo "EXE = $EXE"
-            [ -z "$EXE" ] && { echo "no exe built for $FX"; continue; }
-            for i in $(seq 1 25); do
-              timeout 20 gdb -batch -nx -ex run \
-                  -ex 'printf "\n===SIGNAL+BACKTRACE (all threads)===\n"' \
-                  -ex 'thread apply all bt' --args "$EXE" > /tmp/gdb.txt 2>&1
-              if grep -qE 'SIGSEGV|SIGABRT|Program received signal' /tmp/gdb.txt; then
-                echo "#### $FX CRASHED on iteration $i ####"; cat /tmp/gdb.txt; exit 0
-              fi
-            done
-            echo "$FX: no crash captured in 25 runs (tail below)"; tail -6 /tmp/gdb.txt
-          done
-          exit 0
-
       - name: SonarQube End
         if: always()
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"

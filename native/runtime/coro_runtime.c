@@ -19,7 +19,6 @@
 #include "../include/razorforge_runtime.h"
 
 #include <stdatomic.h> /* atomic sched_state — a worker drains/steals a coroutine off s->lock (step 3) */
-#include <stdio.h> /* TEMP DIAGNOSTIC: fprintf(stderr) in rf_coro_resume's UAF/double-resume assertions */
 #include <stdlib.h>
 
 #ifdef _WIN32
@@ -103,10 +102,6 @@ typedef enum {
     RF_PARK_YIELD      // cooperative yield: re-queue immediately, behind the other ready coros
 } rf_park_intent;
 
-/* TEMP DIAGNOSTIC magic values for the M:N libco crash (UAF vs double-resume). Remove once fixed. */
-#define RF_CORO_MAGIC 0x600DC070u
-#define RF_CORO_DEAD  0xDEADC070u
-
 struct rf_coro {
     rf_context_entry_fn entry;     /* user routine to run inside the coroutine            */
     void* userdata;                /* opaque argument handed to entry                     */
@@ -121,13 +116,6 @@ struct rf_coro {
                                    // s->lock) is race-free against a make_ready reading it under s->lock.
                                    // Every access goes through atomic_load/atomic_store (seq_cst).
     rf_park_intent park_intent;    // recorded by a park primitive; applied by the worker post-resume
-    unsigned magic;                /* TEMP DIAGNOSTIC: RF_CORO_MAGIC while alive, RF_CORO_DEAD after free.
-                                    * rf_coro_resume aborts with a message if it is asked to resume a coro
-                                    * whose magic is not ALIVE (= a use-after-free). Distinguishes UAF from
-                                    * double-resume for the M:N libco crash. Remove once fixed.          */
-    _Atomic int resuming;          /* TEMP DIAGNOSTIC: 0/1. rf_coro_resume atomically 0->1 before switching
-                                    * in; if it observes 1 already, TWO workers are resuming this coro at
-                                    * once (= double-resume). Reset to 0 after the switch returns.        */
     int counted_done;              /* 1 once its completion has decremented live (idempotent)   */
     int owner_released;            /* 1 once the owning Agent handle's $destroy has given up this
                                     * coroutine WHILE a worker still held it (RUNNING, or mid-pop). The
@@ -273,7 +261,6 @@ rf_coro* rf_coro_create(rf_context_entry_fn entry, void* userdata, size_t stack_
         return NULL; /* unreachable: __rf_throw exits */
     }
 
-    coro->magic = RF_CORO_MAGIC; /* TEMP DIAGNOSTIC */
     coro->entry = entry;
     coro->userdata = userdata;
     coro->status = RF_CORO_NEW;
@@ -326,24 +313,7 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
     if (coro == NULL) {
         return RF_CORO_COMPLETED;
     }
-    /* TEMP DIAGNOSTIC (M:N libco crash): catch a use-after-free (magic) and a double-resume (resuming) at
-     * the exact moment so the CI failure says WHICH it is, instead of a bare PC=0. Remove once fixed. */
-    if (coro->magic != RF_CORO_MAGIC) {
-        fprintf(stderr,
-                "\n### RF DIAG: rf_coro_resume on %s coro %p (magic=0x%x status=%d sched=%d) = USE-AFTER-FREE ###\n",
-                coro->magic == RF_CORO_DEAD ? "FREED" : "CORRUPT", (void*)coro, coro->magic,
-                (int)coro->status, (int)atomic_load(&coro->sched_state));
-        fflush(stderr);
-        abort();
-    }
-    if (atomic_exchange(&coro->resuming, 1) != 0) {
-        fprintf(stderr, "\n### RF DIAG: DOUBLE-RESUME of coro %p (status=%d sched=%d) ###\n",
-                (void*)coro, (int)coro->status, (int)atomic_load(&coro->sched_state));
-        fflush(stderr);
-        abort();
-    }
     if (coro->status == RF_CORO_COMPLETED) {
-        atomic_store(&coro->resuming, 0);
         return RF_CORO_COMPLETED;
     }
 
@@ -359,7 +329,6 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
 
     __rf_stack_activate(prev_shadow); /* restore the resumer's call chain */
     g_current_coro = prev;   /* the coroutine parked or finished; restore our context */
-    atomic_store(&coro->resuming, 0); /* TEMP DIAGNOSTIC: this worker is done resuming for now */
     return coro->status;     /* PARKED (yielded) or COMPLETED (entry returned)        */
 #elif defined(HAVE_LIBCO)
     coro->resumer = co_active();
@@ -372,7 +341,6 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
 
     __rf_stack_activate(prev_shadow); /* restore the resumer's call chain */
     g_current_coro = prev;   /* the coroutine parked or finished; restore our context */
-    atomic_store(&coro->resuming, 0); /* TEMP DIAGNOSTIC: this worker is done resuming for now */
     return coro->status;     /* PARKED (yielded) or COMPLETED (entry returned)        */
 #else
     /* No context-switch backend: degrade to a synchronous run-to-completion so callers
@@ -380,7 +348,6 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
     coro->status = RF_CORO_RUNNING;
     coro->entry(coro->userdata);
     coro->status = RF_CORO_COMPLETED;
-    atomic_store(&coro->resuming, 0); /* TEMP DIAGNOSTIC */
     return RF_CORO_COMPLETED;
 #endif
 }
@@ -635,16 +602,6 @@ void rf_coro_delete(rf_coro* coro)
     if (coro == NULL) {
         return;
     }
-    /* TEMP DIAGNOSTIC: mark DEAD BEFORE releasing the stack so a worker that resumes this coro mid-free
-     * (the race we are hunting) reads DEAD at the magic check instead of a not-yet-DEAD struct whose
-     * stack is already munmap'd. Also flag the race from the FREE side if a worker is resuming right now. */
-    if (atomic_load(&coro->resuming)) {
-        fprintf(stderr,
-                "\n### RF DIAG: rf_coro_delete of coro %p WHILE a worker is RESUMING it (status=%d sched=%d) = FREE/RESUME RACE ###\n",
-                (void*)coro, (int)coro->status, (int)atomic_load(&coro->sched_state));
-        fflush(stderr);
-    }
-    coro->magic = RF_CORO_DEAD;
 #if defined(_WIN32)
     if (coro->fiber != NULL) {
         DeleteFiber(coro->fiber); /* frees the Windows-managed fiber stack */
