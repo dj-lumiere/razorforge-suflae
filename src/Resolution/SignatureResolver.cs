@@ -158,6 +158,25 @@ internal sealed class SignatureResolver
                 positionDescription: $"parameter '{param.Name}'", allowTopLevelRvalue: true);
             TypeSymbol paramType = _typeResolver.ResolveType(typeExpr: param.Type);
 
+            // Suflae: a bare entity PARAMETER is a `Roamed[E]` borrow handle (representation unification —
+            // same rule TypeBodyResolver applies to entity fields). The callee receives the caller's
+            // Roamed handle directly (no `.raw_inner()` projection) and accesses it through the Roamed
+            // machinery; it is a BORROW (ScopeTeardownLoweringPass skips SF Roamed params — no release).
+            // `me` is excluded: it stays the bare receiver of the unlocked inner method (the monitor
+            // forwarder, added later, is the Roamed-typed entry). Its type is inferred from OwnerType,
+            // not resolved here, so it never reaches this branch anyway.
+            if (param.Name != "me")
+            {
+                TypeSymbol roamed = MaybeRoamSuflaeEntity(type: paramType);
+                if (!ReferenceEquals(objA: roamed, objB: paramType))
+                {
+                    paramType = roamed;
+                    // Keep the AST parameter's resolved type in sync so teardown / codegen agree with the
+                    // RoutineInfo signature (they read `param.Type.ResolvedType`).
+                    if (param.Type != null) param.Type.ResolvedType = roamed;
+                }
+            }
+
             // #74: Varargs parameter gets wrapped as List[T]
             if (param.IsVariadic)
             {
@@ -901,6 +920,32 @@ internal sealed class SignatureResolver
     }
 
     #endregion
+
+    /// <summary>
+    /// Suflae representation unification: a bare entity type in an SF routine SIGNATURE is a
+    /// <c>Roamed[E]</c> biased-RC handle, exactly as <see cref="TypeBodyResolver"/> already does for SF
+    /// entity FIELDS. Applying it to parameter and return types too makes the entity representation
+    /// uniform across the pipeline (field / local / param / return), so the Roamed RC + access
+    /// machinery applies everywhere and the interim <c>raw_inner</c> projections in
+    /// <c>SuflaeEntityLoweringPass</c> become unnecessary. A non-SF build, or a non-entity type, is
+    /// returned unchanged. Mirrors the field rules: bare <c>E</c> → non-null <c>Roamed[E]</c>;
+    /// <c>Maybe[E]</c> (from <c>E?</c>) → nullable <c>Roamed[E]</c>.
+    /// </summary>
+    private TypeSymbol MaybeRoamSuflaeEntity(TypeSymbol type)
+    {
+        if (_sa._registry.Language != Language.Suflae) return type;
+        if (_sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is not { } roamedDef)
+            return type;
+
+        return type switch
+        {
+            EntityTypeInfo entity =>
+                _sa._registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [entity]),
+            RecordTypeInfo { GenericDefinition.Name: "Maybe", TypeArguments: [EntityTypeInfo innerEntity] } =>
+                _sa._registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [innerEntity]),
+            _ => type
+        };
+    }
 
     // Static helpers
 

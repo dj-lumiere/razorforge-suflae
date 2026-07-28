@@ -47,6 +47,10 @@ if(EXISTS "${LIBUV_INCLUDE_DIR}/uv.h")
                 dbghelp
                 ole32
                 shell32
+                # WaitOnAddress / WakeByAddressSingle (uv__pipe_begin_synchronous_io) live in the
+                # Synchronization import library. Upstream libuv's CMakeLists links it; this vendored
+                # copy omitted it, causing lld-link "undefined symbol: WaitOnAddress" on Windows.
+                Synchronization
             )
             list(APPEND LIBUV_SOURCES
                 ${LIBUV_SRC_DIR}/win/async.c

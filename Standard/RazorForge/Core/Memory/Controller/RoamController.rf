@@ -40,8 +40,13 @@ entity RoamController[T]
 needs T is EntityType
   ### Reference count. Read/written non-atomically in LOCAL mode, atomically once ESCAPED.
   secret count: U64
-  ### `false` = LOCAL, `true` = ESCAPED. Flipped once by `promote()`. Every handle observes it.
-  secret escaped: Bool
+  ### `0` = LOCAL, `1` = ESCAPED. Flipped once by `promote()`. Every handle observes it.
+  ### **`Atomic[U8]`, not `Bool`:** `promote()` publishes the flip cross-thread at the escape site
+  ### and non-owner threads read it from `retain`/`release`/`guard_enter` — a plaintext `Bool` would
+  ### be a data race (and could be hoisted/cached so a promoted object still looks LOCAL forever).
+  ### SeqCst load/store on the atomic gives the release-store / acquire-load the flip needs. `Bool`
+  ### also lowers to `i1`, which has no hardware atomic; the flag is `0`/`1` over `Atomic[U8]`.
+  secret escaped: Atomic[U8]
   ### Raw pointer to the managed entity.
   secret data: Hijacked[T]
   ### Exclusive-lock flag (`0` free / `1` held). Armed and used only in ESCAPED mode.
@@ -69,7 +74,7 @@ needs T is EntityType
 dangerous routine RoamController[T].$create(data: Hijacked[T]) -> RoamController[T]
   return RoamController[T](
     count: 1_u64,
-    escaped: false,
+    escaped: Atomic[U8](initial: 0_u8),
     data: data,
     locked: Atomic[U8](initial: 0_u8),
     holder_task: Atomic[U64](initial: 0_u64),
@@ -87,7 +92,7 @@ dangerous routine RoamController[T].$create(data: Hijacked[T]) -> RoamController
 ### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED.
 routine RoamController[T].retain()
   danger!
-    if me.escaped
+    if me.escaped.load() == 1_u8
       discard atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
     else
       me.count = me.count + 1
@@ -97,7 +102,7 @@ routine RoamController[T].retain()
 ### A decrement that does NOT reach zero registers the object as a cycle-collection candidate.
 routine RoamController[T].release()
   danger!
-    if me.escaped
+    if me.escaped.load() == 1_u8
       var previous = atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
       if previous == 1_u64
         # Dead at zero — free eagerly (deterministic teardown). If it was a buffered cycle candidate,
@@ -123,6 +128,11 @@ routine RoamController[T].release()
 ### Reports this object to the cycle collector as a possible cycle root. The SOLE collector entry
 ### point — only `Roamed` decrements reach it, which is what scopes the collector to `Roamed`.
 dangerous routine RoamController[T].mark_cycle_candidate()
+  # Acyclic-type fast out (standard Bacon-Rajan optimization): a `T` with no `Roamed` fields cannot be
+  # part of a cycle, and the compiler wires its `trace_hook` to `cptr_none()` (see `$create`). Skipping
+  # the candidate buffer here keeps the common non-zero decrement off the collector's books entirely.
+  if me.trace_hook.is_none()
+    return
   if me.buffered
     return
   me.buffered = true
@@ -197,7 +207,7 @@ dangerous routine RoamController[T].cc_set_hooks(trace: CPtr, free: CPtr)
 ### :returns: The number of live strong handles.
 routine RoamController[T].strong_count() -> U64
   danger!
-    if me.escaped
+    if me.escaped.load() == 1_u8
       return atomic_load[U64](ptr: me.count.hijack())
     else
       return me.count
@@ -210,17 +220,17 @@ routine RoamController[T].strong_count() -> U64
 ### thread (the compiler inserts it at the escape site, pre-spawn), so no concurrent access races
 ### the flip. After this, `count` is atomic and the reentrant lock is live.
 dangerous routine RoamController[T].promote()
-  if me.escaped
+  if me.escaped.load() == 1_u8
     return
   me.holder_task.store(desired: 0_u64)
   me.depth = 0_u64
-  me.escaped = true
+  me.escaped.store(desired: 1_u8)
   return
 
 ### Whether this object has escaped. Drives `Roamed`'s access-lock wrapping.
 ### :returns: `true` if ESCAPED.
 routine RoamController[T].is_escaped() -> Bool
-  return me.escaped
+  return me.escaped.load() == 1_u8
 
 # ============================================================================
 # Reentrant, task-keyed exclusive lock — active only in ESCAPED mode.
@@ -240,6 +250,11 @@ dangerous routine RoamController[T].reentrant_acquire()
       me.holder_task.store(desired: tid)
       me.depth = 1_u64
       break
+    # Contended by another task. Yield instead of a bare spin: under M:N the holder may be a coroutine
+    # parked on this very worker (or awaiting reschedule after migration), and a tight spin would pin
+    # the worker and livelock when workers are scarce. `rf_coro_yield` re-queues this coroutine so the
+    # holder can run; off a coroutine (top-level thread) it is a no-op and this stays a busy-spin.
+    rf_coro_yield()
   return
 
 ### Releases one level of the lock. The lock is freed only when the outermost holder releases (depth
@@ -254,13 +269,13 @@ dangerous routine RoamController[T].reentrant_release()
 ### Mode-checked lock entry: acquires the reentrant lock only when ESCAPED (a no-op in LOCAL mode,
 ### where there is no contention). Drives `Roamed`'s access wrapping and the `Roaming[T]` guard token.
 dangerous routine RoamController[T].guard_enter()
-  if me.escaped
+  if me.escaped.load() == 1_u8
     me.reentrant_acquire()
   return
 
 ### Mode-checked lock exit: the `guard_enter` counterpart.
 dangerous routine RoamController[T].guard_exit()
-  if me.escaped
+  if me.escaped.load() == 1_u8
     me.reentrant_release()
   return
 

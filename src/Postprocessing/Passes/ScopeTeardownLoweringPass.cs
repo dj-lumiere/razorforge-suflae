@@ -107,11 +107,11 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         // like a top-level local. (Borrows arrive as Referring/Controlling/Viewing/Modifying wrappers,
         // never as bare EntityTypeInfo, so they are correctly excluded.)
         //
-        // Suflae exception: a bare EntityTypeInfo parameter is a BORROWED projection (the caller passes
-        // its Roamed handle, peeled to the raw entity via `.raw_inner()` by SuflaeEntityLoweringPass) —
-        // the callee never owns it, so destroying it here double-frees the caller's live entity. Owned
-        // SF handles are always `Roamed[E]` (a record), never bare EntityTypeInfo, so skipping bare
-        // entity params loses nothing.
+        // Suflae exception: an entity parameter is a BORROWED handle — the caller keeps ownership, so
+        // destroying it here double-frees the caller's live entity. After representation unification
+        // (SignatureResolver.MaybeRoamSuflaeEntity) an SF entity param resolves to `Roamed[E]` (a
+        // RecordTypeInfo), so we skip THAT; a bare `EntityTypeInfo` param is still skipped for the older
+        // interim `.raw_inner()`-projected shape (both are borrows the callee must not release).
         bool isSuflae = ctx.Registry.Language == TypeModel.Enums.Language.Suflae;
         var paramLive = new List<Owned>();
         foreach (Parameter p in r.Parameters)
@@ -119,7 +119,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             if (p.Name == "me") continue;
             if (_movedNames.Contains(item: p.Name)) continue;
             TypeInfo? pt = p.Type?.ResolvedType;
-            if (isSuflae && pt is EntityTypeInfo) continue;
+            if (isSuflae && (pt is EntityTypeInfo || IsRoamedRecord(pt))) continue;
             if (pt != null && TryResolveDestroy(type: pt, out RoutineInfo? d) && d != null)
                 paramLive.Add(item: new Owned(Name: p.Name, Type: pt, Destroy: d));
         }
@@ -127,6 +127,12 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         Statement newBody = LowerStatement(r.Body, paramLive, loopBoundary: 0);
         return r.Body == newBody && paramLive.Count == 0 ? r : r with { Body = newBody };
     }
+
+    // True for a `Roamed[E]` handle in either representation the pipeline produces (the wrapper form
+    // from SuflaeEntityLoweringPass or the RecordTypeInfo form from the resolver's GetOrCreateResolution).
+    private static bool IsRoamedRecord(TypeInfo? t) =>
+        t is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed }
+          or WrapperTypeInfo { Name: RuntimeContract.Roamed };
 
     /// <summary>
     /// Lowers a statement. <paramref name="live"/> is the ordered list of owned bindings live on

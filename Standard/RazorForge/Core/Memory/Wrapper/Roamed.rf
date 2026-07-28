@@ -15,8 +15,12 @@ import BuilderService
 ### `lock_exit` wrapping (Stage 2). The `borrow()` here is a Stage-1 test hatch only.
 ###
 ### **Stage 1 (this file): manually driven.** `.roam()` / `.promote()` / `lock_enter()` are called by
-### hand; the compiler does not yet auto-insert them, and the cycle collector is a no-op stub (cycles
-### leak). `Roamed` is a plain record, not yet registered as an RC wrapper in RuntimeContract.
+### hand; the compiler does not yet auto-insert them. The cycle collector
+### (`Core/Memory/CycleCollector.rf`) is a COMPLETE Bacon-Rajan trial-deletion recycler — it is just
+### Stage-1 manually driven: hooks are wired by hand and `cc_collect` is called explicitly, so cycles
+### are reclaimed only where the collector is actually run (they are NOT auto-collected yet, but the
+### collector is not a stub). `Roamed` is a plain record, not yet registered as an RC wrapper in
+### RuntimeContract.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
 record Roamed[T]
