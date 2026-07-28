@@ -107,6 +107,14 @@ internal sealed class SignatureResolver
             ? (_sa._registry.LookupType(name: pending.OwnerType.FullName) ?? pending.OwnerType)
             : null;
 
+        // Suflae representation unification: in a Suflae USER file, an `entity` is a `Roamed[E]` handle,
+        // so entity types in its routine SIGNATURES (params + return + `me`) are substituted to
+        // `Roamed[E]` — the same rule TypeBodyResolver applies to entity FIELDS. Gated to non-stdlib:
+        // the borrowed RF stdlib is RazorForge source (bare single-owner entities), and its concrete
+        // entity signatures must NOT be rewritten even though it's loaded under an SF compile.
+        bool sfUserEntity = _sa._registry.Language == Language.Suflae
+            && !_sa.IsStdlibFile(filePath: pending.FilePath);
+
         // Filter routine.GenericParameters to exclude names that resolve to real types in the
         // registry. The parser collects leaf identifiers from nested receiver types like
         // `List[DictEntry[K, V]]` — these include both unresolved names (K, V) which are
@@ -156,26 +164,11 @@ internal sealed class SignatureResolver
 
             RejectRvalueMarkInSlot(typeExpr: param.Type,
                 positionDescription: $"parameter '{param.Name}'", allowTopLevelRvalue: true);
+            // Suflae entity params resolve to `Roamed[E]` at the single ResolveType choke point
+            // (TypeResolver.RoamSuflaeEntitySlot) — no per-site substitution here. The callee receives
+            // the caller's Roamed handle directly (a BORROW; ScopeTeardownLoweringPass skips SF Roamed
+            // params). `me` has no type expression (inferred from OwnerType) so it is set via MeType below.
             TypeSymbol paramType = _typeResolver.ResolveType(typeExpr: param.Type);
-
-            // Suflae: a bare entity PARAMETER is a `Roamed[E]` borrow handle (representation unification —
-            // same rule TypeBodyResolver applies to entity fields). The callee receives the caller's
-            // Roamed handle directly (no `.raw_inner()` projection) and accesses it through the Roamed
-            // machinery; it is a BORROW (ScopeTeardownLoweringPass skips SF Roamed params — no release).
-            // `me` is excluded: it stays the bare receiver of the unlocked inner method (the monitor
-            // forwarder, added later, is the Roamed-typed entry). Its type is inferred from OwnerType,
-            // not resolved here, so it never reaches this branch anyway.
-            if (param.Name != "me")
-            {
-                TypeSymbol roamed = MaybeRoamSuflaeEntity(type: paramType);
-                if (!ReferenceEquals(objA: roamed, objB: paramType))
-                {
-                    paramType = roamed;
-                    // Keep the AST parameter's resolved type in sync so teardown / codegen agree with the
-                    // RoutineInfo signature (they read `param.Type.ResolvedType`).
-                    if (param.Type != null) param.Type.ResolvedType = roamed;
-                }
-            }
 
             // #74: Varargs parameter gets wrapped as List[T]
             if (param.IsVariadic)
@@ -283,6 +276,10 @@ internal sealed class SignatureResolver
             }
         }
 
+        // SF entity RETURN types resolve to `Roamed[E]` via the ResolveType choke point, so `return me`
+        // (me is `Roamed[E]` via MeType below) yields a retained handle to the SAME controller. `$create`
+        // returns the raw entity it builds; its return goes through the memberwise-synthesis path (not
+        // this ResolveType call), so no explicit carve-out is needed here.
         TypeSymbol? returnType = routine.ReturnType != null
             ? _typeResolver.ResolveType(typeExpr: routine.ReturnType)
             : null;
@@ -368,6 +365,20 @@ internal sealed class SignatureResolver
                     if (resolvedRecv is not ErrorTypeInfo) meType = resolvedRecv;
                 }
             }
+        }
+
+        // SF slice 2: `me` of a USER entity member routine is the `Roamed[E]` handle (not bare `E`), so
+        // `me.field` routes through the Roamed access machinery and `return me` type-matches the now
+        // `Roamed[E]` return. Creators ($create/$create!) keep bare `me` — they build the raw entity
+        // before any controller exists. A specialized `meType` (generic receiver) takes precedence.
+        if (sfUserEntity && meType == null
+            && pending.Kind == RoutineKind.MemberRoutine
+            && pending.RoutineName is not ("$create" or "$create!")
+            && refreshedOwnerType is EntityTypeInfo ownerEntity
+            && _sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is { } roamedOwnerDef)
+        {
+            meType = _sa._registry.GetOrCreateResolution(
+                genericDef: roamedOwnerDef, typeArguments: [ownerEntity]);
         }
 
         _sa._currentRoutine = prevRoutine;
@@ -920,32 +931,6 @@ internal sealed class SignatureResolver
     }
 
     #endregion
-
-    /// <summary>
-    /// Suflae representation unification: a bare entity type in an SF routine SIGNATURE is a
-    /// <c>Roamed[E]</c> biased-RC handle, exactly as <see cref="TypeBodyResolver"/> already does for SF
-    /// entity FIELDS. Applying it to parameter and return types too makes the entity representation
-    /// uniform across the pipeline (field / local / param / return), so the Roamed RC + access
-    /// machinery applies everywhere and the interim <c>raw_inner</c> projections in
-    /// <c>SuflaeEntityLoweringPass</c> become unnecessary. A non-SF build, or a non-entity type, is
-    /// returned unchanged. Mirrors the field rules: bare <c>E</c> → non-null <c>Roamed[E]</c>;
-    /// <c>Maybe[E]</c> (from <c>E?</c>) → nullable <c>Roamed[E]</c>.
-    /// </summary>
-    private TypeSymbol MaybeRoamSuflaeEntity(TypeSymbol type)
-    {
-        if (_sa._registry.Language != Language.Suflae) return type;
-        if (_sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is not { } roamedDef)
-            return type;
-
-        return type switch
-        {
-            EntityTypeInfo entity =>
-                _sa._registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [entity]),
-            RecordTypeInfo { GenericDefinition.Name: "Maybe", TypeArguments: [EntityTypeInfo innerEntity] } =>
-                _sa._registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [innerEntity]),
-            _ => type
-        };
-    }
 
     // Static helpers
 

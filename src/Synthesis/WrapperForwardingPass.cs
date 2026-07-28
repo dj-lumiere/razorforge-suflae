@@ -207,6 +207,20 @@ internal sealed class WrapperForwardingPass
             return null;
         }
 
+        // Representation-unified Suflae entity method: its `me` is ALREADY `Roamed[E]` (SignatureResolver
+        // sets MeType), so the "bare" method IS the Roamed method — it does its own lock_enter + project
+        // through RoamController.data. Wrapping it in the projecting forwarder below would project the
+        // controller to the entity and hand a BARE entity to a method that projects AGAIN → double
+        // projection → the controller header is read as entity fields → crash. So resolve a `Roamed[E]`
+        // receiver call straight to the inner method (passing the Roamed handle as `me`), exactly as a
+        // receiver that was still bare at SA already does. No forwarder is registered.
+        if (GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roamed
+            && innerMethod.MeType is RecordTypeInfo { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed }
+                                  or WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Roamed })
+        {
+            return innerMethod;
+        }
+
         if (IsReadOnlyWrapper(type: wrapperType) && !innerMethod.IsReadOnly)
         {
             return null;

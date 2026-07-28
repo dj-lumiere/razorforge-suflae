@@ -30,6 +30,13 @@ internal sealed class SuflaeEntityLoweringPass
     // Per-routine scope: local name -> the Roamed[E] type it now carries. Reset per routine body.
     private readonly Dictionary<string, WrapperTypeInfo> _roamedLocals = new();
 
+    // Per-routine scope: names that are BORROWED Roamed handles (`me` + Roamed parameters). Returning
+    // one hands a fresh reference to the caller while the borrow itself is NOT released at scope exit
+    // (ScopeTeardownLoweringPass skips `me` and SF Roamed params), so the return must RETAIN — otherwise
+    // the caller's binding and the original owner both release the same controller (double free). An
+    // owned local returned by move is NOT in this set, so it is correctly left alone.
+    private readonly HashSet<string> _borrowNames = new();
+
     public SuflaeEntityLoweringPass(TypeRegistry registry)
     {
         _registry = registry;
@@ -69,6 +76,12 @@ internal sealed class SuflaeEntityLoweringPass
     private RoutineDeclaration LowerRoutine(RoutineDeclaration r)
     {
         _roamedLocals.Clear();
+        _borrowNames.Clear();
+        _borrowNames.Add(item: "me");
+        foreach (Parameter p in r.Parameters)
+            if (p.Type?.ResolvedType is WrapperTypeInfo { Name: RuntimeContract.Roamed }
+                or RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed })
+                _borrowNames.Add(item: p.Name);
         Statement newBody = LowerStatement(r.Body);
         return ReferenceEquals(newBody, r.Body) ? r : r with { Body = newBody };
     }
@@ -119,6 +132,14 @@ internal sealed class SuflaeEntityLoweringPass
             case ReturnStatement { Value: not null } ret:
             {
                 Expression v = LowerExpression(ret.Value);
+                // Returning a BORROW (`me` / a Roamed param) or a Roamed FIELD read hands a fresh
+                // reference to the caller; retain so the caller owns its own count. The borrow itself is
+                // not released at scope exit (teardown skips `me` + SF Roamed params), so without the
+                // retain the caller's binding and the original owner both release one shared count →
+                // double free. An owned local returned by MOVE is not a borrow and is left as-is.
+                if ((v is IdentifierExpression rid && _borrowNames.Contains(item: rid.Name))
+                    || v is MemberExpression)
+                    v = MaybeRoamCopy(v);
                 return ReferenceEquals(v, ret.Value) ? stmt : ret with { Value = v };
             }
 
@@ -289,22 +310,10 @@ internal sealed class SuflaeEntityLoweringPass
                     lowered = ProjectRoamedArgsIntoBareParams(call: lowered, routine: argRoutine);
                 }
 
-                // Method call whose receiver became `Roamed[E]`: SA baked the bare-entity method with the
-                // Roamed handle as `me` (so `me.field` reads the RoamController). INTERIM FIX (LOCAL-only,
-                // lock-SKIPPING): project the receiver via `.raw_inner()` so the bare method gets the real
-                // entity. The proper fix is the Roamed[E] forwarder (lock_enter+project+call), which is
-                // SA-synthesized — replace this once method calls resolve against Roamed[E] in SA.
-                if (callee is MemberExpression meCall
-                    && meCall.Object.ResolvedType is WrapperTypeInfo { Name: RuntimeContract.Roamed } roamedRecv
-                    && lowered.ResolvedRoutine is { OwnerType: EntityTypeInfo })
-                {
-                    var rawInner = new CallExpression(
-                        Callee: new MemberExpression(Object: meCall.Object, PropertyName: "raw_inner",
-                            Location: meCall.Location) { ResolvedType = roamedRecv.InnerType },
-                        Arguments: new List<Expression>(),
-                        Location: meCall.Location) { ResolvedType = roamedRecv.InnerType };
-                    return lowered with { Callee = meCall with { Object = rawInner } };
-                }
+                // (The interim receiver `.raw_inner()` projection was removed with representation
+                // unification: an SF entity method's `me` now resolves as `Roamed[E]` — SignatureResolver
+                // sets MeType — so the call passes the Roamed handle directly and `me.field` routes through
+                // the Roamed access machinery. No projection needed.)
 
                 return call.ResolvedType is EntityTypeInfo callEntity
                     ? WrapInRoam(inner: lowered, entity: callEntity)
@@ -442,9 +451,12 @@ internal sealed class SuflaeEntityLoweringPass
     // construct `E(...).roam()`, a call) are already owned and are left alone.
     private Expression MaybeRoamCopy(Expression expr)
     {
-        if (expr is (IdentifierExpression or MemberExpression)
-            && expr.ResolvedType is WrapperTypeInfo { Name: RuntimeContract.Roamed } roamed)
+        // Accept BOTH Roamed representations: WrapperTypeInfo (from this pass's WrapInRoam) and
+        // RecordTypeInfo (from the resolver's GetOrCreateResolution — e.g. `me`/params/fields typed via
+        // MeType / TypeBodyResolver). The `.roam()` copy verb retains the shared controller either way.
+        if (expr is (IdentifierExpression or MemberExpression) && IsRoamedType(expr.ResolvedType))
         {
+            TypeInfo roamed = expr.ResolvedType!;
             return new CallExpression(
                 Callee: new MemberExpression(Object: expr, PropertyName: RuntimeContract.RefCount.Roam,
                     Location: expr.Location) { ResolvedType = roamed },

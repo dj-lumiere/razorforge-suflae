@@ -256,36 +256,17 @@ internal sealed class TypeBodyResolver
                     ? _typeResolver.ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
-                // Suflae: an entity-typed field becomes a `Roamed[E]` biased-RC handle (like SF locals),
-                // so it stores a refcounted handle and the existing Roamed-field machinery applies (retain
-                // on construct/assign, lock-wrapped access, release on teardown, cycle collection). RF keeps
-                // bare single-owner entity fields.
-                bool fieldNullable = false;
-                if (_sa._registry.Language == TypeModel.Enums.Language.Suflae
-                    && _sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is
-                        { } roamedDef)
-                {
-                    // A bare entity field `x: E` is a NON-NULL `Roamed[E]` (always points to an entity).
-                    // Use the actual `Roamed` RECORD instantiation (RecordTypeInfo), not a WrapperTypeInfo,
-                    // so it matches RF `Roamed[T]` fields and all the Roamed-field codegen fires.
-                    if (memberVariableType is EntityTypeInfo fieldEntity)
-                    {
-                        memberVariableType = _sa._registry.GetOrCreateResolution(
-                            genericDef: roamedDef, typeArguments: [fieldEntity]);
-                    }
-                    // An OPTIONAL entity field `x: E?` (= `Maybe[E]`) becomes a NULLABLE `Roamed[E]`, NOT
-                    // `Maybe[Roamed[E]]`: an entity reference represents "none" as a null Roamed handle
-                    // (roamed_none = nullptr), so no Maybe wrapper is needed — the field is a bare Roamed
-                    // that traces / RCs / frees naturally, `none` = null. `x: E` (bare) is the same
-                    // `Roamed[E]` with a non-null invariant. (Value types still use `Maybe[T]` for `T?`.)
-                    else if (memberVariableType is RecordTypeInfo
-                                 { GenericDefinition.Name: "Maybe", TypeArguments: [EntityTypeInfo innerEntity] })
-                    {
-                        memberVariableType = _sa._registry.GetOrCreateResolution(
-                            genericDef: roamedDef, typeArguments: [innerEntity]);
-                        fieldNullable = true;
-                    }
-                }
+                // Suflae: an entity-typed field is a `Roamed[E]` biased-RC handle. The substitution now
+                // happens at the single ResolveType choke point (TypeResolver.RoamSuflaeEntitySlot), so
+                // memberVariableType is ALREADY `Roamed[E]` here (bare `x: E`) or a nullable `Roamed[E]`
+                // (`x: E?` — the choke point collapses `Maybe[E]` to a bare nullable Roamed, since an
+                // entity reference carries its own none via a null handle). We only still record
+                // NULLABILITY as a flow fact: it is no longer visible in the resolved type, so detect it
+                // from the AST — the field was written `E?`, which desugars to a `Maybe[...]` type expr.
+                bool fieldNullable = _sa._registry.Language == TypeModel.Enums.Language.Suflae
+                    && memberVariable.Type is { Name: "Maybe" }
+                    && memberVariableType is RecordTypeInfo
+                        { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed };
 
                 var memberVariableInfo =
                     new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)

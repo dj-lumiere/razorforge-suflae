@@ -111,9 +111,46 @@ internal sealed class TypeResolver
         }
 
         TypeSymbol resolved = ResolveTypeCore(typeExpr: typeExpr);
+        resolved = RoamSuflaeEntitySlot(resolved: resolved);
         typeExpr.ResolvedType = resolved;
         return resolved;
     }
+
+    /// <summary>
+    /// Suflae representation unification, centralized: in a Suflae USER file an <c>entity E</c> is a
+    /// <c>Roamed[E]</c> biased-RC handle, so any entity type resolved through <see cref="ResolveType"/>
+    /// (fields, parameters, returns, local annotations, container element types — every slot) is
+    /// substituted to <c>Roamed[E]</c> at this single choke point instead of per-site gates.
+    /// <para>Carve-outs: the stdlib is excluded (borrowed RazorForge source keeps bare single-owner
+    /// entities); an already-<c>Roamed[...]</c> type is idempotent (no <c>Roamed[Roamed[E]]</c>); and
+    /// <c>Maybe[E]</c> / <c>Maybe[Roamed[E]]</c> (from the <c>E?</c> desugaring) COLLAPSES to a nullable
+    /// bare <c>Roamed[E]</c> — an entity reference carries its own none via a null handle, so it needs no
+    /// <c>Maybe</c> wrapper (value types still use <c>Maybe[T]</c> for <c>T?</c>).</para>
+    /// </summary>
+    private TypeSymbol RoamSuflaeEntitySlot(TypeSymbol resolved)
+    {
+        if (_sa._registry.Language != Language.Suflae) return resolved;
+        if (_sa.IsStdlibFile(filePath: _sa._currentFilePath)) return resolved;
+        if (IsRoamed(type: resolved)) return resolved;
+        if (_sa._registry.LookupType(name: RuntimeContract.Roamed) is not { } roamedDef) return resolved;
+
+        switch (resolved)
+        {
+            case EntityTypeInfo entity:
+                return _sa._registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [entity]);
+            case RecordTypeInfo { GenericDefinition.Name: MaybeTypeName, TypeArguments: [EntityTypeInfo innerEntity] }:
+                return _sa._registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [innerEntity]);
+            case RecordTypeInfo { GenericDefinition.Name: MaybeTypeName, TypeArguments: [{ } innerRoamed] }
+                when IsRoamed(type: innerRoamed):
+                return innerRoamed;
+            default:
+                return resolved;
+        }
+    }
+
+    private static bool IsRoamed(TypeSymbol type) =>
+        type is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed }
+             or WrapperTypeInfo { Name: RuntimeContract.Roamed };
 
     private TypeSymbol ResolveTypeCore(TypeExpression typeExpr) // NOSONAR S3776
     {
