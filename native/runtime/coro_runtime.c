@@ -635,6 +635,16 @@ void rf_coro_delete(rf_coro* coro)
     if (coro == NULL) {
         return;
     }
+    /* TEMP DIAGNOSTIC: mark DEAD BEFORE releasing the stack so a worker that resumes this coro mid-free
+     * (the race we are hunting) reads DEAD at the magic check instead of a not-yet-DEAD struct whose
+     * stack is already munmap'd. Also flag the race from the FREE side if a worker is resuming right now. */
+    if (atomic_load(&coro->resuming)) {
+        fprintf(stderr,
+                "\n### RF DIAG: rf_coro_delete of coro %p WHILE a worker is RESUMING it (status=%d sched=%d) = FREE/RESUME RACE ###\n",
+                (void*)coro, (int)coro->status, (int)atomic_load(&coro->sched_state));
+        fflush(stderr);
+    }
+    coro->magic = RF_CORO_DEAD;
 #if defined(_WIN32)
     if (coro->fiber != NULL) {
         DeleteFiber(coro->fiber); /* frees the Windows-managed fiber stack */
@@ -647,7 +657,6 @@ void rf_coro_delete(rf_coro* coro)
     }
 #endif
     __rf_stack_coro_destroy(coro->shadow_stack); /* free the migrating call-chain stack */
-    coro->magic = RF_CORO_DEAD; /* TEMP DIAGNOSTIC: a later resume of this freed block is caught below */
     free(coro);
 }
 
