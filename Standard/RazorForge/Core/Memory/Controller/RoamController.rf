@@ -225,6 +225,37 @@ dangerous routine RoamController[T].promote()
   me.holder_task.store(desired: 0_u64)
   me.depth = 0_u64
   me.escaped.store(desired: 1_u8)
+  # Escape is a GRAPH property, not a per-object one: everything reachable through this object's lock is
+  # reachable by the other task too, so it must escape as well. A one-object flip would leave a LOCAL
+  # child (non-atomic count, no lock) that both the owner and the crossing task then touch — a data race.
+  # So walk the `Roamed` children through the per-type trace hook and promote each. The escaped-check at
+  # the top prunes already-escaped nodes, so cyclic graphs terminate and repeated promotion is amortized.
+  me.promote_reachable()
+  return
+
+### Promotes every `Roamed` child of this controller (transitively, via `promote`). Children are viewed
+### through `RoamController[T]` purely for the fields `promote` touches — `escaped` / `holder_task` /
+### `depth` / `trace_hook` / `data` all sit at a T-INDEPENDENT offset — so reusing `T` on a child of a
+### different type is a sound reinterpretation (no `RoamErased` needed). A type with no `Roamed` fields
+### (`trace_hook` = `cptr_none()`) cannot own an edge and is skipped.
+dangerous routine RoamController[T].promote_reachable()
+  if me.trace_hook.is_none()
+    return
+  # Snapshot THIS node's child controllers before recursing — tracing fills a shared native scratch that
+  # a nested promote would clobber (same discipline as the collector's `cc_children`).
+  var kids = List[Address]()
+  rf_cc_scratch_reset()
+  rf_cc_trace_into_scratch(trace_hook: me.trace_hook.get_address(), controller: me.data.get_address())
+  var n = rf_cc_scratch_count()
+  var i = 0_u64
+  while i < n
+    kids.add_last(value: rf_cc_scratch_at(i: i))
+    i = i + 1_u64
+  var j = 0_u64
+  while j < kids.count()
+    var child = Hijacked[RoamController[T]](kids.get_raw(index: j)).as_entity()
+    child.promote()
+    j = j + 1_u64
   return
 
 ### Whether this object has escaped. Drives `Roamed`'s access-lock wrapping.
