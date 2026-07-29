@@ -32,20 +32,6 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
     // as its own declaration. Null means "no scoping" (compiler-synthesized variant bodies).
     private Dictionary<string, PresetDeclaration>? _ownPresets;
 
-    // When true, ONLY file-private secret presets are inlined; public presets are left as identifiers
-    // for later resolution. Used by the stdlib-validation verb, whose reduced SA resolves public presets
-    // (via the registry, keeping their declared type) but cannot see secret presets (kept out of the
-    // registry) — so only the latter need inlining there.
-    private bool _secretOnly;
-
-    /// <summary>Inlines ONLY secret presets over <paramref name="program"/> (leaves public presets).</summary>
-    public void RunSecretOnly(Program program)
-    {
-        _secretOnly = true;
-        Run(program: program);
-        _secretOnly = false;
-    }
-
     /// <summary>Every <c>preset</c> declared in the current file, keyed by name (public or secret).</summary>
     private static Dictionary<string, PresetDeclaration> CollectOwnPresets(Program program)
     {
@@ -282,27 +268,19 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
         // -----------------------------------------------------------------------------
         if (expr is IdentifierExpression id)
         {
-            // Own-file SECRET preset: it is kept out of the global registry (file-private), so inline it
-            // directly from this file's declaration. (Public own-file presets fall through to the shared
-            // registry path below, which carries the seeded ResolvedType metadata.)
-            if (_ownPresets is not null
-                && _ownPresets.TryGetValue(key: id.Name, value: out PresetDeclaration? ownDecl)
-                && ownDecl.IsSecret)
+            VariableInfo? v = ctx.Registry.LookupVariable(id.Name);
+
+            // A `secret preset` is file-private: only inline it inside the file that declares it. A
+            // cross-file reference is left un-inlined — since it stays a bare identifier that resolves
+            // to a preset, the backend-entry validator flags it (RF-S958), so a secret constant cannot
+            // silently be used from another file. Public presets always inline.
+            if (v is { IsPreset: true, IsSecret: true }
+                && _ownPresets is not null
+                && !_ownPresets.ContainsKey(key: id.Name))
             {
-                // Aggregate (Array[T,N]) secret presets would need a `@preset.*` global (registry-backed);
-                // none exist in practice, so leave the identifier for the backend validator to flag.
-                if (ownDecl.Value is ListLiteralExpression)
-                    return expr;
-                TypeInfo? rt = id.ResolvedType ?? ownDecl.Value.ResolvedType;
-                return ownDecl.Value is LiteralExpression secretLit
-                    ? secretLit with { ResolvedType = rt }
-                    : ownDecl.Value;
+                return expr;
             }
 
-            if (_secretOnly)
-                return expr;
-
-            VariableInfo? v = ctx.Registry.LookupVariable(id.Name);
             if (v is { IsPreset: true, PresetValue: not null })
             {
                 // Aggregate (Array[T,N]) presets are NOT inlined: substituting the whole list

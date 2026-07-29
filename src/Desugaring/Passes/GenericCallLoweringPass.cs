@@ -500,7 +500,12 @@ internal sealed class GenericCallLoweringPass
         // e.g., Maybe[S64](present: true, value: x) -> SA resolved $create and set ResolvedRoutine.
         // Also handles standalone generic free routines and LLVM intrinsic free functions where
         // Object.Name == MethodName but there is no constructable type.
-        if (gmc.Object is IdentifierExpression id && id.Name == gmc.MethodName)
+        // A failable generic construction `Type![Args](args)` parses with MethodName == "Type!"; treat
+        // it like the construction case (same as `Type[Args](args)`) so its arguments are passed
+        // straight to the resolved `$create!` instead of being mis-lowered into a member call whose
+        // receiver (the type name) becomes a null first argument.
+        if (gmc.Object is IdentifierExpression id &&
+            (id.Name == gmc.MethodName || gmc.MethodName == id.Name + "!"))
         {
             bool isTypeConstruction = gmc.ConstructedType != null ||
                                       gmc.LoweringKind is CallLoweringKind.TypeConstructor
@@ -508,8 +513,10 @@ internal sealed class GenericCallLoweringPass
                                           or CallLoweringKind.ValueConversion
                                           or CallLoweringKind.CollectionConstruction;
             return new CallExpression(
+                // Callee is the type name (without the failable `!`); codegen constructs via
+                // ConstructedType/ResolvedRoutine, so the name only identifies the type.
                 Callee: new IdentifierExpression(
-                    Name: isTypeConstruction ? gmc.MethodName : gmc.ResolvedRoutine.Name,
+                    Name: isTypeConstruction ? id.Name : gmc.ResolvedRoutine.Name,
                     Location: gmc.Location),
                 Arguments: loweredArgs,
                 Location: gmc.Location)

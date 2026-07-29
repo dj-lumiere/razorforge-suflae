@@ -1637,6 +1637,12 @@ public sealed partial class TypeRegistry
             Lifecycle armLc = GetLifecycle(type: member.Type);
             if (!armLc.IsBorrow && armLc.Destroy is not null)
                 return true;
+            // An ENTITY arm is a heap reference with a destructor and double-frees on bitwise alias,
+            // even when its (generic-instance) destructor isn't materialized yet at this phase — so
+            // GetLifecycle reports a null Destroy. Recognize it directly by kind (mirrors the copy
+            // body in WiredRoutinePass.BuildVariantCopyBody, which copies every non-borrow arm).
+            if (member.Type is EntityTypeInfo)
+                return true;
         }
         return false;
     }

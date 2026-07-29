@@ -310,6 +310,27 @@ public sealed partial class SemanticVerifier
                         creatorPosIdx++;
                     }
 
+                    // Type-arg inference for a bare failable variant arm extractor: `Dict!(from: sv)`
+                    // where `Dict` is a generic definition and the single argument is a variant — adopt
+                    // the type args of the variant's arm whose generic base is `Dict`.
+                    if (callableType.IsGenericDefinition && isFailableCall &&
+                        creatorArgTypes is [VariantTypeInfo argVariant])
+                    {
+                        string baseName = callableType.Name;
+                        VariantMemberInfo? matchArm = argVariant.Members.FirstOrDefault(predicate: m =>
+                            !m.IsNone && m.Type is not null &&
+                            ((m.Type switch
+                            {
+                                EntityTypeInfo e => e.GenericDefinition?.Name,
+                                RecordTypeInfo r => r.GenericDefinition?.Name,
+                                _ => null
+                            }) ?? m.Type.Name) == baseName);
+                        if (matchArm?.Type is { } inferredArmType)
+                        {
+                            callableType = inferredArmType;
+                        }
+                    }
+
                     RoutineInfo? creator = _registry.LookupMethodOverload(type: callableType,
                         methodName: "$create",
                         argTypes: creatorArgTypes);
@@ -320,9 +341,19 @@ public sealed partial class SemanticVerifier
                     if (creator != null && creator.Parameters.Count == creatorArgTypes.Count &&
                         !creator.Parameters.Any(predicate: p => p.IsVariadicParam))
                     {
+                        // An auto-generated variant arm EXTRACTOR `Arm.$create!(from: V)` is synthesized
+                        // but has a real pattern-matching body — it is NOT a memberwise field-init, and
+                        // for a scalar arm (S32) `ClassifyConstruction` would tag it a value conversion,
+                        // making codegen bit-reinterpret the variant. Treat it as a normal method call and
+                        // route it through ResolvedRoutine below.
+                        bool isVariantArmExtractor = creator is
+                            { Name: "$create", IsFailable: true, Parameters: [{ Type: VariantTypeInfo }] };
+
                         call.ConstructedType = callableType;
-                        call.LoweringKind = ClassifyConstruction(type: callableType,
-                            isCollectionLiteral: call.IsCollectionLiteral);
+                        call.LoweringKind = isVariantArmExtractor
+                            ? ClassifyMethodCall(method: creator)
+                            : ClassifyConstruction(type: callableType,
+                                isCollectionLiteral: call.IsCollectionLiteral);
 
                         // `Type(...)` written *inside* Type's own `$create` only needs the
                         // inline base case when it resolves back to the SAME `$create` we are
@@ -345,7 +376,7 @@ public sealed partial class SemanticVerifier
                         // match the fields only by name but differ by type (e.g.
                         // `Resource.$create(tag: S32)` over field `tag: S64`) is the real
                         // constructor and is selected by arg type via LookupMethodOverload above.
-                        if (!insideOwnCreate && !creator.IsSynthesized)
+                        if (!insideOwnCreate && (!creator.IsSynthesized || isVariantArmExtractor))
                         {
                             call.ResolvedRoutine = creator;
 
@@ -1273,6 +1304,30 @@ public sealed partial class SemanticVerifier
                     : propName;
 
                 TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
+
+                // Type-arg inference for a method-chain variant arm extractor: `sv.Dict!()` where `Dict`
+                // is a generic definition and the receiver is a variant — adopt the type arguments of the
+                // variant's arm whose generic base is `Dict` (mirrors the construction-form inference), so
+                // the concrete `Dict[Text, SerialValue].$create!(from: sv)` is found instead of the def's
+                // bare `Dict.$create()` (which trips RF-S770 with 0 params).
+                if (targetType is { IsGenericDefinition: true } && isFailable &&
+                    objectType is VariantTypeInfo mcVariant)
+                {
+                    string mcBase = targetType.Name;
+                    VariantMemberInfo? mcArm = mcVariant.Members.FirstOrDefault(predicate: m =>
+                        !m.IsNone && m.Type is not null &&
+                        ((m.Type switch
+                        {
+                            EntityTypeInfo e => e.GenericDefinition?.Name,
+                            RecordTypeInfo r => r.GenericDefinition?.Name,
+                            _ => null
+                        }) ?? m.Type.Name) == mcBase);
+                    if (mcArm?.Type is { } mcArmType)
+                    {
+                        targetType = mcArmType;
+                    }
+                }
+
                 if (targetType != null)
                 {
                     // Look up the creator on the target type, using method-overload resolution

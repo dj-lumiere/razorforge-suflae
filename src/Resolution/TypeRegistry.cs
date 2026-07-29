@@ -1763,15 +1763,6 @@ public sealed partial class TypeRegistry
             PresetValue = value
         };
 
-        // A `secret preset` is file-private: it must NOT be globally resolvable, so it is kept out of
-        // `_presets` (which every `LookupVariable` consults). Its own file inlines it directly from the
-        // AST in PresetInliningPass; any other file that names the same identifier resolves its own
-        // declaration instead of this hidden constant. Public presets stay in the global prelude.
-        if (isSecret)
-        {
-            return;
-        }
-
         _presets[key: name] = variable;
 
         // Index by module-qualified name for unambiguous lookup

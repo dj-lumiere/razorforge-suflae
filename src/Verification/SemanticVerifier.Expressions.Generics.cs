@@ -36,11 +36,16 @@ public sealed partial class SemanticVerifier
             generic.LoweringKind = CallLoweringKind.CollectionConstruction;
 
         // Check if this is a generic type constructor call (e.g., Hijacked[U8](addr))
-        // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args)
+        // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args).
+        // A FAILABLE construction `Type![Args](args)` parses with MethodName == "Type!" (the parser puts the
+        // `!` before `[`) — recognize it here and route to the type's failable `$create` overload (e.g. the
+        // auto-generated variant arm extractor `Dict[Text, SerialValue].$create!(from: sv)`).
+        bool isFailableCtor = generic.Object is IdentifierExpression fctorId &&
+                              generic.MethodName == fctorId.Name + "!";
         if (generic.Object is IdentifierExpression typeId && objectType is TypeInfo
             {
                 IsGenericDefinition: true
-            } typeInfo && typeId.Name == generic.MethodName)
+            } typeInfo && (typeId.Name == generic.MethodName || isFailableCtor))
         {
             // Resolve the generic type with the provided type arguments
             TypeInfo resolvedType = _registry.GetOrCreateResolution(genericDef: typeInfo,

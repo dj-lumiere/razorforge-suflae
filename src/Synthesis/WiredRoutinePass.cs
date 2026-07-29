@@ -76,6 +76,16 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             if (ctx.RoutineBodies.ContainsKey(key: routine.RegistryKey)) continue;
             if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
 
+            // Auto-generated variant arm constructors (handled before the by-NAME explicit-impl skip
+            // below): an extractor `Arm.$create(from: V)` shares the name `$create` with the arm type's
+            // other constructors, so a name-only skip would wrongly drop it. This hook is overload-precise
+            // (owner/param must be in an arm relationship), so it is safe to run first.
+            if (TryBuildVariantArmConstructorBody(routine: routine, body: out Statement? armCtorBody))
+            {
+                ctx.VariantBodies[key: routine.RegistryKey] = armCtorBody;
+                continue;
+            }
+
             // Skip if an explicit (non-synthesized) implementation already exists in the registry.
             // This prevents synthesized bodies from overriding custom stdlib implementations
             // such as Watched[T,P].$represent / $diagnose defined in Watched.rf.
@@ -388,6 +398,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             case "copy":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: record);
                 return;
+            case "serialize" when !record.IsGenericDefinition:
+                // Synthesize BEFORE the opaque-backend skip: @llvm scalar leaves (S8..U64, F32/F64, Bool,
+                // Moment, Bytes, Text) serialize by boxing themselves into their SerialValue arm
+                // (BuildSerializeBody detects the scalar arm). Composite records field-walk there too.
+                ReturnStatement? recSer = BuildSerializeBody(owner: record,
+                    fields: record.MemberVariables, textType: textType);
+                if (recSer != null) ctx.VariantBodies[key: routine.RegistryKey] = recSer;
+                return;
         }
 
         if (record.HasDirectBackendType) return;
@@ -423,10 +441,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             case "serialize":
             {
-                if (record.IsGenericDefinition) break;
-                ReturnStatement? serBody = BuildSerializeBody(owner: record,
-                    fields: record.MemberVariables, textType: textType);
-                if (serBody != null) ctx.VariantBodies[key: routine.RegistryKey] = serBody;
+                // Handled before the opaque-backend skip (see the switch above) so @llvm scalar leaves
+                // get a boxing body; composite records are covered there as well. Nothing to do here.
                 break;
             }
 
@@ -1267,6 +1283,21 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         TypeInfo textType)
     {
         if (ctx.Registry.LookupType(name: "SerialValue") is not VariantTypeInfo serialValue) return null;
+
+        // Scalar leaf types (S8..U64, F32/F64, Bool, Moment, Bytes, Text) serialize by boxing THEMSELVES
+        // into their own SerialValue arm — not a field walk. This makes `x.serialize()` uniform for every
+        // serializable type, so collection `serialize()` can call it per element.
+        VariantMemberInfo? ownArm = FindScalarArm(serialValue: serialValue, fieldType: owner);
+        if (ownArm?.Type != null)
+        {
+            var meScalar = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                { ResolvedType = owner };
+            var boxedScalar = new CreatorExpression(TypeName: serialValue.Name, TypeArguments: null,
+                MemberVariables: [(ownArm.Type.Name, meScalar)], Location: _synthLoc)
+                { ResolvedType = serialValue, ConstructedType = serialValue };
+            return new ReturnStatement(Value: boxedScalar, Location: _synthLoc);
+        }
+
         // The Dict[Text, SerialValue] arm is the only 2-type-argument member; use its resolved Type
         // (and Name) directly so the DictLiteral type and the boxing arm are the exact same resolution.
         VariantMemberInfo? dictArm = serialValue.Members.FirstOrDefault(predicate: m =>
@@ -1345,7 +1376,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     private bool TypeHasSerialize(TypeInfo type) =>
-        ctx.Registry.GetMethodsForType(type: type).Any(predicate: m => m.Name == "serialize");
+        // LookupMethod resolves through the generic definition, so a concrete instance like
+        // `List[S32]` sees the generic `List[T].serialize` (GetMethodsForType only lists the instance's
+        // own already-materialized methods, which misses it during field-value synthesis).
+        ctx.Registry.LookupMethod(type: type, methodName: "serialize") is not null
+        || ctx.Registry.GetMethodsForType(type: type).Any(predicate: m => m.Name == "serialize");
 
     //  $represent / $diagnose (choice)
 
@@ -2563,6 +2598,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Skip generic definitions -> no concrete member types to dispatch on.
         if (variant.IsGenericDefinition) return;
 
+        // Synthesize the per-arm EXTRACTORS (`Arm.$create!(from: V)`) here. They are owned by the arm
+        // type; for a GENERIC-instance arm (e.g. `Dict[Text, SerialValue]`) the main synthesis loop's
+        // `GetAllRoutines` liveness filter (IsConcreteTypeLive) excludes the arm-owned routine at this
+        // phase, so its body would never be built. We hold the arm list here, so build them directly
+        // (idempotent — guarded by ContainsKey). The BOX direction is owned by the concrete variant and
+        // is synthesized by the main-loop hook as usual.
+        SynthesizeVariantArmExtractors(variant: variant);
+
         switch (routine.Name)
         {
             case RepresentMethodName:
@@ -2605,8 +2648,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             Compiler.Resolution.TypeRegistry.Lifecycle armLc =
                 ctx.Registry.GetLifecycle(type: member.Type);
-            if (armLc.IsBorrow || armLc.Destroy is null)
-                continue; // scalar / void arm — bitwise copy via the else branch is sound.
+            if (armLc.IsBorrow)
+                continue; // borrow-tier arm — cannot copy; the else branch bitwise-forwards it.
+            // NOTE: do NOT skip on `armLc.Destroy is null`. A generic ENTITY-instance arm
+            // (Dict[Text, SerialValue], List[SerialValue]) reports a null destructor here because
+            // its instance methods aren't materialized at Phase-4 synthesis time — yet it is a heap
+            // reference that DOUBLE-FREES if bitwise-aliased. Emit `arm.copy()` for every non-borrow
+            // arm (identity for scalars, deep for heap arms); only None arms fall to the else branch.
 
             var typeExpr = new TypeExpression(Name: member.Type.Name, GenericArguments: null,
                 Location: _synthLoc) { ResolvedType = member.Type };
@@ -2637,6 +2685,115 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
         return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
     }
+
+    /// <summary>
+    /// Synthesizes the body of an auto-generated variant arm constructor, if <paramref name="routine"/>
+    /// is one. Two shapes (both keyed off the arm/variant relationship, not the routine name text):
+    /// <list type="bullet">
+    ///   <item><c>V.$create(from: Arm) -> V</c> — box: <c>return &lt;V with the Arm-tagged payload&gt;</c>.</item>
+    ///   <item><c>Arm.$create!(from: V) -> Arm</c> — failable extract:
+    ///     <c>when from { is Arm as v => return v, else => absent }</c>.</item>
+    /// </list>
+    /// Only synthesized (auto) constructors are handled; a hand-written <c>$create</c> keeps its body.
+    /// </summary>
+    private bool TryBuildVariantArmConstructorBody(RoutineInfo routine, out Statement? body)
+    {
+        body = null;
+        if (!routine.IsSynthesized || routine.Kind != RoutineKind.Creator ||
+            routine.Parameters is not [{ Name: "from" } fromParam] || fromParam.Type is null)
+        {
+            return false;
+        }
+
+        // Box: owner is the variant, `from` is one of its arms.
+        if (routine.Name == "$create" && routine.OwnerType is VariantTypeInfo boxVariant &&
+            FindArmByType(variant: boxVariant, armType: fromParam.Type) is { Type: { } boxArmType })
+        {
+            var fromRef = new IdentifierExpression(Name: "from", Location: _synthLoc)
+                { ResolvedType = fromParam.Type };
+            var boxed = new CreatorExpression(TypeName: boxVariant.Name, TypeArguments: null,
+                MemberVariables: [(boxArmType.Name, fromRef)], Location: _synthLoc)
+                { ResolvedType = boxVariant, ConstructedType = boxVariant };
+            body = new ReturnStatement(Value: boxed, Location: _synthLoc);
+            return true;
+        }
+
+        // Failable extract: `from` is a variant, owner is one of its arms.
+        if (routine.Name == "$create" && routine.IsFailable &&
+            fromParam.Type is VariantTypeInfo fromVariant && routine.OwnerType is { } armOwner &&
+            FindArmByType(variant: fromVariant, armType: armOwner) is { Type: { } })
+        {
+            var fromRef = new IdentifierExpression(Name: "from", Location: _synthLoc)
+                { ResolvedType = fromVariant };
+            var typeExpr = new TypeExpression(Name: armOwner.Name, GenericArguments: null,
+                Location: _synthLoc) { ResolvedType = armOwner };
+            var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
+                { ResolvedType = armOwner };
+            // The pattern binding `v` is a VIEW into `from`'s payload. Returning it bare hands the
+            // caller an alias to the variant's heap payload; when the caller owns the result AND the
+            // source variant tears its payload down, the same heap is freed twice. Deep-copy the
+            // payload out so the extracted value is independent. `copy` is AlwaysLive for every type
+            // — identity for scalars, deep for heap arms (Dict/List/Text). We can't gate on
+            // GetLifecycle here because a generic-instance arm (Dict[..]/List[..]) reports a null
+            // destructor at synth time (not-yet-live), which is exactly the arm that MUST be copied.
+            Expression extracted = new CallExpression(
+                Callee: new MemberExpression(Object: vRef, PropertyName: "copy",
+                    Location: _synthLoc) { ResolvedType = armOwner },
+                Arguments: [], Location: _synthLoc) { ResolvedType = armOwner };
+            var matchClause = new WhenClause(
+                Pattern: new TypePattern(Type: typeExpr, VariableName: "v", Bindings: null,
+                    Location: _synthLoc),
+                Body: new ReturnStatement(Value: extracted, Location: _synthLoc),
+                Location: _synthLoc);
+            var elseClause = new WhenClause(
+                Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+                Body: new AbsentStatement(Location: _synthLoc),
+                Location: _synthLoc);
+            body = new WhenStatement(Expression: fromRef, Clauses: [matchClause, elseClause],
+                Location: _synthLoc);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Builds the failable extractor body <c>Arm.$create!(from: V)</c> for each non-None arm and stores
+    /// it under that routine's key, so a GENERIC-instance arm (excluded from the liveness-gated main
+    /// synthesis loop) still gets a body. Idempotent — skips arms whose extractor body already exists.
+    /// </summary>
+    private void SynthesizeVariantArmExtractors(VariantTypeInfo variant)
+    {
+        foreach (VariantMemberInfo arm in variant.Members)
+        {
+            if (arm.IsNone || arm.Type is null)
+            {
+                continue;
+            }
+
+            RoutineInfo? extractor = ctx.Registry.GetMethodsForType(type: arm.Type)
+                .FirstOrDefault(predicate: m =>
+                    m is { Name: "$create", IsFailable: true } &&
+                    m.Parameters is [{ Type: { } paramType }] &&
+                    paramType.FullName == variant.FullName);
+            if (extractor is null || ctx.VariantBodies.ContainsKey(key: extractor.RegistryKey))
+            {
+                continue;
+            }
+
+            if (TryBuildVariantArmConstructorBody(routine: extractor, body: out Statement? exBody) &&
+                exBody is not null)
+            {
+                ctx.VariantBodies[key: extractor.RegistryKey] = exBody;
+            }
+        }
+    }
+
+    /// <summary>Finds the variant arm whose payload type matches <paramref name="armType"/> by full name.</summary>
+    private static VariantMemberInfo? FindArmByType(VariantTypeInfo variant, TypeInfo armType) =>
+        variant.Members.FirstOrDefault(predicate: m =>
+            !m.IsNone && m.Type is not null &&
+            (m.Type.FullName == armType.FullName || m.Type.Name == armType.Name));
 
     /// <summary>
     /// Builds: <c>when me { is Blank => return "Blank", is T as v => return v.$represent(), ... }</c>.

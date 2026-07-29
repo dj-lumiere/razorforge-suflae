@@ -121,7 +121,10 @@ public sealed class BackendEntryValidator
     {
         if (node is IdentifierExpression identifier &&
             registry.LookupVariable(name: identifier.Name) is { IsPreset: true } presetVar &&
-            !presetVar.IsPresettableAggregate)
+            !presetVar.IsPresettableAggregate &&
+            // A name that ALSO resolves to a type is a constructor/type reference here, not a value use
+            // of the preset (a `secret preset X` in another file does not shadow a local `record X`).
+            registry.LookupType(name: identifier.Name) is null or ErrorTypeInfo)
         {
             // Aggregate (Array[T,N]) presets are intentionally NOT inlined — codegen lowers them to
             // a shared `@preset.*` constant global. Only scalar presets must be inlined before here.

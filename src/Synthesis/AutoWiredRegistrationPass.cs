@@ -454,6 +454,17 @@ internal sealed class AutoWiredRegistrationPass
                             returnType: type,
                             existingMethods: existingMethods);
                     }
+
+                    // Bidirectional per-arm constructors, auto-generated for every variant:
+                    //   V.$create(from: Arm)  -> V    — box a branch value into the variant.
+                    //   Arm.$create!(from: V) -> Arm  — failable extraction (absent when the active arm
+                    //                                   is not this one). The `from:` param type (not the
+                    //                                   arm name) carries the overload, so no RF-S770 clash
+                    //                                   with a same-named type (e.g. the `List` arm).
+                    if (!type.IsGenericDefinition && type is VariantTypeInfo variantForCtor)
+                    {
+                        RegisterVariantArmConstructors(variant: variantForCtor);
+                    }
                     break;
             }
         }
@@ -709,6 +720,66 @@ internal sealed class AutoWiredRegistrationPass
     /// <summary>
     /// Registers a failable wired routine if not already defined (for clone, $create!).
     /// </summary>
+    /// <summary>
+    /// Registers the two auto-generated constructors for each non-<c>None</c> arm of a variant:
+    /// <c>V.$create(from: Arm) -> V</c> (box) and <c>Arm.$create!(from: V) -> Arm</c> (failable extract).
+    /// Each is overloaded by the <c>from:</c> parameter type, so an arm type shared across variants gets a
+    /// distinct constructor per variant, and no arm-name/type-name collision (RF-S770) arises.
+    /// </summary>
+    private void RegisterVariantArmConstructors(VariantTypeInfo variant)
+    {
+        foreach (VariantMemberInfo arm in variant.Members)
+        {
+            if (arm.IsNone || arm.Type is null || arm.Type is ErrorTypeInfo)
+            {
+                continue;
+            }
+
+            TypeSymbol armType = arm.Type;
+
+            // V.$create(from: Arm) -> V
+            bool ctorExists = _registry.GetMethodsForType(type: variant).Any(predicate: m =>
+                m is { Name: CreateMethodName, Parameters.Count: 1 } &&
+                m.Parameters[index: 0].Type?.FullName == armType.FullName);
+            if (!ctorExists)
+            {
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                {
+                    Kind = RoutineKind.Creator,
+                    OwnerType = variant,
+                    Parameters = [new ParameterInfo(name: "from", type: armType)],
+                    ReturnType = variant,
+                    IsFailable = false,
+                    DeclaredMutation = MutationCategory.Readonly,
+                    MutationCategory = MutationCategory.Readonly,
+                    Visibility = VisibilityModifier.Open,
+                    IsSynthesized = true
+                });
+            }
+
+            // Arm.$create!(from: V) -> Arm  (name "$create" + IsFailable; a `.$create!(…)` call resolves
+            // against "$create" and the `from: V` param type disambiguates from numeric conversions).
+            bool extractExists = _registry.GetMethodsForType(type: armType).Any(predicate: m =>
+                m is { Name: CreateMethodName, Parameters.Count: 1, IsFailable: true } &&
+                m.Parameters[index: 0].Type?.FullName == variant.FullName);
+            if (!extractExists)
+            {
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                {
+                    Kind = RoutineKind.Creator,
+                    OwnerType = armType,
+                    Parameters = [new ParameterInfo(name: "from", type: variant)],
+                    ReturnType = armType,
+                    IsFailable = true,
+                    DeclaredMutation = MutationCategory.Readonly,
+                    MutationCategory = MutationCategory.Readonly,
+                    Visibility = VisibilityModifier.Open,
+                    IsSynthesized = true
+                });
+            }
+        }
+    }
+
     private void MaybeRegisterWiredFailable(TypeSymbol owner, string name, TypeSymbol returnType,
         List<RoutineInfo> existingMethods, (string name, TypeSymbol type)? param = null,
         RoutineKind kind = RoutineKind.MemberRoutine)

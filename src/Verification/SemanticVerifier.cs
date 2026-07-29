@@ -895,22 +895,6 @@ public sealed partial class SemanticVerifier
         // Uses AST-level detection — no full body analysis or expression lowering required.
         PreRegisterStdlibVariants();
 
-        // Inline presets in the stdlib programs before analyzing their bodies. The normal pipeline
-        // does this in DesugaringPipeline.RunGlobal (Phase 3) before SA; this validation verb runs a
-        // reduced phase set, so a file-private `secret preset` (kept out of the global registry) would
-        // otherwise read as an unknown identifier in its own file. Public presets inline the same way.
-        var presetCtx = new DesugaringContext(registry: _registry,
-            routineBodies: _routineBodies,
-            target: _target,
-            buildMode: _buildMode);
-        foreach ((Program program, _, _) in _registry.StdlibPrograms)
-        {
-            // Only secret presets need inlining here — public presets stay identifiers so the reduced SA
-            // resolves them via the registry with their DECLARED type (inlining them to bare literals
-            // would drop that type and break e.g. chained comparisons against a U32).
-            new Compiler.Desugaring.Passes.PresetInliningPass(ctx: presetCtx).RunSecretOnly(program: program);
-        }
-
         AnalyzeStdlibBodies();
 
         // Collect stdlib-specific errors
