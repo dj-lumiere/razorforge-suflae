@@ -447,6 +447,20 @@ needs T obeys Copyable
     i = i +% 1u64
   return steal result
 
+### Serializes this list to a `SerialValue.List`, serializing each element in order. Overrides the
+### default field-walk so a `List[T]` renders as a sequence of serialized elements, not its internal
+### buffer/count layout.
+### :returns: The `SerialValue.List` holding each element's serialized form.
+@[readonly, generated]
+routine List[T].serialize() -> SerialValue
+needs T obeys Serializable
+  var result = List[SerialValue]()
+  var i = 0u64
+  while i < me.count
+    result.add_last(value: me[i].serialize())
+    i = i +% 1u64
+  return SerialValue(steal result)
+
 ### Shortens the list to `new_count` elements by discarding elements past the new boundary.
 ### The backing allocation is not changed.
 ### :param new_count: The new element count; must be no greater than `count()`.

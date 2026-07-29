@@ -448,3 +448,13 @@ dangerous routine Deque[T].$destroy()
   me.data.invalidate()
   me.hijack().invalidate()
   return
+
+### Serializes this collection to a `SerialValue.List`, serializing each element.
+### :returns: The `SerialValue.List` of each element's serialized form.
+@[readonly, generated]
+routine Deque[T].serialize() -> SerialValue
+needs T obeys Serializable
+  var __sv = List[SerialValue]()
+  for __x in me
+    __sv.add_last(value: __x.serialize())
+  return SerialValue(steal __sv)

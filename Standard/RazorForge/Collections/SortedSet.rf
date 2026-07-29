@@ -1022,3 +1022,13 @@ routine SortedSet[T].$eq(other: Referring[SortedSet[T]]) -> Bool
       return false
     i = i +% 1u64
   return true
+
+### Serializes this collection to a `SerialValue.List`, serializing each element.
+### :returns: The `SerialValue.List` of each element's serialized form.
+@[readonly, generated]
+routine SortedSet[T].serialize() -> SerialValue
+needs T obeys Serializable
+  var __sv = List[SerialValue]()
+  for __x in me
+    __sv.add_last(value: __x.serialize())
+  return SerialValue(steal __sv)
