@@ -1,0 +1,55 @@
+module Tests/Stdlib/NestedSerializeApi
+import IO/Console
+import Collections
+
+# Nested `serialize() -> SerialValue` across record shapes. Regression cover for the entity-arm
+# double-free (0xC0000374): a SerialValue whose Dict/List arm holds a heap value used to be
+# bitwise-aliased (not deep-copied) in SerialValue.copy() / represent / arm extraction, so the
+# shared heap arm freed twice. Every arm is now deep-copied at the copy point.
+# Dict iteration is insertion-order deterministic, so serialized record output is stable.
+
+record Leaf
+  x: S32
+
+record Mid
+  a: Leaf
+  y: S32
+
+record Root
+  b: Mid
+  z: S32
+
+record Bag
+  items: List[S32]
+  tag: S32
+
+routine start()
+  # 1) Flat record → Dict with scalar arms.
+  var leaf = Leaf(x: 42s32)
+  show(f"leaf: {leaf.serialize()}")
+
+  # 2) Two-level nested (the original double-free repro).
+  var mid = Mid(a: Leaf(x: 69s32), y: 74s32)
+  show(f"mid: {mid.serialize()}")
+
+  # 3) Three-level nested, represented twice (second read must not corrupt).
+  var root = Root(b: Mid(a: Leaf(x: 1s32), y: 2s32), z: 3s32)
+  var tree = root.serialize()
+  show(f"tree: {tree}")
+  show(f"tree again: {tree}")
+
+  # 4) Arm extraction — all sugar forms extract the nested Dict without aliasing the source.
+  var mid_tree = root.b.serialize()
+  show(f"extract explicit: {Dict![Text, SerialValue](from: mid_tree)}")
+  show(f"extract positional: {Dict!(mid_tree)}")
+  show(f"extract chain: {mid_tree.Dict!()}")
+
+  # 5) Record with a List field → List[SerialValue] arm.
+  var lst = List[S32]()
+  lst.add_last(value: 10s32)
+  lst.add_last(value: 20s32)
+  var bag = Bag(items: steal lst, tag: 7s32)
+  show(f"bag: {bag.serialize()}")
+
+  show("DONE")
+  return
