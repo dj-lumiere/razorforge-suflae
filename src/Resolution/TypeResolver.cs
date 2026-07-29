@@ -43,34 +43,40 @@ internal sealed class TypeResolver
     /// </summary>
     internal TypeSymbol? LookupTypeWithImports(string name)
     {
-        // Try the registry's built-in lookup (exact match + Core fallback)
-        TypeSymbol? result = _sa._registry.LookupType(name: name);
-        if (result != null)
+        // Already-qualified names (and the resolution cache for generic instances) are handled
+        // directly by the registry — no module search needed.
+        if (name.Contains(value: '.'))
         {
-            return result;
+            return _sa._registry.LookupType(name: name);
         }
 
-        // Try each imported module
+        // MODULE-SCOPED resolution (module A's `Point` and module B's `Point` are DISTINCT types):
+        //   1. The current module's own declaration SHADOWS everything else.
+        //   2. Then imported modules, in import order.
+        //   3. Only if both miss, fall back to the registry's context-free lookup (Core auto-import,
+        //      resolution cache, and the cross-module short-name scan). The short-name scan returns
+        //      an arbitrary first match, so it MUST be last — otherwise a same-named type in an
+        //      unrelated module would win over the current module's own type (the old bug: a member
+        //      routine `Type.m` in module B resolved its owner to module A's same-named `Type`).
+        if (_sa._currentModuleName != null)
+        {
+            TypeSymbol? own = _sa._registry.LookupType(name: $"{_sa._currentModuleName}.{name}");
+            if (own != null)
+            {
+                return own;
+            }
+        }
+
         foreach (string ns in _sa._importedModules)
         {
-            result = _sa._registry.LookupType(name: $"{ns}.{name}");
-            if (result != null)
+            TypeSymbol? imported = _sa._registry.LookupType(name: $"{ns}.{name}");
+            if (imported != null)
             {
-                return result;
+                return imported;
             }
         }
 
-        // Try current module (user-defined types are registered as "Module.Name")
-        if (_sa._currentModuleName != null && !name.Contains(value: '.'))
-        {
-            result = _sa._registry.LookupType(name: $"{_sa._currentModuleName}.{name}");
-            if (result != null)
-            {
-                return result;
-            }
-        }
-
-        return null;
+        return _sa._registry.LookupType(name: name);
     }
 
     /// <summary>

@@ -752,6 +752,23 @@ public partial class Parser
         }
         name = nameSb2.ToString();
 
+        // Generic-instance arm: `is Dict[Text, SerialValue] inner` / `is List[SerialValue] xs`.
+        // Parse the type arguments so the pattern resolves to the concrete instance (and the binding
+        // gets that full type) — mirrors ParseBaseType's `[...]` handling. Without this, a generic
+        // variant arm can't be matched in `when` at all (parser stops at '[').
+        List<TypeExpression>? genericArguments = null;
+        if (Match(type: TokenType.LeftBracket))
+        {
+            genericArguments = new List<TypeExpression>();
+            do
+            {
+                genericArguments.Add(item: ParseTypeOrConstGeneric());
+            } while (Match(type: TokenType.Comma));
+
+            Consume(type: TokenType.RightBracket,
+                errorMessage: "Expected ']' after type arguments in pattern");
+        }
+
         // Check for destructuring: Type.CASE (memberVar1, memberVar2), (memberVar: alias), or ((x, y), z)
         List<DestructuringBinding>? bindings = null;
         if (Match(type: TokenType.LeftParen))
@@ -769,7 +786,7 @@ public partial class Parser
                 ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
         }
 
-        var type = new TypeExpression(Name: name, GenericArguments: null, Location: location);
+        var type = new TypeExpression(Name: name, GenericArguments: genericArguments, Location: location);
         Pattern typePattern = new TypePattern(Type: type,
             VariableName: variableName,
             Bindings: bindings,

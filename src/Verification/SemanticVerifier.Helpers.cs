@@ -1439,6 +1439,25 @@ public sealed partial class SemanticVerifier
             }
         }
 
+        // Strategy 1.5 (ground truth): the element is exactly what the iterator's `$emit!` returns.
+        // Resolve `iterable.$iter()` to the concrete iterator type, then that iterator's `$emit!`
+        // return type. This mirrors the for-loop lowering (IteratorInlineLoweringPass) and, unlike
+        // Strategy 1, does NOT depend on the instance's ImplementedProtocols being populated — so it
+        // works for a generic-instance collection (e.g. `Dict[Text, SerialValue]`) iterated inside a
+        // CONCRETE method compiled before that instance is monomorphized. There, ImplementedProtocols
+        // is still empty and the naive `TypeArguments[0]` fallback below would wrongly pick the first
+        // type arg (`K`, i.e. `Text` for a Dict) instead of `DictEntry[Text, SerialValue]`.
+        RoutineInfo? iterMethod = _registry.LookupMethod(type: iterableType, methodName: "$iter");
+        if (iterMethod?.ReturnType is { } iteratorType and not ErrorTypeInfo)
+        {
+            RoutineInfo? emitMethod =
+                _registry.LookupMethod(type: iteratorType, methodName: "$emit", isFailable: true);
+            if (emitMethod?.ReturnType is { } emittedType and not (ErrorTypeInfo or GenericParameterTypeInfo))
+            {
+                return emittedType;
+            }
+        }
+
         // Strategy 2: Look for $iter method to get element type from Iterator[T] return type
         RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.$iter");
 
