@@ -27,7 +27,7 @@ routine start()
   var (feeder, belt) = make_shared_channel[S64](capacity: 2)
 
   var fj = feed_jobs(out: steal feeder, n: 6)
-  var w1 = worker(belt: steal belt.clone())
+  var w1 = worker(belt: steal belt.duplicate())
   var w2 = worker(belt: steal belt)
 
   danger!

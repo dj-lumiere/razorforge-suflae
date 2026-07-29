@@ -1755,12 +1755,22 @@ public sealed partial class TypeRegistry
     /// <param name="module">The module this preset belongs to.</param>
     /// <param name="value">The value.</param>
     public void RegisterPreset(string name, TypeInfo type, string? module = null,
-        Expression? value = null)
+        Expression? value = null, bool isSecret = false)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
-            IsModifiable = false, IsPreset = true, Module = module, PresetValue = value
+            IsModifiable = false, IsPreset = true, IsSecret = isSecret, Module = module,
+            PresetValue = value
         };
+
+        // A `secret preset` is file-private: it must NOT be globally resolvable, so it is kept out of
+        // `_presets` (which every `LookupVariable` consults). Its own file inlines it directly from the
+        // AST in PresetInliningPass; any other file that names the same identifier resolves its own
+        // declaration instead of this hidden constant. Public presets stay in the global prelude.
+        if (isSecret)
+        {
+            return;
+        }
 
         _presets[key: name] = variable;
 

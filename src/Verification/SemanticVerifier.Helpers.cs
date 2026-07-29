@@ -471,7 +471,7 @@ public sealed partial class SemanticVerifier
             // every borrow is a Protocol (`Referring`/`Controlling`) or a Record wrapper
             // (`Viewing`/`Modifying`/…) — never bare `EntityTypeInfo`. So gating on
             // `paramType is EntityTypeInfo` excludes all borrow forms with no name list. Verb-wrapped
-            // arguments (`steal x`, `x.clone()`, `x.share()`) are Steal/Call expressions, not
+            // arguments (`steal x`, `x.copy()`, `x.share()`) are Steal/Call expressions, not
             // Identifier/Member, so they are excluded automatically. Safety comes from move tracking;
             // this check makes the destructive transfer visible in source.
             if (_registry.Language == Language.RazorForge

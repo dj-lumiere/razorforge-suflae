@@ -10,5 +10,5 @@ module Core
 protocol Serializable
   ### Lowers this value to a `SerialValue` tree. Total — never fails.
   ### :returns: The serialized representation of this value.
-  @readonly
+  @[readonly, generated]
   routine Me.serialize() -> SerialValue

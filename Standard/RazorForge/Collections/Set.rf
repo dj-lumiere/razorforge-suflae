@@ -3,13 +3,13 @@ module Core
 import BuilderService
 import Core.SecureHashKey
 
-preset SET_INITIAL_CAPACITY: U64 = 16u64
-preset SET_INITIAL_ENTRIES: U64 = 16u64
-preset CTRL_EMPTY: U8 = 128_u8
-preset CTRL_TOMBSTONED: U8 = 254_u8
-preset CTRL_H2_MASK: U8 = 127_u8
-preset ENTRY_DEAD: U8 = 0_u8
-preset ENTRY_LIVE: U8 = 1_u8
+secret preset SET_INITIAL_CAPACITY: U64 = 16u64
+secret preset SET_INITIAL_ENTRIES: U64 = 16u64
+secret preset CTRL_EMPTY: U8 = 128_u8
+secret preset CTRL_TOMBSTONED: U8 = 254_u8
+secret preset CTRL_H2_MASK: U8 = 127_u8
+secret preset ENTRY_DEAD: U8 = 0_u8
+secret preset ENTRY_LIVE: U8 = 1_u8
 
 ### A hash-flooding-resistant insertion-ordered set.
 ###

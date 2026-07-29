@@ -498,7 +498,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void ConsumeTransferredLocalOwnership(Expression expr)
     {
-        // `$copy` synthesis is gone — borrowed-reference values reach here as bare
+        // `$store` synthesis is gone — borrowed-reference values reach here as bare
         // identifiers / member accesses or wrapped in `steal`. Both are handled below.
         // Named arguments wrap their value (`value: steal new_node` → NamedArgumentExpression);
         // peek through the wrapper to reach the underlying identifier.

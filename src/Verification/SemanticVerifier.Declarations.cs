@@ -53,6 +53,50 @@ public sealed partial class SemanticVerifier
         {
             CollectDeclaration(node: declaration);
         }
+
+        ReportPresetTypeNameCollisions(program: program);
+    }
+
+    /// <summary>
+    /// Reports a compile error when a file declares both a <c>preset</c> and a type of the same name.
+    /// Cross-file clashes are fine — presets are file-scoped (public ones inline by value; secret ones
+    /// are file-private) — but within one file the identifier is genuinely ambiguous: a call like
+    /// <c>Foo(...)</c> could mean the constructor or the constant. Scans the file's declarations directly
+    /// so it catches the clash regardless of declaration order.
+    /// </summary>
+    private void ReportPresetTypeNameCollisions(Program program)
+    {
+        var typeNames = new HashSet<string>(comparer: System.StringComparer.Ordinal);
+        foreach (ISyntaxTreeNode node in program.Declarations)
+        {
+            string? typeName = node switch
+            {
+                RecordDeclaration r => r.Name,
+                EntityDeclaration e => e.Name,
+                ChoiceDeclaration c => c.Name,
+                FlagsDeclaration f => f.Name,
+                CrashableDeclaration cr => cr.Name,
+                VariantDeclaration v => v.Name,
+                _ => null
+            };
+            if (typeName != null)
+            {
+                typeNames.Add(item: typeName);
+            }
+        }
+
+        foreach (ISyntaxTreeNode node in program.Declarations)
+        {
+            if (node is PresetDeclaration preset && typeNames.Contains(item: preset.Name))
+            {
+                ReportError(code: SemanticDiagnosticCode.PresetTypeNameCollision,
+                    message:
+                    $"Preset '{preset.Name}' collides with a type of the same name declared in this file. " +
+                    "A bare identifier would be ambiguous between the constant and the type — rename one " +
+                    "(a secret preset is only file-private, so it still clashes within its own file).",
+                    location: preset.Location);
+            }
+        }
     }
 
     /// <summary>
@@ -267,7 +311,8 @@ public sealed partial class SemanticVerifier
             _registry.RegisterPreset(name: preset.Name,
                 type: presetType,
                 module: module,
-                value: preset.Value);
+                value: preset.Value,
+                isSecret: preset.IsSecret);
         }
     }
 

@@ -687,6 +687,9 @@ public record PresetDeclaration(
     Expression Value,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <summary>Whether declared <c>secret preset</c> — file-private (inlinable only in its own file).</summary>
+    public bool IsSecret { get; init; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

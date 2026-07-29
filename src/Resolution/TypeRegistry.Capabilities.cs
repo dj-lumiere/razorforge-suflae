@@ -182,7 +182,7 @@ public sealed partial class TypeRegistry
     ///   <item><description>Generic parameters: false (decision deferred to instantiation).</description></item>
     /// </list>
     /// Raw-pointer types like <c>Hijacked[T]</c> and <c>CPtr</c> are ptr-shaped and
-    /// therefore must opt in manually with a trivial <c>$copy() -> Me  return me</c>.
+    /// therefore must opt in manually with a trivial <c>$store() -> Me  return me</c>.
     /// </summary>
     public bool CanAutoDeriveAssignable(TypeInfo type)
     {

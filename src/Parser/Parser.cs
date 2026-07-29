@@ -384,7 +384,25 @@ public partial class Parser
             Advance(); // consume 'lateinit'
             declLateInit = true;
         }
-        if (Match(TokenType.Var, TokenType.Preset))
+        // `secret preset NAME` (visibility-prefixed preset) — route to the dedicated preset parser so
+        // it becomes a PresetDeclaration carrying its secret (file-private) flag, not a VariableDeclaration.
+        if (Check(type: TokenType.Preset))
+        {
+            if (_parsingTypeBody)
+            {
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: "Type member variables cannot use 'var' or 'preset'. " +
+                             "Use 'name: Type' syntax instead",
+                    fileName: FileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
+            }
+
+            Advance(); // consume 'preset'
+            return ParsePresetDeclaration(isSecret: visibility == VisibilityModifier.Secret);
+        }
+        if (Match(TokenType.Var))
         {
             // In type bodies (record, entity), var/preset are not allowed
             // MemberVariables use 'name: Type' syntax without var keywords

@@ -67,7 +67,7 @@ public enum WiredKind
     Display,
     /// <summary>Hash computation ($hash, $fast_hash).</summary>
     Hash,
-    /// <summary>Value copy ($copy).</summary>
+    /// <summary>Value copy ($store).</summary>
     Copy,
     /// <summary>In-place arithmetic assignment ($iadd, $isub, etc.).</summary>
     InPlaceArithmetic,
@@ -89,7 +89,7 @@ public sealed class WiredEntry
 
     /// <summary>The protocols that materialise this routine. <c>[0]</c> is the primary/canonical
     /// protocol used by capability gating; the full list is the <see cref="WiredView.ProtocolDecl"/>
-    /// requirement set. Empty when the routine is not protocol-bound (e.g. <c>$copy</c> is keyed on
+    /// requirement set. Empty when the routine is not protocol-bound (e.g. <c>$store</c> is keyed on
     /// Assignable for capability but not declared via a protocol-operator).</summary>
     public IReadOnlyList<string> Protocols { get; init; } = [];
 
@@ -99,7 +99,7 @@ public sealed class WiredEntry
     public string? CapabilityWiredOverride { get; init; }
 
     /// <summary>True for routines that must be emitted for every live owner regardless of call-site
-    /// reachability — the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$copy</c>).</summary>
+    /// reachability — the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$store</c>).</summary>
     public bool AlwaysLive { get; init; }
 
     /// <summary>True when this routine carries the failable `!` marker. Failability is a PROPERTY —
@@ -140,8 +140,16 @@ public static class WiredRoutineCatalog
         new() { Name = "$enter",   Kind = WiredKind.Context, Views = Known },
         new() { Name = "$exit",    Kind = WiredKind.Context, Views = Known },
         new() { Name = "$destroy", Kind = WiredKind.Lifecycle, Views = Known, AlwaysLive = true },
-        new() { Name = "$copy",    Kind = WiredKind.Copy, Views = Cap | Seed,
-                Protocols = ["Assignable"], AlwaysLive = true },
+        new() { Name = "$store",    Kind = WiredKind.Copy, Views = Cap | Seed,
+                Protocols = ["Storable"], AlwaysLive = true },
+        // Deep `copy` (Copyable). Like `$store`, it is INJECTED during postprocessing (the record/
+        // collection/variant deep-copy point in RecordCopyLoweringPass) — after reachability has run —
+        // so it must be AlwaysLive to bypass the GMP reachability gate and Seed to be marked live per
+        // concrete owner. Cap gates it on `Copyable`: only owners whose element/arm types are copyable
+        // emit a body (e.g. Dict[Text, SerialValue].copy needs SerialValue copyable), so a
+        // Dict[Text, NonCopyable] correctly carries no `copy` symbol.
+        new() { Name = "copy",      Kind = WiredKind.Copy, Views = Cap | Seed,
+                Protocols = ["Copyable"], AlwaysLive = true },
 
         // ---- Display / hash ----
         new() { Name = "$represent", Kind = WiredKind.Display, Views = Cap | Known | Seed, Protocols = ["Representable"] },
@@ -283,7 +291,7 @@ public static class WiredRoutineCatalog
     /// <summary>Looks up a wired entry by its bare canonical name. Returns false when the name is not wired.</summary>
     public static bool TryGet(string name, out WiredEntry entry) => _byName.TryGetValue(key: name, value: out entry!);
 
-    /// <summary>Returns true when <paramref name="name"/> is a lifecycle-category wired routine (<c>$destroy</c> or <c>$copy</c>).</summary>
+    /// <summary>Returns true when <paramref name="name"/> is a lifecycle-category wired routine (<c>$destroy</c> or <c>$store</c>).</summary>
     public static bool IsLifecycle(string name) =>
         _byName.TryGetValue(key: name, value: out WiredEntry? e) &&
         e.Kind is WiredKind.Lifecycle or WiredKind.Copy;
@@ -376,7 +384,8 @@ public static class WiredRoutineCatalog
             ["$add_unchecked"] = ("UncheckedAddable", "$add_unchecked"), ["$sub_unchecked"] = ("UncheckedSubtractable", "$sub_unchecked"),
             ["$mul_unchecked"] = ("UncheckedMultiplicable", "$mul_unchecked"), ["$truediv_unchecked"] = ("UncheckedTrueDivisible", "$truediv_unchecked"),
             ["$floordiv_unchecked"] = ("UncheckedFloorDivisible", "$floordiv_unchecked"), ["$mod_unchecked"] = ("UncheckedFloorDivisible", "$floordiv_unchecked"),
-            ["$pow_unchecked"] = ("UncheckedExponentiable", "$pow_unchecked"), ["$copy"] = ("Assignable", "$copy"),
+            ["$pow_unchecked"] = ("UncheckedExponentiable", "$pow_unchecked"), ["$store"] = ("Storable", "$store"),
+            ["copy"] = ("Copyable", "copy"),
         };
 
     private static readonly string[] _legacyKnownWired =
@@ -419,7 +428,7 @@ public static class WiredRoutineCatalog
     private static readonly string[] _legacyReachabilitySeed =
     [
         "$from_literal",
-        "$represent", "$diagnose", "$hash", "$copy", "$eq", "$ne", "$cmp", "$lt", "$le", "$gt", "$ge",
+        "$represent", "$diagnose", "$hash", "$store", "copy", "$eq", "$ne", "$cmp", "$lt", "$le", "$gt", "$ge",
         "$contains", "$notcontains", "$iter", "$emit", "try_emit",
         "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow", "$neg",
         "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",

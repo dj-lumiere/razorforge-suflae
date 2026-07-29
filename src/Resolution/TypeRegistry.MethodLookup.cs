@@ -532,6 +532,19 @@ public sealed partial class TypeRegistry
     /// <param name="isFailable">Whether this is failable.</param>
     public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null)
     {
+        // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) obey `Storable` but define no concrete
+        // `$store` — their store-hook IS the refcount copy verb (retain/track/share/watch/roam). Redirect
+        // `$store` to that verb so a generic `T obeys Storable` call resolves to a real, defined method
+        // rather than an undefined `<Wrapper>.$store` symbol (which would fail to link). A hand-written
+        // `$store` would recurse (its own `return me.retain()` re-enters `$store`), so the redirect lives
+        // here in lookup instead of as a stdlib method.
+        if (methodName == "$store" && GetRcWrapperBaseName(type: type) is { } rcBase
+            && Compiler.Resolution.RuntimeContract.RcCopyVerb.TryGetValue(
+                key: rcBase, value: out string? rcVerb))
+        {
+            return LookupMethod(type: type, methodName: rcVerb, isFailable: isFailable);
+        }
+
         // Transparent-protocol unwrap: Referring[X] / Controlling[X] are markers that
         // dispatch every method to X. If the receiver is one of these wrappers with a
         // single type argument, recurse on the inner type. Without this, for-loops over
@@ -1116,7 +1129,7 @@ public sealed partial class TypeRegistry
                                       .ToList();
 
         // Substitute return type
-        // Special case: if return type IS the owner's generic def (e.g. Maybe.$copy returns Maybe_def),
+        // Special case: if return type IS the owner's generic def (e.g. Maybe.$store returns Maybe_def),
         // the concrete return type is resolvedOwner itself (Maybe[ListNode[S64]], not Maybe_def).
         TypeInfo? substitutedReturn2;
         if (method.ReturnType != null && genericDef != null &&
@@ -1524,8 +1537,39 @@ public sealed partial class TypeRegistry
         type is GenericParameterTypeInfo or ProtocolTypeInfo;
 
     /// <summary>
-    /// Resolves a type's owned-value lifecycle: its retaining <c>$copy</c> (a hand-written, i.e.
-    /// non-synthesized, zero-arg <c>$copy</c> on a record — the managed-leaf retain hook), its
+    /// If <paramref name="type"/> is an RC wrapper (Retained/Tracked/Shared/Watched/Roamed) — matched
+    /// by its generic base name — returns that base name, else null. Used to redirect the abstract
+    /// <c>$store</c> hook to the wrapper's concrete refcount copy verb (see
+    /// <see cref="RuntimeContract.RcCopyVerb"/>).
+    /// </summary>
+    private static string? GetRcWrapperBaseName(TypeInfo type)
+    {
+        string? name = type switch
+        {
+            RecordTypeInfo { GenericDefinition: { } gd } => gd.Name,
+            WrapperTypeInfo wt => wt.Name,
+            RecordTypeInfo r => r.Name,
+            _ => null
+        };
+        if (name is null)
+        {
+            return null;
+        }
+
+        int bracket = name.IndexOf(value: '[');
+        if (bracket >= 0)
+        {
+            name = name[..bracket];
+        }
+
+        return Compiler.Resolution.RuntimeContract.RcWrapperBaseNames.Contains(item: name)
+            ? name
+            : null;
+    }
+
+    /// <summary>
+    /// Resolves a type's owned-value lifecycle: its retaining <c>$store</c> (a hand-written, i.e.
+    /// non-synthesized, zero-arg <c>$store</c> on a record — the managed-leaf retain hook), its
     /// <c>$destroy</c> (preferring the user-written one), and whether it is a borrow-tier type. The
     /// teardown and copy lowering passes both drive off THIS one decision, so a value is either both
     /// retaining-copied and balanced-destroyed, or neither — never the asymmetry that double-freed
@@ -1544,27 +1588,64 @@ public sealed partial class TypeRegistry
         RoutineInfo? copy = null;
         if (type is RecordTypeInfo rec)
         {
-            // A hand-written $copy is always a retaining copy (the managed-leaf retain hook,
+            // A hand-written $store is always a retaining copy (the managed-leaf retain hook,
             // e.g. Text/Decimal bumping a shared controller).
             copy = own.FirstOrDefault(predicate: m =>
-                m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized);
+                m.Name == "$store" && m.Parameters.Count == 0 && !m.IsSynthesized);
 
-            // The synthesized record $copy is field-delegating (WiredRoutinePass.
+            // The synthesized record $store is field-delegating (WiredRoutinePass.
             // BuildRecordCopyBody) — symmetric with the field-delegating synthesized $destroy.
             // Treat it as a retaining copy iff some field itself needs one, so it gets injected
             // at copy sites and balances the per-field $destroy at teardown (else: double-free).
             if (copy is null && RecordHasRetainingField(record: rec))
                 copy = own.FirstOrDefault(predicate: m =>
-                    m.Name == "$copy" && m.Parameters.Count == 0);
+                    m.Name == "$store" && m.Parameters.Count == 0);
+        }
+        else if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
+        {
+            // A variant with a destructible arm (an arm whose own $destroy does real work — a heap
+            // entity like a collection, a managed leaf like Text, or a record that transitively owns
+            // one) would DOUBLE-FREE if bitwise-aliased: two copies of the variant both tear down the
+            // same heap arm. Its synthesized deep `copy` (WiredRoutinePass.BuildVariantCopyBody,
+            // tag-dispatch → reconstruct each destructible arm with `arm.copy()`) makes an independent
+            // value. Return it as Copy so the copy-lowering pass injects it at every copy point
+            // (record-ctor field-store, call-arg, assignment) — exactly where a bare alias would
+            // otherwise be torn down by both owners.
+            copy = own.FirstOrDefault(predicate: m =>
+                m.Name == "copy" && m.Parameters.Count == 0);
         }
         return new Lifecycle(Copy: copy, Destroy: destroy, IsBorrow: false);
     }
 
     /// <summary>
+    /// Whether a variant has at least one arm whose payload owns a real destructor — i.e. an arm type
+    /// with a non-borrow <c>$destroy</c> (a heap entity/collection, a managed leaf like <c>Text</c>, or
+    /// a record that transitively owns one). Such an arm double-frees on bitwise alias, so the variant
+    /// needs a synthesized deep <c>copy</c>. None/Blank/scalar arms are safe to bitwise-copy and are
+    /// ignored. Drives the variant branch of <see cref="GetLifecycle"/> and the copy/Copyable synthesis.
+    /// </summary>
+    public bool VariantHasDestructibleArm(VariantTypeInfo variant)
+    {
+        if (variant.IsGenericDefinition)
+            return false;
+
+        foreach (VariantMemberInfo member in variant.Members)
+        {
+            if (member.IsNone || member.Type is null)
+                continue;
+
+            Lifecycle armLc = GetLifecycle(type: member.Type);
+            if (!armLc.IsBorrow && armLc.Destroy is not null)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Whether a record transitively contains a field that needs a retaining copy — i.e. a
-    /// field whose type has a hand-written <c>$copy</c> (a managed leaf such as <c>Text</c> or
+    /// field whose type has a hand-written <c>$store</c> (a managed leaf such as <c>Text</c> or
     /// <c>Decimal</c>), or a composite record that itself contains one. Drives whether the
-    /// synthesized field-delegating <c>$copy</c> counts as retaining in <see cref="GetLifecycle"/>.
+    /// synthesized field-delegating <c>$store</c> counts as retaining in <see cref="GetLifecycle"/>.
     /// </summary>
     private bool RecordHasRetainingField(RecordTypeInfo record,
         HashSet<string>? visited = null)
@@ -1581,7 +1662,7 @@ public sealed partial class TypeRegistry
                 continue;
             List<RoutineInfo> fieldOwn = GetOwnMethodsResolved(type: fieldRec).ToList();
             if (fieldOwn.Any(predicate: m =>
-                    m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized))
+                    m.Name == "$store" && m.Parameters.Count == 0 && !m.IsSynthesized))
                 return true;
             if (RecordHasRetainingField(record: fieldRec, visited: visited))
                 return true;

@@ -376,16 +376,16 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
         }
 
-        // `$copy` / `clone` bodies are field-independent (`return me` / `return me.$copy()`), so
+        // `$store` / `clone` bodies are field-independent (`return me` / `return me.$store()`), so
         // synthesize them BEFORE the opaque-backend skip — @llvm primitives (S64, Bool, …) need real
-        // (trivial, LLVM-inlined) bodies so explicit `clone()`/`$copy()` calls link. Only synth stubs
-        // reach here; user-written copies (e.g. Text.$copy, which retains) keep their own body.
+        // (trivial, LLVM-inlined) bodies so explicit `clone()`/`$store()` calls link. Only synth stubs
+        // reach here; user-written copies (e.g. Text.$store, which retains) keep their own body.
         switch (routine.Name)
         {
-            case "$copy":
+            case "$store":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildRecordCopyBody(record: record);
                 return;
-            case "clone":
+            case "copy":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: record);
                 return;
         }
@@ -413,13 +413,22 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            // ($copy / clone handled above, before the opaque-backend skip.)
+            // ($store / clone handled above, before the opaque-backend skip.)
 
             case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: record, fields: record.MemberVariables,
                         textType: textType, diagnose: false);
                 break;
+
+            case "serialize":
+            {
+                if (record.IsGenericDefinition) break;
+                ReturnStatement? serBody = BuildSerializeBody(owner: record,
+                    fields: record.MemberVariables, textType: textType);
+                if (serBody != null) ctx.VariantBodies[key: routine.RegistryKey] = serBody;
+                break;
+            }
 
             case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
@@ -467,6 +476,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
                         textType: textType, diagnose: true);
                 break;
+
+            case "serialize":
+            {
+                if (entity.IsGenericDefinition) break;
+                ReturnStatement? serBody = BuildSerializeBody(owner: entity,
+                    fields: entity.MemberVariables, textType: textType);
+                if (serBody != null) ctx.VariantBodies[key: routine.RegistryKey] = serBody;
+                break;
+            }
 
             case "$eq":
                 ctx.VariantBodies[key: routine.RegistryKey] = entity.MemberVariables.Count == 0
@@ -598,11 +616,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildBreachStatement(logicBreachedErrorType: logicBreachedErrorType);
                 break;
 
-            case "$copy":
+            case "$store":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: choice);
                 break;
 
-            case "clone":
+            case "copy":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: choice);
                 break;
         }
@@ -693,7 +711,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Zero-field entities have no distinguishing state, so any two instances are structurally equal.
     /// </summary>
     /// <summary>
-    /// Builds the body: <c>return me</c>. Used for synthesized <c>$copy()</c> on
+    /// Builds the body: <c>return me</c>. Used for synthesized <c>$store()</c> on
     /// Assignable types. Codegen emits a bitwise copy of the receiver into the
     /// return slot — no method dispatch overhead at the call site.
     /// </summary>
@@ -707,10 +725,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Builds the synthesized record <c>$copy</c> body. Symmetric with
+    /// Builds the synthesized record <c>$store</c> body. Symmetric with
     /// <see cref="BuildDestroyBody"/>: if any field needs a retaining copy (e.g. a
-    /// refcounted <c>Decimal</c>/<c>Text</c> field whose own <c>$copy</c> bumps a shared
-    /// controller), reconstruct the record memberwise — <c>return Owner(f: me.f.$copy(),
+    /// refcounted <c>Decimal</c>/<c>Text</c> field whose own <c>$store</c> bumps a shared
+    /// controller), reconstruct the record memberwise — <c>return Owner(f: me.f.$store(),
     /// g: me.g, …)</c> — so those field refcounts are bumped to balance the per-field
     /// <c>$destroy</c> at teardown. Without this, the value-copy shares field handles at
     /// refcount 1 and both copies free them → double-free.
@@ -740,10 +758,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
-            // Retaining field → me.f.$copy() (bumps its refcount); value field → me.f (shallow).
+            // Retaining field → me.f.$store() (bumps its refcount); value field → me.f (shallow).
             Expression argExpr = ctx.Registry.GetLifecycle(type: field.Type).Copy is not null
                 ? new CallExpression(
-                    Callee: new MemberExpression(Object: fieldRef, PropertyName: "$copy",
+                    Callee: new MemberExpression(Object: fieldRef, PropertyName: "$store",
                         Location: _synthLoc) { ResolvedType = field.Type },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = field.Type }
@@ -764,7 +782,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Builds the body: <c>return me.$copy()</c>. Used for synthesized <c>clone()</c>
+    /// Builds the body: <c>return me.$store()</c>. Used for synthesized <c>clone()</c>
     /// on Assignable types — clone is an Assignable-implied alias for the explicit
     /// copy verb, so it just forwards.
     /// </summary>
@@ -776,7 +794,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         };
         var copyMember = new MemberExpression(
             Object: meRef,
-            PropertyName: "$copy",
+            PropertyName: "$store",
             Location: _synthLoc)
         {
             ResolvedType = ownerType
@@ -1237,6 +1255,98 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         return new ReturnStatement(Value: fstring, Location: _synthLoc);
     }
 
+    /// <summary>
+    /// Builds the auto-derived <c>serialize() -> SerialValue</c> body: a <c>Dict[Text, SerialValue]</c>
+    /// of every member variable (name -> value), boxed into the SerialValue <c>Dict</c> arm. Scalar
+    /// fields whose type is a direct SerialValue arm are boxed inline; aggregate fields with their own
+    /// synthesized <c>serialize()</c> recurse; everything else falls back to <c>Text(field.$represent())</c>
+    /// ($represent is universal, so the fallback always links). Returns null if SerialValue / Dict are
+    /// unavailable. Depth-guard for cyclic entity graphs is a follow-up (see serializable-serialvalue-impl).
+    /// </summary>
+    private ReturnStatement? BuildSerializeBody(TypeInfo owner, List<MemberVariableInfo> fields,
+        TypeInfo textType)
+    {
+        if (ctx.Registry.LookupType(name: "SerialValue") is not VariantTypeInfo serialValue) return null;
+        // The Dict[Text, SerialValue] arm is the only 2-type-argument member; use its resolved Type
+        // (and Name) directly so the DictLiteral type and the boxing arm are the exact same resolution.
+        VariantMemberInfo? dictArm = serialValue.Members.FirstOrDefault(predicate: m =>
+            m.Type?.TypeArguments is { Count: 2 });
+        if (dictArm?.Type == null) return null;
+        TypeInfo dictType = dictArm.Type;
+
+        var pairs = new List<(Expression Key, Expression Value)>();
+        foreach (MemberVariableInfo field in fields)
+        {
+            var keyLit = new LiteralExpression(Value: field.Name,
+                LiteralType: TokenType.TextLiteral, Location: _synthLoc) { ResolvedType = textType };
+            var meField = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = owner },
+                PropertyName: field.Name, Location: _synthLoc) { ResolvedType = field.Type };
+            pairs.Add(item: (keyLit,
+                BuildSerializeFieldValue(field: field, meField: meField,
+                    serialValue: serialValue, textType: textType)));
+        }
+
+        var dict = new DictLiteralExpression(Pairs: pairs, KeyType: null, ValueType: null,
+            Location: _synthLoc) { ResolvedType = dictType };
+        var boxed = new CreatorExpression(TypeName: serialValue.Name, TypeArguments: null,
+            MemberVariables: [(dictArm.Name, dict)], Location: _synthLoc)
+            { ResolvedType = serialValue, ConstructedType = serialValue };
+        return new ReturnStatement(Value: boxed, Location: _synthLoc);
+    }
+
+    private Expression BuildSerializeFieldValue(MemberVariableInfo field, Expression meField,
+        VariantTypeInfo serialValue, TypeInfo textType)
+    {
+        // Direct SerialValue arm (S8..U64 / F32/F64 / Bool / Moment / Bytes / Text) -> box inline.
+        VariantMemberInfo? arm = FindScalarArm(serialValue: serialValue, fieldType: field.Type);
+        if (arm != null)
+            return new CreatorExpression(TypeName: serialValue.Name, TypeArguments: null,
+                MemberVariables: [(arm.Type!.Name, meField)], Location: _synthLoc)
+                { ResolvedType = serialValue, ConstructedType = serialValue };
+
+        // Aggregate with a REAL synthesized serialize() (not an @llvm primitive record) -> recurse.
+        bool recurse = field.Type switch
+        {
+            RecordTypeInfo r => !r.HasDirectBackendType && TypeHasSerialize(type: r),
+            EntityTypeInfo e => TypeHasSerialize(type: e),
+            VariantTypeInfo v => TypeHasSerialize(type: v),
+            _ => false,
+        };
+        if (recurse)
+            return new CallExpression(
+                Callee: new MemberExpression(Object: meField, PropertyName: "serialize",
+                    Location: _synthLoc) { ResolvedType = serialValue },
+                Arguments: [], Location: _synthLoc) { ResolvedType = serialValue };
+
+        // Fallback: Text(field.$represent()). Routine-typed fields have no $represent -> placeholder.
+        Expression textVal = field.Type is RoutineTypeInfo
+            ? new LiteralExpression(Value: "<routine>", LiteralType: TokenType.TextLiteral,
+                Location: _synthLoc) { ResolvedType = textType }
+            : new CallExpression(
+                Callee: new MemberExpression(Object: meField, PropertyName: RepresentMethodName,
+                    Location: _synthLoc) { ResolvedType = textType },
+                Arguments: [], Location: _synthLoc) { ResolvedType = textType };
+        return new CreatorExpression(TypeName: serialValue.Name, TypeArguments: null,
+            MemberVariables: [("Text", textVal)], Location: _synthLoc)
+            { ResolvedType = serialValue, ConstructedType = serialValue };
+    }
+
+    private static VariantMemberInfo? FindScalarArm(VariantTypeInfo serialValue, TypeInfo fieldType)
+    {
+        foreach (VariantMemberInfo m in serialValue.Members)
+        {
+            if (m.IsNone || m.Type is null) continue;
+            // List[SerialValue] / Dict[Text, SerialValue] arms are generic (recursion arms), not scalars.
+            if (m.Type.TypeArguments is { Count: > 0 }) continue;
+            if (m.Type.Name == fieldType.Name || m.Type.FullName == fieldType.FullName) return m;
+        }
+        return null;
+    }
+
+    private bool TypeHasSerialize(TypeInfo type) =>
+        ctx.Registry.GetMethodsForType(type: type).Any(predicate: m => m.Name == "serialize");
+
     //  $represent / $diagnose (choice)
 
     /// <summary>
@@ -1368,11 +1478,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$copy":
+            case "$store":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: flags);
                 break;
 
-            case "clone":
+            case "copy":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: flags);
                 break;
         }
@@ -2464,7 +2574,68 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildVariantDiagnoseBody(variant: variant, textType: textType);
                 break;
+
+            case "copy":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildVariantCopyBody(variant: variant);
+                break;
         }
+    }
+
+    /// <summary>
+    /// Builds a variant's deep <c>copy</c>:
+    /// <c>when me { is HeapArm as v => return Variant.HeapArm(v.copy()), … else => return me }</c>.
+    /// Each arm whose payload owns a real destructor (a collection, a managed leaf like <c>Text</c>, a
+    /// record that transitively owns one) is reconstructed with an independent <c>arm.copy()</c> so the
+    /// result shares no heap storage — a bitwise alias would double-free when both owners tear down.
+    /// Scalar / <c>None</c> / <c>Blank</c> arms are safe to bitwise-duplicate, so they fall to the
+    /// <c>else => return me</c> identity branch (RecordCopyLoweringPass treats this copy body like
+    /// <c>$store</c>, so the bare <c>return me</c> is not re-injected).
+    /// </summary>
+    private WhenStatement BuildVariantCopyBody(VariantTypeInfo variant)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            { ResolvedType = variant };
+
+        var clauses = new List<WhenClause>(capacity: variant.Members.Count + 1);
+        foreach (VariantMemberInfo member in variant.Members)
+        {
+            if (member.IsNone || member.Type is null)
+                continue;
+
+            Compiler.Resolution.TypeRegistry.Lifecycle armLc =
+                ctx.Registry.GetLifecycle(type: member.Type);
+            if (armLc.IsBorrow || armLc.Destroy is null)
+                continue; // scalar / void arm — bitwise copy via the else branch is sound.
+
+            var typeExpr = new TypeExpression(Name: member.Type.Name, GenericArguments: null,
+                Location: _synthLoc) { ResolvedType = member.Type };
+            var pattern = new TypePattern(Type: typeExpr, VariableName: "v", Bindings: null,
+                Location: _synthLoc);
+
+            var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
+                { ResolvedType = member.Type };
+            var copyCall = new CallExpression(
+                Callee: new MemberExpression(Object: vRef, PropertyName: "copy",
+                    Location: _synthLoc) { ResolvedType = member.Type },
+                Arguments: [], Location: _synthLoc) { ResolvedType = member.Type };
+
+            var boxed = new CreatorExpression(TypeName: variant.Name, TypeArguments: null,
+                MemberVariables: [(member.Type.Name, copyCall)], Location: _synthLoc)
+                { ResolvedType = variant, ConstructedType = variant };
+
+            clauses.Add(item: new WhenClause(Pattern: pattern,
+                Body: new ReturnStatement(Value: boxed, Location: _synthLoc),
+                Location: _synthLoc));
+        }
+
+        clauses.Add(item: new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+            Body: new ReturnStatement(
+                Value: meRef, Location: _synthLoc),
+            Location: _synthLoc));
+
+        return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
     }
 
     /// <summary>

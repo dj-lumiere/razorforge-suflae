@@ -31,7 +31,7 @@ suspended routine consume(inbox: Receiver[S64]) -> S64
 routine start()
   var (feeder, hop) = make_channel[S64](capacity: 2)
 
-  var p1 = produce(out: steal feeder.clone(), lo: 1, hi: 6)     # 1+2+3+4+5     = 15
+  var p1 = produce(out: steal feeder.duplicate(), lo: 1, hi: 6)     # 1+2+3+4+5     = 15
   var p2 = produce(out: steal feeder, lo: 10, hi: 15)           # 10+11+12+13+14 = 60
   var c = consume(inbox: steal hop)
 

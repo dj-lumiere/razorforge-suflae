@@ -71,7 +71,7 @@ routine List[T].$create(capacity: U64) -> List[T]
 ### :param fill_value: The value to copy into each slot.
 ### :returns: A list containing `count` copies of `fill_value`.
 routine List[T].$create(count: U64, fill_value: T) -> List[T]
-needs T is Cloneable
+needs T is Copyable
   if count == 0u64
     return List[T]()
 
@@ -414,7 +414,7 @@ routine List[T].$diagnose() -> Text
 ### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
 @migratable
 routine List[T].add_range!(source: Referring[List[T]], from: U64, count: U64)
-needs T obeys Cloneable
+needs T obeys Copyable
   if count == 0u64
     return
   if from + count > source.count()
@@ -425,13 +425,27 @@ needs T obeys Cloneable
     me.reserve(new_count * 2u64)
 
   # Clone each element through the read-only borrow. `clone` is elided for trivially-copyable T
-  # (no symbol) and delegates to the retain-aware `$copy` for RC records like Text, so appended
+  # (no symbol) and delegates to the retain-aware `$store` for RC records like Text, so appended
   # elements are owned independently. The prior bitwise copy aliased buffer pointers (double-free).
   var i = 0u64
   while i < count
-    me.add_last(value: source[from + i].clone())
+    me.add_last(value: source[from + i].copy())
     i = i + 1u64
   return
+
+### Returns a deep, independent copy of this list. Each element is copied through `copy`,
+### so the result shares no heap storage with the original (managed leaves like `Text` bump
+### their refcount; aggregate elements are duplicated recursively). This is the deep-copy point
+### the compiler inserts when a `List[T]` is an owned arm of a value being copied.
+### :returns: A new `List[T]` owning independent copies of every element.
+routine List[T].copy() -> List[T]
+needs T obeys Copyable
+  var result = List[T](capacity: me.count)
+  var i = 0u64
+  while i < me.count
+    result.add_last(value: me[i].copy())
+    i = i +% 1u64
+  return steal result
 
 ### Shortens the list to `new_count` elements by discarding elements past the new boundary.
 ### The backing allocation is not changed.
@@ -449,7 +463,7 @@ routine List[T].truncate!(new_count: U64)
 # ============================================================================
 
 ### The maximum run length sorted with insertion sort before the merge phase begins.
-preset SORT_MIN_RUN: U64 = 32u64
+secret preset SORT_MIN_RUN: U64 = 32u64
 
 ### Sorts the list in ascending order in place using the element's natural `<` ordering.
 ### Uses a stable, iterative bottom-up merge sort with insertion sort for small runs.

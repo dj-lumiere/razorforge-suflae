@@ -77,7 +77,7 @@ routine SignalCaster.cast_all()
 
 ### Produces another handle on the same monitor, so another agent can synchronize through it.
 ### :returns: A new `SignalCaster` sharing this monitor.
-routine SignalCaster.clone() -> SignalCaster
+routine SignalCaster.duplicate() -> SignalCaster
   danger!
     rf_signal_add_ref(sig: me.sig)
     return SignalCaster(sig: me.sig)

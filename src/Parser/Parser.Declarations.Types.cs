@@ -971,7 +971,7 @@ public partial class Parser
     /// Syntax: <c>preset name: Type = value</c>
     /// </summary>
     /// <returns>A <see cref="PresetDeclaration"/> AST node.</returns>
-    private PresetDeclaration ParsePresetDeclaration()
+    private PresetDeclaration ParsePresetDeclaration(bool isSecret = false)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -986,7 +986,7 @@ public partial class Parser
         return new PresetDeclaration(Name: name,
             Type: type,
             Value: value,
-            Location: location);
+            Location: location) { IsSecret = isSecret };
     }
 
 }

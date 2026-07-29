@@ -2,8 +2,8 @@ module Collections
 
 import BuilderService
 
-preset B_DICT: U64 = 64u64
-preset MIN_KEYS_DICT: U64 = 31u64
+secret preset B_DICT: U64 = 64u64
+secret preset MIN_KEYS_DICT: U64 = 31u64
 
 ### Internal B-tree node for {SortedDict[K, V]}.
 ### Stores up to 63 ordered key-value pairs, up to 64 child pointers, and a cached subtree element count.
@@ -108,7 +108,7 @@ routine BTreeDictNode[K, V].value_get(i: U64) -> V
     return me.values_base().stride(count: i.S64()).peek()
 
 ### Builds a {DictEntry[K, V]} from the entry at slot `i`, taking OWNED copies of the key and value.
-### The key/value are bound to locals first so the copy pass injects a retaining `$copy` (a bare
+### The key/value are bound to locals first so the copy pass injects a retaining `$store` (a bare
 ### `key_get(i)` call-result argument would NOT be copied, leaving the entry aliasing the buffer's
 ### refcounted controller — a double-free when the entry is torn down). Mirrors FastDict's iterator.
 ### :param i: Zero-based entry index.

@@ -463,8 +463,14 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     /// initializer VERB (a reference primitive), per the four-routine governance model, not the type.
     /// </summary>
     private static bool IsViewBinding(VariableDeclaration v) =>
-        v.Initializer is CallExpression { Callee: MemberExpression m } &&
-        ViewVerbs.Contains(item: m.PropertyName);
+        (v.Initializer is CallExpression { Callee: MemberExpression m } &&
+         ViewVerbs.Contains(item: m.PropertyName))
+        // A variant when-pattern payload binding (`when me is Arm as v: …`, lowered by
+        // PatternLoweringPass to `var v = <CarrierPayloadExpression on me>`) is a BORROW/view into the
+        // matched variant's payload — the variant still owns it. Tearing `v` down frees the variant's
+        // payload out from under it: a read-only `$represent` would then corrupt `me`, and the
+        // auto-synthesized variant `$destroy` (explicit `v.$destroy()`) would double-free. So exclude it.
+        || v.Initializer is CarrierPayloadExpression;
 
     // -----------------------------------------------------------------------------
     // Move pre-scan: a binding whose ownership leaves the routine is never torn down here.
@@ -510,6 +516,31 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                 // `target = source` / `me.field = source` moves `source` into the target.
                 case AssignmentStatement assign when Unwrap(assign.Value) is IdentifierExpression rhs:
                     _movedNames.Add(item: rhs.Name);
+                    break;
+                // An explicit `v.$destroy()` consumes `v` — it must NOT then be torn down again at
+                // scope exit. This is the auto-synthesized variant `$destroy` shape (`when me is Arm
+                // as v: v.$destroy()`): without this the pattern-bound heap payload is destroyed by the
+                // explicit call AND by binding teardown → double free (scalar arms hid it: no-op $destroy).
+                case CallExpression
+                {
+                    Callee: MemberExpression
+                    {
+                        PropertyName: "$destroy", Object: IdentifierExpression dv
+                    }
+                }:
+                    _movedNames.Add(item: dv.Name);
+                    break;
+                // Constructing a VARIANT boxes (takes ownership of) its single payload — the source
+                // binding is moved into the variant, not dropped at scope exit. Without this, a heap
+                // payload boxed into a returned variant (e.g. a synthesized `serialize()` returning
+                // `SerialValue.Dict(<hoisted dict temp>)`) is BOTH boxed and torn down → double free.
+                // (Harmless for scalar arms: scalars have no `$destroy`. Entity/record field moves are
+                // handled via `steal`; variant/carrier boxing has no steal, so mark it here.)
+                case CreatorExpression creator
+                    when (creator.ConstructedType ?? creator.ResolvedType) is VariantTypeInfo:
+                    foreach ((_, Expression val) in creator.MemberVariables)
+                        if (Unwrap(val) is IdentifierExpression a)
+                            _movedNames.Add(item: a.Name);
                     break;
             }
         });

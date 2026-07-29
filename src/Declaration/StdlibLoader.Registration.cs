@@ -151,6 +151,26 @@ public sealed partial class StdlibLoader
 
                     break;
                 }
+                case VariantDeclaration variant:
+                {
+                    var existing = registry.LookupType(name: variant.Name) as VariantTypeInfo;
+                    // Total declared arms (incl. None). If fewer resolved, some arm was a forward or
+                    // self reference (e.g. List[SerialValue]) unresolvable on the first pass — retry now.
+                    int expectedCount = variant.Members.Count;
+                    if (existing == null || existing.Members.Count >= expectedCount)
+                    {
+                        continue;
+                    }
+
+                    List<VariantMemberInfo> reMembers = BuildVariantMembers(registry: registry,
+                        variant: variant, moduleName: existing.Module);
+                    if (reMembers.Count > existing.Members.Count)
+                    {
+                        existing.Members = reMembers;
+                    }
+
+                    break;
+                }
                 case CrashableDeclaration crashable:
                 {
                     var existing =
@@ -459,7 +479,8 @@ public sealed partial class StdlibLoader
                     registry.RegisterPreset(name: preset.Name,
                         type: presetType,
                         module: moduleName,
-                        value: preset.Value);
+                        value: preset.Value,
+                        isSecret: preset.IsSecret);
                 }
             }
         }
@@ -1163,36 +1184,8 @@ public sealed partial class StdlibLoader
             return;
         }
 
-        // Build members list: None = tag 0, others sequential from 1
-        var members = new List<VariantMemberInfo>();
-        int tag = 0;
-
-        // First pass: find None
-        foreach (VariantMember memberDecl in variant.Members)
-        {
-            if (memberDecl.Type.Name == "None")
-            {
-                members.Add(item: VariantMemberInfo.CreateNone(tagValue: 0, location: null));
-                tag = 1;
-                break;
-            }
-        }
-
-        // Second pass: all non-None members
-        foreach (VariantMember memberDecl in variant.Members)
-        {
-            if (memberDecl.Type.Name == "None")
-            {
-                continue;
-            }
-
-            TypeInfo? memberType =
-                ResolveSimpleType(registry: registry, typeExpr: memberDecl.Type);
-            if (memberType != null)
-            {
-                members.Add(item: new VariantMemberInfo(type: memberType) { TagValue = tag++ });
-            }
-        }
+        List<VariantMemberInfo> members =
+            BuildVariantMembers(registry: registry, variant: variant, moduleName: moduleName);
 
         var typeInfo = new VariantTypeInfo(name: variant.Name)
         {
@@ -1203,6 +1196,46 @@ public sealed partial class StdlibLoader
         };
 
         registry.RegisterType(type: typeInfo);
+    }
+
+    /// <summary>
+    /// Builds a variant's member list: None = tag 0, other arms sequential. An arm whose type does
+    /// not resolve yet (a forward or self reference like <c>List[SerialValue]</c> inside SerialValue,
+    /// or a not-yet-registered type) is skipped here and picked up when <see
+    /// cref="ResolveProgramMemberVariables"/> re-runs after every type shell exists.
+    /// </summary>
+    private static List<VariantMemberInfo> BuildVariantMembers(TypeRegistry registry,
+        VariantDeclaration variant, string? moduleName)
+    {
+        var members = new List<VariantMemberInfo>();
+        int tag = 0;
+
+        foreach (VariantMember memberDecl in variant.Members)
+        {
+            if (memberDecl.Type.Name == "None")
+            {
+                members.Add(item: VariantMemberInfo.CreateNone(tagValue: 0, location: null));
+                tag = 1;
+                break;
+            }
+        }
+
+        foreach (VariantMember memberDecl in variant.Members)
+        {
+            if (memberDecl.Type.Name == "None")
+            {
+                continue;
+            }
+
+            TypeInfo? memberType = ResolveSimpleType(registry: registry, typeExpr: memberDecl.Type,
+                genericParams: variant.GenericParameters, moduleName: moduleName);
+            if (memberType != null)
+            {
+                members.Add(item: new VariantMemberInfo(type: memberType) { TagValue = tag++ });
+            }
+        }
+
+        return members;
     }
 
     /// <summary>

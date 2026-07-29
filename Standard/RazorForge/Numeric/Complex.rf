@@ -4,7 +4,7 @@ module Numerics
 ### `Complex` is built on top of {Real}, so both components retain decimal precision semantics.
 ### Use it for analysis routines that need complex arithmetic without collapsing to machine precision.
 ### :see: {Real}, {Numeric-Types}
-record Complex obeys Numeric, Equatable, Hashable, FastHashable, Assignable
+record Complex obeys Numeric, Equatable, Hashable, FastHashable, Copyable
   ### Stores the real component.
   secret real: Real
   ### Stores the imaginary component.

@@ -13,9 +13,9 @@ import BuilderService
 ### atomic-refcounted handle to an immutable byte buffer. Copying a `Bytes`
 ### bumps the underlying refcount via SeqCst atomic; the last drop frees the
 ### buffer + controller. When `ctrl` is null (`hijacked_none[...]()`), the
-### value represents an empty or static-literal sequence and `$copy`/`$destroy`
+### value represents an empty or static-literal sequence and `$store`/`$destroy`
 ### are no-ops.
-record Bytes obeys Assignable, Iterable[Byte]
+record Bytes obeys Copyable, Iterable[Byte]
   ### Raw buffer of byte values.
   secret data: Hijacked[Byte]
   ### Number of bytes in the buffer.
@@ -29,7 +29,7 @@ record Bytes obeys Assignable, Iterable[Byte]
 ### with no atomic op.
 ### :returns: The resulting `Bytes` value.
 @[readonly, inline]
-routine Bytes.$copy() -> Bytes
+routine Bytes.$store() -> Bytes
   danger!
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()

@@ -339,14 +339,14 @@ routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, T
 ### :param elements: The elements to enqueue.
 ### :param priorities: The priorities to assign at matching positions.
 routine PriorityQueue[TPriority, TElement].add_all(elements: Referring[List[TElement]], priorities: Referring[List[TPriority]])
-needs TElement obeys Cloneable
-needs TPriority obeys Cloneable
+needs TElement obeys Copyable
+needs TPriority obeys Copyable
   var i = 0u64
   var limit = if elements.count() < priorities.count() then elements.count() else priorities.count()
   while i < limit
-    # `clone` out of the read-only borrows (elided for trivial types; retain-aware via `$copy` for
+    # `clone` out of the read-only borrows (elided for trivial types; retain-aware via `$store` for
     # RC records) — `add` takes ownership, so aliasing would double-free when both queues drop.
-    me.add(element: elements[i].clone(), priority: priorities[i].clone())
+    me.add(element: elements[i].copy(), priority: priorities[i].copy())
     i = i +% 1u64
   return
 

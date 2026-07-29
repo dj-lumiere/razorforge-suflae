@@ -3,13 +3,13 @@ module Core
 import BuilderService
 import Core.SecureHashKey
 
-preset DICT_INITIAL_CAPACITY: U64 = 16u64
-preset DICT_INITIAL_ENTRIES: U64 = 16u64
-preset CTRL_EMPTY: U8 = 128_u8
-preset CTRL_TOMBSTONED: U8 = 254_u8
-preset CTRL_H2_MASK: U8 = 127_u8
-preset ENTRY_DEAD: U8 = 0_u8
-preset ENTRY_LIVE: U8 = 1_u8
+secret preset DICT_INITIAL_CAPACITY: U64 = 16u64
+secret preset DICT_INITIAL_ENTRIES: U64 = 16u64
+secret preset CTRL_EMPTY: U8 = 128_u8
+secret preset CTRL_TOMBSTONED: U8 = 254_u8
+secret preset CTRL_H2_MASK: U8 = 127_u8
+secret preset ENTRY_DEAD: U8 = 0_u8
+secret preset ENTRY_LIVE: U8 = 1_u8
 
 ### A hash-flooding-resistant insertion-ordered key-value dictionary.
 ###
@@ -431,6 +431,23 @@ routine DictEmittable[K, V].$emit!() -> DictEntry[K, V]
         var v = me.vals.offset(V.data_size() * p).peek()
         return DictEntry[K, V](key: k, value: v)
   absent
+
+# ============================================================================
+# Copy
+# ============================================================================
+
+### Returns a deep, independent copy of this dictionary. Every key and value is copied through
+### `copy`, so the result shares no heap storage with the original (managed leaves like `Text`
+### bump their refcount; aggregate values are duplicated recursively). This is the deep-copy point
+### the compiler inserts when a `Dict[K, V]` is an owned arm of a value being copied.
+### :returns: A new `Dict[K, V]` owning independent copies of every entry.
+routine Dict[K, V].copy() -> Dict[K, V]
+needs K obeys Copyable
+needs V obeys Copyable
+  var result = Dict[K, V]()
+  for entry in me
+    discard result.add(key: entry.key.copy(), value: entry.value.copy())
+  return steal result
 
 # ============================================================================
 # Display

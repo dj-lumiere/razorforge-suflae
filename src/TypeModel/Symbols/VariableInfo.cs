@@ -23,6 +23,10 @@ public sealed class VariableInfo
     /// Presets are always frozen (IsModifiable=false) and must be initialized with constant expressions.</summary>
     public bool IsPreset { get; init; }
 
+    /// <summary>Whether this is a <c>secret preset</c> — file-private: visible (inlinable) only inside
+    /// the file that declares it, unlike a public preset which is part of the global prelude.</summary>
+    public bool IsSecret { get; init; }
+
     /// <summary>The module this variable belongs to.</summary>
     public string? Module { get; init; }
 

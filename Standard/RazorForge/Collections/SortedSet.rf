@@ -4,8 +4,8 @@ import BuilderService
 
 # B-tree order (max children per node)
 # B = 64 means each node has 31-63 keys (except root)
-preset B: U64 = 64u64
-preset MIN_KEYS: U64 = 31u64  # B/2 - 1
+secret preset BTREE_ORDER: U64 = 64u64
+secret preset MIN_KEYS: U64 = 31u64  # B/2 - 1
 
 ### Represents one internal node in the `SortedSet[T]` B-tree.
 ### Nodes store ordered keys, child pointers, and cached subtree sizes for efficient indexing.
@@ -406,7 +406,7 @@ routine SortedSet[T].add(value: T) -> Bool
   # We must do this proactively so insert_non_full never encounters a full node.
   var root_full = false
   danger!
-    root_full = me.root!!.as_entity().keys_count() >= B -% 1u64
+    root_full = me.root!!.as_entity().keys_count() >= BTREE_ORDER -% 1u64
   if root_full
     danger!
       var old_root = me.root!!
@@ -449,7 +449,7 @@ dangerous routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]
     return true
   else
     # Split child if full (proactive split on the way down).
-    if node.children_get(i).as_entity().keys_count() >= B -% 1u64
+    if node.children_get(i).as_entity().keys_count() >= BTREE_ORDER -% 1u64
       me.split_child(parent_node: node, child_idx: i)
       # After split, the median key was promoted to keys[i].
       # Decide which side of the split our value belongs on.
@@ -477,7 +477,7 @@ dangerous routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]
 @inline
 dangerous routine SortedSet[T].split_child(parent_node: Controlling[BTreeSetNode[T]], child_idx: U64)
   var child = parent_node.children_get(child_idx).as_entity()
-  var mid = unsigned_div[U64](B -% 1u64, 2u64)
+  var mid = unsigned_div[U64](BTREE_ORDER -% 1u64, 2u64)
 
   # Create the right half node (manual Hijacked graph node; build via an entity view).
   var new_node_ptr = BTreeSetNode[T](is_leaf: child.is_leaf).hijack()

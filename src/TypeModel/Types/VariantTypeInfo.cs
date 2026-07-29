@@ -15,8 +15,10 @@ public sealed class VariantTypeInfo : TypeInfo
     /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Variant;
 
-    /// <summary>The member types of this variant.</summary>
-    public List<VariantMemberInfo> Members { get; init; } = [];
+    /// <summary>The member types of this variant. Settable so the stdlib registration fixpoint
+    /// (<c>ResolveProgramMemberVariables</c>) can re-resolve arms that had unresolvable forward or
+    /// self references (e.g. a recursive <c>List[SerialValue]</c>) on the first pass.</summary>
+    public List<VariantMemberInfo> Members { get; set; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.

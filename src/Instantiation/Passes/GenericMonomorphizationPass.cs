@@ -319,7 +319,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// <list type="bullet">
     ///   <item>derived <c>$lt/$le/$gt/$ge</c> → owner <c>$cmp</c> + <c>ComparisonSign.$eq/$ne</c></item>
     ///   <item><c>$ne</c> → owner <c>$eq</c>; <c>$notcontains</c> → owner <c>$contains</c></item>
-    ///   <item>composite <c>$destroy/$copy/$hash/$fast_hash/$eq/$cmp</c> → the same wired verb on
+    ///   <item>composite <c>$destroy/$store/$hash/$fast_hash/$eq/$cmp</c> → the same wired verb on
     ///         each field/element type (recursing to a fixed point)</item>
     /// </list>
     /// This mirrors <c>RoutineReachabilityPass.ExpandSyntheticSiblings</c> + its synthesized-body
@@ -391,7 +391,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 if (ctx.Registry.LookupMethod(type: owner, methodName: "$contains") is { } contains)
                     yield return contains;
                 break;
-            case "$destroy" or "$copy" or "$hash" or "$fast_hash" or "$eq":
+            case "$destroy" or "$store" or "$hash" or "$fast_hash" or "$eq":
                 foreach (RoutineInfo fc in FieldWiredCallees(owner: owner, verb: routine.Name))
                     yield return fc;
                 break;
@@ -549,10 +549,10 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     }
 
     /// Routines emitted for every live owner regardless of call-site reachability. Two sources:
-    /// (1) the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$copy</c>, from
+    /// (1) the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$store</c>, from
     /// <see cref="Compiler.Resolution.WiredRoutineCatalog.AlwaysLiveNames"/>) — scope-exit teardown
     /// inserts <c>$destroy</c> calls that must always have a concrete body, and the matching
-    /// retaining <c>$copy</c> likewise; (2) <c>try_emit</c>, reachable only through synthesized
+    /// retaining <c>$store</c> likewise; (2) <c>try_emit</c>, reachable only through synthesized
     /// for-loop iteration bodies whose owner type (ListEmitter[Byte], etc.) is created post-pass
     /// during GMP body rewriting, so ReachabilityPass cannot trace it. Kept narrow otherwise —
     /// broader sets cascade into derived-op chains ($ne->$eq) where the missing companion is the

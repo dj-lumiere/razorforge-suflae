@@ -39,6 +39,10 @@ internal sealed class AutoWiredRegistrationPass
         TypeSymbol? s64Type = _registry.LookupType(name: "S64");
         TypeSymbol? byteSizeType = _registry.LookupType(name: "ByteSize");
         TypeSymbol? blankType = _registry.LookupType(name: "Blank");
+        // SerialValue backs the auto-derived `serialize()` (Serializable). Registered only on the
+        // aggregate categories that `obey Serializable` (Record/Entity/Variant), mirroring how their
+        // WiredRoutinePass bodies are synthesized — promise==body (see [[serializable-serialvalue-impl]]).
+        TypeSymbol? serialValueType = _registry.LookupType(name: "SerialValue");
 
         // Look up List[T] for list-returning synthesized routines
         TypeSymbol? listDef = _registry.LookupType(name: "List");
@@ -88,6 +92,17 @@ internal sealed class AutoWiredRegistrationPass
                 MaybeRegisterWired(owner: type,
                     name: "$diagnose",
                     returnType: textType,
+                    existingMethods: existingMethods);
+            }
+
+            // Serializable: serialize() -> SerialValue, auto-derived (overridable) for the aggregate
+            // categories that obey Serializable. Body synthesized in WiredRoutinePass (field walk).
+            if (serialValueType != null &&
+                type.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Variant)
+            {
+                MaybeRegisterWired(owner: type,
+                    name: "serialize",
+                    returnType: serialValueType,
                     existingMethods: existingMethods);
             }
 
@@ -148,21 +163,27 @@ internal sealed class AutoWiredRegistrationPass
                     // container types whose logical value is not their field tuple. Auto $eq / $hash is
                     // reserved for tuple / choice / flags (simple, unambiguous tag/element compare). The
                     // stdlib's equatable/hashable struct records (Complex, Integer, Decimal, C32/64/128)
-                    // already hand-write these. $copy (below) + $represent / $diagnose stay auto-derived.
+                    // already hand-write these. $store (below) + $represent / $diagnose stay auto-derived.
 
-                    // `$copy` / `clone` (Assignable): their bodies are `return me` /
-                    // `return me.$copy()` — NOT field-based — so they are safe even for @llvm-backed
+                    // `$store` / `clone` (Assignable): their bodies are `return me` /
+                    // `return me.$store()` — NOT field-based — so they are safe even for @llvm-backed
                     // opaque primitives (S64, Bool, F64, …), unlike the field-based $hash/$eq above.
-                    // Registering them for primitives lets explicit `clone()`/`$copy()` calls (e.g.
+                    // Registering them for primitives lets explicit `clone()`/`$store()` calls (e.g.
                     // from `List.add_range`) link; the trivial body is inlined away by LLVM. Wrapper
                     // types (Retained/Tracked/…) keep their own custom retain-aware copy, so excluded.
+                    // `$store` is registered for any Storable-obeyer (incl. Copyable types, which obey
+                    // Storable transitively). Deep `copy` is Copyable-ONLY — Storable-only raw-pointer
+                    // types (Hijacked/CPtr) can bitwise-`$store` but have no meaningful deep copy.
                     if (!type.IsBlank && !isWrapper &&
-                        ObeysProtocol(type: type, protocolName: "Assignable"))
+                        ObeysProtocol(type: type, protocolName: "Storable"))
                     {
-                        MaybeRegisterWired(owner: type, name: "$copy",
+                        MaybeRegisterWired(owner: type, name: "$store",
                             returnType: type, existingMethods: existingMethods);
-                        // Assignable obeys Cloneable: auto-derive `clone() -> ?Me` (delegates to $copy).
-                        MaybeRegisterWired(owner: type, name: "clone",
+                    }
+                    if (!type.IsBlank && !isWrapper &&
+                        ObeysProtocol(type: type, protocolName: "Copyable"))
+                    {
+                        MaybeRegisterWired(owner: type, name: "copy",
                             returnType: type, existingMethods: existingMethods);
                     }
 
@@ -234,11 +255,11 @@ internal sealed class AutoWiredRegistrationPass
 
                     // Choices auto-derive Assignable (scalar tag layout).
                     MaybeRegisterWired(owner: type,
-                        name: "$copy",
+                        name: "$store",
                         returnType: type,
                         existingMethods: existingMethods);
                     MaybeRegisterWired(owner: type,
-                        name: "clone",
+                        name: "copy",
                         returnType: type,
                         existingMethods: existingMethods);
 
@@ -354,11 +375,11 @@ internal sealed class AutoWiredRegistrationPass
 
                     // Flags auto-derive Assignable (scalar bitset layout).
                     MaybeRegisterWired(owner: type,
-                        name: "$copy",
+                        name: "$store",
                         returnType: type,
                         existingMethods: existingMethods);
                     MaybeRegisterWired(owner: type,
-                        name: "clone",
+                        name: "copy",
                         returnType: type,
                         existingMethods: existingMethods);
 
@@ -417,6 +438,20 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "$diagnose",
                             returnType: textType,
+                            existingMethods: existingMethods);
+                    }
+
+                    // A variant with a destructible arm (a heap/managed payload that double-frees on
+                    // bitwise alias) gets a synthesized deep `copy` — WiredRoutinePass.BuildVariantCopyBody
+                    // reconstructs each such arm with `arm.copy()`. Registering it here makes the symbol
+                    // visible to overload resolution + the reachability sweep, and lets GetLifecycle return
+                    // it as the variant's retaining Copy so copy-lowering injects it at every copy point.
+                    if (!type.IsGenericDefinition && type is VariantTypeInfo variantForCopy &&
+                        _registry.VariantHasDestructibleArm(variant: variantForCopy))
+                    {
+                        MaybeRegisterWired(owner: type,
+                            name: "copy",
+                            returnType: type,
                             existingMethods: existingMethods);
                     }
                     break;

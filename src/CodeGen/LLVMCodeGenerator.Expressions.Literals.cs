@@ -249,7 +249,7 @@ public partial class LlvmCodeGenerator
 
         // Bytes record literal — must mirror the runtime layout
         // `{ ptr data, i64 count, ptr ctrl }`. The `ctrl` slot is null for static
-        // literals; `$copy`/`$destroy` treat null ctrl as a no-op so the literal
+        // literals; `$store`/`$destroy` treat null ctrl as a no-op so the literal
         // is never freed and refcount ops are skipped.
         EmitLine(sb: _globalDeclarations,
             line: $"{constName} = private unnamed_addr constant {{ ptr, i64, ptr }} {{ ptr {dataName}, i64 {count}, ptr null }}");
@@ -655,7 +655,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Layer 2: Text record payload `{ ptr data, i64 count, ptr ctrl }`.
-        // `ctrl` is null for static literals — $copy/$destroy short-circuit on
+        // `ctrl` is null for static literals — $store/$destroy short-circuit on
         // null and never free the literal or touch the refcount.
         EmitLine(sb: _globalDeclarations,
             line: $"{constName} = private unnamed_addr constant {{ ptr, i64, ptr }} {{ ptr {dataName}, i64 {count}, ptr null }}");

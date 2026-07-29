@@ -300,6 +300,10 @@ public enum SemanticDiagnosticCode
     /// collection on every use.</summary>
     NonPresettableCollectionPreset = 260,
 
+    /// <summary>A <c>preset</c> and a type of the same name are declared in the same file — the
+    /// bare identifier is ambiguous between the constant and the type.</summary>
+    PresetTypeNameCollision = 261,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
     // ═══════════════════════════════════════════════════════════════════════════

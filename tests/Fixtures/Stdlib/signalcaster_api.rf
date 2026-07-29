@@ -21,7 +21,7 @@ suspended routine caster(sig: SignalCaster) -> S64
 routine start()
   var sig = SignalCaster()
 
-  var w = waiter(sig: steal sig.clone())
+  var w = waiter(sig: steal sig.duplicate())
   var c = caster(sig: steal sig)
 
   danger!

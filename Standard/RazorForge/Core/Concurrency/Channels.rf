@@ -63,7 +63,7 @@ routine Sender[T].send!(item: T)
 
 ### Produces another sending handle on the same channel (fan-in: more producers).
 ### :returns: A new `Sender[T]` on the same channel.
-routine Sender[T].clone() -> Sender[T]
+routine Sender[T].duplicate() -> Sender[T]
   danger!
     rf_channel_add_feeder(chan: me.chan)
     return Sender[T](chan: me.chan)
@@ -142,7 +142,7 @@ relates ChannelDrain[T] as Iter
 
 ### Produces another consumer handle on the same channel (one more line worker).
 ### :returns: A new `SharedReceiver[T]` on the same channel.
-routine SharedReceiver[T].clone() -> SharedReceiver[T]
+routine SharedReceiver[T].duplicate() -> SharedReceiver[T]
   danger!
     rf_channel_add_consumer(chan: me.chan)
     return SharedReceiver[T](chan: me.chan)

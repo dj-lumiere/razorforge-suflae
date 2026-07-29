@@ -24,11 +24,44 @@ namespace Compiler.Desugaring.Passes;
 /// </summary>
 internal sealed class PresetInliningPass(DesugaringContext ctx)
 {
+    // Presets are GLOBAL by default (public constants like `S64_MAX`/`DECIMAL_PI` are part of the Core
+    // prelude and usable everywhere). A `secret preset` is FILE-PRIVATE: inlinable only inside the file
+    // that declares it. `_ownPresetNames` is the set of preset names declared in the file currently
+    // being lowered — a secret preset from another file is NOT in it, so it is left un-inlined and a bare
+    // identifier that merely shares a name (e.g. a user `record B` vs a stdlib `secret preset B`) resolves
+    // as its own declaration. Null means "no scoping" (compiler-synthesized variant bodies).
+    private Dictionary<string, PresetDeclaration>? _ownPresets;
+
+    // When true, ONLY file-private secret presets are inlined; public presets are left as identifiers
+    // for later resolution. Used by the stdlib-validation verb, whose reduced SA resolves public presets
+    // (via the registry, keeping their declared type) but cannot see secret presets (kept out of the
+    // registry) — so only the latter need inlining there.
+    private bool _secretOnly;
+
+    /// <summary>Inlines ONLY secret presets over <paramref name="program"/> (leaves public presets).</summary>
+    public void RunSecretOnly(Program program)
+    {
+        _secretOnly = true;
+        Run(program: program);
+        _secretOnly = false;
+    }
+
+    /// <summary>Every <c>preset</c> declared in the current file, keyed by name (public or secret).</summary>
+    private static Dictionary<string, PresetDeclaration> CollectOwnPresets(Program program)
+    {
+        var map = new Dictionary<string, PresetDeclaration>(comparer: System.StringComparer.Ordinal);
+        foreach (ISyntaxTreeNode decl in program.Declarations)
+            if (decl is PresetDeclaration preset)
+                map[key: preset.Name] = preset;
+        return map;
+    }
+
     /// <summary>
     /// Runs this compiler phase over its configured input.
     /// </summary>
     public void Run(Program program)
     {
+        _ownPresets = CollectOwnPresets(program: program);
         for (int i = 0; i < program.Declarations.Count; i++)
         {
             switch (program.Declarations[i])
@@ -62,6 +95,10 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
     /// </summary>
     public void RunOnVariantBodies()
     {
+        // Synthesized variant bodies are compiler-generated and not tied to a source file. They never
+        // reference file-private secret presets, so an empty own-set is correct (public presets still
+        // inline via the registry).
+        _ownPresets = new Dictionary<string, PresetDeclaration>(comparer: System.StringComparer.Ordinal);
         foreach (string key in ctx.VariantBodies.Keys.ToList())
         {
             Statement body = ctx.VariantBodies[key];
@@ -245,6 +282,26 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
         // -----------------------------------------------------------------------------
         if (expr is IdentifierExpression id)
         {
+            // Own-file SECRET preset: it is kept out of the global registry (file-private), so inline it
+            // directly from this file's declaration. (Public own-file presets fall through to the shared
+            // registry path below, which carries the seeded ResolvedType metadata.)
+            if (_ownPresets is not null
+                && _ownPresets.TryGetValue(key: id.Name, value: out PresetDeclaration? ownDecl)
+                && ownDecl.IsSecret)
+            {
+                // Aggregate (Array[T,N]) secret presets would need a `@preset.*` global (registry-backed);
+                // none exist in practice, so leave the identifier for the backend validator to flag.
+                if (ownDecl.Value is ListLiteralExpression)
+                    return expr;
+                TypeInfo? rt = id.ResolvedType ?? ownDecl.Value.ResolvedType;
+                return ownDecl.Value is LiteralExpression secretLit
+                    ? secretLit with { ResolvedType = rt }
+                    : ownDecl.Value;
+            }
+
+            if (_secretOnly)
+                return expr;
+
             VariableInfo? v = ctx.Registry.LookupVariable(id.Name);
             if (v is { IsPreset: true, PresetValue: not null })
             {
@@ -288,7 +345,15 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
 
             case CallExpression call:
             {
-                Expression callee = LowerExpression(call.Callee);
+                // A bare-identifier callee is a TYPE constructor or a routine name — never a preset
+                // value (presets are scalars/aggregates, not callable). Inlining it would rewrite
+                // `Foo(a: 1)` into `<literal>(a: 1)` when a preset happens to share the name `Foo`
+                // (e.g. a user `record B` colliding with stdlib `preset B`). So skip the callee when it
+                // is a bare identifier; still lower a member/other callee (e.g. `SOME_PRESET.bit_count()`
+                // whose Object may be a preset) and the argument list.
+                Expression callee = call.Callee is IdentifierExpression
+                    ? call.Callee
+                    : LowerExpression(call.Callee);
                 List<Expression> args = LowerExpressionList(call.Arguments);
                 bool changed = !ReferenceEquals(callee, call.Callee)
                                || !ReferenceEquals(args, call.Arguments);

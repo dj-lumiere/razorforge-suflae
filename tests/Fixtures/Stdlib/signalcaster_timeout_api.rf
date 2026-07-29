@@ -30,7 +30,7 @@ routine start()
   var wa = wait_alone(sig: steal sig_a)
 
   var sig_b = SignalCaster()
-  var wb = wait_for_cast(sig: steal sig_b.clone())
+  var wb = wait_for_cast(sig: steal sig_b.duplicate())
   var cb = caster(sig: steal sig_b)
 
   danger!
