@@ -757,7 +757,13 @@ internal partial class Program
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
                 liveRoutineKeys: result.LiveRoutineKeys,
                 liveOwnerTypeNames: result.LiveOwnerTypeNames,
-                maySuspendRoutineKeys: result.MaySuspendRoutineKeys) { Timing = saTiming };
+                maySuspendRoutineKeys: result.MaySuspendRoutineKeys)
+            {
+                Timing = saTiming,
+                // Single-file codegen: the entry file's own module is the program entry.
+                EntryModule = ast.Declarations.OfType<ModuleDeclaration>()
+                                 .FirstOrDefault()?.Path
+            };
             string llvmIr = generator.Generate();
             Console.WriteLine(value: $"Routines emitted: {generator.EmittedRoutineCount}");
 
@@ -1004,6 +1010,13 @@ internal partial class Program
                 maySuspendKeys: result.MaySuspendRoutineKeys,
                 registry: result.Registry);
 
+            // The entry module (manifest executable) is the module declared by the entry file —
+            // it, not an arbitrary imported module's `start`, is the program entry point.
+            string entryFull = Path.GetFullPath(path: entryFile);
+            string? entryModule = unitsByFile.TryGetValue(key: entryFull, value: out FileBuildUnit? entryUnit)
+                ? entryUnit.Module
+                : null;
+
             var generator = new LlvmCodeGenerator(userPrograms: userPrograms,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
@@ -1013,7 +1026,11 @@ internal partial class Program
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
                 liveRoutineKeys: result.LiveRoutineKeys,
                 liveOwnerTypeNames: result.LiveOwnerTypeNames,
-                maySuspendRoutineKeys: result.MaySuspendRoutineKeys) { Timing = saTiming };
+                maySuspendRoutineKeys: result.MaySuspendRoutineKeys)
+            {
+                Timing = saTiming,
+                EntryModule = entryModule
+            };
             string llvmIr = generator.Generate();
             if (showBuildStages)
                 Console.Error.WriteLine(value: $"Routines emitted: {generator.EmittedRoutineCount}");

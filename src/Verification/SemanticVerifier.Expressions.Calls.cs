@@ -738,6 +738,38 @@ public sealed partial class SemanticVerifier
             }
             case MemberExpression member:
             {
+                // Module-qualified routine call: `Module.routine(...)`. When the callee's object is a
+                // bare identifier that names an imported module — and is neither a value nor a type in
+                // scope — resolve it to a module-level routine (they register under the `Module.name`
+                // key). The identifier may be a full single-segment module name (`ModuleA`) OR the
+                // LEAF of a hierarchical module path (`JsonEncodeApi` for `Tests/Stdlib/JsonEncodeApi`),
+                // since a `/`-path can't be written in expression position (`/` is division). This MUST
+                // run before AnalyzeExpression(member.Object), which would otherwise report the module
+                // name as an unknown identifier (RF-S007).
+                if (member.Object is IdentifierExpression moduleRef
+                    && _registry.LookupVariable(name: moduleRef.Name) == null
+                    && (_currentModuleName == null ||
+                        _registry.LookupVariable(
+                            name: $"{_currentModuleName}.{moduleRef.Name}") == null)
+                    && LookupTypeWithImports(name: moduleRef.Name) == null)
+                {
+                    bool modFailable = member.PropertyName.EndsWith(value: '!');
+                    string modName = modFailable
+                        ? member.PropertyName[..^1]
+                        : member.PropertyName;
+                    RoutineInfo? modRoutine = ResolveModuleQualifiedRoutine(
+                        moduleRef: moduleRef.Name, routineName: modName, isFailable: modFailable,
+                        location: call.Location, ambiguous: out bool ambiguous);
+                    if (ambiguous)
+                    {
+                        return ErrorTypeInfo.Instance;
+                    }
+                    if (modRoutine is { OwnerType: null })
+                    {
+                        return AnalyzeModuleQualifiedRoutineCall(call: call, routine: modRoutine);
+                    }
+                }
+
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
                 // $iter / $refer / $control are dunder-private to their protocols — only the
@@ -1493,6 +1525,106 @@ public sealed partial class SemanticVerifier
         }
 
         return calleeType;
+    }
+
+    /// <summary>
+    /// Resolves a module-qualified routine reference `moduleRef.routineName` to a module-level
+    /// routine. <paramref name="moduleRef"/> may be a full single-segment module name (<c>ModuleA</c>)
+    /// or the LEAF of a hierarchical imported module path (<c>JsonEncodeApi</c> →
+    /// <c>Tests/Stdlib/JsonEncodeApi</c>) — a `/`-path can't be spelled in expression position because
+    /// `/` is division. Candidate modules are the imported modules whose full path equals the ref or
+    /// whose last `/`-segment equals it. Returns the unique matching routine, or null when none match.
+    /// If more than one distinct routine matches (two imported modules sharing a leaf), reports an
+    /// ambiguity error, sets <paramref name="ambiguous"/>, and returns null.
+    /// </summary>
+    private RoutineInfo? ResolveModuleQualifiedRoutine(string moduleRef, string routineName,
+        bool isFailable, SourceLocation location, out bool ambiguous)
+    {
+        ambiguous = false;
+        var matches = new List<RoutineInfo>();
+        var seenKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach (string module in _importedModules)
+        {
+            bool isLeafOrFull = module == moduleRef ||
+                                (module.LastIndexOf(value: '/') is var slash && slash >= 0 &&
+                                 module.AsSpan(start: slash + 1).SequenceEqual(other: moduleRef));
+            if (!isLeafOrFull) continue;
+
+            RoutineInfo? candidate = _registry.LookupRoutine(
+                fullName: $"{module}.{routineName}", isFailable: isFailable);
+            if (candidate is { OwnerType: null } && seenKeys.Add(item: candidate.RegistryKey))
+                matches.Add(item: candidate);
+        }
+
+        if (matches.Count > 1)
+        {
+            ambiguous = true;
+            ReportError(code: SemanticDiagnosticCode.AmbiguousModuleQualifiedCall,
+                message:
+                $"'{moduleRef}.{routineName}' is ambiguous — it matches routines in multiple " +
+                $"imported modules ({string.Join(separator: ", ", values: matches.Select(selector: m => m.BaseName))}). " +
+                "Use a more specific module name.",
+                location: location);
+            return null;
+        }
+
+        return matches.Count == 1 ? matches[index: 0] : null;
+    }
+
+    /// <summary>
+    /// Finalizes a module-qualified routine call (`ModuleName.routine(...)`): binds the resolved
+    /// module-level routine to the call, records failable-call bookkeeping, validates access and
+    /// arguments, and returns the call's result type. Mirrors the standalone-routine branch of
+    /// <see cref="AnalyzeCallExpression"/>; the callee stays a <c>MemberExpression</c> but the
+    /// resolved routine has no owner, which is how codegen and reachability tell the two apart.
+    /// </summary>
+    private TypeSymbol AnalyzeModuleQualifiedRoutineCall(CallExpression call, RoutineInfo routine)
+    {
+        call.ResolvedRoutine = routine;
+        call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
+
+        // Track failable calls for error-handling variant generation (same rule as a bare call).
+        if (routine.IsFailable && _currentRoutine != null)
+        {
+            _currentRoutine.HasFailableCalls = true;
+            _currentRoutine.FailableCallees.Add(item: routine);
+
+            if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
+                !_currentRoutine.IsSynthesized)
+            {
+                ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
+                    message:
+                    $"Failable routine '{routine.Name}!' called without error handling. " +
+                    UseWhenHint,
+                    location: call.Location);
+            }
+        }
+
+        ValidateRoutineAccess(routine: routine, accessLocation: call.Location);
+        AnalyzeCallArguments(routine: routine, arguments: call.Arguments, location: call.Location);
+        ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
+
+        TypeSymbol returnType = routine.ReturnType ??
+                                _registry.LookupType(name: BlankMemberName) ??
+                                ErrorTypeInfo.Instance;
+        call.IsInFlight = routine.IsInFlightReturn;
+
+        // A `threaded`/`suspended` module routine yields an `Agent[T]` handle, exactly like a bare
+        // async call. The crossing rule (RF-S632) applies to its arguments the same way.
+        if (routine.AsyncStatus is AsyncStatus.Threaded or AsyncStatus.Suspended)
+        {
+            ValidateAsyncRoutineArguments(routine: routine, arguments: call.Arguments,
+                boundaryKind: routine.AsyncStatus == AsyncStatus.Threaded
+                    ? "threaded"
+                    : "suspended",
+                location: call.Location);
+            TypeSymbol? agentDef = _registry.LookupType(name: "Agent");
+            return agentDef != null
+                ? _registry.GetOrCreateResolution(genericDef: agentDef, typeArguments: [returnType])
+                : returnType;
+        }
+
+        return returnType;
     }
 
     private static CallLoweringKind ClassifyStandaloneRoutineCall(RoutineInfo routine)

@@ -835,6 +835,21 @@ public partial class LlvmCodeGenerator
 
         EmitTraceLocUpdate(sb: sb, location: call.Location);
 
+        // Module-qualified call `Module.routine(...)`: SA resolved it to a module-level routine
+        // (OwnerType == null) even though the callee is syntactically a member access. There is no
+        // receiver, so emit it as a free call rather than a method call.
+        if (call.Callee is MemberExpression && call.ResolvedRoutine is { OwnerType: null } moduleRoutine)
+        {
+            return EmitRoutineCall(sb: sb,
+                req: new RoutineCallRequest(FunctionName: moduleRoutine.BaseName,
+                    Arguments: call.Arguments,
+                    ResolvedRoutine: moduleRoutine,
+                    ResolvedReturnType: call.ResolvedType,
+                    TypeArguments: call.TypeArguments,
+                    LoweringKind: call.LoweringKind,
+                    ConstructedType: call.ConstructedType));
+        }
+
         return call.Callee switch
         {
             // Determine if this is a method call (callee is MemberExpression) or standalone function call

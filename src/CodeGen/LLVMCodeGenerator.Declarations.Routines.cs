@@ -191,7 +191,8 @@ public partial class LlvmCodeGenerator
     }
 
     private void GenerateRoutineDefinition(RoutineDeclaration routine,
-        RoutineInfo? preResolvedInfo = null, string? nameOverride = null)
+        RoutineInfo? preResolvedInfo = null, string? nameOverride = null,
+        string? moduleContext = null)
     {
         RoutineInfo? routineInfo = preResolvedInfo;
 
@@ -202,6 +203,16 @@ public partial class LlvmCodeGenerator
             // "IO.show" (module.name). Try full AST name first, then short name lookup.
             string baseName = routine.Name;
             routineInfo = _registry.LookupRoutine(fullName: baseName);
+            // Module-level routine (no dot): prefer the module-qualified key so that two modules'
+            // same-named routines (e.g. each of several imported test modules with a `start`) each
+            // bind to their OWN RoutineInfo. Without this, the bare LookupRoutineByName fallback
+            // below returns a first-wins entry and this module's body is emitted under another
+            // module's symbol.
+            if (routineInfo == null && !string.IsNullOrEmpty(value: moduleContext) &&
+                !baseName.Contains(value: '.'))
+            {
+                routineInfo = _registry.LookupRoutine(fullName: $"{moduleContext}.{baseName}");
+            }
             if (routineInfo == null)
             {
                 int dotIdx = baseName.IndexOf(value: '.');

@@ -294,7 +294,8 @@ public partial class LlvmCodeGenerator
         IReadOnlyCollection<string>? liveOwnerTypeNames = null,
         IReadOnlyCollection<string>? maySuspendRoutineKeys = null) :
         this(userPrograms:
-            [(program, program.Location.FileName, "")],
+            [(program, program.Location.FileName,
+                program.Declarations.OfType<ModuleDeclaration>().FirstOrDefault()?.Path ?? "")],
             registry: registry,
             stdlibPrograms: stdlibPrograms,
             target: target,
@@ -443,6 +444,13 @@ public partial class LlvmCodeGenerator
     /// <see cref="Generate"/>. Mirrors the <c>sa-timing</c> manifest flag for codegen visibility.
     /// </summary>
     public bool Timing { get; set; }
+
+    /// <summary>
+    /// The manifest executable module (the entry file's module). Selects which <c>start</c> becomes
+    /// the program entry when several modules define one (e.g. a test harness importing many
+    /// modules). Null/empty for a single-module program, where the sole <c>start</c> is used.
+    /// </summary>
+    public string? EntryModule { get; init; }
 
     /// <summary>Generates LLVM IR for all user programs and returns it as a string.</summary>
     public string Generate()
@@ -721,13 +729,13 @@ public partial class LlvmCodeGenerator
     private void GenerateRoutineDefinitions()
     {
         // First, generate user program routines (these take priority)
-        foreach ((Program userProgram, string _, string _) in _userPrograms)
+        foreach ((Program userProgram, string _, string userModule) in _userPrograms)
         {
             foreach (ISyntaxTreeNode decl in userProgram.Declarations)
             {
                 if (decl is RoutineDeclaration routine)
                 {
-                    GenerateRoutineDefinition(routine: routine);
+                    GenerateRoutineDefinition(routine: routine, moduleContext: userModule);
                 }
             }
         }
@@ -1526,10 +1534,28 @@ public partial class LlvmCodeGenerator
 
         // Emit main() entry point that calls the module's start() / start!() routine.
         // Failable entry points have the symbol decorated with `!`, so we accept both forms.
-        string? startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
+        static bool IsStartSymbol(string f) =>
             f == "start" || f == "start!" ||
             f.EndsWith(value: ".start") || f.EndsWith(value: ".start!") ||
-            f.EndsWith(value: ".start\"") || f.EndsWith(value: ".start!\""));
+            f.EndsWith(value: ".start\"") || f.EndsWith(value: ".start!\"");
+
+        // Prefer the ENTRY module's own start. `_generatedRoutineDefs` is a hash set (unordered),
+        // so a bare FirstOrDefault would pick an arbitrary `.start` when several imported modules
+        // each define one (e.g. a test harness importing many modules) — non-deterministically
+        // making the wrong module's start the program entry. The first user program is the entry
+        // (manifest executable module); its start is the intended entry point.
+        // The program entry is the manifest executable module's start — NOT an arbitrary `.start`.
+        // With several imported modules each defining `start` (e.g. a test harness), selecting by
+        // name alone is ambiguous, so the entry module is passed in explicitly. Fall back to a
+        // lone start only when no entry module is set (single-module program).
+        string? startFunc = null;
+        if (!string.IsNullOrEmpty(value: EntryModule))
+        {
+            startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
+                f == $"{EntryModule}.start" || f == $"{EntryModule}.start!" ||
+                f == $"\"{EntryModule}.start\"" || f == $"\"{EntryModule}.start!\"");
+        }
+        startFunc ??= _generatedRoutineDefs.SingleOrDefault(predicate: IsStartSymbol);
         if (startFunc != null)
         {
             // Select trace mode: 2=shadow (debug+release), 1=platform (hardware faults only), 0=none (release-time/space)

@@ -193,19 +193,35 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
     private void BuildAstIndices()
     {
-        foreach ((Program program, _, _) in ctx.UserPrograms)
+        foreach ((Program program, _, string module) in ctx.UserPrograms)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 AddDecl(map: _userByName, name: decl.Name, decl: decl);
+                // Also index module-level routines under their module-qualified name so
+                // FindDecl can disambiguate same-named routines across modules (e.g. each of
+                // several imported test modules defining `start`). Without this, the bare-name
+                // list collapses to one first-wins decl in MatchOverload's count-only fallback and
+                // the other modules' bodies are never walked — pruning routines they call.
+                if (!string.IsNullOrEmpty(value: module) && !decl.Name.Contains(value: '.'))
+                {
+                    AddDecl(map: _userByName, name: $"{module}.{decl.Name}", decl: decl);
+                }
             }
         }
 
-        foreach ((Program program, _, _) in ctx.Registry.StdlibPrograms)
+        foreach ((Program program, _, string module) in ctx.Registry.StdlibPrograms)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 AddDecl(map: _stdlibByName, name: decl.Name, decl: decl);
+                // Imported project modules are carried here too; index their module-level routines
+                // under the module-qualified name so FindDecl can disambiguate same-named routines
+                // across modules (see the user-index note above).
+                if (!string.IsNullOrEmpty(value: module) && !decl.Name.Contains(value: '.'))
+                {
+                    AddDecl(map: _stdlibByName, name: $"{module}.{decl.Name}", decl: decl);
+                }
             }
         }
     }
@@ -223,7 +239,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
     private void SeedFromEntryPoints()
     {
-        foreach ((Program program, _, _) in ctx.UserPrograms)
+        foreach ((Program program, _, string module) in ctx.UserPrograms)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
@@ -231,7 +247,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                                decl.Annotations.Any(predicate: a => a == "test" || a == "bench");
                 if (!isEntry) continue;
 
-                RoutineInfo? info = ctx.Registry.LookupRoutineByName(name: decl.Name);
+                // Resolve the module-qualified routine so each module's entry maps to its OWN
+                // RoutineInfo. LookupRoutineByName(bare) returns a first-wins single entry, so with
+                // several modules defining `start` (e.g. a harness importing many test modules) it
+                // would both seed the wrong root AND pair a mismatched (info, decl) — walking one
+                // module's body under another's RoutineInfo — pruning the real entry's callees.
+                RoutineInfo? info = (!string.IsNullOrEmpty(value: module)
+                                        ? ctx.Registry.LookupRoutine(
+                                            fullName: $"{module}.{decl.Name}")
+                                        : null)
+                                    ?? ctx.Registry.LookupRoutineByName(name: decl.Name);
                 if (info == null) continue;
                 Enqueue(routine: info, decl: decl, typeSubs: new Dictionary<string, TypeInfo>());
             }
@@ -1485,9 +1510,21 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
     private RoutineDeclaration? FindDecl(RoutineInfo callee) // NOSONAR S3776
     {
-        // Standalone routine: try by bare name in user, then stdlib.
+        // Standalone routine: prefer the module-qualified name (BaseName = "Module.name") so two
+        // modules' same-named routines resolve to their OWN decl, then fall back to the bare name
+        // (covers empty-module routines and stdlib). Qualified is tried in BOTH indices first —
+        // imported project modules are carried in the stdlib index, so a bare-name match in the
+        // user index (e.g. the entry module's own `start`) must not win over the correct
+        // module-qualified decl.
         if (callee.OwnerType == null)
         {
+            if (callee.BaseName != callee.Name)
+            {
+                if (_userByName.TryGetValue(key: callee.BaseName, value: out List<RoutineDeclaration>? uq))
+                    return MatchOverload(decls: uq, callee: callee);
+                if (_stdlibByName.TryGetValue(key: callee.BaseName, value: out List<RoutineDeclaration>? sq))
+                    return MatchOverload(decls: sq, callee: callee);
+            }
             if (_userByName.TryGetValue(key: callee.Name, value: out List<RoutineDeclaration>? u))
                 return MatchOverload(decls: u, callee: callee);
             if (_stdlibByName.TryGetValue(key: callee.Name, value: out List<RoutineDeclaration>? s))
