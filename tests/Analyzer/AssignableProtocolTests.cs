@@ -9,7 +9,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for the Assignable protocol — the gate for implicit-copy positions
-/// (var binding, non-steal arg-pass, non-?T return, <c>with</c> base).
+/// (var binding, non-steal arg-pass, non-in-flight-T return, <c>with</c> base).
 ///
 /// Coverage:
 ///   * Auto-derivation rule — records whose @llvm layout contains no `ptr` get
