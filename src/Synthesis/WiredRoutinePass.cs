@@ -1298,14 +1298,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             return new ReturnStatement(Value: boxedScalar, Location: _synthLoc);
         }
 
-        // SINGLE-VALUE rule: a type with no direct SerialValue arm and fewer than two fields serializes
-        // as a single Text value — its `$represent()` boxed into the Text arm. This covers the @llvm wide
-        // primitives (U128/U256/S128/F128/Decimal/Address/…, which have NO RF fields) and single-field
-        // new types. The OLD behavior field-walked them into a `Dict[Text, SerialValue]`; with zero
-        // fields that Dict was degenerate and its `Dict.create` never monomorphized, leaking the generic
-        // `Core.Dict.create` into codegen (the synth-body-failed warning flood). Multi-field aggregates
-        // fall through to the Dict path below. A type may still hand-define `serialize()` to override.
-        if (fields.Count < 2)
+        // OPAQUE-VALUE rule: a type with no direct SerialValue arm AND no RF fields is an opaque scalar
+        // (the @llvm wide primitives — U128/U256/S128/F128/Decimal/Address/…). It serializes as a single
+        // Text value: its `$represent()` boxed into the Text arm. The OLD behavior field-walked it into a
+        // `Dict[Text, SerialValue]`; with zero fields that Dict was degenerate and its `Dict.create`
+        // never monomorphized, leaking the generic `Core.Dict.create` into codegen (the synth-body-failed
+        // warning flood). A structured type with ≥1 field (even a single-field record like `Leaf{x}`)
+        // still field-walks into the Dict arm below, preserving `{x: …}` structure. A specific type may
+        // hand-define `serialize()` to override.
+        if (fields.Count == 0)
         {
             var meRepr = new IdentifierExpression(Name: "me", Location: _synthLoc)
                 { ResolvedType = owner };
