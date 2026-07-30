@@ -22,7 +22,7 @@ entity Node
 # the node can be constructed before its target exists (T inferred from the field type); `me.next = a`
 # then rewires it (COPY semantics: the field takes a strong reference).
 routine build_self_cycle()
-  danger!
+  danger
     var a = Node(next: roamed_none(), mark: Beacon(id: 7_s64), id: 7_s64).roam()
     a.raw_inner().next = a
   return

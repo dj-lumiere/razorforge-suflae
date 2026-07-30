@@ -849,7 +849,7 @@ public record TypeDestructuringPattern(
 #region Unsafe Statements
 
 /// <summary>
-/// Statement representing a danger! block that disables safety checks.
+/// Statement representing a danger block that disables safety checks.
 /// Allows access to unsafe memory operations and bypasses normal language restrictions.
 /// </summary>
 /// <param name="Body">Block statement containing the unsafe operations</param>

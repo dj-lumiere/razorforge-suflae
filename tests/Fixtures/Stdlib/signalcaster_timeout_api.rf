@@ -33,7 +33,7 @@ routine start()
   var wb = wait_for_cast(sig: steal sig_b.duplicate())
   var cb = caster(sig: steal sig_b)
 
-  danger!
+  danger
     var timed_out = wa.retrieve!()
     var woken = wb.retrieve!()
     discard cb.retrieve!()

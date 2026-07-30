@@ -231,8 +231,8 @@ public sealed partial class StdlibLoader
             {
                 string code = File.ReadAllText(path: filePath);
                 // Parse stdlib files by their own extension, not the user language: the stdlib is
-                // RazorForge source (`.rf`, uses `danger!`/`extern`), so a Suflae compile must still
-                // parse it with the RazorForge grammar (else SF-G112 on the `danger!` bang).
+                // RazorForge source (`.rf`, uses `danger`/`extern`), so a Suflae compile must still
+                // parse it with the RazorForge grammar (else SF-G112 on the `danger` bang).
                 Program ast = ParseFileByExtension(code: code, filePath: filePath);
 
                 // Find module declaration, or derive from directory

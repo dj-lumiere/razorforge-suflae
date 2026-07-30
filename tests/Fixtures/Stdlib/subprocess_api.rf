@@ -15,12 +15,12 @@ suspended routine sh(cmd: Text) -> ProcessResult
 
 routine start()
   # Direct (non-coroutine) call: blocks until the child exits.
-  danger!
+  danger
     var r = run_process(command: "exit 0")
     show(f"direct => ok={r.succeeded()}")
 
   # Output capture: echo produces output on both shells (exact bytes differ, so just check non-empty).
-  danger!
+  danger
     var e = run_process(command: "echo hi")
     show(f"echo => ok={e.succeeded()} has_output={e.output.count() > 0_u64}")
 
@@ -29,7 +29,7 @@ routine start()
   jobs.add_last(value: sh(cmd: "exit 0"))
   jobs.add_last(value: sh(cmd: "exit 5"))
   jobs.add_last(value: sh(cmd: "exit 0"))
-  danger!
+  danger
     var rs = jobs.gather!()
     show(f"gathered => {rs[0].exit_code} {rs[1].exit_code} {rs[2].exit_code}")
     show(f"ok => {rs[0].succeeded()} {rs[1].succeeded()} {rs[2].succeeded()}")

@@ -17,7 +17,7 @@ namespace Compiler.Synthesis;
 /// Synthesis anchors on the wrapper's generic definition (e.g. T) so that
 /// monomorphization handles per-instance specialization.  The forwarder body is:
 ///
-///   danger!
+///   danger
 ///     var raw = Hijacked[T](me)
 ///     return raw.extract().method(arg1: arg1, ...)
 ///
@@ -383,12 +383,12 @@ internal sealed class WrapperForwardingPass
     /// Builds the AST body:
     ///
     ///   Pointer wrappers (dataFieldName == null):
-    ///     danger!
+    ///     danger
     ///       var raw = Hijacked[T](me)
     ///       [return] raw.extract().methodName(param1: param1, ...)
     ///
     ///   Record-struct wrappers (dataFieldName == "data"):
-    ///     danger!
+    ///     danger
     ///       [return] me.data.extract().methodName(param1: param1, ...)
     ///
     /// where T is the wrapper's generic parameter name.
@@ -473,7 +473,7 @@ internal sealed class WrapperForwardingPass
             // RC wrappers: `me` is a ptr to `RetainController[T]`, NOT to T directly. Reaching
             // T requires double-indirection through the controller's `data: Hijacked[T]` field:
             //
-            //   danger!
+            //   danger
             //     var raw  = Hijacked[RetainController[T]](me)
             //     var ctrl = raw.as_entity()              # RetainController[T] ptr
             //     [return] ctrl.borrow_data().as_entity().method(args...)

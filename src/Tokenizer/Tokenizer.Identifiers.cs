@@ -82,7 +82,7 @@ public partial class Tokenizer
 
         string text = _source.Substring(startIndex: _tokenStart, length: _position - _tokenStart);
 
-        // Check if text + "!" matches a keyword (for danger!)
+        // Check if text + "!" matches a keyword (for danger)
         if (Peek() == '!' && _keywords.TryGetValue(key: text + "!", value: out TokenType bangType))
         {
             Advance();

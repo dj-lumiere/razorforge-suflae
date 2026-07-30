@@ -226,7 +226,7 @@ public partial class Tokenizer
         // RF-only keywords
         if (_language == Language.RazorForge)
         {
-            _keywords[key: "danger!"] = TokenType.Danger;
+            _keywords[key: "danger"] = TokenType.Danger;
             _keywords[key: "dangerous"] = TokenType.Dangerous;
             _keywords[key: "external"] = TokenType.External;
             _keywords[key: "steal"] = TokenType.Steal;

@@ -929,7 +929,7 @@ public sealed partial class SemanticVerifier
         // Types the user program actually needs will be materialized when user SA references them.
         // The stdlib is always RazorForge source (SF ≡ RF grammar; SF's Core IS RF's Core). Analyze
         // its bodies in RazorForge mode so language-sensitive SA — unsuffixed-literal defaults, the
-        // danger!/extern gates, generic-call resolution — matches how the stdlib was authored. Under
+        // danger/extern gates, generic-call resolution — matches how the stdlib was authored. Under
         // Suflae mode the RF stdlib's generic calls fail to resolve and survive lowering (RF-S954).
         Language savedLanguage = _registry.Language;
         _registry.Language = Language.RazorForge;

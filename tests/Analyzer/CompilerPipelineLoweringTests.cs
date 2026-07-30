@@ -1672,7 +1672,7 @@ public class CompilerPipelineLoweringTests
 
     /// <summary>
     /// Yields every expression node reachable from <paramref name="statement"/>, including
-    /// nodes inside <c>danger!</c> blocks, loops, and variant-return wrappers that the
+    /// nodes inside <c>danger</c> blocks, loops, and variant-return wrappers that the
     /// narrower <see cref="FindCalls(Statement)"/> walker does not traverse.
     /// </summary>
     private static IEnumerable<Expression> EnumerateExpressions(Statement statement)

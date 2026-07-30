@@ -16,7 +16,7 @@ routine start()
   show(f"-0: {nz}")
 
   # NaN propagation (unchecked: arithmetic with NaN yields NaN, not error)
-  danger!
+  danger
     show(f"nan + 1: {nan.$add_unchecked(you: 1.0_f64)}")
   show(f"nan == nan: {nan == nan}")
   show(f"nan != nan: {nan != nan}")
@@ -24,16 +24,16 @@ routine start()
   show(f"1.0.is_nan(): {1.0_f64.is_nan()}")
 
   # Infinity arithmetic (unchecked: inf+inf=inf, inf-inf=NaN)
-  danger!
+  danger
     show(f"inf + inf: {inf.$add_unchecked(you: inf)}")
     show(f"inf - inf: {inf.$sub_unchecked(you: inf).is_nan()}")
-  danger!
+  danger
     show(f"1.0 / 0.0: {1.0_f64.$truediv_unchecked(you: 0.0_f64)}")
     show(f"-1.0 / 0.0: {(-1.0_f64).$truediv_unchecked(you: 0.0_f64)}")
 
   # Signed zero
   show(f"+0 == -0: {pz == nz}")
-  danger!
+  danger
     show(f"1.0 / +0: {1.0_f64.$truediv_unchecked(you: pz)}")
     show(f"1.0 / -0: {1.0_f64.$truediv_unchecked(you: nz)}")
 

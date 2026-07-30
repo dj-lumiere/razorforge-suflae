@@ -335,7 +335,7 @@ public sealed class RoutineInfo
     /// <summary>For external routines, whether it's variadic.</summary>
     public bool IsVariadic { get; init; }
 
-    /// <summary>Whether this routine is marked dangerous (requires danger! block to call).</summary>
+    /// <summary>Whether this routine is marked dangerous (requires danger block to call).</summary>
     public bool IsDangerous { get; init; }
 
     /// <summary>Storage class: None (instance/module-level), Common (type-level static).</summary>

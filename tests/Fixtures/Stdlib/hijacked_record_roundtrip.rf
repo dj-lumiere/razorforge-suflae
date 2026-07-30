@@ -13,7 +13,7 @@ record Point
 routine start()
   # ── Primitive-shaped record: F128 ────────────────────────────────────
   var f: F128 = 3.14f128
-  danger!
+  danger
     var hf = f.hijack()
     var back = hf.peek()
     show(f"F128 original = {f}")
@@ -23,7 +23,7 @@ routine start()
 
   # ── Multi-field user record: Point ───────────────────────────────────
   var p: Point = Point(x: 10_s64, y: 20_s64)
-  danger!
+  danger
     var hp = p.hijack()
     var p2 = hp.peek()
     show(f"Point original = ({p.x}, {p.y})")

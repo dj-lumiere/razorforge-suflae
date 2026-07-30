@@ -75,7 +75,7 @@ record Box
   posted value: S64
 
 routine Box.set_via_hijack(v: S64)
-  danger!
+  danger
     me.value.hijack().poke(v)
   return
 

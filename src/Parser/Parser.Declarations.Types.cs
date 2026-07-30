@@ -686,7 +686,7 @@ public partial class Parser
                 methodIsCommon = true;
             }
 
-            // Optional `dangerous` qualifier — marks the protocol method as requiring a `danger!`
+            // Optional `dangerous` qualifier — marks the protocol method as requiring a `danger`
             // block at the call site (mirrors the impl-side `dangerous routine` syntax).
             bool methodIsDangerous = false;
             if (Match(type: TokenType.Dangerous))

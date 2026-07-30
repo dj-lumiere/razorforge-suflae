@@ -29,7 +29,7 @@ routine coro_body(ud: CPtr)
   return
 
 routine start()
-  danger!
+  danger
     var co = rf_coro_create(entry: coro_body, userdata: cptr_none(), stack_size: 0)
     discard rf_coro_resume(coro: co)
     rf_coro_abandon(coro: co)

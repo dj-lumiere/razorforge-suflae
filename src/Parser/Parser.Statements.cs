@@ -6,7 +6,7 @@ using SyntaxTree;
 namespace Compiler.Parser;
 
 /// <summary>
-/// Partial class containing statement parsing (if, while, for, when, return, using, release, danger!, etc.).
+/// Partial class containing statement parsing (if, while, for, when, return, using, release, danger, etc.).
 /// Handles both RazorForge and Suflae syntax via <c>_language</c> dispatch.
 /// </summary>
 public partial class Parser
@@ -1077,16 +1077,16 @@ public partial class Parser
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Parses a danger! statement (unsafe memory operations block).
+    /// Parses a danger statement (unsafe memory operations block).
     /// RF-only construct guarded by <c>_language == Language.RazorForge</c>.
-    /// Syntax: <c>danger!</c> followed by indented body.
+    /// Syntax: <c>danger</c> followed by indented body.
     /// </summary>
     /// <returns>A <see cref="DangerStatement"/> AST node.</returns>
     private DangerStatement ParseDangerStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // 'danger!' is tokenized as a single Danger token (including the '!')
+        // 'danger' is tokenized as a single Danger token (including the '!')
         var body = (BlockStatement)ParseIndentedBlock();
 
         return new DangerStatement(Body: body, Location: location);

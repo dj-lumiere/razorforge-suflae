@@ -70,7 +70,7 @@ public partial class LlvmCodeGenerator
                 return false;
 
             case DangerStatement danger:
-                // danger! block - just emit the body
+                // danger block - just emit the body
                 return EmitBlock(sb: sb, block: danger.Body);
 
             case WhenStatement whenStmt:

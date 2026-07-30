@@ -7,7 +7,7 @@ import Numerics.[Decimal]
 # F512-engine routine whose UnpackedFloat field access the SignedFpClass refactor missed (codegen
 # "member 'sign' not found"). validate-stdlib does NOT catch that class of error, so a fixture must.
 routine start()
-  danger!
+  danger
     show(f"tgamma(5): {Decimal(from: 5_s64).tgamma!()}")
     show(f"tgamma(1): {Decimal(from: 1_s64).tgamma!()}")
     show(f"lgamma(10): {Decimal(from: 10_s64).lgamma!()}")

@@ -14,15 +14,15 @@ import IO/Console
 
 suspended routine consumer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
   sig.lock()
-  danger!
+  danger
     while cell.peek() == 0_s64    # predicate, tested under the lock
       sig.wait()                     # releases the lock while parked, re-acquires on wake
   sig.unlock()
-  danger!
+  danger
     return cell.peek()
 
 suspended routine producer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
-  danger!
+  danger
     cell.poke(value: 42_s64)       # make the predicate true...
   sig.cast_one()                     # ...then wake the waiter
   return 1
@@ -30,7 +30,7 @@ suspended routine producer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
 routine start()
   var slot = 0_s64
   var sig = SignalCaster()
-  danger!
+  danger
     var cell = slot.hijack()         # raw pointer to `slot`, copyable -> both coroutines share it
     var con = consumer(sig: steal sig.duplicate(), cell: cell)
     var pro = producer(sig: steal sig, cell: cell)

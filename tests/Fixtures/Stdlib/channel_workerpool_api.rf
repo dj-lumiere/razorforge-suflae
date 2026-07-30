@@ -10,7 +10,7 @@ import IO/Console
 
 suspended routine feed_jobs(out: Sender[S64], n: S64) -> S64
   var i = 1_s64
-  danger!
+  danger
     while i <= n
       out.send!(item: i)
       i = i + 1
@@ -30,7 +30,7 @@ routine start()
   var w1 = worker(belt: steal belt.duplicate())
   var w2 = worker(belt: steal belt)
 
-  danger!
+  danger
     discard fj.retrieve!()       # drive feeding (channel closes when the Sender drops)
     var d1 = w1.retrieve!()
     var d2 = w2.retrieve!()

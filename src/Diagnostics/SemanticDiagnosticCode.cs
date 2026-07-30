@@ -630,7 +630,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Nested grasping is not allowed - cannot grasp a member of an already-grasped object.</summary>
     NestedHijackingNotAllowed = 608,
 
-    /// <summary>Dangerous routine called outside a danger! block.</summary>
+    /// <summary>Dangerous routine called outside a danger block.</summary>
     DangerousCallOutsideDangerBlock = 609,
 
     /// <summary>Lambda captures variable without declaring it in 'given' clause.</summary>
@@ -676,10 +676,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot write to member variable through read-only wrapper (Viewing, Inspecting).</summary>
     WriteThroughReadOnlyWrapper = 631,
 
-    /// <summary>Hijacked[T] method calls require danger! block.</summary>
+    /// <summary>Hijacked[T] method calls require danger block.</summary>
     HijackedRequiresDanger = 627,
 
-    /// <summary>.hijack() on Shared/Watched requires danger! block.</summary>
+    /// <summary>.hijack() on Shared/Watched requires danger block.</summary>
     SnatchRequiresDanger = 628,
 
     /// <summary>A multi-threaded access token (Inspecting/Claiming from inspect()/claim()) must be

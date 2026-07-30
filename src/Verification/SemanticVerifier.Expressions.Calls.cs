@@ -1147,23 +1147,23 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #97: Hijacked[T] method calls require danger! block
+                    // #97: Hijacked[T] method calls require danger block
                     if (IsHijacked(type: objectType) && !InDangerBlock)
                     {
                         ReportError(code: SemanticDiagnosticCode.HijackedRequiresDanger,
                             message:
-                            "Method call on 'Hijacked[T]' type requires a 'danger!' block. " +
+                            "Method call on 'Hijacked[T]' type requires a 'danger' block. " +
                             "Hijacked values bypass ownership safety checks.",
                             location: call.Location);
                     }
 
-                    // #98: .hijack() on Shared/Watched requires danger! block
+                    // #98: .hijack() on Shared/Watched requires danger block
                     if (member.MemberName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && !InDangerBlock &&
                         (IsSharedType(type: objectType) || IsWatchedType(type: objectType)))
                     {
                         ReportError(code: SemanticDiagnosticCode.SnatchRequiresDanger,
                             message:
-                            $"Calling '.hijack()' on '{objectType.Name}' requires a 'danger!' block. " +
+                            $"Calling '.hijack()' on '{objectType.Name}' requires a 'danger' block. " +
                             "Hijacked values bypasses reference counting safety.",
                             location: call.Location);
                     }

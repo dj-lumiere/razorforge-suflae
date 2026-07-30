@@ -3,9 +3,9 @@ import IO/Console
 
 # Case #2 of the struct-ABI byval coverage: a record (with a MANAGED Text field)
 # passed BY VALUE into a FAILABLE `!` routine that is called directly inside a
-# `danger!` block. This is the exact shape of the RecordCopyLoweringPass
+# `danger` block. This is the exact shape of the RecordCopyLoweringPass
 # double-free (the pass once had no `case DangerStatement`, so the retaining
-# `$copy` was skipped for by-value args inside `danger!`). Both the throwing and
+# `$copy` was skipped for by-value args inside `danger`). Both the throwing and
 # non-throwing paths are exercised, and the caller keeps using the record after.
 
 record Person
@@ -19,7 +19,7 @@ routine checked_age!(p: Person) -> S64
 
 routine start()
   var alice = Person(name: "alice", age: 30_s64)
-  danger!
+  danger
     var a = checked_age!(alice)
     show(f"checked_age: {a}")
   show(f"alice still valid: {alice.name} {alice.age}")

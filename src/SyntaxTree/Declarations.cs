@@ -144,7 +144,7 @@ public record VariableDeclaration(
 /// <param name="IsFailable">Whether the routine has a failable <c>!</c> suffix.</param>
 /// <param name="Storage">Storage class for the routine.</param>
 /// <param name="Async">Suspended or threaded routine mode.</param>
-/// <param name="IsDangerous">Whether the routine requires a <c>danger!</c> context.</param>
+/// <param name="IsDangerous">Whether the routine requires a <c>danger</c> context.</param>
 /// <remarks>
 /// Function declarations support:
 /// <list type="bullet">

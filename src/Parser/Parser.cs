@@ -566,7 +566,7 @@ public partial class Parser
     /// <summary>
     /// Parses a single statement within a block or function body.
     /// Handles: if, while, for, when, return, throw, absent, break, continue, and expression statements.
-    /// RazorForge-only: danger! block, steal expression, release statement, block statements.
+    /// RazorForge-only: danger block, steal expression, release statement, block statements.
     /// </summary>
     /// <remarks>
     /// Statement types (checked in sequence):
@@ -594,7 +594,7 @@ public partial class Parser
     ///   using        - Resource management (declaration form)
     ///
     /// MEMORY BLOCKS (RazorForge only):
-    ///   danger!      - Unsafe block (raw pointers, FFI)
+    ///   danger      - Unsafe block (raw pointers, FFI)
     ///   release      - Early resource cleanup
     ///
     /// DECLARATIONS IN STATEMENT CONTEXT:

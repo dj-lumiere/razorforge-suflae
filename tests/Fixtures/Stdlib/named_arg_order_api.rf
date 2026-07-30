@@ -49,7 +49,7 @@ routine start()
 
   # Suspended-spawn call with named args out of order.
   var ag = work(c: 1, a: 100, b: 10)
-  danger!
+  danger
     show(f"spawn: {ag.retrieve!()}")
 
   # Free-routine arguments evaluate in declaration order (a, b, c) even though written c, a, b.

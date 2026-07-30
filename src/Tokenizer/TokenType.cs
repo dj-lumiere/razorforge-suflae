@@ -446,7 +446,7 @@ public enum TokenType
     /// <summary>No-operation pass keyword - placeholder for empty blocks</summary>
     Pass,
 
-    /// <summary>Danger mode keyword for unsafe operations (danger! { ... })</summary>
+    /// <summary>Danger mode keyword for unsafe operations (danger { ... })</summary>
     Danger,
 
     /// <summary>With clause keyword for record copying with modifications (a with .x: 42)</summary>

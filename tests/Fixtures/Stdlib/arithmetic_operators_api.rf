@@ -14,7 +14,7 @@ routine start()
   # --- In-range: all four agree ---
   show("--- in-range ---")
   show(f"100 + 50 (checked): {100_s64 + 50_s64}")
-  danger!
+  danger
     show(f"100 +! 50 (unchecked): {100_s64 +! 50_s64}")
   show(f"100 +% 50 (wrap): {100_s64 +% 50_s64}")
   show(f"100 +^ 50 (clamp): {100_s64 +^ 50_s64}")

@@ -283,7 +283,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 
             case DangerStatement danger:
             {
-                // A `danger!` block is just a scoped block whose failable calls crash on failure.
+                // A `danger` block is just a scoped block whose failable calls crash on failure.
                 // Without recursing into its body, call arguments inside it never get their
                 // retaining `$store` — so the callee's by-value param `$destroy` frees the CALLER's
                 // value (e.g. `x.divmod!(other: b)` double-frees `b`). Recurse like any other block.

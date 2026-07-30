@@ -24,7 +24,7 @@ routine start()
   var w = waiter(sig: steal sig.duplicate())
   var c = caster(sig: steal sig)
 
-  danger!
+  danger
     var wr = w.retrieve!()   # waiter parks -> caster casts -> waiter wakes and returns
     var cr = c.retrieve!()
     show(f"waiter={wr} caster={cr}")

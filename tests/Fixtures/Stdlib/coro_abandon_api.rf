@@ -6,7 +6,7 @@ module Tests/Stdlib/CoroAbandonApi
 #   1. Abandon while parked  -> the cancellation shadow stack runs Box.$destroy.
 #   2. Resume to completion   -> the inline teardown runs Box.$destroy; the node was popped, so
 #      the later delete does not re-fire (no double-free).
-# These exercise the substrate directly (no scheduler yet), so they live in a danger! block.
+# These exercise the substrate directly (no scheduler yet), so they live in a danger block.
 
 import IO/Console
 
@@ -26,13 +26,13 @@ routine coro_body(ud: CPtr)
 
 routine start()
   # Case 1: abandon a parked coroutine -> shadow-stack teardown.
-  danger!
+  danger
     var c1 = rf_coro_create(entry: coro_body, userdata: cptr_none(), stack_size: 0)
     discard rf_coro_resume(coro: c1)
     rf_coro_abandon(coro: c1)
   show(value: "---")
   # Case 2: run to completion -> inline teardown, no re-fire on delete.
-  danger!
+  danger
     var c2 = rf_coro_create(entry: coro_body, userdata: cptr_none(), stack_size: 0)
     discard rf_coro_resume(coro: c2)
     discard rf_coro_resume(coro: c2)

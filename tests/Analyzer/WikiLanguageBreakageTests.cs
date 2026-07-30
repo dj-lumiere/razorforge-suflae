@@ -223,7 +223,7 @@ public class WikiLanguageBreakageTests
                           return 1
 
                         routine test()
-                          danger!
+                          danger
                             var value = read_raw()
                           return
                         """;

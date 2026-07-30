@@ -363,12 +363,12 @@ public sealed partial class SemanticVerifier
             ownerType: routine.OwnerType,
             accessLocation: accessLocation);
 
-        // Dangerous routines can only be called inside danger! blocks
+        // Dangerous routines can only be called inside danger blocks
         if (routine.IsDangerous && !InDangerBlock)
         {
             ReportError(code: SemanticDiagnosticCode.DangerousCallOutsideDangerBlock,
                 message:
-                $"Dangerous routine '{routine.Name}' can only be called inside a 'danger!' block.",
+                $"Dangerous routine '{routine.Name}' can only be called inside a 'danger' block.",
                 location: accessLocation);
         }
     }

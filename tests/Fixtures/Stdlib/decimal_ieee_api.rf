@@ -11,7 +11,7 @@ routine start()
   show(f"round_ties_away: {d.round_ties_away()}")
   show(f"same_quantum(1): {d.same_quantum(other: Decimal(from: 1_s64))}")
   show(f"remainder(7): {d.remainder(other: Decimal(from: 7_s64))}")
-  danger!
+  danger
     show(f"logb: {d.logb!()}")
     show(f"scaleb(2): {d.scaleb!(n: 2_s64)}")
     show(f"quantize(1): {d.quantize!(other: Decimal(from: 1_s64))}")

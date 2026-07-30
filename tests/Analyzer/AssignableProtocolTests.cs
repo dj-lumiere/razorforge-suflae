@@ -196,7 +196,7 @@ public class AssignableProtocolTests
     {
         string source = """
                         routine start()
-                          danger!
+                          danger
                             var a = Hijacked[U8](0_addr)
                             var b = a
                           return
