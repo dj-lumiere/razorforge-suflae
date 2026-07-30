@@ -758,7 +758,7 @@ public class CompilerPipelineLoweringTests
         Assert.DoesNotContain(expectedSubstring: "call ptr @Core.hijacked_from(",
             actualString: llvmIr);
         Assert.Contains(
-            expectedSubstring: "define ptr @\"[dangerous, independent] Core.hijacked_from(S64)(addr: Core.Address)\"(i64 %addr)",
+            expectedSubstring: "define ptr @\"[independent] Core.hijacked_from(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
     }
 
@@ -1254,7 +1254,7 @@ public class CompilerPipelineLoweringTests
         Assert.Contains(expectedSubstring: "define ptr @\"[dangerous, independent] wrap_addr(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
         Assert.Contains(
-            expectedSubstring: "define ptr @\"[dangerous, independent] Core.hijacked_from(S64)(addr: Core.Address)\"(i64 %addr)",
+            expectedSubstring: "define ptr @\"[independent] Core.hijacked_from(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
     }
 
