@@ -30,7 +30,7 @@ record Bytes obeys Copyable, Iterable[Byte]
 ### :returns: The resulting `Bytes` value.
 @[readonly, inline]
 routine Bytes.$store() -> Bytes
-  danger!
+  danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()
   return Bytes(data: me.data, count: me.count, ctrl: me.ctrl)
@@ -58,7 +58,7 @@ routine Bytes.$create(from_list: List[Byte]) -> Bytes
   var n = from_list.count()
   if n == 0u64
     return Bytes(data: hijacked_none[Byte](), count: 0u64, ctrl: hijacked_none[ImmutableSharedController]())
-  danger!
+  danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
     var i: U64 = 0u64
     loop
@@ -72,7 +72,7 @@ routine Bytes.$create(from_list: List[Byte]) -> Bytes
 ### :param from_byte: The single byte to store.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(from_byte: Byte) -> Bytes
-  danger!
+  danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size()))
     buf.poke(value: from_byte)
     return Bytes(data: buf, count: 1u64, ctrl: ImmutableSharedController().hijack())
@@ -82,7 +82,7 @@ routine Bytes.$create(from_byte: Byte) -> Bytes
 ### :param ptr: The source pointer to read from.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
-  danger!
+  danger
     var len: U64 = 0u64
     loop
       if ptr.stride(count: S64(len)).peek() == BYTE_NULL
@@ -102,7 +102,7 @@ routine Bytes.$create(ptr: CStr) -> Bytes
   var len = rf_cstr_count(ptr)
   if len == 0u64
     return Bytes()
-  danger!
+  danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * len))
     rf_copy_bytes_at(dest: buf.address(), src: ptr.ptr().address(), size: Byte.data_size() * len)
     return Bytes(data: buf, count: len, ctrl: ImmutableSharedController().hijack())
@@ -114,7 +114,7 @@ routine Bytes.$create(ptr: CStr) -> Bytes
 routine Bytes.$create(ptr: Address, count: U64) -> Bytes
   if count == 0u64
     return Bytes()
-  danger!
+  danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
     rf_copy_bytes_at(dest: buf.address(), src: ptr, size: Byte.data_size() * count)
     return Bytes(data: buf, count: count, ctrl: ImmutableSharedController().hijack())
@@ -126,7 +126,7 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
 routine Bytes.$create(srcptr: Hijacked[Byte], count: U64) -> Bytes
   if count == 0u64
     return Bytes()
-  danger!
+  danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
     rf_copy_bytes_at(dest: buf.address(), src: srcptr.address(), size: Byte.data_size() * count)
     return Bytes(data: buf, count: count, ctrl: ImmutableSharedController().hijack())
@@ -167,7 +167,7 @@ routine Bytes.is_empty() -> Bool
 routine Bytes.$getitem!(index: U64) -> Byte
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
-  danger!
+  danger
     return me.data.stride(count: S64(index)).peek()
 
 # String operations
@@ -181,7 +181,7 @@ routine Bytes.concat(other: Bytes) -> Bytes
   var n = me.count + other.count
   if n == 0u64
     return Bytes()
-  danger!
+  danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
     if me.count > 0u64
       rf_copy_bytes_at(dest: buf.address(), src: me.data.address(), size: Byte.data_size() * me.count)
@@ -304,7 +304,7 @@ routine Bytes.repeat(times: U64) -> Bytes
   if times == 0u64 or me.count == 0u64
     return Bytes()
   var n = me.count * times
-  danger!
+  danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
     var t: U64 = 0u64
     loop
@@ -326,7 +326,7 @@ routine List[Byte].$create(source: Bytes) -> List[Byte]
   loop
     if i >= source.count
       break
-    danger!
+    danger
       result.add_last(source.data.stride(count: S64(i)).peek())
     i += 1u64
   return steal result
@@ -623,7 +623,7 @@ routine BytesUtf8LossyView.$iter() -> BytesUtf8LossyEmittable
 ### :absent: Returns absent when iteration is exhausted.
 ### :throws: {MalformedUtf8Error} on the first ill-formed subsequence.
 routine BytesUtf8Emittable.$emit!() -> Character
-  danger!
+  danger
     if me.index >= me.byte_count
       absent
 
@@ -677,7 +677,7 @@ routine BytesUtf8Emittable.$emit!() -> Character
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when iteration is exhausted.
 routine BytesUtf8LossyEmittable.$emit!() -> Character
-  danger!
+  danger
     if me.index >= me.byte_count
       absent
 
@@ -754,7 +754,7 @@ routine BytesUtf8LossyEmittable.$emit!() -> Character
 @readonly
 routine Bytes.to_cstr() -> CStr
   var len = me.count
-  danger!
+  danger
     var buffer = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * (len + 1u64)))
     if len > 0u64
       rf_copy_bytes_at(dest: buffer.address(), src: me.data.address(), size: Byte.data_size() * len)
@@ -829,7 +829,7 @@ routine List[U16].decode_as_utf16() -> Text
 ### Returns an xxHash64 hash of the underlying byte buffer's address.
 ### :returns: A `U64` hash of this view.
 routine BytesUtf8View.$fast_hash() -> U64
-  danger!
+  danger
     return __hash_leaf(v: U64(me.data.address()))
 
 ### Returns a SipHash-2-4 keyed hash of the underlying byte buffer's address.
@@ -837,13 +837,13 @@ routine BytesUtf8View.$fast_hash() -> U64
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine BytesUtf8View.$hash(k0: U64, k1: U64) -> U64
-  danger!
+  danger
     return __secure_hash_u64(v: U64(me.data.address()), k0: k0, k1: k1)
 
 ### Returns an xxHash64 hash of this iterator's buffer address and current index.
 ### :returns: A `U64` hash combining the buffer address and the current index.
 routine BytesUtf8Emittable.$fast_hash() -> U64
-  danger!
+  danger
     var acc = __hash_round(acc: 0u64, h: __hash_leaf(v: U64(me.data.address())))
     acc = __hash_round(acc: acc, h: me.index.$fast_hash())
     return __hash_finalize(h: acc)
@@ -853,7 +853,7 @@ routine BytesUtf8Emittable.$fast_hash() -> U64
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine BytesUtf8Emittable.$hash(k0: U64, k1: U64) -> U64
-  danger!
+  danger
     var acc = __hash_round(acc: 0u64, h: __secure_hash_u64(v: U64(me.data.address()), k0: k0, k1: k1))
     acc = __hash_round(acc: acc, h: me.index.$hash(k0: k0, k1: k1))
     return __hash_finalize(h: acc)

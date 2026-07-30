@@ -16,7 +16,7 @@ relates DistinctEmittable[T, S/Iter] as Iter
 routine DistinctIterable[T, S].$iter() -> DistinctEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
   var seen = Set[T]()
-  danger!
+  danger
     return DistinctEmittable[T, S/Iter](source: me.source.as_entity().$iter(), seen: steal seen)
 
 ### Iterates over a source sequence while suppressing values already produced.
@@ -35,7 +35,7 @@ needs SE obeys Emittable[T]
 @migratable
 routine DistinctEmittable[T, SE].$emit!() -> T
 needs T obeys Hashable, Comparable
-  danger!
+  danger
     loop
       var item = me.source.as_entity().$emit!()
       if not me.seen.$contains(item)
@@ -47,7 +47,7 @@ needs T obeys Hashable, Comparable
 @readonly
 routine Iterable[T].distinct() -> DistinctIterable[T, Me]
 needs T obeys Hashable, Comparable
-  danger!
+  danger
     return DistinctIterable[T, Me](source: me.hijack())
 
 ### Represents a lazy adapter that suppresses elements whose key has already been seen.
@@ -70,7 +70,7 @@ relates DistinctByEmittable[T, U, S/Iter] as Iter
 routine DistinctByIterable[T, U, S].$iter() -> DistinctByEmittable[T, U, S/Iter]
 needs U obeys Hashable, Comparable
   var seen = Set[U]()
-  danger!
+  danger
     return DistinctByEmittable[T, U, S/Iter](source: me.source.as_entity().$iter(), key: me.key, seen: steal seen)
 
 ### Iterates over a source sequence while suppressing elements whose key has already been produced.
@@ -92,7 +92,7 @@ needs SE obeys Emittable[T]
 @migratable
 routine DistinctByEmittable[T, U, SE].$emit!() -> T
 needs U obeys Hashable, Comparable
-  danger!
+  danger
     loop
       var item = me.source.as_entity().$emit!()
       var k = me.key(item)
@@ -106,5 +106,5 @@ needs U obeys Hashable, Comparable
 @readonly
 routine Iterable[T].distinct_by[U](key: Routine[(T,), U]) -> DistinctByIterable[T, U, Me]
 needs U obeys Hashable, Comparable
-  danger!
+  danger
     return DistinctByIterable[T, U, Me](source: me.hijack(), key: key)

@@ -17,7 +17,7 @@ relates SkipWhileEmittable[T, S/Iter] as Iter
 ### :returns: The resulting `SkipWhileEmittable[T, S/Iter]` value.
 @readonly
 routine SkipWhileIterable[T, S].$iter() -> SkipWhileEmittable[T, S/Iter]
-  danger!
+  danger
     return SkipWhileEmittable[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, skipping: true)
 
 ### Iterates over a source sequence after dropping its leading predicate-matching prefix.
@@ -36,7 +36,7 @@ needs SE obeys Emittable[T]
 ### After the first predicate failure, later values are yielded without rechecking earlier skip state.
 ### :returns: The resulting `T` value.
 routine SkipWhileEmittable[T, SE].$emit!() -> T
-  danger!
+  danger
     if me.skipping
       loop
         var item = me.source.as_entity().$emit!()
@@ -50,5 +50,5 @@ routine SkipWhileEmittable[T, SE].$emit!() -> T
 ### :returns: The resulting `SkipWhileIterable[T, Me]` value.
 @readonly
 routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> SkipWhileIterable[T, Me]
-  danger!
+  danger
     return SkipWhileIterable[T, Me](source: me.hijack(), predicate: predicate)

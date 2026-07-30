@@ -56,7 +56,7 @@ routine U512.$floordiv(you: U512) -> U512
   var av = me
   var bv = you
   var rem = Array[U64, 8]()
-  danger!
+  danger
     var q = knuth_divide[8](
       a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
@@ -69,7 +69,7 @@ routine udiv512_sticky(num: U512, den: U512) -> U512
   var av = num
   var bv = den
   var rem = Array[U64, 8]()
-  danger!
+  danger
     var qa = knuth_divide[8](
       a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
@@ -85,7 +85,7 @@ routine U512.$mod(you: U512) -> U512
   var av = me
   var bv = you
   var rem = Array[U64, 8]()
-  danger!
+  danger
     var q = knuth_divide[8](
       a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),

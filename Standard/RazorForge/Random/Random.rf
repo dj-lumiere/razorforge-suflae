@@ -121,7 +121,7 @@ routine List[T].shuffle(rng: Modifying[Random]) -> Blank
     # j is uniform in [0, i]; the +1 span is provably nonzero, so the unchecked
     # modulo cannot divide by zero.
     var j = 0u64
-    danger!
+    danger
       j = (rng.next_u64()).$mod_unchecked(you: i +% 1u64)
     if j != i
       var a = me.get_raw(index: i)

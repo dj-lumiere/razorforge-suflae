@@ -87,7 +87,7 @@ routine BitArray[N].$getitem!(index: U64) -> Bool
   var bit_off = U8(index % 8u64)
   var byte_val = 0u8
   # Read the packed byte in place through the storage pointer — no whole-array copy.
-  danger!
+  danger
     byte_val = load_element_ref[BitArray[N], U8](me.hijack(), byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
@@ -102,7 +102,7 @@ routine BitArray[N].$setitem!(index: U64, value: Bool)
   var bit_off = U8(unsigned_rem[U64](index, 8u64))
   # `me` is by reference (struct-record `$setitem!`): read-modify-write the single packed byte in
   # place through `me.hijack()` so the bit change reaches the caller's storage — no whole-array copy.
-  danger!
+  danger
     var byte_val = load_element_ref[BitArray[N], U8](me.hijack(), byte_idx)
     if value
       store_element_ref[BitArray[N], U8](me.hijack(), byte_idx, byte_val | (1u8 << bit_off))

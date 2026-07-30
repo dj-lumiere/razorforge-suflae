@@ -19,7 +19,7 @@ relates ZipEmittable[T, U, S1/Iter, S2/Iter] as Iter
 ### :returns: The resulting `ZipEmittable[T, U, S1/Iter, S2/Iter]` value.
 @readonly
 routine ZipIterable[T, U, S1, S2].$iter() -> ZipEmittable[T, U, S1/Iter, S2/Iter]
-  danger!
+  danger
     return ZipEmittable[T, U, S1/Iter, S2/Iter](first: me.first.as_entity().$iter(), second: me.second.as_entity().$iter())
 
 ### Iterates over two source sequences simultaneously, pairing one element from each.
@@ -40,7 +40,7 @@ needs SE2 obeys Emittable[U]
 ### Propagates absence as soon as either source is exhausted.
 ### :returns: The resulting `Tuple[T, U]` value.
 routine ZipEmittable[T, U, SE1, SE2].$emit!() -> Tuple[T, U]
-  danger!
+  danger
     var a = me.first.as_entity().$emit!()
     var b = me.second.as_entity().$emit!()
     return (a, b)
@@ -52,5 +52,5 @@ routine ZipEmittable[T, U, SE1, SE2].$emit!() -> Tuple[T, U]
 @readonly
 routine Iterable[T].zip[U, S2](other: Referring[S2]) -> ZipIterable[T, U, Me, S2]
 needs S2 obeys Iterable[U]
-  danger!
+  danger
     return ZipIterable[T, U, Me, S2](first: me.hijack(), second: other.hijack())

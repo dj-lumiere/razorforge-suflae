@@ -11,7 +11,7 @@ import Collections
 # ============================================================================
 
 ### (quotient, remainder) of (hi:lo) / d via the hardware 128/64 divide. Requires
-### hi < d. Wraps the dangerous intrinsic so callers stay outside `danger!`.
+### hi < d. Wraps the dangerous intrinsic so callers stay outside `danger`.
 record UDR
   q: U64
   r: U64
@@ -21,7 +21,7 @@ record UDR
 @inline
 routine udivrem128(hi: U64, lo: U64, d: U64) -> UDR
   var scratch = 0_u64
-  danger!
+  danger
     var q = rf_udivrem_128_64(hi: hi, lo: lo, d: d, rem: scratch.hijack())
     return UDR(q: q, r: scratch)
 
@@ -185,7 +185,7 @@ routine udiv256_sticky(num: U256, den: U256) -> U256
   var av = num
   var bv = den
   var rem = Array[U64, 4]()
-  danger!
+  danger
     var qa = knuth_divide[4](
       a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
@@ -211,7 +211,7 @@ routine udivrem256(num: U256, den: U256) -> UDR256
   var av = num
   var bv = den
   var rem = Array[U64, 4]()
-  danger!
+  danger
     var qa = knuth_divide[4](
       a: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),

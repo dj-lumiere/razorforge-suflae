@@ -30,18 +30,18 @@ entity SignalCaster
 ### Creates a new monitor.
 ### :returns: A fresh `SignalCaster`.
 routine SignalCaster.$create() -> SignalCaster
-  danger!
+  danger
     return SignalCaster(sig: rf_signal_create())
 
 ### Acquires the monitor lock guarding your shared condition. Pair every `lock` with an `unlock`.
 routine SignalCaster.lock()
-  danger!
+  danger
     rf_signal_lock(sig: me.sig)
   return
 
 ### Releases the monitor lock.
 routine SignalCaster.unlock()
-  danger!
+  danger
     rf_signal_unlock(sig: me.sig)
   return
 
@@ -49,7 +49,7 @@ routine SignalCaster.unlock()
 ### re-acquires it before returning. UNCOLORED — parks a coroutine (siblings run) or blocks a thread.
 ### Always re-check your condition in a loop, since wakes can be spurious.
 routine SignalCaster.wait()
-  danger!
+  danger
     rf_signal_wait(sig: me.sig)
   return
 
@@ -60,25 +60,25 @@ routine SignalCaster.wait()
 ### :param deadline: How long to wait before giving up.
 ### :returns: `true` if woken in time, `false` on timeout.
 routine SignalCaster.wait_within(deadline: Duration) -> Bool
-  danger!
+  danger
     return rf_signal_wait_deadline(sig: me.sig, timeout_ns: U64(deadline.total_nanoseconds())) != 0_u32
 
 ### Wakes one waiting agent. Call after making the condition true and releasing the lock.
 routine SignalCaster.cast_one()
-  danger!
+  danger
     rf_signal_cast_one(sig: me.sig)
   return
 
 ### Wakes every waiting agent. Call after making the condition true and releasing the lock.
 routine SignalCaster.cast_all()
-  danger!
+  danger
     rf_signal_cast_all(sig: me.sig)
   return
 
 ### Produces another handle on the same monitor, so another agent can synchronize through it.
 ### :returns: A new `SignalCaster` sharing this monitor.
 routine SignalCaster.duplicate() -> SignalCaster
-  danger!
+  danger
     rf_signal_add_ref(sig: me.sig)
     return SignalCaster(sig: me.sig)
 

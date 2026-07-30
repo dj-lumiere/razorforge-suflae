@@ -82,7 +82,7 @@ routine FastDict[K, V].$create() -> FastDict[K, V]
     capacity: cap,
     entries_cap: ecap
   )
-  danger!
+  danger
     dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
     dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
@@ -113,7 +113,7 @@ routine FastDict[K, V].$create(capacity: U64) -> FastDict[K, V]
     capacity: cap,
     entries_cap: ecap
   )
-  danger!
+  danger
     dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
     dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
@@ -146,7 +146,7 @@ routine FastDict[K, V].h1(hash: U64) -> U64
 ### :returns: The entry index stored in that probe slot.
 @readonly
 routine FastDict[K, V].read_index(slot: U64) -> U64
-  danger!
+  danger
     return me.indices.offset(U64.data_size() * slot).peek()
 
 ### Returns the key stored at entry index `ei` without checking whether the entry is live.
@@ -154,7 +154,7 @@ routine FastDict[K, V].read_index(slot: U64) -> U64
 ### :returns: The key at that entry.
 @readonly
 routine FastDict[K, V].read_key_at(ei: U64) -> K
-  danger!
+  danger
     return me.keys.offset(K.data_size() * ei).peek()
 
 ### Returns the value stored at entry index `ei` without checking whether the entry is live.
@@ -162,14 +162,14 @@ routine FastDict[K, V].read_key_at(ei: U64) -> K
 ### :returns: The value at that entry.
 @readonly
 routine FastDict[K, V].read_val_at(ei: U64) -> V
-  danger!
+  danger
     return me.vals.offset(V.data_size() * ei).peek()
 
 ### Overwrites the value at entry index `ei`.
 ### :param ei: The entry index to write to.
 ### :param val: The new value to store.
 routine FastDict[K, V].write_val_at(ei: U64, val: V)
-  danger!
+  danger
     me.vals.offset(V.data_size() * ei).poke(val)
   return
 
@@ -183,7 +183,7 @@ routine FastDict[K, V].find_slot(key: K) -> U64
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
-  danger!
+  danger
     loop
       var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
@@ -203,7 +203,7 @@ routine FastDict[K, V].insert_index_raw(h: U64, entry_index: U64)
   var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
-  danger!
+  danger
     loop
       var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
@@ -253,7 +253,7 @@ routine FastDict[K, V].rehash()
   if me.count *% 2u64 >= old_ecap
     new_ecap = old_ecap *% 2u64
 
-  danger!
+  danger
     me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
     me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
@@ -268,7 +268,7 @@ routine FastDict[K, V].rehash()
 
   var i = 0u64
   while i < old_entries_used
-    danger!
+    danger
       var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
       if live == ENTRY_LIVE
         var k = old_keys.offset(K.data_size() * i).peek()
@@ -282,7 +282,7 @@ routine FastDict[K, V].rehash()
         me.count = me.count +% 1u64
     i = i +% 1u64
 
-  danger!
+  danger
     if not old_ctrl.is_none()
       rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
     if not old_indices.is_none()
@@ -316,7 +316,7 @@ routine FastDict[K, V].is_empty() -> Bool
 ### high-water mark; per-entry live bytes are implicitly invalidated.
 @migratable
 routine FastDict[K, V].clear()
-  danger!
+  danger
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
@@ -345,7 +345,7 @@ routine FastDict[K, V].add(key: K, value: V) -> Bool
     me.write_val_at(ei: existing_ei, val: value)
     return false
   var ei = me.entries_used
-  danger!
+  danger
     me.keys.offset(K.data_size() * ei).poke(key)
     me.vals.offset(V.data_size() * ei).poke(value)
     me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
@@ -364,7 +364,7 @@ routine FastDict[K, V].remove(key: K) -> Bool
   if slot >= me.capacity
     return false
   var ei = me.read_index(slot)
-  danger!
+  danger
     me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
     me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
   me.count = me.count -% 1u64
@@ -420,7 +420,7 @@ routine FastDict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   var i = 0u64
   while i < me.entries_used
-    danger!
+    danger
       if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
         result.add_last(me.keys.offset(K.data_size() * i).peek())
     i = i +% 1u64
@@ -433,7 +433,7 @@ routine FastDict[K, V].values() -> List[V]
   var result = List[V](me.count)
   var i = 0u64
   while i < me.entries_used
-    danger!
+    danger
       if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
         result.add_last(me.vals.offset(V.data_size() * i).peek())
     i = i +% 1u64
@@ -446,7 +446,7 @@ routine FastDict[K, V].entries() -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
   while i < me.entries_used
-    danger!
+    danger
       if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
         var k = me.keys.offset(K.data_size() * i).peek()
         var v = me.vals.offset(V.data_size() * i).peek()
@@ -462,7 +462,7 @@ routine FastDict[K, V].entries() -> List[DictEntry[K, V]]
 ### Order is stable across lookups and value updates; removing and re-adding a key places the entry at the new end.
 @readonly
 routine FastDict[K, V].$iter() -> FastDictEmittable[K, V]
-  danger!
+  danger
     return FastDictEmittable[K, V](
       keys: me.keys,
       vals: me.vals,
@@ -491,7 +491,7 @@ entity FastDictEmittable[K, V] obeys Emittable[DictEntry[K, V]]
 ### :returns: The next live {DictEntry[K, V]} in insertion order.
 ### :absent: No live entries remain.
 routine FastDictEmittable[K, V].$emit!() -> DictEntry[K, V]
-  danger!
+  danger
     while me.pos < me.entries_used
       var p = me.pos
       me.pos = me.pos + 1u64
@@ -548,7 +548,7 @@ needs V obeys Equatable
     return false
   var i = 0u64
   while i < me.entries_used
-    danger!
+    danger
       if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
         var k = me.keys.offset(K.data_size() * i).peek()
         var v = me.vals.offset(V.data_size() * i).peek()

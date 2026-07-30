@@ -72,7 +72,7 @@ routine Set[T].$create(key: SecureHashKey) -> Set[T]
     k0: key.k0,
     k1: key.k1
   )
-  danger!
+  danger
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
@@ -100,7 +100,7 @@ routine Set[T].$create(key: SecureHashKey, capacity: U64) -> Set[T]
     k0: key.k0,
     k1: key.k1
   )
-  danger!
+  danger
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
@@ -122,7 +122,7 @@ routine Set[T].h1(hash: U64) -> U64
 
 @readonly
 routine Set[T].read_index(slot: U64) -> U64
-  danger!
+  danger
     return me.indices.offset(U64.data_size() * slot).peek()
 
 @readonly
@@ -131,7 +131,7 @@ routine Set[T].find_slot(value: T) -> U64
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
-  danger!
+  danger
     loop
       var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
@@ -147,7 +147,7 @@ routine Set[T].insert_index_raw(h: U64, entry_index: U64)
   var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
-  danger!
+  danger
     loop
       var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
@@ -189,7 +189,7 @@ routine Set[T].rehash()
   if me.count *% 2u64 >= old_ecap
     new_ecap = old_ecap *% 2u64
 
-  danger!
+  danger
     me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
     me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
@@ -203,7 +203,7 @@ routine Set[T].rehash()
 
   var i = 0u64
   while i < old_entries_used
-    danger!
+    danger
       var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
       if live == ENTRY_LIVE
         var val = old_slots.offset(T.data_size() * i).peek()
@@ -215,7 +215,7 @@ routine Set[T].rehash()
         me.count = me.count +% 1u64
     i = i +% 1u64
 
-  danger!
+  danger
     if not old_ctrl.is_none()
       rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
     if not old_indices.is_none()
@@ -239,7 +239,7 @@ routine Set[T].is_empty() -> Bool
   return me.count == 0u64
 
 routine Set[T].clear()
-  danger!
+  danger
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
@@ -256,7 +256,7 @@ routine Set[T].add(value: T) -> Bool
   if me.find_slot(value) < me.capacity
     return false
   var ei = me.entries_used
-  danger!
+  danger
     me.slots.offset(T.data_size() * ei).poke(value)
     me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
@@ -269,7 +269,7 @@ routine Set[T].remove(value: T) -> Bool
   if slot >= me.capacity
     return false
   var ei = me.read_index(slot)
-  danger!
+  danger
     me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
     me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
   me.count = me.count -% 1u64
@@ -282,7 +282,7 @@ routine Set[T].remove(value: T) -> Bool
 
 @readonly
 routine Set[T].$iter() -> SetEmittable[T]
-  danger!
+  danger
     return SetEmittable[T](
       slots: me.slots,
       entry_live: me.entry_live,
@@ -298,7 +298,7 @@ entity SetEmittable[T] obeys Emittable[T]
   secret pos: U64
 
 routine SetEmittable[T].$emit!() -> T
-  danger!
+  danger
     while me.pos < me.entries_used
       var p = me.pos
       me.pos = me.pos + 1u64

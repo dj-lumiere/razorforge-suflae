@@ -84,14 +84,14 @@ dangerous routine BTreeListNode[T].children_base() -> Hijacked[Hijacked[BTreeLis
 ### :returns: The key value at position `i`.
 @readonly
 routine BTreeListNode[T].keys_get(i: U64) -> T
-  danger!
+  danger
     return me.keys_base().stride(count: i.S64()).peek()
 
 ### Writes `value` to the key slot at position `i`.
 ### :param i: Zero-based key index.
 ### :param value: The key value to store.
 routine BTreeListNode[T].keys_set(i: U64, value: T)
-  danger!
+  danger
     me.keys_base().stride(count: i.S64()).poke(value: value)
   return
 
@@ -100,21 +100,21 @@ routine BTreeListNode[T].keys_set(i: U64, value: T)
 ### :returns: The child node at position `i`.
 @readonly
 routine BTreeListNode[T].children_get(i: U64) -> Hijacked[BTreeListNode[T]]
-  danger!
+  danger
     return me.children_base().stride(count: i.S64()).peek()
 
 ### Writes `value` to the child slot at position `i`.
 ### :param i: Zero-based child index.
 ### :param value: The child node to store.
 routine BTreeListNode[T].children_set(i: U64, value: Hijacked[BTreeListNode[T]])
-  danger!
+  danger
     me.children_base().stride(count: i.S64()).poke(value: value)
   return
 
 ### Appends `value` after the last key and increments the key count.
 ### :param value: The key to append.
 routine BTreeListNode[T].keys_add_last(value: T)
-  danger!
+  danger
     me.keys_base().stride(count: me.key_count.S64()).poke(value: value)
   me.key_count = me.key_count +% 1u64
   return
@@ -122,7 +122,7 @@ routine BTreeListNode[T].keys_add_last(value: T)
 ### Appends `value` after the last child pointer and increments the child count.
 ### :param value: The child node to append.
 routine BTreeListNode[T].children_add_last(value: Hijacked[BTreeListNode[T]])
-  danger!
+  danger
     me.children_base().stride(count: me.child_count.S64()).poke(value: value)
   me.child_count = me.child_count +% 1u64
   return
@@ -147,7 +147,7 @@ dangerous routine BTreeListNode[T].$destroy()
 ### :param i: Zero-based insertion index.
 ### :param value: The key to insert.
 routine BTreeListNode[T].keys_add_at(i: U64, value: T)
-  danger!
+  danger
     var base = me.keys_base()
     if i < me.key_count
       var elem_size = T.data_size()
@@ -163,7 +163,7 @@ routine BTreeListNode[T].keys_add_at(i: U64, value: T)
 ### :param i: Zero-based insertion index.
 ### :param value: The child node to insert.
 routine BTreeListNode[T].children_add_at(i: U64, value: Hijacked[BTreeListNode[T]])
-  danger!
+  danger
     var base = me.children_base()
     if i < me.child_count
       var elem_size = Address.data_size()
@@ -178,7 +178,7 @@ routine BTreeListNode[T].children_add_at(i: U64, value: Hijacked[BTreeListNode[T
 ### Removes the key at position `i`, shifting later keys left by one.
 ### :param i: Zero-based index of the key to remove.
 routine BTreeListNode[T].keys_remove_at(i: U64)
-  danger!
+  danger
     if i +% 1u64 < me.key_count
       var base = me.keys_base()
       var elem_size = T.data_size()
@@ -192,7 +192,7 @@ routine BTreeListNode[T].keys_remove_at(i: U64)
 ### Removes the child pointer at position `i`, shifting later pointers left by one.
 ### :param i: Zero-based index of the child to remove.
 routine BTreeListNode[T].children_remove_at(i: U64)
-  danger!
+  danger
     if i +% 1u64 < me.child_count
       var base = me.children_base()
       var elem_size = Address.data_size()
@@ -231,7 +231,7 @@ routine BTreeListNode[T].children_truncate(n: U64)
 ### :param count: Number of keys to copy.
 routine BTreeListNode[T].keys_add_range_from(other: Referring[BTreeListNode[T]], start: U64, count: U64)
   if count > 0u64
-    danger!
+    danger
       var elem_size = T.data_size()
       var src_addr = other.keys_base().stride(count: start.S64()).get_address()
       var dst_addr = me.keys_base().stride(count: me.key_count.S64()).get_address()
@@ -245,7 +245,7 @@ routine BTreeListNode[T].keys_add_range_from(other: Referring[BTreeListNode[T]],
 ### :param count: Number of child pointers to copy.
 routine BTreeListNode[T].children_add_range_from(other: Referring[BTreeListNode[T]], start: U64, count: U64)
   if count > 0u64
-    danger!
+    danger
       var elem_size = Address.data_size()
       var src_addr = other.children_base().stride(count: start.S64()).get_address()
       var dst_addr = me.children_base().stride(count: me.child_count.S64()).get_address()
@@ -318,7 +318,7 @@ dangerous routine SortedList[T].$destroy()
 routine SortedList[T].$contains(value: T) -> Bool
   if me.root is None
     return false
-  danger!
+  danger
     var root_ref = me.root!!.as_entity()
     return me.search_node(node: root_ref, value: value)
 
@@ -343,7 +343,7 @@ dangerous routine SortedList[T].search_node(node: Referring[BTreeListNode[T]], v
 routine SortedList[T].count_of(value: T) -> U64
   if me.root is None
     return 0u64
-  danger!
+  danger
     var root_ref = me.root!!.as_entity()
     return me.count_in_node(node: root_ref, value: value)
 
@@ -407,7 +407,7 @@ dangerous routine SortedList[T].upper_bound(node: Referring[BTreeListNode[T]], v
 ### :param value: The element to insert.
 routine SortedList[T].add(value: T)
   if me.root is None
-    danger!
+    danger
       me.root = BTreeListNode[T](is_leaf: true).hijack()
       me.root!!.as_entity().keys_add_last(value)
       me.root!!.as_entity().subtree_size = 1u64
@@ -415,10 +415,10 @@ routine SortedList[T].add(value: T)
     return
 
   var root_full = false
-  danger!
+  danger
     root_full = me.root!!.as_entity().keys_count() >= B_LIST -% 1u64
   if root_full
-    danger!
+    danger
       var old_root = me.root!!
       me.root = BTreeListNode[T](is_leaf: false).hijack()
       var new_root = me.root!!.as_entity()
@@ -426,7 +426,7 @@ routine SortedList[T].add(value: T)
       me.split_child(parent_node: new_root, child_idx: 0u64)
       new_root.subtree_size = new_root.children_get(0u64).as_entity().subtree_size +% new_root.children_get(1u64).as_entity().subtree_size +% 1u64
 
-  danger!
+  danger
     var root_ref = me.root!!.as_entity()
     me.insert_non_full(node: root_ref, value: value)
   me.count = me.count +% 1u64
@@ -505,12 +505,12 @@ routine SortedList[T].remove(value: T) -> Bool
     return false
 
   var removed = false
-  danger!
+  danger
     var root_ref = me.root!!.as_entity()
     removed = me.remove_from_node(node: root_ref, value: value)
   if removed
     me.count = me.count -% 1u64
-    danger!
+    danger
       if me.root!!.as_entity().keys_count() == 0u64 and not me.root!!.as_entity().is_leaf
         me.root = me.root!!.as_entity().children_get(0u64)
       if me.root!!.as_entity().keys_count() == 0u64
@@ -693,7 +693,7 @@ routine SortedList[T].remove_all(value: T) -> U64
 routine SortedList[T].get_by_rank!(rank: U64) -> T
   if rank >= me.count
     throw IndexOutOfBoundsError(index: rank, count: me.count)
-  danger!
+  danger
     var root_ref = me.root!!.as_entity()
     return me.get_at_subtree_rank(node: root_ref, rank: rank)
 
@@ -735,7 +735,7 @@ routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   if me.root is None
     pass
   else
-    danger!
+    danger
       var root_ref = me.root!!.as_entity()
       me.range_collect(node: root_ref, min_val: min_val, max_val: max_val, result: result)
   return steal result
@@ -770,7 +770,7 @@ dangerous routine SortedList[T].range_collect(node: Referring[BTreeListNode[T]],
 routine SortedList[T].min!() -> T
   if me.is_empty()
     absent
-  danger!
+  danger
     var node = me.root!!.as_entity()
     while not node.is_leaf
       node = node.children_get(0u64).as_entity()
@@ -783,7 +783,7 @@ routine SortedList[T].min!() -> T
 routine SortedList[T].max!() -> T
   if me.is_empty()
     absent
-  danger!
+  danger
     var node = me.root!!.as_entity()
     while not node.is_leaf
       node = node.children_get(node.children_count() -% 1u64).as_entity()
@@ -809,7 +809,7 @@ routine SortedList[T].last!() -> T
 
 @readonly
 routine SortedList[T].$iter() -> SortedListEmittable[T]
-  danger!
+  danger
     return SortedListEmittable[T](list: me.hijack(), index: 0u64)
 
 ### Creates a {List[T]} from all elements of `from` in ascending sorted order.
@@ -820,7 +820,7 @@ routine List[T].$create(from: SortedList[T]) -> List[T]
   if from.root is None
     pass
   else
-    danger!
+    danger
       var root_ref = from.root!!.as_entity()
       from.collect_inorder(node: root_ref, result: result)
   return steal result
@@ -847,7 +847,7 @@ entity SortedListEmittable[T] obeys Emittable[T]
   index: U64
 
 routine SortedListEmittable[T].$emit!() -> T
-  danger!
+  danger
     if me.index >= me.list.as_entity().count()
       absent
     var _result = me.list.as_entity().get_by_rank!(rank: me.index)

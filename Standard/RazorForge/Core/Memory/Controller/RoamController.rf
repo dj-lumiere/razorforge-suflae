@@ -91,7 +91,7 @@ dangerous routine RoamController[T].$create(data: Hijacked[T]) -> RoamController
 
 ### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED.
 routine RoamController[T].retain()
-  danger!
+  danger
     if me.escaped.load() == 1_u8
       discard atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
     else
@@ -101,7 +101,7 @@ routine RoamController[T].retain()
 ### Drops an alias. At zero the managed entity is destroyed immediately (deterministic teardown).
 ### A decrement that does NOT reach zero registers the object as a cycle-collection candidate.
 routine RoamController[T].release()
-  danger!
+  danger
     if me.escaped.load() == 1_u8
       var previous = atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
       if previous == 1_u64
@@ -154,7 +154,7 @@ dangerous routine RoamController[T].mark_cycle_candidate()
 ### The address of the managed entity — the collector passes this to the entity-based trace/free
 ### hooks (`$roam_trace_impl` / `$roam_free_impl`, whose `me` is the entity). :returns: the entity address.
 routine RoamController[T].cc_data_addr() -> Address
-  danger!
+  danger
     return me.data.get_address()
 
 ### The collector color. :returns: this controller's `RoamColor`.
@@ -206,7 +206,7 @@ dangerous routine RoamController[T].cc_set_hooks(trace: CPtr, free: CPtr)
 ### Returns the current strong count. Snapshot only.
 ### :returns: The number of live strong handles.
 routine RoamController[T].strong_count() -> U64
-  danger!
+  danger
     if me.escaped.load() == 1_u8
       return atomic_load[U64](ptr: me.count.hijack())
     else

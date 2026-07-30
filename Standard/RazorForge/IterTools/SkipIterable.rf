@@ -16,7 +16,7 @@ relates SkipEmittable[T, S/Iter] as Iter
 ### :returns: The resulting `SkipEmittable[T, S/Iter]` value.
 @readonly
 routine SkipIterable[T, S].$iter() -> SkipEmittable[T, S/Iter]
-  danger!
+  danger
     return SkipEmittable[T, S/Iter](source: me.source.as_entity().$iter(), remaining: me.count)
 
 ### Iterates over a source sequence after discarding an initial prefix.
@@ -33,7 +33,7 @@ needs SE obeys Emittable[T]
 ### Values are discarded only until `remaining` reaches zero.
 ### :returns: The resulting `T` value.
 routine SkipEmittable[T, SE].$emit!() -> T
-  danger!
+  danger
     while me.remaining > 0u64
       me.source.as_entity().$emit!()
       me.remaining = me.remaining - 1u64
@@ -44,5 +44,5 @@ routine SkipEmittable[T, SE].$emit!() -> T
 ### :returns: The resulting `SkipIterable[T, Me]` value.
 @readonly
 routine Iterable[T].skip(count: U64) -> SkipIterable[T, Me]
-  danger!
+  danger
     return SkipIterable[T, Me](source: me.hijack(), count: count)

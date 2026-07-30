@@ -64,11 +64,11 @@ routine Agent[T].is_done() -> Bool
   if me.kind is AgentKind.CORO
     if me.coro.is_none()
       return true
-    danger!
+    danger
       return rf_coro_status_get(coro: me.coro) == 3_u32
   if not me.spawned
     return false
-  danger!
+  danger
     return rf_task_status_get(task: me.agent) == 4_u32
 
 ### Whether the work was spawned and has not yet finished. Racy snapshot (see `is_done`).
@@ -114,7 +114,7 @@ routine Agent[T].retrieve!() -> T
   if me.kind is AgentKind.CORO
     if me.coro.is_none()
       throw TaskSpawnError()
-    danger!
+    danger
       rf_sched_run_until_default(coro: me.coro)
       var payload = rf_task_result_payload(task: me.agent)
       var value = Hijacked[T](from: payload).peek()
@@ -123,7 +123,7 @@ routine Agent[T].retrieve!() -> T
 
   if not me.spawned
     throw TaskSpawnError()
-  danger!
+  danger
     if me.has_deadline
       var total = me.deadline.total_nanoseconds()
       if rf_in_coroutine() != 0_u32
@@ -208,7 +208,7 @@ dangerous routine Agent[T].$destroy()
 ### :throws: {TaskSpawnError} if the set is empty (there is nothing to race).
 ### :returns: The value produced by the first Agent to finish.
 routine List[Agent[V]].race!() -> V
-  danger!
+  danger
     var n = me.count()
     if n == 0_u64
       throw TaskSpawnError()
@@ -241,7 +241,7 @@ routine List[Agent[V]].race!() -> V
 ### scope exit. An empty set yields an empty list.
 ### :returns: The values produced by every Agent, in the order they appear in the list.
 routine List[Agent[V]].gather!() -> List[V]
-  danger!
+  danger
     var n = me.count()
     var results = List[V]()
     var i = 0_u64
@@ -261,7 +261,7 @@ routine List[Agent[V]].gather!() -> List[V]
 ### cancel WITHOUT waiting, simply let the list tear down at scope exit (abandon-all).
 ### :returns: Each Agent's final value, in input order.
 routine List[Agent[V]].cancel_all!() -> List[V]
-  danger!
+  danger
     var n = me.count()
     var i = 0u64
     while i < n
@@ -287,7 +287,7 @@ routine waitfor(duration: Duration)
   # instead of sleeping out the full duration.
   if rf_cancel_requested() != 0_u32
     return
-  danger!
+  danger
     var total = duration.total_nanoseconds()
     if rf_in_coroutine() != 0_u32
       rf_sched_park_timer(delay_ns: U64(total))
@@ -305,7 +305,7 @@ routine waitfor(duration: Duration)
 ### UNCOLORED: outside a scheduler-driven coroutine (a plain thread) there is no turn to yield, so it
 ### is a no-op.
 routine yield_now()
-  danger!
+  danger
     if rf_in_coroutine() != 0_u32
       rf_coro_yield()
   return

@@ -78,7 +78,7 @@ common routine Real.$from_literal(text: Text) -> Real
 ### :returns: The resulting `Real` value.
 @[readonly, inline]
 routine Real.$store() -> Real
-  danger!
+  danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()
   return Real(handle: me.handle, ctrl: me.ctrl)

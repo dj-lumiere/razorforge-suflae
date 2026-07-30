@@ -19,7 +19,7 @@ relates SelectEmittable[T, U, S/Iter] as Iter
 ### :returns: The resulting `SelectEmittable[T, U, S/Iter]` value.
 @readonly
 routine SelectIterable[T, U, S].$iter() -> SelectEmittable[T, U, S/Iter]
-  danger!
+  danger
     return SelectEmittable[T, U, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform)
 
 ### Iterates over a source sequence and projects each yielded value through a transform routine.
@@ -37,7 +37,7 @@ needs SE obeys Emittable[T]
 ### The transform runs once for each successfully yielded source value.
 ### :returns: The resulting `U` value.
 routine SelectEmittable[T, U, SE].$emit!() -> U
-  danger!
+  danger
     var item = me.source.as_entity().$emit!()
     return me.transform(item)
 
@@ -48,5 +48,5 @@ routine SelectEmittable[T, U, SE].$emit!() -> U
 ### :returns: The resulting `SelectIterable[T, U, Me]` value.
 @readonly
 routine Iterable[T].select[U](transform: Routine[(T,), U]) -> SelectIterable[T, U, Me]
-  danger!
+  danger
     return SelectIterable[T, U, Me](source: me.hijack(), transform: transform)

@@ -17,7 +17,7 @@ relates TakeEmittable[T, S/Iter] as Iter
 ### :returns: The resulting `TakeEmittable[T, S/Iter]` value.
 @readonly
 routine TakeIterable[T, S].$iter() -> TakeEmittable[T, S/Iter]
-  danger!
+  danger
     return TakeEmittable[T, S/Iter](source: me.source.as_entity().$iter(), remaining: me.limit)
 
 ### Iterates over at most the configured number of values from the source sequence.
@@ -36,7 +36,7 @@ needs SE obeys Emittable[T]
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the take limit has been exhausted or the source ends first.
 routine TakeEmittable[T, SE].$emit!() -> T
-  danger!
+  danger
     if me.remaining == 0u64
       absent
     var _result = me.source.as_entity().$emit!()
@@ -49,5 +49,5 @@ routine TakeEmittable[T, SE].$emit!() -> T
 ### :returns: The resulting `TakeIterable[T, Me]` value.
 @readonly
 routine Iterable[T].take(count: U64) -> TakeIterable[T, Me]
-  danger!
+  danger
     return TakeIterable[T, Me](source: me.hijack(), limit: count)

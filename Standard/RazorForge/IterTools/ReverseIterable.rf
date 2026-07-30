@@ -14,7 +14,7 @@ relates ReverseEmittable[T] as Iter
 ### :returns: The resulting `ReverseEmittable[T]` value.
 @readonly
 routine ReverseIterable[T, S].$iter() -> ReverseEmittable[T]
-  danger!
+  danger
     var buffer = me.source.as_entity().List()
     var n = buffer.count()
     return ReverseEmittable[T](buffer: steal buffer, index: n)
@@ -41,5 +41,5 @@ routine ReverseEmittable[T].$emit!() -> T
 ### :returns: The resulting `ReverseIterable[T, Me]` value.
 @readonly
 routine Iterable[T].reverse() -> ReverseIterable[T, Me]
-  danger!
+  danger
     return ReverseIterable[T, Me](source: me.hijack())

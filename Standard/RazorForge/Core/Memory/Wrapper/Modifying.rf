@@ -17,7 +17,7 @@ record Modifying[T] obeys Controlling[T], Enterable
 ###        caller's storage. Use `entity` for borrowed mutation.
 routine T.modify() -> Modifying[T]
 needs T is EntityType
-  danger!
+  danger
     return Modifying[T](me.hijack())
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
@@ -47,7 +47,7 @@ routine Modifying[T].$exit()
 ### :returns: The inner entity as `T`.
 @[readonly, inline]
 routine Modifying[T].$refer() -> T
-  danger!
+  danger
     return Hijacked[T](me).as_entity()
 
 ### Yields the inner entity as an in-flight `T` reference for read/write access.
@@ -55,7 +55,7 @@ routine Modifying[T].$refer() -> T
 ### :returns: The inner entity as `T`.
 @inline
 routine Modifying[T].$control() -> T
-  danger!
+  danger
     return Hijacked[T](me).as_entity()
 
 # ============================================================================
@@ -66,7 +66,7 @@ routine Modifying[T].$control() -> T
 ### :returns: The resulting `Text` value.
 @readonly
 routine Modifying[T].$represent() -> Text
-  danger!
+  danger
     var hijacked = Hijacked[T](me)
     return hijacked.as_entity().$represent()
 
@@ -74,7 +74,7 @@ routine Modifying[T].$represent() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Modifying[T].$diagnose() -> Text
-  danger!
+  danger
     var hijacked = Hijacked[T](me)
     return me.type_name() + "(" + hijacked.as_entity().$diagnose() + ")"
 

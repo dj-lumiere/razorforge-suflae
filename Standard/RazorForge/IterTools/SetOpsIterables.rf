@@ -19,7 +19,7 @@ relates IntersectEmittable[T, S/Iter] as Iter
 @readonly
 routine IntersectIterable[T, S, SO].$iter() -> IntersectEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
-  danger!
+  danger
     var other_set = me.other.as_entity().Set()
     return IntersectEmittable[T, S/Iter](source: me.source.as_entity().$iter(), other: steal other_set)
 
@@ -38,7 +38,7 @@ needs SE obeys Emittable[T]
 ### :returns: The resulting `T` value.
 routine IntersectEmittable[T, SE].$emit!() -> T
 needs T obeys Hashable, Comparable
-  danger!
+  danger
     loop
       var item = me.source.as_entity().$emit!()
       if me.other.$contains(item)
@@ -51,7 +51,7 @@ needs T obeys Hashable, Comparable
 routine Iterable[T].intersect[SO](other: Referring[SO]) -> IntersectIterable[T, Me, SO]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
-  danger!
+  danger
     return IntersectIterable[T, Me, SO](source: me.hijack(), other: other.hijack())
 
 ### Represents a lazy adapter that suppresses elements present in another iterable.
@@ -73,7 +73,7 @@ relates ExcludeEmittable[T, S/Iter] as Iter
 @readonly
 routine ExcludeIterable[T, S, SO].$iter() -> ExcludeEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
-  danger!
+  danger
     var other_set = me.other.as_entity().Set()
     return ExcludeEmittable[T, S/Iter](source: me.source.as_entity().$iter(), other: steal other_set)
 
@@ -92,7 +92,7 @@ needs SE obeys Emittable[T]
 ### :returns: The resulting `T` value.
 routine ExcludeEmittable[T, SE].$emit!() -> T
 needs T obeys Hashable, Comparable
-  danger!
+  danger
     loop
       var item = me.source.as_entity().$emit!()
       if not me.other.$contains(item)
@@ -105,7 +105,7 @@ needs T obeys Hashable, Comparable
 routine Iterable[T].exclude[SO](other: Referring[SO]) -> ExcludeIterable[T, Me, SO]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
-  danger!
+  danger
     return ExcludeIterable[T, Me, SO](source: me.hijack(), other: other.hijack())
 
 ### Returns a lazy adapter that yields all distinct elements from this iterable followed by `other`.

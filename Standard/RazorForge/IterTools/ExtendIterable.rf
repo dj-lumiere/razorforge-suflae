@@ -19,7 +19,7 @@ relates ExtendEmittable[T, S1/Iter, S2/Iter] as Iter
 ### :returns: The resulting `ExtendEmittable[T, S1/Iter, S2/Iter]` value.
 @readonly
 routine ExtendIterable[T, S1, S2].$iter() -> ExtendEmittable[T, S1/Iter, S2/Iter]
-  danger!
+  danger
     return ExtendEmittable[T, S1/Iter, S2/Iter](first: me.first.as_entity().$iter(), second: me.second.as_entity().$iter(), in_second: false)
 
 ### Iterates over an `ExtendIterable` by exhausting the first source before moving to the second.
@@ -40,7 +40,7 @@ needs SE2 obeys Emittable[T]
 ### Once the first iterator is exhausted, all remaining values come from the second iterator.
 ### :returns: The resulting `T` value.
 routine ExtendEmittable[T, SE1, SE2].$emit!() -> T
-  danger!
+  danger
     if not me.in_second
       var result = me.first.as_entity().try_emit()
       when result
@@ -55,5 +55,5 @@ routine ExtendEmittable[T, SE1, SE2].$emit!() -> T
 @readonly
 routine Iterable[T].extend[S2](other: Referring[S2]) -> ExtendIterable[T, Me, S2]
 needs S2 obeys Iterable[T]
-  danger!
+  danger
     return ExtendIterable[T, Me, S2](first: me.hijack(), second: other.hijack())

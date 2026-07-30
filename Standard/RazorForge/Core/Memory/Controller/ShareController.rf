@@ -35,14 +35,14 @@ dangerous routine ShareController[T, P].$create(data: Hijacked[T]) -> ShareContr
 
 ### Atomically increments the strong count when a `Shared` handle is cloned.
 routine ShareController[T, P].increase_strong_count()
-  danger!
+  danger
     discard atomic_add[U64](ptr: me.strong_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the strong count. When it reaches zero the managed entity is dropped,
 ### and the controller itself is freed if no weak handles remain.
 routine ShareController[T, P].decrease_strong_count()
-  danger!
+  danger
     var previous = atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
     if previous == 1_u64
       me.drop_data()
@@ -52,13 +52,13 @@ routine ShareController[T, P].decrease_strong_count()
 
 ### Atomically increments the weak count when a `Watched` handle is cloned.
 routine ShareController[T, P].increase_weak_count()
-  danger!
+  danger
     discard atomic_add[U64](ptr: me.weak_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the weak count, freeing the controller when both counts reach zero.
 routine ShareController[T, P].decrease_weak_count()
-  danger!
+  danger
     var previous = atomic_sub[U64](ptr: me.weak_count.hijack(), value: 1_u64)
     if previous == 1_u64
       if me.strong_count() == 0_u64
@@ -68,13 +68,13 @@ routine ShareController[T, P].decrease_weak_count()
 ### Returns the current number of live strong (`Shared`) handles. Snapshot only.
 ### :returns: The strong reference count.
 routine ShareController[T, P].strong_count() -> U64
-  danger!
+  danger
     return atomic_load[U64](ptr: me.strong_count.hijack())
 
 ### Returns the current number of live weak (`Watched`) handles. Snapshot only.
 ### :returns: The weak reference count.
 routine ShareController[T, P].weak_count() -> U64
-  danger!
+  danger
     return atomic_load[U64](ptr: me.weak_count.hijack())
 
 ### Returns a non-owning pointer to the managed data.

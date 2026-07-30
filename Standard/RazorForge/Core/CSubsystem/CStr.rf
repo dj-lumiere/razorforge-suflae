@@ -53,7 +53,7 @@ routine CStr.$create(from_ptr: Address) -> CStr
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from: Bytes) -> CStr
   var len = from.count()
-  danger!
+  danger
     var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
 
     var i: U64 = 0u64
@@ -71,7 +71,7 @@ routine CStr.$create(from: Bytes) -> CStr
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from: Text) -> CStr
   var len = from.count()
-  danger!
+  danger
     if len == 0u64
       var empty_buffer = Hijacked[Byte](rf_allocate_dynamic(1u64))
       empty_buffer.poke(BYTE_NULL)
@@ -117,7 +117,7 @@ routine CStr.count() -> U64
 ### Returns `true` when this wrapper does not reference any C string.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_null() -> Bool
-  danger!
+  danger
     return me.ptr().is_none()
 
 ### Returns `true` when this C string is null or has zero length.
@@ -154,7 +154,7 @@ routine CStr.$cmp(you: CStr) -> ComparisonSign
 ### :returns: The resulting `CStr` value.
 routine CStr.copy() -> CStr
   var len = me.count()
-  danger!
+  danger
     var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
     rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
     return reinterpret_bits[Hijacked[Byte], CStr](buffer)

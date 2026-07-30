@@ -29,7 +29,7 @@ needs T is EntityType, P obeys LockPolicy
 ### so the lock spans exactly the `using` scope.
 ### :returns: This token as `Inspecting[T, P]`.
 routine Inspecting[T, P].$enter() -> Inspecting[T, P]
-  danger!
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.add_inspector()
   return me
@@ -39,13 +39,13 @@ routine Inspecting[T, P].$enter() -> Inspecting[T, P]
 ### release it) or `false` on contention (the `fallback` branch runs; nothing is held).
 ### :returns: `true` if the reader hold was acquired, `false` otherwise.
 routine Inspecting[T, P].$try_enter() -> Bool
-  danger!
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return ctrl.try_add_inspector()
 
 ### Called on exit from the `using` block (and on every escape): releases the reader hold.
 routine Inspecting[T, P].$exit()
-  danger!
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.remove_inspector()
   return
@@ -60,7 +60,7 @@ routine Inspecting[T, P].$exit()
 ### :returns: The guarded entity as `T`.
 @[readonly, inline]
 routine Inspecting[T, P].$refer() -> T
-  danger!
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return ctrl.borrow_data().as_entity()
 
@@ -72,7 +72,7 @@ routine Inspecting[T, P].$refer() -> T
 ### :returns: The resulting `Text` value.
 @readonly
 routine Inspecting[T, P].$represent() -> Text
-  danger!
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return ctrl.borrow_data().as_entity().$represent()
 
@@ -80,7 +80,7 @@ routine Inspecting[T, P].$represent() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Inspecting[T, P].$diagnose() -> Text
-  danger!
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return me.type_name() + "(" + ctrl.borrow_data().as_entity().$diagnose() + ")"
 

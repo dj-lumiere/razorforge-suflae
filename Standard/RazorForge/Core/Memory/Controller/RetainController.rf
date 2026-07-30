@@ -31,10 +31,10 @@ routine RetainController[T].increase_strong_count()
 routine RetainController[T].decrease_strong_count()
   me.strong_count = me.strong_count - 1
   if me.should_deallocate_data()
-    danger!
+    danger
       me.drop_data()
   if me.should_deallocate_controller()
-    danger!
+    danger
       me.$destroy()
   return
 
@@ -47,7 +47,7 @@ routine RetainController[T].increase_weak_count()
 routine RetainController[T].decrease_weak_count()
   me.weak_count = me.weak_count - 1
   if me.should_deallocate_controller()
-    danger!
+    danger
       me.$destroy()
   return
 

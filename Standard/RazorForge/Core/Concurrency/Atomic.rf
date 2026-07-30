@@ -41,13 +41,13 @@ routine Atomic[T].$create(initial: T) -> Atomic[T]
 ### :returns: The value observed.
 @readonly
 routine Atomic[T].load() -> T
-  danger!
+  danger
     return atomic_load[T](ptr: me.value.hijack())
 
 ### Atomically writes `desired`.
 ### :param desired: The replacement value.
 routine Atomic[T].store(desired: T)
-  danger!
+  danger
     atomic_store[T](ptr: me.value.hijack(), value: desired)
   return
 
@@ -55,7 +55,7 @@ routine Atomic[T].store(desired: T)
 ### :param desired: The replacement value.
 ### :returns: The previous value.
 routine Atomic[T].swap(desired: T) -> T
-  danger!
+  danger
     return atomic_exchange[T](ptr: me.value.hijack(), value: desired)
 
 ### Atomically installs `desired` iff the cell currently equals `expected`.
@@ -63,7 +63,7 @@ routine Atomic[T].swap(desired: T) -> T
 ### :param desired: The value to install on success.
 ### :returns: `true` if the exchange happened.
 routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
-  danger!
+  danger
     var result = atomic_compare_and_exchange[T](ptr: me.value.hijack(),
                                                 expected: expected, desired: desired)
     return result.item1
@@ -72,33 +72,33 @@ routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
 ### :param delta: The increment to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_add(delta: T) -> T
-  danger!
+  danger
     return atomic_add[T](ptr: me.value.hijack(), value: delta)
 
 ### Atomically subtracts `delta`, returning the value before the subtraction. Integer `T` only.
 ### :param delta: The decrement to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_sub(delta: T) -> T
-  danger!
+  danger
     return atomic_sub[T](ptr: me.value.hijack(), value: delta)
 
 ### Atomically ANDs the cell with `mask`, returning the value before the update. Integer `T` only.
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_and(mask: T) -> T
-  danger!
+  danger
     return atomic_and[T](ptr: me.value.hijack(), value: mask)
 
 ### Atomically ORs the cell with `mask`, returning the value before the update. Integer `T` only.
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_or(mask: T) -> T
-  danger!
+  danger
     return atomic_or[T](ptr: me.value.hijack(), value: mask)
 
 ### Atomically XORs the cell with `mask`, returning the value before the update. Integer `T` only.
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_xor(mask: T) -> T
-  danger!
+  danger
     return atomic_xor[T](ptr: me.value.hijack(), value: mask)

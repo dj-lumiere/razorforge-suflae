@@ -142,7 +142,7 @@ common routine Integer.$from_literal(text: Text) -> Integer
 ### :returns: The resulting `Integer` value.
 @[readonly, inline]
 routine Integer.$store() -> Integer
-  danger!
+  danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()
   return Integer(handle: me.handle, ctrl: me.ctrl)

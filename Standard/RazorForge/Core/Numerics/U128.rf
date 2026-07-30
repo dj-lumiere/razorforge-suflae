@@ -241,7 +241,7 @@ routine u128_floordiv(a: U128, b: U128) -> U128
   var rem = Array[U64, 2]()
   var qlo = 0_u64
   var qhi = 0_u64
-  danger!
+  danger
     var q = knuth_divide[2](
       a: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
@@ -269,7 +269,7 @@ routine u128_mod(a: U128, b: U128) -> U128
   var rem = Array[U64, 2]()
   var rlo = 0_u64
   var rhi = 0_u64
-  danger!
+  danger
     var q = knuth_divide[2](
       a: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),

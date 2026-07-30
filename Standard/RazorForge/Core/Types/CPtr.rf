@@ -54,7 +54,7 @@ routine CPtr.is_none() -> Bool
 ### :returns: The resulting `Text` value.
 @readonly
 routine CPtr.$represent() -> Text
-  danger!
+  danger
     return me.get_address().$represent()
 
 ### Diagnostic representation for debugging — same as `$represent`.

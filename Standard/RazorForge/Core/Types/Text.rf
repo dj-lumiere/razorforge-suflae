@@ -30,7 +30,7 @@ record Text obeys Copyable, Addable, Ordered, FastHashable, Hashable, TextRepeat
 ### :returns: The resulting `Text` value.
 @[readonly, inline]
 routine Text.$store() -> Text
-  danger!
+  danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()
   return Text(data: me.data, count: me.count, ctrl: me.ctrl)
@@ -66,7 +66,7 @@ routine Text.$create(from_list: List[Character]) -> Text
   var n = from_list.count()
   if n == 0u64
     return Text()
-  danger!
+  danger
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
     var i: U64 = 0u64
     loop
@@ -85,7 +85,7 @@ routine Text.$create(from_list: List[Character]) -> Text
 ### :param from_character: The character to store.
 ### :returns: The resulting `Text` value.
 routine Text.$create(from_character: Character) -> Text
-  danger!
+  danger
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size()))
     buf.poke(value: from_character)
     return Text(
@@ -101,7 +101,7 @@ routine Text.$create(from_character: Character) -> Text
 routine Text.$create(from: CStr) -> Text
   if from.is_null()
     return Text()
-  danger!
+  danger
     var len = from.count()
     if len == 0u64
       return Text()
@@ -182,7 +182,7 @@ routine Text.is_empty() -> Bool
 routine Text.$getitem!(index: U64) -> Character
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
-  danger!
+  danger
     return me.data.stride(count: S64(index)).peek()
 
 # String operations
@@ -196,7 +196,7 @@ routine Text.concat(other: Text) -> Text
   var n = me.count + other.count()
   if n == 0u64
     return Text()
-  danger!
+  danger
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
     if me.count > 0u64
       rf_copy_bytes_at(dest: buf.address(), src: me.data.address(), size: Character.data_size() * me.count)
@@ -232,7 +232,7 @@ routine Text.$mul[I obeys Integral](count: I) -> Text
   if times == 0u64 or me.count == 0u64
     return Text()
   var n = me.count * times
-  danger!
+  danger
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
     var t: U64 = 0u64
     loop

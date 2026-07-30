@@ -56,7 +56,7 @@ routine List[T].$create() -> List[T]
 ### :param capacity: The initial capacity to reserve.
 routine List[T].$create(capacity: U64) -> List[T]
   var byte_size = T.data_size() * capacity
-  danger!
+  danger
     var ptr = rf_allocate_dynamic_uninit(byte_size)
     return List[T](
       data: hijacked_from[T](ptr),
@@ -77,7 +77,7 @@ needs T is Copyable
 
   var byte_size = T.data_size() * count
   var t_size = T.data_size()
-  danger!
+  danger
     var ptr = rf_allocate_dynamic_uninit(byte_size)
     var data = hijacked_from[T](ptr)
     var i = 0u64
@@ -120,7 +120,7 @@ routine List[T].add_last(value: T)
     me.reserve(new_capacity)
 
   var byte_offset = T.data_size() * me.count
-  danger!
+  danger
     me.data.offset(byte_offset).poke(value)
   me.count = me.count +% 1u64
   return
@@ -159,7 +159,7 @@ routine List[T].remove_last!() -> T
 
   me.count = me.count - 1u64
   var byte_offset = T.data_size() * me.count
-  danger!
+  danger
     return me.data.offset(byte_offset).peek()
 
 ### Inserts `value` at the front of the list.
@@ -186,13 +186,13 @@ routine List[T].add_at!(index: U64, value: T)
 
   # Shift elements right via memmove
   if index < me.count
-    danger!
+    danger
       var elem_size = T.data_size()
       var src_ptr:Hijacked[T] = me.data.offset(elem_size * index)
       var dst_ptr:Hijacked[T] = me.data.offset(elem_size * (index + 1u64))
       rf_copy_bytes_at(dest: dst_ptr.get_address(), src: src_ptr.get_address(), size: elem_size * (me.count - index))
 
-  danger!
+  danger
     me.data.offset(T.data_size() * index).poke(value)
   me.count = me.count + 1u64
   return
@@ -216,7 +216,7 @@ routine List[T].remove_at!(index: U64) -> T
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
 
   var byte_offset = T.data_size() * index
-  danger!
+  danger
     var value = me.data.offset(byte_offset).peek()
 
     # Shift elements left via memmove
@@ -236,7 +236,7 @@ routine List[T].remove_at!(index: U64) -> T
 routine List[T].first!() -> T
   if me.is_empty()
     absent
-  danger!
+  danger
     return me.data.peek()
 
 ### Returns the last element without removing it.
@@ -247,7 +247,7 @@ routine List[T].last!() -> T
   if me.is_empty()
     absent
   var byte_offset = T.data_size() * (me.count - 1u64)
-  danger!
+  danger
     return me.data.offset(byte_offset).peek()
 
 # ============================================================================
@@ -263,7 +263,7 @@ routine List[T].$getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
-  danger!
+  danger
     return me.data.offset(byte_offset).peek()
 
 ### Replaces the element at `index` with `value`.
@@ -274,7 +274,7 @@ routine List[T].$setitem!(index: U64, value: T)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
-  danger!
+  danger
     me.data.offset(byte_offset).poke(value)
   return
 
@@ -287,14 +287,14 @@ routine List[T].$setitem!(index: U64, value: T)
 @readonly
 @inline
 routine List[T].get_raw(index: U64) -> T
-  danger!
+  danger
     return me.data.offset(T.data_size() * index).peek()
 
 ### Writes `value` at `index` without bounds checking.
 ### Only call this when the index is already proven to be in range.
 @inline
 routine List[T].set_raw(index: U64, value: T)
-  danger!
+  danger
     me.data.offset(T.data_size() * index).poke(value)
   return
 
@@ -306,7 +306,7 @@ routine List[T].reserve(new_capacity: U64)
   if new_capacity > me.capacity
     var new_byte_size = T.data_size() * new_capacity
 
-    danger!
+    danger
       if me.data.is_none()
         var ptr = rf_allocate_dynamic_uninit(new_byte_size)
         me.data = hijacked_from[T](ptr)
@@ -342,13 +342,13 @@ entity ListEmittable[T] obeys Emittable[T]
 
 @readonly
 routine List[T].$iter() -> ListEmittable[T]
-  danger!
+  danger
     return ListEmittable[T](data: me.data, count: me.count(), index: 0u64)
 
 routine ListEmittable[T].$emit!() -> T
   if me.index >= me.count
     absent
-  danger!
+  danger
     var _result = me.data.offset(T.data_size() * me.index).peek()
     me.index = me.index + 1u64
     return _result

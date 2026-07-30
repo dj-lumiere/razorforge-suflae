@@ -23,7 +23,7 @@ import BuilderService
 ### :param capacity: The buffer depth (0 = rendezvous).
 ### :returns: A `(Sender[T], Receiver[T])` tuple sharing one channel.
 routine make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])
-  danger!
+  danger
     var chan = rf_channel_create(capacity: capacity)
     return (Sender[T](chan: chan), Receiver[T](chan: chan))
 
@@ -33,7 +33,7 @@ routine make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])
 ### :param capacity: The buffer depth (0 = rendezvous).
 ### :returns: A `(Sender[T], SharedReceiver[T])` tuple sharing one channel.
 routine make_shared_channel[T](capacity: U64) -> (Sender[T], SharedReceiver[T])
-  danger!
+  danger
     var chan = rf_channel_create(capacity: capacity)
     return (Sender[T](chan: chan), SharedReceiver[T](chan: chan))
 
@@ -50,7 +50,7 @@ entity Sender[T]
 ### {ChannelClosedError} if the channel is already closed or has no consumers left.
 ### :param item: The value to send (ownership transfers in).
 routine Sender[T].send!(item: T)
-  danger!
+  danger
     var box = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size()))
     box.poke(value: item)
     var ok = rf_channel_feed(chan: me.chan, payload: box.address())
@@ -64,14 +64,14 @@ routine Sender[T].send!(item: T)
 ### Produces another sending handle on the same channel (fan-in: more producers).
 ### :returns: A new `Sender[T]` on the same channel.
 routine Sender[T].duplicate() -> Sender[T]
-  danger!
+  danger
     rf_channel_add_feeder(chan: me.chan)
     return Sender[T](chan: me.chan)
 
 ### Closes the channel early (dropping the last Sender also closes it). Receivers drain the buffer
 ### then finish. Not dangerous — closing is the normal end-of-stream signal; double-close is a no-op.
 routine Sender[T].close()
-  danger!
+  danger
     rf_channel_close(chan: me.chan)
   return
 
@@ -79,7 +79,7 @@ routine Sender[T].close()
 ### close it the instant after you check, so prefer handling `send!`'s failure to gating on this.
 ### :returns: `true` if the channel is closed.
 routine Sender[T].is_closed() -> Bool
-  danger!
+  danger
     return rf_channel_is_closed(chan: me.chan) != 0_u32
 
 ### Drops this producer reference; the last one closes the channel.
@@ -100,32 +100,32 @@ relates ChannelDrain[T] as Iter
 ### Returns an iterator that draws items from the channel (receive == iterate).
 ### :returns: A `ChannelDrain[T]` over this channel.
 routine Receiver[T].$iter() -> ChannelDrain[T]
-  danger!
+  danger
     return ChannelDrain[T](chan: me.chan)
 
 ### The number of buffered items right now. A racy snapshot for diagnostics/heuristics — never a
 ### synchronization decision (it can change the instant after you read it).
 ### :returns: The current buffered item count.
 routine Receiver[T].count() -> U64
-  danger!
+  danger
     return rf_channel_count(chan: me.chan)
 
 ### Whether the buffer is currently empty. Racy snapshot (see `count`).
 ### :returns: `true` if no items are buffered.
 routine Receiver[T].is_empty() -> Bool
-  danger!
+  danger
     return rf_channel_count(chan: me.chan) == 0_u64
 
 ### Whether the channel has been closed (it may still hold buffered items to drain).
 ### :returns: `true` if closed.
 routine Receiver[T].is_closed() -> Bool
-  danger!
+  danger
     return rf_channel_is_closed(chan: me.chan) != 0_u32
 
 ### The buffered capacity this channel was created with (0 = rendezvous).
 ### :returns: The buffer capacity.
 routine Receiver[T].capacity() -> U64
-  danger!
+  danger
     return rf_channel_capacity(chan: me.chan)
 
 ### Drops this consumer reference; the channel frees once no producers and no consumers remain.
@@ -143,35 +143,35 @@ relates ChannelDrain[T] as Iter
 ### Produces another consumer handle on the same channel (one more line worker).
 ### :returns: A new `SharedReceiver[T]` on the same channel.
 routine SharedReceiver[T].duplicate() -> SharedReceiver[T]
-  danger!
+  danger
     rf_channel_add_consumer(chan: me.chan)
     return SharedReceiver[T](chan: me.chan)
 
 ### Returns an iterator that draws items from the channel (receive == iterate).
 ### :returns: A `ChannelDrain[T]` over this channel.
 routine SharedReceiver[T].$iter() -> ChannelDrain[T]
-  danger!
+  danger
     return ChannelDrain[T](chan: me.chan)
 
 ### The number of buffered items right now (racy snapshot — diagnostics only, not synchronization).
 ### :returns: The current buffered item count.
 routine SharedReceiver[T].count() -> U64
-  danger!
+  danger
     return rf_channel_count(chan: me.chan)
 
 ### Whether the buffer is currently empty (racy snapshot). :returns: `true` if no items are buffered.
 routine SharedReceiver[T].is_empty() -> Bool
-  danger!
+  danger
     return rf_channel_count(chan: me.chan) == 0_u64
 
 ### Whether the channel has been closed (may still hold buffered items). :returns: `true` if closed.
 routine SharedReceiver[T].is_closed() -> Bool
-  danger!
+  danger
     return rf_channel_is_closed(chan: me.chan) != 0_u32
 
 ### The buffered capacity this channel was created with (0 = rendezvous). :returns: The capacity.
 routine SharedReceiver[T].capacity() -> U64
-  danger!
+  danger
     return rf_channel_capacity(chan: me.chan)
 
 ### Drops this consumer reference; the channel frees once no producers and no consumers remain.
@@ -192,7 +192,7 @@ entity ChannelDrain[T] obeys Emittable[T]
 ### :returns: The next value, or `absent` at end-of-stream.
 @writable
 routine ChannelDrain[T].$emit!() -> T
-  danger!
+  danger
     var box = hijacked_from[T](rf_channel_next(chan: me.chan))
     if box.is_none()
       absent

@@ -22,7 +22,7 @@ relates SelectManyEmittable[T, U, Sub, S/Iter] as Iter
 @readonly
 routine SelectManyIterable[T, U, Sub, S].$iter() -> SelectManyEmittable[T, U, Sub, S/Iter]
   var buffer = List[U]()
-  danger!
+  danger
     return SelectManyEmittable[T, U, Sub, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform, buffer: steal buffer, buffer_index: 0u64)
 
 ### Iterates over source elements, expanding each through a transform to yield a flat sequence.
@@ -48,7 +48,7 @@ needs Sub obeys Iterable[U]
 ### :returns: The resulting `U` value.
 @migratable
 routine SelectManyEmittable[T, U, Sub, SE].$emit!() -> U
-  danger!
+  danger
     loop
       if me.buffer_index < me.buffer.count()
         var item = me.buffer[me.buffer_index]
@@ -68,5 +68,5 @@ routine SelectManyEmittable[T, U, Sub, SE].$emit!() -> U
 @readonly
 routine Iterable[T].select_many[U, Sub](transform: Routine[(T,), Sub]) -> SelectManyIterable[T, U, Sub, Me]
 needs Sub obeys Iterable[U]
-  danger!
+  danger
     return SelectManyIterable[T, U, Sub, Me](source: me.hijack(), transform: transform)

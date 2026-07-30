@@ -18,7 +18,7 @@ routine U1024.$floordiv(you: U1024) -> U1024
   var av = me
   var bv = you
   var rem = Array[U64, 16]()
-  danger!
+  danger
     var q = knuth_divide[16](
       a: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
@@ -30,7 +30,7 @@ routine U1024.$mod(you: U1024) -> U1024
   var av = me
   var bv = you
   var rem = Array[U64, 16]()
-  danger!
+  danger
     var q = knuth_divide[16](
       a: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),

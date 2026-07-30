@@ -67,7 +67,7 @@ routine Deque[T].$create(capacity: U64) -> Deque[T]
   while actual < capacity
     actual = actual *% 2u64
   var byte_size = T.data_size() * actual
-  danger!
+  danger
     return Deque[T](
       data: hijacked_from[T](rf_allocate_dynamic_uninit(byte_size)),
       start: 0u64,
@@ -101,7 +101,7 @@ routine Deque[T].physical_index(logical_index: U64) -> U64
 @readonly
 routine Deque[T].read_at(physical_idx: U64) -> T
   var byte_offset = T.data_size() * physical_idx
-  danger!
+  danger
     return me.data.offset(byte_offset).peek()
 
 ### Writes `value` into physical slot `physical_idx` without bounds checking.
@@ -109,7 +109,7 @@ routine Deque[T].read_at(physical_idx: U64) -> T
 ### :param value: The element to store.
 routine Deque[T].write_at(physical_idx: U64, value: T)
   var byte_offset = T.data_size() * physical_idx
-  danger!
+  danger
     me.data.offset(byte_offset).poke(value)
   return
 
@@ -237,7 +237,7 @@ routine Deque[T].reserve(new_capacity: U64)
     return
 
   var new_byte_size = T.data_size() * actual
-  danger!
+  danger
     var _new_data = hijacked_from[T](rf_allocate_dynamic_uninit(new_byte_size))
 
     # Copy elements in logical order (unwrap the ring)
@@ -336,7 +336,7 @@ entity DequeEmittable[T] obeys Emittable[T]
 
 @readonly
 routine Deque[T].$iter() -> DequeEmittable[T]
-  danger!
+  danger
     return DequeEmittable[T](
       data: me.data,
       start: me.start,
@@ -353,7 +353,7 @@ routine DequeEmittable[T].$emit!() -> T
     absent
   var physical = (me.start +% me.index) & (me.capacity -% 1u64)
   lateinit var _result: T
-  danger!
+  danger
     _result = me.data.offset(T.data_size() * physical).peek()
   me.index = me.index + 1u64
   return _result

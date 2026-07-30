@@ -19,7 +19,7 @@ relates WhereEmittable[T, S/Iter] as Iter
 ### :returns: The resulting `WhereEmittable[T, S/Iter]` value.
 @readonly
 routine WhereIterable[T, S].$iter() -> WhereEmittable[T, S/Iter]
-  danger!
+  danger
     return WhereEmittable[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, inverted: me.inverted)
 
 ### Iterates over a source sequence while yielding only values that satisfy the effective filter.
@@ -38,7 +38,7 @@ needs SE obeys Emittable[T]
 ### Source values are consumed and discarded until one passes the filter.
 ### :returns: The resulting `T` value.
 routine WhereEmittable[T, SE].$emit!() -> T
-  danger!
+  danger
     loop
       var item = me.source.as_entity().$emit!()
       var matches = me.predicate(item)
@@ -53,7 +53,7 @@ routine WhereEmittable[T, SE].$emit!() -> T
 ### :returns: The resulting `WhereIterable[T, Me]` value.
 @readonly
 routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterable[T, Me]
-  danger!
+  danger
     return WhereIterable[T, Me](source: me.hijack(), predicate: predicate, inverted: false)
 
 ### Returns a lazy adapter that keeps only values for which `predicate` returns
@@ -62,5 +62,5 @@ routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterable[T, Me
 ### :returns: The resulting `WhereIterable[T, Me]` value.
 @readonly
 routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereIterable[T, Me]
-  danger!
+  danger
     return WhereIterable[T, Me](source: me.hijack(), predicate: predicate, inverted: true)
