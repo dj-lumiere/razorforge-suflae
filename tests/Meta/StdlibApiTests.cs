@@ -16,16 +16,23 @@ namespace RazorForge.Tests.Meta;
 public sealed class StdlibApiTests
 {
     private static readonly string RepoRoot = LocateRepoRoot();
-    private static readonly string FixturesDir = Path.Combine(RepoRoot, "tests", "Fixtures", "Stdlib");
-    private static readonly string CompilerDll = Path.Combine(AppContext.BaseDirectory, "RazorForge.dll");
 
-    /// <summary>Enumerates .rf fixture files from the Stdlib fixtures directory.</summary>
+    private static readonly string FixturesDir = Path.Combine(RepoRoot,
+        "tests",
+        "Fixtures",
+        "Stdlib");
+
+    private static readonly string CompilerDll =
+        Path.Combine(AppContext.BaseDirectory, "RazorForge.dll");
+
+    /// <summary>Lists .rf fixture files from the Stdlib fixtures directory.</summary>
     public static IEnumerable<object[]> Fixtures()
     {
         if (!Directory.Exists(FixturesDir)) yield break;
-        foreach (string path in Directory.EnumerateFiles(FixturesDir, "*.rf").OrderBy(p => p))
+        foreach (string path in Directory.EnumerateFiles(FixturesDir, "*.rf")
+                                         .OrderBy(p => p))
         {
-            yield return new object[] { Path.GetFileNameWithoutExtension(path) };
+            yield return [Path.GetFileNameWithoutExtension(path)];
         }
     }
 
@@ -79,15 +86,21 @@ public sealed class StdlibApiTests
         int max = Math.Max(expLines.Length, actLines.Length);
         for (int i = 0; i < max; i++)
         {
-            string e = i < expLines.Length ? expLines[i] : "<missing line>";
-            string a = i < actLines.Length ? actLines[i] : "<missing line>";
-            if (e != a)
+            string e = i < expLines.Length
+                ? expLines[i]
+                : "<missing line>";
+            string a = i < actLines.Length
+                ? actLines[i]
+                : "<missing line>";
+            if (e == a)
             {
-                sb.AppendLine($"First difference at line {i + 1}:");
-                sb.AppendLine($"  expected: {e}");
-                sb.AppendLine($"  actual:   {a}");
-                break;
+                continue;
             }
+
+            sb.AppendLine($"First difference at line {i + 1}:");
+            sb.AppendLine($"  expected: {e}");
+            sb.AppendLine($"  actual:   {a}");
+            break;
         }
 
         sb.AppendLine($"({expLines.Length} expected lines, {actLines.Length} actual lines)");
@@ -149,12 +162,14 @@ public sealed class StdlibApiTests
             Console.Error.WriteLine(
                 $"[StdlibApiTests] {fixture}: spurious kill (exit={last.ExitCode}, no output) " +
                 $"on attempt {attempt}/{MaxRunAttempts}; backing off then retrying.");
-            if (attempt < MaxRunAttempts)
+            if (attempt >= MaxRunAttempts)
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                System.Threading.Thread.Sleep(4000);
+                continue;
             }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            System.Threading.Thread.Sleep(4000);
         }
 
         throw new Xunit.Sdk.XunitException(
@@ -164,7 +179,11 @@ public sealed class StdlibApiTests
     }
 
     private readonly record struct FixtureRun(
-        int ExitCode, string Stdout, string Stderr, bool TimedOut, int TimeoutMs);
+        int ExitCode,
+        string Stdout,
+        string Stderr,
+        bool TimedOut,
+        int TimeoutMs);
 
     private static FixtureRun RunFixtureOnce(string rfPath)
     {
@@ -179,34 +198,42 @@ public sealed class StdlibApiTests
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            WorkingDirectory = RepoRoot
+            WorkingDirectory = RepoRoot,
+            // Each buildandrun child compiles the entire (~180-file) stdlib and runs opt -O2/-O3 on a
+            // large module — the heaviest memory user in the e2e suite. By default .NET uses SERVER GC,
+            // which reserves a managed heap PER CORE; multiplied across ~150 sequential children plus the
+            // test host, that peak exhausts memory on constrained machines and the OS OOM-kills processes
+            // across the tree (the "exit=143, no output" spurious kills, and occasionally the test host
+            // itself). Force WORKSTATION GC + aggressive memory conservation on the child to slash its
+            // footprint; it stays single-fixture sequential, so the small GC-throughput trade is invisible.
+            Environment = { ["DOTNET_gcServer"] = "0", ["DOTNET_GCConserveMemory"] = "9" }
         };
-        // Each buildandrun child compiles the entire (~180-file) stdlib and runs opt -O2/-O3 on a
-        // large module — the heaviest memory user in the e2e suite. By default .NET uses SERVER GC,
-        // which reserves a managed heap PER CORE; multiplied across ~150 sequential children plus the
-        // test host, that peak exhausts memory on constrained machines and the OS OOM-kills processes
-        // across the tree (the "exit=143, no output" spurious kills, and occasionally the test host
-        // itself). Force WORKSTATION GC + aggressive memory conservation on the child to slash its
-        // footprint; it stays single-fixture sequential, so the small GC-throughput trade is invisible.
-        psi.Environment["DOTNET_gcServer"] = "0";
-        psi.Environment["DOTNET_GCConserveMemory"] = "9";
         using var p = Process.Start(psi)!;
         var stdoutTask = p.StandardOutput.ReadToEndAsync();
         var stderrTask = p.StandardError.ReadToEndAsync();
         const int timeoutMs = 60_000;
         if (!p.WaitForExit(timeoutMs))
         {
-            try { p.Kill(entireProcessTree: true); } catch { }
-            return new FixtureRun(ExitCode: -1, Stdout: stdoutTask.Result, Stderr: stderrTask.Result,
-                TimedOut: true, TimeoutMs: timeoutMs);
+            try { p.Kill(entireProcessTree: true); }
+            catch { }
+
+            return new FixtureRun(ExitCode: -1,
+                Stdout: stdoutTask.Result,
+                Stderr: stderrTask.Result,
+                TimedOut: true,
+                TimeoutMs: timeoutMs);
         }
 
-        return new FixtureRun(ExitCode: p.ExitCode, Stdout: stdoutTask.Result,
-            Stderr: stderrTask.Result, TimedOut: false, TimeoutMs: timeoutMs);
+        return new FixtureRun(ExitCode: p.ExitCode,
+            Stdout: stdoutTask.Result,
+            Stderr: stderrTask.Result,
+            TimedOut: false,
+            TimeoutMs: timeoutMs);
     }
 
     private static string NormalizeNewlines(string s) =>
-        s.Replace("\r\n", "\n").Replace("\r", "\n");
+        s.Replace("\r\n", "\n")
+         .Replace("\r", "\n");
 
     /// <summary>
     /// Normalizes output for snapshot comparison: LF line endings (a snapshot checked out as CRLF on
@@ -218,7 +245,10 @@ public sealed class StdlibApiTests
     /// </summary>
     private static string NormalizeForCompare(string s) =>
         string.Join("\n",
-            NormalizeNewlines(s).TrimEnd('\n').Split('\n').Select(line => line.TrimEnd()));
+            NormalizeNewlines(s)
+               .TrimEnd('\n')
+               .Split('\n')
+               .Select(line => line.TrimEnd()));
 
     private static string LocateRepoRoot()
     {
@@ -231,6 +261,7 @@ public sealed class StdlibApiTests
             if (parent == null || parent == dir) break;
             dir = parent;
         }
+
         throw new InvalidOperationException(
             "Could not locate RazorForge.csproj walking up from test assembly directory.");
     }
