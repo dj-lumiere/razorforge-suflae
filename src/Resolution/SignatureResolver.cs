@@ -426,29 +426,10 @@ internal sealed class SignatureResolver
             return;
         }
 
-        // `$` is only a wired/operator-hook marker — `$X` and a plain `X` share the SAME canonical
-        // name `X`, so a type may not declare both (they would be the same routine name with a
-        // contradictory wired-ness). Same-signature cases are already caught by RegistryKey above;
-        // this catches DIFFERENT-signature co-existence (overloads). Scoped to user-vs-user
-        // declarations so auto-derived wired operators don't false-positive against a user method.
-        if (!finalRoutine.IsSynthesized && finalRoutine.OwnerType is { } wiredOwner)
-        {
-            RoutineInfo? wiredConflict = _sa._registry.GetMethodsForType(type: wiredOwner)
-                .FirstOrDefault(predicate: m => !m.IsSynthesized
-                    && m.Name == finalRoutine.Name
-                    && m.IsWiredMemberRoutine != finalRoutine.IsWiredMemberRoutine);
-            if (wiredConflict != null)
-            {
-                _sa.ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
-                    message:
-                    $"Type '{wiredOwner.Name}' declares both a wired '${finalRoutine.Name}' and a plain " +
-                    $"'{finalRoutine.Name}'. '$' is only a wired/operator marker — they are the SAME routine " +
-                    $"name. Rename the non-operator one (e.g. 'append', 'combine').",
-                    location: routine.Location);
-                return;
-            }
-        }
-
+        // NOTE: a wired `$X` and a plain `X` share the canonical bare name `X`. The truly-conflicting
+        // case — SAME signature (e.g. redundant `$add(you:T)` + `add(you:T)`) — is already caught by the
+        // RegistryKey duplicate check above (RF-S406). DIFFERENT-signature pairs (e.g. `hash()` +
+        // `$hash(k0,k1)`) are legitimate distinct routines and MUST coexist, so no extra guard is added.
         _sa._registry.RegisterRoutine(routine: finalRoutine);
 
         // Post-registration validation

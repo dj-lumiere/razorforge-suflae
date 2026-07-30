@@ -748,6 +748,29 @@ public partial class LlvmCodeGenerator
         // owner-case call sites below read uniformly.
         static string Bang(string name, bool failable) => name;
 
+        // Structured attribute prefix — the routine's PROPERTIES (kind, wired-ness, failability,
+        // async mode, storage) are obfuscated into a bracketed list so the name itself carries only
+        // the module-qualified raw identifier. E.g. `[member, wired] Core.Address.create(...)`,
+        // `[independent, crashable] Foo.parse(...)`. External("C") routines are EXEMPT (they keep the
+        // raw C symbol so the LLVM declare links against the native lib), so this is not called there.
+        static string AttrPrefix(RoutineInfo r)
+        {
+            var attrs = new List<string> { r.OwnerType != null ? "member" : "independent" };
+            if (r.IsCommon) attrs.Add(item: "common");
+            if (r.IsWiredMemberRoutine) attrs.Add(item: "wired");
+            if (r.IsFailable) attrs.Add(item: "crashable");
+            if (r.IsSuspended) attrs.Add(item: "suspended");
+            else if (r.IsThreaded) attrs.Add(item: "threaded");
+            attrs.Sort();
+            return $"[{string.Join(separator: ", ", values: attrs)}] ";
+        }
+
+        // Labeled parameter list — `(label: Core.Type, …)` — the label participates in overload
+        // identity (RazorForge dispatches on named args), so it belongs in the mangled symbol.
+        static string LabeledParams(RoutineInfo r) =>
+            "(" + string.Join(separator: ", ",
+                values: r.Parameters.Select(selector: p => $"{p.Name}: {p.Type.FullName}")) + ")";
+
         // Lambda closures: [lambda]filename:line:col!(paramTypes)
         if (routine.IsLambda)
         {
@@ -772,11 +795,10 @@ public partial class LlvmCodeGenerator
         string name = SanitizeLlvmName(name: routine.Name);
         if (routine.OwnerType == null)
         {
-            // Top-level: Module.Name!#(typeargs)(paramTypes)
-            // BaseName preserves the module-qualified form. `!` sits on the routine name
-            // itself, before generic-arg and parameter-type suffixes.
-            string fullName = Bang(name: SanitizeLlvmName(name: routine.BaseName),
-                failable: routine.IsFailable);
+            // Top-level: `[independent, …] Module.name(typeargs)(label: Type, …)`.
+            // BaseName preserves the module-qualified form; attributes + labeled params carry the
+            // former `!`/`$`/decoration.
+            string fullName = AttrPrefix(r: routine) + SanitizeLlvmName(name: routine.BaseName);
 
             // Generic instance: append type arguments (e.g., IO.show -> IO.show#S64)
             if (routine.TypeArguments is { Count: > 0 })
@@ -790,30 +812,22 @@ public partial class LlvmCodeGenerator
                 fullName = $"{fullName}({typeArgSuffix}{variadicMarker})";
             }
 
-            if (ShouldDisambiguateByParameterTypes(candidate: routine))
-            {
-                string paramTypes = string.Join(separator: ",",
-                    values: routine.Parameters.Select(selector: p => p.Type.FullName));
-                fullName = $"{fullName}({paramTypes})";
-            }
-
+            fullName += LabeledParams(r: routine);
             return Q(name: fullName);
         }
 
-        // Common (type-level static) routines: [common]Module.Type.name!(paramTypes)
+        // Common (type-level static) routines: `[member, common, …] Module.Type.name(label: Type, …)`.
         if (routine.IsCommon)
         {
             string typeName = routine.OwnerType.FullName;
-            string paramTypes = string.Join(separator: ",",
-                values: routine.Parameters.Select(selector: p => p.Type.FullName));
-            string commonName = Bang(name: $"[common]{typeName}.{name}",
-                failable: routine.IsFailable);
-            return Q(name: $"{commonName}({paramTypes})");
+            return Q(name: $"{AttrPrefix(r: routine)}{typeName}.{name}{LabeledParams(r: routine)}");
         }
 
-        // Method: Module.OwnerType.Name! (OwnerType.FullName includes module)
+        // Method: `[member, wired?, crashable?, …] Module.OwnerType.name(label: Type, …)`
+        // (OwnerType.FullName includes module). The `$`/`!` are gone from the name — they are in the
+        // attribute prefix.
         string ownerTypeName = routine.OwnerType.FullName;
-        string baseName = Bang(name: $"{ownerTypeName}.{name}", failable: routine.IsFailable);
+        string baseName = AttrPrefix(r: routine) + $"{ownerTypeName}.{name}";
 
         // Method-level type arguments (e.g., Hijacked[U64].recast_as[BTreeListNode[S64]]).
         // Distinct from owner type args already in OwnerType.FullName.
@@ -853,16 +867,12 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Disambiguate synthesized error-handling variants and creators by all
-        // parameter types so overloads like try_create(S8) / try_create(Text) and
-        // try_find(Character) / try_find(Referring[Text]) do not collapse.
-        if (ShouldDisambiguateByParameterTypes(candidate: routine))
-        {
-            string paramTypes = string.Join(separator: ",",
-                values: routine.Parameters.Select(
-                    selector: p => MangleParamTypeName(routine: routine, paramType: p.Type)));
-            baseName = $"{baseName}({paramTypes})";
-        }
+        // Labeled parameter list — `(label: Type, …)` — always appended (even empty `()`); the label
+        // is part of overload identity. Uses MangleParamTypeName for wrapper-forwarder inner-generic
+        // param mapping.
+        baseName += "(" + string.Join(separator: ", ",
+            values: routine.Parameters.Select(
+                selector: p => $"{p.Name}: {MangleParamTypeName(routine: routine, paramType: p.Type)}")) + ")";
 
         return Q(name: baseName);
     }

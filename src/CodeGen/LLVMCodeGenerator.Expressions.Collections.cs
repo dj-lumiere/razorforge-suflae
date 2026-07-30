@@ -344,11 +344,14 @@ public partial class LlvmCodeGenerator
 
             if (creator != null)
             {
-                string funcName;
-                if (resolvedType.IsGenericResolution)
-                    funcName = Q(name: $"{resolvedType.FullName}.create");
-                else
-                    funcName = MangleRoutineName(routine: creator);
+                // Mangle through MangleRoutineName so the call symbol matches the decorated define
+                // ([member, wired] Module.Type.create(...)). For a generic resolution the looked-up
+                // `creator` is keyed on the generic-def owner (List[T]); substitute the concrete owner
+                // (List[S64]) first so the symbol is the concrete one the GMP define emits.
+                RoutineInfo mangleCreator = resolvedType.IsGenericResolution
+                    ? _registry.SubstituteMethodForOwner(method: creator, resolvedOwner: resolvedType) ?? creator
+                    : creator;
+                string funcName = MangleRoutineName(routine: mangleCreator);
 
                 if (!_generatedRoutines.Contains(item: funcName))
                     GenerateRoutineDeclaration(routine: creator, nameOverride: funcName);

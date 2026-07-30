@@ -1536,12 +1536,11 @@ public partial class LlvmCodeGenerator
             output.Append(value: _functionDefinitions);
         }
 
-        // Emit main() entry point that calls the module's start() / start!() routine.
-        // Failable entry points have the symbol decorated with `!`, so we accept both forms.
+        // Emit main() entry point that calls the module's start() routine. The mangled symbol is
+        // `"[independent(, crashable)] <module.>start()"` — attributes are in the bracket prefix and
+        // the name is the bare module-qualified `start` with an (always-empty) labeled param list.
         static bool IsStartSymbol(string f) =>
-            f == "start" || f == "start!" ||
-            f.EndsWith(value: ".start") || f.EndsWith(value: ".start!") ||
-            f.EndsWith(value: ".start\"") || f.EndsWith(value: ".start!\"");
+            f.EndsWith(value: ".start()\"") || f.EndsWith(value: " start()\"");
 
         // Prefer the ENTRY module's own start. `_generatedRoutineDefs` is a hash set (unordered),
         // so a bare FirstOrDefault would pick an arbitrary `.start` when several imported modules
@@ -1555,9 +1554,9 @@ public partial class LlvmCodeGenerator
         string? startFunc = null;
         if (!string.IsNullOrEmpty(value: EntryModule))
         {
+            // Match `"[independent(, …)] {EntryModule}.start()"` regardless of the attribute prefix.
             startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
-                f == $"{EntryModule}.start" || f == $"{EntryModule}.start!" ||
-                f == $"\"{EntryModule}.start\"" || f == $"\"{EntryModule}.start!\"");
+                f.EndsWith(value: $"{EntryModule}.start()\""));
         }
         startFunc ??= _generatedRoutineDefs.SingleOrDefault(predicate: IsStartSymbol);
         if (startFunc != null)
