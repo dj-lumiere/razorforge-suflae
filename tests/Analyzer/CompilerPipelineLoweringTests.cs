@@ -445,13 +445,13 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "\"[crashable, member] Core.S32.sub(you: Core.S32)\"",
+        Assert.Contains(expectedSubstring: "\"[crashable, member, wired] Core.S32.sub(you: Core.S32)\"",
             actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "\"[crashable, member] Core.S32.add(you: Core.S32)\"",
+        Assert.Contains(expectedSubstring: "\"[crashable, member, wired] Core.S32.add(you: Core.S32)\"",
             actualString: llvmIr);
-        Assert.DoesNotContain(expectedSubstring: "declare void @\"[crashable, member] Core.S32.sub",
+        Assert.DoesNotContain(expectedSubstring: "declare void @\"[crashable, member, wired] Core.S32.sub",
             actualString: llvmIr);
-        Assert.DoesNotContain(expectedSubstring: "declare void @\"[crashable, member] Core.S32.add",
+        Assert.DoesNotContain(expectedSubstring: "declare void @\"[crashable, member, wired] Core.S32.add",
             actualString: llvmIr);
     }
 
