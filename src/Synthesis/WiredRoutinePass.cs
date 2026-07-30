@@ -1298,6 +1298,27 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             return new ReturnStatement(Value: boxedScalar, Location: _synthLoc);
         }
 
+        // SINGLE-VALUE rule: a type with no direct SerialValue arm and fewer than two fields serializes
+        // as a single Text value — its `$represent()` boxed into the Text arm. This covers the @llvm wide
+        // primitives (U128/U256/S128/F128/Decimal/Address/…, which have NO RF fields) and single-field
+        // new types. The OLD behavior field-walked them into a `Dict[Text, SerialValue]`; with zero
+        // fields that Dict was degenerate and its `Dict.create` never monomorphized, leaking the generic
+        // `Core.Dict.create` into codegen (the synth-body-failed warning flood). Multi-field aggregates
+        // fall through to the Dict path below. A type may still hand-define `serialize()` to override.
+        if (fields.Count < 2)
+        {
+            var meRepr = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                { ResolvedType = owner };
+            var reprCall = new CallExpression(
+                Callee: new MemberExpression(Object: meRepr, MemberName: RepresentMethodName,
+                    Location: _synthLoc) { ResolvedType = textType },
+                Arguments: [], Location: _synthLoc) { ResolvedType = textType };
+            var boxedText = new CreatorExpression(TypeName: serialValue.Name, TypeArguments: null,
+                MemberVariables: [("Text", reprCall)], Location: _synthLoc)
+                { ResolvedType = serialValue, ConstructedType = serialValue };
+            return new ReturnStatement(Value: boxedText, Location: _synthLoc);
+        }
+
         // The Dict[Text, SerialValue] arm is the only 2-type-argument member; use its resolved Type
         // (and Name) directly so the DictLiteral type and the boxing arm are the exact same resolution.
         VariantMemberInfo? dictArm = serialValue.Members.FirstOrDefault(predicate: m =>
