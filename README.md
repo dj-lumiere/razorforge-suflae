@@ -167,7 +167,7 @@ With no entry file given, the CLI searches the current and parent directories fo
 - **Compiler pipeline**: lexer → parser → semantic analysis (350+ structured diagnostics with
   `error[RF-S###]: file:line:col` format) → desugaring/monomorphization → LLVM IR → native binary.
 - **Memory model**: single-ownership entities with deterministic `$destroy`, explicit `steal`
-  transfer, scoped borrows, `Retained`/`Tracked` reference counting, `danger!` blocks for
+  transfer, scoped borrows, `Retained`/`Tracked` reference counting, `danger` blocks for
   opt-in unsafe operations.
 - **Error handling**: failable routines (`!`), `throw`/`absent`, generated `try_`/`check_`/`lookup_`
   variants, `Maybe[T]`/`Result[T]`/`Lookup[T]` carriers, `when` pattern matching.
