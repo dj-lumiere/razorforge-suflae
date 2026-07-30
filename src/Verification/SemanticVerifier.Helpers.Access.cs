@@ -384,6 +384,21 @@ public sealed partial class SemanticVerifier
     private void ValidateMemberAccess(VisibilityModifier visibility, string memberKind,
         string memberName, TypeSymbol? ownerType, SourceLocation accessLocation)
     {
+        // Owner secrecy CAPS member visibility: a `secret` (module-private) type's members are
+        // module-private too, no matter their own modifier. The type name is already hidden cross-module,
+        // but an importer can still obtain an instance by inference through a non-secret factory that
+        // returns it — this closes that hole. No per-member `secret` annotation is required.
+        if (ownerType is { Visibility: VisibilityModifier.Secret }
+            && !IsAccessingFromSameModule(memberModule: ownerType.Module))
+        {
+            ReportError(code: SemanticDiagnosticCode.SecretMemberAccess,
+                message:
+                $"Cannot access {memberKind} '{memberName}' of secret (module-private) type '{ownerType.Name}' " +
+                $"from outside its module.",
+                location: accessLocation);
+            return;
+        }
+
         switch (visibility)
         {
             case VisibilityModifier.Secret:
