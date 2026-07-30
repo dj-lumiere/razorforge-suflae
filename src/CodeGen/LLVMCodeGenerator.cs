@@ -483,11 +483,6 @@ public partial class LlvmCodeGenerator
         // Combine all sections
         string output = BuildOutput();
         Mark(label: "BuildOutput");
-        string? dumpPath = Environment.GetEnvironmentVariable(variable: "RF_DUMP_IR");
-        if (!string.IsNullOrEmpty(value: dumpPath))
-        {
-            System.IO.File.WriteAllText(path: dumpPath, contents: output);
-        }
         return output;
     }
 
