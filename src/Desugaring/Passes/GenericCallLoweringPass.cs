@@ -537,7 +537,7 @@ internal sealed class GenericCallLoweringPass
         return new CallExpression(
             Callee: new MemberExpression(
                 Object: loweredObj,
-                PropertyName: gmc.MethodName,
+                MemberName: gmc.MethodName,
                 Location: gmc.Location)
             {
                 ResolvedType = gmc.Object.ResolvedType

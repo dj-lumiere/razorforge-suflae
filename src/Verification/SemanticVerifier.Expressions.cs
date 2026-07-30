@@ -155,8 +155,13 @@ public sealed partial class SemanticVerifier
                     return _currentRoutine.OwnerType;
                 }
 
-                // Re-lookup to get the updated type with resolved protocols/member variables
-                TypeSymbol? ownerType = _registry.LookupType(name: _currentRoutine.OwnerType.Name);
+                // Re-lookup to get the updated type with resolved protocols/member variables.
+                // Use the module-qualified FullName, not the bare Name: two modules can each declare
+                // a `Point`, and a bare `LookupType("Point")` collapses to a first-wins short-name
+                // match — binding `me` to the WRONG module's type (cross-module contamination).
+                TypeSymbol? ownerType =
+                    _registry.LookupType(name: _currentRoutine.OwnerType.FullName)
+                    ?? _registry.LookupType(name: _currentRoutine.OwnerType.Name);
                 if (ownerType != null)
                 {
                     return ownerType;
@@ -702,13 +707,13 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                         message:
-                        $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
+                        $"Cannot write to member '{member.MemberName}' through read-only wrapper '{objectType.Name}'. " +
                         "Use Modifying[T] for exclusive write access or Claiming[T] for locked write access.",
                         location: location);
                 }
 
                 ValidateMemberVariableWriteAccess(objectType: objectType,
-                    memberVariableName: member.PropertyName,
+                    memberVariableName: member.MemberName,
                     location: location);
 
                 // Suflae: a NON-NULLABLE entity field (`x: E`) rejects `o.x = <possibly-none>` — literal
@@ -716,7 +721,7 @@ public sealed partial class SemanticVerifier
                 // handle. Mirrors the construction check; the field's IsNullable is set in TypeBodyResolver.
                 if (_registry.Language == Language.Suflae &&
                     objectType is EntityTypeInfo writeEntity &&
-                    writeEntity.LookupMemberVariable(memberVariableName: member.PropertyName) is
+                    writeEntity.LookupMemberVariable(memberVariableName: member.MemberName) is
                         { IsNullable: false, Type: RecordTypeInfo
                             { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed } } writeField &&
                     IsNullableEntityRead(expr: value))
@@ -731,7 +736,7 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                         message:
-                        $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                        $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
                         "Use @migratable to allow mutations.",
                         location: location);
                 }
@@ -882,7 +887,7 @@ public sealed partial class SemanticVerifier
             {
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
                 ValidateMemberVariableWriteAccess(objectType: objectType,
-                    memberVariableName: member.PropertyName,
+                    memberVariableName: member.MemberName,
                     location: compound.Location);
 
                 if (_currentRoutine is { IsReadOnly: true } &&
@@ -890,7 +895,7 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                         message:
-                        $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                        $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
                         "Use @migratable to allow mutations.",
                         location: compound.Location);
                 }

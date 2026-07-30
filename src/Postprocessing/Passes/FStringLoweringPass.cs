@@ -496,7 +496,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                     Expression renderCall = new CallExpression(
                         Callee: new MemberExpression(
                             Object: loweredInner,
-                            PropertyName: methodName,
+                            MemberName: methodName,
                             Location: ep.Location),
                         Arguments: [],
                         Location: ep.Location) { ResolvedType = textType };
@@ -517,7 +517,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                         renderCall = new CallExpression(
                             Callee: new MemberExpression(
                                 Object: renderCall,
-                                PropertyName: Compiler.Resolution.RuntimeContract.Collection.Replace,
+                                MemberName: Compiler.Resolution.RuntimeContract.Collection.Replace,
                                 Location: ep.Location) { ResolvedType = textType },
                             Arguments:
                             [
@@ -555,7 +555,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
             result = new CallExpression(
                 Callee: new MemberExpression(
                     Object: result,
-                    PropertyName: "$add",
+                    MemberName: "$add",
                     Location: loc),
                 Arguments:
                 [

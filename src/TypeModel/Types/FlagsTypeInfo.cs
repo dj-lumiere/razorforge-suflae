@@ -18,12 +18,7 @@ public sealed class FlagsTypeInfo : RecordTypeInfo
     /// <summary>The members of this flags type.</summary>
     public List<FlagsMemberInfo> Members { get; init; } = [];
 
-    /// <summary>Protocols this flags type implements (obeys).</summary>
-    public new List<TypeInfo> ImplementedProtocols
-    {
-        get => base.ImplementedProtocols;
-        init => base.ImplementedProtocols = value;
-    }
+    // ImplementedProtocols is inherited from RecordTypeInfo (no shadowing).
 
     /// <summary>Creates a new flags type with the given name and default i64 backend type.</summary>
     public FlagsTypeInfo(string name) : base(name: name)

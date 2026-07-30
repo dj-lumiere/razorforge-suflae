@@ -108,7 +108,6 @@ public static class RuntimeContractCheck
         {
             RecordTypeInfo r => r.MemberVariables.Select(selector: m => m.Name),
             EntityTypeInfo e => e.MemberVariables.Select(selector: m => m.Name),
-            CrashableTypeInfo c => c.MemberVariables.Select(selector: m => m.Name),
             _ => []
         };
         return new HashSet<string>(collection: names, comparer: System.StringComparer.Ordinal);

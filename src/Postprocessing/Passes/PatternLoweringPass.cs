@@ -696,7 +696,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                     typeIdRhs = new CallExpression(
                         Callee: new MemberExpression(
                             Object: new IdentifierExpression(Name: tp.Type.Name, Location: loc),
-                            PropertyName: TypeIdFieldName, Location: loc),
+                            MemberName: TypeIdFieldName, Location: loc),
                         Arguments: [],
                         Location: loc) { ResolvedType = u64Type };
                 }
@@ -790,7 +790,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private MemberExpression MakePresentAccess(Expression subject, SourceLocation loc)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
-        return new MemberExpression(Object: subject, PropertyName: Compiler.Resolution.RuntimeContract.Carrier.PresentField, Location: loc)
+        return new MemberExpression(Object: subject, MemberName: Compiler.Resolution.RuntimeContract.Carrier.PresentField, Location: loc)
         {
             ResolvedType = boolType
         };
@@ -800,7 +800,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private static MemberExpression MakeMemberAccess(Expression subject, string field,
         TypeInfo? fieldType, SourceLocation loc)
     {
-        return new MemberExpression(Object: subject, PropertyName: field, Location: loc)
+        return new MemberExpression(Object: subject, MemberName: field, Location: loc)
         {
             ResolvedType = fieldType
         };
@@ -872,11 +872,11 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
         TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
-        var valueAccess = new MemberExpression(Object: subject, PropertyName: ValueFieldName, Location: loc)
+        var valueAccess = new MemberExpression(Object: subject, MemberName: ValueFieldName, Location: loc)
         {
             ResolvedType = hijackedType
         };
-        var isNoneMember = new MemberExpression(Object: valueAccess, PropertyName: Compiler.Resolution.RuntimeContract.RawPointer.IsNone,
+        var isNoneMember = new MemberExpression(Object: valueAccess, MemberName: Compiler.Resolution.RuntimeContract.RawPointer.IsNone,
             Location: loc)
         {
             ResolvedType = boolType
@@ -892,11 +892,11 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         TypeInfo entityType, SourceLocation loc)
     {
         TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
-        var valueAccess = new MemberExpression(Object: subject, PropertyName: ValueFieldName, Location: loc)
+        var valueAccess = new MemberExpression(Object: subject, MemberName: ValueFieldName, Location: loc)
         {
             ResolvedType = hijackedType
         };
-        var readMember = new MemberExpression(Object: valueAccess, PropertyName: Compiler.Resolution.RuntimeContract.RawPointer.Peek, Location: loc)
+        var readMember = new MemberExpression(Object: valueAccess, MemberName: Compiler.Resolution.RuntimeContract.RawPointer.Peek, Location: loc)
         {
             ResolvedType = entityType
         };

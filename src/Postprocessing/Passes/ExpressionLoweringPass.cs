@@ -464,7 +464,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 if (mem.Object.ResolvedType is ChoiceTypeInfo choiceType)
                 {
                     ChoiceCaseInfo? caseInfo = choiceType.Cases
-                        .FirstOrDefault(c => c.Name == mem.PropertyName);
+                        .FirstOrDefault(c => c.Name == mem.MemberName);
                     if (caseInfo != null)
                         return ([], new LiteralExpression(
                             Value: caseInfo.ComputedValue,
@@ -477,7 +477,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 if (mem.Object.ResolvedType is FlagsTypeInfo flagsType)
                 {
                     FlagsMemberInfo? memberInfo = flagsType.Members
-                        .FirstOrDefault(m => m.Name == mem.PropertyName);
+                        .FirstOrDefault(m => m.Name == mem.MemberName);
                     if (memberInfo != null)
                         return ([], new LiteralExpression(
                             Value: 1UL << memberInfo.BitPosition,
@@ -569,7 +569,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     var inPlaceCall = new CallExpression(
                         Callee: new MemberExpression(
                             Object: loweredTarget,
-                            PropertyName: inPlaceName,
+                            MemberName: inPlaceName,
                             Location: loc),
                         Arguments: [new NamedArgumentExpression(Name: "you", Value: loweredValue, Location: loc)],
                         Location: loc) { ResolvedType = compound.ResolvedType };
@@ -1346,7 +1346,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         RoutineInfo? method = ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
 
-        var callee = new MemberExpression(Object: receiver, PropertyName: methodName,
+        var callee = new MemberExpression(Object: receiver, MemberName: methodName,
             Location: loc);
         var call = new CallExpression(
             Callee: callee,
@@ -1403,7 +1403,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         }
 
         var typeIdAccess = new MemberExpression(
-            Object: loweredLeft, PropertyName: TypeIdFieldName, Location: loc) { ResolvedType = u64Type };
+            Object: loweredLeft, MemberName: TypeIdFieldName, Location: loc) { ResolvedType = u64Type };
         var constant = new LiteralExpression(
             Value: typeId, LiteralType: TokenType.U64Literal, Location: loc)
             { ResolvedType = u64Type };
@@ -1618,7 +1618,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         // var with_copy = baseRef.$store()
         var copyCall = new CallExpression(
             Callee: new MemberExpression(
-                Object: baseRef, PropertyName: "$store", Location: loc)
+                Object: baseRef, MemberName: "$store", Location: loc)
                 { ResolvedType = baseType },
             Arguments: [],
             Location: loc) { ResolvedType = baseType };
@@ -1635,7 +1635,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             MemberVariableInfo? memberInfo =
                 recordType.LookupMemberVariable(memberVariableName: fieldName);
             var target = new MemberExpression(
-                Object: copyRef, PropertyName: fieldName, Location: loc)
+                Object: copyRef, MemberName: fieldName, Location: loc)
                 { ResolvedType = memberInfo?.Type };
             hoisted.Add(item: new AssignmentStatement(
                 Target: target, Value: value, Location: loc));
@@ -1661,7 +1661,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (isNoneCheck && IsMaybeRecord(operandType))
         {
             var presentAccess = new MemberExpression(
-                Object: loweredExpr, PropertyName: Compiler.Resolution.RuntimeContract.Carrier.PresentField, Location: ipe.Location)
+                Object: loweredExpr, MemberName: Compiler.Resolution.RuntimeContract.Carrier.PresentField, Location: ipe.Location)
             {
                 ResolvedType = boolType
             };
@@ -1680,7 +1680,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (isBlankCheck && IsResultOrLookup(operandType))
         {
             var typeIdAccess = new MemberExpression(
-                Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
+                Object: loweredExpr, MemberName: TypeIdFieldName, Location: ipe.Location)
             {
                 ResolvedType = u64Type
             };
@@ -1705,7 +1705,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             if (tp.Type.Name == BlankMemberName || targetType?.Name == BlankMemberName)
             {
                 var typeIdAccess = new MemberExpression(
-                    Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
+                    Object: loweredExpr, MemberName: TypeIdFieldName, Location: ipe.Location)
                 { ResolvedType = u64Type };
                 var zero = new LiteralExpression(
                     Value: 0UL,
@@ -1724,7 +1724,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 ulong typeId = TypeIdHelper.ComputeTypeId(fullName: targetType.FullName);
                 var typeIdAccess = new MemberExpression(
-                    Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
+                    Object: loweredExpr, MemberName: TypeIdFieldName, Location: ipe.Location)
                 { ResolvedType = u64Type };
                 var constant = new LiteralExpression(
                     Value: typeId,
@@ -2013,7 +2013,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         TypeInfo? propType = resultType?.TypeArguments?[0];
         var memberAccess = new MemberExpression(
             Object: valRef,
-            PropertyName: optMember.PropertyName,
+            MemberName: optMember.MemberName,
             Location: loc)
         {
             ResolvedType = propType

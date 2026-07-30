@@ -1586,7 +1586,25 @@ public sealed partial class TypeRegistry
             .OrderBy(keySelector: m => m.IsSynthesized ? 1 : 0)
             .FirstOrDefault();
         RoutineInfo? copy = null;
-        if (type is RecordTypeInfo rec)
+        // Variant MUST be checked before RecordTypeInfo: VariantTypeInfo is a RecordTypeInfo subclass,
+        // so `type is RecordTypeInfo` would otherwise capture variants and give them the record
+        // field-walk copy — but a variant is a { tag, payload } union whose deep copy needs tag
+        // dispatch (BuildVariantCopyBody). Using the record copy on a variant double-frees / corrupts
+        // its heap arm (the nested_serialize regression).
+        if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
+        {
+            // A variant with a destructible arm (an arm whose own $destroy does real work — a heap
+            // entity like a collection, a managed leaf like Text, or a record that transitively owns
+            // one) would DOUBLE-FREE if bitwise-aliased: two copies of the variant both tear down the
+            // same heap arm. Its synthesized deep `copy` (WiredRoutinePass.BuildVariantCopyBody,
+            // tag-dispatch → reconstruct each destructible arm with `arm.copy()`) makes an independent
+            // value. Return it as Copy so the copy-lowering pass injects it at every copy point
+            // (record-ctor field-store, call-arg, assignment) — exactly where a bare alias would
+            // otherwise be torn down by both owners.
+            copy = own.FirstOrDefault(predicate: m =>
+                m.Name == "copy" && m.Parameters.Count == 0);
+        }
+        else if (type is RecordTypeInfo rec)
         {
             // A hand-written $store is always a retaining copy (the managed-leaf retain hook,
             // e.g. Text/Decimal bumping a shared controller).
@@ -1600,19 +1618,6 @@ public sealed partial class TypeRegistry
             if (copy is null && RecordHasRetainingField(record: rec))
                 copy = own.FirstOrDefault(predicate: m =>
                     m.Name == "$store" && m.Parameters.Count == 0);
-        }
-        else if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
-        {
-            // A variant with a destructible arm (an arm whose own $destroy does real work — a heap
-            // entity like a collection, a managed leaf like Text, or a record that transitively owns
-            // one) would DOUBLE-FREE if bitwise-aliased: two copies of the variant both tear down the
-            // same heap arm. Its synthesized deep `copy` (WiredRoutinePass.BuildVariantCopyBody,
-            // tag-dispatch → reconstruct each destructible arm with `arm.copy()`) makes an independent
-            // value. Return it as Copy so the copy-lowering pass injects it at every copy point
-            // (record-ctor field-store, call-arg, assignment) — exactly where a bare alias would
-            // otherwise be torn down by both owners.
-            copy = own.FirstOrDefault(predicate: m =>
-                m.Name == "copy" && m.Parameters.Count == 0);
         }
         return new Lifecycle(Copy: copy, Destroy: destroy, IsBorrow: false);
     }

@@ -513,14 +513,14 @@ internal sealed class MarkerProtocolDesugarPass
 
             // Skip if arg already coerces to inner T explicitly.
             if (valueExpr is CallExpression { Callee: MemberExpression mem }
-                && (mem.PropertyName == "$refer" || mem.PropertyName == "$control"))
+                && (mem.MemberName == "$refer" || mem.MemberName == "$control"))
                 continue;
 
             string methodName = mk.Kind == MarkerKind.Control ? "$control" : "$refer";
             var coerced = new CallExpression(
                 Callee: new MemberExpression(
                     Object: valueExpr,
-                    PropertyName: methodName,
+                    MemberName: methodName,
                     Location: valueExpr.Location),
                 Arguments: [],
                 Location: valueExpr.Location)

@@ -279,7 +279,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                     Type: null,
                     Initializer: new MemberExpression(
                         Object: new IdentifierExpression(Name: tmpName, Location: loc),
-                        PropertyName: $"item{i}",
+                        MemberName: $"item{i}",
                         Location: loc),
                     Visibility: VisibilityModifier.Secret,
                     Location: loc),
@@ -302,7 +302,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         var iterCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: forStmt.Iterable,
-                PropertyName: "$iter",
+                MemberName: "$iter",
                 Location: loc),
             Arguments: [],
             Location: loc) { IsSynthesizedLowering = true };
@@ -311,7 +311,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         CallExpression tryNextCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: tryNextReceiver,
-                PropertyName: Compiler.Resolution.RuntimeContract.TryEmit,
+                MemberName: Compiler.Resolution.RuntimeContract.TryEmit,
                 Location: loc),
             Arguments: [],
             Location: loc) { IsSynthesizedLowering = true };
@@ -386,7 +386,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                         Type: null,
                         Initializer: new MemberExpression(
                             Object: new IdentifierExpression(Name: elemName, Location: loc),
-                            PropertyName: $"item{i}",
+                            MemberName: $"item{i}",
                             Location: loc),
                         Visibility: VisibilityModifier.Secret,
                         Location: loc),

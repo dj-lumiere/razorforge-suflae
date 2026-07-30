@@ -62,14 +62,14 @@ public sealed partial class SemanticVerifier
             string receiver = member.Object is IdentifierExpression idRecv
                 ? $"'{idRecv.Name}'"
                 : member.Object is MemberExpression mRecv
-                    ? $"'{mRecv.PropertyName}'"
+                    ? $"'{mRecv.MemberName}'"
                     : "the value";
             string hint = member.Object is IdentifierExpression idHint
                 ? $"Null-check it first (e.g. 'if {idHint.Name} isnot None' or 'if {idHint.Name} is None: return')."
                 : "Bind it to a local and null-check that local first (e.g. 'var v = …' then 'if v isnot None').";
             ReportError(code: SemanticDiagnosticCode.NullableEntityDeref,
                 message:
-                $"Cannot access member '{member.PropertyName}' on possibly-none entity {receiver}. {hint}",
+                $"Cannot access member '{member.MemberName}' on possibly-none entity {receiver}. {hint}",
                 location: member.Location);
         }
 
@@ -80,7 +80,7 @@ public sealed partial class SemanticVerifier
         if (lookupType is RecordTypeInfo record)
         {
             MemberVariableInfo? memberVariable =
-                record.LookupMemberVariable(memberVariableName: member.PropertyName);
+                record.LookupMemberVariable(memberVariableName: member.MemberName);
             if (memberVariable != null)
             {
                 // Validate member variable access (read access)
@@ -95,7 +95,7 @@ public sealed partial class SemanticVerifier
             {
                 MemberVariableInfo? innerMemberVariable =
                     LookupMemberVariableOnWrapperInnerType(wrapperType: lookupType,
-                        memberVariableName: member.PropertyName);
+                        memberVariableName: member.MemberName);
                 if (innerMemberVariable != null)
                 {
                     ValidateMemberVariableAccess(memberVariable: innerMemberVariable,
@@ -106,9 +106,9 @@ public sealed partial class SemanticVerifier
 
                 RoutineInfo? innerMethod =
                     TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                        methodName: member.PropertyName, isFailable: false)
+                        methodName: member.MemberName, isFailable: false)
                     ?? _registry.LookupMethod(type: lookupType,
-                        methodName: member.PropertyName);
+                        methodName: member.MemberName);
                 if (innerMethod != null)
                 {
                     ValidateReadOnlyWrapperMethodAccess(wrapperType: lookupType,
@@ -123,7 +123,7 @@ public sealed partial class SemanticVerifier
         else if (lookupType is TupleTypeInfo tupleType)
         {
             MemberVariableInfo? memberVariable =
-                tupleType.GetField(memberVariableName: member.PropertyName);
+                tupleType.GetField(memberVariableName: member.MemberName);
             if (memberVariable != null)
             {
                 return memberVariable.Type;
@@ -132,7 +132,7 @@ public sealed partial class SemanticVerifier
         else if (lookupType is EntityTypeInfo entity)
         {
             MemberVariableInfo? memberVariable =
-                entity.LookupMemberVariable(memberVariableName: member.PropertyName);
+                entity.LookupMemberVariable(memberVariableName: member.MemberName);
             if (memberVariable != null)
             {
                 // Validate member variable access (read access)
@@ -145,7 +145,7 @@ public sealed partial class SemanticVerifier
         else if (lookupType is CrashableTypeInfo crashable)
         {
             MemberVariableInfo? memberVariable =
-                crashable.LookupMemberVariable(memberVariableName: member.PropertyName);
+                crashable.LookupMemberVariable(memberVariableName: member.MemberName);
             if (memberVariable != null)
             {
                 ValidateMemberVariableAccess(memberVariable: memberVariable,
@@ -160,7 +160,7 @@ public sealed partial class SemanticVerifier
             // Try to forward member variable access to the inner type
             MemberVariableInfo? innerMemberVariable =
                 LookupMemberVariableOnWrapperInnerType(wrapperType: lookupType,
-                    memberVariableName: member.PropertyName);
+                    memberVariableName: member.MemberName);
             if (innerMemberVariable != null)
             {
                 // Validate member variable access on the inner type
@@ -173,8 +173,8 @@ public sealed partial class SemanticVerifier
             // Try to forward method access to the inner type via Phase D synthesized forwarders
             RoutineInfo? innerMethod =
                 TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                    methodName: member.PropertyName, isFailable: false)
-                ?? _registry.LookupMethod(type: lookupType, methodName: member.PropertyName);
+                    methodName: member.MemberName, isFailable: false)
+                ?? _registry.LookupMethod(type: lookupType, methodName: member.MemberName);
             if (innerMethod != null)
             {
                 // Validate read-only wrapper restrictions
@@ -193,7 +193,7 @@ public sealed partial class SemanticVerifier
         if (lookupType is ChoiceTypeInfo choice)
         {
             ChoiceCaseInfo? caseInfo =
-                choice.Cases.FirstOrDefault(predicate: c => c.Name == member.PropertyName);
+                choice.Cases.FirstOrDefault(predicate: c => c.Name == member.MemberName);
             if (caseInfo != null)
             {
                 return choice; // Color.RED has type Color
@@ -206,7 +206,7 @@ public sealed partial class SemanticVerifier
         if (lookupType is FlagsTypeInfo flags)
         {
             FlagsMemberInfo? memberInfo =
-                flags.Members.FirstOrDefault(predicate: m => m.Name == member.PropertyName);
+                flags.Members.FirstOrDefault(predicate: m => m.Name == member.MemberName);
             if (memberInfo != null)
             {
                 return flags; // Permissions.READ has type Permissions
@@ -215,12 +215,9 @@ public sealed partial class SemanticVerifier
             // Fall through to method lookup — flags types can have builder service methods
         }
 
-        // Could be a method reference - use LookupMethod which handles generic resolutions
-        // Strip '!' suffix from failable method calls (e.g., invalidate!() -> invalidate)
-        // The parser stores '!' in PropertyName, but routine declarations strip it (IsFailable = true)
-        string lookupName = member.PropertyName.EndsWith(value: '!')
-            ? member.PropertyName[..^1]
-            : member.PropertyName;
+        // Could be a member-routine reference - use LookupMethod which handles generic resolutions.
+        // MemberName is always bare; failability is carried structurally in member.IsFailable.
+        string lookupName = member.MemberName;
         RoutineInfo? method = _registry.LookupMethod(type: lookupType, methodName: lookupName);
         if (method != null)
         {
@@ -233,7 +230,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.MemberNotFound,
                 message:
                 $"'{lookupName}' is a method on '{objectType.Name}', not a member variable. " +
-                $"Bare `.{lookupName}` reads a member variable; call the method as `{member.PropertyName}()`.",
+                $"Bare `.{lookupName}` reads a member variable; call the method as `{member.MemberName}()`.",
                 location: member.Location);
             return ErrorTypeInfo.Instance;
         }
@@ -242,7 +239,7 @@ public sealed partial class SemanticVerifier
         // Currently only Tuple[...] supports destructuring. Record breakdown is planned for the future.
         // When the element type is not a tuple, this means the user wrote `for (a, b) in non_tuple`.
         if (lookupType is not TupleTypeInfo &&
-            System.Text.RegularExpressions.Regex.IsMatch(input: member.PropertyName,
+            System.Text.RegularExpressions.Regex.IsMatch(input: member.MemberName,
                 pattern: @"^item\d+$"))
         {
             ReportError(code: SemanticDiagnosticCode.DestructuringArityMismatch,
@@ -254,7 +251,7 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.MemberNotFound,
                 message:
-                $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.{DidYouMean(target: member.PropertyName, candidates: MemberSuggestionCandidates(type: lookupType))}",
+                $"Type '{objectType.Name}' does not have a member '{member.MemberName}'.{DidYouMean(target: member.MemberName, candidates: MemberSuggestionCandidates(type: lookupType))}",
                 location: member.Location);
         }
         return ErrorTypeInfo.Instance;
@@ -268,7 +265,7 @@ public sealed partial class SemanticVerifier
         // Delegate to regular member analysis for the property lookup
         // The result is wrapped in Maybe[T] since the access may produce none
         var regularMember = new MemberExpression(Object: optMember.Object,
-            PropertyName: optMember.PropertyName,
+            MemberName: optMember.MemberName,
             Location: optMember.Location);
         TypeSymbol memberType = AnalyzeMemberExpression(member: regularMember);
 

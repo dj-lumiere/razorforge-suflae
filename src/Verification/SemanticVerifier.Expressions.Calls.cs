@@ -753,10 +753,8 @@ public sealed partial class SemanticVerifier
                             name: $"{_currentModuleName}.{moduleRef.Name}") == null)
                     && LookupTypeWithImports(name: moduleRef.Name) == null)
                 {
-                    bool modFailable = member.PropertyName.EndsWith(value: '!');
-                    string modName = modFailable
-                        ? member.PropertyName[..^1]
-                        : member.PropertyName;
+                    bool modFailable = member.IsFailable;
+                    string modName = member.MemberName;
                     RoutineInfo? modRoutine = ResolveModuleQualifiedRoutine(
                         moduleRef: moduleRef.Name, routineName: modName, isFailable: modFailable,
                         location: call.Location, ambiguous: out bool ambiguous);
@@ -778,39 +776,39 @@ public sealed partial class SemanticVerifier
                 // result in a variable, which would let a borrow / iterator outlive its source.
                 // Stdlib is exempt — its iterator implementations and wrapper bodies chain these
                 // dunders directly (e.g., `me.source.$iter()`, wrapper `$refer` forwarders).
-                if ((member.PropertyName == "$iter"
-                     || member.PropertyName == "$refer"
-                     || member.PropertyName == "$control")
+                if ((member.MemberName == "$iter"
+                     || member.MemberName == "$refer"
+                     || member.MemberName == "$control")
                     && !call.IsSynthesizedLowering
                     && !IsStdlibFile(filePath: call.Location.FileName))
                 {
-                    string hint = member.PropertyName == "$iter"
+                    string hint = member.MemberName == "$iter"
                         ? "use a 'for' loop or iterable combinators (skip, take, map, etc.) instead."
                         : "pass the value to a routine whose parameter is typed " +
                           "Referring[T] / Controlling[T] — the compiler coerces it for you.";
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
-                        message: $"Method '{member.PropertyName}' is internal to the compiler — {hint}",
+                        message: $"Method '{member.MemberName}' is internal to the compiler — {hint}",
                         location: call.Location);
                     return ErrorTypeInfo.Instance;
                 }
 
                 // Choice types cannot use any operator wired methods
-                if (objectType is ChoiceTypeInfo && IsOperatorWired(name: member.PropertyName))
+                if (objectType is ChoiceTypeInfo && IsOperatorWired(name: member.MemberName))
                 {
                     ReportError(code: SemanticDiagnosticCode.ArithmeticOnChoiceType,
                         message:
-                        $"Operator '{member.PropertyName}' cannot be used with choice type '{objectType.Name}'. " +
+                        $"Operator '{member.MemberName}' cannot be used with choice type '{objectType.Name}'. " +
                         "Choice types do not support operators. Use 'is' for case matching and regular methods for additional behavior.",
                         location: call.Location);
                     return ErrorTypeInfo.Instance;
                 }
 
                 // #134/#135: Flags types cannot use any operator wired methods
-                if (objectType is FlagsTypeInfo && IsOperatorWired(name: member.PropertyName))
+                if (objectType is FlagsTypeInfo && IsOperatorWired(name: member.MemberName))
                 {
                     ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
                         message:
-                        $"Operator '{member.PropertyName}' cannot be used with flags type '{objectType.Name}'. " +
+                        $"Operator '{member.MemberName}' cannot be used with flags type '{objectType.Name}'. " +
                         "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
                         location: call.Location);
                     return ErrorTypeInfo.Instance;
@@ -818,7 +816,7 @@ public sealed partial class SemanticVerifier
 
                 // #137: Nested grasping detection — checked before method resolution
                 // since modify() is generic extension T.modify() that may not resolve by concrete type name
-                if (member.PropertyName == ModifyMethodName && IsNestedModifying(source: member.Object))
+                if (member.MemberName == ModifyMethodName && IsNestedModifying(source: member.Object))
                 {
                     ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
                         message: "Cannot modify a member of an already-modified object. " +
@@ -826,10 +824,8 @@ public sealed partial class SemanticVerifier
                         location: call.Location);
                 }
 
-                bool isFailableMethodCall = member.PropertyName.EndsWith(value: '!');
-                string callLookupName = isFailableMethodCall
-                    ? member.PropertyName[..^1]
-                    : member.PropertyName;
+                bool isFailableMethodCall = member.IsFailable;
+                string callLookupName = member.MemberName;
                 TypeSymbol dispatchType = objectType;
                 RoutineInfo? method =
                     _registry.LookupMethod(type: dispatchType,
@@ -1077,7 +1073,7 @@ public sealed partial class SemanticVerifier
                     // later use is a hard error (UseAfterSteal). `.retain()` on an existing
                     // RC handle (`Retained[T]`, `Shared[T]`, ...) is a refcount bump and the
                     // source remains valid.
-                    if (member.PropertyName is Compiler.Resolution.RuntimeContract.RefCount.Retain or Compiler.Resolution.RuntimeContract.RefCount.Track &&
+                    if (member.MemberName is Compiler.Resolution.RuntimeContract.RefCount.Retain or Compiler.Resolution.RuntimeContract.RefCount.Track &&
                         member.Object is IdentifierExpression consumedId)
                     {
                         string baseName = GetBaseTypeName(typeName: objectType.Name);
@@ -1089,8 +1085,8 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #68: Real-to-Complex promotion — only $add/$sub allow float↔complex cross-type
-                    if (IsOperatorWired(name: member.PropertyName) &&
-                        member.PropertyName is not ("$add" or "$sub" or "$iadd" or "$isub") &&
+                    if (IsOperatorWired(name: member.MemberName) &&
+                        member.MemberName is not ("$add" or "$sub" or "$iadd" or "$isub") &&
                         call.Arguments.Count > 0 && method.Parameters.Count > 0)
                     {
                         TypeSymbol argType = method.Parameters[index: 0].Type;
@@ -1099,14 +1095,14 @@ public sealed partial class SemanticVerifier
                         {
                             ReportError(code: SemanticDiagnosticCode.RealComplexPromotionInvalid,
                                 message:
-                                $"Operator '{member.PropertyName}' does not allow real↔complex promotion. " +
+                                $"Operator '{member.MemberName}' does not allow real↔complex promotion. " +
                                 "Only '+' and '-' support implicit real-to-complex conversion. Use explicit conversion for other operators.",
                                 location: call.Location);
                         }
                     }
 
                     // #12: Partial access rule — entity.field.view() is not allowed
-                    if (member.PropertyName is "view" or ModifyMethodName &&
+                    if (member.MemberName is "view" or ModifyMethodName &&
                         member.Object is MemberExpression innerMember)
                     {
                         TypeSymbol innerObjectType =
@@ -1115,14 +1111,14 @@ public sealed partial class SemanticVerifier
                         {
                             ReportError(code: SemanticDiagnosticCode.PartialAccessOnEntity,
                                 message:
-                                $"Cannot call '.{member.PropertyName}()' on entity member variable '{innerMember.PropertyName}'. " +
+                                $"Cannot call '.{member.MemberName}()' on entity member variable '{innerMember.MemberName}'. " +
                                 $"Access the entity directly instead of its individual member variables.",
                                 location: call.Location);
                         }
                     }
 
                     // #137: Nested grasping detection
-                    if (member.PropertyName == ModifyMethodName && IsNestedModifying(source: member
+                    if (member.MemberName == ModifyMethodName && IsNestedModifying(source: member
                         .Object))
                     {
                         ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
@@ -1132,7 +1128,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #92: Re-grasping prohibition — cannot grasp an already-grasped token
-                    if (member.PropertyName == ModifyMethodName && IsModifyingType(type: objectType))
+                    if (member.MemberName == ModifyMethodName && IsModifyingType(type: objectType))
                     {
                         ReportError(code: SemanticDiagnosticCode.ReHijackingProhibited,
                             message:
@@ -1142,7 +1138,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #170: Downgrade prohibition — cannot call .view() on Modifying/Claiming
-                    if (member.PropertyName == "view" && (IsModifyingType(type: objectType) ||
+                    if (member.MemberName == "view" && (IsModifyingType(type: objectType) ||
                                                           IsClaimingType(type: objectType)))
                     {
                         ReportError(code: SemanticDiagnosticCode.TokenDowngradeProhibited,
@@ -1162,7 +1158,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #98: .hijack() on Shared/Watched requires danger! block
-                    if (member.PropertyName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && !InDangerBlock &&
+                    if (member.MemberName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && !InDangerBlock &&
                         (IsSharedType(type: objectType) || IsWatchedType(type: objectType)))
                     {
                         ReportError(code: SemanticDiagnosticCode.SnatchRequiresDanger,
@@ -1199,8 +1195,8 @@ public sealed partial class SemanticVerifier
                     {
                         ReportError(code: SemanticDiagnosticCode.MtTokenRequiresUsing,
                             message:
-                            $"'{member.PropertyName}()' returns a scope-bound access token and must be " +
-                            $"opened with 'using' (e.g. 'using …{member.PropertyName}() as v'). It " +
+                            $"'{member.MemberName}()' returns a scope-bound access token and must be " +
+                            $"opened with 'using' (e.g. 'using …{member.MemberName}() as v'). It " +
                             "cannot be used inline, passed as an argument, or stored.",
                             location: call.Location);
                     }
@@ -1219,7 +1215,7 @@ public sealed partial class SemanticVerifier
 
                     // #47: .grasp() on @initonly record warns — record is frozen after construction
                     // Check if the variable holding the record is @initonly bound
-                    if (member.PropertyName == ModifyMethodName && objectType is RecordTypeInfo &&
+                    if (member.MemberName == ModifyMethodName && objectType is RecordTypeInfo &&
                         member.Object is IdentifierExpression graspTarget)
                     {
                         VariableInfo? targetVar =
@@ -1235,7 +1231,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #104/#23: Channel send() makes source variable a deadref
-                    if (member is { PropertyName: "send", Object: IdentifierExpression sendSource })
+                    if (member is { MemberName: "send", Object: IdentifierExpression sendSource })
                     {
                         string baseObjType = GetBaseTypeName(typeName: objectType.Name);
                         if (baseObjType == "Channel")
@@ -1329,7 +1325,7 @@ public sealed partial class SemanticVerifier
                 }
 
                 // #78: Method-chain constructor — "42".S32!() -> S32.$create!(from: "42")
-                string propName = member.PropertyName;
+                string propName = member.MemberName;
                 bool isFailable = propName.EndsWith(value: '!');
                 string potentialTypeName = isFailable
                     ? propName[..^1]
@@ -1493,7 +1489,7 @@ public sealed partial class SemanticVerifier
 
                         ReportError(code: SemanticDiagnosticCode.MethodNotFound,
                             message:
-                            $"No routine '{member.PropertyName}()' is defined on '{objectType.Name}'.{hint}",
+                            $"No routine '{member.MemberName}()' is defined on '{objectType.Name}'.{hint}",
                             location: call.Location);
                         return ErrorTypeInfo.Instance;
                     }
@@ -1706,7 +1702,7 @@ public sealed partial class SemanticVerifier
                 values: allowed.Select(selector: t => t.Name));
             ReportError(code: SemanticDiagnosticCode.TypeEqualityConstraintViolation,
                 message:
-                $"'{member.PropertyName}()' is not available on '{receiverType.Name}': " +
+                $"'{member.MemberName}()' is not available on '{receiverType.Name}': " +
                 $"'{boundShort}' is not in [{allowedList}] " +
                 $"(constraint on '{constraint.ParameterName}').",
                 location: location);

@@ -380,7 +380,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     private ExpressionStatement MakeDestroyStmt(Owned owned, SourceLocation loc)
     {
         var ident = new IdentifierExpression(Name: owned.Name, Location: loc) { ResolvedType = owned.Type };
-        var callee = new MemberExpression(Object: ident, PropertyName: "$destroy", Location: loc)
+        var callee = new MemberExpression(Object: ident, MemberName: "$destroy", Location: loc)
             { ResolvedType = _blankType };
         var call = new CallExpression(Callee: callee, Arguments: [], Location: loc)
         {
@@ -464,7 +464,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     /// </summary>
     private static bool IsViewBinding(VariableDeclaration v) =>
         (v.Initializer is CallExpression { Callee: MemberExpression m } &&
-         ViewVerbs.Contains(item: m.PropertyName))
+         ViewVerbs.Contains(item: m.MemberName))
         // A variant when-pattern payload binding (`when me is Arm as v: …`, lowered by
         // PatternLoweringPass to `var v = <CarrierPayloadExpression on me>`) is a BORROW/view into the
         // matched variant's payload — the variant still owns it. Tearing `v` down frees the variant's
@@ -500,7 +500,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                 {
                     Callee: MemberExpression
                     {
-                        PropertyName: RuntimeContract.RefCount.Retain or RuntimeContract.RefCount.Track,
+                        MemberName: RuntimeContract.RefCount.Retain or RuntimeContract.RefCount.Track,
                         Object: IdentifierExpression { ResolvedType: EntityTypeInfo } recv
                     }
                 }:
@@ -525,7 +525,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                 {
                     Callee: MemberExpression
                     {
-                        PropertyName: "$destroy", Object: IdentifierExpression dv
+                        MemberName: "$destroy", Object: IdentifierExpression dv
                     }
                 }:
                     _movedNames.Add(item: dv.Name);
@@ -551,7 +551,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 
     private static string? CalleeName(Expression callee) => callee switch
     {
-        MemberExpression m => m.PropertyName,
+        MemberExpression m => m.MemberName,
         IdentifierExpression id => id.Name,
         _ => null
     };

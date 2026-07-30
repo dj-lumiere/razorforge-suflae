@@ -529,23 +529,32 @@ public record WithExpression(
 }
 
 /// <summary>
-/// Expression that accesses a member (member variable, property, or method) of an object.
+/// Expression that accesses a member (member variable or member routine) of an object.
 /// Represents the dot notation for accessing object members.
 /// </summary>
 /// <param name="Object">Expression that evaluates to the object containing the member</param>
-/// <param name="PropertyName">Name of the member to access</param>
+/// <param name="MemberName">Bare name of the member to access — never carries a trailing
+/// <c>!</c>; the failable marker is tracked structurally in <see cref="IsFailable"/>.</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Member access patterns:
 /// <list type="bullet">
-/// <item>Field access: obj.memberVar</item>
-/// <item>Method reference: obj.method (not a call)</item>
+/// <item>Member-variable access: obj.memberVar</item>
+/// <item>Member-routine reference: obj.routine (not a call)</item>
 /// <item>Chained access: obj.child.grandchild</item>
 /// </list>
 /// </remarks>
-public record MemberExpression(Expression Object, string PropertyName, SourceLocation Location)
+public record MemberExpression(Expression Object, string MemberName, SourceLocation Location)
     : Expression(Location: Location)
 {
+    /// <summary>
+    /// True when the source wrote the failable marker (<c>obj.routine!(...)</c>). The <c>!</c> is
+    /// consumed by the parser as a separate token and recorded here — it is NEVER part of
+    /// <see cref="MemberName"/>. Consumers that need failable overload resolution read this flag
+    /// instead of scanning the name for a trailing <c>!</c>.
+    /// </summary>
+    public bool IsFailable { get; init; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -558,7 +567,7 @@ public record MemberExpression(Expression Object, string PropertyName, SourceLoc
 /// Represents the ?. operator for safe navigation / optional chaining.
 /// </summary>
 /// <param name="Object">Expression that may evaluate to none</param>
-/// <param name="PropertyName">Name of the property/member variable to access if object is not none</param>
+/// <param name="MemberName">Name of the property/member variable to access if object is not none</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples: obj?.memberVar, result?.value
@@ -566,7 +575,7 @@ public record MemberExpression(Expression Object, string PropertyName, SourceLoc
 /// </remarks>
 public record OptionalMemberExpression(
     Expression Object,
-    string PropertyName,
+    string MemberName,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>

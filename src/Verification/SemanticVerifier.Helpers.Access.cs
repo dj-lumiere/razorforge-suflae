@@ -272,7 +272,7 @@ public sealed partial class SemanticVerifier
         {
             IdentifierExpression id => id.Name,
             MemberExpression member =>
-                $"{GetExpressionKey(expression: member.Object)}.{member.PropertyName}",
+                $"{GetExpressionKey(expression: member.Object)}.{member.MemberName}",
             _ => null
         };
     }

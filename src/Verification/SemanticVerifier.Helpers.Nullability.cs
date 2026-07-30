@@ -46,7 +46,7 @@ public sealed partial class SemanticVerifier
             {
                 TypeSymbol objType = m.Object.ResolvedType ?? AnalyzeExpression(expression: m.Object);
                 return objType is EntityTypeInfo entity &&
-                    entity.LookupMemberVariable(memberVariableName: m.PropertyName) is { IsNullable: true };
+                    entity.LookupMemberVariable(memberVariableName: m.MemberName) is { IsNullable: true };
             }
 
             default:

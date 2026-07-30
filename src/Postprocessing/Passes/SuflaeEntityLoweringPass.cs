@@ -264,7 +264,7 @@ internal sealed class SuflaeEntityLoweringPass
 
                 TypeInfo? boolType = _registry.LookupType(name: "Bool");
                 var isNoneCall = new CallExpression(
-                    Callee: new MemberExpression(Object: inner, PropertyName: "is_none",
+                    Callee: new MemberExpression(Object: inner, MemberName: "is_none",
                         Location: ipe.Location) { ResolvedType = boolType },
                     Arguments: new List<Expression>(),
                     Location: ipe.Location) { ResolvedType = boolType };
@@ -415,7 +415,7 @@ internal sealed class SuflaeEntityLoweringPass
         if (!IsRoamedType(val.ResolvedType)) return arg;
 
         var raw = new CallExpression(
-            Callee: new MemberExpression(Object: val, PropertyName: "raw_inner",
+            Callee: new MemberExpression(Object: val, MemberName: "raw_inner",
                 Location: val.Location) { ResolvedType = targetEntity },
             Arguments: new List<Expression>(),
             Location: val.Location) { ResolvedType = targetEntity };
@@ -458,7 +458,7 @@ internal sealed class SuflaeEntityLoweringPass
         {
             TypeInfo roamed = expr.ResolvedType!;
             return new CallExpression(
-                Callee: new MemberExpression(Object: expr, PropertyName: RuntimeContract.RefCount.Roam,
+                Callee: new MemberExpression(Object: expr, MemberName: RuntimeContract.RefCount.Roam,
                     Location: expr.Location) { ResolvedType = roamed },
                 Arguments: new List<Expression>(),
                 Location: expr.Location) { ResolvedType = roamed };
@@ -472,7 +472,7 @@ internal sealed class SuflaeEntityLoweringPass
         WrapperTypeInfo roamed = _registry.GetOrCreateWrapperType(
             wrapperName: RuntimeContract.Roamed, innerType: entity, isReadOnly: false);
         return new CallExpression(
-            Callee: new MemberExpression(Object: inner, PropertyName: RuntimeContract.RefCount.Roam,
+            Callee: new MemberExpression(Object: inner, MemberName: RuntimeContract.RefCount.Roam,
                 Location: inner.Location) { ResolvedType = roamed },
             Arguments: new List<Expression>(),
             Location: inner.Location) { ResolvedType = roamed };

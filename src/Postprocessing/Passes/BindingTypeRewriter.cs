@@ -66,7 +66,7 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
         {
             bool? isFailable = node.ResolvedRoutine?.IsFailable;
             RoutineInfo? resolved = _registry.LookupMethod(type: _concreteType,
-                methodName: me.PropertyName, isFailable: isFailable);
+                methodName: me.MemberName, isFailable: isFailable);
             if (resolved != null)
             {
                 node.ResolvedRoutine = resolved;

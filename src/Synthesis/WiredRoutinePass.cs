@@ -539,7 +539,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var representCall = new CallExpression(
                     Callee: new MemberExpression(
                         Object: fromRef,
-                        PropertyName: RepresentMethodName,
+                        MemberName: RepresentMethodName,
                         Location: _synthLoc) { ResolvedType = textType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = textType };
@@ -693,13 +693,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             var lhs = new MemberExpression(
                 Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
                     { ResolvedType = ownerType },
-                PropertyName: field.Name,
+                MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
             var rhs = new MemberExpression(
                 Object: new IdentifierExpression(Name: "you", Location: _synthLoc)
                     { ResolvedType = ownerType },
-                PropertyName: field.Name,
+                MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
             var cmp = new BinaryExpression(
@@ -771,13 +771,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
                 { ResolvedType = record };
-            var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+            var fieldRef = new MemberExpression(Object: meRef, MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
             // Retaining field → me.f.$store() (bumps its refcount); value field → me.f (shallow).
             Expression argExpr = ctx.Registry.GetLifecycle(type: field.Type).Copy is not null
                 ? new CallExpression(
-                    Callee: new MemberExpression(Object: fieldRef, PropertyName: "$store",
+                    Callee: new MemberExpression(Object: fieldRef, MemberName: "$store",
                         Location: _synthLoc) { ResolvedType = field.Type },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = field.Type }
@@ -810,7 +810,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         };
         var copyMember = new MemberExpression(
             Object: meRef,
-            PropertyName: "$store",
+            MemberName: "$store",
             Location: _synthLoc)
         {
             ResolvedType = ownerType
@@ -866,11 +866,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 { ResolvedType = ownerType };
             var fieldAccess = new MemberExpression(
                 Object: meRef,
-                PropertyName: field.Name,
+                MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
             var hashMethod = new MemberExpression(
                 Object: fieldAccess,
-                PropertyName: HashMethodName,
+                MemberName: HashMethodName,
                 Location: _synthLoc) { ResolvedType = u64Type };
             RoutineInfo? fieldHashRoutine = ctx.Registry.LookupMethodOverload(
                 type: field.Type, methodName: HashMethodName, argTypes: []);
@@ -896,7 +896,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 accum = new CallExpression(
                     Callee: new MemberExpression(
                         Object: accum,
-                        PropertyName: BitXorMethodName,
+                        MemberName: BitXorMethodName,
                         Location: _synthLoc) { ResolvedType = u64Type },
                     Arguments: [new NamedArgumentExpression(Name: "you", Value: fieldHash, Location: _synthLoc)],
                     Location: _synthLoc)
@@ -934,7 +934,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var hashCall = new CallExpression(
             Callee: new MemberExpression(
                 Object: creator,
-                PropertyName: HashMethodName,
+                MemberName: HashMethodName,
                 Location: _synthLoc) { ResolvedType = u64Type },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = u64Type };
@@ -1016,12 +1016,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
                 { ResolvedType = ownerType };
-            var fieldAccess = new MemberExpression(Object: meRef, PropertyName: field.Name,
+            var fieldAccess = new MemberExpression(Object: meRef, MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
             RoutineInfo? fieldSecureHashRoutine = ctx.Registry.LookupMethodOverload(
                 type: field.Type, methodName: HashMethodName, argTypes: [u64Type, u64Type]);
             Expression fieldHash = new CallExpression(
-                Callee: new MemberExpression(Object: fieldAccess, PropertyName: HashMethodName,
+                Callee: new MemberExpression(Object: fieldAccess, MemberName: HashMethodName,
                     Location: _synthLoc) { ResolvedType = u64Type },
                 Arguments:
                 [
@@ -1044,7 +1044,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 accum = new CallExpression(
                     Callee: new MemberExpression(
                         Object: accum,
-                        PropertyName: BitXorMethodName,
+                        MemberName: BitXorMethodName,
                         Location: _synthLoc) { ResolvedType = u64Type },
                     Arguments: [new NamedArgumentExpression(Name: "you", Value: fieldHash, Location: _synthLoc)],
                     Location: _synthLoc)
@@ -1077,7 +1077,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             LoweringKind = CallLoweringKind.TypeConstructor
         };
         var hashCall = new CallExpression(
-            Callee: new MemberExpression(Object: creator, PropertyName: HashMethodName,
+            Callee: new MemberExpression(Object: creator, MemberName: HashMethodName,
                 Location: _synthLoc) { ResolvedType = u64Type },
             Arguments:
             [
@@ -1114,19 +1114,19 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             var meField = new MemberExpression(
                 Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
                     { ResolvedType = ownerType },
-                PropertyName: field.Name,
+                MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
             var youField = new MemberExpression(
                 Object: new IdentifierExpression(Name: "you", Location: _synthLoc)
                     { ResolvedType = ownerType },
-                PropertyName: field.Name,
+                MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
             var cmpCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: meField,
-                    PropertyName: "$cmp",
+                    MemberName: "$cmp",
                     Location: _synthLoc) { ResolvedType = s32Type },
                 Arguments:
                 [
@@ -1211,7 +1211,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var typeNameCall = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: diagnose ? "full_type_name" : "type_name",
+                MemberName: diagnose ? "full_type_name" : "type_name",
                 Location: _synthLoc) { ResolvedType = textType },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = textType };
@@ -1250,7 +1250,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             var fieldExpr = new MemberExpression(
                 Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
                     { ResolvedType = ownerType },
-                PropertyName: field.Name,
+                MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
             // Always use $represent for field values, even inside $diagnose.
@@ -1312,7 +1312,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 LiteralType: TokenType.TextLiteral, Location: _synthLoc) { ResolvedType = textType };
             var meField = new MemberExpression(
                 Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = owner },
-                PropertyName: field.Name, Location: _synthLoc) { ResolvedType = field.Type };
+                MemberName: field.Name, Location: _synthLoc) { ResolvedType = field.Type };
             pairs.Add(item: (keyLit,
                 BuildSerializeFieldValue(field: field, meField: meField,
                     serialValue: serialValue, textType: textType)));
@@ -1339,14 +1339,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Aggregate with a REAL synthesized serialize() (not an @llvm primitive record) -> recurse.
         bool recurse = field.Type switch
         {
-            // Variant is a RecordTypeInfo subclass (never @llvm-backed) — the Record arm covers it.
             RecordTypeInfo r => !r.HasDirectBackendType && TypeHasSerialize(type: r),
             EntityTypeInfo e => TypeHasSerialize(type: e),
             _ => false,
         };
         if (recurse)
             return new CallExpression(
-                Callee: new MemberExpression(Object: meField, PropertyName: "serialize",
+                Callee: new MemberExpression(Object: meField, MemberName: "serialize",
                     Location: _synthLoc) { ResolvedType = serialValue },
                 Arguments: [], Location: _synthLoc) { ResolvedType = serialValue };
 
@@ -1355,7 +1354,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             ? new LiteralExpression(Value: "<routine>", LiteralType: TokenType.TextLiteral,
                 Location: _synthLoc) { ResolvedType = textType }
             : new CallExpression(
-                Callee: new MemberExpression(Object: meField, PropertyName: RepresentMethodName,
+                Callee: new MemberExpression(Object: meField, MemberName: RepresentMethodName,
                     Location: _synthLoc) { ResolvedType = textType },
                 Arguments: [], Location: _synthLoc) { ResolvedType = textType };
         return new CreatorExpression(TypeName: serialValue.Name, TypeArguments: null,
@@ -1634,7 +1633,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
                         { ResolvedType = textType },
-                    PropertyName: "$add",
+                    MemberName: "$add",
                     Location: _synthLoc),
                 Arguments:
                 [
@@ -1694,7 +1693,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Callee: new MemberExpression(
                         Object: new IdentifierExpression(Name: "bits", Location: _synthLoc)
                             { ResolvedType = textType },
-                        PropertyName: "$add",
+                        MemberName: "$add",
                         Location: _synthLoc),
                     Arguments:
                     [
@@ -1708,7 +1707,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Callee: new MemberExpression(
                         Object: new IdentifierExpression(Name: "bits", Location: _synthLoc)
                             { ResolvedType = textType },
-                        PropertyName: "$add",
+                        MemberName: "$add",
                         Location: _synthLoc),
                     Arguments:
                     [
@@ -1868,7 +1867,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var call = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: Compiler.Resolution.RuntimeContract.CrashMessage,
+                MemberName: Compiler.Resolution.RuntimeContract.CrashMessage,
                 Location: _synthLoc),
             Arguments: [],
             Location: _synthLoc);
@@ -1893,7 +1892,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var crashMsgCall = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: Compiler.Resolution.RuntimeContract.CrashMessage,
+                MemberName: Compiler.Resolution.RuntimeContract.CrashMessage,
                 Location: _synthLoc),
             Arguments: [],
             Location: _synthLoc);
@@ -1911,7 +1910,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 { ResolvedType = crashable };
             var fieldExpr = new MemberExpression(
                 Object: meRef2,
-                PropertyName: field.Name,
+                MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
             parts.Add(new ExpressionPart(
@@ -1987,7 +1986,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Expression cond = new CallExpression(
                         Callee: new MemberExpression(
                             Object: memberNameRef,
-                            PropertyName: "$eq",
+                            MemberName: "$eq",
                             Location: _synthLoc),
                         Arguments: [
                             new NamedArgumentExpression(
@@ -2254,10 +2253,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 continue;
             var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
                 { ResolvedType = owner };
-            var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+            var fieldRef = new MemberExpression(Object: meRef, MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
             var visitCall = new CallExpression(
-                Callee: new MemberExpression(Object: fieldRef, PropertyName: "cc_visit_self",
+                Callee: new MemberExpression(Object: fieldRef, MemberName: "cc_visit_self",
                     Location: _synthLoc) { ResolvedType = blankType },
                 Arguments: [],
                 Location: _synthLoc) { ResolvedType = blankType };
@@ -2290,10 +2289,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     continue;
                 var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
                     { ResolvedType = owner };
-                var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+                var fieldRef = new MemberExpression(Object: meRef, MemberName: field.Name,
                     Location: _synthLoc) { ResolvedType = field.Type };
                 var destroyCall = new CallExpression(
-                    Callee: new MemberExpression(Object: fieldRef, PropertyName: "$destroy",
+                    Callee: new MemberExpression(Object: fieldRef, MemberName: "$destroy",
                         Location: _synthLoc) { ResolvedType = blankType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = blankType };
@@ -2349,10 +2348,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             {
                 var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
                     { ResolvedType = owner };
-                var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+                var fieldRef = new MemberExpression(Object: meRef, MemberName: field.Name,
                     Location: _synthLoc) { ResolvedType = field.Type };
                 var destroyCall = new CallExpression(
-                    Callee: new MemberExpression(Object: fieldRef, PropertyName: "$destroy",
+                    Callee: new MemberExpression(Object: fieldRef, MemberName: "$destroy",
                         Location: _synthLoc) { ResolvedType = blankType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = blankType };
@@ -2381,12 +2380,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
             { ResolvedType = owner };
         var hijackCall = new CallExpression(
-            Callee: new MemberExpression(Object: meRef, PropertyName: Compiler.Resolution.RuntimeContract.RawPointer.Hijack,
+            Callee: new MemberExpression(Object: meRef, MemberName: Compiler.Resolution.RuntimeContract.RawPointer.Hijack,
                 Location: _synthLoc) { ResolvedType = hijackedType },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = hijackedType };
         var invalidateCall = new CallExpression(
-            Callee: new MemberExpression(Object: hijackCall, PropertyName: Compiler.Resolution.RuntimeContract.RawPointer.Invalidate,
+            Callee: new MemberExpression(Object: hijackCall, MemberName: Compiler.Resolution.RuntimeContract.RawPointer.Invalidate,
                 Location: _synthLoc) { ResolvedType = blankType },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = blankType };
@@ -2430,7 +2429,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
                     { ResolvedType = member.Type };
                 var destroyCall = new CallExpression(
-                    Callee: new MemberExpression(Object: vRef, PropertyName: "$destroy",
+                    Callee: new MemberExpression(Object: vRef, MemberName: "$destroy",
                         Location: _synthLoc) { ResolvedType = blankType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = blankType };
@@ -2569,7 +2568,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             var fieldExpr = new MemberExpression(
                 Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
                     { ResolvedType = tuple },
-                PropertyName: field.Name,
+                MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
             parts.Add(new ExpressionPart(
@@ -2661,7 +2660,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
                 { ResolvedType = member.Type };
             var copyCall = new CallExpression(
-                Callee: new MemberExpression(Object: vRef, PropertyName: "copy",
+                Callee: new MemberExpression(Object: vRef, MemberName: "copy",
                     Location: _synthLoc) { ResolvedType = member.Type },
                 Arguments: [], Location: _synthLoc) { ResolvedType = member.Type };
 
@@ -2734,7 +2733,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             // GetLifecycle here because a generic-instance arm (Dict[..]/List[..]) reports a null
             // destructor at synth time (not-yet-live), which is exactly the arm that MUST be copied.
             Expression extracted = new CallExpression(
-                Callee: new MemberExpression(Object: vRef, PropertyName: "copy",
+                Callee: new MemberExpression(Object: vRef, MemberName: "copy",
                     Location: _synthLoc) { ResolvedType = armOwner },
                 Arguments: [], Location: _synthLoc) { ResolvedType = armOwner };
             var matchClause = new WhenClause(
@@ -2850,7 +2849,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var representCall = new CallExpression(
                     Callee: new MemberExpression(
                         Object: vRef,
-                        PropertyName: RepresentMethodName,
+                        MemberName: RepresentMethodName,
                         Location: _synthLoc) { ResolvedType = textType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = textType };
@@ -2949,7 +2948,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var diagnoseCall = new CallExpression(
                     Callee: new MemberExpression(
                         Object: vRef,
-                        PropertyName: DiagnoseMethodName,
+                        MemberName: DiagnoseMethodName,
                         Location: _synthLoc) { ResolvedType = textType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = textType };

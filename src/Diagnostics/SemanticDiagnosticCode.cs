@@ -564,6 +564,10 @@ public enum SemanticDiagnosticCode
     /// must be either all positional or all named.</summary>
     MixedPositionalAndNamedArguments = 512,
 
+    /// <summary>A module-qualified call (`Leaf.routine(...)`) matches module-level routines in more
+    /// than one imported module that share the same path leaf. Disambiguate the module name.</summary>
+    AmbiguousModuleQualifiedCall = 513,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // COLLECTION LITERAL ERRORS (RF-S550 - RF-S599)
     // ═══════════════════════════════════════════════════════════════════════════

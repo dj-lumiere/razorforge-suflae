@@ -295,7 +295,7 @@ internal sealed class DerivedOperatorPass
         var call = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: delegateMethod.Name,
+                MemberName: delegateMethod.Name,
                 Location: _synthLoc),
             Arguments:
             [
@@ -341,7 +341,7 @@ internal sealed class DerivedOperatorPass
         var cmpCall = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: "$cmp",
+                MemberName: "$cmp",
                 Location: _synthLoc),
             Arguments:
             [
@@ -371,7 +371,7 @@ internal sealed class DerivedOperatorPass
         // $ne may not yet be registered when this body is built (ordering not guaranteed).
         RoutineInfo? eqMethod = _registry.LookupMethod(type: cmpResultType, methodName: "$eq");
         var eqCall = new CallExpression(
-            Callee: new MemberExpression(Object: cmpCall, PropertyName: "$eq", Location: _synthLoc),
+            Callee: new MemberExpression(Object: cmpCall, MemberName: "$eq", Location: _synthLoc),
             Arguments:
             [
                 new NamedArgumentExpression(Name: "you", Value: caseLiteral, Location: _synthLoc)

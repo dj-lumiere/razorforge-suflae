@@ -185,7 +185,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (enterMethod != null)
         {
             var enterCallee = new MemberExpression(
-                Object: resTempIdent, PropertyName: "$enter", Location: loc);
+                Object: resTempIdent, MemberName: "$enter", Location: loc);
             var enterCall = new CallExpression(
                 Callee: enterCallee, Arguments: [], Location: loc)
             {
@@ -218,7 +218,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (exitMethod != null)
         {
             var exitCallee = new MemberExpression(
-                Object: resTempIdent, PropertyName: "$exit", Location: loc);
+                Object: resTempIdent, MemberName: "$exit", Location: loc);
             var exitCall = new CallExpression(
                 Callee: exitCallee, Arguments: [], Location: loc)
             {
@@ -284,7 +284,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
 
         // Condition: __uf_N.$try_enter()  (Bool; SA has already verified $try_enter exists)
         var tryEnterCallee = new MemberExpression(
-            Object: resTempIdent, PropertyName: "$try_enter", Location: loc);
+            Object: resTempIdent, MemberName: "$try_enter", Location: loc);
         var tryEnterCall = new CallExpression(
             Callee: tryEnterCallee, Arguments: [], Location: loc)
         {
@@ -302,7 +302,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (exitMethod != null)
         {
             var exitCallee = new MemberExpression(
-                Object: resTempIdent, PropertyName: "$exit", Location: loc);
+                Object: resTempIdent, MemberName: "$exit", Location: loc);
             var exitCall = new CallExpression(
                 Callee: exitCallee, Arguments: [], Location: loc)
             {

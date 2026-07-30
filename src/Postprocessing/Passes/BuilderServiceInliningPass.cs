@@ -361,7 +361,7 @@ internal sealed class BuilderServiceInliningPass
         //  BuilderService constant-call folding
         if (expr is CallExpression
             {
-                Callee: MemberExpression { PropertyName: var routineName } bsCallee,
+                Callee: MemberExpression { MemberName: var routineName } bsCallee,
                 Arguments: { Count: 0 }
             } bsCall
             && _foldableRoutines.Contains(routineName))

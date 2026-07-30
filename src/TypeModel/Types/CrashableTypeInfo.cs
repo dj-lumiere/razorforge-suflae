@@ -12,29 +12,17 @@ namespace TypeModel.Types;
 /// Always heap-allocated (entity semantics). Automatically conforms to the Crashable protocol.
 /// Must provide crash_message() -> Text; crash_title() is synthesized from the type name.
 /// </summary>
-public sealed class CrashableTypeInfo : TypeInfo
+// Crashable is an entity (reference type, heap-allocated) — extends EntityTypeInfo (shared members).
+public sealed class CrashableTypeInfo : EntityTypeInfo
 {
     /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Crashable;
-
-    /// <summary>Member variables declared in this crashable type.</summary>
-    public List<MemberVariableInfo> MemberVariables { get; set; } = [];
-
-    /// <summary>Protocols this crashable type implements (always includes Crashable).</summary>
-    public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
     /// The synthesized crash title (sentence-cased type name, e.g. "Network error" for NetworkError).
     /// Computed once and stored here for codegen use.
     /// </summary>
     public string CrashTitle { get; init; }
-
-
-    /// <summary>
-    /// Looks up a member variable by name.
-    /// </summary>
-    public MemberVariableInfo? LookupMemberVariable(string memberVariableName) =>
-        MemberVariables.FirstOrDefault(predicate: f => f.Name == memberVariableName);
 
     /// <summary>
     /// Initializes a new instance of <see cref="CrashableTypeInfo"/>.

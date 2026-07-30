@@ -198,13 +198,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 AddDecl(map: _userByName, name: decl.Name, decl: decl);
-                // Also index under the module-qualified name so FindDecl can disambiguate same-named
-                // declarations across modules — both module-level routines (each module's `start`) AND
-                // member routines with an identical owner+signature in different modules (e.g.
-                // `OwnedApi.Counter.bump(S64)` vs `SharedAccessApi.Counter.bump(S64)`, whose bare
-                // `Counter.bump` key + count-only MatchOverload fallback would collapse first-wins,
-                // leaving the other modules' bodies unwalked and their emitted calls undefined).
-                if (!string.IsNullOrEmpty(value: module))
+                // Also index MODULE-LEVEL routines under their module-qualified name so FindDecl can
+                // disambiguate same-named routines across modules (e.g. each imported test module's
+                // `start`). Members keep the bare index (their harness contamination is a separate
+                // follow-up — module-qualified member indexing regressed generic-instance liveness).
+                if (!string.IsNullOrEmpty(value: module) && !decl.Name.Contains(value: '.'))
                 {
                     AddDecl(map: _userByName, name: $"{module}.{decl.Name}", decl: decl);
                 }
@@ -216,10 +214,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 AddDecl(map: _stdlibByName, name: decl.Name, decl: decl);
-                // Imported project modules are carried here too; index under the module-qualified name
-                // so FindDecl can disambiguate same-named routines/members across modules (see the
-                // user-index note above).
-                if (!string.IsNullOrEmpty(value: module))
+                // Imported project modules are carried here too; index MODULE-LEVEL routines under the
+                // module-qualified name so FindDecl can disambiguate same-named routines across modules
+                // (see the user-index note above).
+                if (!string.IsNullOrEmpty(value: module) && !decl.Name.Contains(value: '.'))
                 {
                     AddDecl(map: _stdlibByName, name: $"{module}.{decl.Name}", decl: decl);
                 }
@@ -1278,14 +1276,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             receiverType = substituted;
         }
-        // PropertyName may carry a trailing `!` (failable call syntax). LookupMethod's name
-        // comparison runs against RoutineInfo.Name, which is stored *without* the `!` (the
-        // parser strips it and tracks failability separately — see TypeRegistry.MethodLookup.cs:236).
-        // Pass isFailable explicitly so a `!`-suffixed property hits the failable variant.
-        string baseName = member.PropertyName.EndsWith(value: '!')
-            ? member.PropertyName[..^1]
-            : member.PropertyName;
-        bool? isFailable = member.PropertyName.EndsWith(value: '!') ? true : null;
+        // MemberName is always bare; failability is carried structurally in member.IsFailable.
+        // LookupMethod's name comparison runs against RoutineInfo.Name (also bare), so pass
+        // isFailable explicitly to hit the failable variant.
+        string baseName = member.MemberName;
+        bool? isFailable = member.IsFailable ? true : null;
 
         // Disambiguate overloads by parameter count when multiple routines share the name (e.g.
         // `SortedDict[K,V].get_by_rank!(i: U64)` vs `SortedDict[K,V].get_by_rank(node, rank)`).
@@ -1423,7 +1418,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 {
                     TypeInfo? recv = InferExpressionType(e: mem.Object);
                     if (recv == null) return null;
-                    RoutineInfo? mm = ctx.Registry.LookupMethod(type: recv, methodName: mem.PropertyName);
+                    RoutineInfo? mm = ctx.Registry.LookupMethod(type: recv, methodName: mem.MemberName);
                     return mm?.ReturnType;
                 }
                 if (ce.Callee is IdentifierExpression idC)
@@ -1535,19 +1530,30 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
         // Member routine: stdlib decls have names like "List[T].insertion_sort" or "S32.$add".
         TypeInfo owner = callee.OwnerType;
-        TypeInfo? genDef = owner switch
-        {
-            RecordTypeInfo r => r.GenericDefinition,
-            EntityTypeInfo e => e.GenericDefinition,
-            WrapperTypeInfo w => ctx.Registry.LookupType(name: w.Name),
-            _ => null
-        };
-        // Try short generic-def form first (e.g. "List[T].insertion_sort").
-        if (genDef != null)
+        // Resolve the generic-definition owner the decl is keyed under. A member routine's AST
+        // decl lives under the owner it was DECLARED on, in generic-definition shape — NOT the
+        // concrete receiver it was resolved onto. The authoritative declaring owner is
+        // callee.GenericDefinition.OwnerType whenever that is itself a GENERIC owner: for a
+        // protocol default / extension method the receiver is a concrete type (`List[S64]`) but
+        // the decl is keyed under the protocol (`Iterable[T].Set`); for an ordinary generic member
+        // it is the generic type (`List[T].insertion_sort`). Fall back to the concrete owner's own
+        // generic definition for callees with no such link. (A bare-generic-parameter declaring
+        // owner — universal methods like `T.hijack` — is handled separately below.)
+        TypeInfo? declGenericOwner =
+            callee.GenericDefinition?.OwnerType is { GenericParameters.Count: > 0 } dgo
+                ? dgo
+                : owner switch
+                {
+                    RecordTypeInfo r => r.GenericDefinition,
+                    EntityTypeInfo e => e.GenericDefinition,
+                    WrapperTypeInfo w => ctx.Registry.LookupType(name: w.Name),
+                    _ => null
+                };
+        if (declGenericOwner is { GenericParameters.Count: > 0 } genDef)
         {
             string genericKey = $"{RoutineInfo.GetTypeIdentity(type: genDef)}.{callee.Name}";
-            // Stdlib decl name is the SHORT form like "List[T].insertion_sort".
-            string shortKey = $"{genDef.Name}[{string.Join(separator: ", ", values: genDef.GenericParameters ?? [])}].{callee.Name}";
+            // Stdlib decl name is the SHORT form like "List[T].insertion_sort" / "Iterable[T].Set".
+            string shortKey = $"{genDef.Name}[{string.Join(separator: ", ", values: genDef.GenericParameters!)}].{callee.Name}";
             if (_stdlibByName.TryGetValue(key: shortKey, value: out List<RoutineDeclaration>? gd))
                 return MatchOverload(decls: gd, callee: callee);
             if (_stdlibByName.TryGetValue(key: genericKey, value: out List<RoutineDeclaration>? gd2))
@@ -1569,21 +1575,6 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // fallback bind to the wrong overload (`$create(S8)`) and walk ITS body — so the real
         // D32B body's callees (`F64.from_bits`, `coeff.F64()`) never reach the live set. Merging
         // lets the exact type-signature match (Pass 1) pick the user D32B overload.
-        // Prefer the MODULE-QUALIFIED member key so same-owner-name-and-signature members in different
-        // modules (e.g. `OwnedApi.Counter.bump(S64)` vs `SharedAccessApi.Counter.bump(S64)`) resolve to
-        // their OWN decl. The bare `owner.Name.method` key lists both, and MatchOverload can't tell same-
-        // signature overloads apart, so it first-wins — walking the wrong module's body and leaving the
-        // requested one's emitted call undefined. owner.FullName is `Module.OwnerName`, matching the
-        // `{module}.{decl.Name}` = `{module}.{OwnerName}.{method}` index built in BuildAstIndices.
-        if (!string.IsNullOrEmpty(value: owner.Module))
-        {
-            string qualifiedMemberKey = $"{owner.FullName}.{callee.Name}";
-            if (_userByName.TryGetValue(key: qualifiedMemberKey, value: out List<RoutineDeclaration>? uq))
-                return MatchOverload(decls: uq, callee: callee);
-            if (_stdlibByName.TryGetValue(key: qualifiedMemberKey, value: out List<RoutineDeclaration>? sq))
-                return MatchOverload(decls: sq, callee: callee);
-        }
-
         string concreteKey = $"{owner.Name}.{callee.Name}";
         bool hasStdlib = _stdlibByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? c);
         bool hasUser = _userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu);
@@ -1606,6 +1597,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             if (_stdlibByName.TryGetValue(key: universalKey, value: out List<RoutineDeclaration>? uMethod))
                 return MatchOverload(decls: uMethod, callee: callee);
         }
+
         return null;
     }
 

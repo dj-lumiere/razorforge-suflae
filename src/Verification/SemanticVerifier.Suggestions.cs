@@ -259,7 +259,6 @@ public sealed partial class SemanticVerifier
         {
             RecordTypeInfo record => record.MemberVariables,
             EntityTypeInfo entity => entity.MemberVariables,
-            CrashableTypeInfo crashable => crashable.MemberVariables,
             _ => null
         };
 

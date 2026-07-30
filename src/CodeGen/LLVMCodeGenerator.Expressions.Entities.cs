@@ -504,7 +504,7 @@ public partial class LlvmCodeGenerator
     /// <returns>The temporary variable holding the member variable value.</returns>
     private string EmitMemberVariableAccess(StringBuilder sb, MemberExpression expr)
     {
-        string propertyName = expr.PropertyName;
+        string memberName = expr.MemberName;
 
         // Choice / Flags case-member access (e.g. FileMode.WRITE) reaches codegen unfolded
         // when it appears in a parameter default value: ExpressionLoweringPass only walks
@@ -516,7 +516,7 @@ public partial class LlvmCodeGenerator
         if (choiceFlagsLookup is ChoiceTypeInfo choiceType)
         {
             ChoiceCaseInfo? caseInfo = choiceType.Cases
-                .FirstOrDefault(predicate: c => c.Name == propertyName);
+                .FirstOrDefault(predicate: c => c.Name == memberName);
             if (caseInfo != null)
             {
                 return caseInfo.ComputedValue.ToString();
@@ -525,7 +525,7 @@ public partial class LlvmCodeGenerator
         if (choiceFlagsLookup is FlagsTypeInfo flagsType)
         {
             FlagsMemberInfo? memberInfo = flagsType.Members
-                .FirstOrDefault(predicate: m => m.Name == propertyName);
+                .FirstOrDefault(predicate: m => m.Name == memberName);
             if (memberInfo != null)
             {
                 return (1UL << memberInfo.BitPosition).ToString();
@@ -554,13 +554,13 @@ public partial class LlvmCodeGenerator
             WrapperTypeNames.Contains(item: wrapRecBaseName) &&
             wrapperRecOfRec is { HasDirectBackendType: true, TypeArguments.Count: > 0 } &&
             wrapperRecOfRec.TypeArguments[index: 0] is RecordTypeInfo innerRecord &&
-            !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == propertyName))
+            !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == memberName))
         {
             int fieldIndex = -1;
             MemberVariableInfo? fieldInfo = null;
             for (int i = 0; i < innerRecord.MemberVariables.Count; i++)
             {
-                if (innerRecord.MemberVariables[index: i].Name == propertyName)
+                if (innerRecord.MemberVariables[index: i].Name == memberName)
                 {
                     fieldIndex = i;
                     fieldInfo = innerRecord.MemberVariables[index: i];
@@ -589,7 +589,7 @@ public partial class LlvmCodeGenerator
             WrapperTypeNames.Contains(item: wrapBaseName) &&
             wrapperRecord.TypeArguments is { Count: > 0 } &&
             wrapperRecord.TypeArguments[index: 0] is EntityTypeInfo innerEntity &&
-            !wrapperRecord.MemberVariables.Any(predicate: mv => mv.Name == propertyName))
+            !wrapperRecord.MemberVariables.Any(predicate: mv => mv.Name == memberName))
         {
             // For @llvm("ptr") wrappers, the value IS the pointer directly
             // For struct wrappers, extract the inner Hijacked[T] (ptr) from field 0
@@ -664,7 +664,7 @@ public partial class LlvmCodeGenerator
                 string roamEntPtr = controllerType is EntityTypeInfo controllerEntity
                     ? EmitEntityMemberVariableRead(sb: sb, entityPtr: target, entity: controllerEntity, memberVariableName: "data")
                     : target;
-                string roamLoaded = EmitEntityMemberVariableRead(sb: sb, entityPtr: roamEntPtr, entity: innerEntity, memberVariableName: propertyName);
+                string roamLoaded = EmitEntityMemberVariableRead(sb: sb, entityPtr: roamEntPtr, entity: innerEntity, memberVariableName: memberName);
                 RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_exit");
                 if (exitM != null)
                 {
@@ -703,7 +703,7 @@ public partial class LlvmCodeGenerator
             return EmitEntityMemberVariableRead(sb: sb,
                 entityPtr: innerPtr,
                 entity: innerEntity,
-                memberVariableName: propertyName);
+                memberVariableName: memberName);
         }
 
         // Most-derived-first: Crashable (an Entity) and Variant (a Record) precede their bases.
@@ -712,24 +712,24 @@ public partial class LlvmCodeGenerator
             CrashableTypeInfo crashable => EmitCrashableMemberVariableRead(sb: sb,
                 crashablePtr: target,
                 crashable: crashable,
-                memberVariableName: propertyName),
+                memberVariableName: memberName),
             EntityTypeInfo entity => EmitEntityMemberVariableRead(sb: sb,
                 entityPtr: target,
                 entity: entity,
-                memberVariableName: propertyName),
+                memberVariableName: memberName),
             TupleTypeInfo tuple => EmitTupleMemberVariableRead(sb: sb,
                 tupleValue: target,
                 tuple: tuple,
-                memberVariableName: propertyName),
+                memberVariableName: memberName),
             // Synthetic type_id access generated by PatternLoweringPass for variant subjects.
-            VariantTypeInfo variant when propertyName == "type_id" =>
+            VariantTypeInfo variant when memberName == "type_id" =>
                 EmitVariantTagAccess(sb: sb, variantValue: target, variant: variant),
             RecordTypeInfo record => EmitRecordMemberVariableRead(sb: sb,
                 recordValue: target,
                 record: record,
-                memberVariableName: propertyName),
+                memberVariableName: memberName),
             _ => throw new InvalidOperationException(
-                message: $"Cannot access member variable '{propertyName}' on type: {targetType.Name} (category: {targetType.Category}), in routine: {_currentEmittingRoutine?.RegistryKey ?? "<unknown>"}")
+                message: $"Cannot access member variable '{memberName}' on type: {targetType.Name} (category: {targetType.Category}), in routine: {_currentEmittingRoutine?.RegistryKey ?? "<unknown>"}")
         };
     }
 

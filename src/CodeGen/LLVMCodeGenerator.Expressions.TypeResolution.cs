@@ -379,14 +379,13 @@ public partial class LlvmCodeGenerator
         if (lookupType is EntityTypeInfo entityType)
         {
             lookupType = RefreshEntityMemberVariables(entity: entityType,
-                memberVariableName: member.PropertyName);
+                memberVariableName: member.MemberName);
         }
 
         MemberVariableInfo? memberVariable = lookupType switch
         {
-            EntityTypeInfo e => e.LookupMemberVariable(memberVariableName: member.PropertyName),
-            RecordTypeInfo r => r.LookupMemberVariable(memberVariableName: member.PropertyName),
-            CrashableTypeInfo c => c.LookupMemberVariable(memberVariableName: member.PropertyName),
+            EntityTypeInfo e => e.LookupMemberVariable(memberVariableName: member.MemberName),
+            RecordTypeInfo r => r.LookupMemberVariable(memberVariableName: member.MemberName),
             _ => null
         };
 
@@ -825,7 +824,7 @@ public partial class LlvmCodeGenerator
         // resolution whose ReturnType still contains a type parameter).
         string calleeDesc = call.Callee switch
         {
-            MemberExpression m => $"{m.Object.GetType().Name}.{m.PropertyName}",
+            MemberExpression m => $"{m.Object.GetType().Name}.{m.MemberName}",
             IdentifierExpression id => id.Name,
             _ => call.Callee.GetType().Name
         };

@@ -122,7 +122,7 @@ public partial class Parser
                 // Optional chaining: obj?.member
                 string member = ConsumeMethodName(errorMessage: "Expected member name after '?.'");
                 expr = new OptionalMemberExpression(Object: expr,
-                    PropertyName: member,
+                    MemberName: member,
                     Location: expr.Location);
             }
             else if (Match(type: TokenType.Dot))
@@ -195,8 +195,8 @@ public partial class Parser
                         errorMessage: ExpectedRightParenAfterArguments);
 
                     Expression memberExpr = new MemberExpression(Object: expr,
-                        PropertyName: member + "!",
-                        Location: expr.Location);
+                        MemberName: member,
+                        Location: expr.Location) { IsFailable = true };
                     expr = new CallExpression(Callee: memberExpr,
                         Arguments: args,
                         Location: expr.Location);
@@ -210,7 +210,7 @@ public partial class Parser
                         errorMessage: ExpectedRightParenAfterArguments);
 
                     Expression memberExpr = new MemberExpression(Object: expr,
-                        PropertyName: member,
+                        MemberName: member,
                         Location: expr.Location);
                     expr = new CallExpression(Callee: memberExpr,
                         Arguments: args,
@@ -219,7 +219,7 @@ public partial class Parser
                 else
                 {
                     expr = new MemberExpression(Object: expr,
-                        PropertyName: member,
+                        MemberName: member,
                         Location: expr.Location);
                 }
             }

@@ -398,7 +398,9 @@ internal sealed class WrapperForwardingPass
         string methodName, bool isFailable, List<ParameterInfo> parameters,
         bool hasReturnValue, string? dataFieldName = null, bool innerIsEntity = false) // NOSONAR S3776
     {
-        string callPropertyName = isFailable ? methodName + "!" : methodName;
+        // The forwarded call's name is always bare; its failability is carried structurally on the
+        // callee MemberExpression (IsFailable), never appended to the name.
+        string callPropertyName = methodName;
         TypeSymbol innerType = wrapperType.TypeArguments is { Count: > 0 }
             ? wrapperType.TypeArguments[0]
             : new GenericParameterTypeInfo(name: genericParamName);
@@ -426,7 +428,7 @@ internal sealed class WrapperForwardingPass
                 { ResolvedType = wrapperType };
             var dataAccess = new MemberExpression(
                 Object: meRef,
-                PropertyName: dataFieldName,
+                MemberName: dataFieldName,
                 Location: _synthLoc)
             {
                 ResolvedType = wrapperDataType
@@ -437,7 +439,7 @@ internal sealed class WrapperForwardingPass
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: dataAccess,
-                    PropertyName: RuntimeContract.RawPointer.Peek,
+                    MemberName: RuntimeContract.RawPointer.Peek,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -448,8 +450,8 @@ internal sealed class WrapperForwardingPass
             var innerCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: readCall,
-                    PropertyName: callPropertyName,
-                    Location: _synthLoc),
+                    MemberName: callPropertyName,
+                    Location: _synthLoc) { IsFailable = isFailable },
                 Arguments: forwardedArgs,
                 Location: _synthLoc)
             {
@@ -550,7 +552,7 @@ internal sealed class WrapperForwardingPass
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "raw", Location: _synthLoc)
                         { ResolvedType = hijackedCtrlType },
-                    PropertyName: RuntimeContract.RawPointer.AsEntity,
+                    MemberName: RuntimeContract.RawPointer.AsEntity,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -570,7 +572,7 @@ internal sealed class WrapperForwardingPass
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "ctrl", Location: _synthLoc)
                         { ResolvedType = retainControllerType },
-                    PropertyName: RuntimeContract.RefCount.BorrowData,
+                    MemberName: RuntimeContract.RefCount.BorrowData,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -581,7 +583,7 @@ internal sealed class WrapperForwardingPass
             var innerRevealCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: borrowCall,
-                    PropertyName: RuntimeContract.RawPointer.AsEntity,
+                    MemberName: RuntimeContract.RawPointer.AsEntity,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -592,8 +594,8 @@ internal sealed class WrapperForwardingPass
             var innerCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: innerRevealCall,
-                    PropertyName: callPropertyName,
-                    Location: _synthLoc),
+                    MemberName: callPropertyName,
+                    Location: _synthLoc) { IsFailable = isFailable },
                 Arguments: forwardedArgs,
                 Location: _synthLoc)
             {
@@ -610,7 +612,7 @@ internal sealed class WrapperForwardingPass
                     Expression: new CallExpression(
                         Callee: new MemberExpression(
                             Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = wrapperType },
-                            PropertyName: verb, Location: _synthLoc),
+                            MemberName: verb, Location: _synthLoc),
                         Arguments: [], Location: _synthLoc) { ResolvedRoutine = m },
                     Location: _synthLoc);
 
@@ -630,7 +632,7 @@ internal sealed class WrapperForwardingPass
                         methodName: "check_" + methodName, isFailable: false);
                     var checkSubject = new CallExpression(
                         Callee: new MemberExpression(Object: innerRevealCall,
-                            PropertyName: "check_" + methodName, Location: _synthLoc),
+                            MemberName: "check_" + methodName, Location: _synthLoc),
                         Arguments: forwardedArgs, Location: _synthLoc)
                     { ResolvedType = checkM?.ReturnType };
                     var whenStmt = new WhenStatement(
@@ -720,7 +722,7 @@ internal sealed class WrapperForwardingPass
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "raw", Location: _synthLoc)
                         { ResolvedType = hijackedInnerType },
-                    PropertyName: accessMethodName,
+                    MemberName: accessMethodName,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -731,8 +733,8 @@ internal sealed class WrapperForwardingPass
             var innerCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: readCall,
-                    PropertyName: callPropertyName,
-                    Location: _synthLoc),
+                    MemberName: callPropertyName,
+                    Location: _synthLoc) { IsFailable = isFailable },
                 Arguments: forwardedArgs,
                 Location: _synthLoc)
             {
@@ -754,6 +756,7 @@ internal sealed class WrapperForwardingPass
     /// <summary>
     /// Gets the base type name without generic arguments.
     /// </summary>
+    [Obsolete("Use TypeSymbol's name instead. NEVER parse them manually in string.")]
     private static string GetBaseTypeName(string typeName)
     {
         int genericIndex = typeName.IndexOf(value: '[');

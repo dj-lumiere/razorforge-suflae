@@ -31,8 +31,7 @@ public sealed class TupleTypeInfo : RecordTypeInfo
     public static bool IsRecordLike(TypeInfo t) => t switch
     {
         TupleTypeInfo tt => tt.IsValueTuple,
-        RecordTypeInfo  => true,
-        VariantTypeInfo => true,
+        RecordTypeInfo  => true, // includes VariantTypeInfo (a RecordTypeInfo subclass)
         _ => false
     };
 

@@ -493,13 +493,10 @@ internal static class GenericAstRewriter
                 return null;
             }
 
-            string lookupName = member.PropertyName.EndsWith(value: '!')
-                ? member.PropertyName[..^1]
-                : member.PropertyName;
             return ResolveMethodOnConcreteOwner(ownerType: receiverType,
-                methodName: lookupName,
+                methodName: member.MemberName,
                 argTypes: callArgTypes,
-                isFailable: member.PropertyName.EndsWith(value: '!'));
+                isFailable: member.IsFailable);
         }
 
         private RoutineInfo? ResolveFreeCallRoutine(CallExpression call,
@@ -802,7 +799,7 @@ internal static class GenericAstRewriter
             // type-param string substitution (e.g., the receiver is IdentifierExpression("T")
             // and stringSubs["T"] = "Core.Byte" -> the name hasn't been rewritten yet when
             // the switch arm fires).
-            CallExpression { Callee: MemberExpression { PropertyName: var bsName } bsCallee,
+            CallExpression { Callee: MemberExpression { MemberName: var bsName } bsCallee,
                 Arguments: { Count: 0 } } bsCall
                 when ctx.Registry != null && BuilderServiceInliningPass.IsFoldable(bsName)
                 => TryFoldBsCallViaStringSubs(
@@ -1222,7 +1219,7 @@ internal static class GenericAstRewriter
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
         TypeInfo? byteSizeType = ctx.Registry.LookupType(name: "ByteSize");
 
-        return callee.PropertyName switch
+        return callee.MemberName switch
         {
             Compiler.Resolution.RuntimeContract.DataSize when u64Type != null && byteSizeType != null =>
                 BuilderServiceInliningPass.MakeByteSizeCreatorPublic(

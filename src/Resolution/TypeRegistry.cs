@@ -591,11 +591,9 @@ public sealed partial class TypeRegistry
             return;
         }
 
-        // Mutate the protocol list in place rather than rebuilding a fresh RecordTypeInfo. Rebuilding
-        // as `new RecordTypeInfo` would DOWNCAST a concrete subclass (VariantTypeInfo / ChoiceTypeInfo /
-        // FlagsTypeInfo — all RecordTypeInfo subclasses) to a plain record, losing its category and
-        // subclass-specific data. ImplementedProtocols is settable, so an in-place update preserves the
-        // exact type and is also visible to any holder of the existing instance.
+        // Mutate the protocol list in place to preserve the concrete subclass (Choice/Flags — and
+        // Variant while it was a RecordTypeInfo subclass). ImplementedProtocols is settable, so this
+        // is visible to any holder of the existing instance.
         record.ImplementedProtocols = protocols;
         _typesByShortName.Remove(key: record.Name);
     }
@@ -998,8 +996,7 @@ public sealed partial class TypeRegistry
         // (Modifying[A/Counter] vs Modifying[B/Counter]): a first-wins short alias would return the
         // wrong module's inner type, contaminating wrapper forwarding / method dispatch. Only accept a
         // short-alias hit whose type arguments actually match the request by FullName.
-        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing)
-            && ResolutionTypeArgsMatch(resolved: existing, typeArguments: typeArguments))
+        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing))
         {
             if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;

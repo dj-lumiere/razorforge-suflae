@@ -200,7 +200,7 @@ internal sealed class IteratorInlineLoweringPass
         // try_emit() call with a NonePattern clause + an ElsePattern clause.
         if (loop.Body is not BlockStatement { Statements: [WhenStatement when] }) return null;
         if (when.Expression is not CallExpression tryNextCall) return null;
-        if (tryNextCall.Callee is not MemberExpression { PropertyName: RuntimeContract.TryEmit, Object: { } recvExpr })
+        if (tryNextCall.Callee is not MemberExpression { MemberName: RuntimeContract.TryEmit, Object: { } recvExpr })
             return null;
 
         // Iterator local name (`_lf_iter_N`).
@@ -343,7 +343,7 @@ internal sealed class IteratorInlineLoweringPass
                 string baseName = (r.OriginalName ?? r.Name).TrimStart('$');
                 if (baseName == "emit") return true;
             }
-            if (call.Callee is MemberExpression { PropertyName: "$emit" }) return true;
+            if (call.Callee is MemberExpression { MemberName: "$emit" }) return true;
         }
         return false;
     }

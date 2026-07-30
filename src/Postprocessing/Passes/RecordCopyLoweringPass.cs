@@ -568,7 +568,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         // `$store`, but a variant's deep copy is `copy` (BuildVariantCopyBody). Codegen dispatches on
         // ResolvedRoutine, but keeping the property name in sync avoids a misleading `$store` label on
         // a `copy` call and any name-based lookup drifting.
-        var callee = new MemberExpression(Object: expr, PropertyName: copyMethod.Name, Location: expr.Location)
+        var callee = new MemberExpression(Object: expr, MemberName: copyMethod.Name, Location: expr.Location)
             { ResolvedType = expr.ResolvedType };
         return new CallExpression(Callee: callee, Arguments: [], Location: expr.Location)
         {

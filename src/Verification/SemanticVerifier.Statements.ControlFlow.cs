@@ -713,7 +713,7 @@ public sealed partial class SemanticVerifier
         return expr switch
         {
             IdentifierExpression id => id.Name,
-            MemberExpression { Object: var inner, PropertyName: var prop } =>
+            MemberExpression { Object: var inner, MemberName: var prop } =>
                 BuildAccessPath(expr: inner) is { } prefix ? $"{prefix}.{prop}" : null,
             _ => null
         };
@@ -755,7 +755,7 @@ public sealed partial class SemanticVerifier
                 {
                     Callee: MemberExpression
                     {
-                        Object: var receiver, PropertyName: "share" or "watch"
+                        Object: var receiver, MemberName: "share" or "watch"
                     }
                 } when BuildAccessPath(expr: receiver) is { } recvPath =>
                 GetOrAssignHandleIdentity(path: recvPath),

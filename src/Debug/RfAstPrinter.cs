@@ -296,12 +296,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
     /// <inheritdoc/>
     public string VisitMemberExpression(MemberExpression node) =>
-        $"{node.Object.Accept(this)}.{node.PropertyName}";
+        $"{node.Object.Accept(this)}.{node.MemberName}";
 
 
     /// <inheritdoc/>
     public string VisitOptionalMemberExpression(OptionalMemberExpression node) =>
-        $"{node.Object.Accept(this)}?.{node.PropertyName}";
+        $"{node.Object.Accept(this)}?.{node.MemberName}";
 
 
     /// <inheritdoc/>

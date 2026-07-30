@@ -33,7 +33,7 @@ public static class RuntimeContract
     // =====================================================================================
 
     /// <summary>Raw-pointer / entity-escape surface on <c>Hijacked[T]</c> and bare entities.</summary>
-    /// <remarks>Sites: WrapperForwardingPass (LookupMethod/PropertyName), PatternLoweringPass,
+    /// <remarks>Sites: WrapperForwardingPass (LookupMethod/MemberName), PatternLoweringPass,
     /// WiredRoutinePass, LLVMCodeGenerator.Expressions.Calls.</remarks>
     public static class RawPointer
     {

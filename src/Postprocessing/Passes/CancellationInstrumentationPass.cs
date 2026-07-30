@@ -135,7 +135,7 @@ public sealed class CancellationInstrumentationPass
         {
             if (n is CallExpression
                 {
-                    Callee: MemberExpression { PropertyName: "$destroy", Object: IdentifierExpression destroyed }
+                    Callee: MemberExpression { MemberName: "$destroy", Object: IdentifierExpression destroyed }
                 })
             {
                 locals.Add(item: destroyed.Name);
@@ -240,7 +240,7 @@ public sealed class CancellationInstrumentationPass
             {
                 Expression: CallExpression
                 {
-                    Callee: MemberExpression { PropertyName: "$destroy", Object: IdentifierExpression id }
+                    Callee: MemberExpression { MemberName: "$destroy", Object: IdentifierExpression id }
                 }
             })
         {

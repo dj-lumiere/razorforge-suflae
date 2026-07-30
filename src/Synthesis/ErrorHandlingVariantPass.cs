@@ -458,7 +458,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         CallExpression safeCall = failCall with { ResolvedRoutine = variant, ResolvedType = carrier };
         safeCall = safeCall.Callee switch
         {
-            MemberExpression m => safeCall with { Callee = m with { PropertyName = variant.Name } },
+            MemberExpression m => safeCall with { Callee = m with { MemberName = variant.Name, IsFailable = false } },
             IdentifierExpression idc => safeCall with { Callee = idc with { Name = variant.Name } },
             _ => safeCall
         };
@@ -470,14 +470,14 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
         presentCondition = new MemberExpression(
             Object: new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = carrier },
-            PropertyName: RuntimeContract.Carrier.PresentField, Location: loc);
+            MemberName: RuntimeContract.Carrier.PresentField, Location: loc);
 
         if (bindName != null)
         {
             TypeInfo? valueType = carrier.TypeArguments[index: 0];
             Expression valueAccess = new MemberExpression(
                 Object: new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = carrier },
-                PropertyName: RuntimeContract.Carrier.ValueField, Location: loc)
+                MemberName: RuntimeContract.Carrier.ValueField, Location: loc)
             { ResolvedType = valueType };
 
             bindStmt = new DeclarationStatement(
@@ -561,7 +561,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         CallExpression retargeted = failCall with { ResolvedRoutine = variant, ResolvedType = carrier };
         retargeted = retargeted.Callee switch
         {
-            MemberExpression m => retargeted with { Callee = m with { PropertyName = variant.Name } },
+            MemberExpression m => retargeted with { Callee = m with { MemberName = variant.Name, IsFailable = false } },
             IdentifierExpression idc => retargeted with { Callee = idc with { Name = variant.Name } },
             _ => retargeted
         };
@@ -648,7 +648,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             CallExpression newCall = call with { ResolvedRoutine = variant, ResolvedType = variant.ReturnType };
             newCall = newCall.Callee switch
             {
-                MemberExpression m => newCall with { Callee = m with { PropertyName = variant.Name } },
+                MemberExpression m => newCall with { Callee = m with { MemberName = variant.Name, IsFailable = false } },
                 IdentifierExpression idc => newCall with { Callee = idc with { Name = variant.Name } },
                 _ => newCall
             };
@@ -689,7 +689,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             newCall = newCall.Callee switch
             {
                 IdentifierExpression idCallee => newCall with { Callee = idCallee with { Name = variant.Name } },
-                MemberExpression memCallee => newCall with { Callee = memCallee with { PropertyName = variant.Name } },
+                MemberExpression memCallee => newCall with { Callee = memCallee with { MemberName = variant.Name, IsFailable = false } },
                 _ => newCall
             };
             rewritten = newCall;
@@ -702,7 +702,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             if (variant == null) return false;
 
             var typeId = new IdentifierExpression(Name: creator.TypeName, Location: creator.Location);
-            var member = new MemberExpression(Object: typeId, PropertyName: variant.Name, Location: creator.Location);
+            var member = new MemberExpression(Object: typeId, MemberName: variant.Name, Location: creator.Location);
             var args = creator.MemberVariables
                 .Select(selector: mv => (Expression)new NamedArgumentExpression(
                     Name: mv.Name, Value: mv.Value, Location: creator.Location))

@@ -238,7 +238,7 @@ public partial class LlvmCodeGenerator
                 {
                     Callee: MemberExpression
                     {
-                        PropertyName: var rcMoveVerb,
+                        MemberName: var rcMoveVerb,
                         Object: IdentifierExpression { Name: var srcEntityName }
                     }
                 }
@@ -384,7 +384,7 @@ public partial class LlvmCodeGenerator
         {
             IdentifierExpression idc => idc.Name,
             GenericMemberExpression gmc => gmc.MemberName,
-            MemberExpression mc => mc.PropertyName,
+            MemberExpression mc => mc.MemberName,
             _ => null
         };
         if (typeName != null)
@@ -596,7 +596,7 @@ public partial class LlvmCodeGenerator
             MemberVariableInfo? sfInfo = null;
             for (int i = 0; i < structRecord.MemberVariables.Count; i++)
             {
-                if (structRecord.MemberVariables[index: i].Name == member.PropertyName)
+                if (structRecord.MemberVariables[index: i].Name == member.MemberName)
                 {
                     sfIndex = i;
                     sfInfo = structRecord.MemberVariables[index: i];
@@ -608,7 +608,7 @@ public partial class LlvmCodeGenerator
             {
                 throw new InvalidOperationException(
                     message:
-                    $"Member variable '{member.PropertyName}' not found on record '{structRecord.Name}'");
+                    $"Member variable '{member.MemberName}' not found on record '{structRecord.Name}'");
             }
 
             string structAddr = EmitLvalueAddress(sb: sb, expr: member.Object);
@@ -630,7 +630,7 @@ public partial class LlvmCodeGenerator
             EmitEntityMemberVariableWrite(sb: sb,
                 entityPtr: target,
                 entity: entity,
-                memberVariableName: member.PropertyName,
+                memberVariableName: member.MemberName,
                 value: value,
                 valueType: valueType);
         }
@@ -643,13 +643,13 @@ public partial class LlvmCodeGenerator
                  WrapperTypeNames.Contains(item: wrapRecBaseName) &&
                  wrapperRecOfRec is { HasDirectBackendType: true, TypeArguments.Count: > 0 } &&
                  wrapperRecOfRec.TypeArguments[index: 0] is RecordTypeInfo innerRecord &&
-                 !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == member.PropertyName))
+                 !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == member.MemberName))
         {
             int fieldIndex = -1;
             MemberVariableInfo? fieldInfo = null;
             for (int i = 0; i < innerRecord.MemberVariables.Count; i++)
             {
-                if (innerRecord.MemberVariables[index: i].Name == member.PropertyName)
+                if (innerRecord.MemberVariables[index: i].Name == member.MemberName)
                 {
                     fieldIndex = i;
                     fieldInfo = innerRecord.MemberVariables[index: i];
@@ -661,7 +661,7 @@ public partial class LlvmCodeGenerator
             {
                 throw new InvalidOperationException(
                     message:
-                    $"Member '{member.PropertyName}' not found on inner record '{innerRecord.Name}'");
+                    $"Member '{member.MemberName}' not found on inner record '{innerRecord.Name}'");
             }
 
             string innerRecordTypeName = GetRecordTypeName(record: innerRecord);
@@ -724,7 +724,7 @@ public partial class LlvmCodeGenerator
                     ? EmitEntityMemberVariableRead(sb: sb, entityPtr: target, entity: controllerEntity, memberVariableName: "data")
                     : target;
                 EmitEntityMemberVariableWrite(sb: sb, entityPtr: roamEntPtr, entity: innerEntity,
-                    memberVariableName: member.PropertyName, value: value, valueType: valueType);
+                    memberVariableName: member.MemberName, value: value, valueType: valueType);
                 RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_exit");
                 if (exitM != null)
                 {
@@ -766,7 +766,7 @@ public partial class LlvmCodeGenerator
             EmitEntityMemberVariableWrite(sb: sb,
                 entityPtr: innerPtr,
                 entity: innerEntity,
-                memberVariableName: member.PropertyName,
+                memberVariableName: member.MemberName,
                 value: value,
                 valueType: valueType);
         }
@@ -861,7 +861,7 @@ public partial class LlvmCodeGenerator
             // Failability is a property, not part of the name — use the bare `$setitem`. Codegen
             // dispatches via ResolvedRoutine (dispatchSetItem), which carries IsFailable.
             var member = new MemberExpression(Object: index.Object,
-                PropertyName: "$setitem",
+                MemberName: "$setitem",
                 Location: index.Location);
             var call = new CallExpression(Callee: member,
                 Arguments: [index.Index, rhs],

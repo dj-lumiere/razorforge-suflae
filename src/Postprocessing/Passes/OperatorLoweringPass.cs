@@ -333,7 +333,6 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     RecordTypeInfo { GenericDefinition: { } d } => d.Name,
                     EntityTypeInfo { GenericDefinition: { } d } => d.Name,
                     ProtocolTypeInfo { GenericDefinition: { } d } => d.Name,
-                    VariantTypeInfo { GenericDefinition: { } d } => d.Name,
                     _ => null
                 };
                 if (idx is { Object: IdentifierExpression typeObjId, ResolvedType: { IsGenericResolution: true } resolvedTy } &&
@@ -393,7 +392,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         : CallLoweringKind.Unknown;
                 var member = new MemberExpression(
                     Object: loweredObj,
-                    PropertyName: propertyName,
+                    MemberName: propertyName,
                     Location: idx.Location);
                 return new CallExpression(
                     Callee: member,
@@ -419,7 +418,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression loweredObj = LowerExpression(gme.Object);
                 var memberExpr = new MemberExpression(
                     Object: loweredObj,
-                    PropertyName: gme.MemberName,
+                    MemberName: gme.MemberName,
                     Location: gme.Location)
                 {
                     ResolvedType = gme.ResolvedType
@@ -467,7 +466,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     ? expr
                     : new MemberExpression(
                         Object: loweredObj,
-                        PropertyName: gme.MemberName,
+                        MemberName: gme.MemberName,
                         Location: gme.Location)
                     {
                         ResolvedType = gme.ResolvedType
@@ -572,7 +571,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
                         methodName: methodName);
                     // If the non-failable form doesn't exist, try the failable form ($sub -> $sub!).
-                    // Types like U64 only define $sub! (underflow would be undefined behaviour).
+                    // Types like U64 only define $sub! (underflow would be undefined behavior).
                     // Methods are stored under their full name including '!' (e.g. "$sub!").
                     if (resolvedMethod == null && !methodName.EndsWith('!'))
                     {
@@ -645,17 +644,17 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // (e.g., stdlib bodies where ResolvedType is null).  When ResolvedRoutine is null,
                 // codegen's EmitMethodCall resolves the method at emission time using the receiver's
                 // LLVM-inferred type; it will also retry with isFailable:null to find $add! etc.
-                string callName = resolvedMethod != null
-                    ? (resolvedMethod.IsFailable ? methodName + "!" : methodName)
-                    : methodName;   // no suffix when method unknown -> EmitMethodCall will find it
+                // Failability is structural on the callee — no `!` in the name. When the method is
+                // unknown, IsFailable stays false and codegen's EmitMethodCall retries either form.
+                bool binFailable = resolvedMethod?.IsFailable ?? false;
                 string paramName = resolvedMethod?.Parameters.Count > 0
                     ? resolvedMethod.Parameters[0].Name
                     : "you";
 
                 var binCallee = new MemberExpression(
                     Object: receiver,
-                    PropertyName: callName,
-                    Location: bin.Location);
+                    MemberName: methodName,
+                    Location: bin.Location) { IsFailable = binFailable };
 
                 CallLoweringKind lk = resolvedMethod != null
                     ? ClassifyMethod(resolvedMethod)
@@ -691,7 +690,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return new CallExpression(
                     Callee: new MemberExpression(
                         Object: operand,
-                        PropertyName: "$unwrap",
+                        MemberName: "$unwrap",
                         Location: forceUnwrap.Location),
                     Arguments: [],
                     Location: forceUnwrap.Location)
@@ -740,14 +739,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 // Always lower to a method call -> even when method isn't resolved
                 // (e.g., stdlib bodies with no ResolvedType on operands).
-                string callName = resolvedUnaryMethod != null
-                    ? (resolvedUnaryMethod.IsFailable ? methodName + "!" : methodName)
-                    : methodName;
+                // Failability is structural on the callee — no `!` in the name.
+                bool unaryFailable = resolvedUnaryMethod?.IsFailable ?? false;
 
                 var unaryCallee = new MemberExpression(
                     Object: operand,
-                    PropertyName: callName,
-                    Location: unary.Location);
+                    MemberName: methodName,
+                    Location: unary.Location) { IsFailable = unaryFailable };
 
                 CallLoweringKind unaryKind = resolvedUnaryMethod != null
                     ? ClassifyMethod(resolvedUnaryMethod)
@@ -1082,7 +1080,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         // receiver.count() -> U64
         RoutineInfo? countRoutine = ctx.Registry.LookupMethod(type: targetType, methodName: Compiler.Resolution.RuntimeContract.Collection.Count);
         var countCall = new CallExpression(
-            Callee: new MemberExpression(Object: loweredObj, PropertyName: Compiler.Resolution.RuntimeContract.Collection.Count,
+            Callee: new MemberExpression(Object: loweredObj, MemberName: Compiler.Resolution.RuntimeContract.Collection.Count,
                 Location: location),
             Arguments: [],
             Location: location)
@@ -1100,7 +1098,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             ? ctx.Registry.LookupMethod(type: backIndexType, methodName: Compiler.Resolution.RuntimeContract.Resolve, isFailable: true)
             : null;
         return new CallExpression(
-            Callee: new MemberExpression(Object: backIndex, PropertyName: Compiler.Resolution.RuntimeContract.Resolve,
+            Callee: new MemberExpression(Object: backIndex, MemberName: Compiler.Resolution.RuntimeContract.Resolve,
                 Location: location),
             Arguments: [countCall],
             Location: location)

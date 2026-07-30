@@ -341,7 +341,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // teardown is decided HERE, where the enclosing call's result type is known, so the
                 // aliasing guard can apply. Nested receivers (a.b().c()) are handled by this same
                 // branch one level down, each guarded by its own call's result type.
-                bool receiverConsumed = ConsumingReceiverVerbs.Contains(m.PropertyName);
+                bool receiverConsumed = ConsumingReceiverVerbs.Contains(m.MemberName);
                 Expression newRecv = Visit(m.Object, objectPos: false, spills);
 
                 // Spill the receiver iff it is a fresh heap-owning RC-record producer, the verb does
@@ -440,7 +440,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     {
         if (e is not (CallExpression or CreatorExpression))
             return false;
-        if (e is CallExpression { Callee: MemberExpression vm } && ViewVerbs.Contains(vm.PropertyName))
+        if (e is CallExpression { Callee: MemberExpression vm } && ViewVerbs.Contains(vm.MemberName))
             return false;
         TypeInfo? t = e.ResolvedType;
         if (t is null)
@@ -477,7 +477,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         SourceLocation loc)
     {
         var ident = new IdentifierExpression(Name: name, Location: loc) { ResolvedType = type };
-        var callee = new MemberExpression(Object: ident, PropertyName: "$destroy", Location: loc)
+        var callee = new MemberExpression(Object: ident, MemberName: "$destroy", Location: loc)
             { ResolvedType = _blankType };
         var call = new CallExpression(Callee: callee, Arguments: [], Location: loc)
         {

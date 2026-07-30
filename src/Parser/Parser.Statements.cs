@@ -831,7 +831,7 @@ public partial class Parser
                 string memberName =
                     ConsumeIdentifier(errorMessage: "Expected member name after '.'");
                 value = new MemberExpression(Object: value,
-                    PropertyName: memberName,
+                    MemberName: memberName,
                     Location: GetLocation());
             }
             else if (Match(type: TokenType.LeftParen))

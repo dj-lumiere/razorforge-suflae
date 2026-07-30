@@ -575,7 +575,7 @@ public sealed partial class SemanticVerifier
             string methodName = isAlert ? "$diagnose" : "$represent";
             var memberAccess = new MemberExpression(
                 Object: innerExpr,
-                PropertyName: methodName,
+                MemberName: methodName,
                 Location: innerExpr.Location);
             var displayCall = new CallExpression(
                 Callee: memberAccess,
@@ -1572,7 +1572,7 @@ public sealed partial class SemanticVerifier
         Expression inner = slotExpr is NamedArgumentExpression nx ? nx.Value : slotExpr;
 
         // Skip if already coerced.
-        if (inner is CallExpression { Callee: MemberExpression { PropertyName: "$refer" or "$control" } })
+        if (inner is CallExpression { Callee: MemberExpression { MemberName: "$refer" or "$control" } })
             return;
 
         // Resolve the method on the source argument type.
@@ -1583,7 +1583,7 @@ public sealed partial class SemanticVerifier
 
         var memberCallee = new MemberExpression(
             Object: inner,
-            PropertyName: methodName,
+            MemberName: methodName,
             Location: inner.Location);
         var coerced = new CallExpression(
             Callee: memberCallee,

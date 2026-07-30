@@ -780,7 +780,7 @@ public sealed partial class SemanticVerifier
             string routineName = call.Callee switch
             {
                 IdentifierExpression id => id.Name,
-                MemberExpression member => member.PropertyName,
+                MemberExpression member => member.MemberName,
                 _ => "routine"
             };
 
@@ -878,13 +878,13 @@ public sealed partial class SemanticVerifier
             {
                 ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                     message:
-                    $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
+                    $"Cannot write to member '{member.MemberName}' through read-only wrapper '{objectType.Name}'. " +
                     "Use Modifying[T] for exclusive write access or Claiming[T] for locked write access.",
                     location: assign.Location);
             }
 
             ValidateMemberVariableWriteAccess(objectType: objectType,
-                memberVariableName: member.PropertyName,
+                memberVariableName: member.MemberName,
                 location: assign.Location);
 
             // Preset enforcement: cannot assign to member variables of preset variables
@@ -896,7 +896,7 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.MemberVariableAssignmentOnImmutable,
                         message:
-                        $"Cannot assign to member variable '{member.PropertyName}' of preset variable '{memberVariableTarget.Name}'.",
+                        $"Cannot assign to member variable '{member.MemberName}' of preset variable '{memberVariableTarget.Name}'.",
                         location: assign.Location);
                 }
             }
@@ -907,7 +907,7 @@ public sealed partial class SemanticVerifier
             {
                 ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                     message:
-                    $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                    $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
                     "Use @migratable to allow mutations.",
                     location: assign.Location);
             }

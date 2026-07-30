@@ -610,7 +610,7 @@ internal sealed class LiteralLoweringPass
         var arg = new NamedArgumentExpression(Name: "text", Value: textLit, Location: loc);
         var callee = new MemberExpression(
             Object: new IdentifierExpression(Name: type.Name, Location: loc) { ResolvedType = type },
-            PropertyName: "$from_literal", Location: loc);
+            MemberName: "$from_literal", Location: loc);
         return new CallExpression(Callee: callee, Arguments: [arg], Location: loc)
         {
             ResolvedRoutine = fromLiteral,

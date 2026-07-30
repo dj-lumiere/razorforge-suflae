@@ -669,11 +669,11 @@ public partial class LlvmCodeGenerator
         // receiver (`data.as_entity()`) is a pure reinterpret and is intentionally not emitted. The
         // concrete entity type is available here (post-monomorphization), unlike in earlier passes
         // where the receiver type is still the generic parameter. See v0.4.x-cycle-collector.md §9.3.
-        if ((member.PropertyName == "roam_trace_ref" || member.PropertyName == "roam_free_ref")
+        if ((member.MemberName == "roam_trace_ref" || member.MemberName == "roam_free_ref")
             && arguments.Count == 0
             && GetExpressionType(expr: member.Object) is EntityTypeInfo roamRecvEntity)
         {
-            string implName = member.PropertyName == "roam_trace_ref"
+            string implName = member.MemberName == "roam_trace_ref"
                 ? "$roam_trace_impl"
                 : "$roam_free_impl";
             RoutineInfo? impl = _registry.GetMethodsForType(type: roamRecvEntity)
@@ -683,7 +683,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Intercept var_name() -> inline the variable name from the receiver expression
-        if (member.PropertyName == "var_name" && arguments.Count == 0)
+        if (member.MemberName == "var_name" && arguments.Count == 0)
         {
             string varName = member.Object is IdentifierExpression varId
                 ? varId.Name
@@ -700,7 +700,7 @@ public partial class LlvmCodeGenerator
         // Entity receivers fall through to the regular call path — `me` for entities is
         // already a ptr, so the stdlib body works. Index access (arr[i].get_address()) is
         // deferred to post-v0.0.1a (requires per-collection `$getitem_addr`).
-        if (member.PropertyName == "get_address" && arguments.Count == 0)
+        if (member.MemberName == "get_address" && arguments.Count == 0)
         {
             TypeInfo? receiverTypeForIntercept = GetExpressionType(expr: member.Object);
             // Intercept only for struct-typed records — records that ARE pointer-shaped
@@ -724,7 +724,7 @@ public partial class LlvmCodeGenerator
         // making subsequent `.extract()`/`.inject()` operate on dead stack. Intercepting at
         // the caller keeps the Hijacked bound to the caller's storage. Same lvalue-shape
         // restrictions and pointer-shaped-record exclusion as the `get_address` intercept.
-        if (member.PropertyName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && arguments.Count == 0)
+        if (member.MemberName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && arguments.Count == 0)
         {
             TypeInfo? receiverTypeForHijack = GetExpressionType(expr: member.Object);
             if (receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: false } || receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: true } primShape
@@ -746,11 +746,11 @@ public partial class LlvmCodeGenerator
                 {
                     IdentifierExpression id => $"identifier '{id.Name}'",
                     CallExpression { Callee: MemberExpression m2 } c =>
-                        $"call .{m2.PropertyName}() (ResolvedType={c.ResolvedType?.Name ?? "null"})",
+                        $"call .{m2.MemberName}() (ResolvedType={c.ResolvedType?.Name ?? "null"})",
                     _ => member.Object.GetType().Name
                 };
                 throw new InvalidOperationException(
-                    message: $"Cannot determine receiver type for method call .{member.PropertyName} on {objDesc}");
+                    message: $"Cannot determine receiver type for method call .{member.MemberName} on {objDesc}");
             }
             // WrapperTypeInfo (e.g., Hijacked[Byte]) has FullName="Hijacked[Core.Byte]" (Module=null,
             // inner FullName used for type args) which LookupMethod can't resolve and emits a wrong
@@ -777,10 +777,8 @@ public partial class LlvmCodeGenerator
             receiverType = transparentProto.TypeArguments![index: 0]!;
         }
 
-        bool isFailableMethodCall = member.PropertyName.EndsWith(value: '!');
-        string methodName = isFailableMethodCall
-            ? member.PropertyName[..^1]
-            : member.PropertyName;
+        bool isFailableMethodCall = member.IsFailable;
+        string methodName = member.MemberName;
 
         RoutineInfo? method = ResolveInitialMemberRoutineCall(receiverType: receiverType,
             methodName: methodName,
@@ -851,7 +849,7 @@ public partial class LlvmCodeGenerator
         if (method == null && loweringKind is CallLoweringKind.DirectMemberRoutine)
         {
             throw new InvalidOperationException(
-                $"Method call .{member.PropertyName} on {receiverType.FullName} reached codegen " +
+                $"Method call .{member.MemberName} on {receiverType.FullName} reached codegen " +
                 $"with loweringKind={loweringKind} but no resolved method. Semantic verifier" +
                 $" must resolve this.");
         }
@@ -868,7 +866,7 @@ public partial class LlvmCodeGenerator
         {
             throw new InvalidOperationException(
                 $"SA-resolved routine '{resolvedRoutine.RegistryKey}' could not be located as a " +
-                $"method on {receiverType.FullName}.{member.PropertyName} during codegen.");
+                $"method on {receiverType.FullName}.{member.MemberName} during codegen.");
         }
 
         // Build argument list: receiver first, then explicit arguments.
@@ -907,7 +905,7 @@ public partial class LlvmCodeGenerator
             {
                 throw new InvalidOperationException(
                     message:
-                    $"Cannot determine type for argument in method call to '{member.PropertyName}'");
+                    $"Cannot determine type for argument in method call to '{member.MemberName}'");
             }
 
             argTypeInfos.Add(item: argType);
@@ -1058,7 +1056,7 @@ public partial class LlvmCodeGenerator
                     {
                         throw new InvalidOperationException(
                             message:
-                            $"Cannot determine type for argument in method call to '{member.PropertyName}'");
+                            $"Cannot determine type for argument in method call to '{member.MemberName}'");
                     }
 
                     reorderedValues.Add(item: boundValue);
@@ -1098,7 +1096,7 @@ public partial class LlvmCodeGenerator
                 {
                     throw new InvalidOperationException(
                         message:
-                        $"Cannot determine type for argument in method call to '{member.PropertyName}'");
+                        $"Cannot determine type for argument in method call to '{member.MemberName}'");
                 }
 
                 argValues.Add(item: value);
@@ -1129,7 +1127,7 @@ public partial class LlvmCodeGenerator
             if (method.IsGenericDefinition)
             {
                 throw new InvalidOperationException(
-                    $"Explicit method generic call '{receiverType.FullName}.{member.PropertyName}' reached LLVM codegen unresolved.");
+                    $"Explicit method generic call '{receiverType.FullName}.{member.MemberName}' reached LLVM codegen unresolved.");
             }
 
             mangledName = MangleRoutineName(routine: method);
@@ -1153,14 +1151,14 @@ public partial class LlvmCodeGenerator
                     isFailable: method.IsFailable);
                 mangledName = resolved?.MangledName ??
                     Q(name: DecorateRoutineSymbolName(
-                        baseName: $"{receiverType.FullName}.{SanitizeLlvmName(name: member.PropertyName)}",
+                        baseName: $"{receiverType.FullName}.{SanitizeLlvmName(name: member.MemberName)}",
                         isFailable: method.IsFailable));
             }
         }
         else
         {
             throw new InvalidOperationException(
-                $"Method '{member.PropertyName}' on '{receiverType.FullName}' could not be resolved after all re-lookup attempts. " +
+                $"Method '{member.MemberName}' on '{receiverType.FullName}' could not be resolved after all re-lookup attempts. " +
                 $"loweringKind={loweringKind}, resolvedRoutine={(resolvedRoutine?.RegistryKey ?? "<null>")}. " +
                 $"Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"}).");
         }
@@ -1364,7 +1362,7 @@ public partial class LlvmCodeGenerator
         if (calleeType is not RoutineTypeInfo routineType)
         {
             throw new InvalidOperationException(
-                $"DynamicCall on member '.{member.PropertyName}' but the field's type is " +
+                $"DynamicCall on member '.{member.MemberName}' but the field's type is " +
                 $"'{calleeType?.FullName ?? "<null>"}', not a Routine type. " +
                 $"Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} " +
                 $"(owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"}).");
@@ -1711,7 +1709,7 @@ public partial class LlvmCodeGenerator
                 {
                     throw new InvalidOperationException(
                         message:
-                        $"Cannot determine type of parent expression for '.{member.PropertyName}' " +
+                        $"Cannot determine type of parent expression for '.{member.MemberName}' " +
                         "in address-of chain.");
                 }
 
@@ -1728,29 +1726,29 @@ public partial class LlvmCodeGenerator
                 {
                     case RecordTypeInfo recordParent:
                         fieldIndex = ResolveRecordFieldIndex(record: recordParent,
-                            memberVariableName: member.PropertyName);
+                            memberVariableName: member.MemberName);
                         if (fieldIndex >= 0)
                         {
                             basePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
                             parentLlvmType = GetRecordTypeName(record: recordParent);
                         }
                         break;
-                    case EntityTypeInfo entityParent:
-                        fieldIndex = IndexOfMemberVariable(
-                            memberVariables: entityParent.MemberVariables, name: member.PropertyName);
-                        if (fieldIndex >= 0)
-                        {
-                            basePtr = EmitExpression(sb: sb, expr: member.Object);
-                            parentLlvmType = GetEntityTypeName(entity: entityParent);
-                        }
-                        break;
                     case CrashableTypeInfo crashableParent:
                         fieldIndex = IndexOfMemberVariable(
-                            memberVariables: crashableParent.MemberVariables, name: member.PropertyName);
+                            memberVariables: crashableParent.MemberVariables, name: member.MemberName);
                         if (fieldIndex >= 0)
                         {
                             basePtr = EmitExpression(sb: sb, expr: member.Object);
                             parentLlvmType = GetCrashableTypeName(crashable: crashableParent);
+                        }
+                        break;
+                    case EntityTypeInfo entityParent:
+                        fieldIndex = IndexOfMemberVariable(
+                            memberVariables: entityParent.MemberVariables, name: member.MemberName);
+                        if (fieldIndex >= 0)
+                        {
+                            basePtr = EmitExpression(sb: sb, expr: member.Object);
+                            parentLlvmType = GetEntityTypeName(entity: entityParent);
                         }
                         break;
                 }
