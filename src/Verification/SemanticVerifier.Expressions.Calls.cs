@@ -1324,12 +1324,10 @@ public sealed partial class SemanticVerifier
                     return returnType;
                 }
 
-                // #78: Method-chain constructor — "42".S32!() -> S32.$create!(from: "42")
-                string propName = member.MemberName;
-                bool isFailable = propName.EndsWith(value: '!');
-                string potentialTypeName = isFailable
-                    ? propName[..^1]
-                    : propName;
+                // #78: Method-chain constructor — "42".S32!() -> S32.$create!(from: "42").
+                // MemberName is bare; failability is carried structurally in member.IsFailable.
+                bool isFailable = member.IsFailable;
+                string potentialTypeName = member.MemberName;
 
                 TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
 

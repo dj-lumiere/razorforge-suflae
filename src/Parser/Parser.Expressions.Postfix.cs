@@ -127,7 +127,9 @@ public partial class Parser
             }
             else if (Match(type: TokenType.Dot))
             {
-                // Member access - allow failable methods with ! suffix
+                // Member access. Do NOT fold a trailing `!` into the name — leave it as a separate
+                // Bang token so the failable-call / generic-failable handling below records it as a
+                // structured MemberExpression.IsFailable / GenericMethodCallExpression flag.
                 string member = ConsumeMethodName(errorMessage: "Expected member name after '.'");
 
                 // Check for failable marker ! before generic parameters: obj.method![T]
