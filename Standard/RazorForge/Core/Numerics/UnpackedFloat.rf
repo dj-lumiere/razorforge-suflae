@@ -19,7 +19,7 @@ module Core
 # ============================================================================
 
 ### The generic extended-precision unpacked float.
-record UnpackedFloat[M, L, W] obeys Addable, Subtractable, Multiplicable, Divisible
+secret record UnpackedFloat[M, L, W] obeys Addable, Subtractable, Multiplicable, Divisible
 needs L obeys FloorDivisible
 needs W is U64
   ### Normalized mantissa (leading bit at W-2 when finite-nonzero).
@@ -304,20 +304,16 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
     return UnpackedFloat[M, L, W].inf(sign: rsign2)
   return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, fpclass: SignedFpClass.from_flags(sign: rsign2, iszero: amzero, isinf: false, isnan: false))
 
-### Returns `me + you`.
-routine UnpackedFloat[M, L, W].add(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
-  return me.faddsub(you: you, negate: false)
-
-### Returns `me - you`.
-routine UnpackedFloat[M, L, W].sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
+### Returns `me - you`. Wired `-`; `.sub(you:)` callers resolve here by bare-name lookup.
+routine UnpackedFloat[M, L, W].$sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.faddsub(you: you, negate: true)
 
 # ============================================================================
 # Multiplication (faithful port of TLFloat fmul, nbexp=0)
 # ============================================================================
 
-### Returns `me * you`.
-routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
+### Returns `me * you`. Wired `*`; `.mul(you:)` callers resolve here by bare-name lookup.
+routine UnpackedFloat[M, L, W].$mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   if me.isnan() or you.isnan() or (me.iszero() and you.isinf()) or (me.isinf() and you.iszero()) or me.isinf() or you.isinf()
     if me.isnan()
       return me
@@ -418,17 +414,10 @@ routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> UnpackedFloat
 # generic engine the named methods are used directly to keep Me bound.
 # ============================================================================
 
-### Wired `+` — returns `me + you`.
+### Wired `+` — returns `me + you`. Also the `.add(you:)` method (same bare name `add`); callers
+### that write `x.add(y)` resolve here by bare-name lookup, and `x + y` lowers here.
 routine UnpackedFloat[M, L, W].$add(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
-  return me.add(you: you)
-
-### Wired `-` — returns `me - you`.
-routine UnpackedFloat[M, L, W].$sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
-  return me.sub(you: you)
-
-### Wired `*` — returns `me * you`.
-routine UnpackedFloat[M, L, W].$mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
-  return me.mul(you: you)
+  return me.faddsub(you: you, negate: false)
 
 ### Wired `/` — returns `me / you`.
 routine UnpackedFloat[M, L, W].$truediv(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]

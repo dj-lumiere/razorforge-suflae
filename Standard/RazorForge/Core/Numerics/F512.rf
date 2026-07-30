@@ -23,7 +23,7 @@ module Core
 
 ### A software binary512 float backed by a raw 512-bit container.
 @llvm("i512")
-record F512 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible
+secret record F512 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible
   pass
 
 # ============================================================================

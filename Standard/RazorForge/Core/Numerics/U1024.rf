@@ -9,7 +9,7 @@ import Collections
 # ============================================================================
 
 @llvm("i1024")
-record U1024 obeys FloorDivisible
+secret record U1024 obeys FloorDivisible
   pass
 
 ### Returns me // you via the generic base-2⁶⁴ Knuth-D kernel (`knuth_divide[16]`,
