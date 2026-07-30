@@ -198,12 +198,13 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 AddDecl(map: _userByName, name: decl.Name, decl: decl);
-                // Also index module-level routines under their module-qualified name so
-                // FindDecl can disambiguate same-named routines across modules (e.g. each of
-                // several imported test modules defining `start`). Without this, the bare-name
-                // list collapses to one first-wins decl in MatchOverload's count-only fallback and
-                // the other modules' bodies are never walked — pruning routines they call.
-                if (!string.IsNullOrEmpty(value: module) && !decl.Name.Contains(value: '.'))
+                // Also index under the module-qualified name so FindDecl can disambiguate same-named
+                // declarations across modules — both module-level routines (each module's `start`) AND
+                // member routines with an identical owner+signature in different modules (e.g.
+                // `OwnedApi.Counter.bump(S64)` vs `SharedAccessApi.Counter.bump(S64)`, whose bare
+                // `Counter.bump` key + count-only MatchOverload fallback would collapse first-wins,
+                // leaving the other modules' bodies unwalked and their emitted calls undefined).
+                if (!string.IsNullOrEmpty(value: module))
                 {
                     AddDecl(map: _userByName, name: $"{module}.{decl.Name}", decl: decl);
                 }
@@ -215,10 +216,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 AddDecl(map: _stdlibByName, name: decl.Name, decl: decl);
-                // Imported project modules are carried here too; index their module-level routines
-                // under the module-qualified name so FindDecl can disambiguate same-named routines
-                // across modules (see the user-index note above).
-                if (!string.IsNullOrEmpty(value: module) && !decl.Name.Contains(value: '.'))
+                // Imported project modules are carried here too; index under the module-qualified name
+                // so FindDecl can disambiguate same-named routines/members across modules (see the
+                // user-index note above).
+                if (!string.IsNullOrEmpty(value: module))
                 {
                     AddDecl(map: _stdlibByName, name: $"{module}.{decl.Name}", decl: decl);
                 }
@@ -1568,6 +1569,21 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // fallback bind to the wrong overload (`$create(S8)`) and walk ITS body — so the real
         // D32B body's callees (`F64.from_bits`, `coeff.F64()`) never reach the live set. Merging
         // lets the exact type-signature match (Pass 1) pick the user D32B overload.
+        // Prefer the MODULE-QUALIFIED member key so same-owner-name-and-signature members in different
+        // modules (e.g. `OwnedApi.Counter.bump(S64)` vs `SharedAccessApi.Counter.bump(S64)`) resolve to
+        // their OWN decl. The bare `owner.Name.method` key lists both, and MatchOverload can't tell same-
+        // signature overloads apart, so it first-wins — walking the wrong module's body and leaving the
+        // requested one's emitted call undefined. owner.FullName is `Module.OwnerName`, matching the
+        // `{module}.{decl.Name}` = `{module}.{OwnerName}.{method}` index built in BuildAstIndices.
+        if (!string.IsNullOrEmpty(value: owner.Module))
+        {
+            string qualifiedMemberKey = $"{owner.FullName}.{callee.Name}";
+            if (_userByName.TryGetValue(key: qualifiedMemberKey, value: out List<RoutineDeclaration>? uq))
+                return MatchOverload(decls: uq, callee: callee);
+            if (_stdlibByName.TryGetValue(key: qualifiedMemberKey, value: out List<RoutineDeclaration>? sq))
+                return MatchOverload(decls: sq, callee: callee);
+        }
+
         string concreteKey = $"{owner.Name}.{callee.Name}";
         bool hasStdlib = _stdlibByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? c);
         bool hasUser = _userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu);

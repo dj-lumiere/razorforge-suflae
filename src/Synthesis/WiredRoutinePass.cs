@@ -154,22 +154,22 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         boolType: boolType, u64Type: u64Type, listTypeDef: listTypeDef);
                     break;
 
+                case VariantTypeInfo variant:
+                    HandleVariant(routine: routine, variant: variant, textType: textType);
+                    break;
+
                 case RecordTypeInfo record:
                     HandleRecord(routine: routine, record: record,
                         textType: textType, boolType: boolType, s32Type: s32Type);
-                    break;
-
-                case EntityTypeInfo entity:
-                    HandleEntity(routine: routine, entity: entity, textType: textType,
-                        boolType: boolType);
                     break;
 
                 case CrashableTypeInfo crashable:
                     HandleCrashable(routine: routine, crashable: crashable, textType: textType);
                     break;
 
-                case VariantTypeInfo variant:
-                    HandleVariant(routine: routine, variant: variant, textType: textType);
+                case EntityTypeInfo entity:
+                    HandleEntity(routine: routine, entity: entity, textType: textType,
+                        boolType: boolType);
                     break;
             }
         }
@@ -1339,9 +1339,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Aggregate with a REAL synthesized serialize() (not an @llvm primitive record) -> recurse.
         bool recurse = field.Type switch
         {
+            // Variant is a RecordTypeInfo subclass (never @llvm-backed) — the Record arm covers it.
             RecordTypeInfo r => !r.HasDirectBackendType && TypeHasSerialize(type: r),
             EntityTypeInfo e => TypeHasSerialize(type: e),
-            VariantTypeInfo v => TypeHasSerialize(type: v),
             _ => false,
         };
         if (recurse)
@@ -1969,7 +1969,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 {
                     RecordTypeInfo r => r.MemberVariables,
                     EntityTypeInfo e => e.MemberVariables,
-                    CrashableTypeInfo c => c.MemberVariables,
                     _ => null
                 };
                 fields ??= [];
@@ -2023,7 +2022,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 {
                     RecordTypeInfo r => r.ImplementedProtocols.Select(p => p.Name).ToList(),
                     EntityTypeInfo e => e.ImplementedProtocols.Select(p => p.Name).ToList(),
-                    CrashableTypeInfo c => c.ImplementedProtocols.Select(p => p.Name).ToList(),
                     _ => []
                 };
                 ctx.VariantBodies[key: routine.RegistryKey] =
@@ -2323,7 +2321,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         List<MemberVariableInfo>? fields = owner switch
         {
             EntityTypeInfo e => e.MemberVariables,
-            CrashableTypeInfo c => c.MemberVariables,
             // Tuples are RecordTypeInfo subclasses that CAN carry owned references (e.g. a
             // `Text` element), so recurse into their item0/item1/... fields to tear those down.
             TupleTypeInfo t => t.MemberVariables,

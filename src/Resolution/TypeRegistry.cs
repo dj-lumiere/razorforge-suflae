@@ -591,22 +591,12 @@ public sealed partial class TypeRegistry
             return;
         }
 
-        // Create updated record with protocols
-        var updatedRecord = new RecordTypeInfo(name: record.Name)
-        {
-            MemberVariables = record.MemberVariables,
-            ImplementedProtocols = protocols,
-            GenericParameters = record.GenericParameters,
-            GenericConstraints = record.GenericConstraints,
-            TypeArguments = record.TypeArguments,
-            GenericDefinition = record.GenericDefinition,
-            Visibility = record.Visibility,
-            Location = record.Location,
-            Module = record.Module,
-            BackendType = record.BackendType
-        };
-
-        _types[key: recordName] = updatedRecord;
+        // Mutate the protocol list in place rather than rebuilding a fresh RecordTypeInfo. Rebuilding
+        // as `new RecordTypeInfo` would DOWNCAST a concrete subclass (VariantTypeInfo / ChoiceTypeInfo /
+        // FlagsTypeInfo — all RecordTypeInfo subclasses) to a plain record, losing its category and
+        // subclass-specific data. ImplementedProtocols is settable, so an in-place update preserves the
+        // exact type and is also visible to any holder of the existing instance.
+        record.ImplementedProtocols = protocols;
         _typesByShortName.Remove(key: record.Name);
     }
 
@@ -1003,7 +993,13 @@ public sealed partial class TypeRegistry
             if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
         }
-        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing))
+        // The shortKey is a bare-type-arg alias (e.g. "Modifying[Counter]") shared by callers that
+        // look up by short arg name. It COLLIDES when two modules declare a same-named type
+        // (Modifying[A/Counter] vs Modifying[B/Counter]): a first-wins short alias would return the
+        // wrong module's inner type, contaminating wrapper forwarding / method dispatch. Only accept a
+        // short-alias hit whose type arguments actually match the request by FullName.
+        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing)
+            && ResolutionTypeArgsMatch(resolved: existing, typeArguments: typeArguments))
         {
             if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
@@ -1066,6 +1062,23 @@ public sealed partial class TypeRegistry
         }
 
         return resolved;
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="resolved"/>'s type arguments match <paramref name="typeArguments"/>
+    /// by fully-qualified name. Guards the bare short-alias cache hit in <see cref="GetOrCreateResolution"/>
+    /// so a same-short-name type from a DIFFERENT module (e.g. two modules' <c>Counter</c>) is not
+    /// mistaken for the requested one.
+    /// </summary>
+    private static bool ResolutionTypeArgsMatch(TypeInfo resolved, List<TypeInfo> typeArguments)
+    {
+        List<TypeInfo>? actual = resolved.TypeArguments;
+        if (actual == null || actual.Count != typeArguments.Count) return false;
+        for (int i = 0; i < actual.Count; i++)
+        {
+            if (actual[index: i].FullName != typeArguments[index: i].FullName) return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -1592,7 +1605,6 @@ public sealed partial class TypeRegistry
             {
                 EntityTypeInfo e => e.ImplementedProtocols,
                 RecordTypeInfo r => r.ImplementedProtocols,
-                CrashableTypeInfo c => c.ImplementedProtocols,
                 _ => null
             };
             if (implemented == null)

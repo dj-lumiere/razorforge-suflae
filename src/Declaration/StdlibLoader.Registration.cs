@@ -207,13 +207,23 @@ public sealed partial class StdlibLoader
     /// </summary>
     internal static void ResolveProgramProtocolConformances(TypeRegistry registry, Program program) // NOSONAR S3776
     {
+        // Resolve type lookups MODULE-QUALIFIED. `LookupType(bareName)` resolves via the first-wins
+        // short-name index, so with two modules each declaring `record Point` it would attach one
+        // module's `obeys` to the OTHER module's type (cross-module protocol contamination →
+        // spurious RF-S702). The program's own module scopes the lookup to its own declaration.
+        string? module = program.Declarations.OfType<ModuleDeclaration>().FirstOrDefault()?.Path;
+        TypeInfo? LookupInModule(string name) =>
+            (!string.IsNullOrEmpty(value: module)
+                ? registry.LookupType(name: $"{module}.{name}")
+                : null) ?? registry.LookupType(name: name);
+
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
             switch (node)
             {
                 case EntityDeclaration { Protocols.Count: > 0 } entity:
                 {
-                    var existing = registry.LookupType(name: entity.Name) as EntityTypeInfo;
+                    var existing = LookupInModule(name: entity.Name) as EntityTypeInfo;
                     if (existing == null ||
                         existing.ImplementedProtocols.Count >= entity.Protocols.Count)
                     {
@@ -232,7 +242,7 @@ public sealed partial class StdlibLoader
                 }
                 case RecordDeclaration { Protocols.Count: > 0 } record:
                 {
-                    var existing = registry.LookupType(name: record.Name) as RecordTypeInfo;
+                    var existing = LookupInModule(name: record.Name) as RecordTypeInfo;
                     if (existing == null ||
                         existing.ImplementedProtocols.Count >= record.Protocols.Count)
                     {

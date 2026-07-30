@@ -482,12 +482,20 @@ public sealed partial class SemanticVerifier
 
             AnalyzeExpression(expression: value);
 
-            // #45: Cannot modify secret member variables in 'with' expression
             if (fieldPath is { Count: > 0 } && baseType is RecordTypeInfo recordType)
             {
                 MemberVariableInfo? memberInfo =
                     recordType.LookupMemberVariable(memberVariableName: fieldPath[index: 0]);
-                if (memberInfo is { Visibility: VisibilityModifier.Secret })
+                if (memberInfo == null)
+                {
+                    // The field named in the update doesn't exist on the record.
+                    ReportError(code: SemanticDiagnosticCode.MemberVariableNotFound,
+                        message:
+                        $"'{baseType.Name}' has no member variable '{fieldPath[index: 0]}'.",
+                        location: with.Location);
+                }
+                // #45: Cannot modify secret member variables in 'with' expression
+                else if (memberInfo is { Visibility: VisibilityModifier.Secret })
                 {
                     ReportError(code: SemanticDiagnosticCode.WithSecretMemberProhibited,
                         message:
@@ -803,7 +811,6 @@ public sealed partial class SemanticVerifier
         {
             RecordTypeInfo r => r.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
             EntityTypeInfo e => e.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
-            CrashableTypeInfo cr => cr.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
             _ => []
         };
 

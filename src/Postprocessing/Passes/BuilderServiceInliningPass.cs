@@ -745,10 +745,9 @@ internal sealed class BuilderServiceInliningPass
                     TupleTypeInfo t => t.MemberVariables.Count,
                     ChoiceTypeInfo ch => ch.Cases.Count,
                     FlagsTypeInfo f => f.Members.Count,
+                    VariantTypeInfo v => v.Members.Count,
                     RecordTypeInfo r => r.MemberVariables.Count,
                     EntityTypeInfo e => e.MemberVariables.Count,
-                    CrashableTypeInfo c => c.MemberVariables.Count,
-                    VariantTypeInfo v => v.Members.Count,
                     _ => 0L
                 };
                 return MakeLiteralS64(count, _s64Type, loc);
@@ -883,15 +882,15 @@ internal sealed class BuilderServiceInliningPass
         // Tuple is a RecordTypeInfo (item0/item1/... members) — delegate to SizeBytes like records.
         // `element_count * 8` was wrong for tuples holding a non-8-byte element (e.g. a Text=24).
         TupleTypeInfo t => (ulong)t.SizeBytes(pointerSize: 8),
+        // Variant is a tagged union: tag + MAX arm payload (not sum). Delegate to SizeBytes.
+        // Variant is a RecordTypeInfo subclass, so it MUST precede the Record arms below.
+        VariantTypeInfo v => (ulong)v.SizeBytes(pointerSize: 8),
         RecordTypeInfo { HasDirectBackendType: true } r => LlvmBackendTypeSize(r.BackendType!),
         // Delegate to the SAME size function codegen uses (RecordTypeInfo.SizeBytes) so the List
         // element stride matches the actual struct layout. `member_count * 8` was wrong for any
         // record with a non-8-byte member (a nested value-record like Text=24, or i32/i128).
         RecordTypeInfo r => (ulong)r.SizeBytes(pointerSize: 8),
-        EntityTypeInfo => 8,    // heap pointer
-        CrashableTypeInfo => 8, // heap pointer
-        // Variant is a tagged union: tag + MAX arm payload (not sum). Delegate to SizeBytes.
-        VariantTypeInfo v => (ulong)v.SizeBytes(pointerSize: 8),
+        EntityTypeInfo => 8,    // heap pointer (Crashable, an entity subclass, included)
         _ => 0
     };
 

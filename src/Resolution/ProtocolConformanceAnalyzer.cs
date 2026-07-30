@@ -214,7 +214,6 @@ internal sealed class ProtocolConformanceAnalyzer
         {
             RecordTypeInfo r => r.ImplementedProtocols,
             EntityTypeInfo e => e.ImplementedProtocols,
-            CrashableTypeInfo cr => cr.ImplementedProtocols,
             _ => []
         };
     }
@@ -235,11 +234,11 @@ internal sealed class ProtocolConformanceAnalyzer
             case RecordTypeInfo:
                 _sa._registry.UpdateRecordProtocols(recordName: type.FullName, protocols: protocols);
                 break;
-            case EntityTypeInfo:
-                _sa._registry.UpdateEntityProtocols(entityName: type.FullName, protocols: protocols);
-                break;
             case CrashableTypeInfo:
                 _sa._registry.UpdateCrashableProtocols(typeName: type.FullName, protocols: protocols);
+                break;
+            case EntityTypeInfo:
+                _sa._registry.UpdateEntityProtocols(entityName: type.FullName, protocols: protocols);
                 break;
         }
     }

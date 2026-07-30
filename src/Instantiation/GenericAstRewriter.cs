@@ -177,7 +177,6 @@ internal static class GenericAstRewriter
                         RecordTypeInfo { GenericDefinition: { } d } => d,
                         EntityTypeInfo { GenericDefinition: { } d } => d,
                         ProtocolTypeInfo { GenericDefinition: { } d } => d,
-                        VariantTypeInfo { GenericDefinition: { } d } => d,
                         _ => null
                     };
                     if (genericBase != null)
@@ -1261,10 +1260,9 @@ internal static class GenericAstRewriter
                         TupleTypeInfo t => t.MemberVariables.Count,
                         ChoiceTypeInfo ch => ch.Cases.Count,
                         FlagsTypeInfo f => f.Members.Count,
+                        VariantTypeInfo v => v.Members.Count,
                         RecordTypeInfo r => r.MemberVariables.Count,
                         EntityTypeInfo e => e.MemberVariables.Count,
-                        CrashableTypeInfo c => c.MemberVariables.Count,
-                        VariantTypeInfo v => v.Members.Count,
                         _ => 0
                     }),
                     LiteralType: TokenType.S64Literal,

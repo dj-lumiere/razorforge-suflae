@@ -177,6 +177,10 @@ public partial class LlvmCodeGenerator
                 HasDirectBackendType: true
             } llvmRecord => llvmRecord.LlvmType,
 
+            // Variants -> struct { tag, payload }. Variant is a RecordTypeInfo subclass, so this
+            // MUST precede the RecordTypeInfo arms below or a variant would be treated as a record.
+            VariantTypeInfo variant => GetVariantTypeName(variant: variant),
+
             // Records with no fields and generic base type has @llvm annotation
             RecordTypeInfo
             {
@@ -189,17 +193,11 @@ public partial class LlvmCodeGenerator
             // may be created on-demand without being registered, so the type loop never sees them.
             RecordTypeInfo record => EnsureRecordTypeDeclared(record: record),
 
-            // Entities -> pointer to LLVM struct
+            // Entities (and Crashable, an entity subclass) -> pointer to LLVM struct
             EntityTypeInfo => "ptr",
-
-            // Crashable types -> pointer to LLVM struct (always entity semantics)
-            CrashableTypeInfo => "ptr",
 
             // Wrappers (Viewing, Modifying, Hijacked, etc.) -> all pointers at LLVM level
             WrapperTypeInfo => "ptr",
-
-            // Variants -> struct { tag, payload }
-            VariantTypeInfo variant => GetVariantTypeName(variant: variant),
 
             // Protocols -> type-erased pointer (protocol-typed fields/params hold a handle to a concrete object)
             ProtocolTypeInfo => "ptr",
@@ -410,9 +408,8 @@ public partial class LlvmCodeGenerator
         type = ResolveTypeSubstitution(type: type);
         return type switch
         {
-            // Entities and crashable types are always passed as pointers
+            // Entities (and Crashable, an entity subclass) are always passed as pointers
             EntityTypeInfo => "ptr",
-            CrashableTypeInfo => "ptr",
 
             // Other types use normal mapping
             _ => GetLlvmType(type: type)

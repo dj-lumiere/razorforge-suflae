@@ -202,14 +202,19 @@ public partial class LlvmCodeGenerator
             // For module-qualified names like "Console.show", the registry key may be
             // "IO.show" (module.name). Try full AST name first, then short name lookup.
             string baseName = routine.Name;
-            routineInfo = _registry.LookupRoutine(fullName: baseName);
+            bool isMemberDecl = baseName.Contains(value: '.');
+            // For a MEMBER decl (`Owner.method`), skip the bare `LookupRoutine(name)` — it hits the
+            // first-wins bare `Owner.method` baseName key and would bind this method's body to a
+            // SAME-NAMED owner in another module (every fixture's `Counter.bump`), emitting under the
+            // wrong identity and leaving THIS module's method undefined. Members resolve via the
+            // module-qualified owner in the dotted branch below.
+            routineInfo = isMemberDecl ? null : _registry.LookupRoutine(fullName: baseName);
             // Module-level routine (no dot): prefer the module-qualified key so that two modules'
             // same-named routines (e.g. each of several imported test modules with a `start`) each
             // bind to their OWN RoutineInfo. Without this, the bare LookupRoutineByName fallback
             // below returns a first-wins entry and this module's body is emitted under another
             // module's symbol.
-            if (routineInfo == null && !string.IsNullOrEmpty(value: moduleContext) &&
-                !baseName.Contains(value: '.'))
+            if (routineInfo == null && !string.IsNullOrEmpty(value: moduleContext) && !isMemberDecl)
             {
                 routineInfo = _registry.LookupRoutine(fullName: $"{moduleContext}.{baseName}");
             }
@@ -230,7 +235,14 @@ public partial class LlvmCodeGenerator
                     int bracketIdx = ownerPart.IndexOf(value: '[');
                     if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
                     string shortName = baseName[(dotIdx + 1)..];
-                    TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                    // Resolve the owner MODULE-QUALIFIED first (moduleContext.Owner): a bare
+                    // LookupType(ownerPart) collapses same-named types across modules to first-wins,
+                    // emitting this method's body under the wrong module's owner.
+                    TypeInfo? ownerType =
+                        (!string.IsNullOrEmpty(value: moduleContext)
+                            ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
+                            : null)
+                        ?? _registry.LookupType(name: ownerPart);
                     if (ownerType != null)
                         routineInfo = _registry.LookupMethod(type: ownerType, methodName: shortName);
                     routineInfo ??= _registry.LookupRoutine(fullName: shortName) ??
@@ -285,15 +297,25 @@ public partial class LlvmCodeGenerator
                         int bracketIdx = ownerPart.IndexOf(value: '[');
                         if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
                         string shortName = routine.Name[(dotIdx + 1)..];
-                        TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                        // Module-qualified owner first (moduleContext.Owner): a bare LookupType(ownerPart)
+                        // picks a same-named owner from another module (first-wins), so the overload
+                        // match rebinds this method's body to the WRONG module's owner.
+                        TypeInfo? ownerType =
+                            (!string.IsNullOrEmpty(value: moduleContext)
+                                ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
+                                : null)
+                            ?? _registry.LookupType(name: ownerPart);
                         if (ownerType != null)
                             overload = _registry.LookupMethodOverload(type: ownerType,
                                 methodName: shortName, argTypes: astParamTypes);
                     }
 
-                    overload ??=
-                        _registry.LookupRoutineOverload(baseName: routineInfo.BaseName,
-                            argTypes: astParamTypes);
+                    // Only fall back to the bare-baseName overload lookup for NON-member routines;
+                    // for members it collapses same-named owners across modules (first-wins).
+                    if (overload == null && !routine.Name.Contains(value: '.'))
+                        overload =
+                            _registry.LookupRoutineOverload(baseName: routineInfo.BaseName,
+                                argTypes: astParamTypes);
                     if (overload != null)
                     {
                         routineInfo = overload;

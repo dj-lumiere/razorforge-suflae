@@ -412,7 +412,6 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 .Where(predicate: m => m is { IsNone: false, Type: not null })
                 .Select(selector: m => m.Type!),
             EntityTypeInfo e => e.MemberVariables.Select(selector: f => f.Type),
-            CrashableTypeInfo c => c.MemberVariables.Select(selector: f => f.Type),
             TupleTypeInfo t => t.MemberVariables.Select(selector: f => f.Type),
             ChoiceTypeInfo or FlagsTypeInfo => [],
             RecordTypeInfo { HasDirectBackendType: false } r =>
@@ -1620,7 +1619,6 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         RecordTypeInfo { GenericDefinition: { } d } => d,
         EntityTypeInfo { GenericDefinition: { } d } => d,
         ProtocolTypeInfo { GenericDefinition: { } d } => d,
-        VariantTypeInfo { GenericDefinition: { } d } => d,
         _ => null
     };
 
