@@ -72,11 +72,24 @@ internal sealed class TypeResolver
             TypeSymbol? imported = _sa._registry.LookupType(name: $"{ns}.{name}");
             if (imported != null)
             {
+                // `secret record`/`secret entity` are MODULE-PRIVATE: visible only within their own
+                // module (step 1 above), INVISIBLE to importers. Skip so an external reference resolves
+                // as "unknown type" rather than leaking an internal engine (e.g. Core's UnpackedFloat).
+                if (imported.Visibility == VisibilityModifier.Secret) continue;
                 return imported;
             }
         }
 
-        return _sa._registry.LookupType(name: name);
+        // Context-free fallback (Core auto-import, resolution cache, cross-module short-name scan).
+        // Hide a module-private `secret` type here too when it belongs to a DIFFERENT module than the
+        // referrer — a null current-module context must not accidentally expose another module's secret.
+        TypeSymbol? fallback = _sa._registry.LookupType(name: name);
+        if (fallback is { Visibility: VisibilityModifier.Secret }
+            && fallback.Module != _sa._currentModuleName)
+        {
+            return null;
+        }
+        return fallback;
     }
 
     /// <summary>
@@ -277,7 +290,12 @@ internal sealed class TypeResolver
             return presetConst;
         }
 
-        // Type not found
+        // Type not found — but a module-private `secret` type of this name may exist and have been
+        // hidden on purpose; if so, report that explicitly rather than a misleading "unknown type".
+        if (_sa.TryReportSecretTypeAccess(name: typeExpr.Name, location: typeExpr.Location))
+        {
+            return ErrorTypeInfo.Instance;
+        }
         _sa.ReportError(code: SemanticDiagnosticCode.UnknownType,
             message: $"Unknown type '{typeExpr.Name}'.{_sa.UnknownTypeSuggestion(typeName: typeExpr.Name)}",
             location: typeExpr.Location);
@@ -340,6 +358,10 @@ internal sealed class TypeResolver
         TypeSymbol? genericDef = LookupTypeWithImports(name: typeExpr.Name);
         if (genericDef == null)
         {
+            if (_sa.TryReportSecretTypeAccess(name: typeExpr.Name, location: typeExpr.Location))
+            {
+                return ErrorTypeInfo.Instance;
+            }
             _sa.ReportError(code: SemanticDiagnosticCode.UnknownType,
                 message: $"Unknown type '{typeExpr.Name}'.{_sa.UnknownTypeSuggestion(typeName: typeExpr.Name)}",
                 location: typeExpr.Location);

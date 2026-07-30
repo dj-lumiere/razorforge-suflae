@@ -376,6 +376,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Module 'Core' is reserved for standard library.</summary>
     ReservedModuleCore = 401,
 
+    /// <summary>
+    /// Referenced a <c>secret</c> (module-private) type from outside its declaring module.
+    /// The type exists but is intentionally hidden from importers.
+    /// </summary>
+    SecretTypeAccess = 402,
+
     /// <summary>Cannot access secret member from outside its defining file.</summary>
     SecretMemberAccess = 403,
 

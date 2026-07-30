@@ -269,11 +269,45 @@ public sealed partial class SemanticVerifier
             return new GenericParameterTypeInfo(name: id.Name);
         }
 
+        // A `secret` type of this name exists but lives in another module (module-private): resolution
+        // above deliberately hid it. Say so explicitly — "Unknown identifier" reads like a typo and
+        // hides the real reason (the type is intentionally not exported).
+        if (TryReportSecretTypeAccess(name: id.Name, location: id.Location))
+        {
+            return ErrorTypeInfo.Instance;
+        }
+
         ReportError(code: SemanticDiagnosticCode.UnknownIdentifier,
             message:
             $"Unknown identifier '{id.Name}'.{DidYouMean(target: id.Name, candidates: IdentifierSuggestionCandidates())}",
             location: id.Location);
         return ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// If a <c>secret</c> (module-private) type whose bare name matches <paramref name="name"/> exists
+    /// in a module OTHER than the current one, resolution deliberately hid it — report a dedicated
+    /// RF-S402 explaining that (instead of letting the caller emit a misleading "unknown type/identifier"
+    /// that reads like a typo), and return true. Returns false when no such type exists.
+    /// </summary>
+    internal bool TryReportSecretTypeAccess(string name, SourceLocation location)
+    {
+        foreach (TypeInfo t in _registry.GetAllTypes())
+        {
+            if (t is { Visibility: VisibilityModifier.Secret }
+                && t.Name == name
+                && t.Module != _currentModuleName)
+            {
+                ReportError(code: SemanticDiagnosticCode.SecretTypeAccess,
+                    message:
+                    $"'{name}' is a secret (module-private) type of module '{t.Module}' " +
+                    $"and cannot be used from module '{_currentModuleName ?? "?"}'.",
+                    location: location);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

@@ -52,6 +52,13 @@ public sealed partial class SemanticVerifier
     {
         TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
+        // The receiver already failed to resolve (its own error was reported). A follow-on
+        // "Type '<error>' does not have a member ..." is pure cascade noise — bail quietly.
+        if (objectType is ErrorTypeInfo)
+        {
+            return ErrorTypeInfo.Instance;
+        }
+
         // Suflae flow typing: dereferencing (member access / method call) a possibly-none entity
         // reference is rejected until it has been null-checked. Covers both a nullable local/param
         // (`x.field` on an unchecked `x: E?`) and a nullable field-chain (`a.b.c` where `b: E?`) — a
