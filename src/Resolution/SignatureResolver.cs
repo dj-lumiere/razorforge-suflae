@@ -820,6 +820,15 @@ internal sealed class SignatureResolver
             return;
         }
 
+        // Only WIRED operator methods ($add, $sub, …) require the operator protocol. A plain user
+        // routine that merely shares the bare name (e.g. `routine Counter.add(n)`) is NOT an operator
+        // and must not be forced to obey Addable — the name alone no longer distinguishes them, so
+        // gate on the structural wired attribute.
+        if (!routineInfo.IsWiredMemberRoutine)
+        {
+            return;
+        }
+
         // Get the required protocol for this wired method
         List<string>? requiredProtocols = SemanticVerifier.GetRequiredProtocols(wiredName: routineInfo.Name);
         if (requiredProtocols == null || requiredProtocols.Count == 0)

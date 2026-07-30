@@ -488,6 +488,15 @@ internal static class GenericAstRewriter
             List<TypeInfo> callArgTypes)
         {
             TypeInfo? receiverType = ResolveTypeForLookup(member.Object.ResolvedType);
+            // A const-generic value receiver (e.g. `N` in `Array[T, N]` monomorphized to the value 4)
+            // has no methods of its own — arithmetic/comparison resolves on its underlying numeric
+            // type. Mirror CallOverloadResolutionPass's const-generic handling so `N - 1` lowers to a
+            // real `U64.sub!` instead of leaving `.sub` unresolved in the monomorphized body.
+            if (receiverType is ConstGenericValueTypeInfo constRecv && Registry != null)
+            {
+                receiverType = Registry.LookupType(name: constRecv.ExplicitTypeName ?? "U64")
+                               ?? receiverType;
+            }
             if (receiverType == null)
             {
                 return null;

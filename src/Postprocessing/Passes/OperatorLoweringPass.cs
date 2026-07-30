@@ -570,18 +570,17 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         : ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
                     resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
                         methodName: methodName);
-                    // If the non-failable form doesn't exist, try the failable form ($sub -> $sub!).
-                    // Types like U64 only define $sub! (underflow would be undefined behavior).
-                    // Methods are stored under their full name including '!' (e.g. "sub!").
-                    if (resolvedMethod == null && !methodName.EndsWith('!'))
+                    // If the non-failable form doesn't exist, try the failable form (sub -> sub!).
+                    // Types like U64 only define sub! (underflow would be undefined behavior).
+                    // The name is BARE; failability is structural — retry with isFailable: true.
+                    if (resolvedMethod == null)
                     {
-                        string failableName = methodName + "!";
                         resolvedMethod = argType != null
                             ? ctx.Registry.LookupMethodOverload(type: receiverType,
-                                methodName: failableName, argTypes: [argType])
+                                methodName: methodName, argTypes: [argType])
                             : null;
                         resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
-                            methodName: failableName);
+                            methodName: methodName, isFailable: true);
                     }
                 }
 
