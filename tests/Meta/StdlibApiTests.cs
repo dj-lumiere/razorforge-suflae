@@ -84,11 +84,25 @@ public sealed class StdlibApiTests
             $"[target]\nexecutable = \"{HarnessModule}\"\nmode = \"debug\"\nlibrary = [\"../Stdlib\"]\n";
         File.WriteAllText(Path.Combine(HarnessDir, "razorforge.toml"), manifest);
 
-        // 2) Compile + run the ONE program (cwd = harness dir so razorforge.toml is discovered).
+        // 2) Compile + run the ONE program (cwd = repo root so relative resource paths resolve).
         FixtureRun run = RunHarness(harnessRf: harnessRf);
         Assert.True(run is { ExitCode: 0, TimedOut: false },
             $"Harness buildandrun failed (exit={run.ExitCode}, timedOut={run.TimedOut}).\n" +
             $"--- stdout ---\n{run.Stdout}\n--- stderr ---\n{run.Stderr}");
+
+        // 2b) stderr must be CLEAN. The build's own progress banners go to stdout; anything on stderr is
+        // a diagnostic — a compiler warning/error or a runtime fault. These are silently swallowed if we
+        // only check stdout+exit (that is exactly how a flood of "Synthesized body codegen failed" /
+        // "Unresolved generic method 'Core.Dict.create'" warnings hid for so long). Fail on any of them.
+        string[] offending = run.Stderr
+            .Split('\n')
+            .Select(selector: l => l.TrimEnd('\r'))
+            .Where(predicate: l => System.Text.RegularExpressions.Regex.IsMatch(l,
+                @"error\[RF-|Warning:|Codegen bug|Synthesized body codegen failed|Unresolved generic|Error type found|undefined symbol|never defined|MARKER-LEAK|Unhandled exception|\bE0\d"))
+            .ToArray();
+        Assert.True(offending.Length == 0,
+            $"Harness stderr was not clean — {offending.Length} diagnostic line(s):\n" +
+            string.Join("\n", offending.Take(40)));
 
         // 3) Split combined output on the delimiter lines.
         Dictionary<string, string> sections = SplitHarnessOutput(stdout: run.Stdout);
