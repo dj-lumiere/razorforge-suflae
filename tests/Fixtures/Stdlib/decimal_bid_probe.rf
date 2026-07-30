@@ -1,4 +1,4 @@
-module Main
+module Tests/Stdlib/DecimalBidProbe
 
 import IO/Console
 
