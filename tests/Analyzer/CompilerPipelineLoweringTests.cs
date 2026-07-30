@@ -416,7 +416,7 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "Core.List[Core.List[Core.S64]].$create",
+        Assert.Contains(expectedSubstring: "Core.List[Core.List[Core.S64]].create",
             actualString: llvmIr);
     }
 
@@ -445,11 +445,13 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "\"Core.S32.$sub(Core.S32)\"", actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "\"Core.S32.$add(Core.S32)\"", actualString: llvmIr);
-        Assert.DoesNotContain(expectedSubstring: "declare void @Core.S32.$sub",
+        Assert.Contains(expectedSubstring: "\"[crashable, member] Core.S32.sub(you: Core.S32)\"",
             actualString: llvmIr);
-        Assert.DoesNotContain(expectedSubstring: "declare void @Core.S32.$add",
+        Assert.Contains(expectedSubstring: "\"[crashable, member] Core.S32.add(you: Core.S32)\"",
+            actualString: llvmIr);
+        Assert.DoesNotContain(expectedSubstring: "declare void @\"[crashable, member] Core.S32.sub",
+            actualString: llvmIr);
+        Assert.DoesNotContain(expectedSubstring: "declare void @\"[crashable, member] Core.S32.add",
             actualString: llvmIr);
     }
 
@@ -512,7 +514,7 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define void @\"Collections.BitList.add_last(",
+        Assert.Contains(expectedSubstring: "define void @\"[member] Collections.BitList.add_last(",
             actualString: llvmIr);
     }
 
@@ -607,7 +609,7 @@ public class CompilerPipelineLoweringTests
 
         string llvmIr = generator.Generate();
         string body = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define [8 x i8] @Core.U64.to_bytes_le");
+            functionMarker: "define [8 x i8] @\"[member] Core.U64.to_bytes_le");
         Assert.Contains(expectedSubstring: "alloca [8 x i8]", actualString: body);
         Assert.DoesNotContain(expectedSubstring: "[i64 x i8]", actualString: llvmIr);
     }
@@ -639,12 +641,12 @@ public class CompilerPipelineLoweringTests
 
         string llvmIr = generator.Generate();
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define %\"Record.Core.Maybe[Core.U8]\" @Collections.BitList.try_to_u8");
-        Assert.Contains(expectedSubstring: "call i64 @\"Core.Hijacked[Core.U64].peek\"",
+            functionMarker: "define %\"Record.Core.Maybe[Core.U8]\" @\"[member] Collections.BitList.try_to_u8");
+        Assert.Contains(expectedSubstring: "call i64 @\"[dangerous, member] Core.Hijacked[Core.U64].peek()\"",
             actualString: tryToU8Body);
-        Assert.DoesNotContain(expectedSubstring: "@\"Core.Hijacked[Core.Bytes].peek\"",
+        Assert.DoesNotContain(expectedSubstring: "@\"[dangerous, member] Core.Hijacked[Core.Bytes].peek()\"",
             actualString: tryToU8Body);
-        Assert.DoesNotContain(expectedSubstring: "@Core.Bytes.$bitand", actualString: tryToU8Body);
+        Assert.DoesNotContain(expectedSubstring: "Core.Bytes.bitand", actualString: tryToU8Body);
     }
 
     /// <summary>
@@ -693,8 +695,8 @@ public class CompilerPipelineLoweringTests
             IsSynthesized = true
         });
 
-        Assert.Equal(expected: "\"Core.S64.try_create(Core.S8)\"", actual: fromS8);
-        Assert.Equal(expected: "\"Core.S64.try_create(Core.Text)\"", actual: fromText);
+        Assert.Equal(expected: "\"[member] Core.S64.try_create(from: Core.S8)\"", actual: fromS8);
+        Assert.Equal(expected: "\"[member] Core.S64.try_create(from_text: Core.Text)\"", actual: fromText);
         Assert.NotEqual(expected: fromS8, actual: fromText);
     }
 
@@ -756,7 +758,7 @@ public class CompilerPipelineLoweringTests
         Assert.DoesNotContain(expectedSubstring: "call ptr @Core.hijacked_from(",
             actualString: llvmIr);
         Assert.Contains(
-            expectedSubstring: "define ptr @\"Core.hijacked_from(S64)(Core.Address)\"(i64 %addr)",
+            expectedSubstring: "define ptr @\"[dangerous, independent] Core.hijacked_from(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
     }
 
@@ -793,8 +795,8 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define i32 @test()", actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "@\"Box[Core.S32].peek\"", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "define i32 @\"[independent] test()\"", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "@\"[member] Box[Core.S32].peek()\"", actualString: llvmIr);
     }
 
     /// <summary>
@@ -821,9 +823,9 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define i64 @\"test(Core.Hijacked[Core.S64])\"(ptr %ptr)",
+        Assert.Contains(expectedSubstring: "define i64 @\"[dangerous, independent] test(ptr: Core.Hijacked[Core.S64])\"(ptr %ptr)",
             actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "@\"Core.Hijacked[Core.S64].peek\"",
+        Assert.Contains(expectedSubstring: "@\"[dangerous, member] Core.Hijacked[Core.S64].peek()\"",
             actualString: llvmIr);
     }
 
@@ -854,9 +856,9 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define i32 @\"test(Core.Text)\"(", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "define i32 @\"[independent] test(text: Core.Text)\"(", actualString: llvmIr);
         Assert.Contains(expectedSubstring: "trunc i64", actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "call i32 @\"helper(Core.S32)\"(i32 ", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "call i32 @\"[independent] helper(value: Core.S32)\"(i32 ", actualString: llvmIr);
     }
 
     /// <summary>
@@ -1183,7 +1185,7 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define i8 @\"start(", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "define i8 @\"[independent] start(", actualString: llvmIr);
     }
 
     /// <summary>
@@ -1216,7 +1218,7 @@ public class CompilerPipelineLoweringTests
         // S64.data_size() must fold against the SEMANTIC receiver (S64 -> 8 bytes) at
         // the call site rather than emitting a data_size call.
         string startBody = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define i64 @start()");
+            functionMarker: "define i64 @\"[independent] start()\"");
         Assert.Contains(expectedSubstring: "ret i64 8", actualString: startBody);
         Assert.DoesNotContain(expectedSubstring: "call i64 @Core.S64.data_size",
             actualString: startBody);
@@ -1249,10 +1251,10 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define ptr @\"wrap_addr(S64)(Core.Address)\"(i64 %addr)",
+        Assert.Contains(expectedSubstring: "define ptr @\"[dangerous, independent] wrap_addr(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
         Assert.Contains(
-            expectedSubstring: "define ptr @\"Core.hijacked_from(S64)(Core.Address)\"(i64 %addr)",
+            expectedSubstring: "define ptr @\"[dangerous, independent] Core.hijacked_from(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
     }
 
