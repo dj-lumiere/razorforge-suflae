@@ -17,7 +17,7 @@ using static TestHelpers;
 /// </summary>
 public class CompilerPipelineInputEdgeCaseTests
 {
-    private const string TestRoutineIrSignature = "define void @test()";
+    private const string TestRoutineIrSignature = "define void @\"[independent] test()\"";
 
     /// <summary>
     /// Verifies that source forms with no declarations survive semantic analysis as empty programs.

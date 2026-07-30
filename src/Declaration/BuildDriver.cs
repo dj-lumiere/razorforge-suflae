@@ -68,12 +68,15 @@ public sealed class BuildDriver
     public BuildDriver(string projectRoot, string stdlibRoot, Language language,
         IReadOnlyList<string>? libraryRoots = null)
     {
+        _projectRoot = projectRoot;
         _libraryRoots = libraryRoots ?? [];
         _resolver = new ModuleResolver(projectRoot: projectRoot, stdlibRoot: stdlibRoot,
             libraryRoots: _libraryRoots);
         _stdlibRoot = stdlibRoot;
         _language = language;
     }
+
+    private readonly string _projectRoot;
 
     private readonly IReadOnlyList<string> _libraryRoots;
 
@@ -455,6 +458,20 @@ public sealed class BuildDriver
                 }
             }
 
+            // A file with no `module` header gets one DERIVED from its path relative to the project
+            // root (the razorforge.toml directory): each path segment is PascalCased (spaces removed),
+            // '.'/'..' segments dropped, the extension stripped, joined with '/'. E.g.
+            // `../SomeFolder/SomeMoreFolder/file a.rf` -> `SomeFolder/SomeMoreFolder/FileA`. A synthetic
+            // ModuleDeclaration is inserted at the top of the AST so every downstream reader (type/
+            // routine registration, protocol conformance) sees the same module uniformly.
+            if (modulePath == null)
+            {
+                modulePath = DeriveModuleFromPath(filePath: filePath);
+                ast.Declarations.Insert(index: 0, item: new ModuleDeclaration(
+                    Path: modulePath,
+                    Location: new SourceLocation(FileName: filePath, Line: 0, Column: 0, Position: 0)));
+            }
+
             return new FileBuildUnit(FilePath: filePath,
                 Module: modulePath,
                 Ast: ast,
@@ -484,6 +501,59 @@ public sealed class BuildDriver
                     Position: 0)));
             return null;
         }
+    }
+
+    /// <summary>
+    /// Derives a module path for a file with no <c>module</c> header, from its location relative to
+    /// the project root (the razorforge.toml directory). Path segments are PascalCased (whitespace
+    /// removed, each word's first letter capitalized), <c>.</c>/<c>..</c> segments are dropped, the
+    /// file extension is stripped, and segments are joined with <c>/</c>. E.g.
+    /// <c>../SomeFolder/SomeMoreFolder/file a.rf</c> -> <c>SomeFolder/SomeMoreFolder/FileA</c>.
+    /// </summary>
+    private string DeriveModuleFromPath(string filePath)
+    {
+        string rel = Path.GetRelativePath(relativeTo: _projectRoot, path: filePath);
+        List<string> segments = rel
+            .Split(separator: ['/', '\\'], options: StringSplitOptions.RemoveEmptyEntries)
+            .Where(predicate: s => s != "." && s != "..")
+            .ToList();
+
+        if (segments.Count == 0)
+        {
+            return PascalCaseSegment(segment: Path.GetFileNameWithoutExtension(path: filePath));
+        }
+
+        // Strip the extension from the final segment (the file name).
+        segments[^1] = Path.GetFileNameWithoutExtension(path: segments[^1]);
+        return string.Join(separator: '/',
+            values: segments.Select(selector: PascalCaseSegment));
+    }
+
+    /// <summary>
+    /// PascalCases one path segment: splits on whitespace, capitalizes the first letter of each word
+    /// (preserving the rest), and concatenates. <c>file a</c> -> <c>FileA</c>; an already-cased
+    /// <c>SomeFolder</c> stays <c>SomeFolder</c>.
+    /// </summary>
+    private static string PascalCaseSegment(string segment)
+    {
+        string[] words = segment.Split(separator: (char[]?)null,
+            options: StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0)
+        {
+            return segment;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        foreach (string w in words)
+        {
+            sb.Append(value: char.ToUpperInvariant(c: w[0]));
+            if (w.Length > 1)
+            {
+                sb.Append(value: w[1..]);
+            }
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>
