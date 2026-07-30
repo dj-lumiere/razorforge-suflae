@@ -127,10 +127,18 @@ public partial class Parser
             }
             else if (Match(type: TokenType.Dot))
             {
-                // Member access. Do NOT fold a trailing `!` into the name — leave it as a separate
-                // Bang token so the failable-call / generic-failable handling below records it as a
-                // structured MemberExpression.IsFailable / GenericMethodCallExpression flag.
-                string member = ConsumeMethodName(errorMessage: "Expected member name after '.'");
+                // Member access. Consume the bare member name WITHOUT folding a trailing `!` into it
+                // (unlike ConsumeMethodName, which the declaration parser still uses): the `!` stays a
+                // separate Bang token so the failable-call / generic-failable handling below records it
+                // as a structured MemberExpression.IsFailable / GenericMethodCallExpression flag.
+                if (!Check(type: TokenType.Identifier)
+                    && !IsKeywordValidAsMethodName(CurrentToken.Type))
+                {
+                    throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
+                        message: "Expected member name after '.'");
+                }
+                string member = CurrentToken.Text;
+                Advance();
 
                 // Check for failable marker ! before generic parameters: obj.method![T]
                 bool isGenericMemOp = false;
