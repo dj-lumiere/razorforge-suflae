@@ -160,8 +160,17 @@ public sealed class StdlibApiTests
             ArgumentList = { CompilerDll, "buildandrun", harnessRf },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // The compiled program writes UTF-8 (e.g. an em-dash in a fixture string). Without pinning
+            // the capture encoding, Windows decodes the pipe as the OEM codepage and mangles non-ASCII
+            // to '?', producing a spurious mismatch against the UTF-8 .expected.txt.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
             UseShellExecute = false,
-            WorkingDirectory = HarnessDir,
+            // Run from the repo root so fixtures that read repo-relative resource paths (e.g.
+            // coro_async_read_api reads "tests/Fixtures/Stdlib/…") resolve. The manifest is still
+            // found: buildandrun locates razorforge.toml by walking UP from the entry file's
+            // directory (HarnessDir), not from the working directory.
+            WorkingDirectory = RepoRoot,
             Environment = { ["DOTNET_gcServer"] = "0", ["DOTNET_GCConserveMemory"] = "9" }
         };
         using var p = Process.Start(psi)!;
