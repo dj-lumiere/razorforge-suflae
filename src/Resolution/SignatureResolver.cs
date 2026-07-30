@@ -28,11 +28,11 @@ internal sealed class SignatureResolver
     }
 
     /// <summary>
-    /// Reports S802 for any `?T` rvalue mark in a slot-position type expression.
-    /// Vars, fields, and type-args hold lvalue, so `?T` is rejected there. A routine return type
-    /// and a parameter type may carry `?T`: the return is an rvalue producer and a `?T` parameter
+    /// Reports S802 for any `T` rvalue mark in a slot-position type expression.
+    /// Vars, fields, and type-args hold lvalue, so `T` is rejected there. A routine return type
+    /// and a parameter type may carry `T`: the return is an rvalue producer and a `T` parameter
     /// is an ownership-transfer (steal) slot. The top-level allowance does not recurse — a nested
-    /// type argument is always an lvalue slot, so `List[?T]` stays rejected even on a parameter.
+    /// type argument is always an lvalue slot, so `List[T]` stays rejected even on a parameter.
     /// </summary>
     private void RejectRvalueMarkInSlot(TypeExpression? typeExpr, string positionDescription,
         bool allowTopLevelRvalue = false)
@@ -42,7 +42,7 @@ internal sealed class SignatureResolver
         {
             _sa.ReportError(code: SemanticDiagnosticCode.RvalueMarkInSlotPosition,
                 message:
-                $"`?T` rvalue mark is not valid in {positionDescription}; rvalue is return-only.",
+                $"`T` rvalue mark is not valid in {positionDescription}; rvalue is return-only.",
                 location: typeExpr.Location);
         }
 
@@ -266,8 +266,8 @@ internal sealed class SignatureResolver
             }
         }
 
-        // Resolve return type. Top-level `?T` is legal (entity rvalue, return-position only);
-        // nested `?T` inside generic args is a slot position and rejected.
+        // Resolve return type. Top-level `T` is legal (entity rvalue, return-position only);
+        // nested `T` inside generic args is a slot position and rejected.
         if (routine.ReturnType?.GenericArguments is { } retArgs)
         {
             foreach (TypeExpression arg in retArgs)
@@ -302,7 +302,7 @@ internal sealed class SignatureResolver
         // entity leaves a routine only by MOVE (implicit return-move) — there is no bound-lvalue-copy
         // mode for entities. The move-vs-link distinction that actually matters is already carried by
         // the type shape (bare `T` = move, borrow-wrapper = link) plus `steal` at use sites, so the
-        // `?T` return mark is redundant with position and is now inferred. The explicit mark is still
+        // `T` return mark is redundant with position and is now inferred. The explicit mark is still
         // accepted for back-compat; for records the rvalue bit is a no-op.
         bool isRvalueReturn = (routine.ReturnType?.IsRvalue ?? false)
             || returnType is EntityTypeInfo or GenericParameterTypeInfo;
@@ -907,7 +907,7 @@ internal sealed class SignatureResolver
             });
         }
 
-        // Resolve return type. Top-level `?T` legal; nested `?T` in generic args rejected.
+        // Resolve return type. Top-level `T` legal; nested `T` in generic args rejected.
         if (externalDecl.ReturnType?.GenericArguments is { } extRetArgs)
         {
             foreach (TypeExpression arg in extRetArgs)

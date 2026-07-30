@@ -13,7 +13,7 @@ namespace Compiler.Postprocessing.Passes;
 /// and injects implicit .$refer()/.$control() coercion at matching call-site arguments.
 /// After this pass runs, no marker-protocol types remain in routine signatures or
 /// argument expression types — bodies see entity T directly, and call sites pass
-/// in-flight ?T produced by the wrapper's $refer/$control implementation.
+/// in-flight T produced by the wrapper's $refer/$control implementation.
 /// </summary>
 internal sealed class MarkerProtocolDesugarPass
 {

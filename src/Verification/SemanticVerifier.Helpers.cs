@@ -428,7 +428,7 @@ public sealed partial class SemanticVerifier
                 // Implicit $refer/$control coercion for marker-protocol params.
                 // Wraps the argument expression as `arg.$refer()` / `arg.$control()` so
                 // codegen, reachability, and call-classification all see a fully resolved
-                // routine reference. The wrapper's $refer/$control method returns ?T (the
+                // routine reference. The wrapper's $refer/$control method returns T (the
                 // inner entity), which matches the rewritten signature post-Phase 7.
                 TryInjectMarkerCoercion(routine, arguments, binding.Key, paramType, argType);
             }

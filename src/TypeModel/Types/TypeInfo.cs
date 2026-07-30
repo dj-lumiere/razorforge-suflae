@@ -37,7 +37,7 @@ public abstract class TypeInfo
 
     /// <summary>
     /// True for types whose implicit/synthesized default constructor produces an
-    /// in-flight (`?T`) value rather than a bound value. Entities are always in-flight
+    /// in-flight (`T`) value rather than a bound value. Entities are always in-flight
     /// at construction (the freshly-created handle is unbound until a `var`/`let` /
     /// field/param consumes it). Records and other value types default to false.
     /// Used by creator analysis to propagate <see cref="SyntaxTree.Expression.IsInFlight"/>

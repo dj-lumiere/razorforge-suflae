@@ -240,7 +240,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Returns true when the type can appear in an implicit-copy position (var binding,
-    /// non-<c>steal</c> argument pass, non-<c>?T</c> return, <c>with</c> base). The check
+    /// non-<c>steal</c> argument pass, non-<c>T</c> return, <c>with</c> base). The check
     /// is "obeys <c>Assignable</c>" — auto-derived for records whose @llvm layout has no
     /// <c>ptr</c>, explicitly opt-in for raw-pointer wrappers (<c>Hijacked</c>, <c>CPtr</c>),
     /// never auto-derived for ownership-bearing wrappers (<c>Retained</c>,

@@ -501,7 +501,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                         Arguments: [],
                         Location: ep.Location) { ResolvedType = textType };
 
-                    // In-flight entity values (`?T`) inject `?` immediately before the
+                    // In-flight entity values (`T`) inject `?` immediately before the
                     // short type name in the rendered output, so a value of type
                     // `Module.Counter` renders as `Module.?Counter(...)`. The rendered
                     // text is post-processed via `Text.replace` because the type-name

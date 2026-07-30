@@ -87,7 +87,7 @@ public sealed partial class SemanticVerifier
         TypeSymbol? expectedType = null)
     {
         // Collection literals are entity rvalues — value-in-flight produced by a fresh
-        // `$create + add_last` sequence. Mark for the auto-bind rule (rvalue ?T → bound T).
+        // `$create + add_last` sequence. Mark for the auto-bind rule (rvalue T → bound T).
         list.IsInFlight = true;
         // Extract expected element type from list-shaped expected types.
         TypeSymbol? expectedElementType = null;

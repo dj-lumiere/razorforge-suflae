@@ -448,14 +448,14 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// The reference primitives that yield an in-flight <c>?T</c> view of a referent owned elsewhere:
+    /// The reference primitives that yield an in-flight <c>T</c> view of a referent owned elsewhere:
     /// <c>Hijacked[T].as_entity()</c> and the <c>$refer</c>/<c>$control</c> marker-protocol coercions.
     /// A binding initialized by one of these owns nothing and must NOT be torn down.
     /// </summary>
     private static readonly IReadOnlySet<string> ViewVerbs = RuntimeContract.ViewVerbs;
 
     /// <summary>
-    /// True for a binding that holds a borrowed <c>?T</c> view — <c>var ctrl = ptr.as_entity()</c>,
+    /// True for a binding that holds a borrowed <c>T</c> view — <c>var ctrl = ptr.as_entity()</c>,
     /// <c>var x = h.$refer()</c>, <c>var x = h.$control()</c>. These pervade the RC wrapper bodies
     /// (e.g. <c>var ctrl = Hijacked[RetainController[T]](me).as_entity()</c> in <c>Retained.release</c>).
     /// The binding's static type is the bare referent (<c>T</c>), so <c>GetLifecycle</c> would resolve

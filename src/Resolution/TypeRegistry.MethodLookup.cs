@@ -1528,7 +1528,7 @@ public sealed partial class TypeRegistry
     /// access/borrow wrappers, so firing it is always safe by construction. The only thing this gate
     /// excludes is the ABSTRACT tier — generic parameters and protocols (the latter also covering the
     /// <c>Referring</c>/<c>Controlling</c> access markers) — which have no concrete <c>$destroy</c> to
-    /// resolve. The one remaining hazard, a <c>?T</c> reference bound to the bare referent type via the
+    /// resolve. The one remaining hazard, a <c>T</c> reference bound to the bare referent type via the
     /// reference primitives <c>$refer</c>/<c>$control</c>/<c>as_entity</c>, is excluded at the binding
     /// site by <c>ScopeTeardownLoweringPass.IsViewBinding</c> (keyed on the producing verb, since the
     /// binding's static type is the referent itself, not a borrow wrapper).

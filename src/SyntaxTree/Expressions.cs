@@ -43,7 +43,7 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
     public BackendRepr? ResolvedRepr { get; set; }
 
     /// <summary>
-    /// True if this expression produces an in-flight entity (`?T`) — a freshly produced
+    /// True if this expression produces an in-flight entity (`T`) — a freshly produced
     /// entity value that has not yet been bound to a name. Set by SA on:
     ///   - call expressions whose callee's <c>RoutineInfo.IsInFlightReturn</c> is true,
     ///   - `steal x` expressions (consume binding → produce in-flight),
@@ -51,7 +51,7 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
     ///   - collection literals,
     ///   - expressions whose inner expression is in-flight and structurally forwards it.
     /// Drives auto-bind at binding sites and distinct diagnostic formatting
-    /// (`?T` vs `T` render differently — `?Counter(value: 10)` vs `Counter(value: 10)`).
+    /// (`T` vs `T` render differently — `?Counter(value: 10)` vs `Counter(value: 10)`).
     /// Kept independent of <see cref="ResolvedType"/>, which carries only the bare entity
     /// type — in-flight-ness is a per-expression production attribute, not a type identity.
     /// </summary>
@@ -809,7 +809,7 @@ public record Parameter(
 /// <param name="Name">Base type name (s32, Text, MyClass, etc.)</param>
 /// <param name="GenericArguments">Optional list of type arguments for generic types</param>
 /// <param name="Location">Source location information</param>
-/// <param name="IsRvalue">True if this type was written with the `?T` prefix mark (entity rvalue, return-position only). SA enforces position validity.</param>
+/// <param name="IsRvalue">True if this type was written with the `T` prefix mark (entity rvalue, return-position only). SA enforces position validity.</param>
 /// <remarks>
 /// Type expression patterns:
 /// <list type="bullet">

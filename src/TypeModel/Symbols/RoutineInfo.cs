@@ -170,14 +170,22 @@ public sealed class RoutineInfo
     /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
     public TypeSymbol? ReturnType { get; set; }
 
-    /// <summary>True if the source wrote the return type with the `?T` rvalue mark
+    /// <summary>True if the source wrote the return type with the `T` rvalue mark
     /// (entity rvalue, in-flight). Carried from <see cref="TypeExpression.IsRvalue"/>.
     /// SA enforces position validity; downstream passes use this to drive auto-bind
-    /// from rvalue `?T` back to lvalue `T` at the binding site.</summary>
+    /// from rvalue `T` back to lvalue `T` at the binding site.</summary>
     public bool IsInFlightReturn { get; init; }
 
     /// <summary>Whether this routine can fail (has ! suffix).</summary>
     public bool IsFailable { get; init; }
+
+    /// <summary>
+    /// Whether this is a WIRED member routine — one the source spells with a leading <c>$</c>
+    /// (<c>$create</c>, <c>$store</c>, <c>$eq</c>, <c>$emit</c>, <c>$destroy</c>, …). The <c>$</c> is
+    /// a STRUCTURED attribute recorded here, NOT part of <see cref="Name"/>: the canonical name is the
+    /// bare identifier (<c>create</c>, <c>store</c>, …). Wired routines are always member routines.
+    /// </summary>
+    public bool IsWiredMemberRoutine { get; init; }
 
     /// <summary>Whether this routine contains throw statements.</summary>
     public bool HasThrow { get; set; }
@@ -442,6 +450,7 @@ public sealed class RoutineInfo
             Parameters = substitutedParams,
             ReturnType = substitutedReturnType,
             IsFailable = IsFailable,
+            IsWiredMemberRoutine = IsWiredMemberRoutine,
             DeclaredMutation = DeclaredMutation,
             MutationCategory = MutationCategory,
             TypeArguments = typeArguments,

@@ -16,7 +16,7 @@ public partial class Parser
     /// Me (self type), and nullable types (T? = Maybe[T]).
     /// </summary>
     /// <remarks>
-    /// The old `?T` rvalue-entity prefix was removed 2026-07-13: it was redundant with position and
+    /// The old `T` rvalue-entity prefix was removed 2026-07-13: it was redundant with position and
     /// the move-vs-link distinction (bare entity = move, borrow-wrapper = link), and confusable with
     /// the `T?` Maybe suffix. Entity rvalue-ness is now inferred (see SignatureResolver return
     /// inference); moves are marked by `steal` at use sites.
