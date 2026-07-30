@@ -25,45 +25,157 @@ public sealed class StdlibApiTests
     private static readonly string CompilerDll =
         Path.Combine(AppContext.BaseDirectory, "RazorForge.dll");
 
-    /// <summary>Lists .rf fixture files from the Stdlib fixtures directory.</summary>
-    public static IEnumerable<object[]> Fixtures()
+    // The per-fixture `Fixture_OutputMatchesExpected` [Theory] (one full-stdlib compile per fixture,
+    // ~165× ≈ 15 min, load-flaky) was replaced by the single-compile harness below.
+    private static readonly string HarnessDir =
+        Path.Combine(RepoRoot, "tests", "Fixtures", "StdlibHarness");
+
+    private const string HarnessModule = "StdlibHarness";
+
+    private static readonly System.Text.RegularExpressions.Regex ModuleRe =
+        new(@"^\s*module\s+(\S+)\s*$");
+
+    /// <summary>
+    /// Single-compile stdlib e2e test: generates <c>all_stdlib.rf</c> + <c>razorforge.toml</c> from
+    /// every <c>Stdlib/*.rf</c> fixture (importing each by its declared module and calling its
+    /// <c>start()</c> via the module leaf), compiles + runs the ONE program, splits the combined
+    /// stdout on the <c>##### fixture #####</c> delimiters, and diffs each section against its
+    /// <c>.expected.txt</c>. Compiles the stdlib + all fixtures ONCE instead of ~165 times.
+    /// </summary>
+    [Fact]
+    public void StdlibHarness_AllFixturesOutputMatchExpected()
     {
-        if (!Directory.Exists(FixturesDir)) yield break;
-        foreach (string path in Directory.EnumerateFiles(FixturesDir, "*.rf")
-                                         .OrderBy(p => p))
+        // 1) Generate the harness program + manifest from the fixtures.
+        var entries = new List<(string Stem, string Module, string Leaf)>();
+        var leaves = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        foreach (string rf in Directory.EnumerateFiles(FixturesDir, "*.rf")
+                                       .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
         {
-            yield return [Path.GetFileNameWithoutExtension(path)];
+            string? module = ReadDeclaredModule(rfPath: rf);
+            if (module == null) continue;
+            string leaf = module.Contains('/') ? module[(module.LastIndexOf('/') + 1)..] : module;
+            if (leaves.TryGetValue(leaf, out string? other))
+            {
+                throw new Xunit.Sdk.XunitException(
+                    $"Harness leaf collision '{leaf}': {other} vs {module} — module-qualified leaf calls " +
+                    "would be ambiguous (RF-S513). Rename one fixture's module leaf.");
+            }
+            leaves[leaf] = module;
+            entries.Add((Path.GetFileNameWithoutExtension(rf), module, leaf));
+        }
+
+        Directory.CreateDirectory(HarnessDir);
+        var lines = new List<string> { $"module {HarnessModule}", "", "import IO/Console" };
+        lines.AddRange(entries.Select(selector: e => $"import {e.Module}"));
+        lines.Add("");
+        lines.Add("routine start()");
+        foreach ((string stem, _, string leaf) in entries)
+        {
+            lines.Add($"  show(\"##### {stem} #####\")");
+            lines.Add($"  {leaf}.start()");
+        }
+        lines.Add("  return");
+        lines.Add("");
+        string harnessRf = Path.Combine(HarnessDir, "all_stdlib.rf");
+        File.WriteAllText(harnessRf, string.Join("\n", lines));
+
+        string manifest =
+            $"[package]\nname = \"stdlib-harness\"\nversion = \"0.0.1\"\nrazorforge-version = \"0.1.0\"\n\n" +
+            $"[target]\nexecutable = \"{HarnessModule}\"\nmode = \"debug\"\nlibrary = [\"../Stdlib\"]\n";
+        File.WriteAllText(Path.Combine(HarnessDir, "razorforge.toml"), manifest);
+
+        // 2) Compile + run the ONE program (cwd = harness dir so razorforge.toml is discovered).
+        FixtureRun run = RunHarness(harnessRf: harnessRf);
+        Assert.True(run is { ExitCode: 0, TimedOut: false },
+            $"Harness buildandrun failed (exit={run.ExitCode}, timedOut={run.TimedOut}).\n" +
+            $"--- stdout ---\n{run.Stdout}\n--- stderr ---\n{run.Stderr}");
+
+        // 3) Split combined output on the delimiter lines.
+        Dictionary<string, string> sections = SplitHarnessOutput(stdout: run.Stdout);
+
+        // 4) Compare each fixture's section to its snapshot.
+        var mismatches = new List<string>();
+        foreach ((string stem, _, _) in entries)
+        {
+            string expectedPath = Path.Combine(FixturesDir, $"{stem}.expected.txt");
+            if (!File.Exists(expectedPath)) continue;
+            string expected = NormalizeForCompare(s: File.ReadAllText(expectedPath));
+            string actual = NormalizeForCompare(s: sections.GetValueOrDefault(stem, "<no output section emitted>"));
+            if (expected != actual) mismatches.Add(item: stem);
+        }
+
+        if (mismatches.Count > 0)
+        {
+            // Surface the first mismatch in full for a quick read.
+            string first = mismatches[0];
+            AssertOutputEqual(fixtureName: first,
+                expected: NormalizeForCompare(s: File.ReadAllText(Path.Combine(FixturesDir, $"{first}.expected.txt"))),
+                actual: NormalizeForCompare(s: sections.GetValueOrDefault(first, "<no output section emitted>")));
+            throw new Xunit.Sdk.XunitException(
+                $"{mismatches.Count} harness fixture(s) mismatched: {string.Join(", ", mismatches)}");
         }
     }
 
-    /// <summary>Verifies that a stdlib fixture's output matches its expected snapshot file.</summary>
-    [Theory]
-    [MemberData(nameof(Fixtures))]
-    public void Fixture_OutputMatchesExpected(string fixtureName)
+    /// <summary>Reads the declared <c>module</c> path of a fixture (utf-8-sig for BOM), or null.</summary>
+    private static string? ReadDeclaredModule(string rfPath)
     {
-        string rfPath = Path.Combine(FixturesDir, $"{fixtureName}.rf");
-        string expectedPath = Path.Combine(FixturesDir, $"{fixtureName}.expected.txt");
-        Assert.True(File.Exists(rfPath), $"Fixture .rf not found: {rfPath}");
-
-        string actual = NormalizeForCompare(RunFixture(rfPath));
-
-        // Bless mode: capture actual output as the new expected snapshot. Useful for
-        // seeding new fixtures or refreshing after an intentional API/output change.
-        // Set RF_TEST_BLESS=1 (or use the `bless-fixtures` helper) and re-run tests.
-        // Write the normalized form (per-line-trimmed, LF) so blessed snapshots are stable
-        // under editors that trim trailing whitespace on save.
-        if (Environment.GetEnvironmentVariable("RF_TEST_BLESS") == "1")
+        foreach (string line in File.ReadLines(rfPath))
         {
-            File.WriteAllText(expectedPath, actual + "\n");
-            return;
+            System.Text.RegularExpressions.Match m = ModuleRe.Match(line);
+            if (m.Success) return m.Groups[1].Value;
+            string stripped = line.Trim();
+            if (stripped.Length > 0 && !stripped.StartsWith('#')) return null;
         }
+        return null;
+    }
 
-        Assert.True(File.Exists(expectedPath),
-            $"Expected snapshot not found: {expectedPath}. " +
-            $"Run with RF_TEST_BLESS=1 to capture current output as the snapshot.");
+    /// <summary>Splits harness stdout into per-fixture sections keyed by the <c>##### stem #####</c> delimiters.</summary>
+    private static Dictionary<string, string> SplitHarnessOutput(string stdout)
+    {
+        var sections = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        string? current = null;
+        var buf = new StringBuilder();
+        foreach (string rawLine in NormalizeNewlines(s: stdout).Split('\n'))
+        {
+            string line = rawLine.Trim();
+            if (line.StartsWith("##### ") && line.EndsWith(" #####"))
+            {
+                if (current != null) sections[current] = buf.ToString();
+                current = line[6..^6].Trim();
+                buf.Clear();
+                continue;
+            }
+            if (current != null) buf.Append(rawLine).Append('\n');
+        }
+        if (current != null) sections[current] = buf.ToString();
+        return sections;
+    }
 
-        string expected = NormalizeForCompare(File.ReadAllText(expectedPath));
-        AssertOutputEqual(fixtureName: fixtureName, expected: expected, actual: actual);
+    /// <summary>Runs <c>buildandrun</c> on the harness program with the harness dir as cwd.</summary>
+    private static FixtureRun RunHarness(string harnessRf)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            ArgumentList = { CompilerDll, "buildandrun", harnessRf },
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = HarnessDir,
+            Environment = { ["DOTNET_gcServer"] = "0", ["DOTNET_GCConserveMemory"] = "9" }
+        };
+        using var p = Process.Start(psi)!;
+        System.Threading.Tasks.Task<string> outTask = p.StandardOutput.ReadToEndAsync();
+        System.Threading.Tasks.Task<string> errTask = p.StandardError.ReadToEndAsync();
+        const int timeoutMs = 300_000;
+        if (!p.WaitForExit(timeoutMs))
+        {
+            try { p.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            return new FixtureRun(ExitCode: -1, Stdout: outTask.Result, Stderr: errTask.Result,
+                TimedOut: true, TimeoutMs: timeoutMs);
+        }
+        return new FixtureRun(ExitCode: p.ExitCode, Stdout: outTask.Result, Stderr: errTask.Result,
+            TimedOut: false, TimeoutMs: timeoutMs);
     }
 
     /// <summary>
