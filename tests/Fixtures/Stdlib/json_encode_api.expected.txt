@@ -1,0 +1,9 @@
+42
+true
+3.5
+"q\"\\\n\t\u0001"
+[1,2,3]
+[222,0,65]
+{"title":"hi","origin":{"x":1,"y":2},"tags":["a","b"],"ok":false}
+bytes: 65
+DONE
