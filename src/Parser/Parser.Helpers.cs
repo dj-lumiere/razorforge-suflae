@@ -105,12 +105,8 @@ public partial class Parser
         string name = CurrentToken.Text;
         Advance();
 
-        // Check for ! suffix (failable method marker)
-        if (Match(type: TokenType.Bang))
-        {
-            name += "!";
-        }
-
+        // The failable `!` is NOT folded into the name — it stays a separate Bang token for the
+        // declaration parser to consume into RoutineDeclaration.IsFailable (canonical bare name).
         return name;
     }
 

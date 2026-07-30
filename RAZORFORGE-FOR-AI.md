@@ -150,7 +150,7 @@ routine get_text!(n: S64) -> Text      # `!` = failable
     == 0 => throw DivisionByZeroError()
     else => return "ok"
 
-dangerous routine raw_poke(p: Address)  # callable only inside danger! blocks
+dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   ...
   return
 ```
@@ -199,7 +199,7 @@ consume(r: steal b)   # ownership moves; using b afterwards = compile error
   `r.method(...)`). Copying/sharing a retained handle must be explicit via
   `.retain()`; weak handles use `.track()`.
 - Records never use `view`/`modify`/`as_entity` — those are entity concepts.
-- Unsafe operations live in `danger!` blocks; `dangerous` routines can only be
+- Unsafe operations live in `danger` blocks; `dangerous` routines can only be
   called inside them.
 - There is **no borrow checker** and no lifetime syntax; safety comes from
   single ownership + marked transfers.
@@ -357,7 +357,7 @@ suspended routine fetch(id: S64) -> S64
 
 routine start()
   var a = fetch(id: 1)           # call = start NOW + get an Agent[S64]
-  danger!
+  danger
     show(f"result => {a.retrieve!()}")   # drive to completion, get the value
   return
 ```
@@ -381,7 +381,7 @@ Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
 var jobs = List[Agent[S64]]()
 jobs.add_last(value: fetch(id: 1))
 jobs.add_last(value: fetch(id: 2))
-danger!
+danger
   var results = gather!(of: steal jobs)   # both run concurrently; wait for all
   show(f"{results[0]} {results[1]}")
 ```
