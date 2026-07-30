@@ -74,13 +74,13 @@ routine BTreeDictNode[K, V].children_count() -> U64
 ### Returns a raw pointer to the start of the keys buffer.
 ### :returns: A {Hijacked[K]} pointing to the first key slot.
 @readonly
-dangerous routine BTreeDictNode[K, V].keys_base() -> Hijacked[K]
+routine BTreeDictNode[K, V].keys_base() -> Hijacked[K]
   return me.hijack().recast_as[K]()
 
 ### Returns a raw pointer to the start of the values buffer, offset past the keys region.
 ### :returns: A {Hijacked[V]} pointing to the first value slot.
 @readonly
-dangerous routine BTreeDictNode[K, V].values_base() -> Hijacked[V]
+routine BTreeDictNode[K, V].values_base() -> Hijacked[V]
   return me.hijack().recast_as[K]().stride(count: 63_s64).recast_as[V]()
 
 ### Returns a raw pointer to the start of the children buffer, offset past the keys and values regions.
@@ -88,7 +88,7 @@ dangerous routine BTreeDictNode[K, V].values_base() -> Hijacked[V]
 ### its children inline), so the base is a pointer-to-pointer.
 ### :returns: A {Hijacked[Hijacked[BTreeDictNode[K, V]]]} pointing to the first child-pointer slot.
 @readonly
-dangerous routine BTreeDictNode[K, V].children_base() -> Hijacked[Hijacked[BTreeDictNode[K, V]]]
+routine BTreeDictNode[K, V].children_base() -> Hijacked[Hijacked[BTreeDictNode[K, V]]]
   return me.hijack().recast_as[K]().stride(count: 63_s64).recast_as[V]().stride(count: 63_s64).recast_as[Hijacked[BTreeDictNode[K, V]]]()
 
 ### Returns the key at slot `i`.
@@ -377,7 +377,7 @@ routine SortedDict[K, V].clear()
 ### :returns: Smallest index `i` where `node.keys[i] >= key`, or `keys_count()` if all keys are smaller.
 @readonly
 @inline
-dangerous routine SortedDict[K, V].lower_bound(node: Referring[BTreeDictNode[K, V]], key: K) -> U64
+routine SortedDict[K, V].lower_bound(node: Referring[BTreeDictNode[K, V]], key: K) -> U64
   var lo = 0u64
   var hi = node.keys_count()
   while lo < hi

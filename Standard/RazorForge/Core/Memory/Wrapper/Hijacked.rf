@@ -17,7 +17,7 @@ record Hijacked[T] obeys Storable
 ### Returns the raw address carried by this pointer.
 ### :returns: The raw address stored in this pointer.
 @readonly
-dangerous routine Hijacked[T].get_address() -> Address
+routine Hijacked[T].get_address() -> Address
   return pointer_to_int[T, Address](me)
 
 ### Returns a bitwise duplicate of this raw pointer.
@@ -36,13 +36,13 @@ routine Hijacked[T].$store() -> Hijacked[T]
 ###        storage directly. Calling on an rvalue (`make_rec().get_address()`) is a build
 ###        error. For entities, the receiver value (already a ptr) is reinterpreted.
 @readonly
-dangerous routine T.get_address() -> Address
+routine T.get_address() -> Address
   return pointer_to_int[T, Address](reinterpret_bits[T, Hijacked[T]](me))
 
 ### Reinterprets a raw address as `Hijacked[T]`.
 ### :param from: The address to wrap.
 ### :returns: A `Hijacked[T]` pointer wrapping the given raw address.
-dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
+routine Hijacked[T].$create(from: Address) -> Hijacked[T]
   return int_to_pointer[Address, T](from)
 
 ### Produces an unmanaged pointer alias of `me`.
@@ -54,7 +54,7 @@ dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
 ###        be a named lvalue (local/parameter or field chain), and `hijack()` produces a
 ###        pointer to the caller's storage.
 @readonly
-dangerous routine T.hijack() -> Hijacked[T]
+routine T.hijack() -> Hijacked[T]
   return Hijacked[T](me.get_address())
 
 ### Reads the value stored at this address. This is `*ptr` — a raw `load`, no
@@ -107,7 +107,7 @@ dangerous routine Hijacked[T].poke_as[U](value: U)
 
 ### Returns this pointer reinterpreted as `Hijacked[U]`, without loading or storing.
 ### :returns: This pointer with its type parameter reinterpreted as `U`.
-dangerous routine Hijacked[T].recast_as[U]() -> Hijacked[U]
+routine Hijacked[T].recast_as[U]() -> Hijacked[U]
   return reinterpret_bits[Hijacked[T], Hijacked[U]](me)
 
 ### Returns the raw address of this pointer.
@@ -119,7 +119,7 @@ routine Hijacked[T].address() -> Address
 ### Steps this pointer forward by {count} elements (element-sized stride, may be negative).
 ### :param count: Number of elements to advance.
 ### :returns: This pointer advanced by `count` elements of type `T`.
-dangerous routine Hijacked[T].stride(count: S64) -> Hijacked[T]
+routine Hijacked[T].stride(count: S64) -> Hijacked[T]
   return element_pointer[T](ptr: me, count: count)
 
 ### Returns the value at byte offset {offset} from this pointer without moving the pointer.
@@ -156,7 +156,7 @@ routine hijacked_none[T]() -> Hijacked[T]
 ### type refs.
 ### :param addr: The raw address to wrap.
 ### :returns: A `Hijacked[T]` wrapping the given raw address.
-dangerous routine hijacked_from[T](addr: Address) -> Hijacked[T]
+routine hijacked_from[T](addr: Address) -> Hijacked[T]
   return Hijacked[T](addr)
 
 ### Returns `true` if this pointer is null (address zero).
