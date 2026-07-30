@@ -51,13 +51,13 @@ routine Inspecting[T, P].$exit()
   return
 
 # ============================================================================
-# Marker-protocol coercion ($refer) — yields the guarded entity as ?T
+# Marker-protocol coercion ($refer) — yields the guarded entity as T
 # ============================================================================
 
-### Yields the guarded entity as an in-flight `?T` reference for read-only access.
+### Yields the guarded entity as an in-flight `T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`. Projects through the
 ### controller to reach the managed entity.
-### :returns: The guarded entity as `?T`.
+### :returns: The guarded entity as `T`.
 @[readonly, inline]
 routine Inspecting[T, P].$refer() -> T
   danger!

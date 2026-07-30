@@ -70,21 +70,21 @@ routine Retained[T].weak_count() -> U32
     return ctrl.weak_count()
 
 # ============================================================================
-# Marker-protocol coercion ($refer/$control) — yields the inner entity as ?T
+# Marker-protocol coercion ($refer/$control) — yields the inner entity as T
 # ============================================================================
 
-### Yields the inner entity as an in-flight `?T` reference for read-only access.
+### Yields the inner entity as an in-flight `T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`.
-### :returns: The inner entity as `?T`.
+### :returns: The inner entity as `T`.
 @[readonly, inline]
 routine Retained[T].$refer() -> T
   danger!
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
     return ctrl.borrow_data().as_entity()
 
-### Yields the inner entity as an in-flight `?T` reference for read/write access.
+### Yields the inner entity as an in-flight `T` reference for read/write access.
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
-### :returns: The inner entity as `?T`.
+### :returns: The inner entity as `T`.
 @inline
 routine Retained[T].$control() -> T
   danger!

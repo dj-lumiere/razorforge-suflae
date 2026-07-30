@@ -2,7 +2,7 @@ module Core
 
 ### The protocol for a value that can be STORED at an implicit-copy site.
 ### `Storable` gates the `=` operator and every position that implicitly copies a value:
-### `var x = a`, passing as a non-`steal` argument, returning a non-`?T` value, and `with`
+### `var x = a`, passing as a non-`steal` argument, returning a non-`T` value, and `with`
 ### lens-copy. Auto-derived for any type whose `@llvm` layout contains no `ptr` (and for
 ### `@llvm("void")`). Types with managed-pointer payloads (`Retained[T]`, `Text`, …) opt in by
 ### writing `obeys Storable` and a `$store` body that spells out each field's verb (a refcount
