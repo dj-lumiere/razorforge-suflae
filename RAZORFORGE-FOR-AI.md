@@ -45,11 +45,9 @@ When unsure, consult ground truth in the repo/package:
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
 9. **Ignored Bool returns need `discard`**: `discard seen.add(value: v)` (RF-W007).
 10. **Indentation is 2 spaces and blocks are indentation-delimited.** No braces.
-11. **`?T` (prefix) is an in-flight type** (entity being constructed/transferred);
-    **`T?` (postfix) is Maybe**. They are different things — never conflate.
-12. **Chained comparisons are one expression**: `0 <= x <= 10` works.
-13. **Printing is `show(...)`** (after `import IO/Console`), not print/println.
-14. **The entry point is `routine start()`**, not `main`.
+11. **Chained comparisons are one expression**: `0 <= x <= 10` works.
+12. **Printing is `show(...)`** (after `import IO/Console`), not print/println.
+13. **The entry point is `routine start()`**, not `main`.
 
 ## 2. Program skeleton
 
@@ -372,7 +370,7 @@ Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
   `Duration.from_milliseconds(ms: n)`.
 - `agent.waitfor(d).retrieve!()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
   `agent.waitfor(d).try_retrieve()` returns `None` on timeout instead of throwing.
-- `race![T](of: ?List[Agent[T]]) -> ?T` — drive all, return the FIRST finisher; losers abandoned.
+- `race![T](of: ?List[Agent[T]]) -> T` — drive all, return the FIRST finisher; losers abandoned.
 - `gather![T](of: ?List[Agent[T]]) -> ?List[T]` — drive all, wait for ALL; results in input order.
 - `race!`/`gather!` **consume** the list — pass it with `steal`: `gather!(of: steal agents)`.
 - A `List[Agent[T]]` may mix coroutine- and thread-backed agents (one `Agent[T]` type backs both).
