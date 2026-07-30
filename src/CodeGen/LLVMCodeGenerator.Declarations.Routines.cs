@@ -228,7 +228,14 @@ public partial class LlvmCodeGenerator
                     int bracketIdx = ownerPart.IndexOf(value: '[');
                     if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
                     string shortName = baseName[(dotIdx + 1)..];
-                    TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                    // MODULE-SCOPED owner resolution: prefer the emitting program's own module so two
+                    // modules that each declare `record Box` bind this decl to the CORRECT `Mod.Box`.
+                    // A bare `LookupType("Box")` returns a first-wins entry, emitting this module's body
+                    // under the other module's symbol (leaving THIS module's symbol undefined — the
+                    // module-scoped-type over-prune the harness caught).
+                    TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
+                        ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
+                        : null) ?? _registry.LookupType(name: ownerPart);
                     if (ownerType != null)
                         routineInfo = _registry.LookupMethod(type: ownerType, methodName: shortName);
                     routineInfo ??= _registry.LookupRoutine(fullName: shortName) ??
@@ -283,7 +290,11 @@ public partial class LlvmCodeGenerator
                         int bracketIdx = ownerPart.IndexOf(value: '[');
                         if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
                         string shortName = routine.Name[(dotIdx + 1)..];
-                        TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                        // Module-scoped owner (see the resolution above) so the overload is matched on
+                        // THIS module's same-named type, not a first-wins cross-module one.
+                        TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
+                            ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
+                            : null) ?? _registry.LookupType(name: ownerPart);
                         if (ownerType != null)
                             overload = _registry.LookupMethodOverload(type: ownerType,
                                 methodName: shortName, argTypes: astParamTypes);
