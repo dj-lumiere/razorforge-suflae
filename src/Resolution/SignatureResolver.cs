@@ -856,9 +856,14 @@ internal sealed class SignatureResolver
             string protocolText = requiredProtocols.Count == 1
                 ? $"'{requiredProtocols[0]}'"
                 : string.Join(separator: " or ", values: requiredProtocols.Select(selector: p => $"'{p}'"));
+            // Render the wired sigil ('$') the user actually wrote — the canonical Name is bare, but the
+            // `$` remains surface syntax, so the diagnostic must name the operator as `$add`, not `add`.
+            string displayName = routineInfo.IsWiredMemberRoutine
+                ? $"${routineInfo.Name}"
+                : routineInfo.Name;
             _sa.ReportError(code: SemanticDiagnosticCode.OperatorWithoutProtocol,
                 message:
-                $"Type '{currentOwnerType.Name}' defines '{routineInfo.Name}' but does not follow {protocolText}. " +
+                $"Type '{currentOwnerType.Name}' defines '{displayName}' but does not follow {protocolText}. " +
                 $"Add the matching 'obeys' protocol to the type declaration.",
                 location: location ?? new SourceLocation("", 0, 0, 0));
         }

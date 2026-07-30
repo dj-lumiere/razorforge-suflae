@@ -26,16 +26,19 @@ public sealed partial class SemanticVerifier
         Compiler.Resolution.WiredRoutineCatalog.BuildKnownWiredMethods();
 
     /// <summary>
-    /// Checks if a routine name uses the $ prefix but is not a known built-in method.
+    /// Checks whether a routine declared with the wired '$' sigil names something that is NOT a known
+    /// built-in wired method. The canonical name is bare ('$' is a structured attribute, not part of
+    /// the name), so wired-ness is passed via <paramref name="isWired"/> rather than sniffed from the
+    /// string. A non-wired routine can be named anything and is never flagged.
     /// </summary>
-    private static bool IsUnknownWiredMethod(string name)
+    private static bool IsUnknownWiredMethod(string bareName, bool isWired)
     {
-        if (!name.StartsWith('$') || name.Length <= 1)
+        if (!isWired || bareName.Length == 0)
         {
             return false;
         }
 
-        return !KnownWiredMethods.Contains(value: name);
+        return !KnownWiredMethods.Contains(value: bareName);
     }
 
     /// <summary>

@@ -759,6 +759,13 @@ public partial class LlvmCodeGenerator
             if (r.IsCommon) attrs.Add(item: "common");
             if (r.IsWiredMemberRoutine) attrs.Add(item: "wired");
             if (r.IsFailable) attrs.Add(item: "crashable");
+            if (r.IsDangerous) attrs.Add(item: "dangerous");
+            // Visibility is an attribute too. A member of a `secret` (module-private) type is itself
+            // module-private regardless of its own modifier (owner-secrecy cap), so decorate `secret`
+            // when EITHER the routine or its owner type is secret. `open` is the default → not emitted.
+            // (`posted` is member-variable-only — routines are only secret/open/external.)
+            bool ownerSecret = r.OwnerType is { Visibility: VisibilityModifier.Secret };
+            if (r.Visibility == VisibilityModifier.Secret || ownerSecret) attrs.Add(item: "secret");
             if (r.IsSuspended) attrs.Add(item: "suspended");
             else if (r.IsThreaded) attrs.Add(item: "threaded");
             attrs.Sort();

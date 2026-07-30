@@ -614,10 +614,10 @@ public sealed partial class SemanticVerifier
             : routineName;
 
         // Validate $ prefixed names are known built-in methods
-        if (IsUnknownWiredMethod(name: baseName))
+        if (IsUnknownWiredMethod(bareName: baseName, isWired: routine.IsWiredMemberRoutine))
         {
             ReportError(code: SemanticDiagnosticCode.UnknownWiredRoutine,
-                message: $"Routine name '{baseName}' uses reserved '$' prefix. " +
+                message: $"Routine name '${baseName}' uses reserved '$' prefix. " +
                          "Names starting with '$' are reserved for built-in methods.",
                 location: routine.Location);
         }
