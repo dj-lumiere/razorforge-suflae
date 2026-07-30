@@ -649,7 +649,7 @@ internal sealed class BuilderServiceInliningPass
             return rt;
 
         // 1b. ResolvedType is a generic param -> look it up in the current body's TypeSubs
-        //     (e.g. T in List[T].$getitem! body with TypeSubs {T -> Core.Byte, I -> Core.S64}).
+        //     (e.g. T in List[T].getitem! body with TypeSubs {T -> Core.Byte, I -> Core.S64}).
         if (receiver.ResolvedType is GenericParameterTypeInfo gp
             && _currentTypeSubs != null
             && _currentTypeSubs.TryGetValue(gp.Name, out TypeInfo? subFromSubs))

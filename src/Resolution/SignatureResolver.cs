@@ -136,6 +136,7 @@ internal sealed class SignatureResolver
             GenericConstraints = routine.GenericConstraints,
             Module = pending.Module,
             IsFailable = routine.IsFailable,
+            IsWiredMemberRoutine = routine.IsWiredMemberRoutine,
             Location = routine.Location
         };
 
@@ -242,7 +243,7 @@ internal sealed class SignatureResolver
         // (e.g. `$create(tag: S32)` for field `tag: S64`) is allowed and routes normally.
         // The synthesized memberwise creator is registered elsewhere (AutoWiredRegistrationPass),
         // so it never reaches here.
-        if (pending.RoutineName is "$create" or "$create!")
+        if (pending.RoutineName is "create" or "create!")
         {
             List<MemberVariableInfo>? fields = refreshedOwnerType switch
             {
@@ -347,7 +348,7 @@ internal sealed class SignatureResolver
         TypeSymbol? meType = null;
         if (pending.Kind == RoutineKind.MemberRoutine
             && refreshedOwnerType is EntityTypeInfo or RecordTypeInfo
-            && pending.RoutineName is not ("$create" or "$create!")
+            && pending.RoutineName is not ("create" or "create!")
             && routine.Name.Contains(value: '.'))
         {
             string recvText = routine.Name[..routine.Name.IndexOf(value: '.')];
@@ -373,7 +374,7 @@ internal sealed class SignatureResolver
         // before any controller exists. A specialized `meType` (generic receiver) takes precedence.
         if (sfUserEntity && meType == null
             && pending.Kind == RoutineKind.MemberRoutine
-            && pending.RoutineName is not ("$create" or "$create!")
+            && pending.RoutineName is not ("create" or "create!")
             && refreshedOwnerType is EntityTypeInfo ownerEntity
             && _sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is { } roamedOwnerDef)
         {
@@ -392,6 +393,7 @@ internal sealed class SignatureResolver
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
+            IsWiredMemberRoutine = routine.IsWiredMemberRoutine,
             IsInFlightReturn = isRvalueReturn,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
             GenericParameters = allGenericParams.Count > 0

@@ -792,7 +792,7 @@ public partial class LlvmCodeGenerator
 
         // Wrapper-record detection: if the resolved $setitem's value-param type doesn't match
         // the target's last type-argument, the lookup unwrapped through a wrapper (e.g.
-        // Owned[List[S64]] -> inner List[S64].$setitem!(i64)). The inline mangled-name path
+        // Owned[List[S64]] -> inner List[S64].setitem!(i64)). The inline mangled-name path
         // would emit a call to the wrapper's symbol which doesn't exist, so escape to the
         // standard method-dispatch path that handles wrapper forwarding correctly.
         // Skip when the last type-arg is a const-generic value (e.g. BitArray[N] where N=8),
@@ -806,7 +806,7 @@ public partial class LlvmCodeGenerator
         // caller's frame. EmitMemberRoutineCall evaluates the receiver as a loaded value, which would
         // discard writes -> so keep the pointer-based dispatch inline for this case.
         if (setItem != null && targetType is RecordTypeInfo &&
-            setItem.Name.Contains(value: "$setitem") &&
+            setItem.Name.Contains(value: "setitem") &&
             !isWrapperForwardingSetItem &&
             (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
         {
@@ -850,9 +850,9 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        // Entity/generic dispatch: synthesize `obj.$setitem[!](index, rhs)` and delegate to
+        // Entity/generic dispatch: synthesize `obj.setitem[!](index, rhs)` and delegate to
         // EmitMemberRoutineCall. This reuses the full owner-level + method-level generic monomorphization
-        // machinery (e.g. BitList.$setitem![I] -> BitList.$setitem![S64]) without duplicating it.
+        // machinery (e.g. BitList.setitem![I] -> BitList.setitem![S64]) without duplicating it.
         // OperatorLoweringPass annotates `index.ResolvedSetItem` with the method-generic-resolved
         // routine; prefer it over a fresh lookup so codegen bypasses the generic-definition guard.
         RoutineInfo? dispatchSetItem = index.ResolvedSetItem ?? setItem;
@@ -861,7 +861,7 @@ public partial class LlvmCodeGenerator
             // Failability is a property, not part of the name — use the bare `$setitem`. Codegen
             // dispatches via ResolvedRoutine (dispatchSetItem), which carries IsFailable.
             var member = new MemberExpression(Object: index.Object,
-                MemberName: "$setitem",
+                MemberName: "setitem",
                 Location: index.Location);
             var call = new CallExpression(Callee: member,
                 Arguments: [index.Index, rhs],
@@ -907,7 +907,7 @@ public partial class LlvmCodeGenerator
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
-        return _registry.LookupMethod(type: targetType, methodName: "$setitem");
+        return _registry.LookupMethod(type: targetType, methodName: "setitem");
     }
 
     #endregion
@@ -1000,7 +1000,7 @@ public partial class LlvmCodeGenerator
 
             // Unified teardown: tear the RC-wrapper field down via its `$destroy` (which forwards
             // to `release`→controller), not `release` directly — keeps every teardown on one verb.
-            RoutineInfo? destroyMethod = _registry.LookupMethod(type: w, methodName: "$destroy");
+            RoutineInfo? destroyMethod = _registry.LookupMethod(type: w, methodName: "destroy");
             if (destroyMethod == null)
             {
                 continue;
@@ -1025,7 +1025,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EmitRcRecordCleanup(StringBuilder sb)
     {
-        // Teardown is now lowered into the AST as explicit `local.$destroy()` calls by
+        // Teardown is now lowered into the AST as explicit `local.destroy()` calls by
         // ScopeTeardownLoweringPass (Phase 7) — RC wrapper vars and RC-field records get their
         // `$destroy` (which forwards to `release`) inserted there. Codegen emits no teardown.
         _ = sb;
@@ -1080,7 +1080,7 @@ public partial class LlvmCodeGenerator
         }
 
         RoutineInfo? releaseMethod =
-            _registry.LookupMethod(type: recordType, methodName: "$destroy");
+            _registry.LookupMethod(type: recordType, methodName: "destroy");
         if (releaseMethod == null)
         {
             return;

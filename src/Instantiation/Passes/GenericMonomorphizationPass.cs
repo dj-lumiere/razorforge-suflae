@@ -44,7 +44,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 {
     // Routine-declaration index
 
-    // Key: routine name (e.g. "List[T].$getitem") -> list of matching declarations.
+    // Key: routine name (e.g. "List[T].getitem") -> list of matching declarations.
     // Built once in RunGlobal() before the fixed-point loop.
     private Dictionary<string, List<RoutineDeclaration>> _routineIndex = new();
 
@@ -108,7 +108,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     {
         // Process concrete generic instances. Start with the liveness-filtered set, then use
         // a push-based queue to pick up types discovered during body rewriting
-        // (e.g. ListEmitter[Byte] registered by GenericAstRewriter when rewriting List[Byte].$iter).
+        // (e.g. ListEmitter[Byte] registered by GenericAstRewriter when rewriting List[Byte].iter).
         // Only types newly created by GetOrCreateResolution after tracking starts are enqueued —
         // pre-existing phantom types (BTreeDictNode stubs etc.) never enter the queue.
         var sw = timing ? Stopwatch.StartNew() : null;
@@ -146,7 +146,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         }
 
         // Fixed-point expansion: drain types created during body rewriting
-        // (e.g. ListEmitter[Byte] registered when GenericAstRewriter rewrites List[Byte].$iter).
+        // (e.g. ListEmitter[Byte] registered when GenericAstRewriter rewrites List[Byte].iter).
         // The self-nesting guard in GetOrCreateResolution prevents Hijacked^N infinite chains.
         List<TypeInfo> discovered;
         bool madeProgress;
@@ -183,7 +183,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         }
 
         // Scan built bodies for method-generic call sites (e.g. $getitem[U64]! called from
-        // List[Bytes].$eq). SA only analyzes generic-def bodies, so these concrete
+        // List[Bytes].eq). SA only analyzes generic-def bodies, so these concrete
         // call sites are never registered in _routineResolutions. Register them now so
         // ProcessResolvedMethodGenericRoutines can build their bodies.
         ScanAndRegisterMethodGenericCallResolutions();
@@ -311,13 +311,13 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// <para>
     /// Routines enlivened AFTER <see cref="RoutineReachabilityPass"/> (by this pass, e.g. a wired
     /// <c>$destroy</c> on <c>Tuple[S64, Bool]</c> pulled in by overflow-arithmetic machinery, or a
-    /// derived <c>U64.$lt</c> referenced from an emitted generic body) never had their own bodies
+    /// derived <c>U64.lt</c> referenced from an emitted generic body) never had their own bodies
     /// walked: those bodies live in <c>SynthesizedBodies</c> (not <c>VariantBodies</c>, the only
     /// source the reachability BFS walks), and their leaf callees sit on NON-generic primitive
     /// owners that <see cref="ProcessConcreteType"/> never visits. The result is a live aggregate
     /// whose leaf callee is declared-but-undefined at link time:
     /// <list type="bullet">
-    ///   <item>derived <c>$lt/$le/$gt/$ge</c> → owner <c>$cmp</c> + <c>ComparisonSign.$eq/$ne</c></item>
+    ///   <item>derived <c>$lt/$le/$gt/$ge</c> → owner <c>$cmp</c> + <c>ComparisonSign.eq/$ne</c></item>
     ///   <item><c>$ne</c> → owner <c>$eq</c>; <c>$notcontains</c> → owner <c>$contains</c></item>
     ///   <item>composite <c>$destroy/$store/$hash/$fast_hash/$eq/$cmp</c> → the same wired verb on
     ///         each field/element type (recursing to a fixed point)</item>
@@ -366,32 +366,32 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
         switch (routine.Name)
         {
-            case "$lt" or "$le" or "$gt" or "$ge" or "$cmp":
+            case "lt" or "le" or "gt" or "ge" or "cmp":
                 // Derived comparisons (and composite $cmp) reduce to a $cmp whose ComparisonSign
-                // result is tested with ComparisonSign.$eq/$ne.
-                if (routine.Name != "$cmp"
-                    && ctx.Registry.LookupMethod(type: owner, methodName: "$cmp") is { } cmp)
+                // result is tested with ComparisonSign.eq/$ne.
+                if (routine.Name != "cmp"
+                    && ctx.Registry.LookupMethod(type: owner, methodName: "cmp") is { } cmp)
                     yield return cmp;
                 if (ctx.Registry.LookupType(name: "ComparisonSign") is { } cs)
                 {
-                    if (ctx.Registry.LookupMethod(type: cs, methodName: "$eq") is { } cseq)
+                    if (ctx.Registry.LookupMethod(type: cs, methodName: "eq") is { } cseq)
                         yield return cseq;
-                    if (ctx.Registry.LookupMethod(type: cs, methodName: "$ne") is { } csne)
+                    if (ctx.Registry.LookupMethod(type: cs, methodName: "ne") is { } csne)
                         yield return csne;
                 }
-                if (routine.Name == "$cmp")
-                    foreach (RoutineInfo fc in FieldWiredCallees(owner: owner, verb: "$cmp"))
+                if (routine.Name == "cmp")
+                    foreach (RoutineInfo fc in FieldWiredCallees(owner: owner, verb: "cmp"))
                         yield return fc;
                 break;
-            case "$ne":
-                if (ctx.Registry.LookupMethod(type: owner, methodName: "$eq") is { } eq)
+            case "ne":
+                if (ctx.Registry.LookupMethod(type: owner, methodName: "eq") is { } eq)
                     yield return eq;
                 break;
-            case "$notcontains":
-                if (ctx.Registry.LookupMethod(type: owner, methodName: "$contains") is { } contains)
+            case "notcontains":
+                if (ctx.Registry.LookupMethod(type: owner, methodName: "contains") is { } contains)
                     yield return contains;
                 break;
-            case "$destroy" or "$store" or "$hash" or "$fast_hash" or "$eq":
+            case "destroy" or "store" or "hash" or "fast_hash" or "eq":
                 foreach (RoutineInfo fc in FieldWiredCallees(owner: owner, verb: routine.Name))
                     yield return fc;
                 break;
@@ -513,7 +513,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             // (legacy fan-out behavior). RoutineReachabilityPass populates the set.
             // Wired routines bypass the gate: codegen/synthesis emit them unconditionally for
             // every live owner type. Types created during GMP body rewriting (e.g.,
-            // ListEmitter[Byte] from List[Byte].$represent) post-date RoutineReachabilityPass
+            // ListEmitter[Byte] from List[Byte].represent) post-date RoutineReachabilityPass
             // and so were never seeded — without this bypass their wired routines vanish.
             if (ctx.LiveRoutineKeys.Count > 0 && !ctx.LiveRoutineKeys.Contains(item: key)
                 && !IsWiredRoutineName(genMethod.Name))
@@ -564,7 +564,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
     /// <summary>
     /// Returns false when this concrete instantiation does not actually have the wired
-    /// routine. Example: `Array[T, N].$eq` is declared `needs T obeys Equatable` — for
+    /// routine. Example: `Array[T, N].eq` is declared `needs T obeys Equatable` — for
     /// `T = X` (not equatable), the routine does not exist on this owner. Body
     /// emission must skip it so derived companions (`$ne`, `$notcontains`) don't reference
     /// a missing symbol downstream in codegen. The actual protocol-to-wired-routine map
@@ -636,8 +636,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     // Check if the generic definition has a synthesized body in VariantBodies.
                     // ProcessConcreteType->BuildBody checks genMethod.RegistryKey (the generic def key),
                     // but this path only checked resolvedRoutine.RegistryKey (the concrete key).
-                    // Example: List[T].$eq body is stored under "Core.List[T].$eq#Core.List[T]",
-                    // but resolvedRoutine.RegistryKey is "Core.List[Core.Byte].$eq#Core.List[Core.Byte]".
+                    // Example: List[T].eq body is stored under "Core.List[T].eq#Core.List[T]",
+                    // but resolvedRoutine.RegistryKey is "Core.List[Core.Byte].eq#Core.List[Core.Byte]".
                     string genDefRoutineKey = resolvedRoutine.GenericDefinition.RegistryKey;
                     if (ctx.VariantBodies.TryGetValue(key: genDefRoutineKey, out Statement? defVariantBody))
                     {
@@ -785,7 +785,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 typeSubs: typeSubs,
                 stringSubs: stringSubs);
         // If the concrete method still has unresolved method-level generic parameters
-        // (e.g. Text.$getitem! where index: I is still GenericParameterTypeInfo),
+        // (e.g. Text.getitem! where index: I is still GenericParameterTypeInfo),
         // skip this body here. ProcessResolvedMethodGenericRoutines handles per-concrete-
         // index-type specialization once OperatorLoweringPass registers the resolutions.
         if (concreteInfo.Parameters.Any(static p => p.Type is GenericParameterTypeInfo))
@@ -825,7 +825,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         if (genMethod.IsSynthesized && !skippedVariantBodyForStdlibFallback)
         {
             string ck = concreteInfo.RegistryKey;
-            if (ck.Contains("List[Core.Owned") && (ck.Contains("$eq") || ck.Contains("$contains")))
+            if (ck.Contains("List[Core.Owned") && (ck.Contains("eq") || ck.Contains("contains")))
                 Console.Error.WriteLine($"[BuildBody-null-synth] gen={genMethod.RegistryKey} concrete={ck}");
             return null;
         }
@@ -843,7 +843,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         if (astDecl == null)
         {
             string ck = concreteInfo.RegistryKey;
-            if (ck.Contains("List[Core.Owned") && (ck.Contains("$eq") || ck.Contains("$contains")))
+            if (ck.Contains("List[Core.Owned") && (ck.Contains("eq") || ck.Contains("contains")))
                 Console.Error.WriteLine($"[BuildBody-stdlib-miss] gen={genMethod.RegistryKey} concrete={ck} astName={astName}");
             return null;
         }
@@ -958,7 +958,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // Check/Lookup/TryBool are driven by variantStatus. The try_ (Maybe) variant leaves
         // variantStatus null — codegen natively wraps top-level `return`->Some and `absent`->None
         // — but a Maybe variant whose source uses a failable call in NON-tail position (e.g.
-        // `var item = src.$emit!()` in EnumerateEmitter) needs that inner call routed through its
+        // `var item = src.emit!()` in EnumerateEmitter) needs that inner call routed through its
         // own try_ variant; otherwise the raw `!` call hard-crashes at exhaustion. Run the
         // Try-kind transform for Maybe returns so TransformBlockStatements can splice in that
         // propagation. (ListEmitter etc. have no such inner call, so the transform is a no-op for
@@ -1000,7 +1000,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         Dictionary<string, TypeInfo> typeSubs)
     {
         // Wrapper-forwarder special case: the generic forwarder's signature came from the
-        // inner-generic-def method (e.g. List[T].$getitem! returning T). Naive name-based
+        // inner-generic-def method (e.g. List[T].getitem! returning T). Naive name-based
         // substitution using the wrapper's typeSubs would map List[T]'s T to the wrapper's
         // T-substitution (the whole inner type), not the inner's own T. Re-resolve the
         // signature against the concrete inner method instead.
@@ -1628,7 +1628,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
     /// <summary>
     /// Walks all built InstantiatedGenericBodies and registers method-level generic
-    /// call-site resolutions (e.g. $getitem[U64]! called from List[Bytes].$eq).
+    /// call-site resolutions (e.g. $getitem[U64]! called from List[Bytes].eq).
     /// SA only analyzes generic-def bodies, so these concrete resolutions are never in
     /// _routineResolutions. Registering them here lets ProcessResolvedMethodGenericRoutines
     /// build the bodies before codegen runs.
@@ -1750,7 +1750,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     idx.Index.ResolvedType is { } idxIdxType and not GenericParameterTypeInfo)
                 {
                     RoutineInfo? getItem = ctx.Registry.LookupMethod(
-                        type: idxObjType, methodName: "$getitem", isFailable: true);
+                        type: idxObjType, methodName: "getitem", isFailable: true);
                     if (getItem is { IsGenericDefinition: true, GenericParameters.Count: > 0 })
                     {
                         ctx.Registry.GetOrCreateRoutineResolution(
@@ -1758,7 +1758,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                             typeArguments: [idxIdxType]);
                     }
                     RoutineInfo? setItem = ctx.Registry.LookupMethod(
-                        type: idxObjType, methodName: "$setitem", isFailable: true);
+                        type: idxObjType, methodName: "setitem", isFailable: true);
                     if (setItem is { IsGenericDefinition: true, GenericParameters.Count: > 0 })
                     {
                         ctx.Registry.GetOrCreateRoutineResolution(

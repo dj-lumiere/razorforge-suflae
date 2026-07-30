@@ -144,6 +144,13 @@ public partial class Parser
         //   "List[T]"      -> name="List", genericParams=["T"]
         //   "Point.get_x"  -> name="Point.get_x"
         // ===============================================================================
+        // A leading `$` (wired member routine like `$store`) is a separate Dollar token, recorded
+        // structurally (IsWiredMemberRoutine) and dropped from the bare name.
+        _routineNameWired = false;
+        if (Match(type: TokenType.Dollar))
+        {
+            _routineNameWired = true;
+        }
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
         List<string>? genericParams = null;
@@ -433,7 +440,8 @@ public partial class Parser
             IsFailable: isFailable,
             Storage: storage,
             Async: asyncStatus,
-            IsDangerous: isDangerous);
+            IsDangerous: isDangerous,
+            IsWiredMemberRoutine: _routineNameWired);
     }
 
     // Entity declaration parsing lives in Parser.Declarations.Types.cs.

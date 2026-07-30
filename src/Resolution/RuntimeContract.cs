@@ -123,9 +123,9 @@ public static class RuntimeContract
     // =====================================================================================
 
     /// <summary><c>$refer</c> — the <c>Referring</c> marker-protocol coercion (yields a borrow view).</summary>
-    public const string Refer = "$refer";
+    public const string Refer = "refer";
     /// <summary><c>$control</c> — the <c>Controlling</c> marker-protocol coercion (yields a borrow view).</summary>
-    public const string Control = "$control";
+    public const string Control = "control";
 
     /// <summary>The routine-name contracts that MUST resolve to a real, declared stdlib routine —
     /// the rename-sensitive set that <c>validate-stdlib</c>'s <see cref="RuntimeContractCheck"/>

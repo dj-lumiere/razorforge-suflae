@@ -121,14 +121,14 @@ public sealed class RoutineInfo
         return type.FullName;
     }
 
-    /// <summary>The module-qualified name (e.g., "Core/S8.$add", "IO/Console.show").</summary>
+    /// <summary>The module-qualified name (e.g., "Core/S8.add", "IO/Console.show").</summary>
     public string QualifiedName
     {
         get
         {
             if (OwnerType != null)
             {
-                // Member routine: Module/OwnerType.routine (e.g., "Core/S8.$add")
+                // Member routine: Module/OwnerType.routine (e.g., "Core/S8.add")
                 return $"{OwnerType.FullName}.{Name}";
             }
 
@@ -390,7 +390,7 @@ public sealed class RoutineInfo
 
     /// <summary>
     /// For generated error-handling variants (try_, check_, lookup_), the original routine name
-    /// they were generated from (e.g., "$emit" for "try_emit", "parse" for "try_parse").
+    /// they were generated from (e.g., "emit" for "try_emit", "parse" for "try_parse").
     /// </summary>
     public string? OriginalName { get; init; }
 

@@ -74,7 +74,8 @@ public partial class Parser
                 Advance(); // consume '('
 
                 List<Expression> args = ParseArgumentList();
-                Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
+                Consume(type: TokenType.RightParen,
+                    errorMessage: ExpectedRightParenAfterArguments);
 
                 if (expr is IdentifierExpression identExpr)
                 {
@@ -95,7 +96,8 @@ public partial class Parser
             {
                 // Function call - supports named arguments (name: value)
                 List<Expression> args = ParseArgumentList();
-                Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
+                Consume(type: TokenType.RightParen,
+                    errorMessage: ExpectedRightParenAfterArguments);
                 expr = new CallExpression(Callee: expr, Arguments: args, Location: expr.Location);
             }
             else if (Match(type: TokenType.LeftBracket))
@@ -113,9 +115,7 @@ public partial class Parser
                         language: _language);
                 }
 
-                expr = new IndexExpression(Object: expr,
-                    Index: index,
-                    Location: expr.Location);
+                expr = new IndexExpression(Object: expr, Index: index, Location: expr.Location);
             }
             else if (Match(type: TokenType.QuestionDot))
             {
@@ -127,16 +127,21 @@ public partial class Parser
             }
             else if (Match(type: TokenType.Dot))
             {
-                // Member access. Consume the bare member name WITHOUT folding a trailing `!` into it
-                // (unlike ConsumeMethodName, which the declaration parser still uses): the `!` stays a
-                // separate Bang token so the failable-call / generic-failable handling below records it
-                // as a structured MemberExpression.IsFailable / GenericMethodCallExpression flag.
-                if (!Check(type: TokenType.Identifier)
-                    && !IsKeywordValidAsMethodName(CurrentToken.Type))
+                // Member access. The wired marker `$` (me.store(), me.emit!()) is a separate Dollar
+                // token — consume it here; the resolved routine's own IsWiredMemberRoutine carries the
+                // wired attribute, and lookup keys on the BARE name, so the call name stays bare.
+                Match(type: TokenType.Dollar);
+                // Consume the bare member name WITHOUT folding a trailing `!` into it (unlike
+                // ConsumeMethodName, which the declaration parser still uses): the `!` stays a separate
+                // Bang token so the failable-call / generic-failable handling below records it as a
+                // structured MemberExpression.IsFailable / GenericMethodCallExpression flag.
+                if (!Check(type: TokenType.Identifier) &&
+                    !IsKeywordValidAsMethodName(CurrentToken.Type))
                 {
                     throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
                         message: "Expected member name after '.'");
                 }
+
                 string member = CurrentToken.Text;
                 Advance();
 
@@ -152,7 +157,8 @@ public partial class Parser
                 // Check for generic method call with type parameters
                 // Disambiguate by checking bracket content (must look like type args)
                 // and what follows ] (must be ( or .)
-                if (Check(type: TokenType.LeftBracket) && (isGenericMemOp || IsLikelyGenericAfterIdentifier()))
+                if (Check(type: TokenType.LeftBracket) &&
+                    (isGenericMemOp || IsLikelyGenericAfterIdentifier()))
                 {
                     Advance(); // consume '['
                     var typeArgs = new List<TypeExpression>();
@@ -261,7 +267,9 @@ public partial class Parser
                        .Type == TokenType.Dot)
                 {
                     // Consume newlines and let next iteration handle the dot
-                    while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
+                    while (Match(type: TokenType.Newline))
+                    {
+                    } // NOSONAR S108: intentional newline-consuming loop
 
                     continue;
                 }
@@ -276,5 +284,4 @@ public partial class Parser
 
         return expr;
     }
-
 }

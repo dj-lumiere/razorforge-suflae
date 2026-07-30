@@ -632,9 +632,9 @@ public sealed partial class SemanticVerifier
             else
             {
                 // The bound variable's type is `$enter`'s return type when non-void (pass-through).
-                // LookupMethod handles generic fallback (Viewing[Point].$enter -> Viewing.$enter).
+                // LookupMethod handles generic fallback (Viewing[Point].enter -> Viewing.enter).
                 RoutineInfo? enterMethod =
-                    _registry.LookupMethod(type: resourceType, methodName: "$enter");
+                    _registry.LookupMethod(type: resourceType, methodName: "enter");
                 if (enterMethod?.ReturnType is { IsBlank: false } enterReturn)
                     boundType = enterReturn;
 
@@ -642,7 +642,7 @@ public sealed partial class SemanticVerifier
                 // provide `$try_enter` (returns Bool: did the hold succeed?). Types whose entry
                 // can only block (no `$try_enter`) cannot take a `fallback`.
                 if (usingStmt.FallbackBody != null &&
-                    _registry.LookupMethod(type: resourceType, methodName: "$try_enter") == null)
+                    _registry.LookupMethod(type: resourceType, methodName: "try_enter") == null)
                 {
                     ReportError(code: SemanticDiagnosticCode.UsingFallbackRequiresTryEnter,
                         message:

@@ -54,7 +54,7 @@ public sealed partial class SemanticVerifier
     /// (default — rvalue context) get the bare entity; var-decl / field-init sites pass
     /// `true` so the result is Owned-wrapped and can satisfy the entity-ownership rule
     /// (S413). Switching between contexts is purely a type-annotation thing — codegen
-    /// emits the same `List.$create + add_last` sequence either way; the Owned wrapper is
+    /// emits the same `List.create + add_last` sequence either way; the Owned wrapper is
     /// `@llvm("ptr")` and shares the entity's pointer.
     /// </summary>
     private TypeSymbol WrapOwnedCollectionLiteralType(TypeSymbol type,
@@ -462,7 +462,7 @@ public sealed partial class SemanticVerifier
         }
         else if (!IsTriviallyCopyable(type: baseType))
         {
-            // `with` lowers to `tmp = base.$store(); tmp.field = v` — so the base must obey
+            // `with` lowers to `tmp = base.store(); tmp.field = v` — so the base must obey
             // Assignable. Records with ownership-bearing fields that don't opt in are rejected
             // here rather than producing a broken lowered AST.
             ReportError(code: SemanticDiagnosticCode.WithBaseNotAssignable,

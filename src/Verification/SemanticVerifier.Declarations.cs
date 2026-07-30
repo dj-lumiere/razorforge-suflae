@@ -556,7 +556,7 @@ public sealed partial class SemanticVerifier
         if (_currentType != null)
         {
             // Inside a type body
-            kind = routine.Name == "$create"
+            kind = routine.Name == "create"
                 ? RoutineKind.Creator
                 : RoutineKind.MemberRoutine;
         }

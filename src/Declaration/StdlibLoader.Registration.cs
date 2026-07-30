@@ -49,7 +49,7 @@ public sealed partial class StdlibLoader
     /// This is pass 1a — protocols must be registered before other types so 'obeys' clauses can resolve.
     /// Uses two passes: first registers protocol type shells (names + generic params), then fills in
     /// method signatures. This ensures forward references between protocols resolve correctly
-    /// (e.g., Iterable[T].$iter() -> Iterator[T] where Iterator is another protocol).
+    /// (e.g., Iterable[T].iter() -> Iterator[T] where Iterator is another protocol).
     /// </summary>
     /// <summary>
     /// Registers type declarations (record, entity, choice, variant, protocol) from a program.
@@ -527,12 +527,12 @@ public sealed partial class StdlibLoader
     }
 
     /// <summary>
-    /// Registers a routine from stdlib (including type methods like S32.$add).
+    /// Registers a routine from stdlib (including type methods like S32.add).
     /// </summary>
     private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine,
         string moduleName)
     {
-        // Parse method names like "S32.$add" or "Type.method"
+        // Parse method names like "S32.add" or "Type.method"
         string routineName = routine.Name;
         TypeInfo? ownerType = null;
         string methodName = routineName;
@@ -544,7 +544,7 @@ public sealed partial class StdlibLoader
         if (dotIndex > 0)
         {
             string typeName = routineName[..dotIndex];
-            methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "$add")
+            methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "add")
 
             int bracketIndex = typeName.IndexOf(value: '[');
             if (bracketIndex > 0)
@@ -590,7 +590,7 @@ public sealed partial class StdlibLoader
                         // text so `me` is typed as the specialized receiver (MeType) below — making
                         // member access like `me[i]` yield Agent[V] instead of List's raw element.
                         ownerType = baseDef;
-                        meTypeName = methodName is "$create" or "$create!" ? null : typeName;
+                        meTypeName = methodName is "create" or "create!" ? null : typeName;
                     }
                     else
                     {
@@ -702,7 +702,7 @@ public sealed partial class StdlibLoader
             }
         }
 
-        // Use just the method name (not "S32.$add", just "$add")
+        // Use just the method name (not "S32.add", just "add")
         var routineInfo = new RoutineInfo(name: methodName)
         {
             OwnerType = ownerType,

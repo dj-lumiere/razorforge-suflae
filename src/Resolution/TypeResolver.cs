@@ -304,7 +304,7 @@ internal sealed class TypeResolver
         }
 
         // Associated-type projection in a protocol signature (e.g. `Me/Iter` in
-        // `routine Me.$iter() -> Me/Iter`). `Me` here is the abstract protocol self, so the
+        // `routine Me.iter() -> Me/Iter`). `Me` here is the abstract protocol self, so the
         // projection is deferred and resolved per-implementer during monomorphization.
         if (typeExpr.Name.Contains(value: '/'))
         {
@@ -401,7 +401,7 @@ internal sealed class TypeResolver
         // Result[T] / Lookup[T] over a bare entity is now a valid carrier shape — the
         // carrier owns the bound entity directly. The previous S953 rejection of this
         // case was removed alongside Maybe's `needs T is RecordType` constraint.
-        // The identity/ownership-transfer semantics of `Maybe[Entity].$unwrap() -> T`
+        // The identity/ownership-transfer semantics of `Maybe[Entity].unwrap() -> T`
         // are still an open design question (likely `T` — return-position rvalue).
 
         // Post-Owned-retirement: bare entity T in collection slots is fine — bound T is

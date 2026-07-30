@@ -19,7 +19,7 @@ namespace Compiler.Postprocessing.Passes;
 /// recognises them and emits the <c>rf_coro_cf_push</c>/<c>rf_coro_cf_pop</c> runtime calls.</para>
 ///
 /// <para>Consistency-by-construction: the set of instrumented locals is DERIVED from the inline
-/// <c>local.$destroy()</c> calls <c>ScopeTeardownLoweringPass</c> already inserted. A push goes
+/// <c>local.destroy()</c> calls <c>ScopeTeardownLoweringPass</c> already inserted. A push goes
 /// right after a local's construction (so a value built *after* a suspend point is not on the stack
 /// before it — partial init), and a pop right before each of that local's inline
 /// <c>$destroy</c> (so the node is removed exactly when the inline teardown runs — the value can
@@ -120,7 +120,7 @@ public sealed class CancellationInstrumentationPass
 
     /// <summary>
     /// Instruments one routine body (whether a source decl or a monomorphized generic body). The
-    /// set of instrumented locals is DERIVED from the inline <c>X.$destroy()</c> calls
+    /// set of instrumented locals is DERIVED from the inline <c>X.destroy()</c> calls
     /// <c>ScopeTeardownLoweringPass</c> already inserted — keeping abandon's set == inline's set.
     /// </summary>
     private void InstrumentBody(Statement body)
@@ -135,7 +135,7 @@ public sealed class CancellationInstrumentationPass
         {
             if (n is CallExpression
                 {
-                    Callee: MemberExpression { MemberName: "$destroy", Object: IdentifierExpression destroyed }
+                    Callee: MemberExpression { MemberName: "destroy", Object: IdentifierExpression destroyed }
                 })
             {
                 locals.Add(item: destroyed.Name);
@@ -240,7 +240,7 @@ public sealed class CancellationInstrumentationPass
             {
                 Expression: CallExpression
                 {
-                    Callee: MemberExpression { MemberName: "$destroy", Object: IdentifierExpression id }
+                    Callee: MemberExpression { MemberName: "destroy", Object: IdentifierExpression id }
                 }
             })
         {

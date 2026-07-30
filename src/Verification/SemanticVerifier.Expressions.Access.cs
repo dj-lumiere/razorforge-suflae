@@ -13,7 +13,7 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
-    private const string GetItemMethodName = "$getitem";
+    private const string GetItemMethodName = "getitem";
 
     private static bool TryGetTransparentProtocolTarget(TypeSymbol type, out TypeSymbol targetType)
     {
@@ -37,7 +37,7 @@ public sealed partial class SemanticVerifier
     {
         foreach (ProtocolMethodInfo m in proto.Methods)
         {
-            if (m.Name != "$refer" && m.Name != "$control") return false;
+            if (m.Name != "refer" && m.Name != "control") return false;
         }
         return true;
     }
@@ -366,7 +366,7 @@ public sealed partial class SemanticVerifier
         AnalyzeExpression(expression: index.Index, expectedType: indexExpectedType);
 
         // Failability propagation: the resolved $getitem may be `!` per its protocol contract
-        // (e.g. Indexable.$getitem!). A non-failable caller using `arr[i]` must propagate that.
+        // (e.g. Indexable.getitem!). A non-failable caller using `arr[i]` must propagate that.
         if (getItem is { IsFailable: true } && _currentRoutine != null)
         {
             _currentRoutine.HasFailableCalls = true;
@@ -949,7 +949,7 @@ public sealed partial class SemanticVerifier
         // Named-arg → $create routing: if the provided names don't match any field but DO match
         // a `$create(named:)` overload's parameter names, dispatch through that creator instead
         // of doing inline field-init. Lets `SegTreeLazy[..](size: 10, alg: alg)` route to
-        // `SegTreeLazy.$create(size:, alg:)` even though `size`/`alg` aren't field names.
+        // `SegTreeLazy.create(size:, alg:)` even though `size`/`alg` aren't field names.
         if (creator.MemberVariables.Count > 0 &&
             TryRouteCreatorToCreate(type: type, creator: creator))
         {
@@ -979,8 +979,8 @@ public sealed partial class SemanticVerifier
 
         // Name-based match against $create overloads. Iterate type's methods looking for ones
         // named `$create` whose parameter names match the provided set exactly. If multiple
-        // overloads share the same param names (e.g. `S64.$create(from: S8)` vs
-        // `S64.$create(from: ComparisonSign)`), bail out — disambiguation by arg type is the
+        // overloads share the same param names (e.g. `S64.create(from: S8)` vs
+        // `S64.create(from: ComparisonSign)`), bail out — disambiguation by arg type is the
         // job of the legacy path and we don't want to silently pick the wrong overload.
         // Use CollectMemberRoutineCandidates: it walks the generic definition for
         // generic resolutions (e.g. List[V] → List[T]) and runs SubstituteMethodForOwner
@@ -988,15 +988,15 @@ public sealed partial class SemanticVerifier
         var providedNameSet = new HashSet<string>(collection: providedNames);
         var nameMatches = new List<RoutineInfo>();
         var candidates = new List<RoutineInfo>();
-        _registry.CollectMemberRoutineCandidates(type: type, methodName: "$create",
+        _registry.CollectMemberRoutineCandidates(type: type, methodName: "create",
             candidates: candidates);
-        _registry.CollectMemberRoutineCandidates(type: type, methodName: "$create!",
+        _registry.CollectMemberRoutineCandidates(type: type, methodName: "create!",
             candidates: candidates);
         // Also pull the concrete type's own routines directly — CollectMemberRoutineCandidates
         // can miss a user-declared `$create` on an entity, while GetMethodsForType returns it
         // (this is how the entity `$destroy` resolves correctly elsewhere).
         candidates.AddRange(collection: _registry.GetMethodsForType(type: type)
-            .Where(predicate: m => m.Name is "$create" or "$create!"));
+            .Where(predicate: m => m.Name is "create" or "create!"));
         foreach (RoutineInfo m in candidates)
         {
             if (m.Parameters.Count != creator.MemberVariables.Count) continue;
@@ -1013,7 +1013,7 @@ public sealed partial class SemanticVerifier
         // auto-synthesized all-args `$create` (AutoWiredRegistrationPass) whose only job is inline
         // field-init ("stuffing") — when that's the sole match we fall through to inline
         // construction below. A user `$create` with the same signature as the all-args creator
-        // (e.g. `Resource.$create(tag:)` where `tag` is the only field) is the real constructor
+        // (e.g. `Resource.create(tag:)` where `tag` is the only field) is the real constructor
         // and must be called so its body/side-effects run.
         // Dedupe by registry key — CollectMemberRoutineCandidates can surface the same overload
         // through more than one path (owner table + protocol/universal walk), which would make a
@@ -1029,7 +1029,7 @@ public sealed partial class SemanticVerifier
         // `$create(from: U128)`) is an ordinary conversion and must route to that overload;
         // otherwise codegen falls back to inline field-init and mis-lowers bit-carrier types like
         // F128 to a raw integer reinterpret of the IEEE storage.
-        bool insideOwnCreate = _currentRoutine is { Name: "$create" or "$create!" } currentCreate
+        bool insideOwnCreate = _currentRoutine is { Name: "create" or "create!" } currentCreate
             && currentCreate.OwnerType != null
             && (currentCreate.OwnerType.FullName == type.FullName
                 || currentCreate.OwnerType.Name == type.Name)

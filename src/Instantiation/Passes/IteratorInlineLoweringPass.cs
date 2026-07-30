@@ -227,7 +227,7 @@ internal sealed class IteratorInlineLoweringPass
 
         // Resolve the concrete `$emit!` on the emitter and fetch its monomorphized body.
         RoutineInfo? nextRoutine =
-            _registry.LookupMethod(type: emitterType, methodName: "$emit", isFailable: true);
+            _registry.LookupMethod(type: emitterType, methodName: "emit", isFailable: true);
         if (nextRoutine == null) return null;
         if (!_monoBodies.TryGetValue(key: nextRoutine.RegistryKey, out MonomorphizedBody? nextMono))
             return null;
@@ -343,7 +343,7 @@ internal sealed class IteratorInlineLoweringPass
                 string baseName = (r.OriginalName ?? r.Name).TrimStart('$');
                 if (baseName == "emit") return true;
             }
-            if (call.Callee is MemberExpression { MemberName: "$emit" }) return true;
+            if (call.Callee is MemberExpression { MemberName: "emit" }) return true;
         }
         return false;
     }

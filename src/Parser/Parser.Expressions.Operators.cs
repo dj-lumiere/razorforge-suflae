@@ -419,7 +419,7 @@ public partial class Parser
     /// - <c>expr is Type (field1, field2)</c> - destructuring pattern
     /// - <c>expr is Type (memberVar: binding)</c> - named destructuring
     /// - <c>expr isnot Type</c> - negated type check
-    /// - <c>expr in collection</c> - membership test (desugars to collection.$contains(expr))
+    /// - <c>expr in collection</c> - membership test (desugars to collection.contains(expr))
     /// - <c>expr notin collection</c> - negated membership test
     /// - <c>expr obeys Protocol</c> - protocol conformance check
     /// - <c>expr disobeys Protocol</c> - negated protocol check

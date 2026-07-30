@@ -50,7 +50,7 @@ public partial class LlvmCodeGenerator
             // TODO: This should be eliminated by lowering pass
             CarrierPayloadExpression payload => EmitCarrierPayloadExpression(sb: sb,
                 payload: payload),
-            // Named arguments appear inside synthesized AST bodies (e.g., me.$eq(you: you)).
+            // Named arguments appear inside synthesized AST bodies (e.g., me.eq(you: you)).
             // The name is irrelevant to codegen -> just emit the inner value positionally.
             NamedArgumentExpression named => EmitExpression(sb: sb, expr: named.Value),
             _ => throw new NotImplementedException(
@@ -887,7 +887,7 @@ public partial class LlvmCodeGenerator
             return ""; // not a tracked local (e.g. a param) — leave untracked (first-cut limitation)
         }
 
-        RoutineInfo? destroy = _registry.LookupMethod(type: type, methodName: "$destroy");
+        RoutineInfo? destroy = _registry.LookupMethod(type: type, methodName: "destroy");
         if (destroy == null)
         {
             return "";
@@ -1119,10 +1119,10 @@ public partial class LlvmCodeGenerator
             BinaryOperator.Or => throw new InvalidOperationException(
                 $"BinaryExpression(Or) must be lowered to ConditionalExpression by ExpressionLoweringPass before codegen. In routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
             BinaryOperator.Assign => EmitBinaryAssign(sb: sb, binary: binary),
-            BinaryOperator.In => EmitContainsCall(sb: sb, binary: binary, methodName: "$contains"),
+            BinaryOperator.In => EmitContainsCall(sb: sb, binary: binary, methodName: "contains"),
             BinaryOperator.NotIn => EmitContainsCall(sb: sb,
                 binary: binary,
-                methodName: "$notcontains"),
+                methodName: "notcontains"),
             BinaryOperator.Is => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "eq"),
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),

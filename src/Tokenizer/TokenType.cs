@@ -757,6 +757,10 @@ public enum TokenType
     /// <summary>Crashable routine suffix (!)</summary>
     Bang,
 
+    /// <summary>Wired member-routine marker prefix ($) — e.g. $create, $store. Structural: the
+    /// parser records it as RoutineInfo.IsWiredMemberRoutine and keeps the name bare.</summary>
+    Dollar,
+
     /// <summary>Force unwrap operator (!!)</summary>
     BangBang,
 

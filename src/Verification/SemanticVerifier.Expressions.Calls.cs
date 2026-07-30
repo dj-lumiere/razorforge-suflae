@@ -32,7 +32,7 @@ public sealed partial class SemanticVerifier
                     ? id.Name[..^1]
                     : id.Name;
                 // Look up the type with `!` stripped — `U32!(level)` is a failable type
-                // constructor call routing to `U32.$create!(from: U64)`. Without stripping,
+                // constructor call routing to `U32.create!(from: U64)`. Without stripping,
                 // `LookupTypeWithImports("U32!")` returns null and the call falls through to
                 // non-creator paths, eventually mis-picking a non-failable overload by name.
                 TypeSymbol? callableType = LookupTypeWithImports(name: callName);
@@ -57,7 +57,7 @@ public sealed partial class SemanticVerifier
                 // Wired routines ($-prefixed) cannot be called directly by user code, except
                 // $represent and $diagnose which are composable for custom display implementations.
                 if (callName.StartsWith(value: '$')
-                    && callName != "$represent" && callName != "$diagnose")
+                    && callName != "represent" && callName != "diagnose")
                 {
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
                         message: $"Wired routine '{callName}' cannot be called directly. " +
@@ -67,7 +67,7 @@ public sealed partial class SemanticVerifier
                 }
 
                 // Display-routine desugaring (phase 1): `show(x)` / `alert(x)` where x is a
-                // copy-restricted wrapper becomes `show(x.$represent())` / `alert(x.$diagnose())`
+                // copy-restricted wrapper becomes `show(x.represent())` / `alert(x.diagnose())`
                 // BEFORE overload resolution. The rewrite turns the call into a Text-typed
                 // argument, so overload resolution picks the `show(value: Referring[Text])`
                 // / `alert(value: Referring[Text])` overload instead of the generic-T variant
@@ -332,22 +332,22 @@ public sealed partial class SemanticVerifier
                     }
 
                     RoutineInfo? creator = _registry.LookupMethodOverload(type: callableType,
-                        methodName: "$create",
+                        methodName: "create",
                         argTypes: creatorArgTypes);
                     creator ??= _registry.LookupRoutineOverload(
-                        baseName: $"{callableType.FullName}.$create",
+                        baseName: $"{callableType.FullName}.create",
                         argTypes: creatorArgTypes);
 
                     if (creator != null && creator.Parameters.Count == creatorArgTypes.Count &&
                         !creator.Parameters.Any(predicate: p => p.IsVariadicParam))
                     {
-                        // An auto-generated variant arm EXTRACTOR `Arm.$create!(from: V)` is synthesized
+                        // An auto-generated variant arm EXTRACTOR `Arm.create!(from: V)` is synthesized
                         // but has a real pattern-matching body — it is NOT a memberwise field-init, and
                         // for a scalar arm (S32) `ClassifyConstruction` would tag it a value conversion,
                         // making codegen bit-reinterpret the variant. Treat it as a normal method call and
                         // route it through ResolvedRoutine below.
                         bool isVariantArmExtractor = creator is
-                            { Name: "$create", IsFailable: true, Parameters: [{ Type: VariantTypeInfo }] };
+                            { Name: "create", IsFailable: true, Parameters: [{ Type: VariantTypeInfo }] };
 
                         call.ConstructedType = callableType;
                         call.LoweringKind = isVariantArmExtractor
@@ -364,7 +364,7 @@ public sealed partial class SemanticVerifier
                         // to guess and, for bit-carrier types like F128, mis-lowers it to a raw
                         // `sext`/reinterpret of the integer into the i128 IEEE carrier.
                         bool insideOwnCreate =
-                            _currentRoutine is { Name: "$create" or "$create!" } currentCreate
+                            _currentRoutine is { Name: "create" or "create!" } currentCreate
                             && currentCreate.OwnerType != null
                             && (currentCreate.OwnerType.FullName == callableType.FullName
                                 || currentCreate.OwnerType.Name == callableType.Name)
@@ -374,14 +374,14 @@ public sealed partial class SemanticVerifier
                         // The synthesized memberwise creator (IsSynthesized) is pure field-init and
                         // is left to inline construction in codegen. A user `$create` whose params
                         // match the fields only by name but differ by type (e.g.
-                        // `Resource.$create(tag: S32)` over field `tag: S64`) is the real
+                        // `Resource.create(tag: S32)` over field `tag: S64`) is the real
                         // constructor and is selected by arg type via LookupMethodOverload above.
                         if (!insideOwnCreate && (!creator.IsSynthesized || isVariantArmExtractor))
                         {
                             call.ResolvedRoutine = creator;
 
                             // Failability propagation for failable constructors (e.g. `U32!(x)`
-                            // routing to `U32.$create!(from: U64)`).
+                            // routing to `U32.create!(from: U64)`).
                             if (creator.IsFailable && _currentRoutine != null)
                             {
                                 _currentRoutine.HasFailableCalls = true;
@@ -529,15 +529,15 @@ public sealed partial class SemanticVerifier
                     }
 
                     // C95: Try $create overload match first
-                    // e.g., BitList(capacity: 32u64) -> BitList.$create(capacity: U64)
-                    // e.g., BitList(32u64) -> BitList.$create(capacity: U64) instead of collection literal
+                    // e.g., BitList(capacity: 32u64) -> BitList.create(capacity: U64)
+                    // e.g., BitList(32u64) -> BitList.create(capacity: U64) instead of collection literal
                     if (call.Arguments.Count > 0)
                     {
                         RoutineInfo? creator = _registry.LookupMethodOverload(type: type,
-                            methodName: "$create",
+                            methodName: "create",
                             argTypes: argTypes);
                         creator ??= _registry.LookupRoutineOverload(
-                            baseName: $"{type.FullName}.$create",
+                            baseName: $"{type.FullName}.create",
                             argTypes: argTypes);
 
 
@@ -775,14 +775,14 @@ public sealed partial class SemanticVerifier
                 // coercion → $refer/$control). Forbidding user calls prevents storing the
                 // result in a variable, which would let a borrow / iterator outlive its source.
                 // Stdlib is exempt — its iterator implementations and wrapper bodies chain these
-                // dunders directly (e.g., `me.source.$iter()`, wrapper `$refer` forwarders).
-                if ((member.MemberName == "$iter"
-                     || member.MemberName == "$refer"
-                     || member.MemberName == "$control")
+                // dunders directly (e.g., `me.source.iter()`, wrapper `$refer` forwarders).
+                if ((member.MemberName == "iter"
+                     || member.MemberName == "refer"
+                     || member.MemberName == "control")
                     && !call.IsSynthesizedLowering
                     && !IsStdlibFile(filePath: call.Location.FileName))
                 {
-                    string hint = member.MemberName == "$iter"
+                    string hint = member.MemberName == "iter"
                         ? "use a 'for' loop or iterable combinators (skip, take, map, etc.) instead."
                         : "pass the value to a routine whose parameter is typed " +
                           "Referring[T] / Controlling[T] — the compiler coerces it for you.";
@@ -852,7 +852,7 @@ public sealed partial class SemanticVerifier
                 }
 
                 // Generic-parameter receiver: resolve via Obeys constraints from the current
-                // routine and its owner type. e.g. `key.$hash()` where `K obeys Hashable`
+                // routine and its owner type. e.g. `key.hash()` where `K obeys Hashable`
                 // dispatches through Hashable's protocol method.
                 if (method == null && dispatchType is GenericParameterTypeInfo genParam)
                 {
@@ -1086,7 +1086,7 @@ public sealed partial class SemanticVerifier
 
                     // #68: Real-to-Complex promotion — only $add/$sub allow float↔complex cross-type
                     if (IsOperatorWired(name: member.MemberName) &&
-                        member.MemberName is not ("$add" or "$sub" or "$iadd" or "$isub") &&
+                        member.MemberName is not ("add" or "sub" or "iadd" or "isub") &&
                         call.Arguments.Count > 0 && method.Parameters.Count > 0)
                     {
                         TypeSymbol argType = method.Parameters[index: 0].Type;
@@ -1282,7 +1282,7 @@ public sealed partial class SemanticVerifier
                         substitutions[key: "Me"] = dispatchType!;
 
                         // Protocol method resolved through a generic param's `obeys` constraint
-                        // (e.g. `r.$iter()` where `r: __T0 obeys Iterable[S64]`). The resolved method
+                        // (e.g. `r.iter()` where `r: __T0 obeys Iterable[S64]`). The resolved method
                         // is homed on the bare generic param, and its signature carries the PROTOCOL's
                         // own element param (`Iterator[T]`), which is distinct from `__T0` and so isn't
                         // bound by the branches above. Bind each obeys-constraint protocol's params from
@@ -1324,7 +1324,7 @@ public sealed partial class SemanticVerifier
                     return returnType;
                 }
 
-                // #78: Method-chain constructor — "42".S32!() -> S32.$create!(from: "42").
+                // #78: Method-chain constructor — "42".S32!() -> S32.create!(from: "42").
                 // MemberName is bare; failability is carried structurally in member.IsFailable.
                 bool isFailable = member.IsFailable;
                 string potentialTypeName = member.MemberName;
@@ -1334,8 +1334,8 @@ public sealed partial class SemanticVerifier
                 // Type-arg inference for a method-chain variant arm extractor: `sv.Dict!()` where `Dict`
                 // is a generic definition and the receiver is a variant — adopt the type arguments of the
                 // variant's arm whose generic base is `Dict` (mirrors the construction-form inference), so
-                // the concrete `Dict[Text, SerialValue].$create!(from: sv)` is found instead of the def's
-                // bare `Dict.$create()` (which trips RF-S770 with 0 params).
+                // the concrete `Dict[Text, SerialValue].create!(from: sv)` is found instead of the def's
+                // bare `Dict.create()` (which trips RF-S770 with 0 params).
                 if (targetType is { IsGenericDefinition: true } && isFailable &&
                     objectType is VariantTypeInfo mcVariant)
                 {
@@ -1357,17 +1357,17 @@ public sealed partial class SemanticVerifier
                 if (targetType != null)
                 {
                     // Look up the creator on the target type, using method-overload resolution
-                    // to match the object type (e.g., Text -> S32.$create!(from_text: Text)).
+                    // to match the object type (e.g., Text -> S32.create!(from_text: Text)).
                     // Note: parser strips '!' from routine names — IsFailable is a separate flag.
-                    // Always look up "$create" and check IsFailable on the result.
+                    // Always look up "create" and check IsFailable on the result.
                     // $create is owner-scoped, so LookupMethodOverload (not LookupRoutineOverload)
                     // is the right entry point — the latter only indexes free functions.
                     RoutineInfo? creator =
                         _registry.LookupMethodOverload(type: targetType,
-                            methodName: "$create",
+                            methodName: "create",
                             argTypes: [objectType]);
                     // Fall back to default overload if no match by arg type
-                    string creatorFullName = $"{targetType.FullName}.$create";
+                    string creatorFullName = $"{targetType.FullName}.create";
                     creator ??= _registry.LookupRoutine(fullName: creatorFullName);
 
                     if (creator != null)
@@ -1417,7 +1417,7 @@ public sealed partial class SemanticVerifier
                             ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
                                 message:
                                 $"Type '{objectType.Name}' has no conversion to '{potentialTypeName}': " +
-                                $"no '{potentialTypeName}.$create(from: {objectType.Name})' is defined.",
+                                $"no '{potentialTypeName}.create(from: {objectType.Name})' is defined.",
                                 location: call.Location);
                             return ErrorTypeInfo.Instance;
                         }

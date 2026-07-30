@@ -18,7 +18,7 @@ namespace Compiler.Postprocessing.Passes;
 /// transfer sites while still emitting the operand value directly.</item>
 /// <item><b>Record copy injection</b> -> rewrites <c>var r2 = r1</c> and <c>r2 = r1</c>
 /// where <c>r1</c> is a "borrowed reference" (identifier or field access) of a
-/// record type to <c>r1.$store()</c>. Required for RC wrapper types
+/// record type to <c>r1.store()</c>. Required for RC wrapper types
 ///  (<c>Retained[T]</c>, <c>Tracked[T]</c>, etc.) where a bit-for-bit struct copy
 /// would not increment the reference count, causing a double-free bug.
 /// For plain records (no RC fields) <c>$store()</c> is semantically identical to
@@ -36,7 +36,7 @@ namespace Compiler.Postprocessing.Passes;
 internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 {
     // True while lowering the body of a `$store` routine. Returning `me` there is the identity-copy
-    // primitive itself, so it must NOT be rewritten to `me.$store()` (that would recurse forever).
+    // primitive itself, so it must NOT be rewritten to `me.store()` (that would recurse forever).
     private bool _inCopyRoutine;
 
     /// <summary>
@@ -50,7 +50,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             {
                 case RoutineDeclaration r:
                 {
-                    _inCopyRoutine = r.Name.EndsWith(value: "$store");
+                    _inCopyRoutine = r.Name.EndsWith(value: "store");
                     Statement newBody = LowerStatement(stmt: r.Body);
                     if (!ReferenceEquals(newBody, r.Body))
                         program.Declarations[i] = r with { Body = newBody };
@@ -84,7 +84,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             // its non-destructible (scalar/None) arms. Since a destructible-arm variant now carries a
             // GetLifecycle.Copy, that bare `return me` would otherwise re-inject `me.copy()` → infinite
             // recursion. Treat the copy body like `$store`: its `return me` is the identity primitive.
-            _inCopyRoutine = key.Contains(value: "$store") || key.Contains(value: ".copy");
+            _inCopyRoutine = key.Contains(value: "store") || key.Contains(value: ".copy");
             Statement lowered = LowerStatement(stmt: body);
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
@@ -108,7 +108,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue; // pure-synthesized: no AST to walk
-            _inCopyRoutine = key.Contains(value: "$store");
+            _inCopyRoutine = key.Contains(value: "store");
             Statement lowered = LowerStatement(stmt: entry.Ast.Body);
             if (!ReferenceEquals(lowered, entry.Ast.Body))
                 instantiatedGenericBodies[key] = entry with
@@ -127,7 +127,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             if (members[i] is RoutineDeclaration mr)
             {
-                _inCopyRoutine = mr.Name.EndsWith(value: "$store");
+                _inCopyRoutine = mr.Name.EndsWith(value: "store");
                 Statement newBody = LowerStatement(stmt: mr.Body);
                 if (!ReferenceEquals(newBody, mr.Body))
                     members[i] = mr with { Body = newBody };
@@ -192,7 +192,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             case IfStatement ifStmt:
             {
                 // The condition holds copy positions: `when`/`is` desugar to an if whose condition
-                // is e.g. `(x.$cmp(you: v)).$eq(ME_SMALL)`, where `v` is a call argument needing a
+                // is e.g. `(x.cmp(you: v)).eq(ME_SMALL)`, where `v` is a call argument needing a
                 // retaining `$store`. Without lowering the condition, the callee `$destroy`s the
                 // by-value param while the caller never copied it -> double-free of the reused source.
                 Expression newCond = StripStealFromExpr(expr: ifStmt.Condition);
@@ -244,7 +244,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             case WhenStatement whenStmt:
             {
                 bool changed = false;
-                // The subject holds copy positions too (e.g. `when x.$cmp(you: v) is ...` — `v` is a
+                // The subject holds copy positions too (e.g. `when x.cmp(you: v) is ...` — `v` is a
                 // call argument that needs a retaining `$store`). Mirrors the WhenExpression case.
                 Expression newSubject = StripStealFromExpr(expr: whenStmt.Expression);
                 if (!ReferenceEquals(newSubject, whenStmt.Expression))
@@ -320,7 +320,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     /// Lowers a single expression sitting in an ownership/copy position (var-binding RHS,
     /// assignment RHS, return value, call argument). A "borrowed reference" — an identifier or
     /// field read — of a type that carries a retaining <c>$store</c> (e.g. <c>Text</c>, whose
-    /// <c>$store</c> bumps the controller refcount) is rewritten to <c>expr.$store()</c> so the new
+    /// <c>$store</c> bumps the controller refcount) is rewritten to <c>expr.store()</c> so the new
     /// owner holds its own reference, balancing the <c>$destroy</c> that scope-teardown inserts.
     /// Explicit <see cref="StealExpression"/> is preserved (an explicit move, no copy). Fresh
     /// values (calls, constructors, arithmetic) are already owned and are only recursed for
@@ -397,7 +397,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 // Recurse into the receiver chain so nested-call arguments get their
                 // retain copies even when the inner call sits in *receiver* position.
                 // e.g. f-string lowering turns `f"{c1 == c2}"` into
-                // `(c1.$eq(c2)).$represent()`: the `$eq` whose argument `c2` must be
+                // `(c1.eq(c2)).represent()`: the `$eq` whose argument `c2` must be
                 // copied lives in `Callee.Object`, not in any argument list. We recurse
                 // via StripStealFromExpr (not LowerOwnership) so the receiver itself
                 // stays borrowed — only nested argument positions get a `$store`.
@@ -463,10 +463,10 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 return ReferenceEquals(newRight, bin.Right) ? bin : bin with { Right = newRight };
             }
 
-            // A `when` used as an EXPRESSION (e.g. `acc +% when x.$cmp(you: v) is ... => ...`).
+            // A `when` used as an EXPRESSION (e.g. `acc +% when x.cmp(you: v) is ... => ...`).
             // The subject and the arm bodies hold copy positions (call arguments, RHS values) that
             // must be lowered — without this, an argument like `v` inside the subject call never
-            // gets its retaining `$store`, yet the callee (e.g. `Integer.$cmp`) still `$destroy`s the
+            // gets its retaining `$store`, yet the callee (e.g. `Integer.cmp`) still `$destroy`s the
             // by-value parameter, double-freeing the reused source on the next iteration.
             case WhenExpression whenExpr:
             {
@@ -557,7 +557,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// Builds a fully resolved <c>expr.$store()</c> call. The routine and lowering kind are stamped
+    /// Builds a fully resolved <c>expr.store()</c> call. The routine and lowering kind are stamped
     /// here (not left for a later pass) so codegen materializes the <c>$store</c> return value — an
     /// unresolved call is emitted as a discarded <c>void</c> call, dropping the retained copy and
     /// leaving the binding with a dangling reference.

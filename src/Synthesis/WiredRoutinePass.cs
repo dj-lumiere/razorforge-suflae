@@ -21,12 +21,12 @@ namespace Compiler.Synthesis;
 /// <para>Generated bodies (keyed by <c>RoutineInfo.RegistryKey</c> ??<c>ctx.VariantBodies</c>):</para>
 /// <list type="bullet">
 ///   <item><c>$eq</c>   -> field-by-field <c>==</c> AND-chain for concrete <see cref="RecordTypeInfo"/>, <see cref="EntityTypeInfo"/>, <see cref="TupleTypeInfo"/>.</item>
-///   <item><c>$hash</c> -> XOR-chain of <c>me.f.$hash()</c> calls for records, entities, tuples.</item>
+///   <item><c>$hash</c> -> XOR-chain of <c>me.f.hash()</c> calls for records, entities, tuples.</item>
 ///   <item><c>$represent</c> / <c>$diagnose</c> -> f-string body for <see cref="RecordTypeInfo"/> and
 ///         <see cref="EntityTypeInfo"/>, including generic definitions (monomorphization substitutes type params).</item>
 ///   <item><c>$represent</c> on crashable ??<c>return me.crash_message()</c>.</item>
 ///   <item><c>$diagnose</c> on crashable -> f-string <c>Module.Name(crash_message, field: val, ...)</c>.</item>
-///   <item><c>Text.$create(from: T)</c> ??<c>return from.$represent()</c>.</item>
+///   <item><c>Text.create(from: T)</c> ??<c>return from.represent()</c>.</item>
 /// </list>
 ///
 /// <para>Not generated here:</para>
@@ -35,16 +35,16 @@ namespace Compiler.Synthesis;
 ///         expressible in plain AST. Emitted by <c>ErrorHandlingVariantPass</c>.</item>
 ///   <item>Records with <c>HasDirectBackendType</c> — intrinsic types with no RF member
 ///         variables (skipped early in <see cref="HandleRecord"/>).</item>
-///   <item><c>Maybe[T].$represent</c> / <c>$diagnose</c> — defined explicitly in
+///   <item><c>Maybe[T].represent</c> / <c>$diagnose</c> — defined explicitly in
 ///         <c>Core/Errors/Maybe.rf</c> (treated as user code, not synthesized).</item>
 /// </list>
 /// </summary>
 public sealed class WiredRoutinePass(DesugaringContext ctx)
 {
-    private const string RepresentMethodName = "$represent";
-    private const string DiagnoseMethodName = "$diagnose";
-    private const string HashMethodName = "$hash";
-    private const string BitXorMethodName = "$bitxor";
+    private const string RepresentMethodName = "represent";
+    private const string DiagnoseMethodName = "diagnose";
+    private const string HashMethodName = "hash";
+    private const string BitXorMethodName = "bitxor";
     private const string ResultVarName = "result";
     private const string FirstVarName = "first";
     private const string OtherParamName = "other";
@@ -77,7 +77,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
 
             // Auto-generated variant arm constructors (handled before the by-NAME explicit-impl skip
-            // below): an extractor `Arm.$create(from: V)` shares the name `$create` with the arm type's
+            // below): an extractor `Arm.create(from: V)` shares the name `$create` with the arm type's
             // other constructors, so a name-only skip would wrongly drop it. This hook is overload-precise
             // (owner/param must be in an arm relationship), so it is safe to run first.
             if (TryBuildVariantArmConstructorBody(routine: routine, body: out Statement? armCtorBody))
@@ -88,7 +88,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             // Skip if an explicit (non-synthesized) implementation already exists in the registry.
             // This prevents synthesized bodies from overriding custom stdlib implementations
-            // such as Watched[T,P].$represent / $diagnose defined in Watched.rf.
+            // such as Watched[T,P].represent / $diagnose defined in Watched.rf.
             if (routine.OwnerType != null &&
                 ctx.Registry.GetMethodsForType(type: routine.OwnerType)
                     .Any(r => r.Name == routine.Name && !r.IsSynthesized))
@@ -115,7 +115,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             // leaf RC/ptr behaviour (Hijacked → invalidate, Retained/Tracked → controller,
             // Viewing/Modifying → no-op) lives in hand-written wrapper `$destroy`s, so those are
             // never auto-derived (they already exist).
-            if (routine is { Name: "$destroy", Parameters.Count: 0 })
+            if (routine is { Name: "destroy", Parameters.Count: 0 })
             {
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildDestroyBody(owner: routine.OwnerType);
@@ -123,13 +123,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
 
             // Cycle-collector per-type hooks (see AutoWiredRegistrationPass.MaybeRegisterRoamHook).
-            if (routine is { Name: "$roam_trace_impl", Parameters.Count: 0 })
+            if (routine is { Name: "roam_trace_impl", Parameters.Count: 0 })
             {
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildRoamTraceBody(owner: routine.OwnerType);
                 continue;
             }
-            if (routine is { Name: "$roam_free_impl", Parameters.Count: 0 })
+            if (routine is { Name: "roam_free_impl", Parameters.Count: 0 })
             {
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildRoamFreeBody(owner: routine.OwnerType);
@@ -246,22 +246,22 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 // DictEntry[K,V]). The first loop's $destroy handler runs over GetAllRoutines(),
                 // which excludes generic-def owners, so without this their $destroy body is never
                 // synthesized — and GMP.BuildBody returns null for a synthesized method with no
-                // VariantBody, leaving scope-exit `emitter.$destroy()` calls (inserted once these
+                // VariantBody, leaving scope-exit `emitter.destroy()` calls (inserted once these
                 // helper locals exist, e.g. from for-loop iteration) undefined at link.
-                if (routine is { Name: "$destroy", Parameters.Count: 0 })
+                if (routine is { Name: "destroy", Parameters.Count: 0 })
                 {
                     ctx.VariantBodies[key: routine.RegistryKey] =
                         BuildDestroyBody(owner: routine.OwnerType);
                     continue;
                 }
 
-                if (routine is { Name: "$roam_trace_impl", Parameters.Count: 0 })
+                if (routine is { Name: "roam_trace_impl", Parameters.Count: 0 })
                 {
                     ctx.VariantBodies[key: routine.RegistryKey] =
                         BuildRoamTraceBody(owner: routine.OwnerType);
                     continue;
                 }
-                if (routine is { Name: "$roam_free_impl", Parameters.Count: 0 })
+                if (routine is { Name: "roam_free_impl", Parameters.Count: 0 })
                 {
                     ctx.VariantBodies[key: routine.RegistryKey] =
                         BuildRoamFreeBody(owner: routine.OwnerType);
@@ -299,7 +299,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
                         textType: textType, diagnose: true);
                 break;
-            case "$eq":
+            case "eq":
                 ctx.VariantBodies[key: routine.RegistryKey] = entity.MemberVariables.Count == 0
                     ? BuildReturnTrueBody(boolType: boolType)
                     : BuildEqBody(ownerType: entity, fields: entity.MemberVariables,
@@ -335,7 +335,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildTextBody(ownerType: record, fields: record.MemberVariables,
                         textType: textType, diagnose: true);
                 break;
-            case "$eq":
+            case "eq":
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildEqBody(ownerType: record, fields: record.MemberVariables, boolType: boolType);
                 break;
@@ -348,7 +348,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildSecureHashBody(ownerType: record, fields: record.MemberVariables,
                         u64Type: u64Type);
                 break;
-            case "$cmp" when s32Type != null:
+            case "cmp" when s32Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildCmpBody(ownerType: record, fields: record.MemberVariables,
                         s32Type: s32Type, boolType: boolType);
@@ -362,9 +362,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         TypeInfo textType, TypeInfo boolType, TypeInfo? s32Type) // NOSONAR S3776
     {
         // Numeric $create bodies for @llvm-typed primitive records.
-        // S64.$create(from: Choice) -> sign_extend; U64.$create(from: Flags) -> reinterpret_bits.
+        // S64.create(from: Choice) -> sign_extend; U64.create(from: Flags) -> reinterpret_bits.
         // Must be checked before the HasDirectBackendType guard because these live on S64/U64.
-        if (routine is { Name: "$create", Parameters.Count: 1 })
+        if (routine is { Name: "create", Parameters.Count: 1 })
         {
             TypeInfo paramType = routine.Parameters[index: 0].Type;
             string paramName = routine.Parameters[index: 0].Name;
@@ -386,13 +386,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
         }
 
-        // `$store` / `clone` bodies are field-independent (`return me` / `return me.$store()`), so
+        // `$store` / `clone` bodies are field-independent (`return me` / `return me.store()`), so
         // synthesize them BEFORE the opaque-backend skip — @llvm primitives (S64, Bool, …) need real
         // (trivial, LLVM-inlined) bodies so explicit `clone()`/`$store()` calls link. Only synth stubs
-        // reach here; user-written copies (e.g. Text.$store, which retains) keep their own body.
+        // reach here; user-written copies (e.g. Text.store, which retains) keep their own body.
         switch (routine.Name)
         {
-            case "$store":
+            case "store":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildRecordCopyBody(record: record);
                 return;
             case "copy":
@@ -412,7 +412,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
         switch (routine.Name)
         {
-            case "$eq":
+            case "eq":
             {
                 // $eq generation requires knowing the concrete field types at body-gen time.
                 // Generic definitions are handled per concrete instantiation via GMP.
@@ -422,7 +422,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$cmp":
+            case "cmp":
             {
                 if (s32Type == null) break;
                 ctx.VariantBodies[key: routine.RegistryKey] =
@@ -502,7 +502,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$eq":
+            case "eq":
                 ctx.VariantBodies[key: routine.RegistryKey] = entity.MemberVariables.Count == 0
                     ? BuildReturnTrueBody(boolType: boolType)
                     : BuildEqBody(ownerType: entity, fields: entity.MemberVariables, boolType: boolType);
@@ -529,8 +529,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            // Text.$create(from: T) -> return from.$represent()
-            case "$create" when entity.Name == "Text" && routine.Parameters.Count == 1:
+            // Text.create(from: T) -> return from.represent()
+            case "create" when entity.Name == "Text" && routine.Parameters.Count == 1:
             {
                 TypeInfo paramType = routine.Parameters[index: 0].Type;
                 string paramName = routine.Parameters[index: 0].Name;
@@ -583,7 +583,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
-            case "$eq":
+            case "eq":
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildEqBodyNumeric(ownerType: choice, boolType: boolType, isChoice: true);
                 break;
@@ -625,14 +625,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         logicBreachedErrorType: logicBreachedErrorType);
                 break;
 
-            case "$create!":
+            case "create!":
                 // Text -> ChoiceType conversion is not implementable at the RF level;
                 // this always crashes. The body is unreachable in well-typed programs.
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildBreachStatement(logicBreachedErrorType: logicBreachedErrorType);
                 break;
 
-            case "$store":
+            case "store":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: choice);
                 break;
 
@@ -687,7 +687,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         foreach (MemberVariableInfo field in fields)
         {
             // Blank fields carry no information — two Blank values are always equal; skip them
-            // to avoid emitting calls to Blank.$eq (void params, illegal in LLVM IR).
+            // to avoid emitting calls to Blank.eq (void params, illegal in LLVM IR).
             if (field.Type.IsBlank) continue;
 
             var lhs = new MemberExpression(
@@ -744,7 +744,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the synthesized record <c>$store</c> body. Symmetric with
     /// <see cref="BuildDestroyBody"/>: if any field needs a retaining copy (e.g. a
     /// refcounted <c>Decimal</c>/<c>Text</c> field whose own <c>$store</c> bumps a shared
-    /// controller), reconstruct the record memberwise — <c>return Owner(f: me.f.$store(),
+    /// controller), reconstruct the record memberwise — <c>return Owner(f: me.f.store(),
     /// g: me.g, …)</c> — so those field refcounts are bumped to balance the per-field
     /// <c>$destroy</c> at teardown. Without this, the value-copy shares field handles at
     /// refcount 1 and both copies free them → double-free.
@@ -774,10 +774,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             var fieldRef = new MemberExpression(Object: meRef, MemberName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
 
-            // Retaining field → me.f.$store() (bumps its refcount); value field → me.f (shallow).
+            // Retaining field → me.f.store() (bumps its refcount); value field → me.f (shallow).
             Expression argExpr = ctx.Registry.GetLifecycle(type: field.Type).Copy is not null
                 ? new CallExpression(
-                    Callee: new MemberExpression(Object: fieldRef, MemberName: "$store",
+                    Callee: new MemberExpression(Object: fieldRef, MemberName: "store",
                         Location: _synthLoc) { ResolvedType = field.Type },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = field.Type }
@@ -798,7 +798,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Builds the body: <c>return me.$store()</c>. Used for synthesized <c>clone()</c>
+    /// Builds the body: <c>return me.store()</c>. Used for synthesized <c>clone()</c>
     /// on Assignable types — clone is an Assignable-implied alias for the explicit
     /// copy verb, so it just forwards.
     /// </summary>
@@ -810,7 +810,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         };
         var copyMember = new MemberExpression(
             Object: meRef,
-            MemberName: "$store",
+            MemberName: "store",
             Location: _synthLoc)
         {
             ResolvedType = ownerType
@@ -838,7 +838,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     //  $hash
 
     /// <summary>
-    /// Builds the body: <c>return me.f1.$hash() ^ me.f2.$hash() ^ ...</c>.
+    /// Builds the body: <c>return me.f1.hash() ^ me.f2.hash() ^ ...</c>.
     /// Zero-field types: <c>return 0_u64</c>.
     /// </summary>
     private ReturnStatement BuildHashBody(TypeInfo ownerType,
@@ -854,7 +854,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Location: _synthLoc);
         }
 
-        // Pre-resolve U64.$bitxor so synthesized CallExpression nodes carry a concrete
+        // Pre-resolve U64.bitxor so synthesized CallExpression nodes carry a concrete
         // ResolvedRoutine. Without it, codegen's DirectMemberRoutine path throws when it
         // can't determine the receiver type for the XOR accumulator call.
         RoutineInfo? u64Bitxor = ctx.Registry.LookupMethod(type: u64Type, methodName: BitXorMethodName);
@@ -912,8 +912,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Builds the body: <c>return ConversionType(from: me).$hash()</c>.
-    /// Used for Choice (<c>S64(from: me).$hash()</c>) and Flags (<c>U64(from: me).$hash()</c>).
+    /// Builds the body: <c>return ConversionType(from: me).hash()</c>.
+    /// Used for Choice (<c>S64(from: me).hash()</c>) and Flags (<c>U64(from: me).hash()</c>).
     /// The numeric create lowers via the existing codegen numeric-create path; <c>$hash</c>
     /// on the result delegates to the primitive type's xxHash64 implementation.
     /// </summary>
@@ -964,8 +964,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     /// <summary>
     /// Builds: <c>return intrinsicName[From, To](value: paramName)</c>.
-    /// Used for <c>S64.$create(from: Choice)</c> via <c>sign_extend</c> and
-    /// <c>U64.$create(from: Flags)</c> via <c>reinterpret_bits</c>.
+    /// Used for <c>S64.create(from: Choice)</c> via <c>sign_extend</c> and
+    /// <c>U64.create(from: Flags)</c> via <c>reinterpret_bits</c>.
     /// </summary>
     private static ReturnStatement BuildLlvmIntrinsicCallBody(string intrinsicName,
         TypeInfo fromType, TypeInfo toType, string paramName)
@@ -994,7 +994,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     //  keyed $hash(k0, k1)
 
     /// <summary>
-    /// Builds the body: <c>return me.f1.$hash(k0: k0, k1: k1) ^ me.f2.$hash(...) ^ ...</c>.
+    /// Builds the body: <c>return me.f1.hash(k0: k0, k1: k1) ^ me.f2.hash(...) ^ ...</c>.
     /// Zero-field types: <c>return 0_u64</c>.
     /// </summary>
     private ReturnStatement BuildSecureHashBody(TypeInfo ownerType,
@@ -1060,7 +1060,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Builds the body: <c>return ConversionType(from: me).$hash(k0: k0, k1: k1)</c>.
+    /// Builds the body: <c>return ConversionType(from: me).hash(k0: k0, k1: k1)</c>.
     /// Used for Choice (<c>S64(from: me)</c>) and Flags (<c>U64(from: me)</c>).
     /// </summary>
     private static ReturnStatement BuildNumericSecureHashBodyViaConversion(TypeInfo ownerType,
@@ -1092,7 +1092,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     /// <summary>
     /// Builds the body: lexicographic field comparison returning S32 (-1/0/1).
-    /// <c>var r = me.f1.$cmp(you: you.f1); if r != 0 { return r } ...</c>
+    /// <c>var r = me.f1.cmp(you: you.f1); if r != 0 { return r } ...</c>
     /// Zero-field types: <c>return 0_s32</c>.
     /// </summary>
     private static Statement BuildCmpBody(TypeInfo ownerType,
@@ -1126,7 +1126,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             var cmpCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: meField,
-                    MemberName: "$cmp",
+                    MemberName: "cmp",
                     Location: _synthLoc) { ResolvedType = s32Type },
                 Arguments:
                 [
@@ -1240,7 +1240,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             // Routine-typed fields (stored lambdas/function pointers in iterator adapters such as
             // WhereIterator's `predicate`) have no $represent — emitting one yields an undefined
-            // `Routine[...].$represent` symbol at link time. Render a stable placeholder instead.
+            // `Routine[...].represent` symbol at link time. Render a stable placeholder instead.
             if (field.Type is RoutineTypeInfo)
             {
                 parts.Add(new TextPart(Text: "<routine>", Location: _synthLoc));
@@ -1275,7 +1275,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the auto-derived <c>serialize() -> SerialValue</c> body: a <c>Dict[Text, SerialValue]</c>
     /// of every member variable (name -> value), boxed into the SerialValue <c>Dict</c> arm. Scalar
     /// fields whose type is a direct SerialValue arm are boxed inline; aggregate fields with their own
-    /// synthesized <c>serialize()</c> recurse; everything else falls back to <c>Text(field.$represent())</c>
+    /// synthesized <c>serialize()</c> recurse; everything else falls back to <c>Text(field.represent())</c>
     /// ($represent is universal, so the fallback always links). Returns null if SerialValue / Dict are
     /// unavailable. Depth-guard for cyclic entity graphs is a follow-up (see serializable-serialvalue-impl).
     /// </summary>
@@ -1349,7 +1349,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Location: _synthLoc) { ResolvedType = serialValue },
                 Arguments: [], Location: _synthLoc) { ResolvedType = serialValue };
 
-        // Fallback: Text(field.$represent()). Routine-typed fields have no $represent -> placeholder.
+        // Fallback: Text(field.represent()). Routine-typed fields have no $represent -> placeholder.
         Expression textVal = field.Type is RoutineTypeInfo
             ? new LiteralExpression(Value: "<routine>", LiteralType: TokenType.TextLiteral,
                 Location: _synthLoc) { ResolvedType = textType }
@@ -1459,7 +1459,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
-            case "$eq":
+            case "eq":
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildEqBodyNumeric(ownerType: flags, boolType: boolType, isChoice: false);
                 break;
@@ -1512,7 +1512,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$store":
+            case "store":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: flags);
                 break;
 
@@ -1628,12 +1628,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 LiteralType: TokenType.TextLiteral,
                 Location: _synthLoc) { ResolvedType = textType };
 
-            // result.$add(other: " and FlagName")
+            // result.add(other: " and FlagName")
             var appendNameCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
                         { ResolvedType = textType },
-                    MemberName: "$add",
+                    MemberName: "add",
                     Location: _synthLoc),
                 Arguments:
                 [
@@ -1644,7 +1644,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 ],
                 Location: _synthLoc) { ResolvedType = textType };
 
-            // if first { result = "FlagName"; first = false } else { result = result.$add(...) }
+            // if first { result = "FlagName"; first = false } else { result = result.add(...) }
             var innerNameIf = new IfStatement(
                 Condition: new IdentifierExpression(Name: FirstVarName, Location: _synthLoc)
                     { ResolvedType = boolType },
@@ -1688,12 +1688,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
             else
             {
-                // bits.$add(other: "1") -> set branch
+                // bits.add(other: "1") -> set branch
                 var append1 = new CallExpression(
                     Callee: new MemberExpression(
                         Object: new IdentifierExpression(Name: "bits", Location: _synthLoc)
                             { ResolvedType = textType },
-                        MemberName: "$add",
+                        MemberName: "add",
                         Location: _synthLoc),
                     Arguments:
                     [
@@ -1702,12 +1702,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     ],
                     Location: _synthLoc) { ResolvedType = textType };
 
-                // bits.$add(other: "0") -> clear branch
+                // bits.add(other: "0") -> clear branch
                 var append0 = new CallExpression(
                     Callee: new MemberExpression(
                         Object: new IdentifierExpression(Name: "bits", Location: _synthLoc)
                             { ResolvedType = textType },
-                        MemberName: "$add",
+                        MemberName: "add",
                         Location: _synthLoc),
                     Arguments:
                     [
@@ -1716,8 +1716,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     ],
                     Location: _synthLoc) { ResolvedType = textType };
 
-                // if (me & mask) != 0 { <name logic>; bits = bits.$add("1") }
-                // else               { bits = bits.$add("0") }
+                // if (me & mask) != 0 { <name logic>; bits = bits.add("1") }
+                // else               { bits = bits.add("0") }
                 stmts.Add(new IfStatement(
                     Condition: isSet,
                     ThenStatement: new BlockStatement(
@@ -1986,7 +1986,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Expression cond = new CallExpression(
                         Callee: new MemberExpression(
                             Object: memberNameRef,
-                            MemberName: "$eq",
+                            MemberName: "eq",
                             Location: _synthLoc),
                         Arguments: [
                             new NamedArgumentExpression(
@@ -2212,7 +2212,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     /// <summary>
     /// Builds the auto-derived <c>$destroy()</c> body. Composite record/entity/crashable types
-    /// recurse into their owned fields (<c>me.field.$destroy()</c> for each); scalar kinds
+    /// recurse into their owned fields (<c>me.field.destroy()</c> for each); scalar kinds
     /// (choices, flags, <c>@llvm</c>-backed primitives, tuples, variants) get a no-op return.
     /// Leaf RC/ptr teardown (Hijacked, Retained/Tracked, Viewing/Modifying) lives in hand-written
     /// wrapper destructors and is never reached here (those types keep their own <c>$destroy</c>).
@@ -2292,7 +2292,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var fieldRef = new MemberExpression(Object: meRef, MemberName: field.Name,
                     Location: _synthLoc) { ResolvedType = field.Type };
                 var destroyCall = new CallExpression(
-                    Callee: new MemberExpression(Object: fieldRef, MemberName: "$destroy",
+                    Callee: new MemberExpression(Object: fieldRef, MemberName: "destroy",
                         Location: _synthLoc) { ResolvedType = blankType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = blankType };
@@ -2332,7 +2332,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
         // Entities are heap-allocated (rf_allocate_dynamic); their destructor must free the
         // entity allocation itself AFTER tearing down fields, exactly as hand-written entity
-        // destructors do (e.g. List[T].$destroy ends with `me.hijack().invalidate()`). Without
+        // destructors do (e.g. List[T].destroy ends with `me.hijack().invalidate()`). Without
         // this the struct leaks on every $destroy — auto-derived entities like RangeEmitter[T]
         // (the iterator behind every `for x in range`) otherwise leak per iteration. Records,
         // tuples, and crashables are value-typed / managed elsewhere, so they only recurse.
@@ -2351,7 +2351,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var fieldRef = new MemberExpression(Object: meRef, MemberName: field.Name,
                     Location: _synthLoc) { ResolvedType = field.Type };
                 var destroyCall = new CallExpression(
-                    Callee: new MemberExpression(Object: fieldRef, MemberName: "$destroy",
+                    Callee: new MemberExpression(Object: fieldRef, MemberName: "destroy",
                         Location: _synthLoc) { ResolvedType = blankType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = blankType };
@@ -2369,7 +2369,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     /// <summary>
     /// Builds <c>me.hijack().invalidate()</c> — frees the heap allocation backing an entity.
-    /// Mirrors the tail of hand-written entity destructors (e.g. <c>List[T].$destroy</c>); the
+    /// Mirrors the tail of hand-written entity destructors (e.g. <c>List[T].destroy</c>); the
     /// synthesized destructor must emit it too, or every auto-derived entity leaks its struct.
     /// </summary>
     private ExpressionStatement BuildEntitySelfFree(TypeInfo owner, TypeInfo? blankType)
@@ -2394,7 +2394,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     /// <summary>
     /// Builds the variant <c>$destroy()</c>:
-    /// <c>when me { is None => ; is Blank => ; is T as v => v.$destroy(); ... }</c>.
+    /// <c>when me { is None => ; is Blank => ; is T as v => v.destroy(); ... }</c>.
     /// Only the active arm's payload is torn down. The absent arm is matched with <c>is None</c>
     /// (variants use <c>None</c> for their empty branch); void (<c>Blank</c>) and value arms are
     /// no-ops (a value arm's <c>$destroy</c> is itself a no-op, kept for uniformity).
@@ -2429,7 +2429,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
                     { ResolvedType = member.Type };
                 var destroyCall = new CallExpression(
-                    Callee: new MemberExpression(Object: vRef, MemberName: "$destroy",
+                    Callee: new MemberExpression(Object: vRef, MemberName: "destroy",
                         Location: _synthLoc) { ResolvedType = blankType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = blankType };
@@ -2487,7 +2487,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
-            case "$destroy" when routine.Parameters.Count == 0:
+            case "destroy" when routine.Parameters.Count == 0:
                 // Tuples are filtered out of the main routine loop (they never appear in routine
                 // signatures), so the unified `$destroy` synthesis at line ~108 never sees them.
                 // Build the field-recursing destructor here so owned elements (e.g. a `Text`) are
@@ -2505,7 +2505,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildTupleTextBody(tuple: tuple, textType: textType, diagnose: true);
                 break;
 
-            case "$eq":
+            case "eq":
             {
                 TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
                 if (boolType == null) break;
@@ -2514,7 +2514,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$cmp":
+            case "cmp":
             {
                 TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
                 if (s32Type == null || boolType == null) break;
@@ -2594,7 +2594,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Skip generic definitions -> no concrete member types to dispatch on.
         if (variant.IsGenericDefinition) return;
 
-        // Synthesize the per-arm EXTRACTORS (`Arm.$create!(from: V)`) here. They are owned by the arm
+        // Synthesize the per-arm EXTRACTORS (`Arm.create!(from: V)`) here. They are owned by the arm
         // type; for a GENERIC-instance arm (e.g. `Dict[Text, SerialValue]`) the main synthesis loop's
         // `GetAllRoutines` liveness filter (IsConcreteTypeLive) excludes the arm-owned routine at this
         // phase, so its body would never be built. We hold the arm list here, so build them directly
@@ -2686,8 +2686,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Synthesizes the body of an auto-generated variant arm constructor, if <paramref name="routine"/>
     /// is one. Two shapes (both keyed off the arm/variant relationship, not the routine name text):
     /// <list type="bullet">
-    ///   <item><c>V.$create(from: Arm) -> V</c> — box: <c>return &lt;V with the Arm-tagged payload&gt;</c>.</item>
-    ///   <item><c>Arm.$create!(from: V) -> Arm</c> — failable extract:
+    ///   <item><c>V.create(from: Arm) -> V</c> — box: <c>return &lt;V with the Arm-tagged payload&gt;</c>.</item>
+    ///   <item><c>Arm.create!(from: V) -> Arm</c> — failable extract:
     ///     <c>when from { is Arm as v => return v, else => absent }</c>.</item>
     /// </list>
     /// Only synthesized (auto) constructors are handled; a hand-written <c>$create</c> keeps its body.
@@ -2702,7 +2702,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         }
 
         // Box: owner is the variant, `from` is one of its arms.
-        if (routine.Name == "$create" && routine.OwnerType is VariantTypeInfo boxVariant &&
+        if (routine.Name == "create" && routine.OwnerType is VariantTypeInfo boxVariant &&
             FindArmByType(variant: boxVariant, armType: fromParam.Type) is { Type: { } boxArmType })
         {
             var fromRef = new IdentifierExpression(Name: "from", Location: _synthLoc)
@@ -2715,7 +2715,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         }
 
         // Failable extract: `from` is a variant, owner is one of its arms.
-        if (routine.Name == "$create" && routine.IsFailable &&
+        if (routine.Name == "create" && routine.IsFailable &&
             fromParam.Type is VariantTypeInfo fromVariant && routine.OwnerType is { } armOwner &&
             FindArmByType(variant: fromVariant, armType: armOwner) is { Type: { } })
         {
@@ -2754,7 +2754,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Builds the failable extractor body <c>Arm.$create!(from: V)</c> for each non-None arm and stores
+    /// Builds the failable extractor body <c>Arm.create!(from: V)</c> for each non-None arm and stores
     /// it under that routine's key, so a GENERIC-instance arm (excluded from the liveness-gated main
     /// synthesis loop) still gets a body. Idempotent — skips arms whose extractor body already exists.
     /// </summary>
@@ -2769,7 +2769,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             RoutineInfo? extractor = ctx.Registry.GetMethodsForType(type: arm.Type)
                 .FirstOrDefault(predicate: m =>
-                    m is { Name: "$create", IsFailable: true } &&
+                    m is { Name: "create", IsFailable: true } &&
                     m.Parameters is [{ Type: { } paramType }] &&
                     paramType.FullName == variant.FullName);
             if (extractor is null || ctx.VariantBodies.ContainsKey(key: extractor.RegistryKey))
@@ -2792,7 +2792,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             (m.Type.FullName == armType.FullName || m.Type.Name == armType.Name));
 
     /// <summary>
-    /// Builds: <c>when me { is Blank => return "Blank", is T as v => return v.$represent(), ... }</c>.
+    /// Builds: <c>when me { is Blank => return "Blank", is T as v => return v.represent(), ... }</c>.
     /// </summary>
     private static WhenStatement BuildVariantRepresentBody(VariantTypeInfo variant, TypeInfo textType)
     {
@@ -2891,7 +2891,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     /// <summary>
     /// Builds:
-    /// <c>when me { is None => return "Mod.V(type_id: 0, none)", is T as v => return f"Mod.V(type_id: N, {v.$diagnose()})", ... }</c>.
+    /// <c>when me { is None => return "Mod.V(type_id: 0, none)", is T as v => return f"Mod.V(type_id: N, {v.diagnose()})", ... }</c>.
     /// </summary>
     private static WhenStatement BuildVariantDiagnoseBody(VariantTypeInfo variant, TypeInfo textType)
     {

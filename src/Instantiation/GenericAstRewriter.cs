@@ -18,7 +18,7 @@ namespace Compiler.Instantiation;
 /// </summary>
 internal static class GenericAstRewriter
 {
-    private const string CreateMethodName = "$create";
+    private const string CreateMethodName = "create";
     /// <summary>
     /// Rewrites a generic routine declaration by substituting all type parameter references
     /// with concrete type names. Returns a deep clone -> the original is not modified.
@@ -99,16 +99,16 @@ internal static class GenericAstRewriter
         /// Populated by <see cref="Rewrite"/> and the public <c>RewriteStatement</c>
         /// overloads that accept a routine. Used to backfill <c>IdentifierExpression.ResolvedType</c>
         /// when SA failed to annotate a parameter reference (e.g. <c>you.address()</c> in
-        /// <c>Hijacked[T].$cmp</c>'s generic-def body).
+        /// <c>Hijacked[T].cmp</c>'s generic-def body).
         /// </summary>
         public Dictionary<string, TypeInfo> ParamTypes { get; } = new();
 
         /// <summary>
         /// Local variables whose type must be RE-INFERRED after monomorphization because their
-        /// initializer re-dispatched to a concrete owner. Specifically: a `var it = r.$iter()` where
+        /// initializer re-dispatched to a concrete owner. Specifically: a `var it = r.iter()` where
         /// `r` was a protocol-constrained generic param (`__T0 obeys Iterable[S64]`) is typed by SA
         /// as the abstract protocol return (`Iterator[S64]`), but after `__T0 → Range[S64]` the call
-        /// re-dispatches to `Range[S64].$iter` returning the CONCRETE `RangeIterator[S64]`. Recording
+        /// re-dispatches to `Range[S64].iter` returning the CONCRETE `RangeIterator[S64]`. Recording
         /// that here lets later references (`it.try_emit()`) re-dispatch against the concrete iterator
         /// instead of the abstract protocol method (which has no body → linker error). Only used to
         /// concretize references whose stale type is itself a protocol, so other locals are untouched.
@@ -270,7 +270,7 @@ internal static class GenericAstRewriter
                 if (resolvedMethod != null)
                 {
                     // If LookupMethod returned the generic-definition form of a method-generic
-                    // routine (e.g., Array[T,N].$getitem[I]), monomorphize it using the
+                    // routine (e.g., Array[T,N].getitem[I]), monomorphize it using the
                     // substituted argument types so codegen gets a concrete routine, not a
                     // generic-def one.
                     if (resolvedMethod is { IsGenericDefinition: true, GenericParameters.Count: > 0 })
@@ -301,7 +301,7 @@ internal static class GenericAstRewriter
                         argTypes: resolvedParamTypes,
                         isFailable: original.IsFailable);
                     resolvedCreator ??= Registry.LookupRoutineOverload(
-                        baseName: $"{resolvedTarget.Name}.$create",
+                        baseName: $"{resolvedTarget.Name}.create",
                         argTypes: resolvedParamTypes);
                     if (resolvedCreator?.OwnerType is { IsGenericDefinition: true })
                     {
@@ -992,7 +992,7 @@ internal static class GenericAstRewriter
             // Const-generic identifiers (e.g. N in Array[T, N]) have ResolvedType=null in the
             // generic body because SA doesn't run on stdlib bodies before Phase 4.  After GMP
             // substitutes N -> ConstGenericValueTypeInfo("63"), annotate the rewritten identifier
-            // so CallOverloadResolutionPass can resolve operator calls like N.$sub!(1u64).
+            // so CallOverloadResolutionPass can resolve operator calls like N.sub!(1u64).
             if (resolvedType == null &&
                 result is IdentifierExpression cgIdent &&
                 ctx.TypeSubs?.TryGetValue(key: cgIdent.Name, value: out TypeInfo? cgSub) == true &&
@@ -1088,7 +1088,7 @@ internal static class GenericAstRewriter
                     {
                         // Rewriting `List[T](capacity: …)` → `List[S64](capacity: …)` updates
                         // TypeArguments/ConstructedType above, but `ResolvedCreatorRoutine`
-                        // still points at the generic-def `List[T].$create`. Codegen reads
+                        // still points at the generic-def `List[T].create`. Codegen reads
                         // `creatorRoutine.FullName` directly, so without this resolve the
                         // emitted call references the unsubstituted symbol and links fail.
                         creator.ResolvedCreatorRoutine = ctx.ResolveRoutine(
@@ -1125,7 +1125,7 @@ internal static class GenericAstRewriter
             // may arrive with ResolvedType=null when the SA annotation on the generic
             // body's call was not preserved through cloning.  If GMP resolved the routine
             // after the switch, propagate its ReturnType so downstream chained calls
-            // (outer .$method() or CallOverloadResolutionPass) can see the receiver type.
+            // (outer .method() or CallOverloadResolutionPass) can see the receiver type.
             if (result.ResolvedType == null &&
                 result is CallExpression { ResolvedRoutine.ReturnType: { } inferredReturnType })
             {
@@ -1601,7 +1601,7 @@ internal static class GenericAstRewriter
 
                 // Record a re-inferred local type when the initializer re-dispatched to a concrete
                 // owner (its return type is now non-protocol) but SA had typed the binding via an
-                // abstract protocol (e.g. `var it = r.$iter()` : Iterator[S64] → RangeIterator[S64]).
+                // abstract protocol (e.g. `var it = r.iter()` : Iterator[S64] → RangeIterator[S64]).
                 // This lets later references concretize so subsequent member calls re-dispatch to a
                 // real implementer rather than the bodyless protocol method. Only record when the
                 // SA-time type was a protocol and the new return type isn't, so we never demote a

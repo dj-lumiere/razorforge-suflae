@@ -15,7 +15,7 @@ namespace Compiler.Desugaring.Passes;
 /// <para>Lowered cases (require <c>ResolvedRoutine != null</c> from Phase 5):</para>
 /// <list type="bullet">
 /// <item><b>Type constructor with resolved <c>$create</c></b>:
-/// <c>Maybe[S64](value: x)</c> -> <c>CallExpression(IdentifierExpression("$create"), args)</c></item>
+/// <c>Maybe[S64](value: x)</c> -> <c>CallExpression(IdentifierExpression("create"), args)</c></item>
 /// <item><b>Generic method call on receiver</b>:
 /// <c>buf.read![U8](offset)</c> ??
 /// <c>CallExpression(MemberExpression(buf, "read!"), args, TypeArguments=[U8])</c></item>

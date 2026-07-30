@@ -262,7 +262,7 @@ public partial class LlvmCodeGenerator
     {
         // Backend-annotated or single-member-variable wrapper: just return the inner value.
         // BUT: only when there's no explicit `$create(from: argType)` overload — those have
-        // real conversion bodies (e.g. `CStr.$create(from: Referring[Text])` UTF-8-encodes a
+        // real conversion bodies (e.g. `CStr.create(from: Referring[Text])` UTF-8-encodes a
         // Text into bytes). Passing the Text entity ptr through as if it were a CStr ptr
         // skips the conversion and `rf_console_show` ends up dumping the entity struct as
         // bytes, producing garbled output for every non-Text `show(value: T)` callsite.
@@ -278,7 +278,7 @@ public partial class LlvmCodeGenerator
             // arg is an entity type (heap-allocated reference), the wrapper construction is
             // a real conversion, not a representation passthrough. Example:
             // `CStr(from: text)` where text is the Text entity ptr — must call
-            // `CStr.$create(from: Referring[Text])` to UTF-8-encode the codepoints. Without
+            // `CStr.create(from: Referring[Text])` to UTF-8-encode the codepoints. Without
             // this dispatch the passthrough returns the entity ptr and `rf_console_show`
             // dumps raw entity-struct bytes.
             if (argType is EntityTypeInfo &&
@@ -287,7 +287,7 @@ public partial class LlvmCodeGenerator
             {
                 var argTypes = new List<TypeInfo> { argType };
                 RoutineInfo? createOverload = _registry.LookupRoutineOverload(
-                    baseName: $"{record.FullName}.$create",
+                    baseName: $"{record.FullName}.create",
                     argTypes: argTypes);
                 if (createOverload is { OwnerType: not null })
                 {

@@ -15,11 +15,11 @@ namespace Compiler.Postprocessing.Passes;
 /// <code>
 /// {
 ///   var __uf_N = resource
-///   var x = __uf_N.$enter()      // if $enter returns a value
-///   // OR: __uf_N.$enter(); var x = __uf_N   // if $enter is void
+///   var x = __uf_N.enter()      // if $enter returns a value
+///   // OR: __uf_N.enter(); var x = __uf_N   // if $enter is void
 ///   // OR: var x = __uf_N                     // if no $enter
 ///   [body, with $exit() injected before every escape]
-///   __uf_N.$exit()               // normal-path exit (unreachable if body always terminates)
+///   __uf_N.exit()               // normal-path exit (unreachable if body always terminates)
 /// }
 /// </code>
 ///
@@ -170,10 +170,10 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         };
 
         RoutineInfo? enterMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "$enter")
+            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "enter")
             : null;
         RoutineInfo? exitMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "$exit")
+            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "exit")
             : null;
 
         var stmts = new List<Statement>();
@@ -185,7 +185,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (enterMethod != null)
         {
             var enterCallee = new MemberExpression(
-                Object: resTempIdent, MemberName: "$enter", Location: loc);
+                Object: resTempIdent, MemberName: "enter", Location: loc);
             var enterCall = new CallExpression(
                 Callee: enterCallee, Arguments: [], Location: loc)
             {
@@ -218,7 +218,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (exitMethod != null)
         {
             var exitCallee = new MemberExpression(
-                Object: resTempIdent, MemberName: "$exit", Location: loc);
+                Object: resTempIdent, MemberName: "exit", Location: loc);
             var exitCall = new CallExpression(
                 Callee: exitCallee, Arguments: [], Location: loc)
             {
@@ -246,10 +246,10 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
     /// <code>
     /// {
     ///   var __uf_N = resource
-    ///   if __uf_N.$try_enter():        // Bool: did the non-blocking acquire succeed?
+    ///   if __uf_N.try_enter():        // Bool: did the non-blocking acquire succeed?
     ///     var x = __uf_N
     ///     [body, with $exit() injected before every escape]
-    ///     __uf_N.$exit()               // normal-path release
+    ///     __uf_N.exit()               // normal-path release
     ///   else:
     ///     [fallback]                    // nothing acquired -> no $exit
     /// }
@@ -271,10 +271,10 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         };
 
         RoutineInfo? tryEnterMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "$try_enter")
+            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "try_enter")
             : null;
         RoutineInfo? exitMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "$exit")
+            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "exit")
             : null;
 
         var stmts = new List<Statement>();
@@ -282,9 +282,9 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         // var __uf_N = resource
         stmts.Add(MakeBinding(name: resTemp, value: u.Resource, type: resourceType, loc: loc));
 
-        // Condition: __uf_N.$try_enter()  (Bool; SA has already verified $try_enter exists)
+        // Condition: __uf_N.try_enter()  (Bool; SA has already verified $try_enter exists)
         var tryEnterCallee = new MemberExpression(
-            Object: resTempIdent, MemberName: "$try_enter", Location: loc);
+            Object: resTempIdent, MemberName: "try_enter", Location: loc);
         var tryEnterCall = new CallExpression(
             Callee: tryEnterCallee, Arguments: [], Location: loc)
         {
@@ -302,7 +302,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (exitMethod != null)
         {
             var exitCallee = new MemberExpression(
-                Object: resTempIdent, MemberName: "$exit", Location: loc);
+                Object: resTempIdent, MemberName: "exit", Location: loc);
             var exitCall = new CallExpression(
                 Callee: exitCallee, Arguments: [], Location: loc)
             {

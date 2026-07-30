@@ -257,7 +257,7 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 /// <summary>
 /// Expression representing a compound assignment operation (e.g., a += b).
 /// The semantic analyzer dispatches this to an in-place wired method ($iadd, etc.)
-/// or falls back to create-and-assign (a = a.$add(b)) when no in-place operator exists.
+/// or falls back to create-and-assign (a = a.add(b)) when no in-place operator exists.
 /// </summary>
 /// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
 /// <param name="Operator">The base binary operator (Add, Subtract, etc. — not Assign)</param>
@@ -346,7 +346,7 @@ public record UnaryExpression(UnaryOperator Operator, Expression Operand, Source
 /// <item>Method calls: me.method(x, y)</item>
 /// <item>Creator calls: Point(x, y)</item>
 /// <item>Lambda calls: ((x) => x + 1)(42)</item>
-/// <item>Operator method calls: me.$add(you)</item>
+/// <item>Operator method calls: me.add(you)</item>
 /// </list>
 /// </remarks>
 public record CallExpression(
@@ -402,7 +402,7 @@ public record CallExpression(
 
     /// <summary>
     /// True when this call was synthesized by a compiler lowering pass (e.g.
-    /// <c>ControlFlowLoweringPass</c> emitting <c>iter.$iter()</c> / <c>iter.try_emit()</c>
+    /// <c>ControlFlowLoweringPass</c> emitting <c>iter.iter()</c> / <c>iter.try_emit()</c>
     /// for a for-loop). SA uses this to skip checks meant to gate user code from invoking
     /// dunder-private methods directly.
     /// </summary>
@@ -614,7 +614,7 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
     /// When this IndexExpression is the target of an assignment, set by OperatorLoweringPass
     /// to the method-generic-resolved <c>$setitem</c>/<c>$setitem!</c> routine. Codegen uses
     /// this in place of a fresh registry lookup so method-level generics (e.g.
-    /// <c>BitList.$setitem![I]</c> -> <c>BitList.$setitem![S64]</c>) dispatch to the
+    /// <c>BitList.setitem![I]</c> -> <c>BitList.setitem![S64]</c>) dispatch to the
     /// monomorphized entry.
     /// </summary>
     public RoutineInfo? ResolvedSetItem { get; set; }

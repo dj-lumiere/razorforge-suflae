@@ -382,7 +382,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Quotes an LLVM identifier if it contains characters that require quoting.
-    /// LLVM allows any characters in quoted identifiers: @"Hijacked[Point].$eq", %"Record.Hijacked[Point]".
+    /// LLVM allows any characters in quoted identifiers: @"Hijacked[Point].eq", %"Record.Hijacked[Point]".
     /// Unquoted identifiers only allow [a-zA-Z$._0-9-].
     /// </summary>
     private static string Q(string name)
@@ -787,13 +787,13 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        if (returnType != null && routine.Name == "$create")
+        if (returnType != null && routine.Name == "create")
         {
             RoutineInfo? reboundCreator = _registry.LookupMethodOverload(type: returnType,
-                methodName: "$create",
+                methodName: "create",
                 argTypes: argTypes);
             reboundCreator ??= _registry.LookupRoutineOverload(
-                baseName: $"{returnType.Name}.$create",
+                baseName: $"{returnType.Name}.create",
                 argTypes: argTypes);
             // Only accept the rebound when its arity matches the call. The fallback path inside
             // LookupRoutineOverload returns the first-registered overload (often the zero-arg

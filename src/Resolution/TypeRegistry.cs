@@ -304,7 +304,7 @@ public sealed partial class TypeRegistry
         _stdlibPath = stdlibPath ?? StdlibLoader.GetDefaultStdlibPath();
 
         // Register well-known error handling types BEFORE loading the Core module.
-        // This ensures that when Core stdlib routines (e.g. Maybe[T].$unwrap) are registered
+        // This ensures that when Core stdlib routines (e.g. Maybe[T].unwrap) are registered
         // during LoadCoreModule, LookupType("Maybe") returns the initial Maybe definition
         // (FullName="Maybe", no module prefix), so methods are keyed under "Maybe" in
         // _routinesByOwner and are reachable via LookupMethod on Maybe[T] resolutions.
@@ -502,7 +502,7 @@ public sealed partial class TypeRegistry
         // because LoadCoreModule hasn't run.  ResolveProgramMemberVariables (pass 1c inside
         // LoadCoreModule) fills in the members from the stdlib source once all Core types exist.
         // We must register the shells HERE (before LoadCoreModule) so that when
-        // LoadCoreModule's RegisterProgramRoutines processes Maybe[T].$unwrap etc., it calls
+        // LoadCoreModule's RegisterProgramRoutines processes Maybe[T].unwrap etc., it calls
         // LookupType("Maybe") and gets this shell (FullName="Maybe"), causing those methods to
         // be keyed under "Maybe" in _routinesByOwner rather than "Core.Maybe".
         RegisterType(
@@ -1271,11 +1271,11 @@ public sealed partial class TypeRegistry
         var newType = new TupleTypeInfo(elementTypes: elementTypes);
         _resolutions[key: key] = newType;
 
-        // Auto-register TupleType.$represent()
+        // Auto-register TupleType.represent()
         TypeInfo? textType = LookupType(name: "Text");
         if (textType != null)
         {
-            RegisterRoutine(routine: new RoutineInfo(name: "$represent")
+            RegisterRoutine(routine: new RoutineInfo(name: "represent")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1288,7 +1288,7 @@ public sealed partial class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(routine: new RoutineInfo(name: "$diagnose")
+            RegisterRoutine(routine: new RoutineInfo(name: "diagnose")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1308,11 +1308,11 @@ public sealed partial class TypeRegistry
         // tuple won't either — keeping derivation in lockstep with the underlying types.
         TypeInfo? boolType = LookupType(name: "Bool");
         if (boolType != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$eq") != null))
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "eq") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
-            RegisterRoutine(routine: new RoutineInfo(name: "$eq")
+            RegisterRoutine(routine: new RoutineInfo(name: "eq")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1325,7 +1325,7 @@ public sealed partial class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(routine: new RoutineInfo(name: "$ne")
+            RegisterRoutine(routine: new RoutineInfo(name: "ne")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1342,9 +1342,9 @@ public sealed partial class TypeRegistry
         // Auto-register $hash if ALL element types support $hash
         TypeInfo? u64Type = LookupType(name: "U64");
         if (u64Type != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$hash") != null))
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "hash") != null))
         {
-            RegisterRoutine(routine: new RoutineInfo(name: "$hash")
+            RegisterRoutine(routine: new RoutineInfo(name: "hash")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1361,11 +1361,11 @@ public sealed partial class TypeRegistry
         // Auto-register $cmp + derived operators if ALL element types support $cmp
         TypeInfo? comparisonSignType = LookupType(name: "ComparisonSign");
         if (boolType != null && comparisonSignType != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$cmp") != null))
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "cmp") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
-            RegisterRoutine(routine: new RoutineInfo(name: "$cmp")
+            RegisterRoutine(routine: new RoutineInfo(name: "cmp")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1381,10 +1381,10 @@ public sealed partial class TypeRegistry
             // Derived: $lt, $le, $gt, $ge
             foreach (string opName in new[]
                      {
-                         "$lt",
-                         "$le",
-                         "$gt",
-                         "$ge"
+                         "lt",
+                         "le",
+                         "gt",
+                         "ge"
                      })
             {
                 RegisterRoutine(routine: new RoutineInfo(name: opName)
@@ -1486,7 +1486,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// All concrete generic instances, bypassing the liveness filter.
     /// Used by GMP's fixed-point loop to discover types that were registered during
-    /// monomorphization itself (e.g. ListEmitter[Byte] discovered while rewriting List[Byte].$iter).
+    /// monomorphization itself (e.g. ListEmitter[Byte] discovered while rewriting List[Byte].iter).
     /// Wrapper types are excluded to prevent runaway growth for self-wrapping families.
     /// </summary>
     public IEnumerable<TypeInfo> AllConcreteGenericInstancesUnfiltered =>

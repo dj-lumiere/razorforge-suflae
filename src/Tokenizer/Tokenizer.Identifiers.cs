@@ -56,6 +56,24 @@ public partial class Tokenizer
     {
         _hasTokenOnLine = true;
 
+        // Wired member-routine marker: a leading '$' ($create, $store, $emit, …) is a SEPARATE
+        // structural token — the parser records it as RoutineInfo.IsWiredMemberRoutine and keeps the
+        // name bare. Emit the '$' as its own Dollar token, then re-anchor so the bare identifier that
+        // follows scans and emits on its own. (The main scan loop already consumed the '$' into
+        // _position, so the identifier body is scanned by the loop below.)
+        if (_source[index: _tokenStart] == '$')
+        {
+            _tokens.Add(item: new Token(Type: TokenType.Dollar, FileName: _fileName, Text: "$",
+                Line: _tokenStartLine, Column: _tokenStartColumn, Position: _tokenStart));
+            _tokenStart += 1;
+            _tokenStartColumn += 1;
+            // A lone '$' with no identifier body — nothing more to emit.
+            if (!IsIdentifierPart(c: Peek()) && _position == _tokenStart)
+            {
+                return;
+            }
+        }
+
         // Consume identifier characters
         while (IsIdentifierPart(c: Peek()))
         {

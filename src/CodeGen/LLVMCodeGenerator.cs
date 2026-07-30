@@ -843,7 +843,7 @@ public partial class LlvmCodeGenerator
                         // LookupRoutineOverload may return the wrong overload (or fail).
                         // Build the AST param-type name list directly and match against
                         // candidate parameter type names. Determine the owner type from the
-                        // AST routine name (e.g. "Bytes.$create") rather than the possibly-
+                        // AST routine name (e.g. "Bytes.create") rather than the possibly-
                         // wrong initial routineInfo, since LookupRoutineByName returns an
                         // arbitrary overload (possibly from a different type).
                         TypeInfo? resolvedOwner = routineInfo?.OwnerType;
@@ -1081,8 +1081,8 @@ public partial class LlvmCodeGenerator
                 RoutineInfo? synthInfo = _registry.LookupRoutine(fullName: key);
                 if (synthInfo == null || synthInfo.IsGenericDefinition) continue;
                 // Wrapper-forwarder synthesized bodies are anchored on the generic-def owner
-                // (e.g. Retained[T].$eq). Reachability seeds the *concrete* monomorphizations
-                // (Retained[Text].$eq), not the gen-def routine itself, so the gen-def synth
+                // (e.g. Retained[T].eq). Reachability seeds the *concrete* monomorphizations
+                // (Retained[Text].eq), not the gen-def routine itself, so the gen-def synth
                 // would always fail this gate. The inner per-concrete loop below has its own
                 // liveness check (_generatedRoutines.Contains), so it's safe to bypass here.
                 bool isWrapperForwarderGenDef =
@@ -1098,7 +1098,7 @@ public partial class LlvmCodeGenerator
                 // hijacked_from[T]); owner-generic types need a separate guard.
                 if (synthInfo.OwnerType != null && ContainsGenericParameter(synthInfo.OwnerType))
                     continue;
-                // Skip derived operators on generic owner types (e.g. ArrayIterator.$ne).
+                // Skip derived operators on generic owner types (e.g. ArrayIterator.ne).
                 // GMP monomorphizes these into InstantiatedGenericBodies (Phase B); emitting the
                 // generic-def version here would call a non-existent generic $eq/$contains.
                 // Exception: synthesized wrapper forwarder bodies (T.key_get, etc.) are

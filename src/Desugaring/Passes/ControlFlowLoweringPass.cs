@@ -22,7 +22,7 @@ namespace Compiler.Desugaring.Passes;
 /// <para><b>for v in iterable</b> -> loop+when:</para>
 /// <code>
 ///  {
-/// var _lf_iter_N = iterable.$iter()
+/// var _lf_iter_N = iterable.iter()
 /// loop { when _lf_iter_N.try_emit() { is None -> break; else var v -> body } }
 /// }
 /// </code>
@@ -31,7 +31,7 @@ namespace Compiler.Desugaring.Passes;
 /// body prepends positional member-access bindings:</para>
 /// <code>
 ///  {
-/// var _lf_iter_N = pairs.$iter()
+/// var _lf_iter_N = pairs.iter()
 /// loop {
 /// when _lf_iter_N.try_emit() {
 /// is None -> break
@@ -45,7 +45,7 @@ namespace Compiler.Desugaring.Passes;
 /// <code>
 ///  {
 /// var _lf_exhausted_N: Bool = false
-/// var _lf_iter_N = iterable.$iter()
+/// var _lf_iter_N = iterable.iter()
 /// loop {
 /// when _lf_iter_N.try_emit() {
 /// is None -> { _lf_exhausted_N = true; break }
@@ -302,7 +302,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         var iterCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: forStmt.Iterable,
-                MemberName: "$iter",
+                MemberName: "iter",
                 Location: loc),
             Arguments: [],
             Location: loc) { IsSynthesizedLowering = true };
@@ -323,7 +323,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         // Skip ErrorTypeInfo: SA suppresses stdlib errors.
         if (forStmt.Iterable.ResolvedType is { } iterType and not ErrorTypeInfo)
         {
-            RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "$iter");
+            RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "iter");
             if (iterMethod?.ReturnType is { } rawIteratorType)
             {
                 // LookupMethod returns the generic-def `$iter`, whose ReturnType still carries the

@@ -17,7 +17,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <list type="bullet">
 ///   <item>1a. Chained comparisons: <c>a &lt; b &lt; c</c> -> <c>(a &lt; b) and (b &lt; c)</c></item>
 ///   <item>1b. None-coalescing: <c>a ?? b</c> -> temp vars + WhenStatement (preserves lazy eval)</item>
-///   <item>1c. Force-unwrap: <c>a!!</c> -> <c>a.$unwrap()</c> -- handled by <see cref="OperatorLoweringPass"/>
+///   <item>1c. Force-unwrap: <c>a!!</c> -> <c>a.unwrap()</c> -- handled by <see cref="OperatorLoweringPass"/>
 ///         so that stdlib bodies (which bypass this pass) are also covered.</item>
 ///   <item>1d. Optional member access: <c>a?.prop</c> -> temp vars + WhenStatement</item>
 /// </list>
@@ -317,7 +317,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return LowerNoneCoalesce(binary);
 
             // -- Step 1c: force-unwrap (!!) -- handled by OperatorLoweringPass --------
-            // !! is desugared to operand.$unwrap() in OperatorLoweringPass so that
+            // !! is desugared to operand.unwrap() in OperatorLoweringPass so that
             // stdlib bodies (which bypass ExpressionLoweringPass) are also covered.
 
             // -- Step 1d: optional member access (?.) -----------------------------
@@ -1559,7 +1559,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// </summary>
     /// <summary>
     /// Lowers <c>base with .field1 = v1, .field2 = v2</c> into
-    /// <c>var tmp = base.$store(); tmp.field1 = v1; tmp.field2 = v2; tmp</c>. The
+    /// <c>var tmp = base.store(); tmp.field1 = v1; tmp.field2 = v2; tmp</c>. The
     /// <c>$store</c> dispatch carries any per-field semantics (e.g. retains on
     /// <c>Retained[T]</c> fields) that a field-by-field constructor rebuild would skip.
     /// SA gates this in <c>AnalyzeWithExpression</c> (base type must obey Assignable).
@@ -1615,10 +1615,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             return (hoisted, withExpr with { Base = baseRef });
         }
 
-        // var with_copy = baseRef.$store()
+        // var with_copy = baseRef.store()
         var copyCall = new CallExpression(
             Callee: new MemberExpression(
-                Object: baseRef, MemberName: "$store", Location: loc)
+                Object: baseRef, MemberName: "store", Location: loc)
                 { ResolvedType = baseType },
             Arguments: [],
             Location: loc) { ResolvedType = baseType };

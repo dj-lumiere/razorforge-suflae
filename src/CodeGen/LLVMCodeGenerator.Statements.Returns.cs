@@ -162,7 +162,7 @@ public partial class LlvmCodeGenerator
     private void EmitEntityCleanup(StringBuilder sb, string? returnedVarName)
     {
         // Scope-exit teardown of owned locals is lowered into the AST as explicit
-        // `local.$destroy()` calls by ScopeTeardownLoweringPass (Phase 7), so codegen emits none.
+        // `local.destroy()` calls by ScopeTeardownLoweringPass (Phase 7), so codegen emits none.
         //
         // The entity self-free (freeing the heap allocation backing `me`) is ALSO lowered into the
         // synthesized `$destroy` body as `me.hijack().invalidate()` (see

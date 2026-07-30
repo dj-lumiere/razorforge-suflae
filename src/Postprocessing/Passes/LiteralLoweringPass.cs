@@ -27,7 +27,7 @@ internal sealed class LiteralLoweringPass
 {
     private readonly Dictionary<string, Statement>? _variantBodies;
     private readonly TypeInfo? _backIndexType;
-    // Arbitrary-precision literal lowering: `123n`/`3.14dn` -> Integer/Decimal.$from_literal(text:"...").
+    // Arbitrary-precision literal lowering: `123n`/`3.14dn` -> Integer/Decimal.from_literal(text:"...").
     private readonly TypeInfo? _integerType;
     private readonly TypeInfo? _decimalType;
     private readonly TypeInfo? _textType;
@@ -61,10 +61,10 @@ internal sealed class LiteralLoweringPass
         _decimalType = ctx.Registry.LookupType(name: "Decimal");
         _textType = ctx.Registry.LookupType(name: "Text");
         _integerFromLiteral = _integerType != null
-            ? ctx.Registry.LookupMethod(type: _integerType, methodName: "$from_literal")
+            ? ctx.Registry.LookupMethod(type: _integerType, methodName: "from_literal")
             : null;
         _decimalFromLiteral = _decimalType != null
-            ? ctx.Registry.LookupMethod(type: _decimalType, methodName: "$from_literal")
+            ? ctx.Registry.LookupMethod(type: _decimalType, methodName: "from_literal")
             : null;
 
         // Imaginary `j*` literals (J32/J64/J128/Jn) are emitted as Text by codegen (no scalar form
@@ -78,7 +78,7 @@ internal sealed class LiteralLoweringPass
         _f128Type = ctx.Registry.LookupType(name: "F128");
         _realType = ctx.Registry.LookupType(name: "Real");
         _realFromLiteral = _realType != null
-            ? ctx.Registry.LookupMethod(type: _realType, methodName: "$from_literal")
+            ? ctx.Registry.LookupMethod(type: _realType, methodName: "from_literal")
             : null;
     }
 
@@ -592,7 +592,7 @@ internal sealed class LiteralLoweringPass
     }
 
     /// <summary>
-    /// Builds <c>&lt;Type&gt;.$from_literal(text: "&lt;digits&gt;")</c> for an arbitrary-precision
+    /// Builds <c>&lt;Type&gt;.from_literal(text: "&lt;digits&gt;")</c> for an arbitrary-precision
     /// (<c>n</c>/<c>dn</c>) literal. The suffix and digit-group underscores are stripped; the bare
     /// digit string is materialized at runtime by the infallible <c>$from_literal</c> constructor.
     /// </summary>
@@ -610,7 +610,7 @@ internal sealed class LiteralLoweringPass
         var arg = new NamedArgumentExpression(Name: "text", Value: textLit, Location: loc);
         var callee = new MemberExpression(
             Object: new IdentifierExpression(Name: type.Name, Location: loc) { ResolvedType = type },
-            MemberName: "$from_literal", Location: loc);
+            MemberName: "from_literal", Location: loc);
         return new CallExpression(Callee: callee, Arguments: [arg], Location: loc)
         {
             ResolvedRoutine = fromLiteral,
@@ -659,7 +659,7 @@ internal sealed class LiteralLoweringPass
 
     /// <summary>
     /// Builds the `BackIndex(offset: n)` creator that replaces a `^n` expression.
-    /// The <c>BackIndex.$create</c> routine takes a <c>U64</c> offset, so an untyped or
+    /// The <c>BackIndex.create</c> routine takes a <c>U64</c> offset, so an untyped or
     /// signed integer-literal operand is retagged <c>U64</c>; any other operand passes through
     /// unchanged (semantic analysis has already verified it is an integer).
     /// </summary>

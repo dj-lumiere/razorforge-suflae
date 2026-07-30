@@ -724,7 +724,13 @@ public partial class Parser
             // Parse routine signature
             if (Match(type: TokenType.Routine))
             {
-                var methodNameSb = new System.Text.StringBuilder(ConsumeIdentifier(errorMessage: "Expected member routine name"));
+                _routineNameWired = false;
+                if (Match(type: TokenType.Dollar))
+                {
+                    _routineNameWired = true;
+                }
+                var methodNameSb = new System.Text.StringBuilder(
+                    ConsumeIdentifier(errorMessage: "Expected member routine name"));
 
                 // Handle Me.methodName syntax for instance member routines
                 // Protocol member routines can be: "routine Me.methodName()" or "routine methodName()"

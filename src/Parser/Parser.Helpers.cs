@@ -76,8 +76,23 @@ public partial class Parser
     private static bool IsKeywordValidAsMethodName(TokenType type) =>
         type == TokenType.NoneValue;
 
+    /// <summary>
+    /// Set true while parsing a routine-declaration name when a wired marker (`$`) token is consumed
+    /// on the method segment. Read (and reset) by the routine-declaration parsers to populate
+    /// <see cref="SyntaxTree.RoutineDeclaration.IsWiredMemberRoutine"/>. The `$` is NEVER folded into
+    /// the decl name — the canonical name is the bare identifier.
+    /// </summary>
+    private bool _routineNameWired;
+
     private string ConsumeMethodName(string errorMessage)
     {
+        // Wired member-routine marker: `$` is a separate Dollar token, recorded structurally in
+        // _routineNameWired and dropped from the name (bare canonical name).
+        if (Match(type: TokenType.Dollar))
+        {
+            _routineNameWired = true;
+        }
+
         // Accept keyword tokens that are also valid identifiers as method names
         // (e.g. `BitArray[N].none()` — `none` is the absent-value keyword but reads
         // fine as a member-access name in postfix position).

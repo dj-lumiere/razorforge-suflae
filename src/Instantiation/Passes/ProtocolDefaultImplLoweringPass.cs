@@ -15,7 +15,7 @@ namespace Compiler.Instantiation.Passes;
 /// A protocol-extension routine such as
 /// <code>routine Iterable[Text].join(separator: Text) -> Text</code>
 /// carries a real body whose <c>me</c> is typed as the protocol itself. The body's
-/// nested calls (e.g. <c>for part in me</c> -> <c>me.$iter()</c> / <c>me.$emit!()</c>)
+/// nested calls (e.g. <c>for part in me</c> -> <c>me.iter()</c> / <c>me.emit!()</c>)
 /// cannot resolve statically against an abstract protocol owner; codegen needs the
 /// concrete implementer.
 ///
@@ -44,7 +44,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     /// Synthesizes per-implementer protocol-default-impl bodies for every call site reachable from
     /// the current body set, iterating to a local fixed point. Returns <c>true</c> if any new body
     /// was synthesized — the caller re-runs GMP + this pass so that protocol-default calls appearing
-    /// only inside GMP-monomorphized bodies (e.g. <c>source.List()</c> inside <c>ReverseIterator.$iter</c>)
+    /// only inside GMP-monomorphized bodies (e.g. <c>source.List()</c> inside <c>ReverseIterator.iter</c>)
     /// are also lowered.
     /// </summary>
     /// <summary>
@@ -216,8 +216,8 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     /// Seeds the no-arg constructor symbols a freshly-synthesized per-implementer body references so
     /// codegen emits their definitions. A collector body like <c>Iterable[T].Set</c> cloned onto
     /// <c>List[S64]</c> contains <c>var result = Set[S64]()</c>; reachability (which seeds
-    /// <c>&lt;Type&gt;.$create</c> for no-arg constructions) ran BEFORE this synthesis, so without this
-    /// the call links to an undefined <c>Set[S64].$create</c>. The subsequent incremental GMP pass
+    /// <c>&lt;Type&gt;.create</c> for no-arg constructions) ran BEFORE this synthesis, so without this
+    /// the call links to an undefined <c>Set[S64].create</c>. The subsequent incremental GMP pass
     /// monomorphizes the constructor body; this just keeps it past the liveness gate.
     /// </summary>
     private void SeedConstructorCallees(Statement body)
@@ -226,7 +226,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         {
             // A no-arg construction in a cloned collector body — e.g. `Set[T]()` / `List[T]()` —
             // reaches here as a GenericMethodCallExpression (or CreatorExpression) carrying a concrete
-            // ConstructedType after the T→implementer substitution. Codegen emits a `<Type>.$create`
+            // ConstructedType after the T→implementer substitution. Codegen emits a `<Type>.create`
             // call by mangled name; mark it live so the body GMP monomorphizes survives the gate.
             TypeInfo? ct = expr switch
             {
@@ -236,12 +236,12 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                 _ => null
             };
             if (ct is null || !IsConcreteType(t: ct)) return;
-            ctx.LiveRoutineKeys.Add(item: $"{ct.FullName}.$create");
+            ctx.LiveRoutineKeys.Add(item: $"{ct.FullName}.create");
         });
     }
 
     /// <summary>True when <paramref name="t"/> carries no unresolved generic parameter (so its
-    /// <c>$create</c> mangles to a real symbol, not e.g. <c>ExcludeIterator[T, Me, SO].$create</c>).</summary>
+    /// <c>$create</c> mangles to a real symbol, not e.g. <c>ExcludeIterator[T, Me, SO].create</c>).</summary>
     private static bool IsConcreteType(TypeInfo t)
     {
         if (t is GenericParameterTypeInfo or ProtocolTypeInfo) return false;

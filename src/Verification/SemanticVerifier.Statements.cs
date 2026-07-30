@@ -79,8 +79,8 @@ public sealed partial class SemanticVerifier
         // A user-defined `$destroy` replaces the compiler-generated memory teardown (field
         // recursion + invalidate `me`), so the author owns freeing `me` and its fields. Require
         // `dangerous` so this opt-in to manual memory management is explicit at the declaration.
-        bool isDestroyDecl = routine.Name == "$destroy"
-            || routine.Name.EndsWith(value: ".$destroy", comparisonType: StringComparison.Ordinal);
+        bool isDestroyDecl = routine.Name == "destroy"
+            || routine.Name.EndsWith(value: ".destroy", comparisonType: StringComparison.Ordinal);
         if (isDestroyDecl && !routine.IsDangerous)
         {
             ReportError(code: SemanticDiagnosticCode.DestroyMustBeDangerous,
@@ -202,10 +202,10 @@ public sealed partial class SemanticVerifier
                 isFailable: routine.IsFailable);
 
             // Fallback: extension methods on concrete generic specializations
-            // (e.g., `List[Byte].$create`) register under the concrete owner type,
-            // producing a RegistryKey like `Core.List[Core.Byte].$create#Core.Bytes`.
+            // (e.g., `List[Byte].create`) register under the concrete owner type,
+            // producing a RegistryKey like `Core.List[Core.Byte].create#Core.Bytes`.
             // The first lookup above used the generic-def-normalized owner
-            // (`Core.List[T].$create`), so it missed. Resolve the concrete owner
+            // (`Core.List[T].create`), so it missed. Resolve the concrete owner
             // type from the routine name and rebuild the canonical key.
             if (routineInfo == null && routine.Name.Contains(value: '.'))
             {

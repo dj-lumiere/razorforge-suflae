@@ -20,13 +20,17 @@ public partial class Parser
                 message: "External declarations are only available in RazorForge.");
         }
 
-        SourceLocation
-            location =
-                GetLocation(
-                    token: PeekToken(
-                        offset: -2)); // -2 because we consumed 'external' and 'routine'
+        // -2 because we consumed 'external' and 'routine'
+        SourceLocation location = GetLocation(token: PeekToken(offset: -2));
 
-        var nameSb = new System.Text.StringBuilder(ConsumeIdentifier(errorMessage: "Expected routine name"));
+        _routineNameWired = false;
+        if (Match(type: TokenType.Dollar))
+        {
+            _routineNameWired = true;
+        }
+
+        var nameSb = new System.Text.StringBuilder(
+            ConsumeIdentifier(errorMessage: "Expected routine name"));
 
         // Support slash-based module paths with a dot-qualified routine name like IO/Console.print
         while (Match(type: TokenType.Dot))
@@ -70,7 +74,8 @@ public partial class Parser
                 if (Match(type: TokenType.DotDotDot))
                 {
                     isVariadic = true;
-                    break; // ... must be last
+                    // ... must be last
+                    break;
                 }
 
                 string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name");
@@ -173,5 +178,4 @@ public partial class Parser
 
         return new ExternalBlockDeclaration(Declarations: declarations, Location: blockLocation);
     }
-
 }

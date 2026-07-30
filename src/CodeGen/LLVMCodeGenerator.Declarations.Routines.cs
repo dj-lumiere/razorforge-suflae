@@ -270,8 +270,8 @@ public partial class LlvmCodeGenerator
 
                     // Member declaration (Owner.method): disambiguate OWNER-SCOPED. The base-name
                     // path below fails here — routineInfo.BaseName for a member routine is the bare
-                    // "F64.$create" (no module prefix), but overloads register under
-                    // "Core.F64.$create#…", and LookupRoutineOverload's Core-prefix fallback is
+                    // "F64.create" (no module prefix), but overloads register under
+                    // "Core.F64.create#…", and LookupRoutineOverload's Core-prefix fallback is
                     // disabled whenever the base name contains a '.' (which member names always do).
                     // So it would silently fall back to the first-registered overload, ignoring the
                     // arg types we just computed. LookupMethodOverload collects the owner type's
@@ -460,7 +460,7 @@ public partial class LlvmCodeGenerator
             // Without this, codegen falls through GenerateRoutineBody on a null AST and emits
             // an empty function returning zero/null — every page_size() call returns 0,
             // every target_os() returns null ptr, and `show(f"target_os: {os}")` AVs in
-            // CStr.$create(from: null).
+            // CStr.create(from: null).
             Statement effectiveBody = routine.Body;
             // Stub routines (declared without a body, like BuilderService.page_size()) get
             // their synthesized body from WiredRoutinePass via _synthesizedBodies. The parser
@@ -735,7 +735,7 @@ public partial class LlvmCodeGenerator
     internal static string MangleRoutineName(RoutineInfo routine)
     {
         // All routines with parameters are disambiguated by parameter type. Overloads
-        // sharing only a name (e.g. LocalMoment.$sub(Duration) vs $sub(LocalMoment),
+        // sharing only a name (e.g. LocalMoment.sub(Duration) vs $sub(LocalMoment),
         // or $hash() vs $hash(k0, k1)) collapse to the same symbol otherwise and the
         // linker arbitrarily picks one definition, mis-typing every call site.
         static bool ShouldDisambiguateByParameterTypes(RoutineInfo candidate) =>
@@ -939,9 +939,9 @@ public partial class LlvmCodeGenerator
 
     private static bool IsCreatorRoutine(RoutineInfo routine)
     {
-        return routine.Name.Contains(value: "$create") ||
+        return routine.Name.Contains(value: "create") ||
                routine.Name is "try_create" or "check_create" or "lookup_create" ||
-               routine.OriginalName?.Contains(value: "$create") == true;
+               routine.OriginalName?.Contains(value: "create") == true;
     }
 
     private string GetImplicitMeParameterDeclaration(RoutineInfo routine, bool includeName)
@@ -1044,7 +1044,7 @@ public partial class LlvmCodeGenerator
     /// and "mutates in place" never overlap.</item>
     /// </list>
     /// Entities are already by-ref via their pointer ABI. This replaces the old <c>$setitem</c>
-    /// name-check: <c>Array.$setitem</c> is by-ref because Array is aggregate-backed, like every
+    /// name-check: <c>Array.setitem</c> is by-ref because Array is aggregate-backed, like every
     /// other Array method — not because of its name.
     /// </summary>
     internal static bool IsByRefMeRecord(TypeInfo? ownerType) => ownerType switch

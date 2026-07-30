@@ -310,14 +310,14 @@ public partial class LlvmCodeGenerator
 
         ResolvedMemberRoutine? resolved = resolvedType.IsGenericResolution
             ? null
-            : ResolveMemberRoutine(receiverType: resolvedType, methodName: "$create");
+            : ResolveMemberRoutine(receiverType: resolvedType, methodName: "create");
 
         if (resolved is { Routine.Parameters.Count: > 0 })
             resolved = null;
 
         if (resolved == null)
         {
-            string createName = $"{resolvedType.FullName}.$create";
+            string createName = $"{resolvedType.FullName}.create";
             RoutineInfo? creator =
                 _registry.LookupRoutineOverload(baseName: createName, argTypes: new List<TypeInfo>());
             if (creator is { Parameters.Count: > 0 })
@@ -333,7 +333,7 @@ public partial class LlvmCodeGenerator
                 };
                 if (genericDef != null)
                 {
-                    string genCreateName = $"{RoutineInfo.GetTypeIdentity(type: genericDef)}.$create";
+                    string genCreateName = $"{RoutineInfo.GetTypeIdentity(type: genericDef)}.create";
                     creator = _registry.LookupRoutineOverload(baseName: genCreateName,
                         argTypes: new List<TypeInfo>());
                     creator ??= _registry.LookupRoutine(fullName: genCreateName);
@@ -346,7 +346,7 @@ public partial class LlvmCodeGenerator
             {
                 string funcName;
                 if (resolvedType.IsGenericResolution)
-                    funcName = Q(name: $"{resolvedType.FullName}.$create");
+                    funcName = Q(name: $"{resolvedType.FullName}.create");
                 else
                     funcName = MangleRoutineName(routine: creator);
 

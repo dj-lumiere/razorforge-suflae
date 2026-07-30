@@ -10,7 +10,7 @@ namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
 /// Rewrites Referring[T]/Controlling[T] parameter types to the inner entity T
-/// and injects implicit .$refer()/.$control() coercion at matching call-site arguments.
+/// and injects implicit .refer()/.control() coercion at matching call-site arguments.
 /// After this pass runs, no marker-protocol types remain in routine signatures or
 /// argument expression types — bodies see entity T directly, and call sites pass
 /// in-flight T produced by the wrapper's $refer/$control implementation.
@@ -513,10 +513,10 @@ internal sealed class MarkerProtocolDesugarPass
 
             // Skip if arg already coerces to inner T explicitly.
             if (valueExpr is CallExpression { Callee: MemberExpression mem }
-                && (mem.MemberName == "$refer" || mem.MemberName == "$control"))
+                && (mem.MemberName == "refer" || mem.MemberName == "control"))
                 continue;
 
-            string methodName = mk.Kind == MarkerKind.Control ? "$control" : "$refer";
+            string methodName = mk.Kind == MarkerKind.Control ? "control" : "refer";
             var coerced = new CallExpression(
                 Callee: new MemberExpression(
                     Object: valueExpr,

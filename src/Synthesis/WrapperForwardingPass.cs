@@ -30,10 +30,10 @@ namespace Compiler.Synthesis;
 ///   - All other wrappers forward any modification category.
 ///
 /// Signature synthesis: params/return are taken from the inner method's signature
-/// on the inner-generic-def type (e.g. List[T].$getitem!).  GMP's
+/// on the inner-generic-def type (e.g. List[T].getitem!).  GMP's
 /// BuildConcreteRoutineInfo performs name-based substitution at monomorphization
 /// time.  For methods whose return depends on the inner's generic param (e.g.
-/// List[T].$getitem! returning T), the forwarder is marked with
+/// List[T].getitem! returning T), the forwarder is marked with
 /// <see cref="RoutineInfo.WrapperForwarderInnerMethod"/> so GMP can re-resolve the
 /// signature against the concrete inner type.
 /// </summary>
@@ -70,21 +70,21 @@ internal sealed class WrapperForwardingPass
     [
         RuntimeContract.RefCount.Retain,
         RuntimeContract.RefCount.Release,
-        "$destroy",
+        "destroy",
         // Operators/hashing/display: invoked from generic stdlib container
         // bodies after monomorphization, so they bypass SA's lazy synthesis
         // path. Wrappers do not define these themselves — they transparently
-        // forward to inner T (e.g. Text.$eq -> Text.$eq).
-        "$eq",
-        "$ne",
-        "$cmp",
-        "$lt",
-        "$le",
-        "$gt",
-        "$ge",
-        "$hash",
-        "$represent",
-        "$diagnose"
+        // forward to inner T (e.g. Text.eq -> Text.eq).
+        "eq",
+        "ne",
+        "cmp",
+        "lt",
+        "le",
+        "gt",
+        "ge",
+        "hash",
+        "represent",
+        "diagnose"
     ];
 
     /// <summary>
@@ -167,7 +167,7 @@ internal sealed class WrapperForwardingPass
         // $create and $destroy are type-lifecycle methods, not instance methods.
         // Forwarding them would generate `Hijacked[T](me)` in the body but `me` is
         // not set up for $create (constructor) methods — skip unconditionally.
-        if (methodName is "$create" or "$destroy")
+        if (methodName is "create" or "destroy")
             return null;
 
         TypeSymbol? wrapperDef = wrapperType switch

@@ -14,7 +14,7 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
-    private const string CreateMethodName = "$create";
+    private const string CreateMethodName = "create";
 
     /// <summary>
     /// Emit routine call as part of this compiler phase.
@@ -93,13 +93,13 @@ public partial class LlvmCodeGenerator
         // base-case construction inside `$create` carry a null/synth resolvedRoutine and still inline.
         bool routesToUserCreate = resolvedRoutine is
         {
-            IsSynthesized: false, Name: "$create" or "$create!"
+            IsSynthesized: false, Name: "create" or "create!"
         } && constructedType is EntityTypeInfo;
 
         switch (loweringKind)
         {
             // ValueConversion (`x.D128()`-style casts) is NOT inlined here: it falls through to the
-            // routine-call path, which resolves `Target.$create(from: source)` and calls it. The
+            // routine-call path, which resolves `Target.create(from: source)` and calls it. The
             // creator's body is the conversion (scalar cast for primitives, BID/IEEE encode for
             // carrier records) — the backend must not re-decide it with a scalar cast.
             case CallLoweringKind.CollectionConstruction when constructedType != null:
@@ -165,7 +165,7 @@ public partial class LlvmCodeGenerator
             {
                 // Direct named-field construction: when all arg names match field names exactly,
                 // emit struct construction directly (avoids $create infinite recursion).
-                // e.g., CStr(ptr: from_ptr) inside CStr.$create body
+                // e.g., CStr(ptr: from_ptr) inside CStr.create body
                 if (calledType is RecordTypeInfo { MemberVariables.Count: > 0 } record &&
                     arguments.Count == record.MemberVariables.Count && arguments.All(
                         predicate: a =>
@@ -209,7 +209,7 @@ public partial class LlvmCodeGenerator
                 // Zero-arg entity construction -> try $create() first, then null
                 if (calledType is EntityTypeInfo && arguments.Count == 0)
                 {
-                    string createName = $"{calledType.Name}.$create";
+                    string createName = $"{calledType.Name}.create";
                     RoutineInfo? creator = _registry.LookupRoutineOverload(baseName: createName,
                         argTypes: new List<TypeInfo>());
                     if (!(creator is { Parameters.Count: 0 }))
@@ -221,7 +221,7 @@ public partial class LlvmCodeGenerator
                 }
 
                 // Try $create overload -> this covers conversion constructors
-                // (e.g., CStr(from: text) -> CStr.$create(from: Text))
+                // (e.g., CStr(from: text) -> CStr.create(from: Text))
                 var semanticArgTypes = new List<TypeInfo>();
                 foreach (Expression arg in arguments)
                 {
@@ -595,7 +595,7 @@ public partial class LlvmCodeGenerator
     /// Inline when no $create was resolved, OR when the resolved routine's parameter LLVM
     /// type differs from the wrapper's backend type (a scalar primitive cast like U64(s8)).
     /// Otherwise call the routine — same LLVM type with a resolved $create indicates a real
-    /// conversion (e.g. CStr.$create(from: Referring[Text])), which a reinterpret would skip.
+    /// conversion (e.g. CStr.create(from: Referring[Text])), which a reinterpret would skip.
     /// </summary>
     private bool ShouldInlineDirectBackendConstruction(RecordTypeInfo record, Expression arg,
         RoutineInfo? resolvedRoutine)
@@ -613,7 +613,7 @@ public partial class LlvmCodeGenerator
         // for CStr(Referring[Text]), and so on. Honor it; never inline a scalar cast, which would
         // bypass the encoding and corrupt carriers (e.g. `D128(42)` as a raw i128 decodes to
         // 4.2E-6175). The backend must not re-decide a conversion the resolver already settled.
-        if (resolvedRoutine is { IsSynthesized: false, Name: "$create" or "$create!", Parameters.Count: 1 })
+        if (resolvedRoutine is { IsSynthesized: false, Name: "create" or "create!", Parameters.Count: 1 })
         {
             TypeInfo? paramType = resolvedRoutine.Parameters[index: 0].Type;
             if (paramType != null &&
@@ -625,7 +625,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Otherwise the resolved routine is synthesized or a mismatched overload (e.g. SA's
-        // synthesized U64(Address) landing on U64.$create(S8)). A direct backend reinterpret /
+        // synthesized U64(Address) landing on U64.create(S8)). A direct backend reinterpret /
         // scalar cast is the right lowering when the LLVM shapes coincide (no-op reinterpret) or
         // when the source is itself @llvm-primitive; a non-primitive source must go through its
         // routine.
@@ -674,8 +674,8 @@ public partial class LlvmCodeGenerator
             && GetExpressionType(expr: member.Object) is EntityTypeInfo roamRecvEntity)
         {
             string implName = member.MemberName == "roam_trace_ref"
-                ? "$roam_trace_impl"
-                : "$roam_free_impl";
+                ? "roam_trace_impl"
+                : "roam_free_impl";
             RoutineInfo? impl = _registry.GetMethodsForType(type: roamRecvEntity)
                 .FirstOrDefault(predicate: m => m.Name == implName && m.Parameters.Count == 0);
             if (impl != null)
@@ -791,7 +791,7 @@ public partial class LlvmCodeGenerator
         // creator was found, so `method` is guaranteed non-null here). The receiver is the
         // conversion SOURCE: it becomes the `from:` argument, NOT an implicit `me`. Emit the
         // resolved creator call directly — no re-resolution, no inline scalar-cast heuristic. The
-        // numeric `$create` bodies do the real cast (e.g. U64.$create(from: U8) = zero_extend),
+        // numeric `$create` bodies do the real cast (e.g. U64.create(from: U8) = zero_extend),
         // which is also why F128 is correct here: its i128 backend is an IEEE bit carrier, so a
         // scalar cast would reinterpret integer bits as float bits (the old s128→F128 NaN bug).
         if (loweringKind == CallLoweringKind.TypeConstructor && method != null)
@@ -874,7 +874,7 @@ public partial class LlvmCodeGenerator
         //   - creators (`$create`) — owner-scoped but no receiver in the param list
         //   - common routines — explicitly declared without `me`
         // Prepending a phantom receiver for these shifts every actual argument by one
-        // slot in the LLVM call, corrupting all reads (e.g. Moment.$create(year:2026,...)
+        // slot in the LLVM call, corrupting all reads (e.g. Moment.create(year:2026,...)
         // saw year=zeroinitializer-cast and emitted timestamps in the wrong century).
         bool methodTakesReceiver =
             !(method?.IsCommon == true || method?.Name == CreateMethodName);
@@ -914,7 +914,7 @@ public partial class LlvmCodeGenerator
         // Synthesized/lowered bodies (programmatic $eq/$cmp/$hash, operator-lowered calls) never
         // pass through SemanticVerifier, so they arrive without a stamped ResolvedRoutine. Once the
         // concrete argument types are known, resolve the exact overload here so failable operators
-        // like $add!/$sub! do not degrade to undecorated placeholder symbols (Core.S32.$add). This
+        // like $add!/$sub! do not degrade to undecorated placeholder symbols (Core.S32.add). This
         // is resolution for SA-bypassing bodies, NOT intent-rediscovery on user calls — every
         // SA-analyzed member call is already stamped or rejected (RF-S458). The former bare
         // `LookupMethod(name)` that resolved a non-failable name to its failable variant was
@@ -940,7 +940,7 @@ public partial class LlvmCodeGenerator
             returnType: null,
             argTypes: argTypeInfos.Skip(receiverSkip).ToList());
 
-        // Last-chance: method-generic on a concrete owner (e.g., Array[T,N].$getitem[I]).
+        // Last-chance: method-generic on a concrete owner (e.g., Array[T,N].getitem[I]).
         // Neither OLP nor GenericAstRewriter may have resolved it; infer I from the actual
         // call-site argument types and request monomorphization now.
         RoutineInfo? genericMethodForInference = method switch
@@ -1609,9 +1609,9 @@ public partial class LlvmCodeGenerator
     private (string Receiver, TypeInfo? ReceiverType) ResolveMemberRoutineCallReceiver(StringBuilder sb,
         MemberExpression member)
     {
-        // Const-generic value receiver: `N.$represent()` where N is bound to a literal (e.g. 4
+        // Const-generic value receiver: `N.represent()` where N is bound to a literal (e.g. 4
         // for `Array[S64, 4]`). Without this check, the typewise-receiver branch below treats N
-        // as a type identifier and synthesizes a zero receiver — `Array.$diagnose` then prints
+        // as a type identifier and synthesizes a zero receiver — `Array.diagnose` then prints
         // `count: 0` instead of the actual N. Substitute the const value before falling through.
         if (member.Object is IdentifierExpression constId
             && !_localVariables.ContainsKey(key: constId.Name)
@@ -1629,7 +1629,7 @@ public partial class LlvmCodeGenerator
             // Aggregate-preset receivers are NOT typewise/static receivers — they are by-ref values
             // whose storage is the `@preset.*` global. Fall through so EmitLvalueAddress returns it.
             // `common`/static calls on a bare TYPE name (e.g. `Real.zero()`, `Real(value: 2)` lowered
-            // to `Real.$create(...)`) carry no value expression, so GetExpressionType is null on some
+            // to `Real.create(...)`) carry no value expression, so GetExpressionType is null on some
             // stdlib paths where SA didn't stamp the receiver's type. Resolve the type by name
             // (module-aware) before giving up — the synthesized zero receiver below is correct for a
             // static method (it has no `me` to read).
@@ -1854,7 +1854,7 @@ public partial class LlvmCodeGenerator
         RoutineInfo? m = _registry.LookupMethod(type: receiverType,
             methodName: methodName,
             isFailable: isFailableMethodCall);
-        // U64.$sub etc. only define the failable form; retry when the operator-lowered call
+        // U64.sub etc. only define the failable form; retry when the operator-lowered call
         // came in non-failable. Comment at the call site says codegen retries here.
         if (m == null && !isFailableMethodCall && methodName.StartsWith('$'))
         {

@@ -573,7 +573,7 @@ public sealed partial class SemanticVerifier
             buildMode: _buildMode);
 
         // Suflae only: lower `entity E` bindings to a `Roamed[E]` biased-RC backing. MUST run BEFORE
-        // scope-teardown below so teardown inserts `Roamed.$destroy` (→ release → cycle-collector
+        // scope-teardown below so teardown inserts `Roamed.destroy` (→ release → cycle-collector
         // chain) for entity locals instead of a bare-entity `$destroy` (which double-frees an alias
         // and never reaches the RC/cc machinery). Also before reachability, so the roam/promote/lock/
         // cc hooks seed off the live `Roamed` wrapper type. No-op for RazorForge.

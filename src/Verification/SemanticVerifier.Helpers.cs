@@ -426,7 +426,7 @@ public sealed partial class SemanticVerifier
             else
             {
                 // Implicit $refer/$control coercion for marker-protocol params.
-                // Wraps the argument expression as `arg.$refer()` / `arg.$control()` so
+                // Wraps the argument expression as `arg.refer()` / `arg.control()` so
                 // codegen, reachability, and call-classification all see a fully resolved
                 // routine reference. The wrapper's $refer/$control method returns T (the
                 // inner entity), which matches the rewritten signature post-Phase 7.
@@ -527,8 +527,8 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Rewrites `show(x)` / `alert(x)` arguments in-place when `x` is a copy-restricted
-    /// wrapper (Owned, Retained, Tracked, ...). Each such argument becomes `x.$represent()`
-    /// (for show) or `x.$diagnose()` (for alert). The display protocols guarantee `@readonly`,
+    /// wrapper (Owned, Retained, Tracked, ...). Each such argument becomes `x.represent()`
+    /// (for show) or `x.diagnose()` (for alert). The display protocols guarantee `@readonly`,
     /// so the method call is a borrow — `x` is not consumed. The resulting `Text` matches
     /// the `show(value: Referring[Text])` / `alert(value: Referring[Text])` overload
     /// (value-record, no copy verb), so subsequent overload resolution picks that branch
@@ -567,12 +567,12 @@ public sealed partial class SemanticVerifier
             //     returns false; we need the rewrite to avoid S420.
             //   - raw entities (List[T], Set[T], Dict[K,V]) — `IsTriviallyCopyable` returns
             //     true (fallback), but the generic `alert[T]` / `show[T]` monomorphization
-            //     copies the entity ptr by value, which corrupts. Rewriting to `arg.$diagnose()`
+            //     copies the entity ptr by value, which corrupts. Rewriting to `arg.diagnose()`
             //     extracts a Text and uses the cleaner `Referring[Text]` overload instead.
             bool isEntity = argType is EntityTypeInfo;
             if (!isEntity && IsTriviallyCopyable(type: argType)) continue;
 
-            string methodName = isAlert ? "$diagnose" : "$represent";
+            string methodName = isAlert ? "diagnose" : "represent";
             var memberAccess = new MemberExpression(
                 Object: innerExpr,
                 MemberName: methodName,
@@ -997,12 +997,12 @@ public sealed partial class SemanticVerifier
         // ($ne is auto-derived from $eq), and all ordering operators are backed by `$cmp`
         // ($lt/$le/$gt/$ge are auto-derived). Protocols (Equatable/Comparable) declare only the
         // base method, so checking the derived name would spuriously fail for constrained generics
-        // (e.g. `me[i] != other[i]` inside `List[T].$eq needs T obeys Equatable`).
+        // (e.g. `me[i] != other[i]` inside `List[T].eq needs T obeys Equatable`).
         string? methodName = op switch
         {
-            BinaryOperator.Equal or BinaryOperator.NotEqual => "$eq",
+            BinaryOperator.Equal or BinaryOperator.NotEqual => "eq",
             BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
-                or BinaryOperator.GreaterEqual or BinaryOperator.ThreeWayComparator => "$cmp",
+                or BinaryOperator.GreaterEqual or BinaryOperator.ThreeWayComparator => "cmp",
             _ => op.GetMethodName()
         };
         if (methodName == null)
@@ -1010,10 +1010,10 @@ public sealed partial class SemanticVerifier
             return false;
         }
 
-        // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].$eq).
+        // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].eq).
         // A resolution whose owner is a ProtocolTypeInfo is the ABSTRACT protocol declaration
         // (RF protocols have no default implementations) — for a CONCRETE receiver it would link
-        // to nothing (e.g. `record Cat` with no `$eq` resolving `==` to `Equatable.$eq`). Only a
+        // to nothing (e.g. `record Cat` with no `$eq` resolving `==` to `Equatable.eq`). Only a
         // concrete implementation counts as support here; generic-parameter receivers get their
         // constraint-based support from the dedicated branch below.
         RoutineInfo? resolved = _registry.LookupMethod(type: type, methodName: methodName);
@@ -1143,26 +1143,26 @@ public sealed partial class SemanticVerifier
     private static readonly HashSet<string> OperatorWiredMethods =
     [
         // Arithmetic
-        "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
+        "add", "sub", "mul", "truediv", "floordiv", "mod", "pow",
         // Wrapping arithmetic
-        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
+        "add_wrap", "sub_wrap", "mul_wrap", "pow_wrap",
         // Clamping arithmetic
-        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
+        "add_clamp", "sub_clamp", "mul_clamp", "truediv_clamp", "pow_clamp",
         // Comparison
-        "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
+        "eq", "ne", "lt", "le", "gt", "ge", "cmp",
         // Bitwise
-        "$bitand", "$bitor", "$bitxor",
-        "$ashl", "$ashr", "$lshl", "$lshr",
+        "bitand", "bitor", "bitxor",
+        "ashl", "ashr", "lshl", "lshr",
         // Unary
-        "$neg", "$bitnot",
+        "neg", "bitnot",
         // Membership
-        "$contains", "$notcontains",
+        "contains", "notcontains",
         // Indexing
-        "$getitem", "$setitem",
+        "getitem", "setitem",
         // Iteration
-        "$iter", "$emit",
+        "iter", "emit",
         // Context management
-        "$enter", "$exit"
+        "enter", "exit"
     ];
 
     /// <summary>Returns true if the given method name is an operator wired (e.g., <c>$add</c>, <c>$eq</c>).</summary>
@@ -1204,7 +1204,7 @@ public sealed partial class SemanticVerifier
         if (op is BinaryOperator.In or BinaryOperator.NotIn)
         {
             RoutineInfo? containsMethod =
-                _registry.LookupMethod(type: right, methodName: "$contains");
+                _registry.LookupMethod(type: right, methodName: "contains");
             if (containsMethod == null)
             {
                 ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
@@ -1230,7 +1230,7 @@ public sealed partial class SemanticVerifier
         // backing wired method ($eq for ==/!=, $cmp for </<=/>/>=). These are desugared to method
         // calls by OperatorLoweringPass (after SA), so without this check an unsupported operator
         // would slip past SA and surface as an undefined-symbol LINKERR at codegen — e.g. a record
-        // with no $eq whose `==` resolves to the abstract `Equatable.$eq`. A LINKERR on SA-passing
+        // with no $eq whose `==` resolves to the abstract `Equatable.eq`. A LINKERR on SA-passing
         // code is a compiler bug; catch it here with a clean diagnostic.
         if (op is not (BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
             or BinaryOperator.GreaterEqual or BinaryOperator.Equal or BinaryOperator.NotEqual))
@@ -1374,7 +1374,7 @@ public sealed partial class SemanticVerifier
         if (!obeysIterable && iterableType.IsGenericResolution)
         {
             RoutineInfo? seqMethod =
-                _registry.LookupMethod(type: iterableType, methodName: "$iter");
+                _registry.LookupMethod(type: iterableType, methodName: "iter");
             if (seqMethod != null)
             {
                 obeysIterable = true;
@@ -1440,18 +1440,18 @@ public sealed partial class SemanticVerifier
         }
 
         // Strategy 1.5 (ground truth): the element is exactly what the iterator's `$emit!` returns.
-        // Resolve `iterable.$iter()` to the concrete iterator type, then that iterator's `$emit!`
+        // Resolve `iterable.iter()` to the concrete iterator type, then that iterator's `$emit!`
         // return type. This mirrors the for-loop lowering (IteratorInlineLoweringPass) and, unlike
         // Strategy 1, does NOT depend on the instance's ImplementedProtocols being populated — so it
         // works for a generic-instance collection (e.g. `Dict[Text, SerialValue]`) iterated inside a
         // CONCRETE method compiled before that instance is monomorphized. There, ImplementedProtocols
         // is still empty and the naive `TypeArguments[0]` fallback below would wrongly pick the first
         // type arg (`K`, i.e. `Text` for a Dict) instead of `DictEntry[Text, SerialValue]`.
-        RoutineInfo? iterMethod = _registry.LookupMethod(type: iterableType, methodName: "$iter");
+        RoutineInfo? iterMethod = _registry.LookupMethod(type: iterableType, methodName: "iter");
         if (iterMethod?.ReturnType is { } iteratorType and not ErrorTypeInfo)
         {
             RoutineInfo? emitMethod =
-                _registry.LookupMethod(type: iteratorType, methodName: "$emit", isFailable: true);
+                _registry.LookupMethod(type: iteratorType, methodName: "emit", isFailable: true);
             if (emitMethod?.ReturnType is { } emittedType and not (ErrorTypeInfo or GenericParameterTypeInfo))
             {
                 return emittedType;
@@ -1459,12 +1459,12 @@ public sealed partial class SemanticVerifier
         }
 
         // Strategy 2: Look for $iter method to get element type from Iterator[T] return type
-        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.$iter");
+        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.iter");
 
-        // Generic fallback: Range[S64].$iter -> Range.$iter via LookupMethod
+        // Generic fallback: Range[S64].iter -> Range.iter via LookupMethod
         if (seqMethod2 == null)
         {
-            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "$iter");
+            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "iter");
         }
 
         if (seqMethod2?.ReturnType?.TypeArguments is { Count: > 0 })
@@ -1513,7 +1513,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// If <paramref name="paramType"/> is a marker protocol (Referring[T]/Controlling[T])
     /// and the argument isn't already an in-flight inner T, wraps the argument expression
-    /// as `arg.$refer()` or `arg.$control()`. The resulting CallExpression has
+    /// as `arg.refer()` or `arg.control()`. The resulting CallExpression has
     /// ResolvedRoutine and ResolvedType set so downstream passes (reachability, codegen,
     /// CallOverloadResolutionPass) treat it as a normal resolved method call.
     /// </summary>
@@ -1526,8 +1526,8 @@ public sealed partial class SemanticVerifier
         ProtocolTypeInfo def = proto.GenericDefinition ?? proto;
         string baseName = GetBaseTypeName(typeName: def.Name);
         string methodName;
-        if (baseName == Compiler.Resolution.RuntimeContract.Controlling) methodName = "$control";
-        else if (baseName == Compiler.Resolution.RuntimeContract.Referring) methodName = "$refer";
+        if (baseName == Compiler.Resolution.RuntimeContract.Controlling) methodName = "control";
+        else if (baseName == Compiler.Resolution.RuntimeContract.Referring) methodName = "refer";
         else return;
 
         // Pass-through: the argument is already typed as the same marker protocol. No
@@ -1572,7 +1572,7 @@ public sealed partial class SemanticVerifier
         Expression inner = slotExpr is NamedArgumentExpression nx ? nx.Value : slotExpr;
 
         // Skip if already coerced.
-        if (inner is CallExpression { Callee: MemberExpression { MemberName: "$refer" or "$control" } })
+        if (inner is CallExpression { Callee: MemberExpression { MemberName: "refer" or "control" } })
             return;
 
         // Resolve the method on the source argument type.

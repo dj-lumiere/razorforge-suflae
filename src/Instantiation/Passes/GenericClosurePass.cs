@@ -52,7 +52,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
 
         // PDIL → GMP fixed point. PDIL runs before GMP, so a protocol-default-impl call that appears
         // ONLY inside a GMP-monomorphized body — e.g. `me.source.as_entity().List()` inside
-        // `ReverseIterator[T,S].$iter`, or `.Set()` inside `IntersectIterator.$iter` — was never seen
+        // `ReverseIterator[T,S].iter`, or `.Set()` inside `IntersectIterator.iter` — was never seen
         // by PDIL and its per-implementer body (`List[S64].List`/`.Set`) was never synthesized,
         // leaving an undefined symbol at link. Re-run PDIL over the now-larger body set; if it
         // synthesizes anything new, fold it in with a cheap incremental GMP pass and repeat. Most
@@ -95,7 +95,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
             buildMode: ctx.BuildMode);
         // FStringLoweringPass runs BEFORE OperatorLoweringPass (per the per-file pipeline order);
         // monomorphized $represent/$diagnose bodies need f-strings lowered to $represent/$diagnose
-        // method calls + Text.$add before operator lowering can fold the `+` chain.
+        // method calls + Text.add before operator lowering can fold the `+` chain.
         new Compiler.Postprocessing.Passes.FStringLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         // ExpressionLoweringPass: handles RangeExpression, UnaryExpression(Not), pattern lowering

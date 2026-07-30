@@ -683,7 +683,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                         u64Type: u64Type), null);
 
                 // Specific type: type_id == FNV-1a(type.FullName).
-                // GENERIC PARAM (e.g. `is T` in Result[T].$represent): a baked FNV("T") literal
+                // GENERIC PARAM (e.g. `is T` in Result[T].represent): a baked FNV("T") literal
                 // would never match after monomorphization (success stores FNV of the concrete type).
                 // The binding already substitutes correctly (CarrierPayloadExpression carries the
                 // type), but a frozen literal does not. Emit `<T>.type_id()` instead — a type-method

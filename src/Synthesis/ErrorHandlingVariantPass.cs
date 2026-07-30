@@ -72,7 +72,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
         // Phase B: fixpoint propagation through FailableCallees. A routine whose failability
         // is purely propagated (e.g. `routine S64_from_text!(t: Text) -> S64
-        // return S64!(from_text: t)`) has HasThrow=HasAbsent=false but FailableCallees={S64.$create!}.
+        // return S64!(from_text: t)`) has HasThrow=HasAbsent=false but FailableCallees={S64.create!}.
         // We OR the callees' state into the caller until no further change.
         bool changed = true;
         while (changed)
@@ -298,7 +298,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <summary>
     /// Resolves a <c>prefix_base</c> variant on <paramref name="owner"/> that matches
     /// <paramref name="original"/>'s OVERLOAD. A name-only lookup is wrong for heavily-overloaded
-    /// routines (e.g. <c>U8.$create!</c> from S8/S16/S32/S64/…): it returns an arbitrary
+    /// routines (e.g. <c>U8.create!</c> from S8/S16/S32/S64/…): it returns an arbitrary
     /// <c>try_create</c> whose parameter type mismatches the original call's argument, producing
     /// invalid IR. Match by the original's explicit parameter types via <c>LookupMethodOverload</c>;
     /// fall back to name-only lookup when a parameter type isn't a concrete <see cref="TypeInfo"/>.
@@ -320,7 +320,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <summary>
     /// Transforms a block's statements, propagating NON-tail failable calls through their safe
     /// variant. The tail-position <paramref name="rewriter"/> only handles <c>return F!(x)</c>; a
-    /// failable call used in statement position — e.g. <c>var item = src.$emit!()</c> — would
+    /// failable call used in statement position — e.g. <c>var item = src.emit!()</c> — would
     /// otherwise be left calling the raw <c>!</c> routine, which HARD-CRASHES on absence (the raw
     /// form lowers <c>absent</c> to <c>rf_crash</c>). Inside a <c>try_</c> variant that inner
     /// absence must instead become this variant's own <c>None</c> return.
@@ -616,7 +616,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <summary>
     /// Builds a registry-based <see cref="VariantCallRewriter"/> for the monomorphized fallback path
     /// (<see cref="Compiler.Instantiation.Passes.GenericMonomorphizationPass"/>), which has no
-    /// per-pass rewriter instance. It rewrites a TAIL-position <c>return src.$emit!()</c> into a
+    /// per-pass rewriter instance. It rewrites a TAIL-position <c>return src.emit!()</c> into a
     /// passthrough call to the matching <c>try_/check_/lookup_emit</c> variant (resolved via
     /// <see cref="TypeRegistry.LookupMethod"/> on the concrete callee owner). Restricted to
     /// <c>$emit</c> for the same reason as <see cref="TryBuildTryPropagation"/>: <c>try_emit</c> is

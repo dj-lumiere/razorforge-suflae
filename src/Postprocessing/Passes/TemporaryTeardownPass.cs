@@ -13,7 +13,7 @@ namespace Compiler.Postprocessing.Passes;
 /// RAII teardown for owned <b>rvalue temporaries</b> — the heap-owning intermediate values that
 /// <see cref="ScopeTeardownLoweringPass"/> cannot reach because it only tracks <i>named</i> bindings.
 ///
-/// <para>Consider <c>x.$represent().count()</c>: <c>x.$represent()</c> mints a fresh owned
+/// <para>Consider <c>x.represent().count()</c>: <c>x.represent()</c> mints a fresh owned
 /// <c>Text</c> (an RC-record holding a heap buffer), <c>.count()</c> borrows it, and the <c>Text</c>
 /// is then dropped on the floor — never destroyed. Inside a hot loop that leaks one buffer per
 /// iteration. This pass spills such a temporary into a synthetic block-scoped local and emits its
@@ -21,7 +21,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para><b>Why a separate, late pass.</b> <see cref="ScopeTeardownLoweringPass"/> runs before
 /// reachability and before user-code Phase 7 lowering — at that point a <c>var u = when … =>
-/// x.$represent().count()</c> is still a <c>when</c>-<i>expression</i>, so the producing call is
+/// x.represent().count()</c> is still a <c>when</c>-<i>expression</i>, so the producing call is
 /// buried in conditional arms with no statement to attach teardown to. This pass runs AFTER Phase 7
 /// (when→if already lowered, so arms are real blocks) and emits its own <c>$destroy</c> calls;
 /// codegen's emit-on-demand picks up the referenced concrete <c>$destroy</c>.</para>
@@ -30,7 +30,7 @@ namespace Compiler.Postprocessing.Passes;
 /// Exactly one shape: the <b>receiver of a method call where (a) the receiver is a fresh RC-record
 /// producer and (b) the call result is not a borrow/view wrapper</b> (so it cannot alias the
 /// receiver). <c>retain</c>/<c>track</c> verbs (which consume the receiver) are excluded. This covers
-/// both <c>x.$represent().count()</c> (scalar result) and the intermediate <c>Text</c> of a
+/// both <c>x.represent().count()</c> (scalar result) and the intermediate <c>Text</c> of a
 /// concatenation chain <c>a + "-" + b</c> (each <c>$add</c> result is the receiver of the next).</para>
 ///
 /// <para><b>Why this is safe.</b> An RC-record <c>$destroy</c> releases a <i>refcounted</i>
@@ -49,7 +49,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para><b>Why a separate, late pass.</b> <see cref="ScopeTeardownLoweringPass"/> runs before
 /// reachability and before user-code Phase 7 lowering — at that point a <c>var u = when … =>
-/// x.$represent().count()</c> is still a <c>when</c>-expression with the producing call buried in
+/// x.represent().count()</c> is still a <c>when</c>-expression with the producing call buried in
 /// conditional arms. This pass runs AFTER Phase 7 (when→if lowered, arms are real blocks) and emits
 /// its own <c>$destroy</c> calls; codegen's emit-on-demand resolves the concrete <c>$destroy</c>.</para>
 ///
@@ -269,7 +269,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// string-building loops (<c>s = s + part</c>). The new RHS is already an independent owned value
     /// (RecordCopyLoweringPass, which has already run, turned any lvalue source into a fresh
     /// <c>$store</c>; computed results are fresh), so the rewrite is:
-    /// <code>var __rv = RHS ; target.$destroy() ; target = __rv</code>
+    /// <code>var __rv = RHS ; target.destroy() ; target = __rv</code>
     /// computing RHS (which may read the old target) BEFORE the destroy. For other targets the old
     /// value is released elsewhere (entities by ScopeTeardownLoweringPass; HasRCFields / RC-wrapper
     /// records by codegen's EmitVariableAssignment; scalars need nothing), so we only spill receivers.
@@ -477,7 +477,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         SourceLocation loc)
     {
         var ident = new IdentifierExpression(Name: name, Location: loc) { ResolvedType = type };
-        var callee = new MemberExpression(Object: ident, MemberName: "$destroy", Location: loc)
+        var callee = new MemberExpression(Object: ident, MemberName: "destroy", Location: loc)
             { ResolvedType = _blankType };
         var call = new CallExpression(Callee: callee, Arguments: [], Location: loc)
         {

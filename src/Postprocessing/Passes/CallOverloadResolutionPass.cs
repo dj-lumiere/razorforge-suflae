@@ -309,7 +309,7 @@ internal sealed class CallOverloadResolutionPass
         if (call.LoweringKind != CallLoweringKind.Unknown) return;
 
         // Fast path: routine already resolved by DerivedOperatorPass or SA.
-        // Wired routines like ComparisonSign.$eq may not be findable via LookupMethodOverload
+        // Wired routines like ComparisonSign.eq may not be findable via LookupMethodOverload
         // (they are handled by codegen directly, not registered as normal overloads).
         if (call.ResolvedRoutine != null)
         {
@@ -369,7 +369,7 @@ internal sealed class CallOverloadResolutionPass
                     methodName: member.MemberName);
 
                 // If the non-failable form isn't registered, try the failable form.
-                // E.g. U64.$sub is not defined (underflow is undefined); only U64.$sub! exists.
+                // E.g. U64.sub is not defined (underflow is undefined); only U64.sub! exists.
                 // MemberName is bare; failability is structural — retry with isFailable: true.
                 if (method == null && !member.IsFailable)
                 {

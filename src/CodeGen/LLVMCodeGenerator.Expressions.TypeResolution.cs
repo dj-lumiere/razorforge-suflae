@@ -89,7 +89,7 @@ public partial class LlvmCodeGenerator
 
         // Skip SA-resolved type for CallExpression through transparent protocols (e.g., Referring[T]).
         // The SA may resolve "other[j]" on a Referring[Text] parameter to "Text" (the inner type),
-        // but the correct return type is "Character" (from Text.$getitem!). GetCallReturnType
+        // but the correct return type is "Character" (from Text.getitem!). GetCallReturnType
         // handles this via the transparent-protocol fallback path.
         bool skipSaResolved = false;
         if (expr is CallExpression { Callee: MemberExpression calleeMember })
@@ -309,7 +309,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Try $getitem on the member type
-        RoutineInfo? getItem = _registry.LookupMethod(type: memberType, methodName: "$getitem");
+        RoutineInfo? getItem = _registry.LookupMethod(type: memberType, methodName: "getitem");
         return getItem?.ReturnType;
     }
 
@@ -692,7 +692,7 @@ public partial class LlvmCodeGenerator
     {
         foreach (ProtocolMethodInfo m in proto.Methods)
         {
-            if (m.Name != "$refer" && m.Name != "$control") return false;
+            if (m.Name != "refer" && m.Name != "control") return false;
         }
         return true;
     }
@@ -700,7 +700,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Resolves a <see cref="ConstGenericValueTypeInfo"/> to its underlying primitive type
     /// for method dispatch. E.g., a const generic value "8" with constraint "N is U64"
-    /// resolves to the U64 type so that method calls like N.$represent() work correctly.
+    /// resolves to the U64 type so that method calls like N.represent() work correctly.
     /// </summary>
     private TypeInfo ResolveConstGenericUnderlyingType(ConstGenericValueTypeInfo constVal)
     {
@@ -725,7 +725,7 @@ public partial class LlvmCodeGenerator
             return null;
         }
 
-        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: "$getitem");
+        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: "getitem");
         if (getItem?.ReturnType == null)
         {
             return null;

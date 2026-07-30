@@ -10,7 +10,7 @@ using Verification;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
-/// Inserts explicit <c>local.$destroy()</c> calls at scope exits — the unified teardown lowering.
+/// Inserts explicit <c>local.destroy()</c> calls at scope exits — the unified teardown lowering.
 /// After this pass codegen performs NO teardown of its own: every owned local/param is destroyed
 /// by a real <see cref="CallExpression"/> in the AST, so reachability and monomorphization see the
 /// calls naturally and codegen just emits them.
@@ -342,7 +342,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// Rewrites <c>x = EXPR</c> on an owned entity local to
-    /// <c>var __li_N = EXPR ; x.$destroy() ; x = __li_N</c> so the current content (placeholder
+    /// <c>var __li_N = EXPR ; x.destroy() ; x = __li_N</c> so the current content (placeholder
     /// or prior value) is freed exactly once and the RHS still sees the old value.
     /// <paramref name="rebuild"/> reconstructs the assignment statement (whichever AST form it
     /// has) around the spilled RHS.
@@ -380,7 +380,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     private ExpressionStatement MakeDestroyStmt(Owned owned, SourceLocation loc)
     {
         var ident = new IdentifierExpression(Name: owned.Name, Location: loc) { ResolvedType = owned.Type };
-        var callee = new MemberExpression(Object: ident, MemberName: "$destroy", Location: loc)
+        var callee = new MemberExpression(Object: ident, MemberName: "destroy", Location: loc)
             { ResolvedType = _blankType };
         var call = new CallExpression(Callee: callee, Arguments: [], Location: loc)
         {
@@ -397,7 +397,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     /// drives off, so a value is either both retaining-copied and balanced-destroyed or neither (the
     /// asymmetry that double-freed before). <c>GetLifecycle</c> resolves through
     /// <c>GetOwnMethodsResolved</c> (own-methods-only, generic-resolution aware), so it finds e.g.
-    /// <c>Retained[Tracer].$destroy</c> without surfacing the no-owner universal <c>T.$destroy</c> stub,
+    /// <c>Retained[Tracer].destroy</c> without surfacing the no-owner universal <c>T.destroy</c> stub,
     /// and excludes the abstract tier.
     /// </summary>
     private bool TryResolveDestroy(TypeInfo type, out RoutineInfo? destroy)
@@ -431,7 +431,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// True for the synthetic bindings UsingLoweringPass emits (`var __uf_N = resource` and the
-    /// user's `var x = __uf_N.$enter()` / `var x = __uf_N`). Their lifetime is governed by the
+    /// user's `var x = __uf_N.enter()` / `var x = __uf_N`). Their lifetime is governed by the
     /// injected `$enter`/`$exit`, so they must NOT also be torn down here (that would double-free
     /// the single underlying entity).
     /// </summary>
@@ -456,7 +456,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// True for a binding that holds a borrowed <c>T</c> view — <c>var ctrl = ptr.as_entity()</c>,
-    /// <c>var x = h.$refer()</c>, <c>var x = h.$control()</c>. These pervade the RC wrapper bodies
+    /// <c>var x = h.refer()</c>, <c>var x = h.control()</c>. These pervade the RC wrapper bodies
     /// (e.g. <c>var ctrl = Hijacked[RetainController[T]](me).as_entity()</c> in <c>Retained.release</c>).
     /// The binding's static type is the bare referent (<c>T</c>), so <c>GetLifecycle</c> would resolve
     /// the referent's real <c>$destroy</c> and free a value owned elsewhere — hence we key on the
@@ -469,7 +469,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         // PatternLoweringPass to `var v = <CarrierPayloadExpression on me>`) is a BORROW/view into the
         // matched variant's payload — the variant still owns it. Tearing `v` down frees the variant's
         // payload out from under it: a read-only `$represent` would then corrupt `me`, and the
-        // auto-synthesized variant `$destroy` (explicit `v.$destroy()`) would double-free. So exclude it.
+        // auto-synthesized variant `$destroy` (explicit `v.destroy()`) would double-free. So exclude it.
         || v.Initializer is CarrierPayloadExpression;
 
     // -----------------------------------------------------------------------------
@@ -517,15 +517,15 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                 case AssignmentStatement assign when Unwrap(assign.Value) is IdentifierExpression rhs:
                     _movedNames.Add(item: rhs.Name);
                     break;
-                // An explicit `v.$destroy()` consumes `v` — it must NOT then be torn down again at
+                // An explicit `v.destroy()` consumes `v` — it must NOT then be torn down again at
                 // scope exit. This is the auto-synthesized variant `$destroy` shape (`when me is Arm
-                // as v: v.$destroy()`): without this the pattern-bound heap payload is destroyed by the
+                // as v: v.destroy()`): without this the pattern-bound heap payload is destroyed by the
                 // explicit call AND by binding teardown → double free (scalar arms hid it: no-op $destroy).
                 case CallExpression
                 {
                     Callee: MemberExpression
                     {
-                        MemberName: "$destroy", Object: IdentifierExpression dv
+                        MemberName: "destroy", Object: IdentifierExpression dv
                     }
                 }:
                     _movedNames.Add(item: dv.Name);

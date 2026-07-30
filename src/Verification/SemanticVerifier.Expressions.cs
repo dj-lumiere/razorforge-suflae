@@ -279,7 +279,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Analyzes binary expressions that remain as BinaryExpression nodes after parsing.
     /// Note: Most arithmetic, comparison, and bitwise operators are desugared to method calls
-    /// in the parser (e.g., a + b -> a.$add(b)). This method only handles operators that
+    /// in the parser (e.g., a + b -> a.add(b)). This method only handles operators that
     /// are NOT desugared:
     /// - Assignment (=)
     /// - Logical operators (and, or) — require short-circuit evaluation
@@ -497,7 +497,7 @@ public sealed partial class SemanticVerifier
 
             // User type — look up $unwrap_or method
             RoutineInfo? unwrapOrMethod =
-                _registry.LookupMethod(type: leftType, methodName: "$unwrap_or");
+                _registry.LookupMethod(type: leftType, methodName: "unwrap_or");
             if (unwrapOrMethod != null)
             {
                 return unwrapOrMethod.ReturnType ?? rightType;
@@ -749,13 +749,13 @@ public sealed partial class SemanticVerifier
                 TypeSymbol indexedObjectType = AnalyzeExpression(expression: index.Object);
 
                 // Failability: lookup $setitem on the indexed type and propagate `!` to caller.
-                // `arr[i] = v` desugars to `arr.$setitem!(i, v)` for failable indexers; a
+                // `arr[i] = v` desugars to `arr.setitem!(i, v)` for failable indexers; a
                 // non-failable caller must mark HasFailableCalls so its `!` decl is justified.
                 TryGetTransparentProtocolTarget(type: indexedObjectType,
                     targetType: out TypeSymbol setLookupType);
                 RoutineInfo? setItem = _registry.LookupMethod(type: setLookupType,
-                    methodName: "$setitem") ?? _registry.LookupMethod(type: setLookupType,
-                    methodName: "$setitem", isFailable: true);
+                    methodName: "setitem") ?? _registry.LookupMethod(type: setLookupType,
+                    methodName: "setitem", isFailable: true);
                 if (setItem is { IsFailable: true } && _currentRoutine != null)
                 {
                     _currentRoutine.HasFailableCalls = true;
@@ -982,7 +982,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Step 2: Fallback to create-and-assign (a = a.$add(b)) — not allowed for entity types
+        // Step 2: Fallback to create-and-assign (a = a.add(b)) — not allowed for entity types
         if (targetType.Category == TypeCategory.Entity)
         {
             string opSymbol = compound.Operator.ToStringRepresentation();
@@ -1051,7 +1051,7 @@ public sealed partial class SemanticVerifier
             case UnaryOperator.Minus:
                 if (operandType != ErrorTypeInfo.Instance &&
                     !IsNumericType(type: operandType) &&
-                    _registry.LookupMethod(type: operandType, methodName: "$neg") == null)
+                    _registry.LookupMethod(type: operandType, methodName: "neg") == null)
                 {
                     ReportError(code: SemanticDiagnosticCode.NegationRequiresNumeric,
                         message: "Negation operator requires a numeric operand.",
@@ -1092,7 +1092,7 @@ public sealed partial class SemanticVerifier
                 // User type — look up $unwrap method
             {
                 RoutineInfo? unwrapMethod =
-                    _registry.LookupMethod(type: operandType, methodName: "$unwrap");
+                    _registry.LookupMethod(type: operandType, methodName: "unwrap");
                 if (unwrapMethod != null)
                 {
                     return unwrapMethod.ReturnType ?? ErrorTypeInfo.Instance;
