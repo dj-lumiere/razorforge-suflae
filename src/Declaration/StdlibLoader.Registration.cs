@@ -15,31 +15,33 @@ public sealed partial class StdlibLoader
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
-            if (node is ProtocolDeclaration { ParentProtocols.Count: > 0 } protocol)
+            if (node is not ProtocolDeclaration { ParentProtocols.Count: > 0 } protocol)
             {
-                // Look up the registered protocol to get its FullName
-                TypeInfo? registeredProto = registry.LookupType(name: protocol.Name);
-                if (registeredProto is not ProtocolTypeInfo)
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                var parentProtocols = new List<ProtocolTypeInfo>();
-                foreach (TypeExpression parentExpr in protocol.ParentProtocols)
-                {
-                    TypeInfo? parentType =
-                        ResolveSimpleType(registry: registry, typeExpr: parentExpr);
-                    if (parentType is ProtocolTypeInfo parentProto)
-                    {
-                        parentProtocols.Add(item: parentProto);
-                    }
-                }
+            // Look up the registered protocol to get its FullName
+            TypeInfo? registeredProto = registry.LookupType(name: protocol.Name);
+            if (registeredProto is not ProtocolTypeInfo)
+            {
+                continue;
+            }
 
-                if (parentProtocols.Count > 0)
+            var parentProtocols = new List<ProtocolTypeInfo>();
+            foreach (TypeExpression parentExpr in protocol.ParentProtocols)
+            {
+                TypeInfo? parentType =
+                    ResolveSimpleType(registry: registry, typeExpr: parentExpr);
+                if (parentType is ProtocolTypeInfo parentProto)
                 {
-                    registry.UpdateProtocolParents(protocolName: registeredProto.FullName,
-                        parentProtocols: parentProtocols);
+                    parentProtocols.Add(item: parentProto);
                 }
+            }
+
+            if (parentProtocols.Count > 0)
+            {
+                registry.UpdateProtocolParents(protocolName: registeredProto.FullName,
+                    parentProtocols: parentProtocols);
             }
         }
     }
@@ -722,6 +724,10 @@ public sealed partial class StdlibLoader
             IsDangerous = routine.IsDangerous,
             Storage = routine.Storage
         };
+
+        // Pin the decl → info binding (see RoutineDeclaration.ResolvedInfo) so codegen reads it
+        // directly rather than re-deriving the routine by module-blind name lookup.
+        routine.ResolvedInfo = routineInfo;
 
         try
         {

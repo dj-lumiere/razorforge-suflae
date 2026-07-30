@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TypeModel.Symbols;
 
 namespace SyntaxTree;
 
@@ -196,6 +197,15 @@ public record RoutineDeclaration(
     /// wrapper being normalized away (e.g. <c>Text(from_list: steal digits)</c> → <c>Text(digits)</c>).
     /// </summary>
     public HashSet<string>? StolenVariableNames { get; set; }
+
+    /// <summary>
+    /// The <see cref="RoutineInfo"/> this declaration was registered as, attached at registration time
+    /// (SignatureResolver for user code, StdlibLoader for the stdlib). Codegen reads this DIRECTLY
+    /// instead of re-deriving the binding by parsing the name string and looking the owner type up by
+    /// bare name — a module-blind re-lookup that bound one module's body to another module's symbol
+    /// when two modules declared the same-named type. Parallel to <see cref="CallExpression.ResolvedRoutine"/>.
+    /// </summary>
+    public RoutineInfo? ResolvedInfo { get; set; }
 
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

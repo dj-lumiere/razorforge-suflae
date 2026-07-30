@@ -176,17 +176,19 @@ public partial class LlvmCodeGenerator
     private string ClosureStructName(RoutineInfo lambda)
     {
         string name = $"%\"Closure.{lambda.Name}\"";
-        if (!_typeDeclarationsClosure.ContainsKey(key: name))
+        if (_typeDeclarationsClosure.ContainsKey(key: name))
         {
-            var fields = new List<string> { "ptr" };
-            if (lambda.ClosureCaptures != null)
-            {
-                foreach ((string _, TypeInfo capType) in lambda.ClosureCaptures)
-                    fields.Add(item: GetLlvmType(type: capType));
-            }
-            _typeDeclarationsClosure[key: name] =
-                $"{name} = type {{ {string.Join(separator: ", ", values: fields)} }}\n";
+            return name;
         }
+
+        var fields = new List<string> { "ptr" };
+        if (lambda.ClosureCaptures != null)
+        {
+            foreach ((string _, TypeInfo capType) in lambda.ClosureCaptures)
+                fields.Add(item: GetLlvmType(type: capType));
+        }
+        _typeDeclarationsClosure[key: name] =
+            $"{name} = type {{ {string.Join(separator: ", ", values: fields)} }}\n";
         return name;
     }
 
@@ -194,7 +196,9 @@ public partial class LlvmCodeGenerator
         RoutineInfo? preResolvedInfo = null, string? nameOverride = null,
         string? moduleContext = null)
     {
-        RoutineInfo? routineInfo = preResolvedInfo;
+        // The binding attached at registration is authoritative — it is the exact RoutineInfo this
+        // declaration was registered as, so it needs no name re-parsing or module-blind owner lookup.
+        RoutineInfo? routineInfo = preResolvedInfo ?? routine.ResolvedInfo;
 
         if (routineInfo == null)
         {
@@ -202,13 +206,33 @@ public partial class LlvmCodeGenerator
             // For module-qualified names like "Console.show", the registry key may be
             // "IO.show" (module.name). Try full AST name first, then short name lookup.
             string baseName = routine.Name;
-            routineInfo = _registry.LookupRoutine(fullName: baseName);
+
+            // MEMBER decl in a known module: resolve OWNER-SCOPED to this module FIRST. A bare
+            // `LookupRoutine("Box.destroy")` returns a first-wins entry, so when two modules each
+            // declare `record Box` with a `$destroy`/0-param method, this module's body would be
+            // emitted under the OTHER module's symbol — leaving this module's symbol undefined (the
+            // module-scoped-type over-prune). The overload block below only rescues >0-param methods;
+            // 0-param ones (`$destroy()`, `bump()`) must be pinned here, before the bare lookup.
+            int memberDot = baseName.IndexOf(value: '.');
+            if (!string.IsNullOrEmpty(value: moduleContext) && memberDot > 0)
+            {
+                string ownerSeg = baseName[..memberDot];
+                int obrk = ownerSeg.IndexOf(value: '[');
+                if (obrk > 0) ownerSeg = ownerSeg[..obrk];
+                TypeInfo? scopedOwner = _registry.LookupType(name: $"{moduleContext}.{ownerSeg}");
+                if (scopedOwner != null)
+                {
+                    routineInfo = _registry.LookupMethod(type: scopedOwner,
+                        methodName: baseName[(memberDot + 1)..]);
+                }
+            }
+
+            routineInfo ??= _registry.LookupRoutine(fullName: baseName);
             // Module-level routine (no dot): prefer the module-qualified key so that two modules'
             // same-named routines (e.g. each of several imported test modules with a `start`) each
             // bind to their OWN RoutineInfo. Without this, the bare LookupRoutineByName fallback
             // below returns a first-wins entry and this module's body is emitted under another
-            // module's symbol. (Member decls keep the original bare resolution — the harness member
-            // contamination is a separate follow-up, see [[module-qualified-calls]].)
+            // module's symbol.
             if (routineInfo == null && !string.IsNullOrEmpty(value: moduleContext) &&
                 !baseName.Contains(value: '.'))
             {

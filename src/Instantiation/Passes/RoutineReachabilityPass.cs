@@ -1578,14 +1578,21 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         string concreteKey = $"{owner.Name}.{callee.Name}";
         bool hasStdlib = _stdlibByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? c);
         bool hasUser = _userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu);
-        if (hasStdlib && hasUser)
+        if (hasStdlib || hasUser)
         {
-            var combined = new List<RoutineDeclaration>(collection: c!);
-            combined.AddRange(collection: cu!);
-            return MatchOverload(decls: combined, callee: callee);
+            var combined = new List<RoutineDeclaration>();
+            if (hasStdlib) combined.AddRange(collection: c!);
+            if (hasUser) combined.AddRange(collection: cu!);
+            // MODULE-SCOPED: the index key is the BARE owner name ("Box"), so two modules that each
+            // declare `record Box` collide here. Prefer the decl whose registered owner is the SAME
+            // module as the callee — otherwise MatchOverload's count-only fallback walks the wrong
+            // module's body (typing `me` as the other module's `Box`), so calls inside it (`me.hijack()`)
+            // resolve to the wrong module's universal-method instance and this module's stays undefined.
+            List<RoutineDeclaration> scoped = combined
+                .Where(predicate: d => d.ResolvedInfo?.OwnerType?.FullName == owner.FullName)
+                .ToList();
+            return MatchOverload(decls: scoped.Count > 0 ? scoped : combined, callee: callee);
         }
-        if (hasStdlib) return MatchOverload(decls: c!, callee: callee);
-        if (hasUser) return MatchOverload(decls: cu!, callee: callee);
 
         // Universal-method instance: callee was produced by SubstituteMethodForOwner from a
         // routine whose receiver is a bare generic parameter (e.g. `T.hijack()` substituted to

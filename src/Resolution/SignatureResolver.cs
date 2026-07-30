@@ -432,6 +432,10 @@ internal sealed class SignatureResolver
         // `$hash(k0,k1)`) are legitimate distinct routines and MUST coexist, so no extra guard is added.
         _sa._registry.RegisterRoutine(routine: finalRoutine);
 
+        // Pin the decl → info binding so codegen reads it directly instead of re-deriving the routine
+        // by parsing the name and looking the owner type up by bare name (module-blind).
+        routine.ResolvedInfo = finalRoutine;
+
         // Post-registration validation
         ValidateOperatorProtocolConformance(routineInfo: finalRoutine,
             location: routine.Location);
