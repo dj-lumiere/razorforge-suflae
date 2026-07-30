@@ -509,7 +509,7 @@ public class UnwrapOperatorTests
     public void ForceUnwrap_GetMethodName_ReturnsUnwrap()
     {
         UnaryOperator op = UnaryOperator.ForceUnwrap;
-        Assert.Equal(expected: "$unwrap", actual: op.GetMethodName());
+        Assert.Equal(expected: "unwrap", actual: op.GetMethodName());
     }
 
     /// <summary>
@@ -519,7 +519,7 @@ public class UnwrapOperatorTests
     public void NoneCoalesce_GetMethodName_ReturnsUnwrapOr()
     {
         BinaryOperator op = BinaryOperator.NoneCoalesce;
-        Assert.Equal(expected: "$unwrap_or", actual: op.GetMethodName());
+        Assert.Equal(expected: "unwrap_or", actual: op.GetMethodName());
     }
 
     #endregion
