@@ -996,7 +996,8 @@ public sealed partial class TypeRegistry
         // (Modifying[A/Counter] vs Modifying[B/Counter]): a first-wins short alias would return the
         // wrong module's inner type, contaminating wrapper forwarding / method dispatch. Only accept a
         // short-alias hit whose type arguments actually match the request by FullName.
-        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing))
+        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing)
+            && ResolutionTypeArgsMatch(resolved: existing, typeArguments: typeArguments))
         {
             if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
