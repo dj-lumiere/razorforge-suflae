@@ -45,7 +45,7 @@ routine start()
   raw.add_last(value: Byte(from: 0xDEu8))
   raw.add_last(value: Byte(from: 0x00u8))
   raw.add_last(value: Byte(from: 0x41u8))
-  show(SerialValue(Bytes(from_list: raw)).to_json_text())
+  show(SerialValue(Bytes(from_list: steal raw)).to_json_text())
 
   # Nested aggregate through serialize()
   var tags = List[Text]()

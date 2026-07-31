@@ -356,6 +356,37 @@ public sealed partial class SemanticVerifier
                     if (creator != null && creator.Parameters.Count == creatorArgTypes.Count &&
                         !creator.Parameters.Any(predicate: p => p.IsVariadicParam))
                     {
+                        // RF-S413 for CONSTRUCTOR/creator calls: a bare entity passed to a consuming
+                        // entity parameter needs an explicit `steal` — same rule AnalyzeCallArguments
+                        // enforces for ordinary calls, but the creator path analyzes args separately and
+                        // used to bypass it. Without this, `Bytes(from_list: raw)` (raw a bare List entity)
+                        // slips through un-stolen; the callee owns and tears down the param while the
+                        // caller still owns `raw` → double-free once the param type's `$destroy` is
+                        // materialized. Verb-wrapped args (`steal x`, `x.copy()`) are Steal/Call nodes, not
+                        // Identifier/Member, so they are excluded automatically.
+                        if (_registry.Language == Language.RazorForge)
+                        {
+                            for (int ci = 0; ci < call.Arguments.Count; ci++)
+                            {
+                                Expression cArg = call.Arguments[index: ci];
+                                Expression cArgValue = cArg is NamedArgumentExpression cna ? cna.Value : cArg;
+                                ParameterInfo? cParam = cArg is NamedArgumentExpression cNamed
+                                    ? creator.Parameters.FirstOrDefault(predicate: p => p.Name == cNamed.Name)
+                                    : (ci < creator.Parameters.Count ? creator.Parameters[index: ci] : null);
+                                if (cParam is { Type: EntityTypeInfo }
+                                    && cArgValue is IdentifierExpression or MemberExpression
+                                    && creatorArgTypes[index: ci] is EntityTypeInfo cArgEntity)
+                                {
+                                    ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
+                                        message:
+                                        $"Cannot pass entity '{cArgEntity.Name}' to consuming parameter " +
+                                        $"'{cParam.Name}' of '{creator.Name}' directly. Use 'steal' for " +
+                                        "ownership transfer, or pass a borrow.",
+                                        location: cArgValue.Location);
+                                }
+                            }
+                        }
+
                         // An auto-generated variant arm EXTRACTOR `Arm.create!(from: V)` is synthesized
                         // but has a real pattern-matching body — it is NOT a memberwise field-init, and
                         // for a scalar arm (S32) `ClassifyConstruction` would tag it a value conversion,
