@@ -206,10 +206,10 @@ public class StabilizationPlanTests
                         record Guard[T] obeys Enterable
                           resource: T
 
-                        routine Guard[T].$enter() -> Guard[T]
+                        routine Guard[T].enter() -> Guard[T]
                           return me
 
-                        routine Guard[T].$exit()
+                        routine Guard[T].exit()
                           return
 
                         routine test()
@@ -237,10 +237,10 @@ public class StabilizationPlanTests
                         record Guard[T] obeys Enterable
                           resource: T
 
-                        routine Guard[T].$enter() -> Guard[T]
+                        routine Guard[T].enter() -> Guard[T]
                           return me
 
-                        routine Guard[T].$exit()
+                        routine Guard[T].exit()
                           return
 
                         routine test()

@@ -380,7 +380,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Point(x: 1, y: 2)
-                          var b = a.$store()
+                          var b = a.store()
                           return
                         """;
 
@@ -399,7 +399,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Color.Red
-                          var b = a.$store()
+                          var b = a.store()
                           return
                         """;
 
@@ -418,7 +418,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Perms.Read
-                          var b = a.$store()
+                          var b = a.store()
                           return
                         """;
 
@@ -441,7 +441,7 @@ public class AssignableProtocolTests
                         routine start()
                           var a = Node(value: 1)
                           var b = Box(handle: a.retain())
-                          var c = b.$store()
+                          var c = b.store()
                           return
                         """;
 

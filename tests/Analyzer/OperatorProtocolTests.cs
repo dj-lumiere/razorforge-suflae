@@ -321,7 +321,7 @@ public class OperatorProtocolTests
                           x: S32
                           y: S32
 
-                        routine Point.$create() -> Point
+                        routine Point.create() -> Point
                           return Point(x: 0, y: 0)
                         """;
 
@@ -339,7 +339,7 @@ public class OperatorProtocolTests
                         entity Resource
                           handle: S32
 
-                        dangerous routine Resource.$destroy()
+                        dangerous routine Resource.destroy()
                           pass
                           return
                         """;

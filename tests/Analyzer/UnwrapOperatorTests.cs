@@ -253,7 +253,7 @@ public class UnwrapOperatorTests
                         record Wrapper
                           value: S64
                         @readonly
-                        routine Wrapper.$unwrap() -> S64
+                        routine Wrapper.unwrap() -> S64
                           return me.value
                         routine test()
                           var w = Wrapper(value: 42)
@@ -276,7 +276,7 @@ public class UnwrapOperatorTests
                         entity Box
                           value: S64
                         @readonly
-                        routine Box.$unwrap() -> S64
+                        routine Box.unwrap() -> S64
                           return me.value
                         routine test()
                           var b = Box(value: 99)
@@ -353,7 +353,7 @@ public class UnwrapOperatorTests
                         record Wrapper
                           value: S64
                         @readonly
-                        routine Wrapper.$unwrap() -> S64
+                        routine Wrapper.unwrap() -> S64
                           return me.value
                         @readonly
                         routine Wrapper.$unwrap_or(default: S64) -> S64
@@ -375,7 +375,7 @@ public class UnwrapOperatorTests
                         record Wrapper
                           value: S64
                         @readonly
-                        routine Wrapper.$frobnicate() -> S64
+                        routine Wrapper.frobnicate() -> S64
                           return me.value
                         """;
 

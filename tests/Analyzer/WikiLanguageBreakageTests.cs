@@ -435,7 +435,7 @@ public class WikiLanguageBreakageTests
                         record Point
                           x: S32
 
-                        routine Point.$teleport() -> Point
+                        routine Point.teleport() -> Point
                           return me
                         """;
 
