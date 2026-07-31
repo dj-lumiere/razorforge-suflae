@@ -15,7 +15,7 @@ needs T is EntityType
 ### Creates a new controller with one strong reference.
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `RetainController[T]` value.
-dangerous routine RetainController[T].create(data: Hijacked[T]) -> RetainController[T]
+dangerous routine RetainController[T](data: Hijacked[T]) -> RetainController[T]
   return RetainController[T](
     strong_count: 1,
     weak_count: 0,

@@ -62,7 +62,7 @@ relates FastSetEmittable[T] as Iter
 # ============================================================================
 
 ### Creates an empty set using the default initial table size.
-routine FastSet[T].create() -> FastSet[T]
+routine FastSet[T]() -> FastSet[T]
   var cap = FAST_SET_INITIAL_CAPACITY
   var ecap = FAST_SET_INITIAL_ENTRIES
   var set = FastSet[T](
@@ -86,7 +86,7 @@ routine FastSet[T].create() -> FastSet[T]
 
 ### Creates an empty set pre-sized to hold at least `capacity` live elements without rehashing.
 ### :param capacity: Minimum number of live elements to accommodate before the first rehash.
-routine FastSet[T].create(capacity: U64) -> FastSet[T]
+routine FastSet[T](capacity: U64) -> FastSet[T]
   var cap = FAST_SET_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -361,7 +361,7 @@ routine FastSet[T].is_disjoint(other: Referring[FastSet[T]]) -> Bool
 ### Creates a {List[T]} from all elements of `from` in insertion order.
 ### :param from: The set to copy elements from.
 ### :returns: A new {List[T]} containing all elements of `from`.
-routine List[T].create(from: Referring[FastSet[T]]) -> List[T]
+routine List[T](from: Referring[FastSet[T]]) -> List[T]
   var result = List[T](capacity: from.count)
   for val in from
     result.add_last(val)

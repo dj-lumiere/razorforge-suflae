@@ -67,7 +67,7 @@ relates V as Value
 # ============================================================================
 
 ### Creates an empty dictionary using the default initial table size.
-routine FastDict[K, V].create() -> FastDict[K, V]
+routine FastDict[K, V]() -> FastDict[K, V]
   var cap = FAST_DICT_INITIAL_CAPACITY
   var ecap = FAST_DICT_INITIAL_ENTRIES
   var dict = FastDict[K, V](
@@ -94,7 +94,7 @@ routine FastDict[K, V].create() -> FastDict[K, V]
 ### Creates an empty dictionary pre-sized to hold at least `capacity` live entries without rehashing.
 ### Both the probe table and the entries array are rounded up to the next power-of-two.
 ### :param capacity: Minimum number of live entries to accommodate before the first rehash.
-routine FastDict[K, V].create(capacity: U64) -> FastDict[K, V]
+routine FastDict[K, V](capacity: U64) -> FastDict[K, V]
   var cap = FAST_DICT_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64

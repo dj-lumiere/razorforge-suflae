@@ -53,10 +53,10 @@ relates SetEmittable[T] as Iter
 # Creators
 # ============================================================================
 
-routine Set[T].create() -> Set[T]
+routine Set[T]() -> Set[T]
   return Set[T](key: SecureHashKey.random())
 
-routine Set[T].create(key: SecureHashKey) -> Set[T]
+routine Set[T](key: SecureHashKey) -> Set[T]
   var cap = SET_INITIAL_CAPACITY
   var ecap = SET_INITIAL_ENTRIES
   var set = Set[T](
@@ -80,7 +80,7 @@ routine Set[T].create(key: SecureHashKey) -> Set[T]
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal set
 
-routine Set[T].create(key: SecureHashKey, capacity: U64) -> Set[T]
+routine Set[T](key: SecureHashKey, capacity: U64) -> Set[T]
   var cap = SET_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -373,7 +373,7 @@ routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
 ### Creates a {List[T]} from all elements of `from` in insertion order.
 ### :param from: The set to copy elements from.
 ### :returns: A new {List[T]} containing all elements of `from`.
-routine List[T].create(from: Set[T]) -> List[T]
+routine List[T](from: Set[T]) -> List[T]
   var result = List[T](capacity: from.count)
   for val in from
     result.add_last(val)

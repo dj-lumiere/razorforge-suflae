@@ -50,7 +50,7 @@ relates DequeEmittable[T] as Iter
 
 ### Creates an empty deque with no allocated storage.
 ### The backing buffer is acquired lazily on first insertion.
-routine Deque[T].create() -> Deque[T]
+routine Deque[T]() -> Deque[T]
   return Deque[T](
     data: hijacked_none[U8](),
     start: 0u64,
@@ -62,7 +62,7 @@ routine Deque[T].create() -> Deque[T]
 ### The requested capacity is rounded up to the next power of two so index wrapping
 ### can use a bitmask.
 ### :param capacity: The minimum number of elements to reserve space for.
-routine Deque[T].create(capacity: U64) -> Deque[T]
+routine Deque[T](capacity: U64) -> Deque[T]
   var actual = 1u64
   while actual < capacity
     actual = actual *% 2u64

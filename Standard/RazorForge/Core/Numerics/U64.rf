@@ -20,7 +20,7 @@ preset U64_ONE: U64 = 1_u64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is negative.
-routine U64.create!(from: S8) -> U64
+routine U64!(from: S8) -> U64
   if from < 0_s8
     throw IntegerOverflowError()
   return sign_extend[S8, U64](from)
@@ -29,7 +29,7 @@ routine U64.create!(from: S8) -> U64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is negative.
-routine U64.create!(from: S16) -> U64
+routine U64!(from: S16) -> U64
   if from < 0_s16
     throw IntegerOverflowError()
   return sign_extend[S16, U64](from)
@@ -38,7 +38,7 @@ routine U64.create!(from: S16) -> U64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is negative.
-routine U64.create!(from: S32) -> U64
+routine U64!(from: S32) -> U64
   if from < 0_s32
     throw IntegerOverflowError()
   return sign_extend[S32, U64](from)
@@ -47,7 +47,7 @@ routine U64.create!(from: S32) -> U64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is negative.
-routine U64.create!(from: S64) -> U64
+routine U64!(from: S64) -> U64
   if from < 0_s64
     throw IntegerOverflowError()
   return reinterpret_bits[S64, U64](from)
@@ -56,7 +56,7 @@ routine U64.create!(from: S64) -> U64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside the `U64` range.
-routine U64.create!(from: S128) -> U64
+routine U64!(from: S128) -> U64
   if not (0_s128 <= from <= 18446744073709551615_s128)
     throw IntegerOverflowError()
   return int_truncate[S128, U64](from)
@@ -64,32 +64,32 @@ routine U64.create!(from: S128) -> U64
 ### Zero-extends an unsigned 8-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.create(from: U8) -> U64
+routine U64(from: U8) -> U64
   return zero_extend[U8, U64](from)
 
 ### Zero-extends an unsigned 16-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.create(from: U16) -> U64
+routine U64(from: U16) -> U64
   return zero_extend[U16, U64](from)
 
 ### Zero-extends an unsigned 32-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.create(from: U32) -> U64
+routine U64(from: U32) -> U64
   return zero_extend[U32, U64](from)
 
 ### Returns `from` unchanged (identity conversion).
 ### :param from: The source value.
 ### :returns: `from`.
-routine U64.create(from: U64) -> U64
+routine U64(from: U64) -> U64
   return from
 
 ### Truncates an unsigned 128-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The lower 64 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` exceeds `U64_MAX`.
-routine U64.create!(from: U128) -> U64
+routine U64!(from: U128) -> U64
   if from > 18446744073709551615_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U64](from)
@@ -98,7 +98,7 @@ routine U64.create!(from: U128) -> U64
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 64 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside 0..18446744073709551615.
-routine U64.create!(from: S256) -> U64
+routine U64!(from: S256) -> U64
   if not (0_s256 <= from <= 18446744073709551615_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, U64](from)
@@ -107,7 +107,7 @@ routine U64.create!(from: S256) -> U64
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 64 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 18446744073709551615`.
-routine U64.create!(from: U256) -> U64
+routine U64!(from: U256) -> U64
   if from > 18446744073709551615_u256
     throw IntegerOverflowError()
   return int_truncate[U256, U64](from)
@@ -115,13 +115,13 @@ routine U64.create!(from: U256) -> U64
 ### Truncates a 16-bit float to `U64` by first widening to `F32`.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64.create!(from: F16) -> U64
+routine U64!(from: F16) -> U64
   return from.F32().U64!()
 
 ### Truncates a 32-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64.create!(from: F32) -> U64
+routine U64!(from: F32) -> U64
   if from.is_nan() or not (0.0_f32 <= from <= 18446744073709551615.0_f32)
     throw IntegerOverflowError()
   return float_to_unsigned[F32, U64](from)
@@ -129,7 +129,7 @@ routine U64.create!(from: F32) -> U64
 ### Truncates a 64-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64.create!(from: F64) -> U64
+routine U64!(from: F64) -> U64
   if from.is_nan() or not (0.0_f64 <= from <= 18446744073709551615.0_f64)
     throw IntegerOverflowError()
   return float_to_unsigned[F64, U64](from)
@@ -137,25 +137,25 @@ routine U64.create!(from: F64) -> U64
 ### Truncates a 128-bit float to `U64` by narrowing to `F64` first.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64.create!(from: F128) -> U64
+routine U64!(from: F128) -> U64
   return from.F64!().U64!()
 
 ### Converts a 32-bit decimal float to `U64` via `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `U64` representation.
-routine U64.create!(from: D32) -> U64
+routine U64!(from: D32) -> U64
   return from.S64!().U64!()
 
 ### Converts a 64-bit decimal float to `U64` via `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `U64` representation.
-routine U64.create!(from: D64) -> U64
+routine U64!(from: D64) -> U64
   return from.S64!().U64!()
 
 ### Converts a 128-bit decimal float to `U64` via `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `U64` representation.
-routine U64.create!(from: D128) -> U64
+routine U64!(from: D128) -> U64
   return from.S64!().U64!()
 
 # ============================================================================
@@ -618,7 +618,7 @@ routine U64.diagnose() -> Text
 ### :param from_text: A non-empty string of ASCII decimal digits.
 ### :returns: The parsed `U64` value.
 ### :throws: {InvalidValueError} if the text is empty or contains non-digit characters.
-routine U64.create!(from_text: Text) -> U64
+routine U64!(from_text: Text) -> U64
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "U64")
   var result = 0u64

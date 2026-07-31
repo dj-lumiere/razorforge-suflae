@@ -11,7 +11,7 @@ record BackIndex
 ### Creates a back index from an end-relative offset.
 ### :param offset: The end-relative offset where `1` means the last element.
 ### :returns: The resulting `BackIndex` value.
-routine BackIndex.create(offset: U64) -> BackIndex
+routine BackIndex(offset: U64) -> BackIndex
   return reinterpret_bits[U64, BackIndex](offset)
 
 ### Resolves this back index against a collection length.

@@ -230,7 +230,7 @@ routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
 
 ### Truncates toward zero to an unsigned 128-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U128.
-routine U128.create!(from: D128) -> U128
+routine U128!(from: D128) -> U128
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
@@ -240,7 +240,7 @@ routine U128.create!(from: D128) -> U128
 
 ### Truncates toward zero to a signed 128-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^127, 2^127-1].
-routine S128.create!(from: D128) -> S128
+routine S128!(from: D128) -> S128
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
@@ -276,7 +276,7 @@ routine d128_int_magnitude_u256!(coeff: U128, exp: S64) -> U256
 
 ### Truncates toward zero to an unsigned 256-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U256.
-routine U256.create!(from: D128) -> U256
+routine U256!(from: D128) -> U256
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
@@ -286,7 +286,7 @@ routine U256.create!(from: D128) -> U256
 
 ### Truncates toward zero to a signed 256-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^255, 2^255-1].
-routine S256.create!(from: D128) -> S256
+routine S256!(from: D128) -> S256
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
@@ -1011,29 +1011,29 @@ preset D128_EPSILON: D128 = 1e-33_d128
 # ============================================================================
 
 ### Converts a signed integer into decimal128.
-routine D128.create(from: S8) -> D128
+routine D128(from: S8) -> D128
   return D128.from_int64(value: S64(from))
 
 ### Converts a signed 16-bit integer into decimal128.
-routine D128.create(from: S16) -> D128
+routine D128(from: S16) -> D128
   return D128.from_int64(value: S64(from))
 
 ### Converts a signed 32-bit integer into decimal128.
-routine D128.create(from: S32) -> D128
+routine D128(from: S32) -> D128
   return D128.from_int64(value: S64(from))
 
 ### Converts a signed 64-bit integer into decimal128.
-routine D128.create(from: S64) -> D128
+routine D128(from: S64) -> D128
   return D128.from_int64(value: from)
 
 ### Converts a signed 128-bit integer into decimal128 (exact: <= 34 digits fit the coefficient).
-routine D128.create(from: S128) -> D128
+routine D128(from: S128) -> D128
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
   return D128.from_components(sign: neg, coeff: mag, exp: 0_s64)
 
 ### Converts a signed 256-bit integer into decimal128 (rounds half-even when > 34 digits).
-routine D128.create(from: S256) -> D128
+routine D128(from: S256) -> D128
   # The 256-bit magnitude can exceed 34 digits, so round it (half-even) via decfinB
   # rather than D128.from_components (which assumes a <=34-digit U128 coefficient).
   var neg = signed_lt[S256](a: from, b: 0_s256)
@@ -1041,27 +1041,27 @@ routine D128.create(from: S256) -> D128
   return d128_of_parts(p: decfinB(sign: neg, coeff: mag, exp: 0_s64, pref: 0_s64))
 
 ### Converts an unsigned integer into decimal128.
-routine D128.create(from: U8) -> D128
+routine D128(from: U8) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
 ### Converts an unsigned 16-bit integer into decimal128.
-routine D128.create(from: U16) -> D128
+routine D128(from: U16) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
 ### Converts an unsigned 32-bit integer into decimal128.
-routine D128.create(from: U32) -> D128
+routine D128(from: U32) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
 ### Converts an unsigned 64-bit integer into decimal128.
-routine D128.create(from: U64) -> D128
+routine D128(from: U64) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
 ### Converts an unsigned 128-bit integer into decimal128 (exact: <= 34 digits fit the coefficient).
-routine D128.create(from: U128) -> D128
+routine D128(from: U128) -> D128
   return D128.from_components(sign: false, coeff: from, exp: 0_s64)
 
 ### Converts an unsigned 256-bit integer into decimal128 (rounds half-even when > 34 digits).
-routine D128.create(from: U256) -> D128
+routine D128(from: U256) -> D128
   # >34-digit magnitude rounds (half-even) via decfinB, same as the S256 path.
   return d128_of_parts(p: decfinB(sign: false, coeff: from, exp: 0_s64, pref: 0_s64))
 
@@ -1070,19 +1070,19 @@ routine D128.create(from: U256) -> D128
 # ============================================================================
 
 ### Converts a binary float to decimal128 (correctly rounded via F256 -> D128).
-routine D128.create(from: F16) -> D128
+routine D128(from: F16) -> D128
   return D128(from: from.F32())
 
 ### Converts an F32 to decimal128 (widen to F64 -> F128 -> F256, correctly rounded).
-routine D128.create(from: F32) -> D128
+routine D128(from: F32) -> D128
   return D128(from: from.F64())
 
 ### Converts an F64 to decimal128 (widen to F128 -> F256, correctly rounded).
-routine D128.create(from: F64) -> D128
+routine D128(from: F64) -> D128
   return f256_to_d128(x: F256(from: F128(from: from)))
 
 ### Converts an F128 to decimal128 (widen to F256, correctly rounded).
-routine D128.create(from: F128) -> D128
+routine D128(from: F128) -> D128
   return f256_to_d128(x: F256(from: from))
 
 # ============================================================================
@@ -1090,15 +1090,15 @@ routine D128.create(from: F128) -> D128
 # ============================================================================
 
 ### Widens a decimal32 to decimal128 (exact; no rounding needed).
-routine D128.create(from: D32) -> D128
+routine D128(from: D32) -> D128
   return d128_of_parts(p: d32parts_to_d128(p: from.decode()))
 
 ### Widens a decimal64 to decimal128 (exact; no rounding needed).
-routine D128.create(from: D64) -> D128
+routine D128(from: D64) -> D128
   return d128_of_parts(p: d64parts_to_d128(p: from.decode()))
 
 ### Identity conversion (decimal128 -> decimal128).
-routine D128.create(from: D128) -> D128
+routine D128(from: D128) -> D128
   return from
 
 # ============================================================================
@@ -1203,7 +1203,7 @@ routine parse_decimal_d128!(from_text: Text) -> D128
 
 ### Parses a decimal literal into a `D128`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
-routine D128.create!(from_text: Text) -> D128
+routine D128!(from_text: Text) -> D128
   return parse_decimal_d128(from_text: from_text)
 
 # ============================================================================

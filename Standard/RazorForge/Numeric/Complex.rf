@@ -25,34 +25,34 @@ preset COMPLEX_I: Complex = Complex(real: Real.zero(), imag: Real.one())
 
 ### Creates the complex zero value.
 ### :returns: The resulting `Complex` value.
-routine Complex.create() -> Complex
+routine Complex() -> Complex
   return COMPLEX_ZERO
 
 ### Creates a purely real complex value.
 ### The imaginary component is initialized to zero.
 ### :param real: The real component.
 ### :returns: The resulting `Complex` value.
-routine Complex.create(real: Real) -> Complex
+routine Complex(real: Real) -> Complex
   return Complex(real: real, imag: Real.zero())
 
 ### Creates a complex value from explicit real and imaginary components.
 ### :param real: The real component.
 ### :param imag: The imaginary component.
 ### :returns: The resulting `Complex` value.
-routine Complex.create(real: Real, imag: Real) -> Complex
+routine Complex(real: Real, imag: Real) -> Complex
   return Complex(real: real, imag: imag)
 
 ### Creates a purely real complex value from a signed 64-bit integer (imaginary part zero).
 ### Uses the `from:` label (not `real:`) so the call routes to `create`, not a record literal.
 ### :param from: The real-axis integer value.
 ### :returns: The resulting `Complex` value.
-routine Complex.create(from: S64) -> Complex
+routine Complex(from: S64) -> Complex
   return Complex(real: Real(value: from), imag: Real.zero())
 
 ### Creates a purely real complex value from an `F64` (imaginary part zero).
 ### :param from: The real-axis double value.
 ### :returns: The resulting `Complex` value.
-routine Complex.create(from: F64) -> Complex
+routine Complex(from: F64) -> Complex
   return Complex(real: Real(value: from), imag: Real.zero())
 
 ### Creates a complex value from polar coordinates.

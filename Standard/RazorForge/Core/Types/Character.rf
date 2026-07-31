@@ -14,13 +14,13 @@ record Character obeys ConstCompatible, Comparable
 ### standard construction surface.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Character` value.
-routine Character.create(from: Character) -> Character
+routine Character(from: Character) -> Character
   return from
 
 ### Reinterprets a Unicode code point value as `Character`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Character` value.
-routine Character.create(from: U32) -> Character
+routine Character(from: U32) -> Character
   return reinterpret_bits[U32, Character](value: from)
 
 # Unicode constants

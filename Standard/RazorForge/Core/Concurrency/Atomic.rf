@@ -34,7 +34,7 @@ needs T obeys AtomicType
 ### Creates an atomic cell holding `initial`.
 ### :param initial: The starting value.
 ### :returns: The new `Atomic[T]`.
-routine Atomic[T].create(initial: T) -> Atomic[T]
+routine Atomic[T](initial: T) -> Atomic[T]
   return Atomic[T](value: initial)
 
 ### Atomically reads the current value.

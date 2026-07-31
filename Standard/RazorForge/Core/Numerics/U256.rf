@@ -236,7 +236,7 @@ routine U256.diagnose() -> Text
 ### :param from: The `S8` value to convert.
 ### :returns: A `U256` with the same unsigned value as `from`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U256.create!(from: S8) -> U256
+routine U256!(from: S8) -> U256
   if from < 0_s8
     throw IntegerOverflowError()
   return sign_extend[S8, U256](from)
@@ -245,7 +245,7 @@ routine U256.create!(from: S8) -> U256
 ### :param from: The `S16` value to convert.
 ### :returns: A `U256` with the same unsigned value as `from`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U256.create!(from: S16) -> U256
+routine U256!(from: S16) -> U256
   if from < 0_s16
     throw IntegerOverflowError()
   return sign_extend[S16, U256](from)
@@ -254,7 +254,7 @@ routine U256.create!(from: S16) -> U256
 ### :param from: The `S32` value to convert.
 ### :returns: A `U256` with the same unsigned value as `from`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U256.create!(from: S32) -> U256
+routine U256!(from: S32) -> U256
   if from < 0_s32
     throw IntegerOverflowError()
   return sign_extend[S32, U256](from)
@@ -263,7 +263,7 @@ routine U256.create!(from: S32) -> U256
 ### :param from: The `S64` value to convert.
 ### :returns: A `U256` with the same unsigned value as `from`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U256.create!(from: S64) -> U256
+routine U256!(from: S64) -> U256
   if from < 0_s64
     throw IntegerOverflowError()
   return sign_extend[S64, U256](from)
@@ -273,7 +273,7 @@ routine U256.create!(from: S64) -> U256
 ### :param from: The `S128` value to convert.
 ### :returns: A `U256` with the same unsigned value as `from`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U256.create!(from: S128) -> U256
+routine U256!(from: S128) -> U256
   if from < 0_s128
     throw IntegerOverflowError()
   return sign_extend[S128, U256](from)
@@ -282,7 +282,7 @@ routine U256.create!(from: S128) -> U256
 ### :param from: The `S256` value to convert.
 ### :returns: The same bit pattern reinterpreted as `U256`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U256.create!(from: S256) -> U256
+routine U256!(from: S256) -> U256
   if from < 0_s256
     throw IntegerOverflowError()
   return reinterpret_bits[S256, U256](from)
@@ -290,51 +290,51 @@ routine U256.create!(from: S256) -> U256
 ### Zero-extends a `U8` to `U256`.
 ### :param from: The `U8` value to widen.
 ### :returns: A `U256` equal in value to `from`.
-routine U256.create(from: U8) -> U256
+routine U256(from: U8) -> U256
   return zero_extend[U8, U256](from)
 
 ### Zero-extends a `U16` to `U256`.
 ### :param from: The `U16` value to widen.
 ### :returns: A `U256` equal in value to `from`.
-routine U256.create(from: U16) -> U256
+routine U256(from: U16) -> U256
   return zero_extend[U16, U256](from)
 
 ### Zero-extends a `U32` to `U256`.
 ### :param from: The `U32` value to widen.
 ### :returns: A `U256` equal in value to `from`.
-routine U256.create(from: U32) -> U256
+routine U256(from: U32) -> U256
   return zero_extend[U32, U256](from)
 
 ### Zero-extends a `U64` to `U256`.
 ### :param from: The `U64` value to widen.
 ### :returns: A `U256` equal in value to `from`.
-routine U256.create(from: U64) -> U256
+routine U256(from: U64) -> U256
   return zero_extend[U64, U256](from)
 
 ### Zero-extends a `U128` to `U256`.
 ### :param from: The `U128` value to widen.
 ### :returns: A `U256` equal in value to `from`.
-routine U256.create(from: U128) -> U256
+routine U256(from: U128) -> U256
   return zero_extend[U128, U256](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `U256` value to return.
 ### :returns: `from` unchanged.
-routine U256.create(from: U256) -> U256
+routine U256(from: U256) -> U256
   return from
 
 ### Converts an `F16` to `U256`, truncating toward zero.
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
-routine U256.create!(from: F16) -> U256
+routine U256!(from: F16) -> U256
   return from.F32().U256!()
 
 ### Converts an `F32` to `U256`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
-routine U256.create!(from: F32) -> U256
+routine U256!(from: F32) -> U256
   if not from.is_finite() or from < 0.0_f32
     throw IntegerOverflowError()
   return float_to_unsigned[F32, U256](from)
@@ -343,7 +343,7 @@ routine U256.create!(from: F32) -> U256
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, negative, or >= 2^256.
-routine U256.create!(from: F64) -> U256
+routine U256!(from: F64) -> U256
   if from.is_nan() or from < 0.0_f64 or from >= 115792089237316195423570985008687907853269984665640564039457584007913129639936.0_f64
     throw IntegerOverflowError()
   return float_to_unsigned[F64, U256](from)
@@ -352,7 +352,7 @@ routine U256.create!(from: F64) -> U256
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
 ### :throws: {NumericOverflowError} if negative or >= 2^256; {NumericDomainError} if NaN.
-routine U256.create!(from: F128) -> U256
+routine U256!(from: F128) -> U256
   var bits = from.to_bits()
   var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
   var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
@@ -377,14 +377,14 @@ routine U256.create!(from: F128) -> U256
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
 ### :throws: {NumericOverflowError} if the integer part overflows U256.
-routine U256.create!(from: D32) -> U256
+routine U256!(from: D32) -> U256
   return U256(from: D128(from: from))
 
 ### Converts a `D64` to `U256`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U256`.
 ### :throws: {NumericOverflowError} if the integer part overflows U256.
-routine U256.create!(from: D64) -> U256
+routine U256!(from: D64) -> U256
   return U256(from: D128(from: from))
 
 # ============================================================================
@@ -834,7 +834,7 @@ routine U256.low128() -> U128
 ### :param from_text: The decimal string to parse (no sign, no prefix).
 ### :returns: The parsed `U256` value.
 ### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
-routine U256.create!(from_text: Text) -> U256
+routine U256!(from_text: Text) -> U256
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "U256")
   var result = 0u256

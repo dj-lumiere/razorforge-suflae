@@ -35,7 +35,7 @@ routine CPtr.store() -> CPtr
 ### This does not validate ownership or liveness of the pointed runtime object.
 ### :param from: The address to wrap.
 ### :returns: The resulting `CPtr` value.
-dangerous routine CPtr.create(from: Address) -> CPtr
+dangerous routine CPtr(from: Address) -> CPtr
   return reinterpret_bits[Hijacked[CPtr], CPtr](int_to_pointer[Address, CPtr](from))
 
 ### Returns the null `CPtr` value.

@@ -51,7 +51,7 @@ dangerous routine Text.destroy()
 ### Creates an empty text value.
 ### The returned value contains no characters and owns no backing buffer.
 ### :returns: The resulting `Text` value.
-routine Text.create() -> Text
+routine Text() -> Text
   return Text(
     data: hijacked_none[Character](),
     count: 0u64,
@@ -62,7 +62,7 @@ routine Text.create() -> Text
 ### The input characters are copied into a newly allocated immutable buffer.
 ### :param from_list: The characters to copy into the new text value.
 ### :returns: The resulting `Text` value.
-routine Text.create(from_list: List[Character]) -> Text
+routine Text(from_list: List[Character]) -> Text
   var n = from_list.count()
   if n == 0u64
     return Text()
@@ -84,7 +84,7 @@ routine Text.create(from_list: List[Character]) -> Text
 ### This is the most direct way to build one-character text values.
 ### :param from_character: The character to store.
 ### :returns: The resulting `Text` value.
-routine Text.create(from_character: Character) -> Text
+routine Text(from_character: Character) -> Text
   danger
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size()))
     buf.poke(value: from_character)
@@ -98,7 +98,7 @@ routine Text.create(from_character: Character) -> Text
 ### Invalid byte sequences are replaced with the Unicode replacement character.
 ### :param from: The source C string.
 ### :returns: The resulting `Text` value.
-routine Text.create(from: CStr) -> Text
+routine Text(from: CStr) -> Text
   if from.is_null()
     return Text()
   danger

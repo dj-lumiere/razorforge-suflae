@@ -19,32 +19,32 @@ preset S64_ONE: S64 = 1_s64
 ### Sign-extends a signed 8-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.create(from: S8) -> S64
+routine S64(from: S8) -> S64
   return sign_extend[S8, S64](from)
 
 ### Sign-extends a signed 16-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.create(from: S16) -> S64
+routine S64(from: S16) -> S64
   return sign_extend[S16, S64](from)
 
 ### Sign-extends a signed 32-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.create(from: S32) -> S64
+routine S64(from: S32) -> S64
   return sign_extend[S32, S64](from)
 
 ### Returns `from` unchanged (identity conversion).
 ### :param from: The source value.
 ### :returns: `from`.
-routine S64.create(from: S64) -> S64
+routine S64(from: S64) -> S64
   return from
 
 ### Truncates a signed 128-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside the `S64` range.
-routine S64.create!(from: S128) -> S64
+routine S64!(from: S128) -> S64
   if not (-9223372036854775808s128 <= from <= 9223372036854775807s128)
     throw IntegerOverflowError()
   return int_truncate[S128, S64](from)
@@ -52,26 +52,26 @@ routine S64.create!(from: S128) -> S64
 ### Zero-extends an unsigned 8-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.create(from: U8) -> S64
+routine S64(from: U8) -> S64
   return zero_extend[U8, S64](from)
 
 ### Zero-extends an unsigned 16-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.create(from: U16) -> S64
+routine S64(from: U16) -> S64
   return zero_extend[U16, S64](from)
 
 ### Zero-extends an unsigned 32-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.create(from: U32) -> S64
+routine S64(from: U32) -> S64
   return zero_extend[U32, S64](from)
 
 ### Reinterprets a `U64` as `S64` using two's complement.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` exceeds `S64_MAX`.
-routine S64.create!(from: U64) -> S64
+routine S64!(from: U64) -> S64
   if from > 9223372036854775807_u64
     throw IntegerOverflowError()
   return reinterpret_bits[U64, S64](from)
@@ -80,7 +80,7 @@ routine S64.create!(from: U64) -> S64
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` exceeds `S64_MAX`.
-routine S64.create!(from: U128) -> S64
+routine S64!(from: U128) -> S64
   if from > 9223372036854775807_u128
     throw IntegerOverflowError()
   return int_truncate[U128, S64](from)
@@ -89,7 +89,7 @@ routine S64.create!(from: U128) -> S64
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 64 bits reinterpreted as an `S64`.
 ### :throws: {IntegerOverflowError} if `from` is outside −9223372036854775808..9223372036854775807.
-routine S64.create!(from: S256) -> S64
+routine S64!(from: S256) -> S64
   if not (-9223372036854775808_s256 <= from <= 9223372036854775807_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, S64](from)
@@ -98,7 +98,7 @@ routine S64.create!(from: S256) -> S64
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 64 bits reinterpreted as an `S64`.
 ### :throws: {IntegerOverflowError} if `from > 9223372036854775807`.
-routine S64.create!(from: U256) -> S64
+routine S64!(from: U256) -> S64
   if from > 9223372036854775807_u256
     throw IntegerOverflowError()
   return int_truncate[U256, S64](from)
@@ -106,13 +106,13 @@ routine S64.create!(from: U256) -> S64
 ### Truncates a 16-bit float to `S64` by first widening to `F32`.
 ### :param from: The source float value.
 ### :returns: The truncated `S64` representation.
-routine S64.create!(from: F16) -> S64
+routine S64!(from: F16) -> S64
   return from.F32().S64!()
 
 ### Truncates a 32-bit float to `S64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `S64` representation.
-routine S64.create!(from: F32) -> S64
+routine S64!(from: F32) -> S64
   if from.is_nan() or not (-9223372036854775808.0_f32 <= from <= 9223372036854775807.0_f32)
     throw IntegerOverflowError()
   return float_to_signed[F32, S64](from)
@@ -120,7 +120,7 @@ routine S64.create!(from: F32) -> S64
 ### Truncates a 64-bit float to `S64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `S64` representation.
-routine S64.create!(from: F64) -> S64
+routine S64!(from: F64) -> S64
   if from.is_nan() or not (-9223372036854775808.0_f64 <= from <= 9223372036854775807.0_f64)
     throw IntegerOverflowError()
   return float_to_signed[F64, S64](from)
@@ -128,7 +128,7 @@ routine S64.create!(from: F64) -> S64
 ### Truncates a 128-bit float to `S64` by narrowing to `F64` first.
 ### :param from: The source float value.
 ### :returns: The truncated `S64` representation.
-routine S64.create!(from: F128) -> S64
+routine S64!(from: F128) -> S64
   if from.is_nan() or not (-9223372036854775808.0_f128 <= from <= 9223372036854775807.0_f128)
     throw IntegerOverflowError()
   return from.F64().S64!()
@@ -136,19 +136,19 @@ routine S64.create!(from: F128) -> S64
 ### Converts a 32-bit decimal float to `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
-routine S64.create!(from: D32) -> S64
+routine S64!(from: D32) -> S64
   return S128(from: D128(from: from)).S64!()
 
 ### Converts a 64-bit decimal float to `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
-routine S64.create!(from: D64) -> S64
+routine S64!(from: D64) -> S64
   return S128(from: D128(from: from)).S64!()
 
 ### Converts a 128-bit decimal float to `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
-routine S64.create!(from: D128) -> S64
+routine S64!(from: D128) -> S64
   return S128(from: from).S64!()
 
 # ============================================================================
@@ -665,7 +665,7 @@ routine S64.diagnose() -> Text
 ### :param from_text: The text to parse.
 ### :returns: The parsed `S64` value.
 ### :throws: {InvalidValueError} if the text is empty or contains non-digit characters.
-routine S64.create!(from_text: Text) -> S64
+routine S64!(from_text: Text) -> S64
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S64")
   var start = 0u64

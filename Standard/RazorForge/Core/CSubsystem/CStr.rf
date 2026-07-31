@@ -38,20 +38,20 @@ routine CStr.ptr() -> Hijacked[Byte]
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The pointer to wrap.
 ### :returns: The resulting `CStr` value.
-routine CStr.create(from_ptr: Hijacked[Byte]) -> CStr
+routine CStr(from_ptr: Hijacked[Byte]) -> CStr
   return reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
 
 ### Wraps an existing raw address as `CStr`.
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The address to wrap.
 ### :returns: The resulting `CStr` value.
-routine CStr.create(from_ptr: Address) -> CStr
+routine CStr(from_ptr: Address) -> CStr
   return reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
 
 ### Creates a null-terminated C string by copying raw bytes and appending a trailing null byte.
 ### :param from: The byte sequence to copy.
 ### :returns: The resulting `CStr` value.
-routine CStr.create(from: Bytes) -> CStr
+routine CStr(from: Bytes) -> CStr
   var len = from.count()
   danger
     var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
@@ -69,7 +69,7 @@ routine CStr.create(from: Bytes) -> CStr
 ### Creates a UTF-8 encoded null-terminated C string from `Text`.
 ### :param from: The text value to encode and copy.
 ### :returns: The resulting `CStr` value.
-routine CStr.create(from: Text) -> CStr
+routine CStr(from: Text) -> CStr
   var len = from.count()
   danger
     if len == 0u64

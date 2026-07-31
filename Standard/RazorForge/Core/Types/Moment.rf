@@ -124,7 +124,7 @@ routine days_to_day(days_since_epoch: S64) -> S64
 ### :param minute: The minute component.
 ### :param second: The second component.
 ### :returns: The resulting `Moment` value.
-routine Moment.create(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
+routine Moment(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
   var d = ymd_to_days(year: year, month: month, day: day)
   var s = d *% SECONDS_PER_DAY +% hour *% SECONDS_PER_HOUR +% minute *% SECONDS_PER_MINUTE +% second
   return Moment(seconds: s, nanoseconds: 0_u32)

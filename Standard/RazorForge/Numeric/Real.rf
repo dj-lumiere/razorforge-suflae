@@ -21,13 +21,13 @@ record Real obeys Copyable, Equatable, Comparable, Negatable, Addable, Subtracta
 
 ### Constructs the real value zero.
 ### :returns: The resulting `Real` value.
-routine Real.create() -> Real
+routine Real() -> Real
   return Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
 
 ### Constructs a `Real` from a signed 64-bit integer (exact).
 ### :param value: The initial signed value.
 ### :returns: The resulting `Real` value.
-routine Real.create(value: S64) -> Real
+routine Real(value: S64) -> Real
   var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_set_i64(handle: r.handle, value: value)
   return r
@@ -35,7 +35,7 @@ routine Real.create(value: S64) -> Real
 ### Constructs a `Real` from an F64 (exact — the double is widened, not re-rounded).
 ### :param value: The initial double value.
 ### :returns: The resulting `Real` value.
-routine Real.create(value: F64) -> Real
+routine Real(value: F64) -> Real
   var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_set_f64(handle: r.handle, value: value)
   return r
@@ -55,7 +55,7 @@ common routine Real.one() -> Real
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Real` value.
 ### :throws: {ValueError} if `text` is not a valid real in `radix`.
-routine Real.create!(text: Text, radix: S32 = 10) -> Real
+routine Real!(text: Text, radix: S32 = 10) -> Real
   var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   var status = rf_real_set_str(handle: r.handle, str: text.to_cstr(), radix: radix)
   if status != 0_s32

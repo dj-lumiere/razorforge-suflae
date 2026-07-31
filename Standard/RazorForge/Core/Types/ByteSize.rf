@@ -35,7 +35,7 @@ record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible, Scalable, 
 ### Creates a `ByteSize` from a raw byte count.
 ### :param bytes: The number of bytes.
 ### :returns: The resulting `ByteSize` value.
-routine ByteSize.create(bytes: U64) -> ByteSize
+routine ByteSize(bytes: U64) -> ByteSize
   return reinterpret_bits[U64, ByteSize](bytes)
 
 ### Returns a decimal terabyte size.

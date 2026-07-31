@@ -47,7 +47,7 @@ relates BitListEmittable as Iter
 ### Creates an empty bit list with no allocated storage.
 ### The first append allocates the initial packed word buffer.
 ### :returns: An empty `BitList`.
-routine BitList.create() -> BitList
+routine BitList() -> BitList
   # Create empty bit list with default capacity
   return BitList(
     data: hijacked_none[U64](),
@@ -60,7 +60,7 @@ routine BitList.create() -> BitList
 ### bit sets incrementally.
 ### :param capacity: The minimum number of bits to reserve.
 ### :returns: An empty `BitList` with preallocated storage.
-routine BitList.create(capacity: U64) -> BitList
+routine BitList(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var word_size = (capacity +% 63u64) >> 6u32
   danger

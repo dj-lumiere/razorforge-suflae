@@ -22,7 +22,7 @@ preset U16_ONE: U16 = 1_u16
 ### :param from: The `S8` value to convert.
 ### :returns: A `U16` with the same unsigned value as `from`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U16.create!(from: S8) -> U16
+routine U16!(from: S8) -> U16
   if from < 0_s8
     throw IntegerOverflowError()
   return sign_extend[S8, U16](from)
@@ -31,7 +31,7 @@ routine U16.create!(from: S8) -> U16
 ### :param from: The `S16` value to convert.
 ### :returns: The same bit pattern reinterpreted as an unsigned value.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U16.create!(from: S16) -> U16
+routine U16!(from: S16) -> U16
   if from < 0_s16
     throw IntegerOverflowError()
   return reinterpret_bits[S16, U16](from)
@@ -40,7 +40,7 @@ routine U16.create!(from: S16) -> U16
 ### :param from: The `S32` value to convert.
 ### :returns: The lower 16 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=65535`.
-routine U16.create!(from: S32) -> U16
+routine U16!(from: S32) -> U16
   if not (0_s32 <= from <= 65535_s32)
     throw IntegerOverflowError()
   return int_truncate[S32, U16](from)
@@ -49,7 +49,7 @@ routine U16.create!(from: S32) -> U16
 ### :param from: The `S64` value to convert.
 ### :returns: The lower 16 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=65535`.
-routine U16.create!(from: S64) -> U16
+routine U16!(from: S64) -> U16
   if not (0_s64 <= from <= 65535_s64)
     throw IntegerOverflowError()
   return int_truncate[S64, U16](from)
@@ -58,7 +58,7 @@ routine U16.create!(from: S64) -> U16
 ### :param from: The `S128` value to convert.
 ### :returns: The lower 16 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=65535`.
-routine U16.create!(from: S128) -> U16
+routine U16!(from: S128) -> U16
   if not (0_s128 <= from <= 65535_s128)
     throw IntegerOverflowError()
   return int_truncate[S128, U16](from)
@@ -66,20 +66,20 @@ routine U16.create!(from: S128) -> U16
 ### Zero-extends a `U8` to `U16`.
 ### :param from: The `U8` value to widen.
 ### :returns: A `U16` equal in value to `from`.
-routine U16.create(from: U8) -> U16
+routine U16(from: U8) -> U16
   return zero_extend[U8, U16](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `U16` value to return.
 ### :returns: `from` unchanged.
-routine U16.create(from: U16) -> U16
+routine U16(from: U16) -> U16
   return from
 
 ### Converts a `U32` to `U16`, throwing if the value exceeds 65535.
 ### :param from: The `U32` value to convert.
 ### :returns: The lower 16 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 65535`.
-routine U16.create!(from: U32) -> U16
+routine U16!(from: U32) -> U16
   if from > 65535_u32
     throw IntegerOverflowError()
   return int_truncate[U32, U16](from)
@@ -88,7 +88,7 @@ routine U16.create!(from: U32) -> U16
 ### :param from: The `U64` value to convert.
 ### :returns: The lower 16 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 65535`.
-routine U16.create!(from: U64) -> U16
+routine U16!(from: U64) -> U16
   if from > 65535_u64
     throw IntegerOverflowError()
   return int_truncate[U64, U16](from)
@@ -97,7 +97,7 @@ routine U16.create!(from: U64) -> U16
 ### :param from: The `U128` value to convert.
 ### :returns: The lower 16 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 65535`.
-routine U16.create!(from: U128) -> U16
+routine U16!(from: U128) -> U16
   if from > 65535_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U16](from)
@@ -106,7 +106,7 @@ routine U16.create!(from: U128) -> U16
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 16 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside 0..65535.
-routine U16.create!(from: S256) -> U16
+routine U16!(from: S256) -> U16
   if not (0_s256 <= from <= 65535_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, U16](from)
@@ -115,7 +115,7 @@ routine U16.create!(from: S256) -> U16
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 16 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 65535`.
-routine U16.create!(from: U256) -> U16
+routine U16!(from: U256) -> U16
   if from > 65535_u256
     throw IntegerOverflowError()
   return int_truncate[U256, U16](from)
@@ -124,49 +124,49 @@ routine U16.create!(from: U256) -> U16
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16.create!(from: F16) -> U16
+routine U16!(from: F16) -> U16
   return from.U32!().U16!()
 
 ### Converts an `F32` to `U16` by first converting to `U32`, then truncating.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16.create!(from: F32) -> U16
+routine U16!(from: F32) -> U16
   return from.U32!().U16!()
 
 ### Converts an `F64` to `U16` by first converting to `U32`, then truncating.
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16.create!(from: F64) -> U16
+routine U16!(from: F64) -> U16
   return from.U32!().U16!()
 
 ### Converts an `F128` to `U16` by first converting to `U32`, then truncating.
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16.create!(from: F128) -> U16
+routine U16!(from: F128) -> U16
   return from.U32!().U16!()
 
 ### Converts a `D32` to `U16` by first converting to `U32`, then truncating.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16.create!(from: D32) -> U16
+routine U16!(from: D32) -> U16
   return from.U32!().U16!()
 
 ### Converts a `D64` to `U16` by first converting to `U32`, then truncating.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16.create!(from: D64) -> U16
+routine U16!(from: D64) -> U16
   return from.U32!().U16!()
 
 ### Converts a `D128` to `U16` by first converting to `U32`, then truncating.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16.create!(from: D128) -> U16
+routine U16!(from: D128) -> U16
   return from.U32!().U16!()
 
 # ============================================================================
@@ -604,7 +604,7 @@ routine U16.diagnose() -> Text
 ### :param from_text: The decimal string to parse (no sign, no prefix).
 ### :returns: The parsed `U16` value.
 ### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
-routine U16.create!(from_text: Text) -> U16
+routine U16!(from_text: Text) -> U16
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "U16")
   var result = 0u32

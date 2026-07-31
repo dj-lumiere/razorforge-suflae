@@ -39,21 +39,21 @@ preset F64_LN_10: F64 = 2.302585092994046_f64
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.create(from: S8) -> F64
+routine F64(from: S8) -> F64
   return signed_to_float[S8, F64](from)
 
 ### Converts an `S16` to `F64`. The result is exact for all values.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.create(from: S16) -> F64
+routine F64(from: S16) -> F64
   return signed_to_float[S16, F64](from)
 
 ### Converts an `S32` to `F64`. The result is exact for all values.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.create(from: S32) -> F64
+routine F64(from: S32) -> F64
   return signed_to_float[S32, F64](from)
 
 ### Converts an `S64` to `F64`.
@@ -62,7 +62,7 @@ routine F64.create(from: S32) -> F64
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.create(from: S64) -> F64
+routine F64(from: S64) -> F64
   return signed_to_float[S64, F64](from)
 
 ### Converts an `S128` to `F64`.
@@ -70,28 +70,28 @@ routine F64.create(from: S64) -> F64
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.create(from: S128) -> F64
+routine F64(from: S128) -> F64
   return signed_to_float[S128, F64](from)
 
 ### Converts a `U8` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.create(from: U8) -> F64
+routine F64(from: U8) -> F64
   return unsigned_to_float[U8, F64](from)
 
 ### Converts a `U16` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.create(from: U16) -> F64
+routine F64(from: U16) -> F64
   return unsigned_to_float[U16, F64](from)
 
 ### Converts a `U32` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.create(from: U32) -> F64
+routine F64(from: U32) -> F64
   return unsigned_to_float[U32, F64](from)
 
 ### Converts a `U64` to `F64`.
@@ -99,7 +99,7 @@ routine F64.create(from: U32) -> F64
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.create(from: U64) -> F64
+routine F64(from: U64) -> F64
   return unsigned_to_float[U64, F64](from)
 
 ### Converts a `U128` to `F64`.
@@ -107,48 +107,48 @@ routine F64.create(from: U64) -> F64
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.create(from: U128) -> F64
+routine F64(from: U128) -> F64
   return unsigned_to_float[U128, F64](from)
 
 ### Converts an `S256` to `F64` (precision limited to ~53 bits of significand).
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.create(from: S256) -> F64
+routine F64(from: S256) -> F64
   return signed_to_float[S256, F64](from)
 
 ### Converts a `U256` to `F64` (precision limited to ~53 bits of significand).
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.create(from: U256) -> F64
+routine F64(from: U256) -> F64
   return unsigned_to_float[U256, F64](from)
 
 ### Widens a half-precision float to double precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
 @inline
-routine F64.create(from: F16) -> F64
+routine F64(from: F16) -> F64
   return float_extend[F16, F64](from)
 
 ### Widens a single-precision float to double precision.
 ### :param from: The `F32` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
 @inline
-routine F64.create(from: F32) -> F64
+routine F64(from: F32) -> F64
   return float_extend[F32, F64](from)
 
 ### Returns an existing `F64` unchanged.
 ### :param from: The double-precision value to forward.
 ### :returns: `from`.
 @inline
-routine F64.create(from: F64) -> F64
+routine F64(from: F64) -> F64
   return from
 
 ### Narrows a quadruple-precision float to double precision.
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F64` value.
-routine F64.create(from: F128) -> F64
+routine F64(from: F128) -> F64
   return from.F64()
 
 ### (`F64.create(from: D32)` is provided by the decimal32 engine — `D32Trans.rf`.)
@@ -156,13 +156,13 @@ routine F64.create(from: F128) -> F64
 ### Converts a decimal64 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F64` value.
-routine F64.create(from: D64) -> F64
+routine F64(from: D64) -> F64
   return d64_to_f128(x: from).F64()
 
 ### Converts a decimal128 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F64` value.
-routine F64.create(from: D128) -> F64
+routine F64(from: D128) -> F64
   return d128_to_f256(x: from).to_f128().F64()
 
 # ============================================================================
@@ -536,7 +536,7 @@ routine F64.diagnose() -> Text
 ###   optional leading sign).
 ### :returns: The `F64` value parsed from the input.
 ### :throws: {InvalidValueError} if the text is not a valid float literal.
-routine F64.create!(from_text: Text) -> F64
+routine F64!(from_text: Text) -> F64
   var len = from_text.count()
   if len == 0u64
     throw InvalidValueError(input: from_text, target: "F64")

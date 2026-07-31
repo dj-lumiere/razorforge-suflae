@@ -71,7 +71,7 @@ needs T is EntityType
 ### Creates a controller with one strong reference in LOCAL mode (unlocked, non-atomic).
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `RoamController[T]` value.
-dangerous routine RoamController[T].create(data: Hijacked[T]) -> RoamController[T]
+dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
   return RoamController[T](
     count: 1_u64,
     escaped: Atomic[U8](initial: 0_u8),

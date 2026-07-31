@@ -14,13 +14,13 @@ record Byte obeys ConstCompatible
 ### standard construction surface.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
-routine Byte.create(from: Byte) -> Byte
+routine Byte(from: Byte) -> Byte
   return from
 
 ### Reinterprets an unsigned 8-bit integer as `Byte`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
-routine Byte.create(from: U8) -> Byte
+routine Byte(from: U8) -> Byte
   return reinterpret_bits[U8, Byte](value: from)
 
 # Common byte constants

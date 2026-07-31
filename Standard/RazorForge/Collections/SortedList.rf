@@ -257,7 +257,7 @@ routine BTreeListNode[T].children_add_range_from(other: Referring[BTreeListNode[
 # Creators
 # ============================================================================
 
-routine BTreeListNode[T].create(is_leaf: Bool) -> BTreeListNode[T]
+routine BTreeListNode[T](is_leaf: Bool) -> BTreeListNode[T]
   return BTreeListNode[T](
     keys: zero_value[Array[T, 63]](),
     children: zero_value[Array[Hijacked[BTreeListNode[T]], 64]](),
@@ -267,7 +267,7 @@ routine BTreeListNode[T].create(is_leaf: Bool) -> BTreeListNode[T]
     is_leaf: is_leaf
   )
 
-routine SortedList[T].create() -> SortedList[T]
+routine SortedList[T]() -> SortedList[T]
   return SortedList[T](
     root: none,
     count: 0u64
@@ -829,7 +829,7 @@ routine SortedList[T].iter() -> SortedListEmittable[T]
 ### Creates a {List[T]} from all elements of `from` in ascending sorted order.
 ### :param from: The sorted list to convert.
 ### :returns: A new {List[T]} containing all elements in ascending order.
-routine List[T].create(from: SortedList[T]) -> List[T]
+routine List[T](from: SortedList[T]) -> List[T]
   var result = List[T](capacity: from.count)
   if from.root is None
     pass

@@ -22,7 +22,7 @@ preset U8_ONE: U8 = 1_u8
 ### :param from: The `S8` value to convert.
 ### :returns: A `U8` with the same bit pattern as `from`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U8.create!(from: S8) -> U8
+routine U8!(from: S8) -> U8
   if from < 0_s8
     throw IntegerOverflowError()
   return reinterpret_bits[S8, U8](from)
@@ -31,7 +31,7 @@ routine U8.create!(from: S8) -> U8
 ### :param from: The `S16` value to convert.
 ### :returns: The `U8` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=255`.
-routine U8.create!(from: S16) -> U8
+routine U8!(from: S16) -> U8
   if not (0_s16 <= from <= 255_s16)
     throw IntegerOverflowError()
   return int_truncate[S16, U8](from)
@@ -40,7 +40,7 @@ routine U8.create!(from: S16) -> U8
 ### :param from: The `S32` value to convert.
 ### :returns: The `U8` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=255`.
-routine U8.create!(from: S32) -> U8
+routine U8!(from: S32) -> U8
   if not (0_s32 <= from <= 255_s32)
     throw IntegerOverflowError()
   return int_truncate[S32, U8](from)
@@ -49,7 +49,7 @@ routine U8.create!(from: S32) -> U8
 ### :param from: The `S64` value to convert.
 ### :returns: The `U8` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=255`.
-routine U8.create!(from: S64) -> U8
+routine U8!(from: S64) -> U8
   if not (0_s64 <= from <= 255_s64)
     throw IntegerOverflowError()
   return int_truncate[S64, U8](from)
@@ -58,7 +58,7 @@ routine U8.create!(from: S64) -> U8
 ### :param from: The `S128` value to convert.
 ### :returns: The `U8` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=255`.
-routine U8.create!(from: S128) -> U8
+routine U8!(from: S128) -> U8
   if not (0_s128 <= from <= 255_s128)
     throw IntegerOverflowError()
   return int_truncate[S128, U8](from)
@@ -66,14 +66,14 @@ routine U8.create!(from: S128) -> U8
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `U8` value to return.
 ### :returns: `from` unchanged.
-routine U8.create(from: U8) -> U8
+routine U8(from: U8) -> U8
   return from
 
 ### Converts a `U16` to `U8`, throwing if the value exceeds 255.
 ### :param from: The `U16` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.create!(from: U16) -> U8
+routine U8!(from: U16) -> U8
   if from > 255_u16
     throw IntegerOverflowError()
   return int_truncate[U16, U8](from)
@@ -82,7 +82,7 @@ routine U8.create!(from: U16) -> U8
 ### :param from: The `U32` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.create!(from: U32) -> U8
+routine U8!(from: U32) -> U8
   if from > 255_u32
     throw IntegerOverflowError()
   return int_truncate[U32, U8](from)
@@ -91,7 +91,7 @@ routine U8.create!(from: U32) -> U8
 ### :param from: The `U64` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.create!(from: U64) -> U8
+routine U8!(from: U64) -> U8
   if from > 255_u64
     throw IntegerOverflowError()
   return int_truncate[U64, U8](from)
@@ -100,7 +100,7 @@ routine U8.create!(from: U64) -> U8
 ### :param from: The `U128` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.create!(from: U128) -> U8
+routine U8!(from: U128) -> U8
   if from > 255_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U8](from)
@@ -109,7 +109,7 @@ routine U8.create!(from: U128) -> U8
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside 0..255.
-routine U8.create!(from: S256) -> U8
+routine U8!(from: S256) -> U8
   if not (0_s256 <= from <= 255_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, U8](from)
@@ -118,7 +118,7 @@ routine U8.create!(from: S256) -> U8
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.create!(from: U256) -> U8
+routine U8!(from: U256) -> U8
   if from > 255_u256
     throw IntegerOverflowError()
   return int_truncate[U256, U8](from)
@@ -127,49 +127,49 @@ routine U8.create!(from: U256) -> U8
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.create!(from: F16) -> U8
+routine U8!(from: F16) -> U8
   return from.U32!().U8!()
 
 ### Converts an `F32` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.create!(from: F32) -> U8
+routine U8!(from: F32) -> U8
   return from.U32!().U8!()
 
 ### Converts an `F64` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.create!(from: F64) -> U8
+routine U8!(from: F64) -> U8
   return from.U32!().U8!()
 
 ### Converts an `F128` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.create!(from: F128) -> U8
+routine U8!(from: F128) -> U8
   return from.U32!().U8!()
 
 ### Converts a `D32` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.create!(from: D32) -> U8
+routine U8!(from: D32) -> U8
   return from.U32!().U8!()
 
 ### Converts a `D64` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.create!(from: D64) -> U8
+routine U8!(from: D64) -> U8
   return from.U32!().U8!()
 
 ### Converts a `D128` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.create!(from: D128) -> U8
+routine U8!(from: D128) -> U8
   return from.U32!().U8!()
 
 # ============================================================================
@@ -657,7 +657,7 @@ routine U8.diagnose() -> Text
 ### :param from_text: The decimal string to parse (no sign, no prefix).
 ### :returns: The parsed `U8` value.
 ### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
-routine U8.create!(from_text: Text) -> U8
+routine U8!(from_text: Text) -> U8
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "U8")
   var result = 0u32

@@ -81,7 +81,7 @@ common routine F256.from_bits(bits: U256) -> F256
 ### F128 subnormals normalize into the vast F256 normal range. Mirrors the F64->F128 widening
 ### in `Numerics/F128.rf`. Used by decimal<-binary conversions, which round a binary value into
 ### a decimal via `f256_to_d128`.
-routine F256.create(from: F128) -> F256
+routine F256(from: F128) -> F256
   var bits = from.to_bits()
   var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))), b: 0)
   var e = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 112_s64)), b: zero_extend[U64, U128](0x7FFF_u64)))

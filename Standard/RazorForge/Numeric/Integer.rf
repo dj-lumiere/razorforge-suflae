@@ -27,7 +27,7 @@ record Integer obeys Copyable, Integral, Divisible, Negatable, Ordered, Hashable
 ### Use this overload when the surrounding context needs an explicit `Integer`
 ### instead of a fixed-width literal.
 ### :returns: The resulting `Integer` value.
-routine Integer.create() -> Integer
+routine Integer() -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   return int
 
@@ -36,7 +36,7 @@ routine Integer.create() -> Integer
 ### so the result is no longer limited by `S64` range after construction.
 ### :param value: The initial signed value.
 ### :returns: The resulting `Integer` value.
-routine Integer.create(value: S64) -> Integer
+routine Integer(value: S64) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_set_i64(handle: int.handle, value: value)
   return int
@@ -46,7 +46,7 @@ routine Integer.create(value: S64) -> Integer
 ### unsigned integer data.
 ### :param value: The initial unsigned value.
 ### :returns: The resulting `Integer` value.
-routine Integer.create(value: U64) -> Integer
+routine Integer(value: U64) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_set_u64(handle: int.handle, value: value)
   return int
@@ -76,18 +76,18 @@ routine integer_of_u64(v: U64) -> Integer
 ### would collide with.)
 ### :param from: The signed source value.
 ### :returns: The equal `Integer` value.
-routine Integer.create(from: S8) -> Integer
+routine Integer(from: S8) -> Integer
   return integer_of_s64(v: sign_extend[S8, S64](from))
-routine Integer.create(from: S16) -> Integer
+routine Integer(from: S16) -> Integer
   return integer_of_s64(v: sign_extend[S16, S64](from))
-routine Integer.create(from: S32) -> Integer
+routine Integer(from: S32) -> Integer
   return integer_of_s64(v: sign_extend[S32, S64](from))
-routine Integer.create(from: S128) -> Integer
+routine Integer(from: S128) -> Integer
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
   var r = Integer(from: mag)
   return if neg then r.neg() else r
-routine Integer.create(from: S256) -> Integer
+routine Integer(from: S256) -> Integer
   var neg = signed_lt[S256](a: from, b: 0_s256)
   var mag = if neg then reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: from)) else reinterpret_bits[S256, U256](from)
   var r = Integer(from: mag)
@@ -96,18 +96,18 @@ routine Integer.create(from: S256) -> Integer
 ### Widens an unsigned fixed-width integer into an `Integer` (exact).
 ### :param from: The unsigned source value.
 ### :returns: The equal `Integer` value.
-routine Integer.create(from: U8) -> Integer
+routine Integer(from: U8) -> Integer
   return integer_of_u64(v: zero_extend[U8, U64](from))
-routine Integer.create(from: U16) -> Integer
+routine Integer(from: U16) -> Integer
   return integer_of_u64(v: zero_extend[U16, U64](from))
-routine Integer.create(from: U32) -> Integer
+routine Integer(from: U32) -> Integer
   return integer_of_u64(v: zero_extend[U32, U64](from))
-routine Integer.create(from: U128) -> Integer
+routine Integer(from: U128) -> Integer
   # value = hi * 2^64 + lo, from the two 64-bit limbs.
   var hi = integer_of_u64(v: int_truncate[U128, U64](from >>> 64u32))
   var lo = integer_of_u64(v: int_truncate[U128, U64](from))
   return hi.shl(bits: 64_s32).add(other: lo)
-routine Integer.create(from: U256) -> Integer
+routine Integer(from: U256) -> Integer
   # value = hi * 2^128 + lo, reusing the U128 widening for each 128-bit half.
   var hi = Integer(from: int_truncate[U256, U128](from >>> 128u32))
   var lo = Integer(from: int_truncate[U256, U128](from))
@@ -119,7 +119,7 @@ routine Integer.create(from: U256) -> Integer
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Integer` value.
 ### :throws: {ValueError} if `text` is not a valid integer in `radix`.
-routine Integer.create!(text: Text, radix: S32 = 10) -> Integer
+routine Integer!(text: Text, radix: S32 = 10) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
   if result != 0
@@ -483,7 +483,7 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
 ### range.
 ### :param from: The source value to convert.
 ### :returns: The resulting `S64` value.
-routine S64.create!(from: Integer) -> S64
+routine S64!(from: Integer) -> S64
   return rf_bigint_get_i64(from.handle)
 
 ### Converts an arbitrary-precision integer to `U64`.
@@ -491,7 +491,7 @@ routine S64.create!(from: Integer) -> S64
 ### range.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U64` value.
-routine U64.create!(from: Integer) -> U64
+routine U64!(from: Integer) -> U64
   return rf_bigint_get_u64(from.handle)
 
 ### Formats this value as base-10 text. Standard `represent` shape (no args)
@@ -542,7 +542,7 @@ routine Integer.hash(k0: U64, k1: U64) -> U64
 ### :param text: The text to parse.
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
-routine Integer.create!(text: Text) -> Integer
+routine Integer!(text: Text) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   if result != 0

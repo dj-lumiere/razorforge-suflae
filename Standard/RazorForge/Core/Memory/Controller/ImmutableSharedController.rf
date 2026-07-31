@@ -17,7 +17,7 @@ entity ImmutableSharedController
 
 ### Creates a new controller with one strong reference.
 ### :returns: The resulting `ImmutableSharedController` value.
-dangerous routine ImmutableSharedController.create() -> ImmutableSharedController
+dangerous routine ImmutableSharedController() -> ImmutableSharedController
   return ImmutableSharedController(
     strong_count: 1_u64
   )

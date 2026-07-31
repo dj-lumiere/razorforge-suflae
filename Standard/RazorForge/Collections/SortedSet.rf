@@ -273,7 +273,7 @@ relates SortedSetEmittable[T] as Iter
 ### The node starts empty with zero keys, zero children, and no cached subtree size.
 ### :param is_leaf: Whether the new node should be treated as a leaf.
 ### :returns: The resulting `BTreeSetNode[T]` value.
-routine BTreeSetNode[T].create(is_leaf: Bool) -> BTreeSetNode[T]
+routine BTreeSetNode[T](is_leaf: Bool) -> BTreeSetNode[T]
   return BTreeSetNode[T](
     keys: zero_value[Array[T, 63]](),
     children: zero_value[Array[Hijacked[BTreeSetNode[T]], 64]](),
@@ -289,7 +289,7 @@ routine BTreeSetNode[T].create(is_leaf: Bool) -> BTreeSetNode[T]
 
 ### Creates an empty sorted set with no root node.
 ### :returns: The resulting `SortedSet[T]` value.
-routine SortedSet[T].create() -> SortedSet[T]
+routine SortedSet[T]() -> SortedSet[T]
   return SortedSet[T](
     root: none,
     count: 0u64
@@ -943,7 +943,7 @@ routine SortedSet[T].iter() -> SortedSetEmittable[T]
 ### Materializes the set as a list in ascending order.
 ### :param from: The set to copy values from.
 ### :returns: The resulting `List[T]` value.
-routine List[T].create(from: SortedSet[T]) -> List[T]
+routine List[T](from: SortedSet[T]) -> List[T]
   var result = List[T](capacity: from.count)
   if from.root is None
     pass

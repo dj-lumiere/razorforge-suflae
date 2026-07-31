@@ -24,74 +24,74 @@ preset S256_ONE: S256 = 1_s256
 ### Sign-extends an `S8` to `S256` (always succeeds).
 ### :param from: The `S8` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.create(from: S8) -> S256
+routine S256(from: S8) -> S256
   return sign_extend[S8, S256](from)
 
 ### Sign-extends an `S16` to `S256` (always succeeds).
 ### :param from: The `S16` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.create(from: S16) -> S256
+routine S256(from: S16) -> S256
   return sign_extend[S16, S256](from)
 
 ### Sign-extends an `S32` to `S256` (always succeeds).
 ### :param from: The `S32` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.create(from: S32) -> S256
+routine S256(from: S32) -> S256
   return sign_extend[S32, S256](from)
 
 ### Sign-extends an `S64` to `S256` (always succeeds).
 ### :param from: The `S64` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.create(from: S64) -> S256
+routine S256(from: S64) -> S256
   return sign_extend[S64, S256](from)
 
 ### Sign-extends an `S128` to `S256` (always succeeds).
 ### :param from: The `S128` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.create(from: S128) -> S256
+routine S256(from: S128) -> S256
   return sign_extend[S128, S256](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S256` value to return.
 ### :returns: `from` unchanged.
-routine S256.create(from: S256) -> S256
+routine S256(from: S256) -> S256
   return from
 
 ### Zero-extends a `U8` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U8` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.create(from: U8) -> S256
+routine S256(from: U8) -> S256
   return zero_extend[U8, S256](from)
 
 ### Zero-extends a `U16` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U16` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.create(from: U16) -> S256
+routine S256(from: U16) -> S256
   return zero_extend[U16, S256](from)
 
 ### Zero-extends a `U32` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U32` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.create(from: U32) -> S256
+routine S256(from: U32) -> S256
   return zero_extend[U32, S256](from)
 
 ### Zero-extends a `U64` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U64` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.create(from: U64) -> S256
+routine S256(from: U64) -> S256
   return zero_extend[U64, S256](from)
 
 ### Zero-extends a `U128` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U128` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.create(from: U128) -> S256
+routine S256(from: U128) -> S256
   return zero_extend[U128, S256](from)
 
 ### Reinterprets a `U256` as `S256` using two's complement, throwing if the value exceeds S256_MAX.
 ### :param from: The `U256` value to convert.
 ### :returns: The same bit pattern interpreted as `S256`.
 ### :throws: {IntegerOverflowError} if `from > S256_MAX`.
-routine S256.create!(from: U256) -> S256
+routine S256!(from: U256) -> S256
   if from > 57896044618658097711785492504343953926634992332820282019728792003956564819967_u256
     throw IntegerOverflowError()
   return reinterpret_bits[U256, S256](from)
@@ -100,14 +100,14 @@ routine S256.create!(from: U256) -> S256
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
-routine S256.create!(from: F16) -> S256
+routine S256!(from: F16) -> S256
   return from.F32().S256!()
 
 ### Converts an `F32` to `S256`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
-routine S256.create!(from: F32) -> S256
+routine S256!(from: F32) -> S256
   if not from.is_finite()
     throw IntegerOverflowError()
   return float_to_signed[F32, S256](from)
@@ -116,7 +116,7 @@ routine S256.create!(from: F32) -> S256
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^255, 2^255-1].
-routine S256.create!(from: F64) -> S256
+routine S256!(from: F64) -> S256
   if from.is_nan() or from < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0_f64 or from >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0_f64
     throw IntegerOverflowError()
   return float_to_signed[F64, S256](from)
@@ -125,7 +125,7 @@ routine S256.create!(from: F64) -> S256
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
-routine S256.create!(from: F128) -> S256
+routine S256!(from: F128) -> S256
   var bits = from.to_bits()
   var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
   var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
@@ -157,14 +157,14 @@ routine S256.create!(from: F128) -> S256
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if the integer part overflows S256.
-routine S256.create!(from: D32) -> S256
+routine S256!(from: D32) -> S256
   return S256(from: D128(from: from))
 
 ### Converts a `D64` to `S256`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if the integer part overflows S256.
-routine S256.create!(from: D64) -> S256
+routine S256!(from: D64) -> S256
   return S256(from: D128(from: from))
 
 # ============================================================================
@@ -703,7 +703,7 @@ routine S256.diagnose() -> Text
 ### :param from_text: The decimal string to parse.
 ### :returns: The parsed `S256` value.
 ### :throws: {InvalidValueError} if `from_text` is empty, sign-only, or contains non-digit characters.
-routine S256.create!(from_text: Text) -> S256
+routine S256!(from_text: Text) -> S256
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S256")
   var start = 0u64

@@ -29,7 +29,7 @@ entity SignalCaster
 
 ### Creates a new monitor.
 ### :returns: A fresh `SignalCaster`.
-routine SignalCaster.create() -> SignalCaster
+routine SignalCaster() -> SignalCaster
   danger
     return SignalCaster(sig: rf_signal_create())
 

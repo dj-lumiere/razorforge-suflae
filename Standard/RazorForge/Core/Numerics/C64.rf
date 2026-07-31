@@ -24,109 +24,109 @@ preset C64_I: C64 = C64(real: 0.0_f64, imag: 1.0_f64)
 ### Constructs a `C64` with the given real component and zero imaginary part.
 ### :param from: The real-axis value.
 ### :returns: The corresponding `C64` value.
-routine C64.create(from: F64) -> C64
+routine C64(from: F64) -> C64
   return C64(real: from, imag: 0.0_f64)
 
 ### Widens a `C32` to `C64` by extending each component to `F64`.
 ### :param from: The single-precision complex value to widen.
 ### :returns: A `C64` carrying the same numeric value.
-routine C64.create(from: C32) -> C64
+routine C64(from: C32) -> C64
   return C64(real: F64(from.real), imag: F64(from.imag))
 
 ### Narrows a `C128` to `C64` by truncating each component to `F64`.
 ### :param from: The quadruple-precision complex value to narrow.
 ### :returns: The nearest representable `C64`.
-routine C64.create(from: C128) -> C64
+routine C64(from: C128) -> C64
   return C64(real: F64(from.real), imag: F64(from.imag))
 
 ### Real scalar -> `C64` (imaginary part 0), routing the value through `F64`.
 ### :param from: A real integer or float value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: S8) -> C64
+routine C64(from: S8) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S16` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: S16) -> C64
+routine C64(from: S16) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S32` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: S32) -> C64
+routine C64(from: S32) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S64` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: S64) -> C64
+routine C64(from: S64) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S128` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: S128) -> C64
+routine C64(from: S128) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S256` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: S256) -> C64
+routine C64(from: S256) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U8` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: U8) -> C64
+routine C64(from: U8) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U16` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: U16) -> C64
+routine C64(from: U16) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U32` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: U32) -> C64
+routine C64(from: U32) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U64` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: U64) -> C64
+routine C64(from: U64) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U128` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: U128) -> C64
+routine C64(from: U128) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U256` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: U256) -> C64
+routine C64(from: U256) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `F16` scalar -> `C64` (imaginary part 0), value widened to `F64`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: F16) -> C64
+routine C64(from: F16) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `F32` scalar -> `C64` (imaginary part 0), value widened to `F64`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: F32) -> C64
+routine C64(from: F32) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `F128` scalar -> `C64` (imaginary part 0), value narrowed to `F64`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in double precision.
-routine C64.create(from: F128) -> C64
+routine C64(from: F128) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Constructs a `C64` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.

@@ -32,21 +32,21 @@ preset F32_LN_10: F32 = 2.3025851_f32
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F32` value.
 @inline
-routine F32.create(from: S8) -> F32
+routine F32(from: S8) -> F32
   return signed_to_float[S8, F32](from)
 
 ### Converts an `S16` into single-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F32` value.
 @inline
-routine F32.create(from: S16) -> F32
+routine F32(from: S16) -> F32
   return signed_to_float[S16, F32](from)
 
 ### Converts an `S32` into single-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The closest representable `F32` value.
 @inline
-routine F32.create(from: S32) -> F32
+routine F32(from: S32) -> F32
   return signed_to_float[S32, F32](from)
 
 ### Converts an `S64` into single-precision floating-point form.
@@ -54,42 +54,42 @@ routine F32.create(from: S32) -> F32
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F32` value.
 @inline
-routine F32.create(from: S64) -> F32
+routine F32(from: S64) -> F32
   return signed_to_float[S64, F32](from)
 
 ### Converts an `S128` into single-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F32` value under the target rounding rules.
 @inline
-routine F32.create(from: S128) -> F32
+routine F32(from: S128) -> F32
   return signed_to_float[S128, F32](from)
 
 ### Converts a `U8` into single-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F32` value.
 @inline
-routine F32.create(from: U8) -> F32
+routine F32(from: U8) -> F32
   return unsigned_to_float[U8, F32](from)
 
 ### Converts a `U16` into single-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F32` value.
 @inline
-routine F32.create(from: U16) -> F32
+routine F32(from: U16) -> F32
   return unsigned_to_float[U16, F32](from)
 
 ### Converts a `U32` into single-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The closest representable `F32` value.
 @inline
-routine F32.create(from: U32) -> F32
+routine F32(from: U32) -> F32
   return unsigned_to_float[U32, F32](from)
 
 ### Converts a `U64` into single-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F32` value.
 @inline
-routine F32.create(from: U64) -> F32
+routine F32(from: U64) -> F32
   return unsigned_to_float[U64, F32](from)
 
 ### Converts a `U128` into single-precision floating-point form. Failable: throws when the
@@ -97,66 +97,66 @@ routine F32.create(from: U64) -> F32
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F32` value (finite).
 ### :throws: {NumericOverflowError} if the value is out of the F32 range.
-routine F32.create!(from: U128) -> F32
+routine F32!(from: U128) -> F32
   return unsigned_to_float[U128, F32](from).finite()
 
 ### Converts an `S256` to `F32`. Failable: throws if the value exceeds the F32 range.
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F32` value (finite).
 ### :throws: {NumericOverflowError} if the value is out of the F32 range.
-routine F32.create!(from: S256) -> F32
+routine F32!(from: S256) -> F32
   return signed_to_float[S256, F32](from).finite()
 
 ### Converts a `U256` to `F32`. Failable: throws if the value exceeds the F32 range.
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F32` value (finite).
 ### :throws: {NumericOverflowError} if the value is out of the F32 range.
-routine F32.create!(from: U256) -> F32
+routine F32!(from: U256) -> F32
   return unsigned_to_float[U256, F32](from).finite()
 
 ### Widens a half-precision float to single precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F32` carrying the same numeric value when representable.
 @inline
-routine F32.create(from: F16) -> F32
+routine F32(from: F16) -> F32
   return float_extend[F16, F32](from)
 
 ### Returns an existing `F32` unchanged.
 ### :param from: The single-precision value to forward.
 ### :returns: `from`.
 @inline
-routine F32.create(from: F32) -> F32
+routine F32(from: F32) -> F32
   return from
 
 ### Narrows a double-precision float to single precision.
 ### :param from: The `F64` value to convert.
 ### :returns: The nearest representable `F32` value.
 @inline
-routine F32.create(from: F64) -> F32
+routine F32(from: F64) -> F32
   return float_narrow[F64, F32](from)
 
 ### Narrows a quadruple-precision float to single precision.
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F32` value.
-routine F32.create(from: F128) -> F32
+routine F32(from: F128) -> F32
   return from.F32()
 
 ### Converts a decimal32 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F32` value.
-routine F32.create(from: D32) -> F32
+routine F32(from: D32) -> F32
   return F32(from: F64(from))
 
 ### Converts a decimal64 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F32` value.
-routine F32.create(from: D64) -> F32
+routine F32(from: D64) -> F32
   return F32(from: F64(from))
 
 ### Converts a decimal128 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F32` value.
-routine F32.create(from: D128) -> F32
+routine F32(from: D128) -> F32
   return F32(from: F64(from))
 
 # ============================================================================
@@ -501,7 +501,7 @@ routine F32.diagnose() -> Text
 ### :param from_text: The `from_text` value.
 ### :returns: The resulting `F32` value.
 ### :throws: May throw {InvalidValueError}.
-routine F32.create!(from_text: Text) -> F32
+routine F32!(from_text: Text) -> F32
   var len = from_text.count()
   if len == 0u64
     throw InvalidValueError(input: from_text, target: "F32")

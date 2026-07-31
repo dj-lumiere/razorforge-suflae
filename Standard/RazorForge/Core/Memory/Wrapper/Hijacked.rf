@@ -42,7 +42,7 @@ routine T.get_address() -> Address
 ### Reinterprets a raw address as `Hijacked[T]`.
 ### :param from: The address to wrap.
 ### :returns: A `Hijacked[T]` pointer wrapping the given raw address.
-routine Hijacked[T].create(from: Address) -> Hijacked[T]
+routine Hijacked[T](from: Address) -> Hijacked[T]
   return int_to_pointer[Address, T](from)
 
 ### Produces an unmanaged pointer alias of `me`.

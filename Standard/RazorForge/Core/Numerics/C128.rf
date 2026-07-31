@@ -25,109 +25,109 @@ preset C128_I: C128 = C128(real: 0.0_f128, imag: 1.0_f128)
 ### Constructs a `C128` with the given real component and zero imaginary part.
 ### :param from: The real-axis value.
 ### :returns: The corresponding `C128` value.
-routine C128.create(from: F128) -> C128
+routine C128(from: F128) -> C128
   return C128(real: from, imag: 0.0_f128)
 
 ### Widens a `C32` to `C128` by extending each component to `F128`.
 ### :param from: The single-precision complex value to widen.
 ### :returns: A `C128` carrying the same numeric value.
-routine C128.create(from: C32) -> C128
+routine C128(from: C32) -> C128
   return C128(real: F128(from.real), imag: F128(from.imag))
 
 ### Widens a `C64` to `C128` by extending each component to `F128`.
 ### :param from: The double-precision complex value to widen.
 ### :returns: A `C128` carrying the same numeric value.
-routine C128.create(from: C64) -> C128
+routine C128(from: C64) -> C128
   return C128(real: F128(from.real), imag: F128(from.imag))
 
 ### Real scalar -> `C128` (imaginary part 0), routing the value through `F128`.
 ### :param from: A real integer or float value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: S8) -> C128
+routine C128(from: S8) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `S16` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: S16) -> C128
+routine C128(from: S16) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `S32` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: S32) -> C128
+routine C128(from: S32) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `S64` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: S64) -> C128
+routine C128(from: S64) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `S128` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: S128) -> C128
+routine C128(from: S128) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `S256` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: S256) -> C128
+routine C128(from: S256) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `U8` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: U8) -> C128
+routine C128(from: U8) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `U16` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: U16) -> C128
+routine C128(from: U16) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `U32` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: U32) -> C128
+routine C128(from: U32) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `U64` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: U64) -> C128
+routine C128(from: U64) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `U128` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: U128) -> C128
+routine C128(from: U128) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `U256` scalar -> `C128` (imaginary part 0), value routed through `F128`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: U256) -> C128
+routine C128(from: U256) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `F16` scalar -> `C128` (imaginary part 0), value widened to `F128`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: F16) -> C128
+routine C128(from: F16) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `F32` scalar -> `C128` (imaginary part 0), value widened to `F128`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: F32) -> C128
+routine C128(from: F32) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Real `F64` scalar -> `C128` (imaginary part 0), value widened to `F128`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in quadruple precision.
-routine C128.create(from: F64) -> C128
+routine C128(from: F64) -> C128
   return C128(real: F128(from: from), imag: 0.0_f128)
 
 ### Constructs a `C128` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.

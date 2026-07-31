@@ -327,7 +327,7 @@ routine BTreeDictNode[K, V].children_add_range_from(other: Referring[BTreeDictNo
 # Creators
 # ============================================================================
 
-routine BTreeDictNode[K, V].create(is_leaf: Bool) -> BTreeDictNode[K, V]
+routine BTreeDictNode[K, V](is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
     entry_keys: zero_value[Array[K, 63]](),
     entry_values: zero_value[Array[V, 63]](),
@@ -338,7 +338,7 @@ routine BTreeDictNode[K, V].create(is_leaf: Bool) -> BTreeDictNode[K, V]
     is_leaf: is_leaf
   )
 
-routine SortedDict[K, V].create() -> SortedDict[K, V]
+routine SortedDict[K, V]() -> SortedDict[K, V]
   return SortedDict[K, V](
     root: none,
     count: 0u64
@@ -997,7 +997,7 @@ routine SortedDict[K, V].iter() -> SortedDictEmittable[K, V]
 ### Creates a {List[DictEntry[K, V]]} from all entries of `from` in ascending key order.
 ### :param from: The sorted dictionary to convert.
 ### :returns: A new list of all entries in key-ascending order.
-routine List[DictEntry[K, V]].create(from: SortedDict[K, V]) -> List[DictEntry[K, V]]
+routine List[DictEntry[K, V]](from: SortedDict[K, V]) -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](from.count)
   if from.root is None
     pass

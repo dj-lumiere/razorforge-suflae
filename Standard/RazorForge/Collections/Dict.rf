@@ -57,10 +57,10 @@ relates V as Value
 # Creators
 # ============================================================================
 
-routine Dict[K, V].create() -> Dict[K, V]
+routine Dict[K, V]() -> Dict[K, V]
   return Dict[K, V](key: SecureHashKey.random())
 
-routine Dict[K, V].create(key: SecureHashKey) -> Dict[K, V]
+routine Dict[K, V](key: SecureHashKey) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   var ecap = DICT_INITIAL_ENTRIES
   var dict = Dict[K, V](
@@ -86,7 +86,7 @@ routine Dict[K, V].create(key: SecureHashKey) -> Dict[K, V]
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal dict
 
-routine Dict[K, V].create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
+routine Dict[K, V](key: SecureHashKey, capacity: U64) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64

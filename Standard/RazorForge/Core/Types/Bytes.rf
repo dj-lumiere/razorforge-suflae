@@ -48,13 +48,13 @@ dangerous routine Bytes.destroy()
 
 ### Creates an empty byte sequence.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.create() -> Bytes
+routine Bytes() -> Bytes
   return Bytes(data: hijacked_none[Byte](), count: 0u64, ctrl: hijacked_none[ImmutableSharedController]())
 
 ### Creates a byte sequence by copying the contents of `from_list`.
 ### :param from_list: The source list of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.create(from_list: List[Byte]) -> Bytes
+routine Bytes(from_list: List[Byte]) -> Bytes
   var n = from_list.count()
   if n == 0u64
     return Bytes(data: hijacked_none[Byte](), count: 0u64, ctrl: hijacked_none[ImmutableSharedController]())
@@ -71,7 +71,7 @@ routine Bytes.create(from_list: List[Byte]) -> Bytes
 ### Creates a one-byte sequence from `from_byte`.
 ### :param from_byte: The single byte to store.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.create(from_byte: Byte) -> Bytes
+routine Bytes(from_byte: Byte) -> Bytes
   danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size()))
     buf.poke(value: from_byte)
@@ -81,7 +81,7 @@ routine Bytes.create(from_byte: Byte) -> Bytes
 ### Copying stops at the first null byte.
 ### :param ptr: The source pointer to read from.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.create(ptr: Hijacked[Byte]) -> Bytes
+routine Bytes(ptr: Hijacked[Byte]) -> Bytes
   danger
     var len: U64 = 0u64
     loop
@@ -98,7 +98,7 @@ routine Bytes.create(ptr: Hijacked[Byte]) -> Bytes
 ### No text decoding is performed.
 ### :param ptr: The source C string.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.create(ptr: CStr) -> Bytes
+routine Bytes(ptr: CStr) -> Bytes
   var len = rf_cstr_count(ptr)
   if len == 0u64
     return Bytes()
@@ -111,7 +111,7 @@ routine Bytes.create(ptr: CStr) -> Bytes
 ### :param ptr: The source address.
 ### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.create(ptr: Address, count: U64) -> Bytes
+routine Bytes(ptr: Address, count: U64) -> Bytes
   if count == 0u64
     return Bytes()
   danger
@@ -123,7 +123,7 @@ routine Bytes.create(ptr: Address, count: U64) -> Bytes
 ### :param source: The source pointer.
 ### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.create(srcptr: Hijacked[Byte], count: U64) -> Bytes
+routine Bytes(srcptr: Hijacked[Byte], count: U64) -> Bytes
   if count == 0u64
     return Bytes()
   danger
@@ -320,7 +320,7 @@ routine Bytes.repeat(times: U64) -> Bytes
 ### Creates a mutable byte list by copying the contents of `Bytes`.
 ### :param source: The byte sequence to convert.
 ### :returns: The resulting `List[Byte]` value.
-routine List[Byte].create(source: Bytes) -> List[Byte]
+routine List[Byte](source: Bytes) -> List[Byte]
   var result = List[Byte](source.count)
   var i: U64 = 0u64
   loop

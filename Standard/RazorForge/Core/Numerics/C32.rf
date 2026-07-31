@@ -25,109 +25,109 @@ preset C32_I: C32 = C32(real: 0.0_f32, imag: 1.0_f32)
 ### Constructs a `C32` with the given real component and zero imaginary part.
 ### :param from: The real-axis value.
 ### :returns: The corresponding `C32` value.
-routine C32.create(from: F32) -> C32
+routine C32(from: F32) -> C32
   return C32(real: from, imag: 0.0_f32)
 
 ### Narrows a `C64` to `C32` by truncating each component to `F32`.
 ### :param from: The double-precision complex value to narrow.
 ### :returns: The nearest representable `C32`.
-routine C32.create(from: C64) -> C32
+routine C32(from: C64) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
 ### Narrows a `C128` to `C32` by truncating each component to `F32`.
 ### :param from: The quadruple-precision complex value to narrow.
 ### :returns: The nearest representable `C32`.
-routine C32.create(from: C128) -> C32
+routine C32(from: C128) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
 ### Real scalar -> `C32` (imaginary part 0), routing the value through `F32`.
 ### :param from: A real integer or float value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: S8) -> C32
+routine C32(from: S8) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S16` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: S16) -> C32
+routine C32(from: S16) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S32` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: S32) -> C32
+routine C32(from: S32) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S64` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: S64) -> C32
+routine C32(from: S64) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S128` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: S128) -> C32
+routine C32(from: S128) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S256` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: S256) -> C32
+routine C32(from: S256) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U8` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: U8) -> C32
+routine C32(from: U8) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U16` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: U16) -> C32
+routine C32(from: U16) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U32` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: U32) -> C32
+routine C32(from: U32) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U64` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: U64) -> C32
+routine C32(from: U64) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U128` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: U128) -> C32
+routine C32(from: U128) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U256` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: U256) -> C32
+routine C32(from: U256) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `F16` scalar -> `C32` (imaginary part 0), value widened to `F32`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: F16) -> C32
+routine C32(from: F16) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `F64` scalar -> `C32` (imaginary part 0), value narrowed to `F32`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: F64) -> C32
+routine C32(from: F64) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `F128` scalar -> `C32` (imaginary part 0), value narrowed to `F32`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in single precision.
-routine C32.create(from: F128) -> C32
+routine C32(from: F128) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Constructs a `C32` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.

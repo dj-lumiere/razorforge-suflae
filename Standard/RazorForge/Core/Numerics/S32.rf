@@ -21,26 +21,26 @@ preset S32_ONE: S32 = 1_s32
 ### Sign-extends an `S8` to `S32`.
 ### :param from: The `S8` value to widen.
 ### :returns: An `S32` with the same signed value as `from`.
-routine S32.create(from: S8) -> S32
+routine S32(from: S8) -> S32
   return sign_extend[S8, S32](from)
 
 ### Sign-extends an `S16` to `S32`.
 ### :param from: The `S16` value to widen.
 ### :returns: An `S32` with the same signed value as `from`.
-routine S32.create(from: S16) -> S32
+routine S32(from: S16) -> S32
   return sign_extend[S16, S32](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S32` value to return.
 ### :returns: `from` unchanged.
-routine S32.create(from: S32) -> S32
+routine S32(from: S32) -> S32
   return from
 
 ### Converts an `S64` to `S32`, throwing if the value is outside the S32 range.
 ### :param from: The `S64` value to convert.
 ### :returns: The lower 32 bits of `from` interpreted as signed.
 ### :throws: {IntegerOverflowError} if `from` is not in `-2147483648..=2147483647`.
-routine S32.create!(from: S64) -> S32
+routine S32!(from: S64) -> S32
   unless S64(S32_MIN) <= from <= S64(S32_MAX)
     throw IntegerOverflowError()
   return int_truncate[S64, S32](from)
@@ -49,7 +49,7 @@ routine S32.create!(from: S64) -> S32
 ### :param from: The `S128` value to convert.
 ### :returns: The lower 32 bits of `from` interpreted as signed.
 ### :throws: {IntegerOverflowError} if `from` is not in `-2147483648..=2147483647`.
-routine S32.create!(from: S128) -> S32
+routine S32!(from: S128) -> S32
   unless S128(S32_MIN) <= from <= S128(S32_MAX)
     throw IntegerOverflowError()
   return int_truncate[S128, S32](from)
@@ -57,20 +57,20 @@ routine S32.create!(from: S128) -> S32
 ### Zero-extends a `U8` to `S32` (always succeeds — `U8` max 255 fits in S32).
 ### :param from: The `U8` value to widen.
 ### :returns: An `S32` equal in value to `from`.
-routine S32.create(from: U8) -> S32
+routine S32(from: U8) -> S32
   return zero_extend[U8, S32](from)
 
 ### Zero-extends a `U16` to `S32` (always succeeds — `U16` max 65535 fits in S32).
 ### :param from: The `U16` value to widen.
 ### :returns: An `S32` equal in value to `from`.
-routine S32.create(from: U16) -> S32
+routine S32(from: U16) -> S32
   return zero_extend[U16, S32](from)
 
 ### Reinterprets a `U32` as `S32` using two's complement, throwing if the value exceeds S32_MAX.
 ### :param from: The `U32` value to convert.
 ### :returns: The same bit pattern interpreted as `S32`.
 ### :throws: {IntegerOverflowError} if `from > 2147483647`.
-routine S32.create!(from: U32) -> S32
+routine S32!(from: U32) -> S32
   unless from <= U32(S32_MAX)
     throw IntegerOverflowError()
   return reinterpret_bits[U32, S32](from)
@@ -79,7 +79,7 @@ routine S32.create!(from: U32) -> S32
 ### :param from: The `U64` value to convert.
 ### :returns: The lower 32 bits interpreted as a signed `S32`.
 ### :throws: {IntegerOverflowError} if `from > 2147483647`.
-routine S32.create!(from: U64) -> S32
+routine S32!(from: U64) -> S32
   unless from <= U64(S32_MAX)
     throw IntegerOverflowError()
   return int_truncate[U64, S32](from)
@@ -88,7 +88,7 @@ routine S32.create!(from: U64) -> S32
 ### :param from: The `U128` value to convert.
 ### :returns: The lower 32 bits interpreted as a signed `S32`.
 ### :throws: {IntegerOverflowError} if `from > 2147483647`.
-routine S32.create!(from: U128) -> S32
+routine S32!(from: U128) -> S32
   unless from <= U128(S32_MAX)
     throw IntegerOverflowError()
   return int_truncate[U128, S32](from)
@@ -97,7 +97,7 @@ routine S32.create!(from: U128) -> S32
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 32 bits reinterpreted as an `S32`.
 ### :throws: {IntegerOverflowError} if `from` is outside −2147483648..2147483647.
-routine S32.create!(from: S256) -> S32
+routine S32!(from: S256) -> S32
   if not (-2147483648_s256 <= from <= 2147483647_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, S32](from)
@@ -106,7 +106,7 @@ routine S32.create!(from: S256) -> S32
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 32 bits reinterpreted as an `S32`.
 ### :throws: {IntegerOverflowError} if `from > 2147483647`.
-routine S32.create!(from: U256) -> S32
+routine S32!(from: U256) -> S32
   if from > 2147483647_u256
     throw IntegerOverflowError()
   return int_truncate[U256, S32](from)
@@ -115,14 +115,14 @@ routine S32.create!(from: U256) -> S32
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.create!(from: F16) -> S32
+routine S32!(from: F16) -> S32
   return from.F32().S32!()
 
 ### Converts an `F32` to `S32`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the value is outside the S32 range.
-routine S32.create!(from: F32) -> S32
+routine S32!(from: F32) -> S32
   if from.is_nan() or not (-2147483648.0_f32 <= from <= 2147483647.0_f32)
     throw IntegerOverflowError()
   return float_to_signed[F32, S32](from)
@@ -131,7 +131,7 @@ routine S32.create!(from: F32) -> S32
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the value is outside the S32 range.
-routine S32.create!(from: F64) -> S32
+routine S32!(from: F64) -> S32
   if from.is_nan() or not (-2147483648.0_f64 <= from <= 2147483647.0_f64)
     throw IntegerOverflowError()
   return float_to_signed[F64, S32](from)
@@ -140,28 +140,28 @@ routine S32.create!(from: F64) -> S32
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.create!(from: F128) -> S32
+routine S32!(from: F128) -> S32
   return from.F64!().S32!()
 
 ### Converts a `D32` decimal to `S32` via its packed bit representation.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.create!(from: D32) -> S32
+routine S32!(from: D32) -> S32
   return S128(from: D128(from: from)).S32!()
 
 ### Converts a `D64` decimal to `S32` via its packed bit representation.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.create!(from: D64) -> S32
+routine S32!(from: D64) -> S32
   return S128(from: D128(from: from)).S32!()
 
 ### Converts a `D128` decimal to `S32` via its low/high 64-bit halves.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.create!(from: D128) -> S32
+routine S32!(from: D128) -> S32
   return S128(from: from).S32!()
 
 # ============================================================================
@@ -673,7 +673,7 @@ routine S32.diagnose() -> Text
 ### :param from_text: The decimal string to parse.
 ### :returns: The parsed `S32` value.
 ### :throws: {InvalidValueError} if `from_text` is empty, sign-only, or contains non-digit characters.
-routine S32.create!(from_text: Text) -> S32
+routine S32!(from_text: Text) -> S32
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S32")
   var start = 0u64

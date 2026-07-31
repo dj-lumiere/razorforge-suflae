@@ -173,7 +173,7 @@ routine scan_decimal_parts256!(from_text: Text) -> DecimalParts
 
 ### Parses a decimal literal into a `Decimal` (scans the full 70-digit coefficient).
 ### :throws: {InvalidValueError} if the text is not a valid finite decimal literal.
-routine Decimal.create!(from_text: Text) -> Decimal
+routine Decimal!(from_text: Text) -> Decimal
   var p = scan_decimal_parts256(from_text: from_text)
   return Decimal.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
 
@@ -295,30 +295,30 @@ common routine Decimal.from_int64(value: S64) -> Decimal
 
 ### Signed integer -> Decimal.
 ### S8 -> Decimal (widened to S64, exponent 0).
-routine Decimal.create(from: S8) -> Decimal
+routine Decimal(from: S8) -> Decimal
   return Decimal.from_int64(value: S64(from))
 
 ### S16 -> Decimal (widened to S64, exponent 0).
-routine Decimal.create(from: S16) -> Decimal
+routine Decimal(from: S16) -> Decimal
   return Decimal.from_int64(value: S64(from))
 
 ### S32 -> Decimal (widened to S64, exponent 0).
-routine Decimal.create(from: S32) -> Decimal
+routine Decimal(from: S32) -> Decimal
   return Decimal.from_int64(value: S64(from))
 
 ### S64 -> Decimal (exponent 0).
-routine Decimal.create(from: S64) -> Decimal
+routine Decimal(from: S64) -> Decimal
   return Decimal.from_int64(value: from)
 
 ### S128 -> Decimal (split sign / magnitude into a U256 coefficient, exponent 0).
-routine Decimal.create(from: S128) -> Decimal
+routine Decimal(from: S128) -> Decimal
   # negate via two's complement on the signed value, then reinterpret the magnitude as unsigned
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
   return Decimal.from_components(sign: neg, coeff: zero_extend[U128, U256](mag), exp: 0_s64)
 
 ### S256 -> Decimal (split sign / magnitude into the U256 coefficient, exponent 0).
-routine Decimal.create(from: S256) -> Decimal
+routine Decimal(from: S256) -> Decimal
   # S256_MIN negates to itself in two's complement; its magnitude (2^255) still fits the 256-bit
   # coeff
   var neg = signed_lt[S256](a: from, b: 0_s256)
@@ -327,27 +327,27 @@ routine Decimal.create(from: S256) -> Decimal
 
 ### Unsigned integer -> Decimal.
 ### U8 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.create(from: U8) -> Decimal
+routine Decimal(from: U8) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U8, U256](from), exp: 0_s64)
 
 ### U16 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.create(from: U16) -> Decimal
+routine Decimal(from: U16) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U16, U256](from), exp: 0_s64)
 
 ### U32 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.create(from: U32) -> Decimal
+routine Decimal(from: U32) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U32, U256](from), exp: 0_s64)
 
 ### U64 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.create(from: U64) -> Decimal
+routine Decimal(from: U64) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U64, U256](from), exp: 0_s64)
 
 ### U128 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.create(from: U128) -> Decimal
+routine Decimal(from: U128) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U128, U256](from), exp: 0_s64)
 
 ### U256 -> Decimal (coefficient stored directly, exponent 0).
-routine Decimal.create(from: U256) -> Decimal
+routine Decimal(from: U256) -> Decimal
   return Decimal.from_components(sign: false, coeff: from, exp: 0_s64)
 
 # ============================================================================
@@ -360,19 +360,19 @@ routine Decimal.create(from: U256) -> Decimal
 
 ### Binary float -> Decimal (correctly rounded via D128).
 ### F16 -> Decimal via D128 (round-trip-exact: F16 fits well inside D128's 34 digits).
-routine Decimal.create(from: F16) -> Decimal
+routine Decimal(from: F16) -> Decimal
   return Decimal(from: D128(from: from))
 
 ### F32 -> Decimal via D128 (round-trip-exact).
-routine Decimal.create(from: F32) -> Decimal
+routine Decimal(from: F32) -> Decimal
   return Decimal(from: D128(from: from))
 
 ### F64 -> Decimal via D128 (round-trip-exact).
-routine Decimal.create(from: F64) -> Decimal
+routine Decimal(from: F64) -> Decimal
   return Decimal(from: D128(from: from))
 
 ### F128 -> Decimal via D128 (correctly rounded to 34 digits; full 70-digit path is future work).
-routine Decimal.create(from: F128) -> Decimal
+routine Decimal(from: F128) -> Decimal
   return Decimal(from: D128(from: from))
 
 # ============================================================================
@@ -392,17 +392,17 @@ common routine Decimal.from_decimal_parts(sign: Bool, special: U64, exp: S64, co
 
 ### IEEE decimal -> Decimal.
 ### D32 -> Decimal (exact: decode parts, widen coefficient into the 70-digit cohort).
-routine Decimal.create(from: D32) -> Decimal
+routine Decimal(from: D32) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U256](p.coeff))
 
 ### D64 -> Decimal (exact: decode parts, widen coefficient into the 70-digit cohort).
-routine Decimal.create(from: D64) -> Decimal
+routine Decimal(from: D64) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U256](p.coeff))
 
 ### D128 -> Decimal (exact: decode parts, widen the 34-digit coefficient into the cohort).
-routine Decimal.create(from: D128) -> Decimal
+routine Decimal(from: D128) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U128, U256](p.coeff))
 

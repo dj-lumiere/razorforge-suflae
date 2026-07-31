@@ -55,7 +55,7 @@ needs TPriority obeys Comparable
 
 ### Creates an empty priority queue with no allocated backing storage.
 ### Storage is acquired lazily on the first insertion or explicit `reserve`.
-routine PriorityQueue[TPriority, TElement].create() -> PriorityQueue[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement]() -> PriorityQueue[TPriority, TElement]
   return PriorityQueue[TPriority, TElement](
     priorities: hijacked_none[TPriority](),
     elements: hijacked_none[TElement](),
@@ -66,7 +66,7 @@ routine PriorityQueue[TPriority, TElement].create() -> PriorityQueue[TPriority, 
 ### Creates an empty priority queue with storage pre-allocated for `capacity` entries.
 ### Use this when the expected queue size is known and early reallocations should be avoided.
 ### :param capacity: The number of entries to reserve space for.
-routine PriorityQueue[TPriority, TElement].create(capacity: U64) -> PriorityQueue[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement](capacity: U64) -> PriorityQueue[TPriority, TElement]
   var priority_byte_size = TPriority.data_size() * capacity
   var element_byte_size = TElement.data_size() * capacity
   danger
@@ -381,7 +381,7 @@ needs TElement obeys Equatable
 ### Use `drain()` on a copy if you need priority order without consuming the queue.
 ### :param source: The queue to copy entries from.
 ### :returns: A `List[PQEntry[TPriority, TElement]]` in heap array order.
-routine List[PQEntry[TPriority, TElement]].create(source: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
+routine List[PQEntry[TPriority, TElement]](source: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
   var result = List[PQEntry[TPriority, TElement]](source.count())
   var i = 0u64
   while i < source.count()

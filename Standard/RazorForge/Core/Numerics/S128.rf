@@ -24,62 +24,62 @@ preset S128_ONE: S128 = 1_s128
 ### Sign-extends an `S8` to `S128` (always succeeds).
 ### :param from: The `S8` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
-routine S128.create(from: S8) -> S128
+routine S128(from: S8) -> S128
   return sign_extend[S8, S128](from)
 
 ### Sign-extends an `S16` to `S128` (always succeeds).
 ### :param from: The `S16` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
-routine S128.create(from: S16) -> S128
+routine S128(from: S16) -> S128
   return sign_extend[S16, S128](from)
 
 ### Sign-extends an `S32` to `S128` (always succeeds).
 ### :param from: The `S32` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
-routine S128.create(from: S32) -> S128
+routine S128(from: S32) -> S128
   return sign_extend[S32, S128](from)
 
 ### Sign-extends an `S64` to `S128` (always succeeds).
 ### :param from: The `S64` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
-routine S128.create(from: S64) -> S128
+routine S128(from: S64) -> S128
   return sign_extend[S64, S128](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S128` value to return.
 ### :returns: `from` unchanged.
-routine S128.create(from: S128) -> S128
+routine S128(from: S128) -> S128
   return from
 
 ### Zero-extends a `U8` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U8` value to widen.
 ### :returns: An `S128` equal in value to `from`.
-routine S128.create(from: U8) -> S128
+routine S128(from: U8) -> S128
   return zero_extend[U8, S128](from)
 
 ### Zero-extends a `U16` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U16` value to widen.
 ### :returns: An `S128` equal in value to `from`.
-routine S128.create(from: U16) -> S128
+routine S128(from: U16) -> S128
   return zero_extend[U16, S128](from)
 
 ### Zero-extends a `U32` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U32` value to widen.
 ### :returns: An `S128` equal in value to `from`.
-routine S128.create(from: U32) -> S128
+routine S128(from: U32) -> S128
   return zero_extend[U32, S128](from)
 
 ### Zero-extends a `U64` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U64` value to widen.
 ### :returns: An `S128` equal in value to `from`.
-routine S128.create(from: U64) -> S128
+routine S128(from: U64) -> S128
   return zero_extend[U64, S128](from)
 
 ### Reinterprets a `U128` as `S128` using two's complement, throwing if the value exceeds S128_MAX.
 ### :param from: The `U128` value to convert.
 ### :returns: The same bit pattern interpreted as `S128`.
 ### :throws: {IntegerOverflowError} if `from > 170141183460469231731687303715884105727`.
-routine S128.create!(from: U128) -> S128
+routine S128!(from: U128) -> S128
   if from > 170141183460469231731687303715884105727_u128
     throw IntegerOverflowError()
   return reinterpret_bits[U128, S128](from)
@@ -88,7 +88,7 @@ routine S128.create!(from: U128) -> S128
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 128 bits reinterpreted as an `S128`.
 ### :throws: {IntegerOverflowError} if `from` is outside the S128 range.
-routine S128.create!(from: S256) -> S128
+routine S128!(from: S256) -> S128
   if not (-170141183460469231731687303715884105728_s256 <= from <= 170141183460469231731687303715884105727_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, S128](from)
@@ -97,7 +97,7 @@ routine S128.create!(from: S256) -> S128
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 128 bits reinterpreted as an `S128`.
 ### :throws: {IntegerOverflowError} if `from > 170141183460469231731687303715884105727`.
-routine S128.create!(from: U256) -> S128
+routine S128!(from: U256) -> S128
   if from > 170141183460469231731687303715884105727_u256
     throw IntegerOverflowError()
   return int_truncate[U256, S128](from)
@@ -106,14 +106,14 @@ routine S128.create!(from: U256) -> S128
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
-routine S128.create!(from: F16) -> S128
+routine S128!(from: F16) -> S128
   return from.F32().S128!()
 
 ### Converts an `F32` to `S128`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^127, 2^127-1].
-routine S128.create!(from: F32) -> S128
+routine S128!(from: F32) -> S128
   if from.is_nan() or from < -170141183460469231731687303715884105728.0_f32 or from >= 170141183460469231731687303715884105728.0_f32
     throw IntegerOverflowError()
   return float_to_signed[F32, S128](from)
@@ -122,7 +122,7 @@ routine S128.create!(from: F32) -> S128
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^127, 2^127-1].
-routine S128.create!(from: F64) -> S128
+routine S128!(from: F64) -> S128
   if from.is_nan() or from < -170141183460469231731687303715884105728.0_f64 or from >= 170141183460469231731687303715884105728.0_f64
     throw IntegerOverflowError()
   return float_to_signed[F64, S128](from)
@@ -131,7 +131,7 @@ routine S128.create!(from: F64) -> S128
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
-routine S128.create!(from: F128) -> S128
+routine S128!(from: F128) -> S128
   var bits = from.to_bits()
   var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
   var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
@@ -163,14 +163,14 @@ routine S128.create!(from: F128) -> S128
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {NumericOverflowError} if the integer part overflows S128.
-routine S128.create!(from: D32) -> S128
+routine S128!(from: D32) -> S128
   return S128(from: D128(from: from))
 
 ### Converts a `D64` to `S128`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {NumericOverflowError} if the integer part overflows S128.
-routine S128.create!(from: D64) -> S128
+routine S128!(from: D64) -> S128
   return S128(from: D128(from: from))
 
 # ============================================================================
@@ -712,7 +712,7 @@ routine S128.diagnose() -> Text
 ### :param from_text: The decimal string to parse.
 ### :returns: The parsed `S128` value.
 ### :throws: {InvalidValueError} if `from_text` is empty, sign-only, or contains non-digit characters.
-routine S128.create!(from_text: Text) -> S128
+routine S128!(from_text: Text) -> S128
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S128")
   var start = 0u64

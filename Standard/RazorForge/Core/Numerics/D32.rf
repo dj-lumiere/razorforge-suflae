@@ -581,51 +581,51 @@ preset D32_EPSILON: D32 = 1e-6_d32
 # ============================================================================
 
 ### Converts an S8 to D32 (widen to S64, exponent 0; rounded to 7 digits).
-routine D32.create(from: S8) -> D32
+routine D32(from: S8) -> D32
   return D32.from_int64(value: S64(from))
 
 ### Converts an S16 to D32 (widen to S64, exponent 0; rounded to 7 digits).
-routine D32.create(from: S16) -> D32
+routine D32(from: S16) -> D32
   return D32.from_int64(value: S64(from))
 
 ### Converts an S32 to D32 (widen to S64, exponent 0; rounded to 7 digits).
-routine D32.create(from: S32) -> D32
+routine D32(from: S32) -> D32
   return D32.from_int64(value: S64(from))
 
 ### Converts an S64 to D32 (exponent 0; rounded to 7 digits).
-routine D32.create(from: S64) -> D32
+routine D32(from: S64) -> D32
   return D32.from_int64(value: from)
 
 ### Converts an S128 to D32 via D128 (rounded to 7 digits).
-routine D32.create(from: S128) -> D32
+routine D32(from: S128) -> D32
   return D32(from: D128(from: from))
 
 ### Converts an S256 to D32 via D128 (rounded to 7 digits).
-routine D32.create(from: S256) -> D32
+routine D32(from: S256) -> D32
   return D32(from: D128(from: from))
 
 ### Converts a U8 to D32 (exponent 0).
-routine D32.create(from: U8) -> D32
+routine D32(from: U8) -> D32
   return D32.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U16 to D32 (exponent 0).
-routine D32.create(from: U16) -> D32
+routine D32(from: U16) -> D32
   return D32.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U32 to D32 (exponent 0; rounded to 7 digits).
-routine D32.create(from: U32) -> D32
+routine D32(from: U32) -> D32
   return D32.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U64 to D32 (exponent 0; rounded to 7 digits).
-routine D32.create(from: U64) -> D32
+routine D32(from: U64) -> D32
   return D32.from_components(sign: false, coeff: from, exp: 0_s64)
 
 ### Converts a U128 to D32 via D128 (rounded to 7 digits).
-routine D32.create(from: U128) -> D32
+routine D32(from: U128) -> D32
   return D32(from: D128(from: from))
 
 ### Converts a U256 to D32 via D128 (rounded to 7 digits).
-routine D32.create(from: U256) -> D32
+routine D32(from: U256) -> D32
   return D32(from: D128(from: from))
 
 # ============================================================================
@@ -633,15 +633,15 @@ routine D32.create(from: U256) -> D32
 # ============================================================================
 
 ### Converts an F16 to D32 (via F64, correctly rounded binary -> decimal).
-routine D32.create(from: F16) -> D32
+routine D32(from: F16) -> D32
   return D32(from: F64(from))
 
 ### Converts an F32 to D32 (via F64, correctly rounded binary -> decimal).
-routine D32.create(from: F32) -> D32
+routine D32(from: F32) -> D32
   return D32(from: F64(from))
 
 ### Converts an F128 to D32 (narrow to F64 first, then F64 -> D32 via the engine).
-routine D32.create(from: F128) -> D32
+routine D32(from: F128) -> D32
   return D32(from: from.F64())
 
 # ============================================================================
@@ -649,15 +649,15 @@ routine D32.create(from: F128) -> D32
 # ============================================================================
 
 ### Identity conversion (D32 -> D32).
-routine D32.create(from: D32) -> D32
+routine D32(from: D32) -> D32
   return from
 
 ### Converts a D64 to D32 (rounded to 7 digits / decimal32 range).
-routine D32.create(from: D64) -> D32
+routine D32(from: D64) -> D32
   return d32_of_parts(p: d128_to_d32parts(p: d64parts_to_d128(p: from.decode())))
 
 ### Converts a D128 to D32 (rounded to 7 digits / decimal32 range).
-routine D32.create(from: D128) -> D32
+routine D32(from: D128) -> D32
   return d32_of_parts(p: d128_to_d32parts(p: from.decode()))
 
 # ============================================================================
@@ -666,7 +666,7 @@ routine D32.create(from: D128) -> D32
 
 ### Parses a decimal literal into a `D32`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
-routine D32.create!(from_text: Text) -> D32
+routine D32!(from_text: Text) -> D32
   return D32(from: parse_decimal_d128(from_text: from_text))
 
 # ============================================================================

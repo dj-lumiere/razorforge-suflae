@@ -22,7 +22,7 @@ record LocalMoment obeys Ordered, DurationAddable, DurationSubtractable
 ### :param moment: The underlying UTC instant.
 ### :param offset: The UTC offset used for local-time interpretation.
 ### :returns: The resulting `LocalMoment` value.
-routine LocalMoment.create(moment: Moment, offset: Duration) -> LocalMoment
+routine LocalMoment(moment: Moment, offset: Duration) -> LocalMoment
   return LocalMoment(moment: moment, offset: offset)
 
 ### Creates a `LocalMoment` from local civil date-time components and a UTC offset.
@@ -52,7 +52,7 @@ common routine LocalMoment.now_utc() -> LocalMoment
 ### Extracts the underlying UTC `Moment` from a `LocalMoment`.
 ### :param from: The local moment to convert.
 ### :returns: The resulting `Moment` value.
-routine Moment.create(from: LocalMoment) -> Moment
+routine Moment(from: LocalMoment) -> Moment
   return from.moment
 
 ### Converts this value to moment.

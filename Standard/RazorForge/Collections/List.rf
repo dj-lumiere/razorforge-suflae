@@ -43,7 +43,7 @@ relates ListEmittable[T] as Iter
 
 # Creators
 
-routine List[T].create() -> List[T]
+routine List[T]() -> List[T]
   return List[T](
     data: hijacked_none[T](),
     count: 0u64,
@@ -54,7 +54,7 @@ routine List[T].create() -> List[T]
 ### No elements are initialized, but the backing allocation is made immediately to
 ### avoid the first few growth steps.
 ### :param capacity: The initial capacity to reserve.
-routine List[T].create(capacity: U64) -> List[T]
+routine List[T](capacity: U64) -> List[T]
   var byte_size = T.data_size() * capacity
   danger
     var ptr = rf_allocate_dynamic_uninit(byte_size)
@@ -70,7 +70,7 @@ routine List[T].create(capacity: U64) -> List[T]
 ### :param count: The number of elements to produce.
 ### :param fill_value: The value to copy into each slot.
 ### :returns: A list containing `count` copies of `fill_value`.
-routine List[T].create(count: U64, fill_value: T) -> List[T]
+routine List[T](count: U64, fill_value: T) -> List[T]
 needs T is Copyable
   if count == 0u64
     return List[T]()
