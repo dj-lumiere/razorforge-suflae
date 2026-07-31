@@ -28,7 +28,7 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### |---|---|---|
 ### | `add` | O(1) | O(n) (rehash) |
 ### | `remove` | O(1) | O(n) |
-### | `$contains` / `get_or_default` | O(1) | O(n) |
+### | `contains` / `get_or_default` | O(1) | O(n) |
 ### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
 ### :typeparam K: The key type. Must obey {Hashable} and {Equatable}.
@@ -57,10 +57,10 @@ relates V as Value
 # Creators
 # ============================================================================
 
-routine Dict[K, V].$create() -> Dict[K, V]
+routine Dict[K, V].create() -> Dict[K, V]
   return Dict[K, V](key: SecureHashKey.random())
 
-routine Dict[K, V].$create(key: SecureHashKey) -> Dict[K, V]
+routine Dict[K, V].create(key: SecureHashKey) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   var ecap = DICT_INITIAL_ENTRIES
   var dict = Dict[K, V](
@@ -86,7 +86,7 @@ routine Dict[K, V].$create(key: SecureHashKey) -> Dict[K, V]
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal dict
 
-routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
+routine Dict[K, V].create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -118,14 +118,14 @@ routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
 
 ### Frees the heap buffers owned by this dictionary. The element/key/value contents are
 ### not recursed into — only the backing arrays are released.
-dangerous routine Dict[K, V].$destroy()
+dangerous routine Dict[K, V].destroy()
   # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
-  # in DictEmittable.$emit!). No-op for value types; frees owned entity keys/values.
+  # in DictEmittable.emit!). No-op for value types; frees owned entity keys/values.
   var p = 0u64
   while p < me.entries_used
     if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
-      me.keys.offset(K.data_size() * p).peek().$destroy()
-      me.vals.offset(V.data_size() * p).peek().$destroy()
+      me.keys.offset(K.data_size() * p).peek().destroy()
+      me.vals.offset(V.data_size() * p).peek().destroy()
     p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()
@@ -169,7 +169,7 @@ routine Dict[K, V].write_val_at(ei: U64, val: V)
 
 @readonly
 routine Dict[K, V].find_slot(key: K) -> U64
-  var h = key.$hash(k0: me.k0, k1: me.k1)
+  var h = key.hash(k0: me.k0, k1: me.k1)
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
@@ -257,7 +257,7 @@ routine Dict[K, V].rehash()
         me.vals.offset(V.data_size() * new_ei).poke(v)
         me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
-        me.insert_index_raw(h: k.$hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
+        me.insert_index_raw(h: k.hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
@@ -295,7 +295,7 @@ routine Dict[K, V].clear()
   return
 
 @readonly
-routine Dict[K, V].$contains(key: K) -> Bool
+routine Dict[K, V].contains(key: K) -> Bool
   return me.find_slot(key) < me.capacity
 
 routine Dict[K, V].add(key: K, value: V) -> Bool
@@ -312,7 +312,7 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
     me.vals.offset(V.data_size() * ei).poke(value)
     me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
-  me.insert_index_raw(h: key.$hash(k0: me.k0, k1: me.k1), entry_index: ei)
+  me.insert_index_raw(h: key.hash(k0: me.k0, k1: me.k1), entry_index: ei)
   me.count = me.count +% 1u64
   return true
 
@@ -340,13 +340,13 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$getitem!(key: Referring[K]) -> V
+routine Dict[K, V].getitem!(key: Referring[K]) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
   return me.read_val_at(me.read_index(slot))
 
-routine Dict[K, V].$setitem!(key: Referring[K], value: V)
+routine Dict[K, V].setitem!(key: Referring[K], value: V)
   if key notin me
     absent
   var slot = me.find_slot(key)
@@ -403,7 +403,7 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$iter() -> DictEmittable[K, V]
+routine Dict[K, V].iter() -> DictEmittable[K, V]
   danger
     return DictEmittable[K, V](
       keys: me.keys,
@@ -421,7 +421,7 @@ entity DictEmittable[K, V] obeys Emittable[DictEntry[K, V]]
   secret entries_used: U64
   secret pos: U64
 
-routine DictEmittable[K, V].$emit!() -> DictEntry[K, V]
+routine DictEmittable[K, V].emit!() -> DictEntry[K, V]
   danger
     while me.pos < me.entries_used
       var p = me.pos
@@ -454,7 +454,7 @@ needs V obeys Copyable
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$represent() -> Text
+routine Dict[K, V].represent() -> Text
   if me.is_empty()
     return "{:}"
   var result = "{"
@@ -462,19 +462,19 @@ routine Dict[K, V].$represent() -> Text
   for entry in me
     if not first
       result = result + ", "
-    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    result = result + entry.key.represent() + ": " + entry.value.represent()
     first = false
   result = result + "}"
   return steal result
 
 @readonly
-routine Dict[K, V].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
+routine Dict[K, V].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
   for entry in me
     if not first
       result = result + ", "
-    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    result = result + entry.key.represent() + ": " + entry.value.represent()
     first = false
   result = result + "})"
   return steal result
@@ -484,7 +484,7 @@ routine Dict[K, V].$diagnose() -> Text
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$eq(other: Referring[Dict[K, V]]) -> Bool
+routine Dict[K, V].eq(other: Referring[Dict[K, V]]) -> Bool
 needs V obeys Equatable
   if me.count != other.count
     return false
@@ -504,12 +504,12 @@ needs V obeys Equatable
     i = i +% 1u64
   return true
 
-### Serializes this dictionary to a `SerialValue.Dict`; keys render via `$represent`, values serialize.
+### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.
 ### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
 @[readonly, generated]
 routine Dict[K, V].serialize() -> SerialValue
 needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
   for __e in me
-    discard __sv.add(key: __e.key.$represent(), value: __e.value.serialize())
+    discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
   return SerialValue(steal __sv)

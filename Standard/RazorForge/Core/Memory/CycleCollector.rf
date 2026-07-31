@@ -135,7 +135,7 @@ routine cc_collect_white(addr: Address)
       rf_cc_reap_push(ctrl: addr)
   return
 
-### Reaps a controller: runs the entity-based free hook (`$roam_free_impl`: tears down the entity's
+### Reaps a controller: runs the entity-based free hook (`roam_free_impl`: tears down the entity's
 ### non-`Roamed` fields + frees its allocation) over the managed entity, then frees the controller
 ### itself (type-independent — the controller layout does not depend on `T`).
 ### :param addr: The controller address.
@@ -145,7 +145,7 @@ routine cc_free(addr: Address)
     var hook = c.cc_free_hook()
     var target = c.cc_data_addr()
     rf_cc_invoke_free(free_hook: hook.get_address(), controller: target)
-    Hijacked[RoamController[RoamErased]](addr).as_entity().$destroy()
+    Hijacked[RoamController[RoamErased]](addr).as_entity().destroy()
   return
 
 ### Runs one full cycle-collection pass over the current roots buffer: MarkRoots → ScanRoots →

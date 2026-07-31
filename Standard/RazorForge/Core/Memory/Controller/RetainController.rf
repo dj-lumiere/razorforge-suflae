@@ -15,7 +15,7 @@ needs T is EntityType
 ### Creates a new controller with one strong reference.
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `RetainController[T]` value.
-dangerous routine RetainController[T].$create(data: Hijacked[T]) -> RetainController[T]
+dangerous routine RetainController[T].create(data: Hijacked[T]) -> RetainController[T]
   return RetainController[T](
     strong_count: 1,
     weak_count: 0,
@@ -35,7 +35,7 @@ routine RetainController[T].decrease_strong_count()
       me.drop_data()
   if me.should_deallocate_controller()
     danger
-      me.$destroy()
+      me.destroy()
   return
 
 ### Increments the weak reference count when a new `Tracked` handle is cloned.
@@ -48,7 +48,7 @@ routine RetainController[T].decrease_weak_count()
   me.weak_count = me.weak_count - 1
   if me.should_deallocate_controller()
     danger
-      me.$destroy()
+      me.destroy()
   return
 
 ### Returns the current number of live strong (`Retained`) handles.
@@ -77,17 +77,17 @@ dangerous routine RetainController[T].borrow_data() -> Hijacked[T]
   return me.data
 
 ### Destroys the managed entity. Call only when strong count reaches zero.
-### Runs the entity's own `$destroy`, which IS the sole free under the unified-teardown model
-### (a synthesized entity `$destroy` self-invalidates its allocation; a user-written one owns its
+### Runs the entity's own `destroy`, which IS the sole free under the unified-teardown model
+### (a synthesized entity `destroy` self-invalidates its allocation; a user-written one owns its
 ### own free). Do not also `invalidate` here — that would double-free self-freeing entities.
 dangerous routine RetainController[T].drop_data()
-  me.data.as_entity().$destroy()
+  me.data.as_entity().destroy()
   return
 
-dangerous routine RetainController[T].$destroy()
+dangerous routine RetainController[T].destroy()
   if me.should_deallocate_controller()
-    me.strong_count.$destroy()
-    me.weak_count.$destroy()
+    me.strong_count.destroy()
+    me.weak_count.destroy()
     me.hijack().invalidate()
     return
   return

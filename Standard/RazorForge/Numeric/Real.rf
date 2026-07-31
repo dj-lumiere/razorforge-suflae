@@ -21,13 +21,13 @@ record Real obeys Copyable, Equatable, Comparable, Negatable, Addable, Subtracta
 
 ### Constructs the real value zero.
 ### :returns: The resulting `Real` value.
-routine Real.$create() -> Real
+routine Real.create() -> Real
   return Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
 
 ### Constructs a `Real` from a signed 64-bit integer (exact).
 ### :param value: The initial signed value.
 ### :returns: The resulting `Real` value.
-routine Real.$create(value: S64) -> Real
+routine Real.create(value: S64) -> Real
   var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_set_i64(handle: r.handle, value: value)
   return r
@@ -35,7 +35,7 @@ routine Real.$create(value: S64) -> Real
 ### Constructs a `Real` from an F64 (exact — the double is widened, not re-rounded).
 ### :param value: The initial double value.
 ### :returns: The resulting `Real` value.
-routine Real.$create(value: F64) -> Real
+routine Real.create(value: F64) -> Real
   var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_set_f64(handle: r.handle, value: value)
   return r
@@ -55,7 +55,7 @@ common routine Real.one() -> Real
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Real` value.
 ### :throws: {ValueError} if `text` is not a valid real in `radix`.
-routine Real.$create!(text: Text, radix: S32 = 10) -> Real
+routine Real.create!(text: Text, radix: S32 = 10) -> Real
   var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   var status = rf_real_set_str(handle: r.handle, str: text.to_cstr(), radix: radix)
   if status != 0_s32
@@ -65,7 +65,7 @@ routine Real.$create!(text: Text, radix: S32 = 10) -> Real
 ### Materializes a `Real` from a tokenizer-validated decimal string (literal lowering).
 ### :param text: The decimal string (no suffix, no separators).
 ### :returns: The resulting `Real` value.
-common routine Real.$from_literal(text: Text) -> Real
+common routine Real.from_literal(text: Text) -> Real
   var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   discard rf_real_set_str(handle: r.handle, str: text.to_cstr(), radix: 10_s32)
   return r
@@ -77,14 +77,14 @@ common routine Real.$from_literal(text: Text) -> Real
 ### Returns a copy with the underlying refcount bumped; the handle is shared.
 ### :returns: The resulting `Real` value.
 @[readonly, inline]
-routine Real.$store() -> Real
+routine Real.store() -> Real
   danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()
   return Real(handle: me.handle, ctrl: me.ctrl)
 
 ### Releases this reference; frees the handle when this was the last live ref.
-dangerous routine Real.$destroy()
+dangerous routine Real.destroy()
   if me.ctrl.is_none()
     return
   var prev = me.ctrl.as_entity().decrease_strong_count()
@@ -101,7 +101,7 @@ dangerous routine Real.$destroy()
 ### :param other: The value to add.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.$add(other: Real) -> Real
+routine Real.add(other: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_add(result: result.handle, a: me.handle, b: other.handle)
   return result
@@ -110,7 +110,7 @@ routine Real.$add(other: Real) -> Real
 ### :param other: The value to subtract.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.$sub(other: Real) -> Real
+routine Real.sub(other: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_sub(result: result.handle, a: me.handle, b: other.handle)
   return result
@@ -119,7 +119,7 @@ routine Real.$sub(other: Real) -> Real
 ### :param other: The value to multiply by.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.$mul(other: Real) -> Real
+routine Real.mul(other: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_mul(result: result.handle, a: me.handle, b: other.handle)
   return result
@@ -128,7 +128,7 @@ routine Real.$mul(other: Real) -> Real
 ### :param other: The divisor.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.$truediv(other: Real) -> Real
+routine Real.truediv(other: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_div(result: result.handle, a: me.handle, b: other.handle)
   return result
@@ -136,7 +136,7 @@ routine Real.$truediv(other: Real) -> Real
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.$neg() -> Real
+routine Real.neg() -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_neg(result: result.handle, a: me.handle)
   return result
@@ -158,8 +158,8 @@ routine Real.is_zero() -> Bool
 @readonly
 routine Real.abs() -> Real
   if me.is_negative()
-    return me.$neg()
-  return me.$store()
+    return me.neg()
+  return me.store()
 
 # ============================================================================
 # Comparison
@@ -169,14 +169,14 @@ routine Real.abs() -> Real
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Real.$eq(you: Real) -> Bool
+routine Real.eq(you: Real) -> Bool
   return rf_real_cmp(a: me.handle, b: you.handle) == 0_s32
 
 ### Compares this value with `you` under numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Real.$cmp(you: Real) -> ComparisonSign
+routine Real.cmp(you: Real) -> ComparisonSign
   var c = rf_real_cmp(a: me.handle, b: you.handle)
   if c < 0_s32
     return ME_SMALL
@@ -216,7 +216,7 @@ routine Real.log() -> Real
 ### :param exp: The exponent.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.$pow!(exp: Real) -> Real
+routine Real.pow!(exp: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_pow(result: result.handle, a: me.handle, b: exp.handle)
   return result
@@ -524,18 +524,18 @@ routine Real.signum() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.min(other: Real) -> Real
-  if me.$cmp(you: other) is ME_LARGE
-    return other.$store()
-  return me.$store()
+  if me.cmp(you: other) is ME_LARGE
+    return other.store()
+  return me.store()
 
 ### Returns the larger of this value and `other`.
 ### :param other: The value to compare against.
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.max(other: Real) -> Real
-  if me.$cmp(you: other) is ME_SMALL
-    return other.$store()
-  return me.$store()
+  if me.cmp(you: other) is ME_SMALL
+    return other.store()
+  return me.store()
 
 ### Returns this value's magnitude carrying the sign of `you`.
 ### :param you: The value supplying the sign.
@@ -543,7 +543,7 @@ routine Real.max(other: Real) -> Real
 @readonly
 routine Real.copysign(you: Real) -> Real
   if you.is_negative()
-    return me.abs().$neg()
+    return me.abs().neg()
   return me.abs()
 
 ### Rounds toward negative infinity (the largest integer not greater than `me`).
@@ -645,7 +645,7 @@ routine Real.to_f64() -> F64
 ### Formats this value as base-10 decimal text.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Real.$represent() -> Text
+routine Real.represent() -> Text
   var CStr = rf_real_to_str(handle: me.handle)
   var text = Text(from: CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr()))
@@ -656,11 +656,11 @@ routine Real.$represent() -> Text
 ### :param k1: The second hash key half.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Real.$hash(k0: U64, k1: U64) -> U64
-  return me.$represent().$hash(k0: k0, k1: k1)
+routine Real.hash(k0: U64, k1: U64) -> U64
+  return me.represent().hash(k0: k0, k1: k1)
 
 ### Fast (non-cryptographic) hash of the canonical representation.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Real.$fast_hash() -> U64
-  return me.$represent().$fast_hash()
+routine Real.fast_hash() -> U64
+  return me.represent().fast_hash()

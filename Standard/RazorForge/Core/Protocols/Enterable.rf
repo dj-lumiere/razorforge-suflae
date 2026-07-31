@@ -1,26 +1,26 @@
 module Core
 
-### Protocol for a type whose lifetime is managed by a `using` scope. `$enter` runs on entry
-### (returning the value the scope binds — usually `me`) and `$exit` runs on every exit, so the
+### Protocol for a type whose lifetime is managed by a `using` scope. `enter` runs on entry
+### (returning the value the scope binds — usually `me`) and `exit` runs on every exit, so the
 ### resource or lock it guards is acquired on entry and released on exit and its lifetime is
 ### lexically visible.
 ###
 ### Obeying `Enterable` makes a type **using-required**: it must be opened with `using` and cannot
 ### be used inline, passed as an ordinary argument, or stored in a free `var`. (The `using`
-### mechanism itself works for any type that merely has `$enter`/`$exit` — e.g. `Viewing`/`Modifying`
+### mechanism itself works for any type that merely has `enter`/`exit` — e.g. `Viewing`/`Modifying`
 ### stay inline-capable precisely by NOT obeying this protocol. Obeying it is the opt-in to the
 ### stricter "must scope" rule.)
 ###
-### Failability is covariant: `$enter!` MAY fail, but a concrete `$enter` that never fails — a lock
+### Failability is covariant: `enter!` MAY fail, but a concrete `enter` that never fails — a lock
 ### guard that blocks, or a no-op — is a valid implementation. A resource whose acquisition can
-### error expresses that in a failable factory (`open!`) consumed as the `using` resource; `$enter`
+### error expresses that in a failable factory (`open!`) consumed as the `using` resource; `enter`
 ### itself usually just returns `me`.
 ### :see: {Inspecting}, {Claiming}, {FileHandle}
 protocol Enterable
   ### Called on entry to the `using` scope. Returns the value the scope binds (usually `me`).
   ### :returns: The entered value as `?Me`.
-  routine Me.$enter!() -> Me
+  routine Me.enter!() -> Me
 
   ### Called on every exit from the `using` scope (normal end and every escape). Infallible —
   ### teardown must always be able to run.
-  routine Me.$exit()
+  routine Me.exit()

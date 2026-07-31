@@ -10,4 +10,4 @@ relates Iter obeys Emittable[T]
   ### Each call should return an iterator positioned at the start of the sequence.
   ### :returns: The resulting `Emittable[T]` value.
   @readonly
-  routine Me.$iter() -> Emittable[T]
+  routine Me.iter() -> Emittable[T]

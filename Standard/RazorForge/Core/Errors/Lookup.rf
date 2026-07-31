@@ -15,43 +15,43 @@ record Lookup[T]
 
 ### Returns the display form of this lookup result.
 ### Absent renders as `"none"`; present/crashable arms delegate to the payload's
-### own `$represent`.
+### own `represent`.
 ### :returns: The resulting `Text` value.
-routine Lookup[T].$represent() -> Text
+routine Lookup[T].represent() -> Text
   when me
     is None =>
       return "none"
     is Crashable v =>
-      return v.$represent()
+      return v.represent()
     is T v =>
-      return v.$represent()
+      return v.represent()
     else =>
       return me.type_name()
 
 ### Returns the diagnostic form of this lookup result.
-### Format: `f"{full_type_name}(type_id: {type_id}, {payload.$diagnose()})"`,
+### Format: `f"{full_type_name}(type_id: {type_id}, {payload.diagnose()})"`,
 ### or `f"{full_type_name}(type_id: 0, none)"` for the absent state.
 ### :returns: The resulting `Text` value.
-routine Lookup[T].$diagnose() -> Text
+routine Lookup[T].diagnose() -> Text
   when me
     is None =>
       return f"{me.full_type_name()}(type_id: 0, none)"
     is Crashable v =>
-      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.diagnose()})"
     is T v =>
-      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.diagnose()})"
     else =>
       return f"{me.full_type_name()}(type_id: {me.type_id})"
 
 ### Frees the active payload. The absent arm is a no-op; the crashable arm delegates (a no-op for
 ### non-owning errors) and the success arm frees `T`. Defined explicitly (not auto-derived) so the
-### per-instantiation body is monomorphized and emitted like `$represent`/`$diagnose`.
-dangerous routine Lookup[T].$destroy()
+### per-instantiation body is monomorphized and emitted like `represent`/`diagnose`.
+dangerous routine Lookup[T].destroy()
   when me
     is None =>
       return
     is T v =>
-      v.$destroy()
+      v.destroy()
     else =>
       return
   return

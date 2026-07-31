@@ -14,7 +14,7 @@ record Exclusive obeys LockPolicy
 
 ### Creates an unlocked exclusive policy.
 ### :returns: The resulting `Exclusive` value.
-routine Exclusive.$create() -> Exclusive
+routine Exclusive.create() -> Exclusive
   return Exclusive(locked: Atomic[U8](initial: 0_u8), owner: Atomic[U64](initial: 0_u64))
 
 ### Acquires the lock, spinning until it is free. Blocking, not failing: a contended lock waits.

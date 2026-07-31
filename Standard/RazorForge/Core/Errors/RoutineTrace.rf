@@ -20,26 +20,26 @@ record RoutineTrace
 
 ### Returns an xxHash64-based hash of this routine trace.
 ### :returns: A `U64` hash combining all valid frames, depth, and truncation flag.
-routine RoutineTrace.$fast_hash() -> U64
+routine RoutineTrace.fast_hash() -> U64
   var acc = 0u64
   var i = 0u64
   while i < 10u64
-    acc = __hash_round(acc: acc, h: me.frames[i].$fast_hash())
+    acc = __hash_round(acc: acc, h: me.frames[i].fast_hash())
     i = i + 1_u64
-  acc = __hash_round(acc: acc, h: me.depth.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.truncated.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.depth.fast_hash())
+  acc = __hash_round(acc: acc, h: me.truncated.fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this routine trace.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine RoutineTrace.$hash(k0: U64, k1: U64) -> U64
+routine RoutineTrace.hash(k0: U64, k1: U64) -> U64
   var acc = 0u64
   var i = 0u64
   while i < 10u64
-    acc = __hash_round(acc: acc, h: me.frames[i].$hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.frames[i].hash(k0: k0, k1: k1))
     i = i + 1_u64
-  acc = __hash_round(acc: acc, h: me.depth.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.truncated.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.depth.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.truncated.hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

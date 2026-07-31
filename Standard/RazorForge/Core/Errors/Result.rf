@@ -13,39 +13,39 @@ record Result[T]
   ### The runtime uses this to distinguish successful payloads from crashables.
   secret type_id: U64
 
-### Returns the display form of this result: the payload's own `$represent` for both the success
+### Returns the display form of this result: the payload's own `represent` for both the success
 ### (`T`) and crashable arms. `is T` matches the success state (type-id of the concrete `T`); the
 ### `else` is an unreachable fallback (a `Result` is always `Crashable` or `T`).
 ### :returns: The resulting `Text` value.
-routine Result[T].$represent() -> Text
+routine Result[T].represent() -> Text
   when me
     is Crashable v =>
-      return v.$represent()
+      return v.represent()
     is T v =>
-      return v.$represent()
+      return v.represent()
     else =>
       return me.type_name()
 
 ### Returns the diagnostic form of this result.
-### Format: `f"{full_type_name}(type_id: {type_id}, {payload.$diagnose()})"` for both arms.
+### Format: `f"{full_type_name}(type_id: {type_id}, {payload.diagnose()})"` for both arms.
 ### :returns: The resulting `Text` value.
-routine Result[T].$diagnose() -> Text
+routine Result[T].diagnose() -> Text
   when me
     is Crashable v =>
-      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.diagnose()})"
     is T v =>
-      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.diagnose()})"
     else =>
       return f"{me.full_type_name()}(type_id: {me.type_id})"
 
-### Frees the active payload. Both arms delegate to the payload's own `$destroy`: the crashable
+### Frees the active payload. Both arms delegate to the payload's own `destroy`: the crashable
 ### arm is a no-op for non-owning errors, the success arm frees `T`. Defined explicitly (not
 ### auto-derived) so the per-instantiation body is monomorphized and emitted like
-### `$represent`/`$diagnose`, and so only the active arm's payload is touched.
-dangerous routine Result[T].$destroy()
+### `represent`/`diagnose`, and so only the active arm's payload is touched.
+dangerous routine Result[T].destroy()
   when me
     is T v =>
-      v.$destroy()
+      v.destroy()
     else =>
       pass
   return

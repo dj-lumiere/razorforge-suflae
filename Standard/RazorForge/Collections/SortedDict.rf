@@ -37,7 +37,7 @@ needs K obeys Comparable
 ### |---|---|
 ### | `add` | O(log n) |
 ### | `remove` | O(log n) |
-### | `$contains` / `get!` / `get_or` | O(log n) |
+### | `contains` / `get!` / `get_or` | O(log n) |
 ### | `[]` rank-based access | O(log n) |
 ### | `min!` / `max!` | O(log n) |
 ### | `keys()` / `values()` | O(n) |
@@ -108,7 +108,7 @@ routine BTreeDictNode[K, V].value_get(i: U64) -> V
     return me.values_base().stride(count: i.S64()).peek()
 
 ### Builds a {DictEntry[K, V]} from the entry at slot `i`, taking OWNED copies of the key and value.
-### The key/value are bound to locals first so the copy pass injects a retaining `$store` (a bare
+### The key/value are bound to locals first so the copy pass injects a retaining `store` (a bare
 ### `key_get(i)` call-result argument would NOT be copied, leaving the entry aliasing the buffer's
 ### refcounted controller — a double-free when the entry is torn down). Mirrors FastDict's iterator.
 ### :param i: Zero-based entry index.
@@ -148,26 +148,26 @@ dangerous routine BTreeDictNode[K, V].children_get(i: U64) -> Hijacked[BTreeDict
 ### Recursively frees this node's subtree (post-order): destroys each child node, tears down each
 ### stored key and value, then frees this node's own allocation. Visited inline (never bound to a
 ### `var`) so scope-exit teardown doesn't double-free.
-dangerous routine BTreeDictNode[K, V].$destroy()
+dangerous routine BTreeDictNode[K, V].destroy()
   if not me.is_leaf
     var ci = 0u64
     while ci < me.child_count
-      me.children_get(ci).as_entity().$destroy()
+      me.children_get(ci).as_entity().destroy()
       ci = ci + 1u64
   var ki = 0u64
   while ki < me.key_count
-    me.key_get(ki).$destroy()
-    me.value_get(ki).$destroy()
+    me.key_get(ki).destroy()
+    me.value_get(ki).destroy()
     ki = ki + 1u64
   me.hijack().invalidate()
   return
 
 ### Frees the entire backing B-tree — every node, key, and value — at scope exit.
-dangerous routine SortedDict[K, V].$destroy()
+dangerous routine SortedDict[K, V].destroy()
   if me.root is None
     me.hijack().invalidate()
     return
-  me.root!!.as_entity().$destroy()
+  me.root!!.as_entity().destroy()
   me.hijack().invalidate()
   return
 
@@ -327,7 +327,7 @@ routine BTreeDictNode[K, V].children_add_range_from(other: Referring[BTreeDictNo
 # Creators
 # ============================================================================
 
-routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
+routine BTreeDictNode[K, V].create(is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
     entry_keys: zero_value[Array[K, 63]](),
     entry_values: zero_value[Array[V, 63]](),
@@ -338,7 +338,7 @@ routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
     is_leaf: is_leaf
   )
 
-routine SortedDict[K, V].$create() -> SortedDict[K, V]
+routine SortedDict[K, V].create() -> SortedDict[K, V]
   return SortedDict[K, V](
     root: none,
     count: 0u64
@@ -396,7 +396,7 @@ routine SortedDict[K, V].lower_bound(node: Referring[BTreeDictNode[K, V]], key: 
 ### :param key: The key to look up.
 ### :returns: `true` if the key is present.
 @readonly
-routine SortedDict[K, V].$contains(key: K) -> Bool
+routine SortedDict[K, V].contains(key: K) -> Bool
   if me.root is None
     return false
   danger
@@ -422,9 +422,9 @@ dangerous routine SortedDict[K, V].search_node(node: Referring[BTreeDictNode[K, 
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
-routine SortedDict[K, V].$getitem!(key: Referring[K]) -> V
+routine SortedDict[K, V].getitem!(key: Referring[K]) -> V
   if me.root is None
-    throw KeyNotFoundError(key: key.$represent())
+    throw KeyNotFoundError(key: key.represent())
   danger
     var root_ref = me.root!!.as_entity()
     return me.get_from_node!(node: root_ref, key: key)
@@ -440,14 +440,14 @@ dangerous routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[
   if i < node.keys_count() and key == node.key_get(i)
     return node.value_get(i)
   if node.is_leaf
-    throw KeyNotFoundError(key: key.$represent())
+    throw KeyNotFoundError(key: key.represent())
   return me.get_from_node!(node: node.children_get(i).as_entity(), key: key)
 
 ### Updates the value associated with `key`.
 ### :param key: The key to update.
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
-routine SortedDict[K, V].$setitem!(key: Referring[K], value: V)
+routine SortedDict[K, V].setitem!(key: Referring[K], value: V)
   if key notin me
     absent
   discard me.add(key: key, value: value)
@@ -973,14 +973,14 @@ dangerous routine SortedDict[K, V].get_by_rank(node: Referring[BTreeDictNode[K, 
 # ============================================================================
 
 @readonly
-routine SortedDict[K, V].$iter() -> SortedDictEmittable[K, V]
+routine SortedDict[K, V].iter() -> SortedDictEmittable[K, V]
   danger
     return SortedDictEmittable[K, V](dict: me.hijack(), index: 0u64)
 
 ### Creates a {List[DictEntry[K, V]]} from all entries of `from` in ascending key order.
 ### :param from: The sorted dictionary to convert.
 ### :returns: A new list of all entries in key-ascending order.
-routine List[DictEntry[K, V]].$create(from: SortedDict[K, V]) -> List[DictEntry[K, V]]
+routine List[DictEntry[K, V]].create(from: SortedDict[K, V]) -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](from.count)
   if from.root is None
     pass
@@ -1008,14 +1008,14 @@ dangerous routine SortedDict[K, V].collect_inorder(node: Referring[BTreeDictNode
 ### Emittable that yields entries of a {SortedDict[K, V]} in ascending key order.
 ### Holds a NON-OWNING `Hijacked` pointer to the dict — a cursor borrows its container, it does not
 ### own it. An owning `dict: SortedDict` field would make the iterator's teardown free the whole tree,
-### double-freeing it against the real owner's scope-exit `$destroy` (containment = ownership).
+### double-freeing it against the real owner's scope-exit `destroy` (containment = ownership).
 ### :typeparam K: The key type.
 ### :typeparam V: The value type.
 entity SortedDictEmittable[K, V] obeys Emittable[DictEntry[K, V]]
   dict: Hijacked[SortedDict[K, V]]
   index: U64
 
-routine SortedDictEmittable[K, V].$emit!() -> DictEntry[K, V]
+routine SortedDictEmittable[K, V].emit!() -> DictEntry[K, V]
   danger
     if me.index >= me.dict.as_entity().count()
       absent
@@ -1029,35 +1029,35 @@ routine SortedDictEmittable[K, V].$emit!() -> DictEntry[K, V]
 # ============================================================================
 
 @readonly
-routine SortedDict[K, V].$represent() -> Text
+routine SortedDict[K, V].represent() -> Text
   var result = me.type_name() + "({"
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    result = result + entry.key.represent() + ": " + entry.value.represent()
     i = i +% 1u64
   result = result + "})"
   return steal result
 
 @readonly
-routine SortedDict[K, V].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
+routine SortedDict[K, V].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    result = result + entry.key.represent() + ": " + entry.value.represent()
     i = i +% 1u64
   result = result + "})"
   return steal result
 
-### Serializes this dictionary to a `SerialValue.Dict`; keys render via `$represent`, values serialize.
+### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.
 ### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
 @[readonly, generated]
 routine SortedDict[K, V].serialize() -> SerialValue
 needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
   for __e in me
-    discard __sv.add(key: __e.key.$represent(), value: __e.value.serialize())
+    discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
   return SerialValue(steal __sv)

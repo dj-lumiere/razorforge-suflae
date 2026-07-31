@@ -11,7 +11,7 @@ record BackIndex
 ### Creates a back index from an end-relative offset.
 ### :param offset: The end-relative offset where `1` means the last element.
 ### :returns: The resulting `BackIndex` value.
-routine BackIndex.$create(offset: U64) -> BackIndex
+routine BackIndex.create(offset: U64) -> BackIndex
   return reinterpret_bits[U64, BackIndex](offset)
 
 ### Resolves this back index against a collection length.
@@ -37,7 +37,7 @@ routine BackIndex.get_offset() -> U64
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine BackIndex.$eq(other: BackIndex) -> Bool
+routine BackIndex.eq(other: BackIndex) -> Bool
   return reinterpret_bits[BackIndex, U64](me) == reinterpret_bits[BackIndex, U64](other)
 
 ### Compares this back index with another by effective position from the end.
@@ -45,5 +45,5 @@ routine BackIndex.$eq(other: BackIndex) -> Bool
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine BackIndex.$cmp(other: BackIndex) -> ComparisonSign
-  return reinterpret_bits[BackIndex, U64](other).$cmp(reinterpret_bits[BackIndex, U64](me))
+routine BackIndex.cmp(other: BackIndex) -> ComparisonSign
+  return reinterpret_bits[BackIndex, U64](other).cmp(reinterpret_bits[BackIndex, U64](me))

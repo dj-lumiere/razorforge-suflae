@@ -25,109 +25,109 @@ preset C32_I: C32 = C32(real: 0.0_f32, imag: 1.0_f32)
 ### Constructs a `C32` with the given real component and zero imaginary part.
 ### :param from: The real-axis value.
 ### :returns: The corresponding `C32` value.
-routine C32.$create(from: F32) -> C32
+routine C32.create(from: F32) -> C32
   return C32(real: from, imag: 0.0_f32)
 
 ### Narrows a `C64` to `C32` by truncating each component to `F32`.
 ### :param from: The double-precision complex value to narrow.
 ### :returns: The nearest representable `C32`.
-routine C32.$create(from: C64) -> C32
+routine C32.create(from: C64) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
 ### Narrows a `C128` to `C32` by truncating each component to `F32`.
 ### :param from: The quadruple-precision complex value to narrow.
 ### :returns: The nearest representable `C32`.
-routine C32.$create(from: C128) -> C32
+routine C32.create(from: C128) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
 ### Real scalar -> `C32` (imaginary part 0), routing the value through `F32`.
 ### :param from: A real integer or float value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: S8) -> C32
+routine C32.create(from: S8) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S16` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: S16) -> C32
+routine C32.create(from: S16) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S32` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: S32) -> C32
+routine C32.create(from: S32) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S64` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: S64) -> C32
+routine C32.create(from: S64) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S128` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: S128) -> C32
+routine C32.create(from: S128) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `S256` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: S256) -> C32
+routine C32.create(from: S256) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U8` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: U8) -> C32
+routine C32.create(from: U8) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U16` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: U16) -> C32
+routine C32.create(from: U16) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U32` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: U32) -> C32
+routine C32.create(from: U32) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U64` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: U64) -> C32
+routine C32.create(from: U64) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U128` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: U128) -> C32
+routine C32.create(from: U128) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `U256` scalar -> `C32` (imaginary part 0), value routed through `F32`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: U256) -> C32
+routine C32.create(from: U256) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `F16` scalar -> `C32` (imaginary part 0), value widened to `F32`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: F16) -> C32
+routine C32.create(from: F16) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `F64` scalar -> `C32` (imaginary part 0), value narrowed to `F32`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: F64) -> C32
+routine C32.create(from: F64) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Real `F128` scalar -> `C32` (imaginary part 0), value narrowed to `F32`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in single precision.
-routine C32.$create(from: F128) -> C32
+routine C32.create(from: F128) -> C32
   return C32(real: F32(from: from), imag: 0.0_f32)
 
 ### Constructs a `C32` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
@@ -145,19 +145,19 @@ routine C32.from_polar(r: F32, theta: F32) -> C32
 ### Returns the complex sum `me + you` (component-wise addition).
 ### :param you: The addend.
 ### :returns: A `C32` whose components are the sums of the corresponding components.
-routine C32.$add(you: C32) -> C32
+routine C32.add(you: C32) -> C32
   return C32(real: me.real + you.real, imag: me.imag + you.imag)
 
 ### Returns the complex difference `me - you` (component-wise subtraction).
 ### :param you: The value to subtract.
 ### :returns: A `C32` whose components are the differences of the corresponding components.
-routine C32.$sub(you: C32) -> C32
+routine C32.sub(you: C32) -> C32
   return C32(real: me.real - you.real, imag: me.imag - you.imag)
 
 ### Returns the complex product `me * you` using the formula `(ac−bd) + (ad+bc)i`.
 ### :param you: The right operand.
 ### :returns: The Gaussian product.
-routine C32.$mul(you: C32) -> C32
+routine C32.mul(you: C32) -> C32
   # (a+bi)(c+di) = (ac − bd) + (ad + bc)i.
   return C32(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
@@ -165,7 +165,7 @@ routine C32.$mul(you: C32) -> C32
 ### Divides by the squared modulus of `you`.
 ### :param you: The divisor.
 ### :returns: The complex quotient.
-routine C32.$truediv(you: C32) -> C32
+routine C32.truediv(you: C32) -> C32
   # (a+bi)/(c+di) = (a+bi)(c−di)/|c+di|², with d = |denom|² = c²+d².
   var d = you.real * you.real + you.imag * you.imag
   # Real = (ac+bd)/d, imag = (bc−ad)/d.
@@ -173,7 +173,7 @@ routine C32.$truediv(you: C32) -> C32
 
 ### Returns the arithmetic negation of this value.
 ### :returns: A `C32` with both components negated.
-routine C32.$neg() -> C32
+routine C32.neg() -> C32
   return C32(real: -me.real, imag: -me.imag)
 
 # ============================================================================
@@ -183,7 +183,7 @@ routine C32.$neg() -> C32
 ### Returns `true` if both components compare equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me.real == you.real` and `me.imag == you.imag`.
-routine C32.$eq(you: C32) -> Bool
+routine C32.eq(you: C32) -> Bool
   return me.real == you.real and me.imag == you.imag
 
 # ============================================================================
@@ -398,7 +398,7 @@ routine C32.sqrt_unchecked() -> C32
 ### Returns this complex value raised to the complex power `you`.
 ### :param you: The complex exponent.
 ### :returns: `me ** you`, computed as `exp(you · log(me))`.
-routine C32.$pow(you: C32) -> C32
+routine C32.pow(you: C32) -> C32
   # z^w = exp(w·log z); principal branch via log_unchecked.
   return (you * me.log_unchecked()).exp_unchecked()
 
@@ -427,11 +427,11 @@ routine C32.is_imaginary() -> Bool
 
 ### Formats this value compactly as `a+bj` / `a-bj` (e.g. `1.5+2j`). The `j`
 ### spelling matches the imaginary literal suffixes, so output is valid
-### literal syntax. Standard `$represent` shape (no args) for f-string dispatch.
+### literal syntax. Standard `represent` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
-routine C32.$represent() -> Text
-  var real_text = me.real.$represent()
-  var imag_abs = me.imag.abs().$represent()
+routine C32.represent() -> Text
+  var real_text = me.real.represent()
+  var imag_abs = me.imag.abs().represent()
   if me.imag < 0.0_f32
     return real_text + "-" + imag_abs + "j"
   return real_text + "+" + imag_abs + "j"
@@ -447,10 +447,10 @@ routine C32.imag_part() -> F32
   return me.imag
 
 ### Returns a diagnostic string wrapping the value with its type name (e.g. `C32(1.5+2j)`).
-### Standard `$diagnose` shape (no args) for f-string dispatch.
+### Standard `diagnose` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
-routine C32.$diagnose() -> Text
-  return "C32(" + me.$represent() + ")"
+routine C32.diagnose() -> Text
+  return "C32(" + me.represent() + ")"
 
 # ============================================================================
 # Hashing
@@ -458,16 +458,16 @@ routine C32.$diagnose() -> Text
 
 ### Returns an xxHash64-based hash of this complex value.
 ### :returns: A `U64` hash combining both components.
-routine C32.$fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.real.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.imag.$fast_hash())
+routine C32.fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.real.fast_hash())
+  acc = __hash_round(acc: acc, h: me.imag.fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this complex value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine C32.$hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0u64, h: me.real.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.imag.$hash(k0: k0, k1: k1))
+routine C32.hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.real.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.imag.hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

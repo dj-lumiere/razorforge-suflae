@@ -13,7 +13,7 @@ import Collections
 ###   - integers          -> decimal digits
 ###   - `F32` / `F64`     -> decimal (non-finite floats are out of scope)
 ###   - `Text`            -> a JSON string with quote, backslash and control chars escaped
-###   - `Moment`          -> a JSON string of its `$represent()`
+###   - `Moment`          -> a JSON string of its `represent()`
 ###   - `Bytes`           -> a JSON array of byte VALUES (`[10, 20]`), since JSON has no byte type
 ###   - `List`            -> a JSON array
 ###   - `Dict[Text, _]`   -> a JSON object (keys are the Text keys, escaped)
@@ -23,8 +23,8 @@ import Collections
 ### :returns: `"0".."9"` or `"a".."f"`.
 secret routine json_hex_digit(nibble: U32) -> Text
   if nibble < 10u32
-    return Character(0x30u32 + nibble).$represent()
-  return Character(0x61u32 + (nibble - 10u32)).$represent()
+    return Character(0x30u32 + nibble).represent()
+  return Character(0x61u32 + (nibble - 10u32)).represent()
 
 ### Renders the low byte of `cp` as two lowercase hex digits (for the u00XX control escape form).
 ### :param cp: The code point whose low 8 bits are rendered.
@@ -61,7 +61,7 @@ secret routine json_string(t: Text) -> Text
       < 0x20u32 =>
         result = result + "\\u00" + json_hex2(cp: cp)
       else =>
-        result = result + ch.$represent()
+        result = result + ch.represent()
   result = result + "\""
   return steal result
 
@@ -75,27 +75,27 @@ routine SerialValue.to_json_text() -> Text
     is Bool b =>
       return if b then "true" else "false"
     is S8 v =>
-      return v.$represent()
+      return v.represent()
     is S16 v =>
-      return v.$represent()
+      return v.represent()
     is S32 v =>
-      return v.$represent()
+      return v.represent()
     is S64 v =>
-      return v.$represent()
+      return v.represent()
     is U8 v =>
-      return v.$represent()
+      return v.represent()
     is U16 v =>
-      return v.$represent()
+      return v.represent()
     is U32 v =>
-      return v.$represent()
+      return v.represent()
     is U64 v =>
-      return v.$represent()
+      return v.represent()
     is F32 v =>
-      return v.$represent()
+      return v.represent()
     is F64 v =>
-      return v.$represent()
+      return v.represent()
     is Moment v =>
-      return json_string(t: v.$represent())
+      return json_string(t: v.represent())
     is Text v =>
       return json_string(t: v)
     is Bytes v =>
@@ -104,7 +104,7 @@ routine SerialValue.to_json_text() -> Text
       for byte in v
         if not first
           body = body + ","
-        body = body + U8(from: byte).$represent()
+        body = body + U8(from: byte).represent()
         first = false
       body = body + "]"
       return steal body
@@ -121,7 +121,7 @@ routine SerialValue.to_json_text() -> Text
     is Dict[Text, SerialValue] d =>
       # Walk keys()/values() by index rather than `for entry in d`. The type-resolution gap that
       # blocked `for entry in d` in a concrete stdlib method is fixed (GetIterableElementType now
-      # resolves the element via the iterator's `$emit!` return), so it COMPILES — but tearing down
+      # resolves the element via the iterator's `emit!` return), so it COMPILES — but tearing down
       # the per-iteration `DictEntry` loop variable (whose `value` is a copied nested-Dict SerialValue)
       # still double-frees here, a separate concrete-method teardown bug. keys()/values() (concrete
       # element types) sidesteps the DictEntry loop variable entirely.

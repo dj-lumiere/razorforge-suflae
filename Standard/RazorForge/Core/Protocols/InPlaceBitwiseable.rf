@@ -8,14 +8,14 @@ protocol InPlaceBitwiseable
   ### :param you: The other value to combine with.
   ### :note: The right-hand operand should remain unchanged.
   @writable
-  routine Me.$ibitand(you: Me)
+  routine Me.ibitand(you: Me)
 
   ### Applies bitwise OR with `you` in place.
   ### :param you: The other value to combine with.
   @writable
-  routine Me.$ibitor(you: Me)
+  routine Me.ibitor(you: Me)
 
   ### Applies bitwise XOR with `you` in place.
   ### :param you: The other value to combine with.
   @writable
-  routine Me.$ibitxor(you: Me)
+  routine Me.ibitxor(you: Me)

@@ -25,34 +25,34 @@ preset COMPLEX_I: Complex = Complex(real: Real.zero(), imag: Real.one())
 
 ### Creates the complex zero value.
 ### :returns: The resulting `Complex` value.
-routine Complex.$create() -> Complex
+routine Complex.create() -> Complex
   return COMPLEX_ZERO
 
 ### Creates a purely real complex value.
 ### The imaginary component is initialized to zero.
 ### :param real: The real component.
 ### :returns: The resulting `Complex` value.
-routine Complex.$create(real: Real) -> Complex
+routine Complex.create(real: Real) -> Complex
   return Complex(real: real, imag: Real.zero())
 
 ### Creates a complex value from explicit real and imaginary components.
 ### :param real: The real component.
 ### :param imag: The imaginary component.
 ### :returns: The resulting `Complex` value.
-routine Complex.$create(real: Real, imag: Real) -> Complex
+routine Complex.create(real: Real, imag: Real) -> Complex
   return Complex(real: real, imag: imag)
 
 ### Creates a purely real complex value from a signed 64-bit integer (imaginary part zero).
-### Uses the `from:` label (not `real:`) so the call routes to `$create`, not a record literal.
+### Uses the `from:` label (not `real:`) so the call routes to `create`, not a record literal.
 ### :param from: The real-axis integer value.
 ### :returns: The resulting `Complex` value.
-routine Complex.$create(from: S64) -> Complex
+routine Complex.create(from: S64) -> Complex
   return Complex(real: Real(value: from), imag: Real.zero())
 
 ### Creates a purely real complex value from an `F64` (imaginary part zero).
 ### :param from: The real-axis double value.
 ### :returns: The resulting `Complex` value.
-routine Complex.$create(from: F64) -> Complex
+routine Complex.create(from: F64) -> Complex
   return Complex(real: Real(value: from), imag: Real.zero())
 
 ### Creates a complex value from polar coordinates.
@@ -73,28 +73,28 @@ common routine Complex.from_polar(r: Real, theta: Real, precision: S32 = DECIMAL
 ### :param you: The value to add.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$add(you: Complex) -> Complex
+routine Complex.add(you: Complex) -> Complex
   return Complex(real: me.real + you.real, imag: me.imag + you.imag)
 
 ### Subtracts `you` from this complex value component-wise.
 ### :param you: The value to subtract.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$sub(you: Complex) -> Complex
+routine Complex.sub(you: Complex) -> Complex
   return Complex(real: me.real - you.real, imag: me.imag - you.imag)
 
 ### Multiplies this value by `you` using the standard complex product rule.
 ### :param you: The value to multiply by.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$mul(you: Complex) -> Complex
+routine Complex.mul(you: Complex) -> Complex
   return Complex(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
 ### Divides this value by `you`.
 ### :param you: The non-zero divisor.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$truediv(you: Complex) -> Complex
+routine Complex.truediv(you: Complex) -> Complex
   var d = you.real * you.real + you.imag * you.imag
   return Complex(
     real: (me.real * you.real + me.imag * you.imag) / d,
@@ -104,14 +104,14 @@ routine Complex.$truediv(you: Complex) -> Complex
 ### Returns the additive inverse of this complex value.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$neg() -> Complex
+routine Complex.neg() -> Complex
   return Complex(real: -me.real, imag: -me.imag)
 
 ### Returns `true` when both the real and imaginary components are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Complex.$eq(you: Complex) -> Bool
+routine Complex.eq(you: Complex) -> Bool
   return me.real == you.real and me.imag == you.imag
 
 # ============================================================================
@@ -123,8 +123,8 @@ routine Complex.$eq(you: Complex) -> Bool
 ### equal complex values hash equally.
 ### :returns: The 64-bit hash.
 @readonly
-routine Complex.$fast_hash() -> U64
-  return me.represent_with_places(decimal_places: 10_s32).$fast_hash()
+routine Complex.fast_hash() -> U64
+  return me.represent_with_places(decimal_places: 10_s32).fast_hash()
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### Hashes the canonical fixed-precision representation under the supplied key pair.
@@ -132,8 +132,8 @@ routine Complex.$fast_hash() -> U64
 ### :param k1: The second 64-bit key word.
 ### :returns: The 64-bit keyed hash.
 @readonly
-routine Complex.$hash(k0: U64, k1: U64) -> U64
-  return me.represent_with_places(decimal_places: 10_s32).$hash(k0: k0, k1: k1)
+routine Complex.hash(k0: U64, k1: U64) -> U64
+  return me.represent_with_places(decimal_places: 10_s32).hash(k0: k0, k1: k1)
 
 # ============================================================================
 # Components and Properties
@@ -223,7 +223,7 @@ routine Complex.pow(exp: Complex, precision: S32 = DECIMAL_DEFAULT_PRECISION) ->
 ### :param exp: The exponent value.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$pow!(exp: Complex) -> Complex
+routine Complex.pow!(exp: Complex) -> Complex
   return (exp * me.log()).exp()
 
 ### Computes the complex sine of this value.
@@ -404,12 +404,12 @@ routine Complex.is_imaginary() -> Bool
 ### Formats this value compactly as `a+bj` / `a-bj`, with each component in its canonical decimal
 ### form (full precision, no trailing zeros — e.g. `1+1j`, not `1.0000000000 + 1.0000000000j`).
 ### The `j` spelling matches the imaginary literal suffixes (`2j`, `1.5jn`), so output is valid
-### literal syntax. Standard `$represent` shape (no args) for f-string dispatch.
+### literal syntax. Standard `represent` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Complex.$represent() -> Text
-  var real_text = me.real.$represent()
-  var imag_abs = me.imag.abs().$represent()
+routine Complex.represent() -> Text
+  var real_text = me.real.represent()
+  var imag_abs = me.imag.abs().represent()
   if me.imag.is_negative()
     return real_text + "-" + imag_abs + "j"
   return real_text + "+" + imag_abs + "j"
@@ -426,10 +426,10 @@ routine Complex.represent_with_places(decimal_places: S32) -> Text
   return real_text + " + " + imag_abs + "j"
 
 ### Returns a diagnostic string that includes the type name wrapper.
-### Standard `$diagnose` shape (no args) for f-string dispatch.
+### Standard `diagnose` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Complex.$diagnose() -> Text
+routine Complex.diagnose() -> Text
   return me.diagnose_with_places(decimal_places: 10_s32)
 
 ### Returns a diagnostic string with the requested precision.

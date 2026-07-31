@@ -37,7 +37,7 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### |---|---|---|
 ### | `add` | O(1) | O(n) (rehash) |
 ### | `remove` | O(1) | O(n) |
-### | `$contains` / `get_or_default` | O(1) | O(n) |
+### | `contains` / `get_or_default` | O(1) | O(n) |
 ### | `keys()` / `values()` / `entries()` | O(n) | O(n) |
 ### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
@@ -67,7 +67,7 @@ relates V as Value
 # ============================================================================
 
 ### Creates an empty dictionary using the default initial table size.
-routine FastDict[K, V].$create() -> FastDict[K, V]
+routine FastDict[K, V].create() -> FastDict[K, V]
   var cap = FAST_DICT_INITIAL_CAPACITY
   var ecap = FAST_DICT_INITIAL_ENTRIES
   var dict = FastDict[K, V](
@@ -94,7 +94,7 @@ routine FastDict[K, V].$create() -> FastDict[K, V]
 ### Creates an empty dictionary pre-sized to hold at least `capacity` live entries without rehashing.
 ### Both the probe table and the entries array are rounded up to the next power-of-two.
 ### :param capacity: Minimum number of live entries to accommodate before the first rehash.
-routine FastDict[K, V].$create(capacity: U64) -> FastDict[K, V]
+routine FastDict[K, V].create(capacity: U64) -> FastDict[K, V]
   var cap = FAST_DICT_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -127,14 +127,14 @@ routine FastDict[K, V].$create(capacity: U64) -> FastDict[K, V]
 # ============================================================================
 
 ### Extracts the 7-bit control-byte fingerprint from a raw hash value.
-### :param hash: The raw hash output from `$fast_hash`.
+### :param hash: The raw hash output from `fast_hash`.
 ### :returns: The low 7 bits of `hash`, used to filter candidate probe slots before a full key comparison.
 @readonly
 routine FastDict[K, V].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
 ### Derives the primary probe slot index from a raw hash value.
-### :param hash: The raw hash output from `$fast_hash`.
+### :param hash: The raw hash output from `fast_hash`.
 ### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
 @readonly
 routine FastDict[K, V].h1(hash: U64) -> U64
@@ -179,7 +179,7 @@ routine FastDict[K, V].write_val_at(ei: U64, val: V)
 ### :returns: The probe slot index of `key` if found, or `capacity` if the key is absent.
 @readonly
 routine FastDict[K, V].find_slot(key: K) -> U64
-  var h = key.$fast_hash()
+  var h = key.fast_hash()
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
@@ -278,7 +278,7 @@ routine FastDict[K, V].rehash()
         me.vals.offset(V.data_size() * new_ei).poke(v)
         me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
-        me.insert_index_raw(h: k.$fast_hash(), entry_index: new_ei)
+        me.insert_index_raw(h: k.fast_hash(), entry_index: new_ei)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
@@ -327,7 +327,7 @@ routine FastDict[K, V].clear()
 ### :param key: The key to look up.
 ### :returns: `true` if the key exists.
 @readonly
-routine FastDict[K, V].$contains(key: K) -> Bool
+routine FastDict[K, V].contains(key: K) -> Bool
   return me.find_slot(key) < me.capacity
 
 ### Inserts `key` with `value`, or updates the existing entry's value when `key` is already present.
@@ -350,7 +350,7 @@ routine FastDict[K, V].add(key: K, value: V) -> Bool
     me.vals.offset(V.data_size() * ei).poke(value)
     me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
-  me.insert_index_raw(h: key.$fast_hash(), entry_index: ei)
+  me.insert_index_raw(h: key.fast_hash(), entry_index: ei)
   me.count = me.count +% 1u64
   return true
 
@@ -391,7 +391,7 @@ routine FastDict[K, V].get_or_default(key: K, default_value: V) -> V
 ### :returns: The value mapped to `key`.
 ### :absent: The key is not present in the dictionary.
 @readonly
-routine FastDict[K, V].$getitem!(key: Referring[K]) -> V
+routine FastDict[K, V].getitem!(key: Referring[K]) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
@@ -402,7 +402,7 @@ routine FastDict[K, V].$getitem!(key: Referring[K]) -> V
 ### :param key: The key to update.
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
-routine FastDict[K, V].$setitem!(key: Referring[K], value: V)
+routine FastDict[K, V].setitem!(key: Referring[K], value: V)
   if key notin me
     absent
   var slot = me.find_slot(key)
@@ -461,7 +461,7 @@ routine FastDict[K, V].entries() -> List[DictEntry[K, V]]
 ### Returns an iterator over all live entries in insertion order.
 ### Order is stable across lookups and value updates; removing and re-adding a key places the entry at the new end.
 @readonly
-routine FastDict[K, V].$iter() -> FastDictEmittable[K, V]
+routine FastDict[K, V].iter() -> FastDictEmittable[K, V]
   danger
     return FastDictEmittable[K, V](
       keys: me.keys,
@@ -484,13 +484,13 @@ entity FastDictEmittable[K, V] obeys Emittable[DictEntry[K, V]]
   secret entry_live: Hijacked[U8]
   ### Entries-array high-water mark captured at iterator creation.
   secret entries_used: U64
-  ### Current entry index; advances on each call to `$emit!`.
+  ### Current entry index; advances on each call to `emit!`.
   secret pos: U64
 
 ### Advances to the next live entry and returns it.
 ### :returns: The next live {DictEntry[K, V]} in insertion order.
 ### :absent: No live entries remain.
-routine FastDictEmittable[K, V].$emit!() -> DictEntry[K, V]
+routine FastDictEmittable[K, V].emit!() -> DictEntry[K, V]
   danger
     while me.pos < me.entries_used
       var p = me.pos
@@ -508,26 +508,26 @@ routine FastDictEmittable[K, V].$emit!() -> DictEntry[K, V]
 ### Returns a compact text representation of the dictionary contents.
 ### Entries are rendered as `key: value` pairs in insertion order.
 @readonly
-routine FastDict[K, V].$represent() -> Text
+routine FastDict[K, V].represent() -> Text
   var result = "FastDict({"
   var first = true
   for entry in me
     if not first
       result = result + ", "
-    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    result = result + entry.key.represent() + ": " + entry.value.represent()
     first = false
   result = result + "})"
   return steal result
 
 ### Returns a diagnostic form that includes the runtime type name and live entry count.
 @readonly
-routine FastDict[K, V].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
+routine FastDict[K, V].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
   for entry in me
     if not first
       result = result + ", "
-    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    result = result + entry.key.represent() + ": " + entry.value.represent()
     first = false
   result = result + "})"
   return steal result
@@ -542,7 +542,7 @@ routine FastDict[K, V].$diagnose() -> Text
 ### :param other: The other dictionary to compare against.
 ### :returns: `true` if both have the same count and every key-value pair is equal.
 @readonly
-routine FastDict[K, V].$eq(other: Referring[FastDict[K, V]]) -> Bool
+routine FastDict[K, V].eq(other: Referring[FastDict[K, V]]) -> Bool
 needs V obeys Equatable
   if me.count != other.count
     return false
@@ -562,14 +562,14 @@ needs V obeys Equatable
     i = i +% 1u64
   return true
 
-dangerous routine FastDict[K, V].$destroy()
-  # Tear down each live key and value before freeing the buffers (mirrors FastDictEmittable.$emit!).
+dangerous routine FastDict[K, V].destroy()
+  # Tear down each live key and value before freeing the buffers (mirrors FastDictEmittable.emit!).
   # No-op for value types; frees owned entity keys/values.
   var p = 0u64
   while p < me.entries_used
     if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
-      me.keys.offset(K.data_size() * p).peek().$destroy()
-      me.vals.offset(V.data_size() * p).peek().$destroy()
+      me.keys.offset(K.data_size() * p).peek().destroy()
+      me.vals.offset(V.data_size() * p).peek().destroy()
     p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()
@@ -579,12 +579,12 @@ dangerous routine FastDict[K, V].$destroy()
   me.hijack().invalidate()
   return
 
-### Serializes this dictionary to a `SerialValue.Dict`; keys render via `$represent`, values serialize.
+### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.
 ### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
 @[readonly, generated]
 routine FastDict[K, V].serialize() -> SerialValue
 needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
   for __e in me
-    discard __sv.add(key: __e.key.$represent(), value: __e.value.serialize())
+    discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
   return SerialValue(steal __sv)

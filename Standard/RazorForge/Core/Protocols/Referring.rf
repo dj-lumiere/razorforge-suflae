@@ -11,4 +11,4 @@ needs T is EntityType
   ### `Referring[T]` and whose argument is any obeyer of `Referring[T]`.
   ### :returns: The inner entity as `T` (scoped borrow shape).
   @readonly
-  routine Me.$refer() -> T
+  routine Me.refer() -> T

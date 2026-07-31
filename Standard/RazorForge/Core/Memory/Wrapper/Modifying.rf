@@ -31,22 +31,22 @@ needs T is EntityType
 ### Called on entry to a `using` block; passes the modify through as the bound value (access is
 ### already established by `.modify()`).
 ### :returns: This modify token as `Modifying[T]`.
-routine Modifying[T].$enter() -> Modifying[T]
+routine Modifying[T].enter() -> Modifying[T]
   return me
 
 ### Called on exit from a `using` block; no-op for a modify (the compiler handles scope cleanup).
-routine Modifying[T].$exit()
+routine Modifying[T].exit()
   return
 
 # ============================================================================
-# Marker-protocol coercion ($refer/$control) — yields the inner entity as T
+# Marker-protocol coercion (refer/control) — yields the inner entity as T
 # ============================================================================
 
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`.
 ### :returns: The inner entity as `T`.
 @[readonly, inline]
-routine Modifying[T].$refer() -> T
+routine Modifying[T].refer() -> T
   danger
     return Hijacked[T](me).as_entity()
 
@@ -54,7 +54,7 @@ routine Modifying[T].$refer() -> T
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
 ### :returns: The inner entity as `T`.
 @inline
-routine Modifying[T].$control() -> T
+routine Modifying[T].control() -> T
   danger
     return Hijacked[T](me).as_entity()
 
@@ -65,18 +65,18 @@ routine Modifying[T].$control() -> T
 ### Returns the display form of the modifying entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Modifying[T].$represent() -> Text
+routine Modifying[T].represent() -> Text
   danger
     var hijacked = Hijacked[T](me)
-    return hijacked.as_entity().$represent()
+    return hijacked.as_entity().represent()
 
 ### Returns the diagnostic form of the modifying entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Modifying[T].$diagnose() -> Text
+routine Modifying[T].diagnose() -> Text
   danger
     var hijacked = Hijacked[T](me)
-    return me.type_name() + "(" + hijacked.as_entity().$diagnose() + ")"
+    return me.type_name() + "(" + hijacked.as_entity().diagnose() + ")"
 
-dangerous routine Modifying[T].$destroy()
+dangerous routine Modifying[T].destroy()
   return

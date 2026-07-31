@@ -12,7 +12,7 @@ choice RoamColor
   ### Buffered as a possible cycle root.
   PURPLE: 3
 
-### Compiler intrinsic: yields a closure over this type's synthesized `$roam_trace_impl` cycle-collector
+### Compiler intrinsic: yields a closure over this type's synthesized `roam_trace_impl` cycle-collector
 ### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
 ### routine-value reference to that hook; the `cptr_none()` body is a never-used fallback (NOT `@innate`
 ### — an unrecognized `@innate` T-method is folded to a default before the rewrite runs).
@@ -20,7 +20,7 @@ choice RoamColor
 routine T.roam_trace_ref() -> CPtr
   return cptr_none()
 
-### Compiler intrinsic: yields a closure over this type's synthesized `$roam_free_impl` hook (tears down
+### Compiler intrinsic: yields a closure over this type's synthesized `roam_free_impl` hook (tears down
 ### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass; `cptr_none()` fallback.
 routine T.roam_free_ref() -> CPtr
   return cptr_none()
@@ -65,13 +65,13 @@ needs T is EntityType
   secret trace_hook: CPtr
   ### Address of the compiler-generated per-type free function for `T`. Called as
   ### `fn(controller_address)` when the collector reaps a white (garbage) node: runs the managed
-  ### entity's `$destroy` (type-correct) then frees the controller. `cptr_none()` until wired.
+  ### entity's `destroy` (type-correct) then frees the controller. `cptr_none()` until wired.
   secret free_hook: CPtr
 
 ### Creates a controller with one strong reference in LOCAL mode (unlocked, non-atomic).
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `RoamController[T]` value.
-dangerous routine RoamController[T].$create(data: Hijacked[T]) -> RoamController[T]
+dangerous routine RoamController[T].create(data: Hijacked[T]) -> RoamController[T]
   return RoamController[T](
     count: 1_u64,
     escaped: Atomic[U8](initial: 0_u8),
@@ -111,7 +111,7 @@ routine RoamController[T].release()
         if me.buffered
           rf_cc_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
-        me.$destroy()
+        me.destroy()
       else
         me.mark_cycle_candidate()
     else
@@ -120,7 +120,7 @@ routine RoamController[T].release()
         if me.buffered
           rf_cc_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
-        me.$destroy()
+        me.destroy()
       else
         me.mark_cycle_candidate()
   return
@@ -129,7 +129,7 @@ routine RoamController[T].release()
 ### point — only `Roamed` decrements reach it, which is what scopes the collector to `Roamed`.
 dangerous routine RoamController[T].mark_cycle_candidate()
   # Acyclic-type fast out (standard Bacon-Rajan optimization): a `T` with no `Roamed` fields cannot be
-  # part of a cycle, and the compiler wires its `trace_hook` to `cptr_none()` (see `$create`). Skipping
+  # part of a cycle, and the compiler wires its `trace_hook` to `cptr_none()` (see `create`). Skipping
   # the candidate buffer here keeps the common non-zero decrement off the collector's books entirely.
   if me.trace_hook.is_none()
     return
@@ -152,7 +152,7 @@ dangerous routine RoamController[T].mark_cycle_candidate()
 # ============================================================================
 
 ### The address of the managed entity — the collector passes this to the entity-based trace/free
-### hooks (`$roam_trace_impl` / `$roam_free_impl`, whose `me` is the entity). :returns: the entity address.
+### hooks (`roam_trace_impl` / `roam_free_impl`, whose `me` is the entity). :returns: the entity address.
 routine RoamController[T].cc_data_addr() -> Address
   danger
     return me.data.get_address()
@@ -321,9 +321,9 @@ dangerous routine RoamController[T].data_ptr() -> Hijacked[T]
 
 ### Destroys the managed entity. Call only when the strong count reaches zero.
 dangerous routine RoamController[T].drop_data()
-  me.data.as_entity().$destroy()
+  me.data.as_entity().destroy()
   return
 
-dangerous routine RoamController[T].$destroy()
+dangerous routine RoamController[T].destroy()
   me.hijack().invalidate()
   return

@@ -10,11 +10,11 @@ protocol FloorDivisible
   ### :param you: The divisor.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$floordiv!(you: Me) -> Me
+  routine Me.floordiv!(you: Me) -> Me
 
   ### Returns the remainder after division.
-  ### This result should correspond to the quotient returned by `$floordiv!`.
+  ### This result should correspond to the quotient returned by `floordiv!`.
   ### :param you: The divisor.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$mod!(you: Me) -> Me
+  routine Me.mod!(you: Me) -> Me

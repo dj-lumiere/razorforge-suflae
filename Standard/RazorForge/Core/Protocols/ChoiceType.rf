@@ -10,7 +10,7 @@ protocol ChoiceType obeys Diagnosable, FastHashable, Hashable, Copyable
   ### :param from: The choice case to convert.
   ### :returns: The resulting `S64` value.
   @[readonly, innate]
-  routine S64.$create(from: Me) -> S64
+  routine S64.create(from: Me) -> S64
 
   ### Returns every declared case for this choice type.
   ### Cases are returned in declaration order and are suitable for iteration,

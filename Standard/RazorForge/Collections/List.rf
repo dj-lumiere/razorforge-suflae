@@ -23,8 +23,8 @@ import BuilderService
 ### | `remove_last!` | O(1) |
 ### | `add_first` / `add_at!` | O(n) |
 ### | `remove_first!` / `remove_at!` | O(n) |
-### | `$getitem!` / `$setitem!` | O(1) |
-### | `$contains` | O(n) |
+### | `getitem!` / `setitem!` | O(1) |
+### | `contains` | O(n) |
 ### | `sort` | O(n log n) |
 ### | `reverse` | O(n) |
 ### | Iteration | O(n) |
@@ -43,7 +43,7 @@ relates ListEmittable[T] as Iter
 
 # Creators
 
-routine List[T].$create() -> List[T]
+routine List[T].create() -> List[T]
   return List[T](
     data: hijacked_none[T](),
     count: 0u64,
@@ -54,7 +54,7 @@ routine List[T].$create() -> List[T]
 ### No elements are initialized, but the backing allocation is made immediately to
 ### avoid the first few growth steps.
 ### :param capacity: The initial capacity to reserve.
-routine List[T].$create(capacity: U64) -> List[T]
+routine List[T].create(capacity: U64) -> List[T]
   var byte_size = T.data_size() * capacity
   danger
     var ptr = rf_allocate_dynamic_uninit(byte_size)
@@ -66,11 +66,11 @@ routine List[T].$create(capacity: U64) -> List[T]
 
 ### Creates a list of `count` copies of `fill_value`. The backing buffer is sized
 ### exactly to `count` and every slot is initialized with an independent copy of
-### `fill_value`. Equivalent to {List[T].$create()} when `count == 0`.
+### `fill_value`. Equivalent to {List[T].create()} when `count == 0`.
 ### :param count: The number of elements to produce.
 ### :param fill_value: The value to copy into each slot.
 ### :returns: A list containing `count` copies of `fill_value`.
-routine List[T].$create(count: U64, fill_value: T) -> List[T]
+routine List[T].create(count: U64, fill_value: T) -> List[T]
 needs T is Copyable
   if count == 0u64
     return List[T]()
@@ -259,7 +259,7 @@ routine List[T].last!() -> T
 ### :returns: The element at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
-routine List[T].$getitem!(index: U64) -> T
+routine List[T].getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
@@ -270,7 +270,7 @@ routine List[T].$getitem!(index: U64) -> T
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-routine List[T].$setitem!(index: U64, value: T)
+routine List[T].setitem!(index: U64, value: T)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
@@ -341,11 +341,11 @@ entity ListEmittable[T] obeys Emittable[T]
   secret index: U64
 
 @readonly
-routine List[T].$iter() -> ListEmittable[T]
+routine List[T].iter() -> ListEmittable[T]
   danger
     return ListEmittable[T](data: me.data, count: me.count(), index: 0u64)
 
-routine ListEmittable[T].$emit!() -> T
+routine ListEmittable[T].emit!() -> T
   if me.index >= me.count
     absent
   danger
@@ -357,7 +357,7 @@ routine ListEmittable[T].$emit!() -> T
 ### :param other: The other list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine List[T].$eq(other: Referring[List[T]]) -> Bool
+routine List[T].eq(other: Referring[List[T]]) -> Bool
 needs T obeys Equatable
   if me.count() != other.count()
     return false
@@ -373,7 +373,7 @@ needs T obeys Equatable
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
-routine List[T].$contains(value: Referring[T]) -> Bool
+routine List[T].contains(value: Referring[T]) -> Bool
 needs T obeys Equatable
   var i = 0u64
   while i < me.count()
@@ -383,25 +383,25 @@ needs T obeys Equatable
   return false
 
 @readonly
-routine List[T].$represent() -> Text
+routine List[T].represent() -> Text
   var result = "["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$represent()
+    result = result + v.represent()
     i = i +% 1u64
   result = result + "]"
   return steal result
 
 @readonly
-routine List[T].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
+routine List[T].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$represent()
+    result = result + v.represent()
     i = i +% 1u64
   result = result + "])"
   return steal result
@@ -425,7 +425,7 @@ needs T obeys Copyable
     me.reserve(new_count * 2u64)
 
   # Clone each element through the read-only borrow. `clone` is elided for trivially-copyable T
-  # (no symbol) and delegates to the retain-aware `$store` for RC records like Text, so appended
+  # (no symbol) and delegates to the retain-aware `store` for RC records like Text, so appended
   # elements are owned independently. The prior bitwise copy aliased buffer pointers (double-free).
   var i = 0u64
   while i < count
@@ -772,11 +772,11 @@ routine List[T].merge_into_by(left: U64, mid: U64, right: U64, buffer: Controlli
   return
 
 ### Destroys each live element (no-op for value-typed `T`), then frees the backing buffer.
-dangerous routine List[T].$destroy()
+dangerous routine List[T].destroy()
   var elem_size = T.data_size()
   var i: U64 = 0u64
   while i < me.count
-    me.data.offset(elem_size * i).peek().$destroy()
+    me.data.offset(elem_size * i).peek().destroy()
     i = i + 1u64
   me.data.invalidate()
   me.hijack().invalidate()

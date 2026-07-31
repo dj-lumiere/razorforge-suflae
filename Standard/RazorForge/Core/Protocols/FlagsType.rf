@@ -9,7 +9,7 @@ protocol FlagsType obeys Diagnosable, FastHashable, Hashable, Copyable
   ### :param from: The flags value to convert.
   ### :returns: The resulting `U64` value.
   @[readonly, innate]
-  routine U64.$create(from: Me) -> U64
+  routine U64.create(from: Me) -> U64
 
   ### Returns every declared flag case for this type.
   ### The cases are returned in declaration order, not filtered by whether a

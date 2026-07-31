@@ -83,7 +83,7 @@ routine Sender[T].is_closed() -> Bool
     return rf_channel_is_closed(chan: me.chan) != 0_u32
 
 ### Drops this producer reference; the last one closes the channel.
-dangerous routine Sender[T].$destroy()
+dangerous routine Sender[T].destroy()
   rf_channel_drop_feeder(chan: me.chan)
   return
 
@@ -99,7 +99,7 @@ relates ChannelDrain[T] as Iter
 
 ### Returns an iterator that draws items from the channel (receive == iterate).
 ### :returns: A `ChannelDrain[T]` over this channel.
-routine Receiver[T].$iter() -> ChannelDrain[T]
+routine Receiver[T].iter() -> ChannelDrain[T]
   danger
     return ChannelDrain[T](chan: me.chan)
 
@@ -129,7 +129,7 @@ routine Receiver[T].capacity() -> U64
     return rf_channel_capacity(chan: me.chan)
 
 ### Drops this consumer reference; the channel frees once no producers and no consumers remain.
-dangerous routine Receiver[T].$destroy()
+dangerous routine Receiver[T].destroy()
   rf_channel_drop_consumer(chan: me.chan)
   return
 
@@ -149,7 +149,7 @@ routine SharedReceiver[T].duplicate() -> SharedReceiver[T]
 
 ### Returns an iterator that draws items from the channel (receive == iterate).
 ### :returns: A `ChannelDrain[T]` over this channel.
-routine SharedReceiver[T].$iter() -> ChannelDrain[T]
+routine SharedReceiver[T].iter() -> ChannelDrain[T]
   danger
     return ChannelDrain[T](chan: me.chan)
 
@@ -175,14 +175,14 @@ routine SharedReceiver[T].capacity() -> U64
     return rf_channel_capacity(chan: me.chan)
 
 ### Drops this consumer reference; the channel frees once no producers and no consumers remain.
-dangerous routine SharedReceiver[T].$destroy()
+dangerous routine SharedReceiver[T].destroy()
   rf_channel_drop_consumer(chan: me.chan)
   return
 
 # ---- The drain iterator -------------------------------------------------------------------------
 
 ### The iterator a receiving end hands to a `for` loop. It references the channel without owning it (the
-### owning `Receiver`/`SharedReceiver` holds the consumer reference); `$emit!` receives one item, parking
+### owning `Receiver`/`SharedReceiver` holds the consumer reference); `emit!` receives one item, parking
 ### while the buffer is empty, and returns `absent` once the channel is closed and drained — ending the loop.
 entity ChannelDrain[T] obeys Emittable[T]
   ### The shared native channel handle (rf_channel*), non-owning (this iterator holds no reference).
@@ -191,7 +191,7 @@ entity ChannelDrain[T] obeys Emittable[T]
 ### Receives the next item, or `absent` when the channel is closed and the buffer is empty.
 ### :returns: The next value, or `absent` at end-of-stream.
 @writable
-routine ChannelDrain[T].$emit!() -> T
+routine ChannelDrain[T].emit!() -> T
   danger
     var box = hijacked_from[T](rf_channel_next(chan: me.chan))
     if box.is_none()

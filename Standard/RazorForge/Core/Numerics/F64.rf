@@ -10,7 +10,7 @@ import Collections
 ### values up to approximately ±1.8 × 10³⁰⁸.
 ###
 ### Arithmetic operations throw {NumericOverflowError} when the result is
-### non-finite (infinity or NaN). Use `$truediv_unchecked` for raw IEEE 754
+### non-finite (infinity or NaN). Use `truediv_unchecked` for raw IEEE 754
 ### semantics without the overflow guard.
 @llvm("double")
 record F64 obeys Numeric, Ordered
@@ -39,21 +39,21 @@ preset F64_LN_10: F64 = 2.302585092994046_f64
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.$create(from: S8) -> F64
+routine F64.create(from: S8) -> F64
   return signed_to_float[S8, F64](from)
 
 ### Converts an `S16` to `F64`. The result is exact for all values.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.$create(from: S16) -> F64
+routine F64.create(from: S16) -> F64
   return signed_to_float[S16, F64](from)
 
 ### Converts an `S32` to `F64`. The result is exact for all values.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.$create(from: S32) -> F64
+routine F64.create(from: S32) -> F64
   return signed_to_float[S32, F64](from)
 
 ### Converts an `S64` to `F64`.
@@ -62,7 +62,7 @@ routine F64.$create(from: S32) -> F64
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.$create(from: S64) -> F64
+routine F64.create(from: S64) -> F64
   return signed_to_float[S64, F64](from)
 
 ### Converts an `S128` to `F64`.
@@ -70,28 +70,28 @@ routine F64.$create(from: S64) -> F64
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.$create(from: S128) -> F64
+routine F64.create(from: S128) -> F64
   return signed_to_float[S128, F64](from)
 
 ### Converts a `U8` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.$create(from: U8) -> F64
+routine F64.create(from: U8) -> F64
   return unsigned_to_float[U8, F64](from)
 
 ### Converts a `U16` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.$create(from: U16) -> F64
+routine F64.create(from: U16) -> F64
   return unsigned_to_float[U16, F64](from)
 
 ### Converts a `U32` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
-routine F64.$create(from: U32) -> F64
+routine F64.create(from: U32) -> F64
   return unsigned_to_float[U32, F64](from)
 
 ### Converts a `U64` to `F64`.
@@ -99,7 +99,7 @@ routine F64.$create(from: U32) -> F64
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.$create(from: U64) -> F64
+routine F64.create(from: U64) -> F64
   return unsigned_to_float[U64, F64](from)
 
 ### Converts a `U128` to `F64`.
@@ -107,62 +107,62 @@ routine F64.$create(from: U64) -> F64
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.$create(from: U128) -> F64
+routine F64.create(from: U128) -> F64
   return unsigned_to_float[U128, F64](from)
 
 ### Converts an `S256` to `F64` (precision limited to ~53 bits of significand).
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.$create(from: S256) -> F64
+routine F64.create(from: S256) -> F64
   return signed_to_float[S256, F64](from)
 
 ### Converts a `U256` to `F64` (precision limited to ~53 bits of significand).
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
-routine F64.$create(from: U256) -> F64
+routine F64.create(from: U256) -> F64
   return unsigned_to_float[U256, F64](from)
 
 ### Widens a half-precision float to double precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
 @inline
-routine F64.$create(from: F16) -> F64
+routine F64.create(from: F16) -> F64
   return float_extend[F16, F64](from)
 
 ### Widens a single-precision float to double precision.
 ### :param from: The `F32` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
 @inline
-routine F64.$create(from: F32) -> F64
+routine F64.create(from: F32) -> F64
   return float_extend[F32, F64](from)
 
 ### Returns an existing `F64` unchanged.
 ### :param from: The double-precision value to forward.
 ### :returns: `from`.
 @inline
-routine F64.$create(from: F64) -> F64
+routine F64.create(from: F64) -> F64
   return from
 
 ### Narrows a quadruple-precision float to double precision.
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F64` value.
-routine F64.$create(from: F128) -> F64
+routine F64.create(from: F128) -> F64
   return from.F64()
 
-### (`F64.$create(from: D32)` is provided by the decimal32 engine — `D32Trans.rf`.)
+### (`F64.create(from: D32)` is provided by the decimal32 engine — `D32Trans.rf`.)
 
 ### Converts a decimal64 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F64` value.
-routine F64.$create(from: D64) -> F64
+routine F64.create(from: D64) -> F64
   return d64_to_f128(x: from).F64()
 
 ### Converts a decimal128 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F64` value.
-routine F64.$create(from: D128) -> F64
+routine F64.create(from: D128) -> F64
   return d128_to_f256(x: from).to_f128().F64()
 
 # ============================================================================
@@ -175,16 +175,16 @@ routine F64.$create(from: D128) -> F64
 # `@crash_only` makes each crash unconditional, so the wired operators that call them stay
 # non-failable — a non-finite result is a bug surfaced loudly at its source, not a recoverable
 # error.
-# Opt out with the `$*_unchecked` operators (raw IEEE 754 propagation) or `.finite!()`
+# Opt out with the `*_unchecked` operators (raw IEEE 754 propagation) or `.finite!()`
 # (recoverable).
 
 ### Classifies a non-finite result: NaN -> domain crash, ±infinity -> overflow crash.
 
 ### Returns `me + you`. Checked: crashes if the IEEE result is ±infinity (overflow) or NaN
-### (domain). Use `$add_unchecked` for raw IEEE 754 propagation.
+### (domain). Use `add_unchecked` for raw IEEE 754 propagation.
 ### :param you: The addend.
 ### :returns: The double-precision sum (always finite).
-routine F64.$add!(you: F64) -> F64
+routine F64.add!(you: F64) -> F64
   var r = float_add[F64](a: me, b: you)
   if r.is_finite()
     return r
@@ -193,10 +193,10 @@ routine F64.$add!(you: F64) -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me - you`. Checked: crashes if the IEEE result is non-finite.
-### Use `$sub_unchecked` for raw IEEE 754 propagation.
+### Use `sub_unchecked` for raw IEEE 754 propagation.
 ### :param you: The value to subtract.
 ### :returns: The double-precision difference (always finite).
-routine F64.$sub!(you: F64) -> F64
+routine F64.sub!(you: F64) -> F64
   var r = float_sub[F64](a: me, b: you)
   if r.is_finite()
     return r
@@ -205,10 +205,10 @@ routine F64.$sub!(you: F64) -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me * you`. Checked: crashes if the IEEE result is non-finite.
-### Use `$mul_unchecked` for raw IEEE 754 propagation.
+### Use `mul_unchecked` for raw IEEE 754 propagation.
 ### :param you: The multiplier.
 ### :returns: The double-precision product (always finite).
-routine F64.$mul!(you: F64) -> F64
+routine F64.mul!(you: F64) -> F64
   var r = float_mul[F64](a: me, b: you)
   if r.is_finite()
     return r
@@ -217,11 +217,11 @@ routine F64.$mul!(you: F64) -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me / you`. Checked: `x / 0` crashes with DivisionByZeroError, `0 / 0` with a domain
-### error, and an overflow to ±infinity with an overflow error. Use `$truediv_unchecked` for raw
+### error, and an overflow to ±infinity with an overflow error. Use `truediv_unchecked` for raw
 ### IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN), or `(a / b).finite!()` for recoverable handling.
 ### :param you: The divisor.
 ### :returns: The double-precision quotient (always finite).
-routine F64.$truediv!(you: F64) -> F64
+routine F64.truediv!(you: F64) -> F64
   var r = float_div[F64](a: me, b: you)
   if r.is_finite()
     return r
@@ -244,7 +244,7 @@ routine F64.finite!() -> F64
 
 ### Returns the arithmetic negation of this value.
 ### :returns: `-me` in double precision.
-routine F64.$neg() -> F64
+routine F64.neg() -> F64
   return float_neg[F64](me)
 
 # Unchecked variants — raw IEEE 754 propagation (the float analog of integer `+%`/`+^`). inf/NaN
@@ -255,19 +255,19 @@ routine F64.$neg() -> F64
 ### Returns `me / you` with raw IEEE 754 semantics: `x/0` -> ±infinity, `0/0` -> NaN. No crash.
 ### :param you: The divisor.
 ### :returns: The double-precision quotient, possibly ±infinity or NaN.
-routine F64.$truediv_unchecked(you: F64) -> F64
+routine F64.truediv_unchecked(you: F64) -> F64
   return float_div[F64](a: me, b: you)
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F64.$add_unchecked(you: F64) -> F64
+routine F64.add_unchecked(you: F64) -> F64
   return float_add[F64](a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F64.$sub_unchecked(you: F64) -> F64
+routine F64.sub_unchecked(you: F64) -> F64
   return float_sub[F64](a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F64.$mul_unchecked(you: F64) -> F64
+routine F64.mul_unchecked(you: F64) -> F64
   return float_mul[F64](a: me, b: you)
 
 # ============================================================================
@@ -277,13 +277,13 @@ routine F64.$mul_unchecked(you: F64) -> F64
 ### Returns `true` if both values are equal under IEEE 754 ordered comparison.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` if either operand is NaN.
-routine F64.$eq(you: F64) -> Bool
+routine F64.eq(you: F64) -> Bool
   return float_eq[F64](a: me, b: you)
 
 ### Compares this value with `you` under IEEE 754 ordered comparison.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL`, `ME_LARGE`, or `SAME`.
-routine F64.$cmp(you: F64) -> ComparisonSign
+routine F64.cmp(you: F64) -> ComparisonSign
   if float_lt[F64](a: me, b: you)
     return ME_SMALL
   if float_gt[F64](a: me, b: you)
@@ -407,7 +407,7 @@ routine F64.pow_unchecked(exp: F64) -> F64
 ### NOTE: contrary to mathematical convention, `0 ** 0 == 1` (IEEE 754 `pow`).
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp` (always finite).
-routine F64.$pow!(exp: F64) -> F64
+routine F64.pow!(exp: F64) -> F64
   var r = me.pow_unchecked(exp)
   if r.is_finite()
     return r
@@ -519,7 +519,7 @@ common routine F64.signaling_nan() -> F64
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F64.$represent() -> Text
+routine F64.represent() -> Text
   if me.is_signaling()
     return "snan"
   var cstr_result = rf_format_F64(me)
@@ -527,8 +527,8 @@ routine F64.$represent() -> Text
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F64.$diagnose() -> Text
-  return "F64(" + me.$represent() + ")"
+routine F64.diagnose() -> Text
+  return "F64(" + me.represent() + ")"
 
 ### Parses a decimal float literal into an `F64`.
 ### :param from_text: The text to parse. Accepts standard decimal notation and
@@ -536,7 +536,7 @@ routine F64.$diagnose() -> Text
 ###   optional leading sign).
 ### :returns: The `F64` value parsed from the input.
 ### :throws: {InvalidValueError} if the text is not a valid float literal.
-routine F64.$create!(from_text: Text) -> F64
+routine F64.create!(from_text: Text) -> F64
   var len = from_text.count()
   if len == 0u64
     throw InvalidValueError(input: from_text, target: "F64")
@@ -599,7 +599,7 @@ routine F64.$create!(from_text: Text) -> F64
 
 ### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
 ### :returns: A `U64` hash of the 64-bit float encoding.
-routine F64.$fast_hash() -> U64
+routine F64.fast_hash() -> U64
   return __hash_leaf(v: reinterpret_bits[F64, U64](me))
 
 # ============================================================================
@@ -640,7 +640,7 @@ routine F64.to_bytes_be() -> Array[Byte, 8]
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
-routine F64.$hash(k0: U64, k1: U64) -> U64
+routine F64.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: reinterpret_bits[F64, U64](me), k0: k0, k1: k1)
 
 # ============================================================================

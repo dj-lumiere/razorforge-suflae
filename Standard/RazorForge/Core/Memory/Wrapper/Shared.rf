@@ -76,7 +76,7 @@ needs P in [MultiRead, ReadOnly]
 
 ### Opens shared (multi-reader) access for a *fallible*, non-blocking acquisition. Identical to
 ### `inspect()` except intended for `using ... fallback`: entering the scope tries the reader hold
-### once (via `$try_enter`) and, on contention, runs the `fallback` branch instead of blocking.
+### once (via `try_enter`) and, on contention, runs the `fallback` branch instead of blocking.
 ### :returns: A scoped `Inspecting[T, P]` read token.
 ### :note: Use as `using s.try_inspect() as v` followed by a `fallback` branch.
 routine Shared[T, P].try_inspect() -> Inspecting[T, P]
@@ -97,7 +97,7 @@ needs P in [Exclusive, MultiRead]
 
 ### Opens exclusive access for a *fallible*, non-blocking acquisition. Identical to `claim()` except
 ### intended for `using ... fallback`: entering the scope tries the exclusive hold once (via
-### `$try_enter`) and, on contention, runs the `fallback` branch instead of blocking.
+### `try_enter`) and, on contention, runs the `fallback` branch instead of blocking.
 ### :returns: A scoped `Claiming[T, P]` write token.
 ### :note: Use as `using s.try_claim() as c` followed by a `fallback` branch.
 routine Shared[T, P].try_claim() -> Claiming[T, P]
@@ -130,21 +130,21 @@ routine Shared[T, P].weak_count() -> U64
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Shared[T, P].$represent() -> Text
+routine Shared[T, P].represent() -> Text
   danger
     return me.type_name()
 
 ### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Shared[T, P].$diagnose() -> Text
+routine Shared[T, P].diagnose() -> Text
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
     var addr = ctrl.borrow_data().get_address()
-    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ")"
+    return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ")"
 
-dangerous routine Shared[T, P].$destroy()
+dangerous routine Shared[T, P].destroy()
   me.release()
   return

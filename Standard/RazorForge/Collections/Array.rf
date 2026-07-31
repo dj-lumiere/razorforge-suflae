@@ -22,9 +22,9 @@ import BuilderService
 ### **Complexity**
 ### | Operation | Time |
 ### |---|---|
-### | `$getitem!` / `$setitem!` | O(1) |
+### | `getitem!` / `setitem!` | O(1) |
 ### | `first!` / `last!` | O(1) |
-### | `$contains` | O(N) |
+### | `contains` | O(N) |
 ### | `index_of!` | O(N) |
 ### | Iteration | O(N) |
 ###
@@ -48,7 +48,7 @@ relates ArrayEmittable[T, N] as Iter
 ### :returns: The element stored at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @readonly
-routine Array[T, N].$getitem!(index: U64) -> T
+routine Array[T, N].getitem!(index: U64) -> T
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
   # Read in place through the storage pointer — no whole-array copy.
@@ -56,12 +56,12 @@ routine Array[T, N].$getitem!(index: U64) -> T
     return load_element_ref[Array[T, N], T](me.hijack(), index)
 
 ### Replaces the element at `index` with `value`, mutating this `Array` in place.
-### `me` is received by reference (struct-record `$setitem!`), so the single-element write through
+### `me` is received by reference (struct-record `setitem!`), so the single-element write through
 ### `me.hijack()` reaches the caller's storage directly — no whole-array copy.
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
-routine Array[T, N].$setitem!(index: U64, value: T)
+routine Array[T, N].setitem!(index: U64, value: T)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
   danger
@@ -69,13 +69,13 @@ routine Array[T, N].$setitem!(index: U64, value: T)
   return
 
 ### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
-### entity elements. Invoked through an owning entity's generated `$destroy` field-recursion when
+### entity elements. Invoked through an owning entity's generated `destroy` field-recursion when
 ### the array is an entity field — all `N` inline slots are live, so the full range is visited.
 ### (`Array` is a value record, so it has no separate allocation of its own to free.)
-dangerous routine Array[T, N].$destroy()
+dangerous routine Array[T, N].destroy()
   var i = 0u64
   while i < N
-    element_at[Array[T, N], T](me, i).$destroy()
+    element_at[Array[T, N], T](me, i).destroy()
     i = i + 1u64
   return
 
@@ -119,7 +119,7 @@ routine Array[T, N].last!() -> T
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` otherwise.
 @readonly
-routine Array[T, N].$contains(value: T) -> Bool
+routine Array[T, N].contains(value: T) -> Bool
 needs T obeys Equatable
   for i in 0u64 til N
     if me[i] == value
@@ -153,13 +153,13 @@ entity ArrayEmittable[T, N] obeys Emittable[T]
   index: U64
 
 @readonly
-routine Array[T, N].$iter() -> ArrayEmittable[T, N]
+routine Array[T, N].iter() -> ArrayEmittable[T, N]
   return ArrayEmittable[T, N](list: me, index: 0u64)
 
 ### Returns the next element from the iterator in ascending index order.
 ### :returns: The element at the current index.
 ### :absent: All `N` elements have been yielded.
-routine ArrayEmittable[T, N].$emit!() -> T
+routine ArrayEmittable[T, N].emit!() -> T
   if me.index >= U64(N)
     absent
   var value = me.list[me.index]
@@ -170,21 +170,21 @@ routine ArrayEmittable[T, N].$emit!() -> T
 # Display
 # ============================================================================
 
-routine Array[T, N].$represent() -> Text
+routine Array[T, N].represent() -> Text
   var result = "Array(["
   for i in 0u64 til N
     if i > 0u64
       result = result + ", "
-    result = result + me[i].$represent()
+    result = result + me[i].represent()
   result = result + "])"
   return result
 
-routine Array[T, N].$diagnose() -> Text
+routine Array[T, N].diagnose() -> Text
   var result = me.full_type_name() + "(["
   for i in 0u64 til N
     if i > 0u64
       result = result + ", "
-    result = result + me[i].$represent()
+    result = result + me[i].represent()
   result = result + "])"
   return result
 
@@ -192,10 +192,10 @@ routine Array[T, N].$diagnose() -> Text
 ### :param you: The other array to compare against.
 ### :returns: `true` if every corresponding pair of elements is equal.
 ### :note: Requires `T` to obey `Equatable`. Arrays of non-equatable element types
-###        (e.g. a `U` that is not equatable) do not get an `$eq`
+###        (e.g. a `U` that is not equatable) do not get an `eq`
 ###        operator — `==` on such arrays is a build error.
 @readonly
-routine Array[T, N].$eq(you: Array[T, N]) -> Bool
+routine Array[T, N].eq(you: Array[T, N]) -> Bool
 needs T obeys Equatable
   for i in 0u64 til N
     if me[i] != you[i]
@@ -203,16 +203,16 @@ needs T obeys Equatable
   return true
 
 ### Lexicographic comparison of two arrays of equal length.
-### Compares element by element from index 0 using `T.$cmp`; returns at the
+### Compares element by element from index 0 using `T.cmp`; returns at the
 ### first non-equal pair, or `SAME` when every pair is equal.
 ### :param you: The other array to compare against.
 ### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
 ### :note: Requires `T` to obey `Comparable`.
 @readonly
-routine Array[T, N].$cmp(you: Array[T, N]) -> ComparisonSign
+routine Array[T, N].cmp(you: Array[T, N]) -> ComparisonSign
 needs T obeys Comparable
   for i in 0u64 til N
-    var sign = me[i].$cmp(you[i])
+    var sign = me[i].cmp(you[i])
     if sign isnot SAME
       return sign
   return SAME

@@ -12,4 +12,4 @@ protocol UncheckedSubtractable
   ### :param you: The value to subtract.
   ### :returns: The resulting `Me` value.
   @readonly
-  dangerous routine Me.$sub_unchecked(you: Me) -> Me
+  dangerous routine Me.sub_unchecked(you: Me) -> Me

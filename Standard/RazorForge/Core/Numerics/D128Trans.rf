@@ -236,7 +236,7 @@ routine D128.cbrt() -> D128
 ### Raw me^you via the F256 core; may return ±inf or NaN; never crashes.
 ### :param you: The exponent.
 routine D128.pow_unchecked(you: D128) -> D128
-  return f256_to_d128(x: d128_to_f256(x: me).$pow(you: d128_to_f256(x: you)))
+  return f256_to_d128(x: d128_to_f256(x: me).pow(you: d128_to_f256(x: you)))
 
 ### sqrt(me² + you²) without intermediate overflow/underflow. Crashes: NumericDomainError on NaN,
 ### NumericOverflowError on ±inf.
@@ -622,7 +622,7 @@ routine D128.total_order(you: D128) -> Bool
   var pb = you.decode()
   if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
     return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
-  var c = me.$cmp(you: you)
+  var c = me.cmp(you: you)
   if c isnot SAME
     return c is ME_SMALL
   if pa.sign != pb.sign
@@ -638,7 +638,7 @@ routine D128.total_order_mag(you: D128) -> Bool
   return me.abs().total_order(you: you.abs())
 
 ### Negation -me (flips the sign bit; preserves specials and the cohort). Never crashes.
-routine D128.$neg() -> D128
+routine D128.neg() -> D128
   var p = me.decode()
   return d128_of_parts(p: D128Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
@@ -771,7 +771,7 @@ routine D128.minimum(you: D128) -> D128
     return me
   if you.is_nan()
     return you
-  var c = me.$cmp(you: you)
+  var c = me.cmp(you: you)
   if c is ME_SMALL
     return me
   if c is ME_LARGE
@@ -788,7 +788,7 @@ routine D128.maximum(you: D128) -> D128
     return me
   if you.is_nan()
     return you
-  var c = me.$cmp(you: you)
+  var c = me.cmp(you: you)
   if c is ME_LARGE
     return me
   if c is ME_SMALL
@@ -873,8 +873,8 @@ routine D128.remainder(other: D128) -> D128
     return D128.quiet_nan()
   if other.is_infinite()
     return me
-  var n = me.$truediv_unchecked(you: other).rint()
-  return me.$sub_unchecked(you: other.$mul_unchecked(you: n))
+  var n = me.truediv_unchecked(you: other).rint()
+  return me.sub_unchecked(you: other.mul_unchecked(you: n))
 
 ### IEEE 754 normalize (the `reduce` operation): the value with trailing zeros stripped to the
 ### simplest member of its cohort (e.g. `3.00` -> `3`, `1.50` -> `1.5`, `100` -> `1E+2`,

@@ -8,4 +8,4 @@ protocol InPlaceExponentiable
   ### :param you: The exponent value.
   ### :note: The right-hand operand should remain unchanged.
   @writable
-  routine Me.$ipow(you: Me)
+  routine Me.ipow(you: Me)

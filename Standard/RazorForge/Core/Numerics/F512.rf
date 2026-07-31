@@ -121,7 +121,7 @@ routine F512.is_subnormal() -> Bool
 # ============================================================================
 
 ### Returns the arithmetic negation (sign bit flipped).
-routine F512.$neg() -> F512
+routine F512.neg() -> F512
   return F512.from_bits(bits: bit_xor[U512](a: me.to_bits(), b: f512a_sign_mask()))
 
 ### Returns the absolute value (sign bit cleared).
@@ -139,7 +139,7 @@ routine F512.copysign(sign: F512) -> F512
 # ============================================================================
 
 ### Returns whether two values compare equal (NaN unequal; +0 == -0).
-routine F512.$eq(you: F512) -> Bool
+routine F512.eq(you: F512) -> Bool
   if me.is_nan() or you.is_nan()
     return false
   if me.is_zero() and you.is_zero()
@@ -147,7 +147,7 @@ routine F512.$eq(you: F512) -> Bool
   return int_eq[U512](a: me.to_bits(), b: you.to_bits())
 
 ### Compares this value with `you` under IEEE ordered semantics.
-routine F512.$cmp(you: F512) -> ComparisonSign
+routine F512.cmp(you: F512) -> ComparisonSign
   if me.is_nan() or you.is_nan()
     return SAME
   if me.is_zero() and you.is_zero()
@@ -241,19 +241,19 @@ routine UnpackedFloat[M, L, W].to_f512a() -> F512
 # ============================================================================
 
 ### Returns `me + you`.
-routine F512.$add(you: F512) -> F512
+routine F512.add(you: F512) -> F512
   return me.to_uf().add(you: you.to_uf()).to_f512a()
 
 ### Returns `me - you`.
-routine F512.$sub(you: F512) -> F512
+routine F512.sub(you: F512) -> F512
   return me.to_uf().sub(you: you.to_uf()).to_f512a()
 
 ### Returns `me * you`.
-routine F512.$mul(you: F512) -> F512
+routine F512.mul(you: F512) -> F512
   return me.to_uf().mul(you: you.to_uf()).to_f512a()
 
 ### Returns `me / you`.
-routine F512.$truediv(you: F512) -> F512
+routine F512.truediv(you: F512) -> F512
   return me.to_uf().div(you: you.to_uf()).to_f512a()
 
 # ============================================================================
@@ -355,7 +355,7 @@ routine F512.exp10() -> F512
   return me.to_uf().mul(you: UnpackedFloat[U512, U1024, 512].ln10()).exp(n: 20_s64).to_f512a()
 
 ### me raised to the power `you`.
-routine F512.$pow(you: F512) -> F512
+routine F512.pow(you: F512) -> F512
   return me.abs().to_uf().log(n: 23_s64, m: 0_s64, t: 0_s64).mul(you: you.to_uf()).exp(n: 20_s64).to_f512a()
 
 ### Cube root.
@@ -433,13 +433,13 @@ routine F512.to_f256a() -> F256
   return me.to_uf().to_f256a()
 
 ### Returns the decimal text (narrowed to binary256 precision for display).
-routine F512.$represent() -> Text
+routine F512.represent() -> Text
   if me.is_nan()
     return "NaN"
   if me.is_infinite()
     return if me.is_negative() then "-inf" else "inf"
-  return me.to_f256a().$represent()
+  return me.to_f256a().represent()
 
 ### Returns a diagnostic representation tagged with the type name.
-routine F512.$diagnose() -> Text
-  return "F512(" + me.$represent() + ")"
+routine F512.diagnose() -> Text
+  return "F512(" + me.represent() + ")"

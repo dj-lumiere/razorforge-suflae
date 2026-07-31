@@ -11,4 +11,4 @@ protocol Container[T]
   ### :param value: The value to test for membership.
   ### :returns: `true` if the given value is present in this container.
   @readonly
-  routine Me.$contains(value: T) -> Bool
+  routine Me.contains(value: T) -> Bool

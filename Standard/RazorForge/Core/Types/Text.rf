@@ -13,7 +13,7 @@ import BuilderService
 ### atomic-refcounted handle to an immutable character buffer. Copying a
 ### `Text` bumps the underlying refcount via SeqCst atomic; the last drop
 ### frees the buffer + controller. When `ctrl` is null (`hijacked_none[...]()`),
-### the value represents an empty or static-literal string and `$store`/`$destroy`
+### the value represents an empty or static-literal string and `store`/`destroy`
 ### are no-ops.
 record Text obeys Copyable, Addable, Ordered, FastHashable, Hashable, TextRepeatable, Iterable[Character]
   ### Stores the character buffer.
@@ -29,7 +29,7 @@ record Text obeys Copyable, Addable, Ordered, FastHashable, Hashable, TextRepeat
 ### no atomic op.
 ### :returns: The resulting `Text` value.
 @[readonly, inline]
-routine Text.$store() -> Text
+routine Text.store() -> Text
   danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()
@@ -37,7 +37,7 @@ routine Text.$store() -> Text
 
 ### Releases this value's reference. Frees the buffer + controller when this
 ### was the last live ref. No-op when `ctrl` is null (empty / static literal).
-dangerous routine Text.$destroy()
+dangerous routine Text.destroy()
   if me.ctrl.is_none()
     return
   var prev = me.ctrl.as_entity().decrease_strong_count()
@@ -51,7 +51,7 @@ dangerous routine Text.$destroy()
 ### Creates an empty text value.
 ### The returned value contains no characters and owns no backing buffer.
 ### :returns: The resulting `Text` value.
-routine Text.$create() -> Text
+routine Text.create() -> Text
   return Text(
     data: hijacked_none[Character](),
     count: 0u64,
@@ -62,7 +62,7 @@ routine Text.$create() -> Text
 ### The input characters are copied into a newly allocated immutable buffer.
 ### :param from_list: The characters to copy into the new text value.
 ### :returns: The resulting `Text` value.
-routine Text.$create(from_list: List[Character]) -> Text
+routine Text.create(from_list: List[Character]) -> Text
   var n = from_list.count()
   if n == 0u64
     return Text()
@@ -84,7 +84,7 @@ routine Text.$create(from_list: List[Character]) -> Text
 ### This is the most direct way to build one-character text values.
 ### :param from_character: The character to store.
 ### :returns: The resulting `Text` value.
-routine Text.$create(from_character: Character) -> Text
+routine Text.create(from_character: Character) -> Text
   danger
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size()))
     buf.poke(value: from_character)
@@ -98,7 +98,7 @@ routine Text.$create(from_character: Character) -> Text
 ### Invalid byte sequences are replaced with the Unicode replacement character.
 ### :param from: The source C string.
 ### :returns: The resulting `Text` value.
-routine Text.$create(from: CStr) -> Text
+routine Text.create(from: CStr) -> Text
   if from.is_null()
     return Text()
   danger
@@ -179,7 +179,7 @@ routine Text.is_empty() -> Bool
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Character` value.
 @readonly
-routine Text.$getitem!(index: U64) -> Character
+routine Text.getitem!(index: U64) -> Character
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   danger
@@ -219,7 +219,7 @@ routine Text.concat(other: Text) -> Text
 ### :param other: The text to append.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$add(other: Text) -> Text
+routine Text.add(other: Text) -> Text
   return me.concat(other)
 
 ### Returns this text repeated `count` times.
@@ -227,7 +227,7 @@ routine Text.$add(other: Text) -> Text
 ### :param count: The number of repetitions to produce.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$mul[I obeys Integral](count: I) -> Text
+routine Text.mul[I obeys Integral](count: I) -> Text
   var times = U64(count)
   if times == 0u64 or me.count == 0u64
     return Text()
@@ -252,7 +252,7 @@ routine Text.$mul[I obeys Integral](count: I) -> Text
 ### :param other: The other text to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Text.$eq(other: Text) -> Bool
+routine Text.eq(other: Text) -> Bool
   if me.count != other.count()
     return false
   var i: U64 = 0u64
@@ -271,7 +271,7 @@ routine Text.$eq(other: Text) -> Bool
 ### :param other: The other text to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Text.$cmp(other: Text) -> ComparisonSign
+routine Text.cmp(other: Text) -> ComparisonSign
   var other_count = other.count()
   var min_len = me.count
   if other_count < min_len
@@ -291,7 +291,7 @@ routine Text.$cmp(other: Text) -> ComparisonSign
 ### Hashing combines character code points using the xxHash64 round function.
 ### :returns: The resulting `U64` hash value.
 @readonly
-routine Text.$fast_hash() -> U64
+routine Text.fast_hash() -> U64
   var h = __hash_leaf(v: me.count)
   for i in 0u64 til me.count
     h = __hash_round(acc: h, h: __hash_leaf(v: U64(me[i].codepoint())))
@@ -304,7 +304,7 @@ routine Text.$fast_hash() -> U64
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` keyed hash.
 @readonly
-routine Text.$hash(k0: U64, k1: U64) -> U64
+routine Text.hash(k0: U64, k1: U64) -> U64
   var h = __hash_leaf(v: me.count)
   for i in 0u64 til me.count
     h = __hash_round(acc: h, h: __secure_hash_u64(v: U64(me[i].codepoint()), k0: k0, k1: k1))
@@ -317,7 +317,7 @@ routine Text.$hash(k0: U64, k1: U64) -> U64
 ### :param character: The character to test.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Text.$contains(character: Character) -> Bool
+routine Text.contains(character: Character) -> Bool
   for i in 0u64 til me.count
     if me[i] == character
       return true
@@ -329,7 +329,7 @@ routine Text.$contains(character: Character) -> Bool
 ### :param other: The substring to search for.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Text.$contains(other: Text) -> Bool
+routine Text.contains(other: Text) -> Bool
   if other.is_empty()
     return true
   var other_count = other.count()
@@ -576,7 +576,7 @@ routine Text.remove_suffix(suffix: Text) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.repeat(times: U64) -> Text
-  return me.$mul[U64](count: times)
+  return me.mul[U64](count: times)
 
 ### Returns a copy with the value order reversed.
 ### Characters are reversed by position; no grapheme-aware processing is applied.
@@ -736,14 +736,14 @@ routine Text.words() -> List[Text]
 ### For `Text`, the display form is the value itself.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$represent() -> Text
+routine Text.represent() -> Text
   return me
 
 ### Returns the diagnostic representation of this text.
 ### The result includes the type name and character count for debugging.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$diagnose() -> Text
+routine Text.diagnose() -> Text
   return f"Text(count: {me.count}, \"{me}\")"
 
 ### Represents the iterator used to traverse a `Text` value.
@@ -759,14 +759,14 @@ entity TextEmittable
 ### The iterator starts at index `0`.
 ### :returns: The resulting `TextEmittable` value.
 @readonly
-routine Text.$iter() -> TextEmittable
+routine Text.iter() -> TextEmittable
   return TextEmittable(text: me, index: 0u64)
 
 ### Returns the next character from this iterator.
 ### Each successful call advances the iterator by one character.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
-routine TextEmittable.$emit!() -> Character
+routine TextEmittable.emit!() -> Character
   if me.index >= me.text.count
     absent
   var value = me.text[me.index]

@@ -7,10 +7,10 @@ protocol InPlaceFloorDivisible
   ### Applies floor division by `you` in place.
   ### :param you: The divisor.
   @writable
-  routine Me.$ifloordiv(you: Me)
+  routine Me.ifloordiv(you: Me)
 
   ### Applies modulo by `you` in place.
   ### This replaces the current value with the remainder associated with `you`.
   ### :param you: The divisor.
   @writable
-  routine Me.$imod(you: Me)
+  routine Me.imod(you: Me)
