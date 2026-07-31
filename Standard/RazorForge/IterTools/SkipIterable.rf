@@ -35,9 +35,9 @@ needs SE obeys Emittable[T]
 routine SkipEmittable[T, SE].emit!() -> T
   danger
     while me.remaining > 0u64
-      me.source.as_entity().emit!()
+      me.source.as_entity().emit()
       me.remaining = me.remaining - 1u64
-    return me.source.as_entity().emit!()
+    return me.source.as_entity().emit()
 
 ### Returns a lazy adapter that skips the first `count` values.
 ### :param count: The number of leading values to discard.

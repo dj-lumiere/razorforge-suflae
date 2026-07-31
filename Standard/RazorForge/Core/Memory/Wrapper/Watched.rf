@@ -4,7 +4,7 @@ import BuilderService
 
 ### Multi-threaded weak reference. Thin pointer to the same {ShareController[T, P]} as {Shared[T, P]}.
 ### The atomic-refcount twin of {Tracked[T]} — equivalent to `Weak[T]` in Rust. Does not keep the
-### entity alive. Use {recover!()} to attempt an upgrade to a strong {Shared[T, P]}.
+### entity alive. Use {recover()} to attempt an upgrade to a strong {Shared[T, P]}.
 ### :typeparam T: The exclusively owned entity type.
 ### :typeparam P: The access-discipline lock policy (carried so the upgraded `Shared` keeps it).
 @llvm("ptr")

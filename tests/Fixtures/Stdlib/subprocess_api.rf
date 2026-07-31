@@ -30,7 +30,7 @@ routine start()
   jobs.add_last(value: sh(cmd: "exit 5"))
   jobs.add_last(value: sh(cmd: "exit 0"))
   danger
-    var rs = jobs.gather!()
+    var rs = jobs.gather()
     show(f"gathered => {rs[0].exit_code} {rs[1].exit_code} {rs[2].exit_code}")
     show(f"ok => {rs[0].succeeded()} {rs[1].succeeded()} {rs[2].succeeded()}")
   return

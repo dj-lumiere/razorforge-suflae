@@ -175,7 +175,7 @@ routine F64.create(from: D128) -> F64
 # `@crash_only` makes each crash unconditional, so the wired operators that call them stay
 # non-failable — a non-finite result is a bug surfaced loudly at its source, not a recoverable
 # error.
-# Opt out with the `*_unchecked` operators (raw IEEE 754 propagation) or `.finite!()`
+# Opt out with the `*_unchecked` operators (raw IEEE 754 propagation) or `.finite()`
 # (recoverable).
 
 ### Classifies a non-finite result: NaN -> domain crash, ±infinity -> overflow crash.
@@ -218,7 +218,7 @@ routine F64.mul!(you: F64) -> F64
 
 ### Returns `me / you`. Checked: `x / 0` crashes with DivisionByZeroError, `0 / 0` with a domain
 ### error, and an overflow to ±infinity with an overflow error. Use `truediv_unchecked` for raw
-### IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN), or `(a / b).finite!()` for recoverable handling.
+### IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN), or `(a / b).finite()` for recoverable handling.
 ### :param you: The divisor.
 ### :returns: The double-precision quotient (always finite).
 routine F64.truediv!(you: F64) -> F64
@@ -233,7 +233,7 @@ routine F64.truediv!(you: F64) -> F64
 
 ### Returns `me` if it is finite; throws (RECOVERABLE) if it is ±infinity or NaN. The bridge from
 ### raw IEEE propagation back to a handled result: run the unchecked operators, then recover, e.g.
-### `var x = when (a *~ b +~ c).finite!() { is err: fallback else v: v }`. (The checked `+ - * /`
+### `var x = when (a *~ b +~ c).finite() { is err: fallback else v: v }`. (The checked `+ - * /`
 ### crash instead, so a checked `(a * b)` would already have crashed before reaching `finite!`.)
 ### :returns: `me`, when finite.
 ### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.

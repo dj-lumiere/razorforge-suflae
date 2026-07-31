@@ -428,7 +428,7 @@ routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
 ### :throws: {IntegerOverflowError} if the result is outside the S128 range.
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.pow!(exp: S128) -> S128
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -698,7 +698,7 @@ routine S128.represent() -> Text
     return "0"
   if me > 0s128
     return U128(me).represent()
-  # Use reinterpret_bits (not U128(me)) — U128.create!(S128) throws on negative inputs,
+  # Use reinterpret_bits (not U128(me)) — U128.create(S128) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u128 -% bits`
   # yields |me| (works correctly even for S128.MIN, whose absolute value overflows S128).
   return "-" + (0u128 -% reinterpret_bits[S128, U128](me)).represent()

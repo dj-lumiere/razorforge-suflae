@@ -174,7 +174,7 @@ routine scan_decimal_parts256!(from_text: Text) -> DecimalParts
 ### Parses a decimal literal into a `Decimal` (scans the full 70-digit coefficient).
 ### :throws: {InvalidValueError} if the text is not a valid finite decimal literal.
 routine Decimal.create!(from_text: Text) -> Decimal
-  var p = scan_decimal_parts256!(from_text: from_text)
+  var p = scan_decimal_parts256(from_text: from_text)
   return Decimal.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
 
 # ============================================================================
@@ -759,7 +759,7 @@ routine decimalfixed_neg(a: Decimal) -> Decimal
 ### `Decimal` range (e.g. MAX - (-MAX)), so the throw propagates through `add!` (the `-` operator
 ### crashes on it in non-failable context; `try_sub!` recovers).
 routine Decimal.sub!(you: Decimal) -> Decimal
-  return me.add!(you: decimalfixed_neg(a: you))
+  return me.add(you: decimalfixed_neg(a: you))
 
 ### Returns me / you (scale numerator ~74 digits past, divide, sticky, round).
 routine Decimal.truediv!(you: Decimal) -> Decimal

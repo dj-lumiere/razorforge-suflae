@@ -54,8 +54,8 @@ routine run_demo!() -> S64
     lst.add_last(value: f)
     dq.add_last(value: f)
     f = f + 1s64
-  var lv = lst.pick!(rng: r.modify())
-  var dv = dq.pick!(rng: r.modify())
+  var lv = lst.pick(rng: r.modify())
+  var dv = dq.pick(rng: r.modify())
   show(f"List pick in [0,6): {lv >= 0s64 and lv < 6s64}")
   show(f"Deque pick in [0,6): {dv >= 0s64 and dv < 6s64}")
 

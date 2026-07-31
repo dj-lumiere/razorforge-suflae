@@ -428,7 +428,7 @@ routine SortedDict[K, V].getitem!(key: Referring[K]) -> V
     throw KeyNotFoundError(key: key.represent())
   danger
     var root_ref = me.root!!.as_entity()
-    return me.get_from_node!(node: root_ref, key: key)
+    return me.get_from_node(node: root_ref, key: key)
 
 ### Descends `node` to retrieve the value for `key`, throwing if not found.
 ### :param node: The subtree root to search.
@@ -443,7 +443,7 @@ routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[K, V]], ke
       return node.value_get(i)
     if node.is_leaf
       throw KeyNotFoundError(key: key.represent())
-    return me.get_from_node!(node: node.children_get(i).as_entity(), key: key)
+    return me.get_from_node(node: node.children_get(i).as_entity(), key: key)
 
 ### Updates the value associated with `key`.
 ### :param key: The key to update.
@@ -792,7 +792,7 @@ routine SortedDict[K, V].get_by_rank!(i: U64) -> DictEntry[K, V]
 ### :returns: The {DictEntry[K, V]} at the resolved sorted position.
 @readonly
 routine SortedDict[K, V].get_by_rank!(i: BackIndex) -> DictEntry[K, V]
-  var rank = i.resolve!(me.count)
+  var rank = i.resolve(me.count)
   if rank >= me.count
     throw IndexOutOfBoundsError(index: rank, count: me.count)
   danger
@@ -881,19 +881,19 @@ routine SortedDict[K, V].max!() -> DictEntry[K, V]
     var last = node.keys_count() -% 1u64
     return node.entry_get(last)
 
-### Returns the entry with the smallest key. Alias for {SortedDict[K, V].min!()}.
+### Returns the entry with the smallest key. Alias for {SortedDict[K, V].min()}.
 ### :returns: The first (minimum-key) entry.
 ### :absent: The dictionary is empty.
 @readonly
 routine SortedDict[K, V].first!() -> DictEntry[K, V]
-  return me.min!()
+  return me.min()
 
-### Returns the entry with the largest key. Alias for {SortedDict[K, V].max!()}.
+### Returns the entry with the largest key. Alias for {SortedDict[K, V].max()}.
 ### :returns: The last (maximum-key) entry.
 ### :absent: The dictionary is empty.
 @readonly
 routine SortedDict[K, V].last!() -> DictEntry[K, V]
-  return me.max!()
+  return me.max()
 
 # ============================================================================
 # Keys / Values

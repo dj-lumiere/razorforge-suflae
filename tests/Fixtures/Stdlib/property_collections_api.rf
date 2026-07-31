@@ -16,7 +16,7 @@ routine start()
   # List: add+remove inverse
   var l: List[S64] = [1, 2, 3]
   l.add_last(value: 99)
-  discard l.remove_last!()
+  discard l.remove_last()
   check(name: "list add_last + remove_last preserves size",
         ok: l.count() == 3_u64)
   check(name: "list add_last + remove_last preserves last",

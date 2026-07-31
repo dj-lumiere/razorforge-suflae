@@ -3,7 +3,7 @@ module Core
 import BuilderService
 
 ### Single-threaded weak reference. Thin pointer to the same {RetainController[T]} as {Retained[T]}.
-### Does not keep the entity alive. Use {recover!()} to attempt upgrade to a strong reference.
+### Does not keep the entity alive. Use {recover()} to attempt upgrade to a strong reference.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
 record Tracked[T]

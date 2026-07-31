@@ -18,7 +18,7 @@ routine start()
   while i <= 100_s64
     kids.add_last(value: square(n: i))
     i = i + 1_s64
-  var results = kids.gather!()
+  var results = kids.gather()
   var sum = 0_s64
   var k = 0_s64
   while k < 100_s64

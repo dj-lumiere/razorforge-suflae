@@ -29,8 +29,8 @@ routine start()
   show(f"distinct*10: {dupes.distinct().select(transform: x => x * 10).List()}")
 
   # chain -> terminal aggregations
-  show(f"sum even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).sum!()}")
-  show(f"max even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).max!()}")
+  show(f"sum even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).sum()}")
+  show(f"max even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).max()}")
   show(f"count even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).get_count()}")
 
   # chain -> boolean terminals

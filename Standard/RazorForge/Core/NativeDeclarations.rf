@@ -198,7 +198,7 @@ dangerous external("C") routine rf_sched_run(sched: CPtr)
 ### `suspended routine` call site so the coroutine is ready before any retrieve! drives the loop.
 dangerous external("C") routine rf_sched_spawn_default(coro: CPtr)
 ### Drives this thread's implicit scheduler until `coro` finishes, leaving siblings parked. The
-### engine behind Agent[T].retrieve!() (run-until-this-handle: siblings progress concurrently).
+### engine behind Agent[T].retrieve() (run-until-this-handle: siblings progress concurrently).
 dangerous external("C") routine rf_sched_run_until_default(coro: CPtr)
 ### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
 ### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
@@ -289,7 +289,7 @@ dangerous external("C") routine rf_signal_cast_all(sig: CPtr)
 # ============================================================================
 # race! competitor set (v0.2.0). Built one entry per Agent in List order, then
 # driven on this thread's implicit scheduler until the first competitor finishes.
-# Underlies the stdlib `race![T](of: List[Agent[T]])`.
+# Underlies the stdlib `race[T](of: List[Agent[T]])`.
 # ============================================================================
 
 ### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as a `CPtr`.

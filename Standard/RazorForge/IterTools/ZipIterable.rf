@@ -41,8 +41,8 @@ needs SE2 obeys Emittable[U]
 ### :returns: The resulting `Tuple[T, U]` value.
 routine ZipEmittable[T, U, SE1, SE2].emit!() -> Tuple[T, U]
   danger
-    var a = me.first.as_entity().emit!()
-    var b = me.second.as_entity().emit!()
+    var a = me.first.as_entity().emit()
+    var b = me.second.as_entity().emit()
     return (a, b)
 
 ### Returns a lazy adapter that pairs each element of this iterable with an element from `other`.

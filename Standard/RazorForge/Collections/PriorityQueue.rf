@@ -351,11 +351,11 @@ needs TPriority obeys Copyable
   return
 
 ### Removes all entries and returns their elements in dequeue order (smallest priority first).
-### :returns: A `List[TElement]` whose order matches repeated `remove!()` calls.
+### :returns: A `List[TElement]` whose order matches repeated `remove()` calls.
 routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
   var result = List[TElement](me.count())
   while not me.is_empty()
-    result.add_last(me.remove!())
+    result.add_last(me.remove())
   return steal result
 
 # ============================================================================

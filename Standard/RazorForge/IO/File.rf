@@ -157,7 +157,7 @@ routine FileHandle.is_eof() -> Bool
   return rf_file_is_eof(me.fd)
 
 # ============================================================================
-# Resource management — enables `using open!(path) as f`
+# Resource management — enables `using open(path) as f`
 # ============================================================================
 
 ### Enters a `using` scope with this file handle, passing it through as the bound value.
@@ -186,7 +186,7 @@ dangerous routine FileHandle.destroy()
 ### :param path: The path to read.
 ### :returns: The resulting `Text` value.
 routine read_all!(path: Text) -> Text
-  var file = open!(path, mode: FileMode.READ)
+  var file = open(path, mode: FileMode.READ)
   var content = file.read_all()
   file.close()
   return content
@@ -196,7 +196,7 @@ routine read_all!(path: Text) -> Text
 ### :param path: The path to write.
 ### :param content: The text to write.
 routine write_all!(path: Text, content: Text)
-  var file = open!(path, mode: FileMode.WRITE)
+  var file = open(path, mode: FileMode.WRITE)
   file.write(content, end: "")
   file.close()
   return
@@ -206,7 +206,7 @@ routine write_all!(path: Text, content: Text)
 ### :param path: The path to append to.
 ### :param content: The text to append.
 routine append_all!(path: Text, content: Text)
-  var file = open!(path, mode: FileMode.APPEND)
+  var file = open(path, mode: FileMode.APPEND)
   file.write(content, end: "")
   file.close()
   return

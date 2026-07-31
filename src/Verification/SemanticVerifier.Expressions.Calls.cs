@@ -87,6 +87,22 @@ public sealed partial class SemanticVerifier
                         isFailable: isFailableCall);
                 }
 
+                // Call-site `!` is OPTIONAL: a bare `foo()` call may bind a failable routine `foo!`
+                // when only the failable form exists. The name is BARE and failability is a
+                // structural flag, not part of the name — so a non-`!` call to a `!`-only routine
+                // resolves to the failable form and is crash-on-failure (the failability tracking
+                // below keys off routine.IsFailable, and the UnhandledCrashableCall warning is
+                // suppressed). Retry with isFailable: true when the bare lookup missed.
+                if (routine == null && !isFailableCall)
+                {
+                    routine = _registry.LookupRoutine(fullName: callName, isFailable: true);
+                    if (routine == null && _currentModuleName != null && !callName.Contains(value: '.'))
+                    {
+                        routine = _registry.LookupRoutine(
+                            fullName: $"{_currentModuleName}.{callName}", isFailable: true);
+                    }
+                }
+
                 // Explicit type arguments on a generic routine call — monomorphize immediately so
                 // that ResolvedType is concrete (e.g., signed_div[S32](...) -> ReturnType = S32, not T).
                 if (routine is { IsGenericDefinition: true } &&
@@ -831,6 +847,18 @@ public sealed partial class SemanticVerifier
                         methodName: callLookupName,
                         isFailable: isFailableMethodCall);
 
+                // Call-site `!` is OPTIONAL: a bare (`x.retrieve()`) call may bind a failable
+                // routine when only the failable form exists. The name is BARE and failability is
+                // a structural flag, not part of the name — so a non-`!` call to a `!`-only routine
+                // resolves to the failable form and is crash-on-failure (the UnhandledCrashableCall
+                // warning is suppressed). Retry with isFailable: true when the bare lookup missed.
+                if (method == null && !isFailableMethodCall)
+                {
+                    method = _registry.LookupMethod(type: dispatchType,
+                        methodName: callLookupName,
+                        isFailable: true);
+                }
+
                 // Phase D: Transparent wrapper forwarding — if the method isn't found directly on
                 // the wrapper, synthesize a forwarder that delegates to the inner type's method
                 // via `Hijacked[T](me).extract().method(...)`.
@@ -848,6 +876,12 @@ public sealed partial class SemanticVerifier
                     method = _registry.LookupMethod(type: dispatchType,
                         methodName: callLookupName,
                         isFailable: isFailableMethodCall);
+                    if (method == null && !isFailableMethodCall)
+                    {
+                        method = _registry.LookupMethod(type: dispatchType,
+                            methodName: callLookupName,
+                            isFailable: true);
+                    }
                 }
 
                 // Generic-parameter receiver: resolve via Obeys constraints from the current
@@ -860,6 +894,13 @@ public sealed partial class SemanticVerifier
                         methodName: callLookupName,
                         isFailable: isFailableMethodCall,
                         constraints: constraints);
+                    if (method == null && !isFailableMethodCall)
+                    {
+                        method = _registry.LookupMethodViaConstraints(param: genParam,
+                            methodName: callLookupName,
+                            isFailable: true,
+                            constraints: constraints);
+                    }
                 }
 
                 // Named-argument overload disambiguation. LookupMethod returns one overload by name;

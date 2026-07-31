@@ -28,7 +28,7 @@ routine Exclusive.acquire()
       me.owner.store(desired: tid)
       break
     if me.owner.load() == tid
-      crash_reentrant_lock!()
+      crash_reentrant_lock()
   return
 
 ### Releases the lock. Clears the owner before the flag so a waiter that wins the next CAS never

@@ -34,7 +34,7 @@ needs SE obeys Emittable[T]
 ### :returns: The resulting `Tuple[U64, T]` value.
 routine EnumerateEmittable[T, SE].emit!() -> Tuple[U64, T]
   danger
-    var item = me.source.as_entity().emit!()
+    var item = me.source.as_entity().emit()
     var _result = (me.index, item)
     me.index = me.index + 1u64
     return _result

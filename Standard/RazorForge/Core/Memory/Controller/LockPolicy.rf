@@ -3,7 +3,7 @@ module Core
 ### Marker protocol for the access-synchronization discipline of a {Shared[T, P]}.
 ###
 ### A policy carries the lock STATE (if any) and provides the acquire/release primitives that
-### `Shared.inspect()` / `Shared.claim!()` drive. The discipline ALSO determines, at compile time,
+### `Shared.inspect()` / `Shared.claim()` drive. The discipline ALSO determines, at compile time,
 ### which access tokens are legal — `ReadOnly` grants only `Inspecting`, `Exclusive` only `Claiming`,
 ### `MultiRead` both — enforced statically by the readers-XOR-writer borrow checker.
 ###

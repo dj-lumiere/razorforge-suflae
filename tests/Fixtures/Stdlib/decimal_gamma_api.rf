@@ -8,8 +8,8 @@ import Numerics.[Decimal]
 # "member 'sign' not found"). validate-stdlib does NOT catch that class of error, so a fixture must.
 routine start()
   danger
-    show(f"tgamma(5): {Decimal(from: 5_s64).tgamma!()}")
-    show(f"tgamma(1): {Decimal(from: 1_s64).tgamma!()}")
-    show(f"lgamma(10): {Decimal(from: 10_s64).lgamma!()}")
+    show(f"tgamma(5): {Decimal(from: 5_s64).tgamma()}")
+    show(f"tgamma(1): {Decimal(from: 1_s64).tgamma()}")
+    show(f"lgamma(10): {Decimal(from: 10_s64).lgamma()}")
   show("DONE")
   return

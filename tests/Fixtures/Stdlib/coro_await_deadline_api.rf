@@ -1,6 +1,6 @@
 module Tests/Stdlib/CoroAwaitDeadlineApi
 
-# v0.2.0 non-blocking timed await. Inside a scheduler-driven coroutine, `task.waitfor(d).retrieve!()`
+# v0.2.0 non-blocking timed await. Inside a scheduler-driven coroutine, `task.waitfor(d).retrieve()`
 # races the worker thread against the deadline WITHOUT blocking: the coroutine parks on a deadline
 # timer that is also wakeable by the worker's completion, and resumes on whichever wins. If the task
 # finishes first the value comes back; if the deadline wins it throws TaskTimeoutError (here caught
@@ -17,7 +17,7 @@ threaded routine slow(x: S64) -> S64
 
 suspended routine in_time() -> S64
   # Worker returns immediately, well within the 5s deadline -> parks briefly, then the value.
-  return quick(x: 41).waitfor(5s).retrieve!()
+  return quick(x: 41).waitfor(5s).retrieve()
 
 suspended routine times_out() -> S64
   # Worker takes 150ms but the deadline is 20ms -> the timer wins; try_retrieve yields None.
@@ -27,6 +27,6 @@ suspended routine times_out() -> S64
     is S64 v => return v        # would be 42 if it had not timed out
 
 routine start()
-  show(f"in-time => {in_time().retrieve!()}")
-  show(f"timed-out => {times_out().retrieve!()}")
+  show(f"in-time => {in_time().retrieve()}")
+  show(f"timed-out => {times_out().retrieve()}")
   return

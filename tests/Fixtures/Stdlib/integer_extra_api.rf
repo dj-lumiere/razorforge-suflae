@@ -19,8 +19,8 @@ routine start()
   show(f"max(1234,56): {a.max(other: b)}")
   show(f"clamp(1234,0,100): {a.clamp(low: Integer(from: 0_s64), high: Integer(from: 100_s64))}")
   danger
-    var qr = a.divmod!(other: b)
+    var qr = a.divmod(other: b)
     show(f"divmod(1234,56): q={qr.item0} r={qr.item1}")
-    show(f"modpow(7,13,100): {Integer(from: 7_s64).modpow!(exp: Integer(from: 13_s64), modulus: Integer(from: 100_s64))}")
+    show(f"modpow(7,13,100): {Integer(from: 7_s64).modpow(exp: Integer(from: 13_s64), modulus: Integer(from: 100_s64))}")
   show("DONE")
   return

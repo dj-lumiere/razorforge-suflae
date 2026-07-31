@@ -26,7 +26,7 @@ suspended routine burst() -> S64
   while i < 48_s64
     kids.add_last(value: tag())
     i = i + 1_s64
-  var moved = kids.gather!()
+  var moved = kids.gather()
   var migrated = 0_s64
   var j = 0_s64
   while j < 48_s64
@@ -37,7 +37,7 @@ suspended routine burst() -> S64
 routine start()
   var workers = rf_sched_worker_count()
   var b = burst()
-  var migrated = b.retrieve!()
+  var migrated = b.retrieve()
   var ok = workers <= 1_u64 or migrated > 0_s64
   if ok
     show("worksteal distribution: ok")

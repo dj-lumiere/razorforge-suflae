@@ -10,9 +10,9 @@ import IO/Console
 routine start()
   var (feeder, hop) = make_channel[S64](capacity: 4)
   danger
-    feeder.send!(item: 10)
-    feeder.send!(item: 20)
-    feeder.send!(item: 30)
+    feeder.send(item: 10)
+    feeder.send(item: 20)
+    feeder.send(item: 30)
   feeder.close()
 
   var total = 0_s64

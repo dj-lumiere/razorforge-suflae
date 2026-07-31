@@ -167,7 +167,7 @@ routine List[T].remove_last!() -> T
 ### :param value: The value to insert.
 @migratable
 routine List[T].add_first(value: T)
-  me.add_at!(index: 0u64, value: value)
+  me.add_at(index: 0u64, value: value)
   return
 
 ### Inserts `value` at `index`, shifting later elements right by one position.
@@ -204,7 +204,7 @@ routine List[T].add_at!(index: U64, value: T)
 routine List[T].remove_first!() -> T
   if me.is_empty()
     absent
-  return me.remove_at!(0u64)
+  return me.remove_at(0u64)
 
 ### Removes and returns the element at `index`, shifting later elements left by one position.
 ### :param index: The zero-based position to remove.
@@ -589,7 +589,7 @@ routine List[T].sort_by(compare: Routine[(T, T), Bool])
 routine List[T].sorted() -> List[T]
 needs T obeys Comparable
   var copy = List[T](capacity: me.count)
-  copy.add_range!(source: me, from: 0u64, count: me.count)
+  copy.add_range(source: me, from: 0u64, count: me.count)
   copy.sort()
   return steal copy
 
@@ -600,7 +600,7 @@ needs T obeys Comparable
 @readonly
 routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> List[T]
   var copy = List[T](capacity: me.count)
-  copy.add_range!(source: me, from: 0u64, count: me.count)
+  copy.add_range(source: me, from: 0u64, count: me.count)
   copy.sort_by(compare)
   return steal copy
 

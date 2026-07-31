@@ -37,7 +37,7 @@ routine DistinctEmittable[T, SE].emit!() -> T
 needs T obeys Hashable, Comparable
   danger
     loop
-      var item = me.source.as_entity().emit!()
+      var item = me.source.as_entity().emit()
       if not me.seen.contains(item)
         discard me.seen.add(item)
         return item
@@ -94,7 +94,7 @@ routine DistinctByEmittable[T, U, SE].emit!() -> T
 needs U obeys Hashable, Comparable
   danger
     loop
-      var item = me.source.as_entity().emit!()
+      var item = me.source.as_entity().emit()
       var k = me.key(item)
       if not me.seen.contains(k)
         discard me.seen.add(k)

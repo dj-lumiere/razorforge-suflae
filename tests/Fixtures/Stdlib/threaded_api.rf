@@ -25,15 +25,15 @@ threaded routine excessive_compute(a: S64) -> S64
 routine start()
   # 1. spawn, hold the handle, then join.
   var t = compute(x: 6, y: 7)
-  var r = t.retrieve!()
+  var r = t.retrieve()
   show(f"compute => {r}")
 
   # 2. fused spawn + join.
-  var r2 = compute(x: 2, y: 5).retrieve!()
+  var r2 = compute(x: 2, y: 5).retrieve()
   show(f"fused => {r2}")
 
   # 3. record result.
-  var p = make_point(a: 3, b: 4).retrieve!()
+  var p = make_point(a: 3, b: 4).retrieve()
   show(f"point => x={p.x} y={p.y}")
 
   # 4. bounded join via the graceful variant — `retrieve!` throws on timeout, whereas

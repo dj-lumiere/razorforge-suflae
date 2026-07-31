@@ -1700,7 +1700,7 @@ routine F128.create(from: D128) -> F128
 # ============================================================================
 
 ### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
-### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite()`.
 ### :returns: `me`, when finite.
 ### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
 routine F128.finite!() -> F128
@@ -1982,7 +1982,7 @@ routine F128.create!(from_text: Text) -> F128
   # is exact anyway, and for exp<0 a tie requires 5^|exp| | coeff, in which case
   # V = (coeff / 5^|exp|) x 2^exp is EXACT in F512 via ldexp and resolved with bounded U256.
   # No bignum, no module-Numerics dependency, no table beyond the existing f512_pow10.
-  var p = scan_decimal_parts!(from_text: from_text)
+  var p = scan_decimal_parts(from_text: from_text)
   if int_eq[U64](a: p.special, b: 0_u64) and int_ne[U128](a: p.coeff, b: 0_u128) and signed_lt[S64](a: p.exp, b: 0_s64) and signed_ge[S64](a: p.exp, b: -56_s64)
     var p5 = f128_pow5(k: sub[S64](a: 0_s64, b: p.exp))
     var cw = zero_extend[U128, U256](p.coeff)

@@ -128,7 +128,7 @@ routine Integer.create!(text: Text, radix: S32 = 10) -> Integer
 
 ### Materializes an `Integer` from a tokenizer-validated decimal digit string.
 ### Used by literal lowering for `n` literals (e.g. `123n`); the input is guaranteed
-### valid by the tokenizer, so this is infallible (unlike the public `create!(text:)`).
+### valid by the tokenizer, so this is infallible (unlike the public `create(text:)`).
 ### :param text: The decimal digit string (no suffix, no separators).
 ### :returns: The resulting `Integer` value.
 common routine Integer.from_literal(text: Text) -> Integer
@@ -465,13 +465,13 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
   if exp.is_negative()
     throw NumericDomainError(description: "modpow: negative exponent")
   var result = Integer.one()
-  var base = me.mod!(other: modulus)
+  var base = me.mod(other: modulus)
   var e = exp.store()
   while not e.is_zero()
     if e.is_odd()
-      result = result.mul(other: base).mod!(other: modulus)
+      result = result.mul(other: base).mod(other: modulus)
     e = e.shr(bits: 1_s32)
-    base = base.mul(other: base).mod!(other: modulus)
+    base = base.mul(other: base).mod(other: modulus)
   return result
 
 # ============================================================================

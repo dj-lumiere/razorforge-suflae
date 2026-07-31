@@ -265,7 +265,7 @@ routine S256.mod!(you: S256) -> S256
   # EUCLIDEAN remainder (always >= 0), consistent with S8..S128. For a negative
   # dividend with a nonzero remainder, reflect the magnitude remainder into [0, |you|).
   var bmag = s256_abs_u256(x: you)
-  var ur = s256_abs_u256(x: me).mod!(bmag)
+  var ur = s256_abs_u256(x: me).mod(bmag)
   if signed_lt[S256](a: me, b: 0_s256) and int_ne[U256](a: ur, b: 0_u256)
     ur = sub[U256](a: bmag, b: ur)
   return reinterpret_bits[U256, S256](ur)
@@ -419,7 +419,7 @@ routine S256.pow_with_overflow!(exp: S256) -> (S256, Bool)
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S256.pow!(exp: S256) -> S256
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -689,7 +689,7 @@ routine S256.represent() -> Text
     return "0"
   if me > 0s256
     return U256(me).represent()
-  # Use reinterpret_bits (not U256(me)) — U256.create!(S256) throws on negative inputs,
+  # Use reinterpret_bits (not U256(me)) — U256.create(S256) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u256 -% bits`
   # yields |me| (works correctly even for S256.MIN, whose absolute value overflows S256).
   return "-" + (0u256 -% reinterpret_bits[S256, U256](me)).represent()

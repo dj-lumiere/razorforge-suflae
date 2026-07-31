@@ -21,10 +21,10 @@ routine start()
   var t3 = add_n(cell: counter, times: 1000_s64, amount: 1_s64)
   var t4 = add_n(cell: counter, times: 1000_s64, amount: 1_s64)
 
-  discard t1.retrieve!()
-  discard t2.retrieve!()
-  discard t3.retrieve!()
-  discard t4.retrieve!()
+  discard t1.retrieve()
+  discard t2.retrieve()
+  discard t3.retrieve()
+  discard t4.retrieve()
 
   show(f"total: {counter.load()}")
   return

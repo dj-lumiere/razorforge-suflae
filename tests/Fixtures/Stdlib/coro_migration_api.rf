@@ -26,7 +26,7 @@ routine start()
   while i < 40_s64
     probes.add_last(value: probe())
     i = i + 1_s64
-  var results = probes.gather!()
+  var results = probes.gather()
 
   var migrated = 0_s64
   var completed = 0_s64

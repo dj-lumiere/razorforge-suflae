@@ -9,9 +9,9 @@ import IO/Console
 
 suspended routine produce(out: Sender[S64]) -> S64
   danger
-    out.send!(item: 7)     # each parks until the consumer takes it
-    out.send!(item: 8)
-    out.send!(item: 9)
+    out.send(item: 7)     # each parks until the consumer takes it
+    out.send(item: 8)
+    out.send(item: 9)
   return 3
 
 suspended routine consume(inbox: Receiver[S64]) -> S64
@@ -27,7 +27,7 @@ routine start()
   var c = consume(inbox: steal hop)
 
   danger
-    var sum = c.retrieve!()
-    discard p.retrieve!()
+    var sum = c.retrieve()
+    discard p.retrieve()
     show(f"sum={sum}")
   return

@@ -34,7 +34,7 @@ routine start()
     var cell = slot.hijack()         # raw pointer to `slot`, copyable -> both coroutines share it
     var con = consumer(sig: steal sig.duplicate(), cell: cell)
     var pro = producer(sig: steal sig, cell: cell)
-    var got = con.retrieve!()        # consumer parks on the predicate; producer sets it and casts
-    discard pro.retrieve!()
+    var got = con.retrieve()        # consumer parks on the predicate; producer sets it and casts
+    discard pro.retrieve()
     show(f"got={got}")
   return

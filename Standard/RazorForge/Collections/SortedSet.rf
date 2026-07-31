@@ -915,19 +915,19 @@ routine SortedSet[T].max!() -> T
       node = node.children_get(node.children_count() -% 1u64).as_entity()
     return node.keys_get(node.keys_count() -% 1u64)
 
-### Returns the first (smallest) element in the set; equivalent to `min!()`.
+### Returns the first (smallest) element in the set; equivalent to `min()`.
 ### :returns: The minimum element.
 ### :absent: The set is empty.
 @readonly
 routine SortedSet[T].first!() -> T
-  return me.min!()
+  return me.min()
 
-### Returns the last (largest) element in the set; equivalent to `max!()`.
+### Returns the last (largest) element in the set; equivalent to `max()`.
 ### :returns: The maximum element.
 ### :absent: The set is empty.
 @readonly
 routine SortedSet[T].last!() -> T
-  return me.max!()
+  return me.max()
 
 # ============================================================================
 # Iteration (in-order traversal)
@@ -986,7 +986,7 @@ routine SortedSetEmittable[T].emit!() -> T
   danger
     if me.index >= me.set.as_entity().count()
       absent
-    var _result = me.set.as_entity().get_by_rank!(rank: me.index)
+    var _result = me.set.as_entity().get_by_rank(rank: me.index)
     me.index = me.index + 1u64
     return _result
 

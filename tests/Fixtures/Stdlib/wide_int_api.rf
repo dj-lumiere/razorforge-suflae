@@ -25,7 +25,7 @@ routine start()
   var sbig: S256 = -1000000000000000000000000000000_s256
   show(f"S256 s: {s}")
   show(f"S256 sbig: {sbig}")
-  show(f"S256 s.abs: {s.abs!()}")
+  show(f"S256 s.abs: {s.abs()}")
   show(f"S256 s + 100: {s + 100_s256}")
   show(f"S256 MIN: {S256_MIN}")
   show(f"S256 MAX: {S256_MAX}")

@@ -6,7 +6,7 @@ module Core
 ### (`me.<field>.hijack()`), so cloning/dropping a handle is safe across threads.
 ###
 ### Also holds the access-discipline lock `P` (a {LockPolicy}). The lock state lives here — at the one
-### address every handle references — so `inspect()`/`claim!()` (a later phase) synchronize correctly.
+### address every handle references — so `inspect()`/`claim()` (a later phase) synchronize correctly.
 ### Selected by monomorphization: `ReadOnly` is zero-sized (no overhead), `Exclusive`/`MultiRead` carry
 ### their atomic flags.
 ### :typeparam T: The exclusively owned entity type.
@@ -83,7 +83,7 @@ dangerous routine ShareController[T, P].borrow_data() -> Hijacked[T]
   return me.data
 
 # ============================================================================
-# Access-discipline lock — drives `Shared.inspect()` / `Shared.claim!()`. The lock state lives
+# Access-discipline lock — drives `Shared.inspect()` / `Shared.claim()`. The lock state lives
 # here, at the single address every handle shares, so synchronization is correct across threads.
 # Each call delegates to the monomorphized policy `P` (no runtime dispatch).
 # ============================================================================

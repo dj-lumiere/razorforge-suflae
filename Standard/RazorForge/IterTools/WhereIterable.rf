@@ -40,7 +40,7 @@ needs SE obeys Emittable[T]
 routine WhereEmittable[T, SE].emit!() -> T
   danger
     loop
-      var item = me.source.as_entity().emit!()
+      var item = me.source.as_entity().emit()
       var matches = me.predicate(item)
       if me.inverted
         matches = not matches

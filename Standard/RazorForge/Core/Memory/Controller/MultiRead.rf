@@ -36,7 +36,7 @@ routine MultiRead.acquire_read()
       # A writer slipped in between the check and the bump — back out and retry.
       discard me.readers.fetch_sub(delta: 1_s32)
     if me.writer_owner.load() == tid
-      crash_reentrant_lock!()
+      crash_reentrant_lock()
   return
 
 ### Releases a shared read lock.
@@ -54,7 +54,7 @@ routine MultiRead.acquire_write()
       me.writer_owner.store(desired: tid)
       break
     if me.writer_owner.load() == tid
-      crash_reentrant_lock!()
+      crash_reentrant_lock()
   loop
     if me.readers.load() == 0_s32
       break

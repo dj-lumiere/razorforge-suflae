@@ -41,7 +41,7 @@ routine start()
     show(f"  line: {l}")
 
   # Find
-  show(f"find 'world' in 'hello world': {"hello world".find!(other: "world")}")
+  show(f"find 'world' in 'hello world': {"hello world".find(other: "world")}")
 
   show("DONE")
   return

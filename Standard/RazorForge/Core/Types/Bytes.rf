@@ -595,7 +595,7 @@ entity BytesUtf8LossyEmittable
 ### :throws: {MalformedUtf8Error} if these bytes are not well-formed UTF-8.
 @readonly
 routine Bytes.interpret_as_utf8!() -> BytesUtf8View
-  var validated = me.decode_as_utf8!()
+  var validated = me.decode_as_utf8()
   return BytesUtf8View(data: me.data, byte_count: me.count)
 
 ### Returns a lossy lazy UTF-8 view over this byte sequence.

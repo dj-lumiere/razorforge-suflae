@@ -641,7 +641,7 @@ routine D64.create(from: D128) -> D64
 ### Parses a decimal literal into a `D64`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 routine D64.create!(from_text: Text) -> D64
-  return D64(from: parse_decimal_d128!(from_text: from_text))
+  return D64(from: parse_decimal_d128(from_text: from_text))
 
 # ============================================================================
 # Hashing

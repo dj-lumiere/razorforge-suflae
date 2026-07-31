@@ -384,7 +384,7 @@ routine S32.pow_with_overflow!(exp: S32) -> (S32, Bool)
 ### :throws: {IntegerOverflowError} if the result is outside the S32 range.
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S32.pow!(exp: S32) -> S32
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -659,7 +659,7 @@ routine S32.represent() -> Text
     return "0"
   if me > 0s32
     return U32(me).represent()
-  # Use reinterpret_bits (not U32(me)) — U32.create!(S32) throws on negative inputs,
+  # Use reinterpret_bits (not U32(me)) — U32.create(S32) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u32 -% bits`
   # yields |me| (works correctly even for S32.MIN, whose absolute value overflows S32).
   return "-" + (0u32 -% reinterpret_bits[S32, U32](me)).represent()

@@ -236,7 +236,7 @@ routine U128.create!(from: D128) -> U128
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   if p.sign and int_ne[U128](a: p.coeff, b: 0)
     throw NumericOverflowError(description: "negative decimal to unsigned integer")
-  return d128_int_magnitude!(coeff: p.coeff, exp: p.exp)
+  return d128_int_magnitude(coeff: p.coeff, exp: p.exp)
 
 ### Truncates toward zero to a signed 128-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^127, 2^127-1].
@@ -244,7 +244,7 @@ routine S128.create!(from: D128) -> S128
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
-  var mag = d128_int_magnitude!(coeff: p.coeff, exp: p.exp)
+  var mag = d128_int_magnitude(coeff: p.coeff, exp: p.exp)
   var lim = shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))
   if p.sign
     if unsigned_gt[U128](a: mag, b: lim)
@@ -282,7 +282,7 @@ routine U256.create!(from: D128) -> U256
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   if p.sign and int_ne[U128](a: p.coeff, b: 0)
     throw NumericOverflowError(description: "negative decimal to unsigned integer")
-  return d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
+  return d128_int_magnitude_u256(coeff: p.coeff, exp: p.exp)
 
 ### Truncates toward zero to a signed 256-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^255, 2^255-1].
@@ -290,7 +290,7 @@ routine S256.create!(from: D128) -> S256
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
-  var mag = d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
+  var mag = d128_int_magnitude_u256(coeff: p.coeff, exp: p.exp)
   var lim = shift_left[U256](value: 1, bits: U256.to_width(s: 255_s64))
   if p.sign
     if unsigned_gt[U256](a: mag, b: lim)
@@ -1194,7 +1194,7 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
 ### Parses decimal text into a `D128` (rounds the scanned coefficient to 34 digits).
 ### :throws: {InvalidValueError} on malformed input.
 routine parse_decimal_d128!(from_text: Text) -> D128
-  var p = scan_decimal_parts!(from_text: from_text)
+  var p = scan_decimal_parts(from_text: from_text)
   if int_eq[U64](a: p.special, b: 1_u64)
     return D128.infinity(sign: p.sign)
   if unsigned_ge[U64](a: p.special, b: 2_u64)
@@ -1204,7 +1204,7 @@ routine parse_decimal_d128!(from_text: Text) -> D128
 ### Parses a decimal literal into a `D128`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 routine D128.create!(from_text: Text) -> D128
-  return parse_decimal_d128!(from_text: from_text)
+  return parse_decimal_d128(from_text: from_text)
 
 # ============================================================================
 # Hashing

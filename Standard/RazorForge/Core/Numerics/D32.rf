@@ -667,7 +667,7 @@ routine D32.create(from: D128) -> D32
 ### Parses a decimal literal into a `D32`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 routine D32.create!(from_text: Text) -> D32
-  return D32(from: parse_decimal_d128!(from_text: from_text))
+  return D32(from: parse_decimal_d128(from_text: from_text))
 
 # ============================================================================
 # Hashing

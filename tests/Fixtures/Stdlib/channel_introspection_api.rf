@@ -12,8 +12,8 @@ suspended routine quick(x: S64) -> S64
 routine start()
   var (feeder, hop) = make_channel[S64](capacity: 4)
   danger
-    feeder.send!(item: 10)
-    feeder.send!(item: 20)
+    feeder.send(item: 10)
+    feeder.send(item: 20)
   show(f"cap={hop.capacity()} count={hop.count()} empty={hop.is_empty()} closed={hop.is_closed()}")
 
   feeder.close()
@@ -27,6 +27,6 @@ routine start()
   # Agent introspection: is_done flips from false (spawned, not driven) to true (after retrieve!).
   var a = quick(x: 21)
   danger
-    var v = a.retrieve!()
+    var v = a.retrieve()
     show(f"agent_after={a.is_done()} val={v}")
   return

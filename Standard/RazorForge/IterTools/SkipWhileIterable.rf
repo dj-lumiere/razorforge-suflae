@@ -39,11 +39,11 @@ routine SkipWhileEmittable[T, SE].emit!() -> T
   danger
     if me.skipping
       loop
-        var item = me.source.as_entity().emit!()
+        var item = me.source.as_entity().emit()
         if not me.predicate(item)
           me.skipping = false
           return item
-    return me.source.as_entity().emit!()
+    return me.source.as_entity().emit()
 
 ### Returns a lazy adapter that skips values while `predicate` returns `true`.
 ### :param predicate: The predicate that controls the initial skipping phase.

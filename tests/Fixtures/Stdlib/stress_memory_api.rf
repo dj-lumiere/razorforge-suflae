@@ -21,7 +21,7 @@ routine start()
   loop
     if i >= 10_000_s64
       break
-    discard l.remove_first!()
+    discard l.remove_first()
     i = i + 1_s64
   show(f"after 10000 remove_first!, list count: {l.count()}")
   show(f"is_empty: {l.is_empty()}")

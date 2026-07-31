@@ -47,7 +47,7 @@ routine ExtendEmittable[T, SE1, SE2].emit!() -> T
         is None => me.in_second = true
         else item =>
           return item
-    return me.second.as_entity().emit!()
+    return me.second.as_entity().emit()
 
 ### Returns a lazy concatenation of this iterable and `other`.
 ### :param other: The iterable to consume after `me`.

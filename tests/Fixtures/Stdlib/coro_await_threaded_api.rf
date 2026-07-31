@@ -1,7 +1,7 @@
 module Tests/Stdlib/CoroAwaitThreadedApi
 
 # v0.2.0 threaded↔suspended bridge: a `suspended routine` (coroutine) awaits a `threaded routine`
-# (OS thread). Inside a scheduler-driven coroutine, `Task[T].retrieve!()` is UNCOLORED — it PARKS
+# (OS thread). Inside a scheduler-driven coroutine, `Task[T].retrieve()` is UNCOLORED — it PARKS
 # the coroutine and the worker thread wakes it on completion (cross-thread wake), rather than
 # blocking the scheduler thread. The same retrieve! that blocks on a plain thread parks here.
 
@@ -12,10 +12,10 @@ threaded routine heavy(x: S64) -> S64
 
 suspended routine orchestrate(n: S64) -> S64
   var t = heavy(x: n)        # spawns an OS thread → Task[S64]
-  var v = t.retrieve!()      # inside a coroutine: parks until the worker wakes us (no block)
+  var v = t.retrieve()      # inside a coroutine: parks until the worker wakes us (no block)
   return v + 1
 
 routine start()
   var c = orchestrate(n: 6)              # spawned onto the implicit scheduler
-  show(f"orchestrate => {c.retrieve!()}")   # drives the loop; the coroutine awaits the thread
+  show(f"orchestrate => {c.retrieve()}")   # drives the loop; the coroutine awaits the thread
   return

@@ -369,7 +369,7 @@ routine DequeEmittable[T].emit!() -> T
 routine Deque[T].first_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
-  return me.first!()
+  return me.first()
 
 ### Returns the back element or `default_value` if the deque is empty.
 ### :param default_value: The fallback to return when no element is stored.
@@ -378,7 +378,7 @@ routine Deque[T].first_or_default(default_value: T) -> T
 routine Deque[T].last_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
-  return me.last!()
+  return me.last()
 
 ### Returns true if any element in the deque equals `value`.
 ### Scans in logical front-to-back order using the element type's equality operator.

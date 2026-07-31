@@ -42,7 +42,7 @@ routine TakeWhileEmittable[T, SE].emit!() -> T
   danger
     if me.done
       absent
-    var item = me.source.as_entity().emit!()
+    var item = me.source.as_entity().emit()
     if not me.predicate(item)
       me.done = true
       absent

@@ -38,7 +38,7 @@ needs SE obeys Emittable[T]
 ### :returns: The resulting `U` value.
 routine SelectEmittable[T, U, SE].emit!() -> U
   danger
-    var item = me.source.as_entity().emit!()
+    var item = me.source.as_entity().emit()
     return me.transform(item)
 
 ### Returns a lazy projection of this iterable.

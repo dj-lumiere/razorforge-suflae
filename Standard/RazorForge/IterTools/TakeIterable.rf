@@ -39,7 +39,7 @@ routine TakeEmittable[T, SE].emit!() -> T
   danger
     if me.remaining == 0u64
       absent
-    var _result = me.source.as_entity().emit!()
+    var _result = me.source.as_entity().emit()
     me.remaining = me.remaining - 1u64
     return _result
 

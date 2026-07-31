@@ -2,8 +2,8 @@ module Tests/Stdlib/CancelAllApi
 
 # v0.2.x structured concurrency, RF-native shape: a `List[Agent[T]]` bound to a name IS the scope —
 # ownership already guarantees no child outlives it (the list's teardown abandons every in-flight
-# Agent). So the structured-concurrency operations are MEMBER routines on that list: `agents.race!()`,
-# `agents.gather!()`, `agents.cancel_all()`. They BORROW the list (no consume, no hidden steal);
+# Agent). So the structured-concurrency operations are MEMBER routines on that list: `agents.race()`,
+# `agents.gather()`, `agents.cancel_all()`. They BORROW the list (no consume, no hidden steal);
 # cleanup stays with the list's own teardown. This fixture exercises abandon-on-scope-exit,
 # `gather!`, and `cancel_all` (+ gather to wait out the cooperative wind-down).
 
@@ -42,7 +42,7 @@ routine start()
   coros.add_last(value: compute(x: 30))
   coros.add_last(value: compute(x: 5))
   coros.add_last(value: compute(x: 15))
-  var rs = coros.gather!()
+  var rs = coros.gather()
   show(f"coros => {rs[0]} {rs[1]} {rs[2]}")
 
   # 3. cancel_all!: two worker threads spin until asked to stop. cancel_all! sets each cancel flag,
@@ -51,6 +51,6 @@ routine start()
   jobs.add_last(value: cancellable())
   jobs.add_last(value: cancellable())
   waitfor(Duration.from_milliseconds(ms: 20))
-  var rc = jobs.cancel_all!()
+  var rc = jobs.cancel_all()
   show(f"cancel => {rc[0]} {rc[1]}")
   return

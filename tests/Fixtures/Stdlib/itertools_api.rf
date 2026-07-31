@@ -44,13 +44,13 @@ routine start()
   show(f"all > 0: {src.all(predicate: x => x > 0_s64)}")
   show(f"all > 5: {src.all(predicate: x => x > 5_s64)}")
   show(f"count: {src.get_count()}")
-  show(f"first: {src.first!()}")
-  show(f"last: {src.last!()}")
+  show(f"first: {src.first()}")
+  show(f"last: {src.last()}")
 
   # Aggregation
-  show(f"sum: {src.sum!()}")
-  show(f"min: {src.min!()}")
-  show(f"max: {src.max!()}")
+  show(f"sum: {src.sum()}")
+  show(f"min: {src.min()}")
+  show(f"max: {src.max()}")
   show(f"accumulate (sum start=100): {src.accumulate(start: 100_s64, combiner: (acc, x) => acc + x)}")
 
   # Set ops

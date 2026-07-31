@@ -40,7 +40,7 @@ routine IntersectEmittable[T, SE].emit!() -> T
 needs T obeys Hashable, Comparable
   danger
     loop
-      var item = me.source.as_entity().emit!()
+      var item = me.source.as_entity().emit()
       if me.other.contains(item)
         return item
 
@@ -94,7 +94,7 @@ routine ExcludeEmittable[T, SE].emit!() -> T
 needs T obeys Hashable, Comparable
   danger
     loop
-      var item = me.source.as_entity().emit!()
+      var item = me.source.as_entity().emit()
       if not me.other.contains(item)
         return item
 

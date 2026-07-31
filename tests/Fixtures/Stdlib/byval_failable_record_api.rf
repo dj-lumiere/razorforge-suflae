@@ -20,7 +20,7 @@ routine checked_age!(p: Person) -> S64
 routine start()
   var alice = Person(name: "alice", age: 30_s64)
   danger
-    var a = checked_age!(alice)
+    var a = checked_age(alice)
     show(f"checked_age: {a}")
   show(f"alice still valid: {alice.name} {alice.age}")
 

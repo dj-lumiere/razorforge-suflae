@@ -13,7 +13,7 @@ import IO/Console
 suspended routine produce(out: Sender[S64], n: S64) -> S64
   var i = 1_s64
   while i <= n
-    out.send!(item: i)
+    out.send(item: i)
     i = i + 1
   return n
 
@@ -29,7 +29,7 @@ routine start()
   var p = produce(out: steal feeder, n: 500)
   var c = consume(inbox: steal hop)
 
-  var sum = c.retrieve!()      # drains until the producer's Sender drops and the channel closes
-  discard p.retrieve!()
+  var sum = c.retrieve()      # drains until the producer's Sender drops and the channel closes
+  discard p.retrieve()
   show(f"backpressure sum 1..500: {sum}")
   return

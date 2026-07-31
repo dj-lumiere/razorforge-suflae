@@ -803,19 +803,19 @@ routine SortedList[T].max!() -> T
       node = node.children_get(node.children_count() -% 1u64).as_entity()
     return node.keys_get(node.keys_count() -% 1u64)
 
-### Returns the smallest element. Alias for {SortedList[T].min!()}.
+### Returns the smallest element. Alias for {SortedList[T].min()}.
 ### :returns: The first (minimum) element.
 ### :absent: The list is empty.
 @readonly
 routine SortedList[T].first!() -> T
-  return me.min!()
+  return me.min()
 
-### Returns the largest element. Alias for {SortedList[T].max!()}.
+### Returns the largest element. Alias for {SortedList[T].max()}.
 ### :returns: The last (maximum) element.
 ### :absent: The list is empty.
 @readonly
 routine SortedList[T].last!() -> T
-  return me.max!()
+  return me.max()
 
 # ============================================================================
 # Iteration
@@ -865,7 +865,7 @@ routine SortedListEmittable[T].emit!() -> T
   danger
     if me.index >= me.list.as_entity().count()
       absent
-    var _result = me.list.as_entity().get_by_rank!(rank: me.index)
+    var _result = me.list.as_entity().get_by_rank(rank: me.index)
     me.index = me.index + 1u64
     return _result
 

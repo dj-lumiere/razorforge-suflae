@@ -11,12 +11,12 @@ choice AgentKind
   ### Backed by an OS worker thread (a `threaded routine`).
   THREAD
 
-### A handle to in-flight work whose result you can fetch with `retrieve!()`. One concrete type backs
+### A handle to in-flight work whose result you can fetch with `retrieve()`. One concrete type backs
 ### BOTH kinds of asynchrony so a heterogeneous set can be raced from a `List[Agent[T]]`:
 ###   * a `suspended routine` call yields a coroutine-backed Agent (kind CORO) — runs on this thread's
 ###     implicit scheduler, parks (never blocks) at `waitfor`/await points;
 ###   * a `threaded routine` call yields a thread-backed Agent (kind THREAD) — runs on an OS thread.
-### `retrieve!()` and `waitfor()` branch on `kind`, reusing the coroutine-park and thread-wait paths.
+### `retrieve()` and `waitfor()` branch on `kind`, reusing the coroutine-park and thread-wait paths.
 ### The metaphor: you delegate to an agent, it runs on its own, you only fetch the result.
 ###
 ### Teardown is status-based (NOT done in `retrieve!`): a completed Agent is freed; one still in
@@ -92,7 +92,7 @@ dangerous routine Agent[T].request_cancel()
     rf_task_request_cancel(task: me.agent)
   return
 
-### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve!()` on a
+### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve()` on a
 ### thread-backed Agent. The returned value is a TEMPORARY copy aliasing the same worker — use it
 ### inline (never bind it to a name alongside the original, or both would tear the worker down).
 ### :param deadline: The maximum time `retrieve!` will wait.
@@ -105,7 +105,7 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
 ### awaited inside a scheduler-driven coroutine PARKS (siblings run meanwhile) instead of blocking;
 ### on a plain thread it blocks. A coroutine-backed Agent drives this thread's implicit scheduler
 ### until THIS coroutine finishes (siblings spawned earlier progress concurrently). A deadline
-### (`agent.waitfor(d).retrieve!()`) races completion against the timer and throws {TaskTimeoutError}
+### (`agent.waitfor(d).retrieve()`) races completion against the timer and throws {TaskTimeoutError}
 ### if the deadline wins. `retrieve!` only reads the value out; freeing happens later in `destroy`.
 ### :throws: {TaskSpawnError} if the work could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
@@ -195,12 +195,12 @@ dangerous routine Agent[T].destroy()
 # A `List[Agent[T]]` bound to a name IS the structured-concurrency scope: ownership already
 # guarantees no child outlives it (the list's teardown abandons every still-running Agent). So the
 # scope operations are MEMBER routines on that list — `race!` / `gather!` / `cancel_all` — read as
-# `agents.gather!()`. They BORROW the list (`me` is by-reference): they never consume or free it, so
+# `agents.gather()`. They BORROW the list (`me` is by-reference): they never consume or free it, so
 # there is no hidden ownership transfer; cleanup stays with the list's own teardown at scope exit.
 # Each Agent is read only as a temporary (`me[i]`), so nothing aliases an Agent or double-frees.
 
 ### Races the Agents, driving them CONCURRENTLY until the FIRST one finishes, and returns that
-### winner's value. BORROWS the list — call it `agents.race!()`. The losers are not freed here; they
+### winner's value. BORROWS the list — call it `agents.race()`. The losers are not freed here; they
 ### are ABANDONED when the list itself tears down at the enclosing scope's return (a parked coroutine
 ### runs its cancellation shadow stack; a still-running worker thread is joined then discarded). To
 ### drop the losers promptly, race inside a routine that returns the winner, so the list tears down
@@ -234,7 +234,7 @@ routine List[Agent[V]].race!() -> V
 
 ### Drives the Agents CONCURRENTLY and waits for ALL of them to finish, returning their results in
 ### INPUT order. The twin of `race!` (first finisher); `gather!` returns every finisher. BORROWS the
-### list — call it `agents.gather!()`. Each Agent is driven with the same uncolored `retrieve!` logic,
+### list — call it `agents.gather()`. Each Agent is driven with the same uncolored `retrieve!` logic,
 ### so coroutine children progress on this thread's scheduler and thread children run on their OS
 ### threads; total wait is the SLOWEST child, not the sum. FAIL-FAST: if any Agent's routine throws,
 ### that throw propagates out and the remaining children are abandoned when the list tears down at
@@ -246,14 +246,14 @@ routine List[Agent[V]].gather!() -> List[V]
     var results = List[V]()
     var i = 0_u64
     while i < n
-      var value = me[i].retrieve!()
+      var value = me[i].retrieve()
       results.add_last(value: value)
       i = i + 1
     return results
 
 ### Requests cooperative cancellation of EVERY Agent in the set, then waits out the wind-down,
 ### returning each Agent's final value in input order (a cooperative worker returns its own sentinel
-### when it observes the request). BORROWS the list — call it `agents.cancel_all!()`. It sets a cancel
+### when it observes the request). BORROWS the list — call it `agents.cancel_all()`. It sets a cancel
 ### flag on each Agent (in native memory, through the handle), then drives them to completion with the
 ### same uncolored logic as `gather!`: a worker thread observes the flag via `cancellation_requested()`
 ### (the only way to halt one — a thread cannot be killed) and returns; a coroutine observes it at its
@@ -271,7 +271,7 @@ routine List[Agent[V]].cancel_all!() -> List[V]
     var results = List[V]()
     i = 0u64
     while i < n
-      var value = me[i].retrieve!()
+      var value = me[i].retrieve()
       results.add_last(value: value)
       i = i + 1
     return results

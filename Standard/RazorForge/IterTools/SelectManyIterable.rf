@@ -54,7 +54,7 @@ routine SelectManyEmittable[T, U, Sub, SE].emit!() -> U
         var item = me.buffer[me.buffer_index]
         me.buffer_index = me.buffer_index + 1u64
         return item
-      var outer = me.source.as_entity().emit!()
+      var outer = me.source.as_entity().emit()
       var new_buffer = me.transform(outer).List()
       me.buffer = steal new_buffer
       me.buffer_index = 0u64

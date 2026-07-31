@@ -372,7 +372,7 @@ routine S64.pow_with_overflow!(exp: S64) -> (S64, Bool)
 ### :returns: The result.
 ### :throws: {IntegerOverflowError} if the result is outside the `S64` range.
 routine S64.pow!(exp: S64) -> S64
-  var result = me.pow_with_overflow!(exp)
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -650,7 +650,7 @@ routine S64.represent() -> Text
     return "0"
   if me > 0s64
     return U64(me).represent()
-  # Use reinterpret_bits (not U64(me)) — U64.create!(S64) throws on negative inputs,
+  # Use reinterpret_bits (not U64(me)) — U64.create(S64) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u64 -% bits`
   # yields |me| (works correctly even for S64.MIN, whose absolute value overflows S64).
   return "-" + (0u64 -% reinterpret_bits[S64, U64](me)).represent()

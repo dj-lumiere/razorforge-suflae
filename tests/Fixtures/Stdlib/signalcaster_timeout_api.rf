@@ -34,8 +34,8 @@ routine start()
   var cb = caster(sig: steal sig_b)
 
   danger
-    var timed_out = wa.retrieve!()
-    var woken = wb.retrieve!()
-    discard cb.retrieve!()
+    var timed_out = wa.retrieve()
+    var woken = wb.retrieve()
+    discard cb.retrieve()
     show(f"timed_out={timed_out} woken={woken}")
   return
