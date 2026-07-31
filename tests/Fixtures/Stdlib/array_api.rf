@@ -1,4 +1,4 @@
-module Tests/Stdlib/ArrayAPi
+module Tests/Stdlib/ArrayApi
 import IO/Console
 import Collections
 
