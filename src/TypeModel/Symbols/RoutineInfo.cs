@@ -185,7 +185,7 @@ public sealed class RoutineInfo
     /// a STRUCTURED attribute recorded here, NOT part of <see cref="Name"/>: the canonical name is the
     /// bare identifier (<c>create</c>, <c>store</c>, …). Wired routines are always member routines.
     /// </summary>
-    public bool IsWiredMemberRoutine { get; init; }
+    public bool IsWiredMemberRoutine { get; internal set; }
 
     /// <summary>Whether this routine contains throw statements.</summary>
     public bool HasThrow { get; set; }

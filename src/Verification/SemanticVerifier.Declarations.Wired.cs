@@ -58,6 +58,51 @@ public sealed partial class SemanticVerifier
         return WiredToProtocols.GetValueOrDefault(key: wiredName);
     }
 
+    /// <summary>
+    /// Re-derives <see cref="RoutineInfo.IsWiredMemberRoutine"/> for every registered member routine.
+    ///
+    /// <para>The wired sigil (<c>$</c>) was removed from the surface syntax, so the parser no longer
+    /// sets this flag (it is uniformly false at registration). This pass restores meaningful wired-ness
+    /// by INFERRING it from the wired-routine catalog plus explicit protocol conformance.</para>
+    ///
+    /// <para>A member routine <c>R</c> is wired iff its bare name is a known wired method AND either the
+    /// name is not protocol-gated (creator/context/lifecycle names like <c>create</c>/<c>destroy</c> —
+    /// wired by catalog name alone) or the owner EXPLICITLY <c>obeys</c> one of the name's required
+    /// protocols. This reproduces the pre-removal <c>$</c> set: a numeric <c>add</c> (obeys Addable) is
+    /// wired, while <c>Set.add</c> (Set does not obey Addable) stays non-wired.</para>
+    ///
+    /// <para>Runs AFTER conformance is applied (<c>ApplyImplicitMarkerConformance</c> + user <c>obeys</c>)
+    /// and AFTER all member routines are registered, so the explicit-conformance query is authoritative.
+    /// It OVERWRITES the all-false value the parser left behind.</para>
+    /// </summary>
+    private void InferWiredMemberRoutines()
+    {
+        foreach (RoutineInfo r in _registry.EnumerateMemberRoutines())
+        {
+            r.IsWiredMemberRoutine = InferWired(r);
+        }
+    }
+
+    /// <summary>Computes wired-ness for a single member routine (see <see cref="InferWiredMemberRoutines"/>).</summary>
+    private bool InferWired(RoutineInfo r)
+    {
+        if (r.OwnerType == null || !KnownWiredMethods.Contains(value: r.Name))
+        {
+            return false;
+        }
+
+        List<string>? protos = GetRequiredProtocols(wiredName: r.Name);
+        if (protos == null || protos.Count == 0)
+        {
+            // create/destroy/enter/exit/from_literal/unwrap/… — wired by catalog name alone.
+            return true;
+        }
+
+        // Re-lookup the owner to get the version whose ImplementedProtocols are populated by conformance.
+        TypeSymbol? owner = _registry.LookupType(name: r.OwnerType.FullName) ?? r.OwnerType;
+        return protos.Any(predicate: p => ExplicitlyImplementsProtocol(type: owner, protocolName: p));
+    }
+
     private void CollectExternalDeclaration(ExternalDeclaration external)
     {
         // #123: Suflae cannot use C interop directly

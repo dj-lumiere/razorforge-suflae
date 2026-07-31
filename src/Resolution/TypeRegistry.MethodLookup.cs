@@ -1772,5 +1772,20 @@ public sealed partial class TypeRegistry
         return [];
     }
 
+    /// <summary>
+    /// Enumerates every registered member routine object exactly once. <c>_routinesByOwner</c> holds
+    /// the full per-owner method lists (including all overloads), which is the comprehensive set the
+    /// wired-ness inference pass must iterate. Deduped by reference because the same routine object can
+    /// appear under multiple owner keys (e.g. a shell/canonical duplicate of a generic definition).
+    /// </summary>
+    public IEnumerable<RoutineInfo> EnumerateMemberRoutines()
+    {
+        var seen = new HashSet<RoutineInfo>(comparer: ReferenceEqualityComparer.Instance);
+        foreach (List<RoutineInfo> list in _routinesByOwner.Values)
+            foreach (RoutineInfo r in list)
+                if (seen.Add(item: r))
+                    yield return r;
+    }
+
     #endregion
 }

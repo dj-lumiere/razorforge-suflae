@@ -453,6 +453,9 @@ public sealed partial class SemanticVerifier
     {
         AutoRegisterWiredRoutines();
         GenerateDerivedOperators();
+        // Conformance (Phase 2.5) and all member-routine registration are now complete; re-derive the
+        // wired attribute the parser no longer sets from the surface `$` sigil.
+        InferWiredMemberRoutines();
         ValidateProtocolImplementations();
         PreRegisterUserVariants(program: program);
         // Snapshot mode: stdlib variants are already registered in the restored registry.
@@ -897,6 +900,7 @@ public sealed partial class SemanticVerifier
         _conformanceAnalyzer.ApplyImplicitMarkerConformance();
         AutoRegisterWiredRoutines();
         GenerateDerivedOperators();
+        InferWiredMemberRoutines();
         AnalyzeSynthesizedBodies();
 
         // Pre-register try_/check_/lookup_ stubs for all failable stdlib routines so that
@@ -1122,6 +1126,8 @@ public sealed partial class SemanticVerifier
         Mark(label: "Phase 3 global -> AutoRegisterWiredRoutines");
         GenerateDerivedOperators();
         Mark(label: "Phase 3 global -> GenerateDerivedOperators");
+        InferWiredMemberRoutines();
+        Mark(label: "Phase 3 global -> InferWiredMemberRoutines");
         ValidateProtocolImplementations();
         Mark(label: "Phase 3 global -> ValidateProtocolImplementations");
 
