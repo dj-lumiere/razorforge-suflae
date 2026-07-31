@@ -79,11 +79,11 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
     }
     /// <summary>
-    /// Verifies flags validation behavior for is only with and without unexpected diagnostics.
+    /// Verifies that exact-flags equality via '==' produces no errors.
     /// </summary>
 
     [Fact]
-    public void Flags_IsOnlyWithAnd_NoErrors()
+    public void Flags_ExactEqualityWithAnd_NoErrors()
     {
         string source = """
                         flags Permissions
@@ -92,13 +92,12 @@ public class FlagsValidationTests
                           EXECUTE
 
                         routine test(perms: Permissions)
-                          var result = perms isonly READ and WRITE
+                          var result = perms == (Permissions.READ and Permissions.WRITE)
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut);
+        Assert.Empty(collection: result.Errors);
     }
     /// <summary>
     /// Verifies flags validation behavior for but operator same type without unexpected diagnostics.
@@ -332,35 +331,6 @@ public class FlagsValidationTests
 
     #endregion
 
-    #region #133: isonly rejects or/but (parser-enforced)
-
-    // #133 is enforced at the parser level: the isonly parser only accepts 'and' connective.
-    // 'isonly READ or WRITE' parses as '(perms isonly READ) or WRITE' -> a logical or,
-    // which produces LogicalOperatorRequiresBool. No semantic check needed.
-    /// <summary>
-    /// Verifies flags validation behavior for is only with or produces parse error.
-    /// </summary>
-
-    [Fact]
-    public void Flags_IsOnlyWithOr_ProducesParseError()
-    {
-        string source = """
-                        flags Permissions
-                          READ
-                          WRITE
-
-                        routine test(perms: Permissions)
-                          var result = perms isonly READ or WRITE
-                          return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        // Parser treats 'or' after isonly as logical or, not flags connective
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
-    }
-
-    #endregion
 
     #region #134: No arithmetic on flags
     /// <summary>
@@ -501,10 +471,10 @@ public class FlagsValidationTests
     }
 
     /// <summary>
-    /// Verifies that isonly with three members joined by and produces no error.
+    /// Verifies that exact-flags equality via '==' with three members produces no error.
     /// </summary>
     [Fact]
-    public void Flags_IsOnlyWithThreeMembers_NoErrors()
+    public void Flags_ExactEqualityWithThreeMembers_NoErrors()
     {
         string source = """
                         flags Permissions
@@ -513,15 +483,12 @@ public class FlagsValidationTests
                           EXECUTE
 
                         routine test(perms: Permissions)
-                          var result = perms isonly READ and WRITE and EXECUTE
+                          var result = perms == (Permissions.READ and Permissions.WRITE and Permissions.EXECUTE)
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+        Assert.Empty(collection: result.Errors);
     }
 
     /// <summary>

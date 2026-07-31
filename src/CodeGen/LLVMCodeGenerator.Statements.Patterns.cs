@@ -928,40 +928,31 @@ public partial class LlvmCodeGenerator
         string maskStr = testMask.ToString();
         string result;
 
-        if (flagsPattern.IsExact)
+        // is: check flags based on connective
+        string andResult = NextTemp();
+        EmitLine(sb: sb, line: $"  {andResult} = and i64 {subject}, {maskStr}");
+
+        if (flagsPattern.Connective == FlagsTestConnective.Or)
         {
-            // isonly: x == mask
             result = NextTemp();
-            EmitLine(sb: sb, line: $"  {result} = icmp eq i64 {subject}, {maskStr}");
+            EmitLine(sb: sb, line: $"  {result} = icmp ne i64 {andResult}, 0");
         }
         else
         {
-            // is: check flags based on connective
-            string andResult = NextTemp();
-            EmitLine(sb: sb, line: $"  {andResult} = and i64 {subject}, {maskStr}");
+            result = NextTemp();
+            EmitLine(sb: sb, line: $"  {result} = icmp eq i64 {andResult}, {maskStr}");
+        }
 
-            if (flagsPattern.Connective == FlagsTestConnective.Or)
-            {
-                result = NextTemp();
-                EmitLine(sb: sb, line: $"  {result} = icmp ne i64 {andResult}, 0");
-            }
-            else
-            {
-                result = NextTemp();
-                EmitLine(sb: sb, line: $"  {result} = icmp eq i64 {andResult}, {maskStr}");
-            }
-
-            // Handle 'but' exclusion
-            if (excludedMask > 0)
-            {
-                string exclAnd = NextTemp();
-                EmitLine(sb: sb, line: $"  {exclAnd} = and i64 {subject}, {excludedMask}");
-                string exclCmp = NextTemp();
-                EmitLine(sb: sb, line: $"  {exclCmp} = icmp eq i64 {exclAnd}, 0");
-                string combined = NextTemp();
-                EmitLine(sb: sb, line: $"  {combined} = and i1 {result}, {exclCmp}");
-                result = combined;
-            }
+        // Handle 'but' exclusion
+        if (excludedMask > 0)
+        {
+            string exclAnd = NextTemp();
+            EmitLine(sb: sb, line: $"  {exclAnd} = and i64 {subject}, {excludedMask}");
+            string exclCmp = NextTemp();
+            EmitLine(sb: sb, line: $"  {exclCmp} = icmp eq i64 {exclAnd}, 0");
+            string combined = NextTemp();
+            EmitLine(sb: sb, line: $"  {combined} = and i1 {result}, {exclCmp}");
+            result = combined;
         }
 
         EmitLine(sb: sb, line: $"  br i1 {result}, label %{matchLabel}, label %{failLabel}");

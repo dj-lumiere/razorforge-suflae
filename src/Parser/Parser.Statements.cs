@@ -269,7 +269,6 @@ public partial class Parser
     /// - 'is Type' / 'is Type varName' - type pattern with optional binding
     /// - 'is Type (field1, field2)' - destructuring pattern
     /// - 'isnot Type' - negated type pattern
-    /// - 'isonly FLAG' - exact flags pattern
     /// - comparison operators (==, !=, &lt;, &gt;, &lt;=, &gt;=)
     /// - literal values (42, "hello", true)
     /// - expression patterns (for condition-based when)
@@ -446,26 +445,6 @@ public partial class Parser
 
                 _inWhenPatternContext = false;
             }
-            // Case 5: 'isonly' keyword - exact flags pattern
-            else if (Match(type: TokenType.IsOnly))
-            {
-                _inWhenPatternContext = true;
-                var flagNames = new List<string>();
-                flagNames.Add(
-                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'"));
-                while (Match(type: TokenType.And))
-                {
-                    flagNames.Add(
-                        item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
-                }
-
-                pattern = new FlagsPattern(FlagNames: flagNames,
-                    Connective: FlagsTestConnective.And,
-                    ExcludedFlags: null,
-                    IsExact: true,
-                    Location: clauseLocation);
-                _inWhenPatternContext = false;
-            }
             // Case 6: Comparison patterns (==, !=, <, >, <=, >=)
             else if (IsComparisonOperator(tokenType: CurrentToken.Type))
             {
@@ -595,7 +574,6 @@ public partial class Parser
         return new FlagsPattern(FlagNames: flags,
             Connective: connective,
             ExcludedFlags: excluded,
-            IsExact: false,
             Location: loc);
     }
 

@@ -292,26 +292,6 @@ public sealed partial class SemanticVerifier
                     }
                 }
 
-                // #133: isonly rejects 'or' and 'but'
-                if (flagsPat.IsExact)
-                {
-                    if (flagsPat.Connective == FlagsTestConnective.Or)
-                    {
-                        ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
-                            message:
-                            "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
-                            location: flagsPat.Location);
-                    }
-
-                    if (flagsPat.ExcludedFlags is { Count: > 0 })
-                    {
-                        ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
-                            message:
-                            "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
-                            location: flagsPat.Location);
-                    }
-                }
-
                 break;
 
             case ComparisonPattern cmp when matchedType is ChoiceTypeInfo:

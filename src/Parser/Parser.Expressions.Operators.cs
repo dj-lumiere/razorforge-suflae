@@ -430,10 +430,9 @@ public partial class Parser
     {
         Expression expr = ParseBitwiseOr();
 
-        // Handle is/isnot/isonly/in/notin/obeys/disobeys expressions when not in when pattern/clause context
+        // Handle is/isnot/in/notin/obeys/disobeys expressions when not in when pattern/clause context
         while (!_inWhenPatternContext && !_inWhenClauseBody && Match(TokenType.Is,
                    TokenType.IsNot,
-                   TokenType.IsOnly,
                    TokenType.In,
                    TokenType.NotIn,
                    TokenType.Obeys,
@@ -441,24 +440,6 @@ public partial class Parser
         {
             Token op = PeekToken(offset: -1);
             SourceLocation location = GetLocation(token: op);
-
-            // 'isonly' is exact equality on a flags value. Parse the RHS as a full
-            // expression; semantic analysis resolves bare identifiers in the RHS against
-            // the LHS flags type (so `p isonly READ`, `p isonly READ and WRITE`, and
-            // `p isonly (Perm.READ and Perm.WRITE)` all work). After SA, codegen treats
-            // BinaryOperator.IsOnly identically to BinaryOperator.Equal on flags.
-            if (op.Type == TokenType.IsOnly)
-            {
-                // ParseLogicalAnd so `p isonly READ and WRITE` greedily consumes the
-                // `and READ` as a flag-combination on the RHS, producing
-                // IsOnly(p, And(READ, WRITE)) instead of And(IsOnly(p, READ), WRITE).
-                Expression rhs = ParseLogicalAnd();
-                expr = new BinaryExpression(Left: expr,
-                    Operator: BinaryOperator.IsOnly,
-                    Right: rhs,
-                    Location: location);
-                continue;
-            }
 
             if (op.Type is TokenType.Is or TokenType.IsNot)
             {

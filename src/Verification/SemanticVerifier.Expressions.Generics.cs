@@ -539,29 +539,9 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
                 message:
-                $"Flags test operators (is/isnot/isonly) require a flags type, but got '{subjectType.Name}'.",
+                $"Flags test operators (is/isnot) require a flags type, but got '{subjectType.Name}'.",
                 location: flagsTest.Location);
             return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
-        }
-
-        // #133: isonly rejects 'or' and 'but'
-        if (flagsTest.Kind == FlagsTestKind.IsOnly)
-        {
-            if (flagsTest.Connective == FlagsTestConnective.Or)
-            {
-                ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
-                    message:
-                    "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
-                    location: flagsTest.Location);
-            }
-
-            if (flagsTest.ExcludedFlags is { Count: > 0 })
-            {
-                ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
-                    message:
-                    "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
-                    location: flagsTest.Location);
-            }
         }
 
         // Validate each flag name exists in the type

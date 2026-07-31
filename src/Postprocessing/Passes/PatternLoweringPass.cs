@@ -731,12 +731,9 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
             case FlagsPattern fp:
             {
-                FlagsTestKind kind = fp.IsExact
-                    ? FlagsTestKind.IsOnly
-                    : FlagsTestKind.Is;
                 var cond = new FlagsTestExpression(
                     Subject: subject,
-                    Kind: kind,
+                    Kind: FlagsTestKind.Is,
                     TestFlags: fp.FlagNames,
                     Connective: fp.Connective,
                     ExcludedFlags: fp.ExcludedFlags,

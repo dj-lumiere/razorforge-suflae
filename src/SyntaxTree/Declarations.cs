@@ -352,7 +352,7 @@ public record ChoiceDeclaration(
 /// <list type="bullet">
 /// <item>Combining: perms = READ or WRITE</item>
 /// <item>Testing: perms is READ</item>
-/// <item>Exact match: perms isonly READ and WRITE</item>
+/// <item>Exact match: perms == (READ and WRITE)</item>
 /// <item>Removal: perms but WRITE</item>
 /// <item>Max 64 members (U64 backing)</item>
 /// </list>

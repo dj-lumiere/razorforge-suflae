@@ -637,19 +637,17 @@ public record NegatedTypePattern(TypeExpression Type, SourceLocation Location)
 
 /// <summary>
 /// Pattern that matches flag combinations in when clauses.
-/// Used for both 'is' flags patterns (has flags) and 'isonly' patterns (exact match).
-/// Examples: is READ and WRITE => ..., isonly READ and WRITE => ..., is READ or WRITE => ...
+/// Used for 'is' flags patterns (has flags).
+/// Examples: is READ and WRITE => ..., is READ or WRITE => ...
 /// </summary>
 /// <param name="FlagNames">List of flag member names to test</param>
 /// <param name="Connective">How the flags are combined: And (all required) or Or (any required)</param>
 /// <param name="ExcludedFlags">Optional flags to exclude with 'but' (only valid with And connective)</param>
-/// <param name="IsExact">True for isonly (exact match), false for is (has flags)</param>
 /// <param name="Location">Source location information</param>
 public record FlagsPattern(
     List<string> FlagNames,
     FlagsTestConnective Connective,
     List<string>? ExcludedFlags,
-    bool IsExact,
     SourceLocation Location) : Pattern(Location: Location);
 
 /// <summary>

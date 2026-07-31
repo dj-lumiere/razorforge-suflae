@@ -158,8 +158,8 @@ public sealed partial class SemanticVerifier
     /// <summary>Tracks variables invalidated by steal/ownership transfer (#11).</summary>
     private readonly HashSet<string> _deadrefVariables = [];
 
-    /// <summary>Flags-context stack: when analyzing the RHS of `isonly` (and similar) on a flags
-    /// LHS, bare identifiers are resolved against the flag members of the top type.</summary>
+    /// <summary>Flags-context stack: while a flags type is on top, bare identifiers are resolved
+    /// against the flag members of that type.</summary>
     private readonly Stack<TypeSymbol> _flagsContextStack = new();
 
     /// <summary>Tracks the current for-loop iteration variable names for migratable check (#22).</summary>

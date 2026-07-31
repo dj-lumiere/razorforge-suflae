@@ -601,7 +601,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.FlagsCustomOperatorNotAllowed,
                 message:
                 $"Flags type '{ownerType.Name}' cannot define operator '{routineName}'. " +
-                "Flags only support built-in operators: 'is', 'isnot', 'isonly', and 'but'.",
+                "Flags only support built-in operators: 'is', 'isnot', and 'but'.",
                 location: routine.Location);
         }
 

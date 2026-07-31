@@ -174,9 +174,10 @@ public sealed partial class SemanticVerifier
                 return _registry.LookupType(name: "Maybe") ?? ErrorTypeInfo.Instance;
         }
 
-        // Flag-context resolution: when analyzing the RHS of `p isonly READ` (where p: Perm),
-        // bare `READ` resolves against `Perm`'s flag members. The matching FlagsMemberInfo
-        // bit is stashed on the identifier so ExpressionLoweringPass can emit the bitmask.
+        // Flag-context resolution: while a flags type is the active flag-context, a bare
+        // identifier (e.g. `READ`) resolves against that type's flag members. The matching
+        // FlagsMemberInfo bit is stashed on the identifier so ExpressionLoweringPass can emit
+        // the bitmask.
         if (_flagsContextStack.Count > 0 && id.Name.Length > 0 && !id.Name.Contains(value: '.'))
         {
             TypeSymbol flagsCtx = _flagsContextStack.Peek();
@@ -327,49 +328,6 @@ public sealed partial class SemanticVerifier
             _deadrefVariables.Remove(item: rebindId.Name);
         }
 
-        // `p isonly RHS` — analyze LHS first, then analyze RHS with flag-context so bare flag
-        // names (READ, WRITE) and bare-name combinations (READ and WRITE) resolve against the
-        // LHS flags type without needing the type qualifier.
-        if (binary.Operator == BinaryOperator.IsOnly)
-        {
-            TypeSymbol lhsType = AnalyzeExpression(expression: binary.Left);
-            TypeSymbol rhsType;
-            if (lhsType is FlagsTypeInfo)
-            {
-                _flagsContextStack.Push(item: lhsType);
-                try
-                {
-                    rhsType = AnalyzeExpression(expression: binary.Right);
-                }
-                finally
-                {
-                    _flagsContextStack.Pop();
-                }
-            }
-            else
-            {
-                rhsType = AnalyzeExpression(expression: binary.Right);
-                if (lhsType is not ErrorTypeInfo)
-                {
-                    ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
-                        message:
-                        $"'isonly' requires a flags value on the left side, but got '{lhsType.Name}'.",
-                        location: binary.Location);
-                }
-            }
-
-            if (lhsType is FlagsTypeInfo && rhsType is not ErrorTypeInfo &&
-                rhsType.Name != lhsType.Name)
-            {
-                ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
-                    message:
-                    $"'isonly' requires both operands to be the same flags type, but got '{lhsType.Name}' and '{rhsType.Name}'.",
-                    location: binary.Location);
-            }
-
-            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
-        }
-
         // TODO: This should be done with not operator, but with member routines.
         TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
         // Pass leftType as expected for assignments so RHS literals like `none`
@@ -421,7 +379,7 @@ public sealed partial class SemanticVerifier
                 return ErrorTypeInfo.Instance;
             case BinaryOperator.But:
                 return leftType;
-            // #128: 'or' cannot be used to combine flags outside is/isnot/isonly tests
+            // #128: 'or' cannot be used to combine flags outside is/isnot tests
             case BinaryOperator.Or when
                 (leftType is FlagsTypeInfo || rightType is FlagsTypeInfo):
                 ReportError(code: SemanticDiagnosticCode.FlagsOrInAssignment,
@@ -451,7 +409,7 @@ public sealed partial class SemanticVerifier
                     ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
                         message:
                         $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used " +
-                        $"with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but'/'isonly' for " +
+                        $"with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but' for " +
                         $"" +
                         $"flag" +
                         $" operations.",
@@ -1030,7 +988,7 @@ public sealed partial class SemanticVerifier
                 ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
                     message:
                     $"Operator '{compound.Operator.ToStringRepresentation()}=' cannot be used with flags type '{targetType.Name}'. " +
-                    "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
+                    "Use 'but' to remove flags and 'is'/'isnot' to test flags.",
                     location: compound.Location);
                 return ErrorTypeInfo.Instance;
         }

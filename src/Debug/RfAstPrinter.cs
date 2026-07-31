@@ -516,7 +516,6 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         {
             FlagsTestKind.Is => "is",
             FlagsTestKind.IsNot => "isnot",
-            FlagsTestKind.IsOnly => "isonly",
             _ => node.Kind.ToString().ToLower()
         };
         string excluded = node.ExcludedFlags is { Count: > 0 }

@@ -324,16 +324,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case OptionalMemberExpression optMember:
                 return LowerOptionalMember(optMember);
 
-            // -- Step 1d-2: isonly -> equality on flags ----------------------------
-            // `p isonly RHS` parsed/typed as IsOnly. Rewrite to Equal so downstream
-            // (codegen icmp eq, flag-context bare-name lowering) treats it normally.
-            case BinaryExpression { Operator: BinaryOperator.IsOnly } isOnlyBin:
-            {
-                var rewritten = isOnlyBin with { Operator = BinaryOperator.Equal };
-                rewritten.ResolvedType = isOnlyBin.ResolvedType;
-                return LowerExpr(rewritten);
-            }
-
             // -- Step 1e: flags combination (and/but on FlagsTypeInfo) -------------
             case BinaryExpression { Operator: BinaryOperator.And or BinaryOperator.But, Left.ResolvedType: FlagsTypeInfo } flagsBin:
                 return LowerFlagsCombination(flagsBin);
@@ -767,10 +757,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                                 Right: maskLit, Location: loc) { ResolvedType = u64Type },
                             Operator: BinaryOperator.NotEqual, Right: maskLit, Location: loc)
                             { ResolvedType = boolType },
-                    FlagsTestKind.IsOnly =>
-                        new BinaryExpression(
-                            Left: loweredSubj, Operator: BinaryOperator.Equal,
-                            Right: maskLit, Location: loc) { ResolvedType = boolType },
                     _ =>
                         new BinaryExpression(
                             Left: new BinaryExpression(
@@ -926,7 +912,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
             case IdentifierExpression id:
             {
-                // Fold bare flag-context identifiers (e.g. `READ` inside `p isonly READ`)
+                // Fold bare flag-context identifiers (e.g. a bare `READ` in a flags test)
                 // -> bitmask literal. SA stamps ResolvedFlagsBit when it resolves a bare
                 // identifier against a flag context.
                 if (id.ResolvedFlagsBit is int bit && id.ResolvedType is FlagsTypeInfo)

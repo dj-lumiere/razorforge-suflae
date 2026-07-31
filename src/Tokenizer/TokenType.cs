@@ -506,14 +506,6 @@ public enum TokenType
     Not,
 
     /// <summary>
-    /// Flags exact match keyword.
-    /// Tests that only the specified flags are set — no more, no less.
-    /// 'isonly A and B' builds to equality check (value == mask) vs
-    /// 'is A and B' which is a superset check ((value &amp; mask) == mask).
-    /// </summary>
-    IsOnly,
-
-    /// <summary>
     /// Flags removal / exclusion keyword.
     /// Removes flags from a value (perms but WRITE = bitwise AND NOT), or
     /// excludes flags in 'is' tests (perms is READ and WRITE but EXECUTE =

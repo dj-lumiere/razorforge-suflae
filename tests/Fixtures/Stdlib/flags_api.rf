@@ -22,9 +22,9 @@ routine start()
   show(f"all (diagnose): {all:?}")
 
   # Equality
-  show(f"rw == READ and WRITE: {rw isonly (Permission.READ and Permission.WRITE)}")
-  show(f"rw == READ: {rw isonly Permission.READ}")
-  show(f"all == rw: {all isonly rw}")
+  show(f"rw == READ and WRITE: {rw == (Permission.READ and Permission.WRITE)}")
+  show(f"rw == READ: {rw == Permission.READ}")
+  show(f"all == rw: {all == rw}")
   show(f"all is rw: {all is rw}")
 
   show("DONE")

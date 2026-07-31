@@ -207,7 +207,6 @@ public partial class Tokenizer
             [key: "and"] = TokenType.And,
             [key: "or"] = TokenType.Or,
             [key: "not"] = TokenType.Not,
-            [key: "isonly"] = TokenType.IsOnly,
             [key: "but"] = TokenType.But,
 
             // Literals

@@ -50,7 +50,7 @@
         {
           "comment": "Type and pattern operations",
           "name": "keyword.operator.sf",
-          "match": "\\b(is|isnot|isonly|obeys|disobeys|in|notin|but)\\b"
+          "match": "\\b(is|isnot|obeys|disobeys|in|notin|but)\\b"
         },
         {
           "comment": "Module system",

@@ -473,9 +473,6 @@ public enum SemanticDiagnosticCode
     /// <summary>'or' connective on flags is only valid in test context (is ... or), not in assignment.</summary>
     FlagsOrInAssignment = 428,
 
-    /// <summary>'isonly' rejects 'or' and 'but' connectives — only 'and' is valid.</summary>
-    FlagsIsOnlyRejectsOrBut = 429,
-
     /// <summary>Flags member not found in the flags type.</summary>
     FlagsMemberNotFound = 430,
 

@@ -140,9 +140,6 @@ public enum BinaryOperator
     /// <summary>Negated type check or pattern matching operator (isnot)</summary>
     IsNot,
 
-    /// <summary>Exact-equality check on flags (isonly) — desugars to == in codegen, but keeps flag-context name resolution on RHS</summary>
-    IsOnly,
-
     /// <summary>Protocol conformance check operator (obeys)</summary>
     Obeys,
 
@@ -257,7 +254,6 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.NotIn => "notin",
                 BinaryOperator.Is => "is",
                 BinaryOperator.IsNot => "isnot",
-                BinaryOperator.IsOnly => "isonly",
                 BinaryOperator.Obeys => "obeys",
                 BinaryOperator.Disobeys => "disobeys",
 
