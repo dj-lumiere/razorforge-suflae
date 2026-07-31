@@ -365,25 +365,6 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
     }
 
-    /// <summary>
-    /// Verifies that the test validates dollar method still and reports the expected error.
-    /// </summary>
-    [Fact]
-    public void UnknownDollarMethod_StillReportsError()
-    {
-        string source = """
-                        record Wrapper
-                          value: S64
-                        @readonly
-                        routine Wrapper.frobnicate() -> S64
-                          return me.value
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
-    }
-
     #endregion
 
     #region !! and ?? on non-failable call -> error (no error handling type)

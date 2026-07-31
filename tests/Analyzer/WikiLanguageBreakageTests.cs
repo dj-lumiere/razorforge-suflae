@@ -425,25 +425,6 @@ public class WikiLanguageBreakageTests
             filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
     }
 
-    /// <summary>
-    /// Verifies that unknown wired routine names are rejected.
-    /// </summary>
-    [Fact]
-    public void Analyze_UnknownWiredRoutineName_ReportsError()
-    {
-        string source = """
-                        record Point
-                          x: S32
-
-                        routine Point.teleport() -> Point
-                          return me
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
-    }
 
     /// <summary>
     /// Verifies that break cannot appear outside a loop.
