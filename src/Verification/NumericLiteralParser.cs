@@ -170,12 +170,12 @@ public static class NumericLiteralParser
         // prematurely. (Digit-group separators "_" between digits are handled below.)
         foreach (string suf in new[] { "decimal", "f128", "d128", "d64", "d32", "dec", "dn" })
         {
-            if (cleaned.EndsWith("_" + suf, System.StringComparison.OrdinalIgnoreCase))
+            if (cleaned.EndsWith("_" + suf, StringComparison.OrdinalIgnoreCase))
             {
                 cleaned = cleaned[..^(suf.Length + 1)];
                 break;
             }
-            if (cleaned.EndsWith(suf, System.StringComparison.OrdinalIgnoreCase))
+            if (cleaned.EndsWith(suf, StringComparison.OrdinalIgnoreCase))
             {
                 cleaned = cleaned[..^suf.Length];
                 break;

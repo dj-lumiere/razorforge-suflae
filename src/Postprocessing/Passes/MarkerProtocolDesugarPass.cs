@@ -33,8 +33,8 @@ internal sealed class MarkerProtocolDesugarPass
         _registry = ctx.Registry;
         _variantBodies = ctx.VariantBodies;
         _synthesizedBodies = ctx.SynthesizedBodies;
-        _referringProto = _registry.LookupType(Compiler.Resolution.RuntimeContract.Referring) as ProtocolTypeInfo;
-        _controllingProto = _registry.LookupType(Compiler.Resolution.RuntimeContract.Controlling) as ProtocolTypeInfo;
+        _referringProto = _registry.LookupType(RuntimeContract.Referring) as ProtocolTypeInfo;
+        _controllingProto = _registry.LookupType(RuntimeContract.Controlling) as ProtocolTypeInfo;
         Snapshot();
     }
 
@@ -305,7 +305,7 @@ internal sealed class MarkerProtocolDesugarPass
     private static TypeExpression? UnwrapMarker(TypeExpression? t)
     {
         if (t == null) return null;
-        if ((t.Name == Compiler.Resolution.RuntimeContract.Referring || t.Name == Compiler.Resolution.RuntimeContract.Controlling)
+        if ((t.Name == RuntimeContract.Referring || t.Name == RuntimeContract.Controlling)
             && t.GenericArguments is { Count: > 0 } args)
             return args[0];
         return null;

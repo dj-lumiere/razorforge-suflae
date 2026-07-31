@@ -539,7 +539,7 @@ public sealed partial class TypeRegistry
         // `$store` would recurse (its own `return me.retain()` re-enters `$store`), so the redirect lives
         // here in lookup instead of as a stdlib method.
         if (methodName == "store" && GetRcWrapperBaseName(type: type) is { } rcBase
-            && Compiler.Resolution.RuntimeContract.RcCopyVerb.TryGetValue(
+            && RuntimeContract.RcCopyVerb.TryGetValue(
                 key: rcBase, value: out string? rcVerb))
         {
             return LookupMethod(type: type, methodName: rcVerb, isFailable: isFailable);
@@ -555,7 +555,7 @@ public sealed partial class TypeRegistry
             string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
             int markerBracket = markerBase.IndexOf(value: '[');
             if (markerBracket >= 0) markerBase = markerBase[..markerBracket];
-            if (markerBase is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling)
+            if (markerBase is RuntimeContract.Referring or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMethod(type: markerArgs[index: 0],
                     methodName: methodName, isFailable: isFailable);
@@ -675,7 +675,7 @@ public sealed partial class TypeRegistry
             };
             int recBracket = recBaseName.IndexOf(value: '[');
             if (recBracket >= 0) recBaseName = recBaseName[..recBracket];
-            bool skipProtocols = recBaseName is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked;
+            bool skipProtocols = recBaseName is RuntimeContract.Retained or RuntimeContract.Tracked;
             if (!skipProtocols)
             {
                 foreach (var protocol in protocols)
@@ -701,8 +701,8 @@ public sealed partial class TypeRegistry
         // controller pointer, reading controller's strong+weak counts as if they were T's first
         // fields. The forwarder-synthesis path emits the correct double-indirection body
         // (Hijacked[RetainController[T]](me).as_entity().borrow_data().as_entity().method(...)).
-        if (type is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Viewing
-                or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched
+        if (type is WrapperTypeInfo { Name: RuntimeContract.Viewing
+                or RuntimeContract.Modifying or RuntimeContract.Inspecting or RuntimeContract.Claiming or RuntimeContract.Shared or RuntimeContract.Watched
             } forwardingWrapper)
         {
             return LookupMethod(type: forwardingWrapper.InnerType,
@@ -783,7 +783,7 @@ public sealed partial class TypeRegistry
             string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
             int markerBracket = markerBase.IndexOf(value: '[');
             if (markerBracket >= 0) markerBase = markerBase[..markerBracket];
-            if (markerBase is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling)
+            if (markerBase is RuntimeContract.Referring or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMethodOverload(type: markerArgs[index: 0],
                     methodName: methodName, argTypes: argTypes);
@@ -1562,7 +1562,7 @@ public sealed partial class TypeRegistry
             name = name[..bracket];
         }
 
-        return Compiler.Resolution.RuntimeContract.RcWrapperBaseNames.Contains(item: name)
+        return RuntimeContract.RcWrapperBaseNames.Contains(item: name)
             ? name
             : null;
     }

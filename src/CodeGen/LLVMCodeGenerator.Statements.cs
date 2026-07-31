@@ -242,8 +242,8 @@ public partial class LlvmCodeGenerator
                         Object: IdentifierExpression { Name: var srcEntityName }
                     }
                 }
-                && rcMoveVerb is Compiler.Resolution.RuntimeContract.RefCount.Retain
-                    or Compiler.Resolution.RuntimeContract.RefCount.Roam)
+                && rcMoveVerb is Resolution.RuntimeContract.RefCount.Retain
+                    or Resolution.RuntimeContract.RefCount.Roam)
             {
                 _localEntityVars.RemoveAll(match: e => e.Name == srcEntityName);
             }
@@ -477,7 +477,7 @@ public partial class LlvmCodeGenerator
                 // own reference and tears down normally. Consuming it here (move semantics, for the
                 // strict Retained/Tracked wrappers) would drop a ref the field just retained → underflow.
                 if (GetGenericBaseName(type: GetExpressionType(expr: member)) is not { } targetBase
-                    || targetBase != Compiler.Resolution.RuntimeContract.Roamed)
+                    || targetBase != Resolution.RuntimeContract.Roamed)
                 {
                     ConsumeTransferredLocalOwnership(expr: assign.Value);
                 }
@@ -688,7 +688,7 @@ public partial class LlvmCodeGenerator
             // to `me.head!!.prev = ...` etc. on Retained/Tracked would store into the
             // controller's strong_count slot instead of the wrapped entity's field.
             if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == Compiler.Resolution.RuntimeContract.Retained || wrapBaseName == Compiler.Resolution.RuntimeContract.Tracked))
+                (wrapBaseName == Resolution.RuntimeContract.Retained || wrapBaseName == Resolution.RuntimeContract.Tracked))
             {
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RetainController[{innerEntity.FullName}]")
@@ -706,7 +706,7 @@ public partial class LlvmCodeGenerator
                 }
             }
             else if (wrapperRecord.HasDirectBackendType &&
-                wrapBaseName == Compiler.Resolution.RuntimeContract.Roamed)
+                wrapBaseName == Resolution.RuntimeContract.Roamed)
             {
                 // Roamed[T] handle: project the WRITE through RoamController.data AND bracket it with
                 // the mode-checked lock so an ESCAPED object's field store is serialized (no-op LOCAL).
@@ -748,7 +748,7 @@ public partial class LlvmCodeGenerator
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
                         {
-                            Name: Compiler.Resolution.RuntimeContract.Hijacked, TypeArguments.Count: > 0
+                            Name: Resolution.RuntimeContract.Hijacked, TypeArguments.Count: > 0
                         } hijacked &&
                         hijacked.TypeArguments![index: 0] is EntityTypeInfo fieldInner &&
                         fieldInner.FullName == innerEntity.FullName)
@@ -916,7 +916,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>RC wrapper base names that require copy/release on var binding.</summary>
     private static readonly HashSet<string> RcWrapperBaseNames =
-        [Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Tracked, Compiler.Resolution.RuntimeContract.Shared, Compiler.Resolution.RuntimeContract.Watched, Compiler.Resolution.RuntimeContract.Roamed];
+        [Resolution.RuntimeContract.Retained, Resolution.RuntimeContract.Tracked, Resolution.RuntimeContract.Shared, Resolution.RuntimeContract.Watched, Resolution.RuntimeContract.Roamed];
 
     /// <summary>
     /// Emits retain calls for all RC wrapper fields in a record.
@@ -939,7 +939,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
 
-            RoutineInfo? retainMethod = _registry.LookupMethod(type: w, methodName: Compiler.Resolution.RuntimeContract.RefCount.Retain);
+            RoutineInfo? retainMethod = _registry.LookupMethod(type: w, methodName: Resolution.RuntimeContract.RefCount.Retain);
             if (retainMethod == null)
             {
                 continue;
@@ -970,7 +970,7 @@ public partial class LlvmCodeGenerator
         if (IsMaybeType(type: recordType))
         {
             MemberVariableInfo? presentField = recordType.MemberVariables
-                .FirstOrDefault(f => f.Name == Compiler.Resolution.RuntimeContract.Carrier.PresentField);
+                .FirstOrDefault(f => f.Name == Resolution.RuntimeContract.Carrier.PresentField);
             if (presentField != null)
             {
                 // Maybe `present` is a Bool stored as i8 — trunc to i1 for the branch.
@@ -1033,7 +1033,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>Copy verb per RC wrapper (the method that bumps the appropriate count).</summary>
     private static string? RcCopyVerb(string wrapperBase) =>
-        Compiler.Resolution.RuntimeContract.RcCopyVerb.TryGetValue(key: wrapperBase, value: out string? verb)
+        Resolution.RuntimeContract.RcCopyVerb.TryGetValue(key: wrapperBase, value: out string? verb)
             ? verb
             : null;
 

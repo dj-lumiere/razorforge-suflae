@@ -73,7 +73,7 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 {
-    private const string ValueFieldName = Compiler.Resolution.RuntimeContract.Carrier.ValueField;
+    private const string ValueFieldName = Resolution.RuntimeContract.Carrier.ValueField;
     private const string TypeIdFieldName = "type_id";
 
     /// <summary>
@@ -127,11 +127,11 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     /// Mirror of <c>ExpressionLoweringPass.RunOnInstantiatedGenericBodies</c>.
     /// </summary>
     public void RunOnInstantiatedGenericBodies(
-        Dictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedGenericBodies)
+        Dictionary<string, Instantiation.MonomorphizedBody> instantiatedGenericBodies)
     {
         foreach (string key in instantiatedGenericBodies.Keys.ToList())
         {
-            Compiler.Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
+            Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue;
             Statement lowered = LowerStatement(stmt: entry.Ast.Body);
             if (!ReferenceEquals(lowered, entry.Ast.Body))
@@ -790,7 +790,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private MemberExpression MakePresentAccess(Expression subject, SourceLocation loc)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
-        return new MemberExpression(Object: subject, MemberName: Compiler.Resolution.RuntimeContract.Carrier.PresentField, Location: loc)
+        return new MemberExpression(Object: subject, MemberName: Resolution.RuntimeContract.Carrier.PresentField, Location: loc)
         {
             ResolvedType = boolType
         };
@@ -876,7 +876,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         {
             ResolvedType = hijackedType
         };
-        var isNoneMember = new MemberExpression(Object: valueAccess, MemberName: Compiler.Resolution.RuntimeContract.RawPointer.IsNone,
+        var isNoneMember = new MemberExpression(Object: valueAccess, MemberName: Resolution.RuntimeContract.RawPointer.IsNone,
             Location: loc)
         {
             ResolvedType = boolType
@@ -896,7 +896,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         {
             ResolvedType = hijackedType
         };
-        var readMember = new MemberExpression(Object: valueAccess, MemberName: Compiler.Resolution.RuntimeContract.RawPointer.Peek, Location: loc)
+        var readMember = new MemberExpression(Object: valueAccess, MemberName: Resolution.RuntimeContract.RawPointer.Peek, Location: loc)
         {
             ResolvedType = entityType
         };

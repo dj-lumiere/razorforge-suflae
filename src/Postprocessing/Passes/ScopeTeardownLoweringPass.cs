@@ -89,7 +89,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    private readonly HashSet<string> _movedNames = new(comparer: System.StringComparer.Ordinal);
+    private readonly HashSet<string> _movedNames = new(comparer: StringComparer.Ordinal);
 
     private RoutineDeclaration LowerRoutine(RoutineDeclaration r)
     {
@@ -348,7 +348,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     /// has) around the spilled RHS.
     /// </summary>
     private Statement LowerEntityReassign(Statement original, Expression rhs,
-        System.Func<Expression, Statement> rebuild, Owned owned)
+        Func<Expression, Statement> rebuild, Owned owned)
     {
         var stmts = new List<Statement>();
         Expression finalRhs = rhs;

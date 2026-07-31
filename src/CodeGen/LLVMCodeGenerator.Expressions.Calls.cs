@@ -724,7 +724,7 @@ public partial class LlvmCodeGenerator
         // making subsequent `.extract()`/`.inject()` operate on dead stack. Intercepting at
         // the caller keeps the Hijacked bound to the caller's storage. Same lvalue-shape
         // restrictions and pointer-shaped-record exclusion as the `get_address` intercept.
-        if (member.MemberName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && arguments.Count == 0)
+        if (member.MemberName == Resolution.RuntimeContract.RawPointer.Hijack && arguments.Count == 0)
         {
             TypeInfo? receiverTypeForHijack = GetExpressionType(expr: member.Object);
             if (receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: false } || receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: true } primShape
@@ -824,7 +824,7 @@ public partial class LlvmCodeGenerator
         // $control/$represent/$diagnose/$destroy, owned by the token itself) keep the controller ptr.
         if (method is { OwnerType: { } methodOwner } &&
             receiverType is RecordTypeInfo tokenRec &&
-            GetGenericBaseName(type: tokenRec) is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
+            GetGenericBaseName(type: tokenRec) is Resolution.RuntimeContract.Inspecting or Resolution.RuntimeContract.Claiming &&
             tokenRec.TypeArguments is { Count: > 1 } &&
             tokenRec.TypeArguments[index: 0] is EntityTypeInfo tokenInner &&
             methodOwner.FullName == tokenInner.FullName)

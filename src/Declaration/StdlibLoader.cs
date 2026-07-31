@@ -639,8 +639,8 @@ public sealed partial class StdlibLoader
         {
             // Wrapper types (Hijacked, Viewing, Modifying, etc.) are not in _types — create directly
             if (typeExpr.GenericArguments.Count == 1 &&
-                typeName is Compiler.Resolution.RuntimeContract.Hijacked or Compiler.Resolution.RuntimeContract.Viewing or Compiler.Resolution.RuntimeContract.Modifying
-                    or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched)
+                typeName is RuntimeContract.Hijacked or RuntimeContract.Viewing or RuntimeContract.Modifying
+                    or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Shared or RuntimeContract.Watched)
             {
                 TypeInfo? wrapperInner = ResolveSimpleType(registry: registry,
                     typeExpr: typeExpr.GenericArguments[index: 0],
@@ -648,7 +648,7 @@ public sealed partial class StdlibLoader
                     moduleName: moduleName);
                 if (wrapperInner != null)
                 {
-                    bool isReadOnly = typeName is Compiler.Resolution.RuntimeContract.Viewing;
+                    bool isReadOnly = typeName is RuntimeContract.Viewing;
                     return registry.GetOrCreateWrapperType(wrapperName: typeName,
                         innerType: wrapperInner,
                         isReadOnly: isReadOnly);

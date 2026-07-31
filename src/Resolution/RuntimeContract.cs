@@ -163,21 +163,21 @@ public static class RuntimeContract
     /// source binding is not torn down at scope exit.</summary>
     /// <remarks>Sites: ScopeTeardownLoweringPass.StorePrimitives.</remarks>
     public static readonly IReadOnlySet<string> StorePrimitives =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
+        new HashSet<string>(comparer: StringComparer.Ordinal)
             { RawPointer.Poke, "store_element_ref", "store" };
 
     /// <summary>Verbs that CONSUME their (bare-entity) receiver — ownership moves into the RC
     /// controller, so the receiver is not torn down.</summary>
     /// <remarks>Sites: ScopeTeardownLoweringPass (retain/track pattern), TemporaryTeardownPass.ConsumingReceiverVerbs.</remarks>
     public static readonly IReadOnlySet<string> ConsumingReceiverVerbs =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
+        new HashSet<string>(comparer: StringComparer.Ordinal)
             { RefCount.Retain, RefCount.Track };
 
     /// <summary>Reference primitives whose result BORROWS a referent owned elsewhere — a binding or
     /// temporary initialized by one owns nothing and must not be torn down.</summary>
     /// <remarks>Sites: ScopeTeardownLoweringPass.ViewVerbs, TemporaryTeardownPass.ViewVerbs.</remarks>
     public static readonly IReadOnlySet<string> ViewVerbs =
-        new HashSet<string>(comparer: System.StringComparer.Ordinal)
+        new HashSet<string>(comparer: StringComparer.Ordinal)
             { RawPointer.AsEntity, Refer, Control };
 
     // =====================================================================================

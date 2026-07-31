@@ -20,7 +20,7 @@ public partial class LlvmCodeGenerator
     private static TypeInfo UnwrapCollectionStorageType(TypeInfo type)
     {
         TypeInfo current = type;
-        while (current is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned } wrapper)
+        while (current is WrapperTypeInfo { Name: Resolution.RuntimeContract.Owned } wrapper)
         {
             current = wrapper.InnerType;
         }
@@ -73,7 +73,7 @@ public partial class LlvmCodeGenerator
         TypeInfo t = paramType;
         while (t is WrapperTypeInfo wrapper)
         {
-            if (wrapper.Name == Compiler.Resolution.RuntimeContract.Owned) { t = wrapper.InnerType; continue; }
+            if (wrapper.Name == Resolution.RuntimeContract.Owned) { t = wrapper.InnerType; continue; }
             return false;
         }
         string baseName = GetGenericBaseName(type: t) ?? t.Name;
@@ -188,8 +188,8 @@ public partial class LlvmCodeGenerator
         bool isMapType = baseName is "Dict" or "SortedDict" or "SecureDict";
         bool isSequenceType = baseName is "List" or "Deque" or "BitList";
         addMemberRoutineName = isSequenceType
-            ? Compiler.Resolution.RuntimeContract.Collection.AddLast
-            : Compiler.Resolution.RuntimeContract.Collection.Add;
+            ? Resolution.RuntimeContract.Collection.AddLast
+            : Resolution.RuntimeContract.Collection.Add;
 
         ResolvedMemberRoutine? resolvedAdd = ResolveMemberRoutine(receiverType: resolvedType, methodName: addMemberRoutineName);
         if (resolvedAdd == null) return collectionPtr;

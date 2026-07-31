@@ -81,7 +81,7 @@ public partial class LlvmCodeGenerator
             // (EmitEntityMemberVariableWrite). Null/none values retain as a no-op (null-safe), so the
             // zero-init caller (a $create prologue) is unaffected.
             if (memberVariable.Type is RecordTypeInfo roamedField
-                && GetGenericBaseName(type: roamedField) == Compiler.Resolution.RuntimeContract.Roamed)
+                && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed)
             {
                 EmitRetainedVarRetain(sb: sb, llvmAddr: memberVariablePtr,
                     recordType: (RecordTypeInfo)memberVariable.Type);
@@ -241,7 +241,7 @@ public partial class LlvmCodeGenerator
             MemberVariableInfo? fieldInfo = entity.MemberVariables
                 .FirstOrDefault(predicate: mv => mv.Name == fieldName);
             bool isRoamedField = fieldInfo?.Type is RecordTypeInfo roamedFieldInfo
-                && GetGenericBaseName(type: roamedFieldInfo) == Compiler.Resolution.RuntimeContract.Roamed;
+                && GetGenericBaseName(type: roamedFieldInfo) == Resolution.RuntimeContract.Roamed;
             if (!isRoamedField)
             {
                 ConsumeTransferredLocalOwnership(expr: fieldExpr);
@@ -440,7 +440,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb, line: $"  store {fieldType} {value}, ptr {fieldPtr}");
 
             if (field.Type is RecordTypeInfo roamedField
-                && GetGenericBaseName(type: roamedField) == Compiler.Resolution.RuntimeContract.Roamed)
+                && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed)
             {
                 EmitRetainedVarRetain(sb: sb, llvmAddr: fieldPtr,
                     recordType: (RecordTypeInfo)field.Type);
@@ -600,7 +600,7 @@ public partial class LlvmCodeGenerator
             // dereferencing the controller first; otherwise `ra.value` reads
             // controller.strong_count (offset 0) instead of the actual field.
             if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == Compiler.Resolution.RuntimeContract.Retained || wrapBaseName == Compiler.Resolution.RuntimeContract.Tracked))
+                (wrapBaseName == Resolution.RuntimeContract.Retained || wrapBaseName == Resolution.RuntimeContract.Tracked))
             {
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RetainController[{innerEntity.FullName}]")
@@ -620,7 +620,7 @@ public partial class LlvmCodeGenerator
                 }
             }
             else if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == Compiler.Resolution.RuntimeContract.Inspecting || wrapBaseName == Compiler.Resolution.RuntimeContract.Claiming) &&
+                (wrapBaseName == Resolution.RuntimeContract.Inspecting || wrapBaseName == Resolution.RuntimeContract.Claiming) &&
                 wrapperRecord.TypeArguments is { Count: > 1 })
             {
                 // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets
@@ -646,7 +646,7 @@ public partial class LlvmCodeGenerator
                 }
             }
             else if (wrapperRecord.HasDirectBackendType &&
-                wrapBaseName == Compiler.Resolution.RuntimeContract.Roamed)
+                wrapBaseName == Resolution.RuntimeContract.Roamed)
             {
                 // Roamed[T] is an `@llvm("ptr")` handle targeting RoamController[T], NOT the entity.
                 // Project the read through the controller's `data` field AND bracket it with the
@@ -687,7 +687,7 @@ public partial class LlvmCodeGenerator
                 for (int fi = 0; fi < wrapperRecord.MemberVariables.Count; fi++)
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
-                        { Name: Compiler.Resolution.RuntimeContract.Hijacked, TypeArguments.Count: > 0
+                        { Name: Resolution.RuntimeContract.Hijacked, TypeArguments.Count: > 0
                         } hijacked
                         && hijacked.TypeArguments![index: 0] is EntityTypeInfo fieldInner
                         && fieldInner.FullName == innerEntity.FullName)
@@ -1012,7 +1012,7 @@ public partial class LlvmCodeGenerator
         // Suflae — the optional one just permits a null handle (roamed_none). Reassignment drops the old
         // strong ref and takes a fresh one; the helpers are null-safe so a null (none) handle is a no-op.
         bool isRoamedField = memberVariable.Type is RecordTypeInfo roamedField
-            && GetGenericBaseName(type: roamedField) == Compiler.Resolution.RuntimeContract.Roamed;
+            && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed;
         if (isRoamedField)
         {
             EmitRetainedVarRelease(sb: sb, llvmAddr: memberVariablePtr,
@@ -1180,8 +1180,8 @@ public partial class LlvmCodeGenerator
         if (typeExpr.GenericArguments is { Count: > 0 } genericArgs)
         {
             if (genericArgs.Count == 1 &&
-                typeExpr.Name is Compiler.Resolution.RuntimeContract.Hijacked or Compiler.Resolution.RuntimeContract.Viewing or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Inspecting or
-                    Compiler.Resolution.RuntimeContract.Claiming or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Watched)
+                typeExpr.Name is Resolution.RuntimeContract.Hijacked or Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Modifying or Resolution.RuntimeContract.Inspecting or
+                    Resolution.RuntimeContract.Claiming or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Shared or Resolution.RuntimeContract.Tracked or Resolution.RuntimeContract.Watched)
             {
                 TypeInfo? innerType = ResolveEntityMemberTypeFromAst(typeExpr: genericArgs[index: 0],
                     moduleName: moduleName,
@@ -1191,7 +1191,7 @@ public partial class LlvmCodeGenerator
                     return null;
                 }
 
-                bool isReadOnly = typeExpr.Name is Compiler.Resolution.RuntimeContract.Viewing or Compiler.Resolution.RuntimeContract.Inspecting;
+                bool isReadOnly = typeExpr.Name is Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Inspecting;
                 return _registry.GetOrCreateWrapperType(wrapperName: typeExpr.Name,
                     innerType: innerType,
                     isReadOnly: isReadOnly);

@@ -714,7 +714,7 @@ internal sealed class IteratorInlineLoweringPass
     // ---------------------------------------------------------------------------------------------
     // Lightweight read-only walkers (used only by the simple-gate and local collection).
     // ---------------------------------------------------------------------------------------------
-    private static void WalkStatements(Statement stmt, System.Action<Statement> visit)
+    private static void WalkStatements(Statement stmt, Action<Statement> visit)
     {
         visit(stmt);
         switch (stmt)
@@ -750,7 +750,7 @@ internal sealed class IteratorInlineLoweringPass
         }
     }
 
-    private static void WalkExpressions(Statement stmt, System.Action<Expression> visit)
+    private static void WalkExpressions(Statement stmt, Action<Expression> visit)
     {
         WalkStatements(stmt: stmt, visit: s =>
         {
@@ -776,7 +776,7 @@ internal sealed class IteratorInlineLoweringPass
         });
     }
 
-    private static void WalkExpr(Expression e, System.Action<Expression> visit)
+    private static void WalkExpr(Expression e, Action<Expression> visit)
     {
         visit(e);
         switch (e)

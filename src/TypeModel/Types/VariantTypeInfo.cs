@@ -135,7 +135,7 @@ public sealed class VariantTypeInfo : RecordTypeInfo
     /// <summary>
     /// Recursively substitutes type parameters in a type.
     /// </summary>
-    private static TypeInfo SubstituteType(TypeInfo type,
+    private static new TypeInfo SubstituteType(TypeInfo type,
         Dictionary<string, TypeInfo> substitution)
     {
         if (substitution.TryGetValue(key: type.Name, value: out TypeInfo? substituted))

@@ -266,7 +266,7 @@ public sealed class RoutineInfo
         string fullName = proto.GenericDefinition?.Name ?? proto.Name;
         int bracket = fullName.IndexOf(value: '[');
         string baseName = bracket >= 0 ? fullName[..bracket] : fullName;
-        return baseName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
+        return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
     }
 
     /// <summary>Visibility modifier.</summary>

@@ -311,7 +311,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         CallExpression tryNextCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: tryNextReceiver,
-                MemberName: Compiler.Resolution.RuntimeContract.TryEmit,
+                MemberName: Resolution.RuntimeContract.TryEmit,
                 Location: loc),
             Arguments: [],
             Location: loc) { IsSynthesizedLowering = true };
@@ -338,7 +338,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 // Carry the concrete emitter type onto the receiver so reachability/codegen see it.
                 tryNextReceiver.ResolvedType = iteratorType;
                 RoutineInfo? tryNextMethod =
-                    ctx.Registry.LookupMethod(type: iteratorType, methodName: Compiler.Resolution.RuntimeContract.TryEmit);
+                    ctx.Registry.LookupMethod(type: iteratorType, methodName: Resolution.RuntimeContract.TryEmit);
                 if (tryNextMethod != null)
                     tryNextCallExpr = tryNextCallExpr with
                     {
@@ -542,11 +542,11 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     /// per-implementer routines; those clones contain raw `for` loops that codegen rejects.
     /// </summary>
     public void RunOnInstantiatedGenericBodies(
-        IDictionary<string, Compiler.Instantiation.MonomorphizedBody> bodies)
+        IDictionary<string, Instantiation.MonomorphizedBody> bodies)
     {
         foreach (string key in bodies.Keys.ToList())
         {
-            Compiler.Instantiation.MonomorphizedBody mb = bodies[key];
+            Instantiation.MonomorphizedBody mb = bodies[key];
             Statement lowered = LowerStatement(stmt: mb.Ast.Body);
             if (!ReferenceEquals(lowered, mb.Ast.Body))
                 bodies[key] = mb with { Ast = mb.Ast with { Body = lowered } };

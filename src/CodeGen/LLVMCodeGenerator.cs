@@ -1284,9 +1284,9 @@ public partial class LlvmCodeGenerator
                 string sample = string.Join(separator: "\n",
                     values: overPruned.Take(count: 20).Select(selector: n => $"  @{n}"));
                 string more = overPruned.Count > 20 ? $"\n  … and {overPruned.Count - 20} more" : "";
-                if (System.Environment.GetEnvironmentVariable(variable: "RF_OVERPRUNE_WARN") == "1")
+                if (Environment.GetEnvironmentVariable(variable: "RF_OVERPRUNE_WARN") == "1")
                 {
-                    System.Console.Error.WriteLine(value: $"[OVERPRUNE-WARN] {overPruned.Count}:\n{sample}{more}");
+                    Console.Error.WriteLine(value: $"[OVERPRUNE-WARN] {overPruned.Count}:\n{sample}{more}");
                     return;
                 }
                 throw new InvalidOperationException(

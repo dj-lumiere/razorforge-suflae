@@ -517,7 +517,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                         renderCall = new CallExpression(
                             Callee: new MemberExpression(
                                 Object: renderCall,
-                                MemberName: Compiler.Resolution.RuntimeContract.Collection.Replace,
+                                MemberName: Resolution.RuntimeContract.Collection.Replace,
                                 Location: ep.Location) { ResolvedType = textType },
                             Arguments:
                             [

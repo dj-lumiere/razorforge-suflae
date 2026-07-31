@@ -35,7 +35,7 @@ public static class RuntimeContractCheck
         // 1. Every bare routine name declared anywhere in the stdlib ASTs. Using the declaration
         //    ground truth (not the liveness-filtered GetAllRoutines) so the check is independent of
         //    which routines a user program happens to reach — validate-stdlib has no user program.
-        var declaredRoutines = new HashSet<string>(comparer: System.StringComparer.Ordinal);
+        var declaredRoutines = new HashSet<string>(comparer: StringComparer.Ordinal);
         foreach ((Program program, _, _) in registry.StdlibPrograms)
         {
             AstWalker.Walk(root: program, visit: node =>
@@ -110,6 +110,6 @@ public static class RuntimeContractCheck
             EntityTypeInfo e => e.MemberVariables.Select(selector: m => m.Name),
             _ => []
         };
-        return new HashSet<string>(collection: names, comparer: System.StringComparer.Ordinal);
+        return new HashSet<string>(collection: names, comparer: StringComparer.Ordinal);
     }
 }

@@ -376,7 +376,7 @@ internal sealed class SignatureResolver
             && pending.Kind == RoutineKind.MemberRoutine
             && pending.RoutineName is not ("create" or "create!")
             && refreshedOwnerType is EntityTypeInfo ownerEntity
-            && _sa._registry.LookupType(name: Compiler.Resolution.RuntimeContract.Roamed) is { } roamedOwnerDef)
+            && _sa._registry.LookupType(name: RuntimeContract.Roamed) is { } roamedOwnerDef)
         {
             meType = _sa._registry.GetOrCreateResolution(
                 genericDef: roamedOwnerDef, typeArguments: [ownerEntity]);
@@ -988,6 +988,6 @@ internal sealed class SignatureResolver
             return false;
         }
         string baseName = GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name);
-        return baseName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
+        return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
     }
 }

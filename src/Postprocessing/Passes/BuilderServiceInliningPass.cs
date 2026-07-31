@@ -63,7 +63,7 @@ internal sealed class BuilderServiceInliningPass
 
     private static readonly HashSet<string> _foldableRoutines = new(StringComparer.Ordinal)
     {
-        Compiler.Resolution.RuntimeContract.DataSize,
+        RuntimeContract.DataSize,
         "type_id",
         "type_name",
         "module_name",
@@ -714,7 +714,7 @@ internal sealed class BuilderServiceInliningPass
         string inFlightPrefix = receiverIsInFlight && type is EntityTypeInfo ? "?" : "";
         switch (routineName)
         {
-            case Compiler.Resolution.RuntimeContract.DataSize when _u64Type != null && _byteSizeType != null:
+            case RuntimeContract.DataSize when _u64Type != null && _byteSizeType != null:
                 return MakeByteSizeCreator(CalculateDataSizeForType(type), _u64Type, _byteSizeType, loc);
 
             case "type_id" when _u64Type != null:

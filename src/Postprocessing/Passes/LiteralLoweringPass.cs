@@ -599,7 +599,7 @@ internal sealed class LiteralLoweringPass
     private CallExpression MakeFromLiteralCall(string raw, string suffix, TypeInfo type,
         RoutineInfo fromLiteral, SourceLocation loc)
     {
-        string digits = (raw.EndsWith(value: suffix, comparisonType: System.StringComparison.OrdinalIgnoreCase)
+        string digits = (raw.EndsWith(value: suffix, comparisonType: StringComparison.OrdinalIgnoreCase)
             ? raw[..^suffix.Length]
             : raw).Replace(oldValue: "_", newValue: "");
 

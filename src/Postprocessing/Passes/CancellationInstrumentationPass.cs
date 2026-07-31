@@ -54,7 +54,7 @@ public sealed class CancellationInstrumentationPass
     /// </summary>
     public static void Run(
         IEnumerable<(Program Program, string FilePath, string Module)> programs,
-        IReadOnlyDictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedBodies,
+        IReadOnlyDictionary<string, Instantiation.MonomorphizedBody> instantiatedBodies,
         IReadOnlyCollection<string> maySuspendKeys,
         TypeRegistry registry)
     {
@@ -79,7 +79,7 @@ public sealed class CancellationInstrumentationPass
         // are the SAME objects codegen emits, so mutating their bodies in place takes effect. They
         // inherited the inline $destroy calls from the lowered generic-def, so InstrumentBody derives
         // the teardown set the same way.
-        foreach ((string key, Compiler.Instantiation.MonomorphizedBody mb) in instantiatedBodies)
+        foreach ((string key, Instantiation.MonomorphizedBody mb) in instantiatedBodies)
         {
             if (pass._maySuspend.Contains(item: key) || pass._maySuspend.Contains(item: mb.Info.RegistryKey))
             {

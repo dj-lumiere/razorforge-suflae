@@ -2108,7 +2108,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             ResolvedType = crashable
         };
         var call = new CallExpression(Callee: new MemberExpression(Object: meRef,
-                MemberName: Compiler.Resolution.RuntimeContract.CrashMessage,
+                MemberName: Resolution.RuntimeContract.CrashMessage,
                 Location: _synthLoc),
             Arguments: [],
             Location: _synthLoc);
@@ -2133,7 +2133,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             ResolvedType = crashable
         };
         var crashMsgCall = new CallExpression(Callee: new MemberExpression(Object: meRef,
-                MemberName: Compiler.Resolution.RuntimeContract.CrashMessage,
+                MemberName: Resolution.RuntimeContract.CrashMessage,
                 Location: _synthLoc),
             Arguments: [],
             Location: _synthLoc);
@@ -2335,7 +2335,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             {
                 TypeInfo? fieldInfoType = ctx.Registry.LookupType(name: "FieldInfo");
                 TypeInfo? ownedDef =
-                    ctx.Registry.LookupType(name: Compiler.Resolution.RuntimeContract.Owned);
+                    ctx.Registry.LookupType(name: Resolution.RuntimeContract.Owned);
                 TypeInfo? listDef = ctx.Registry.LookupType(name: "List");
                 if (fieldInfoType == null || ownedDef == null || listDef == null) return false;
                 TypeInfo ownedFieldInfo = ctx.Registry.GetOrCreateResolution(genericDef: ownedDef,
@@ -2496,7 +2496,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 ? t.Name[..t.Name.IndexOf(value: '[')]
                 : t.Name
         };
-        return baseName == Compiler.Resolution.RuntimeContract.Roamed;
+        return baseName == Resolution.RuntimeContract.Roamed;
     }
 
     /// <summary>
@@ -2665,7 +2665,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     private ExpressionStatement BuildEntitySelfFree(TypeInfo owner, TypeInfo? blankType)
     {
         TypeInfo hijackedType = ctx.Registry.GetOrCreateWrapperType(
-            wrapperName: Compiler.Resolution.RuntimeContract.Hijacked,
+            wrapperName: Resolution.RuntimeContract.Hijacked,
             innerType: owner,
             isReadOnly: false);
 
@@ -2675,13 +2675,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         };
         var hijackCall = new CallExpression(
             Callee: new MemberExpression(Object: meRef,
-                MemberName: Compiler.Resolution.RuntimeContract.RawPointer.Hijack,
+                MemberName: Resolution.RuntimeContract.RawPointer.Hijack,
                 Location: _synthLoc) { ResolvedType = hijackedType },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = hijackedType };
         var invalidateCall = new CallExpression(
             Callee: new MemberExpression(Object: hijackCall,
-                MemberName: Compiler.Resolution.RuntimeContract.RawPointer.Invalidate,
+                MemberName: Resolution.RuntimeContract.RawPointer.Invalidate,
                 Location: _synthLoc) { ResolvedType = blankType },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = blankType };
@@ -2955,7 +2955,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             if (member.IsNone || member.Type is null)
                 continue;
 
-            Compiler.Resolution.TypeRegistry.Lifecycle armLc =
+            Resolution.TypeRegistry.Lifecycle armLc =
                 ctx.Registry.GetLifecycle(type: member.Type);
             if (armLc.IsBorrow)
                 continue; // borrow-tier arm — cannot copy; the else branch bitwise-forwards it.

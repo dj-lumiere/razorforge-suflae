@@ -1053,8 +1053,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
         // List, Deque, BitList append at the end; everything else uses add().
         string addMethod = baseName is "List" or "Deque" or "BitList"
-            ? Compiler.Resolution.RuntimeContract.Collection.AddLast
-            : Compiler.Resolution.RuntimeContract.Collection.Add;
+            ? Resolution.RuntimeContract.Collection.AddLast
+            : Resolution.RuntimeContract.Collection.Add;
 
         foreach (Expression elem in list.Elements)
         {
@@ -1095,7 +1095,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         {
             var (h, lowered) = LowerExpr(elem);
             hoisted.AddRange(h);
-            hoisted.Add(MakeCollectionAddCall(colRef, setType, Compiler.Resolution.RuntimeContract.Collection.Add, [lowered], loc));
+            hoisted.Add(MakeCollectionAddCall(colRef, setType, Resolution.RuntimeContract.Collection.Add, [lowered], loc));
         }
 
         Expression result = !ReferenceEquals(resolvedType, setType)
@@ -1136,7 +1136,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             List<Expression> args = isPriorityQueue
                 ? [loweredVal, loweredKey]
                 : [loweredKey, loweredVal];
-            hoisted.Add(MakeCollectionAddCall(colRef, dictType, Compiler.Resolution.RuntimeContract.Collection.Add, args, loc));
+            hoisted.Add(MakeCollectionAddCall(colRef, dictType, Resolution.RuntimeContract.Collection.Add, args, loc));
         }
 
         Expression result = !ReferenceEquals(resolvedType, dictType)
@@ -1255,7 +1255,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         var maybeCreator = new CreatorExpression(
             TypeName: "Maybe",
             TypeArguments: typeArgs,
-            MemberVariables: [(Compiler.Resolution.RuntimeContract.Carrier.PresentField, trueLit), (Compiler.Resolution.RuntimeContract.Carrier.ValueField, init)],
+            MemberVariables: [(Resolution.RuntimeContract.Carrier.PresentField, trueLit), (Resolution.RuntimeContract.Carrier.ValueField, init)],
             Location: init.Location)
         {
             ResolvedType = targetType,
@@ -1297,15 +1297,15 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
     private static TypeInfo? UnwrapOwnershipWrapper(TypeInfo? type)
     {
-        if (type is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked } w)
+        if (type is WrapperTypeInfo { Name: Resolution.RuntimeContract.Owned or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Tracked } w)
             return w.InnerType;
         // T / Retained[T] / Tracked[T] are declared as `record T` in stdlib, so
         // they surface as RecordTypeInfo, not WrapperTypeInfo. Match by base name + single
         // TypeArgument and return the inner collection so downstream lowering sees the actual
         // base (BitList, SortedSet, …) instead of the Owned envelope.
         if (type is RecordTypeInfo { TypeArguments: { Count: 1 } recArgs } rec
-            && (rec.GenericDefinition?.Name is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked
-                || GetCollectionBaseName(rec) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked))
+            && (rec.GenericDefinition?.Name is Resolution.RuntimeContract.Owned or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Tracked
+                || GetCollectionBaseName(rec) is Resolution.RuntimeContract.Owned or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Tracked))
         {
             return recArgs[0];
         }
@@ -1661,7 +1661,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (isNoneCheck && IsMaybeRecord(operandType))
         {
             var presentAccess = new MemberExpression(
-                Object: loweredExpr, MemberName: Compiler.Resolution.RuntimeContract.Carrier.PresentField, Location: ipe.Location)
+                Object: loweredExpr, MemberName: Resolution.RuntimeContract.Carrier.PresentField, Location: ipe.Location)
             {
                 ResolvedType = boolType
             };
@@ -2224,11 +2224,11 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// Mirror of <c>OperatorLoweringPass.RunOnInstantiatedGenericBodies</c>.
     /// </summary>
     public void RunOnInstantiatedGenericBodies(
-        Dictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedGenericBodies)
+        Dictionary<string, Instantiation.MonomorphizedBody> instantiatedGenericBodies)
     {
         foreach (string key in instantiatedGenericBodies.Keys.ToList())
         {
-            Compiler.Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
+            Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue;
             Statement lowered = LowerStatementFull(stmt: entry.Ast.Body);
             if (!ReferenceEquals(lowered, entry.Ast.Body))

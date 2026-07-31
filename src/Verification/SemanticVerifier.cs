@@ -579,7 +579,7 @@ public sealed partial class SemanticVerifier
         // cc hooks seed off the live `Roamed` wrapper type. No-op for RazorForge.
         {
             var suflaeEntityPass =
-                new Compiler.Postprocessing.Passes.SuflaeEntityLoweringPass(registry: _registry);
+                new SuflaeEntityLoweringPass(registry: _registry);
             foreach ((Program program, _, _) in _registry.UserPrograms)
                 suflaeEntityPass.Run(program: program);
         }
@@ -588,7 +588,7 @@ public sealed partial class SemanticVerifier
         // no manual seeding needed) and BEFORE the marker pass (so Referring[T]/Controlling[T]
         // params are still protocol-typed and excluded as access types, not yet stripped to the
         // inner entity). Generic bodies are processed here too, then monomorphized with the calls.
-        var teardownPass = new Compiler.Postprocessing.Passes.ScopeTeardownLoweringPass(markerCtx);
+        var teardownPass = new ScopeTeardownLoweringPass(markerCtx);
         foreach ((Program program, _, _) in _registry.UserPrograms)
             teardownPass.Run(program: program);
         foreach ((Program program, _, _) in _registry.StdlibPrograms)
@@ -600,7 +600,7 @@ public sealed partial class SemanticVerifier
         // double-frees the temps' bindings, and BEFORE reachability so its $destroy calls drive
         // liveness. Stdlib + variant bodies are already Phase-7 lowered here (when→if done); USER
         // programs are lowered later (Phase 7 per-file), so they get this pass in RunPhase7Postprocessing.
-        var tempTeardownPass = new Compiler.Postprocessing.Passes.TemporaryTeardownPass(markerCtx);
+        var tempTeardownPass = new TemporaryTeardownPass(markerCtx);
         foreach ((Program program, _, _) in _registry.StdlibPrograms)
             tempTeardownPass.Run(program: program);
         tempTeardownPass.RunOnBodies(markerCtx.VariantBodies);
@@ -626,7 +626,7 @@ public sealed partial class SemanticVerifier
         // Without this, the fanout happens in Phase 7 and the crash_message method on
         // each concrete crashable is never marked reachable -> linker errors.
         {
-            var crashablePass = new Compiler.Postprocessing.Passes.CrashableExpansionPass(markerCtx);
+            var crashablePass = new CrashableExpansionPass(markerCtx);
             foreach ((Program program, _, _) in _registry.UserPrograms)
                 crashablePass.Run(program);
             foreach ((Program program, _, _) in _registry.StdlibPrograms)
@@ -695,7 +695,7 @@ public sealed partial class SemanticVerifier
         {
             var lines = new List<string> { "=== MAY-SUSPEND ROUTINES ===" };
             lines.AddRange(collection: maySuspend.OrderBy(keySelector: s => s));
-            System.IO.File.WriteAllLines(path: dumpPath, contents: lines);
+            File.WriteAllLines(path: dumpPath, contents: lines);
         }
     }
 
@@ -727,7 +727,7 @@ public sealed partial class SemanticVerifier
         // `$emit!` bodies are already monomorphized (Phase 6 ran), so the lookup succeeds; the
         // spliced body then flows through the normal Phase 7 lowering below. Composed/filtering
         // iterators fall back to the existing `try_emit` loop.
-        new Compiler.Instantiation.Passes.IteratorInlineLoweringPass(
+        new IteratorInlineLoweringPass(
                 registry: _registry, monoBodies: _instantiatedGenericBodies)
             .Run(program: program);
         new PostprocessingPipeline(ctx: ctx).Run(program: program);
@@ -736,7 +736,7 @@ public sealed partial class SemanticVerifier
         // producing calls sit in real statements. ScopeTeardownLoweringPass already ran (pre-lowering,
         // step 4) and will not revisit this program, so the temps' bindings are freed exactly once by
         // the $destroy calls this pass emits (codegen emit-on-demand resolves the concrete $destroy).
-        new Compiler.Postprocessing.Passes.TemporaryTeardownPass(ctx).Run(program: program);
+        new TemporaryTeardownPass(ctx).Run(program: program);
     }
 
     /// <summary>
@@ -760,7 +760,7 @@ public sealed partial class SemanticVerifier
         {
             if (t is not ProtocolTypeInfo p) return false;
             string n = (p.GenericDefinition ?? p).Name;
-            return n is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
+            return n is RuntimeContract.Referring or RuntimeContract.Controlling;
         }
 
         static bool ContainsMarker(TypeInfo? t, HashSet<TypeInfo> seen)
@@ -802,7 +802,7 @@ public sealed partial class SemanticVerifier
         // Rewrite those param types and re-key the dict + live-set so definition emission and
         // call-site mangling agree.
         if (_markerPass != null
-            && _instantiatedGenericBodies is Dictionary<string, Compiler.Instantiation.MonomorphizedBody> bodyDict)
+            && _instantiatedGenericBodies is Dictionary<string, MonomorphizedBody> bodyDict)
         {
             Dictionary<string, string> bodyKeyMap = _markerPass.RewriteInstantiatedBodyInfos(bodyDict);
             if (bodyKeyMap.Count > 0)
@@ -885,7 +885,7 @@ public sealed partial class SemanticVerifier
     /// description per broken contract; empty means all contracts hold.</summary>
     public List<string> CheckRuntimeContract()
     {
-        return Compiler.Resolution.RuntimeContractCheck.Check(registry: _registry);
+        return RuntimeContractCheck.Check(registry: _registry);
     }
 
     public List<SemanticError> ValidateStdlibBodies()

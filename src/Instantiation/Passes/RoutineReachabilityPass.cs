@@ -70,14 +70,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         foreach (string key in _live) ctx.LiveRoutineKeys.Add(item: key);
         foreach (TypeInfo owner in _liveOwnerTypes) ctx.LiveOwnerTypeNames.Add(item: owner.FullName);
 
-        string? dumpPath = System.Environment.GetEnvironmentVariable(variable: "RF_REACHABILITY_DUMP");
+        string? dumpPath = Environment.GetEnvironmentVariable(variable: "RF_REACHABILITY_DUMP");
         if (!string.IsNullOrEmpty(value: dumpPath))
         {
             var lines = new List<string> { "=== LIVE ROUTINES ===" };
             lines.AddRange(collection: _live.OrderBy(keySelector: s => s));
             lines.Add(item: "=== LIVE OWNER TYPES ===");
             lines.AddRange(collection: _liveOwnerTypes.Select(selector: t => t.FullName).OrderBy(keySelector: s => s));
-            System.IO.File.WriteAllLines(path: dumpPath, contents: lines);
+            File.WriteAllLines(path: dumpPath, contents: lines);
         }
     }
 
@@ -463,7 +463,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // collection type the lowering will actually call methods on.
         TypeInfo collectionType = concreteType;
         while (collectionType.TypeArguments is { Count: 1 } args
-               && GetCollectionBaseNameForReachability(collectionType) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
+               && GetCollectionBaseNameForReachability(collectionType) is RuntimeContract.Owned or RuntimeContract.Retained or RuntimeContract.Tracked)
         {
             collectionType = args[0];
         }
@@ -842,7 +842,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // destructor is never made reachable, because no method on `Tracked[Node]` is called
         // explicitly in user code.
         if (callee.ReturnType is { } retType
-            && GetCollectionBaseNameForReachability(retType) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
+            && GetCollectionBaseNameForReachability(retType) is RuntimeContract.Owned or RuntimeContract.Retained or RuntimeContract.Tracked)
         {
             _liveOwnerTypes.Add(item: retType);
         }

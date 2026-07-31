@@ -345,8 +345,8 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         // generic bodies are re-lowered here post-monomorphization (after the def already grew the
         // temps), and copying `target = __rv` would leak the un-freed `__rv` every iteration.
         if (expr is IdentifierExpression { Name: var tn }
-            && (tn.StartsWith(value: "__rv_", comparisonType: System.StringComparison.Ordinal)
-                || tn.StartsWith(value: "__tt_", comparisonType: System.StringComparison.Ordinal)))
+            && (tn.StartsWith(value: "__rv_", comparisonType: StringComparison.Ordinal)
+                || tn.StartsWith(value: "__tt_", comparisonType: StringComparison.Ordinal)))
             return expr;
 
         if (expr is IdentifierExpression or MemberExpression

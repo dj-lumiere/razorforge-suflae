@@ -1230,7 +1230,7 @@ internal static class GenericAstRewriter
 
         return callee.MemberName switch
         {
-            Compiler.Resolution.RuntimeContract.DataSize when u64Type != null && byteSizeType != null =>
+            RuntimeContract.DataSize when u64Type != null && byteSizeType != null =>
                 BuilderServiceInliningPass.MakeByteSizeCreatorPublic(
                     BuilderServiceInliningPass.CalculateDataSizeForType(typeInfo),
                     u64Type, byteSizeType, location),

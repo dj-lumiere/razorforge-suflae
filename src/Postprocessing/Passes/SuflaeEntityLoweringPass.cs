@@ -369,10 +369,10 @@ internal sealed class SuflaeEntityLoweringPass
     // Rewrite each argument that lands in a BARE-entity parameter of `routine` from a Roamed handle to
     // `arg.raw_inner()` (the real entity pointer). Named args match by parameter name; positional args
     // map by order over the non-`me` parameters. Non-Roamed args and non-entity params are untouched.
-    private CallExpression ProjectRoamedArgsIntoBareParams(CallExpression call, TypeModel.Symbols.RoutineInfo routine)
+    private CallExpression ProjectRoamedArgsIntoBareParams(CallExpression call, RoutineInfo routine)
     {
-        var nonMe = new List<TypeModel.Symbols.ParameterInfo>();
-        foreach (TypeModel.Symbols.ParameterInfo p in routine.Parameters)
+        var nonMe = new List<ParameterInfo>();
+        foreach (ParameterInfo p in routine.Parameters)
             if (p.Name != "me") nonMe.Add(p);
 
         bool changed = false;
@@ -380,10 +380,10 @@ internal sealed class SuflaeEntityLoweringPass
         int posIdx = 0;
         foreach (Expression a in call.Arguments)
         {
-            TypeModel.Symbols.ParameterInfo? param = null;
+            ParameterInfo? param = null;
             if (a is NamedArgumentExpression named)
             {
-                foreach (TypeModel.Symbols.ParameterInfo p in nonMe)
+                foreach (ParameterInfo p in nonMe)
                     if (p.Name == named.Name) { param = p; break; }
             }
             else

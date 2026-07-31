@@ -245,7 +245,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                         ?? (throwStmt.Error is CreatorExpression cre ? cre.ConstructedType : null);
                     if (errorType == null) return;
                     RoutineInfo? crashMsg =
-                        ctx.Registry.LookupMethod(type: errorType, methodName: Compiler.Resolution.RuntimeContract.CrashMessage);
+                        ctx.Registry.LookupMethod(type: errorType, methodName: RuntimeContract.CrashMessage);
                     if (crashMsg != null && ctx.LiveRoutineKeys.Count > 0
                         && ctx.LiveRoutineKeys.Add(item: crashMsg.RegistryKey))
                     {
@@ -557,8 +557,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// broader sets cascade into derived-op chains ($ne->$eq) where the missing companion is the
     /// actual culprit.
     private static readonly HashSet<string> _gateBypassNames =
-        new(collection: Compiler.Resolution.WiredRoutineCatalog.AlwaysLiveNames,
-            comparer: StringComparer.Ordinal) { Compiler.Resolution.RuntimeContract.TryEmit };
+        new(collection: WiredRoutineCatalog.AlwaysLiveNames,
+            comparer: StringComparer.Ordinal) { RuntimeContract.TryEmit };
 
     private static bool IsWiredRoutineName(string name) => _gateBypassNames.Contains(name);
 
@@ -1510,10 +1510,10 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// (e.g. <c>from: Referring[FastSet[T]]</c>) reaches the AST as the bare inner type
     /// (<c>FastSet</c>), while the resolved <see cref="RoutineInfo"/> keeps the full wrapper —
     /// so overload disambiguation must compare the inner type, not the wrapper.</summary>
-    private static readonly HashSet<string> BorrowWrapperNames = new(System.StringComparer.Ordinal)
+    private static readonly HashSet<string> BorrowWrapperNames = new(StringComparer.Ordinal)
     {
-        Compiler.Resolution.RuntimeContract.Referring, Compiler.Resolution.RuntimeContract.Viewing, Compiler.Resolution.RuntimeContract.Controlling, Compiler.Resolution.RuntimeContract.Modifying, Compiler.Resolution.RuntimeContract.Hijacked,
-        Compiler.Resolution.RuntimeContract.Inspecting, Compiler.Resolution.RuntimeContract.Claiming, Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Tracked, Compiler.Resolution.RuntimeContract.Shared
+        RuntimeContract.Referring, RuntimeContract.Viewing, RuntimeContract.Controlling, RuntimeContract.Modifying, RuntimeContract.Hijacked,
+        RuntimeContract.Inspecting, RuntimeContract.Claiming, RuntimeContract.Retained, RuntimeContract.Tracked, RuntimeContract.Shared
     };
 
     /// <summary>Base type name for overload matching: strips generic args and unwraps a leading

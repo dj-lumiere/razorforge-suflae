@@ -263,10 +263,10 @@ internal sealed class TypeBodyResolver
                 // entity reference carries its own none via a null handle). We only still record
                 // NULLABILITY as a flow fact: it is no longer visible in the resolved type, so detect it
                 // from the AST — the field was written `E?`, which desugars to a `Maybe[...]` type expr.
-                bool fieldNullable = _sa._registry.Language == TypeModel.Enums.Language.Suflae
+                bool fieldNullable = _sa._registry.Language == Language.Suflae
                     && memberVariable.Type is { Name: "Maybe" }
                     && memberVariableType is RecordTypeInfo
-                        { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed };
+                        { GenericDefinition.Name: RuntimeContract.Roamed };
 
                 var memberVariableInfo =
                     new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
@@ -863,10 +863,10 @@ internal sealed class TypeBodyResolver
 
     private static readonly HashSet<string> StorableWrapperTypes =
     [
-        Compiler.Resolution.RuntimeContract.Hijacked, // Unmanaged raw pointer handle
-        Compiler.Resolution.RuntimeContract.Retained, // Reference-counted handle
-        Compiler.Resolution.RuntimeContract.Shared,   // Reference-counted multi-threaded handle
-        Compiler.Resolution.RuntimeContract.Tracked,  // Weak reference handle
-        Compiler.Resolution.RuntimeContract.Watched,  // Weak reference multi-threaded handle
+        RuntimeContract.Hijacked, // Unmanaged raw pointer handle
+        RuntimeContract.Retained, // Reference-counted handle
+        RuntimeContract.Shared,   // Reference-counted multi-threaded handle
+        RuntimeContract.Tracked,  // Weak reference handle
+        RuntimeContract.Watched,  // Weak reference multi-threaded handle
     ];
 }

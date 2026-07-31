@@ -244,7 +244,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// position (var init / assignment RHS / return value), so its top-level producer is left intact.
     /// </summary>
     private Statement SpillAround(Statement owner, Expression root,
-        System.Func<Expression, Statement> rebuildWithCondition, bool topOwning = true)
+        Func<Expression, Statement> rebuildWithCondition, bool topOwning = true)
     {
         var spills = new List<Spill>();
         Expression rewritten = Visit(root, objectPos: !topOwning, spills);
@@ -275,7 +275,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// records by codegen's EmitVariableAssignment; scalars need nothing), so we only spill receivers.
     /// </summary>
     private Statement LowerReassign(Statement owner, Expression rhs, IdentifierExpression target,
-        System.Func<Expression, Statement> rebuild)
+        Func<Expression, Statement> rebuild)
     {
         if (!IsManagedLeafReassignTarget(target.ResolvedType))
             return SpillAround(owner, rhs, rebuildWithCondition: rebuild);

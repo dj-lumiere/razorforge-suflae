@@ -1027,7 +1027,7 @@ public partial class LlvmCodeGenerator
         //     at the call boundary by the entity-ownership rule),
         //   - `Modifying[T]` (scope-bound exclusive borrow — its definition).
         bool isExclusive = routine.OwnerType is EntityTypeInfo
-                           || routine.OwnerType is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Modifying };
+                           || routine.OwnerType is WrapperTypeInfo { Name: Resolution.RuntimeContract.Modifying };
         if (isExclusive)
         {
             return routine.MutationCategory == MutationCategory.Readonly
@@ -1049,7 +1049,7 @@ public partial class LlvmCodeGenerator
 
     private static string GetExplicitParameterAttributes(TypeInfo? type) =>
         type is EntityTypeInfo
-        || type is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Modifying }
+        || type is WrapperTypeInfo { Name: Resolution.RuntimeContract.Modifying }
             ? "noalias"
             : string.Empty;
 
@@ -1139,7 +1139,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static bool IsThreadShareableType(TypeInfo? type) =>
         type != null &&
-        GetGenericBaseNameStatic(type: type) is Compiler.Resolution.RuntimeContract.Atomic or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched;
+        GetGenericBaseNameStatic(type: type) is Resolution.RuntimeContract.Atomic or Resolution.RuntimeContract.Shared or Resolution.RuntimeContract.Watched;
 
     /// <summary>
     /// Gets the zero/default value for a type.

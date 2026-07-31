@@ -66,7 +66,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void ReportPresetTypeNameCollisions(Program program)
     {
-        var typeNames = new HashSet<string>(comparer: System.StringComparer.Ordinal);
+        var typeNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
             string? typeName = node switch

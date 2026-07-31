@@ -7,7 +7,7 @@ namespace Compiler.Resolution;
 /// The views (consumer lists) a wired-routine concept can participate in. Each historical
 /// hard-coded list becomes a projection of <see cref="WiredRoutineCatalog"/> filtered by one flag.
 /// </summary>
-[System.Flags]
+[Flags]
 public enum WiredView
 {
     /// <summary>The zero value; no views selected.</summary>
@@ -252,7 +252,7 @@ public static class WiredRoutineCatalog
     /// Reproduces <c>TypeRegistry.Capabilities._wiredRoutineMap</c>.</summary>
     public static Dictionary<string, (string Protocol, string WiredName)> BuildCapabilityMap()
     {
-        var map = new Dictionary<string, (string, string)>(comparer: System.StringComparer.Ordinal);
+        var map = new Dictionary<string, (string, string)>(comparer: StringComparer.Ordinal);
         foreach (WiredEntry e in All.Where(predicate: e => e.Views.HasFlag(flag: Cap)))
             map[key: e.Name] = (e.Protocols[index: 0], e.CapabilityWired);
         return map;
@@ -261,7 +261,7 @@ public static class WiredRoutineCatalog
     /// <summary>Valid declarable <c>$</c>-names. Reproduces <c>SemanticVerifier.KnownWiredMethods</c>.</summary>
     public static HashSet<string> BuildKnownWiredMethods() =>
         new(collection: All.Where(predicate: e => e.Views.HasFlag(flag: Known)).Select(selector: e => e.Name),
-            comparer: System.StringComparer.Ordinal);
+            comparer: StringComparer.Ordinal);
 
     /// <summary>Operator → permitting protocols. Reproduces <c>SemanticVerifier.WiredToProtocols</c>.</summary>
     public static Dictionary<string, List<string>> BuildWiredToProtocols() =>
@@ -280,13 +280,13 @@ public static class WiredRoutineCatalog
     // ---------------------------------------------------------------------------
 
     private static readonly Dictionary<string, WiredEntry> _byName =
-        All.ToDictionary(keySelector: e => e.Name, comparer: System.StringComparer.Ordinal);
+        All.ToDictionary(keySelector: e => e.Name, comparer: StringComparer.Ordinal);
 
     /// <summary>Names that must be emitted for every live owner (the unified-teardown lifecycle
     /// routines). Used by the GMP gate-bypass and codegen always-live policy in S3.</summary>
     public static readonly IReadOnlySet<string> AlwaysLiveNames =
         All.Where(predicate: e => e.AlwaysLive).Select(selector: e => e.Name)
-           .ToHashSet(comparer: System.StringComparer.Ordinal);
+           .ToHashSet(comparer: StringComparer.Ordinal);
 
     /// <summary>Looks up a wired entry by its bare canonical name. Returns false when the name is not wired.</summary>
     public static bool TryGet(string name, out WiredEntry entry) => _byName.TryGetValue(key: name, value: out entry!);
@@ -315,8 +315,8 @@ public static class WiredRoutineCatalog
             if (got.Protocol != v.Protocol || got.WiredName != v.WiredName)
             {
                 string m = $"capability '{k}' = ({got.Protocol},{got.WiredName}) but legacy ({v.Protocol},{v.WiredName})";
-                System.Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + m);
-                throw new System.InvalidOperationException(message: m);
+                Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + m);
+                throw new InvalidOperationException(message: m);
             }
         }
         AssertSetEquals(label: "KnownWired", expected: _legacyKnownWired, actual: BuildKnownWiredMethods());
@@ -328,8 +328,8 @@ public static class WiredRoutineCatalog
             if (!got.SequenceEqual(second: v))
             {
                 string m = $"WiredToProtocols['{k}'] = [{string.Join(",", got)}] but legacy [{string.Join(",", v)}]";
-                System.Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + m);
-                throw new System.InvalidOperationException(message: m);
+                Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + m);
+                throw new InvalidOperationException(message: m);
             }
         }
         AssertSetEquals(label: "ReachabilitySeed", expected: _legacyReachabilitySeed,
@@ -339,20 +339,20 @@ public static class WiredRoutineCatalog
 
     private static void AssertSetEquals(string label, IEnumerable<string> expected, IEnumerable<string> actual)
     {
-        var e = new HashSet<string>(collection: expected, comparer: System.StringComparer.Ordinal);
-        var a = new HashSet<string>(collection: actual, comparer: System.StringComparer.Ordinal);
+        var e = new HashSet<string>(collection: expected, comparer: StringComparer.Ordinal);
+        var a = new HashSet<string>(collection: actual, comparer: StringComparer.Ordinal);
         if (e.SetEquals(other: a)) return;
         var missing = e.Except(second: a).OrderBy(keySelector: x => x);
         var extra = a.Except(second: e).OrderBy(keySelector: x => x);
         string msg =
             $"WiredRoutineCatalog '{label}' diverged. Missing from catalog: [{string.Join(",", missing)}]. " +
             $"Extra in catalog: [{string.Join(",", extra)}].";
-        System.Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + msg);
-        throw new System.InvalidOperationException(message: msg);
+        Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + msg);
+        throw new InvalidOperationException(message: msg);
     }
 
     private static readonly Dictionary<string, (string Protocol, string WiredName)> _legacyCapabilityMap =
-        new(comparer: System.StringComparer.Ordinal)
+        new(comparer: StringComparer.Ordinal)
         {
             ["eq"] = ("Equatable", "eq"), ["ne"] = ("Equatable", "eq"), ["hash"] = ("Hashable", "hash"),
             ["fast_hash"] = ("FastHashable", "fast_hash"), ["cmp"] = ("Comparable", "cmp"),

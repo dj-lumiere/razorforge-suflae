@@ -214,9 +214,9 @@ internal sealed class WrapperForwardingPass
         // projection → the controller header is read as entity fields → crash. So resolve a `Roamed[E]`
         // receiver call straight to the inner method (passing the Roamed handle as `me`), exactly as a
         // receiver that was still bare at SA already does. No forwarder is registered.
-        if (GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roamed
-            && innerMethod.MeType is RecordTypeInfo { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed }
-                                  or WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Roamed })
+        if (wrapperType.BareName == RuntimeContract.Roamed
+            && innerMethod.MeType is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed }
+                                  or WrapperTypeInfo { Name: RuntimeContract.Roamed })
         {
             return innerMethod;
         }
@@ -231,7 +231,7 @@ internal sealed class WrapperForwardingPass
         // re-throw's `Core.Crashable.crash_message` gets reachability-pruned ("declared+called but never
         // defined"); the seed attempt in RoutineReachabilityPass (LookupType("Crashable")) did not
         // resolve it. Re-enable by fixing that seed (find the correct crash_message owner/lookup).
-        if (GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roamed
+        if (wrapperType.BareName == RuntimeContract.Roamed
             && innerMethod.IsFailable)
         {
             return null;
@@ -468,7 +468,7 @@ internal sealed class WrapperForwardingPass
                 : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
             innerStatements = [callStmt];
         }
-        else if (GetBaseTypeName(typeName: wrapperType.Name) is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Roamed)
+        else if (wrapperType.BareName is RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Roamed)
         {
             // RC wrappers: `me` is a ptr to `RetainController[T]`, NOT to T directly. Reaching
             // T requires double-indirection through the controller's `data: Hijacked[T]` field:
@@ -485,12 +485,12 @@ internal sealed class WrapperForwardingPass
             // `RetainController.borrow_data()`. Both just reach the inner entity — for `Roaming` the
             // lock is already held by the enclosing `using` ($enter), so the forwarder only reaches +
             // calls (release happens at $exit on every path).
-            bool isRoamed = GetBaseTypeName(typeName: wrapperType.Name) == Compiler.Resolution.RuntimeContract.Roamed;
+            bool isRoamed = wrapperType.BareName == RuntimeContract.Roamed;
             bool viaRoamController = isRoamed;
             string controllerName = viaRoamController ? "RoamController" : "RetainController";
             string dataRevealName = viaRoamController
                 ? "data_ptr"
-                : Compiler.Resolution.RuntimeContract.RefCount.BorrowData;
+                : RuntimeContract.RefCount.BorrowData;
             var controllerTypeExpr = new TypeExpression(
                 Name: controllerName,
                 GenericArguments:
@@ -754,25 +754,13 @@ internal sealed class WrapperForwardingPass
     }
 
     /// <summary>
-    /// Gets the base type name without generic arguments.
-    /// </summary>
-    [Obsolete("Use TypeSymbol's name instead. NEVER parse them manually in string.")]
-    private static string GetBaseTypeName(string typeName)
-    {
-        int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0
-            ? typeName[..genericIndex]
-            : typeName;
-    }
-
-    /// <summary>
     /// Checks if a type is a forwarding wrapper (Viewing, Modifying, Shared, etc.).
     /// Hijacked is intentionally excluded — its API is the explicit extract/as_entity/inject
     /// surface, not transparent forwarding of T's methods.
     /// </summary>
     private static bool IsWrapperType(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return ForwardingWrapperTypes.Contains(value: baseName);
     }
 
@@ -781,7 +769,7 @@ internal sealed class WrapperForwardingPass
     /// </summary>
     private static bool IsReadOnlyWrapper(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return ReadOnlyWrapperTypes.Contains(value: baseName);
     }
 

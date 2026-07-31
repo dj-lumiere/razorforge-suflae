@@ -36,7 +36,7 @@ public partial class Tokenizer
         int originalCol = _column;
 
         char firstChar = _source[index: startPos];
-        var prefixSb = new System.Text.StringBuilder();
+        var prefixSb = new StringBuilder();
         prefixSb.Append(firstChar);
 
         // Greedy match: build the longest valid prefix

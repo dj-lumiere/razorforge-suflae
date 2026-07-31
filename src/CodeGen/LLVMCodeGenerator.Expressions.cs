@@ -407,7 +407,7 @@ public partial class LlvmCodeGenerator
     private void MaybePromoteRoamedSpawnArg(StringBuilder sb, string argValue, TypeInfo? paramType)
     {
         if (paramType is not RecordTypeInfo rec ||
-            GetGenericBaseName(type: rec) != Compiler.Resolution.RuntimeContract.Roamed)
+            GetGenericBaseName(type: rec) != Resolution.RuntimeContract.Roamed)
         {
             return;
         }
@@ -823,12 +823,12 @@ public partial class LlvmCodeGenerator
         // before any normal resolution and lowered to rf_coro_cf_push / rf_coro_cf_pop. They are
         // void; the empty result is discarded by the enclosing ExpressionStatement.
         if (call.Callee is IdentifierExpression
-            { Name: Compiler.Postprocessing.Passes.CancellationInstrumentationPass.PushMarker })
+            { Name: Postprocessing.Passes.CancellationInstrumentationPass.PushMarker })
         {
             return EmitCancelPush(sb: sb, call: call);
         }
         if (call.Callee is IdentifierExpression
-            { Name: Compiler.Postprocessing.Passes.CancellationInstrumentationPass.PopMarker })
+            { Name: Postprocessing.Passes.CancellationInstrumentationPass.PopMarker })
         {
             return EmitCancelPop(sb: sb, call: call);
         }

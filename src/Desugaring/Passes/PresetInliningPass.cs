@@ -26,16 +26,22 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
 {
     // Presets are GLOBAL by default (public constants like `S64_MAX`/`DECIMAL_PI` are part of the Core
     // prelude and usable everywhere). A `secret preset` is FILE-PRIVATE: inlinable only inside the file
-    // that declares it. `_ownPresetNames` is the set of preset names declared in the file currently
+    // that declares it. `_ownPresets` is the set of preset names declared in the file currently
     // being lowered — a secret preset from another file is NOT in it, so it is left un-inlined and a bare
     // identifier that merely shares a name (e.g. a user `record B` vs a stdlib `secret preset B`) resolves
     // as its own declaration. Null means "no scoping" (compiler-synthesized variant bodies).
+    //
+    // NOTE (module-private secret, WIP): the intended end-state is that `secret` is MODULE-private for
+    // ACCESS (un-importable, usable across files of the same module) enforced at the VISIBILITY layer with
+    // a diagnostic — NOT by widening inlining to module scope here. A prior attempt to inline within-module
+    // secret presets regressed reachability (Dict/Set method bodies pruned → 48 "never defined" in the
+    // stdlib harness). Keep inlining FILE-scoped; enforce module-private access separately.
     private Dictionary<string, PresetDeclaration>? _ownPresets;
 
     /// <summary>Every <c>preset</c> declared in the current file, keyed by name (public or secret).</summary>
     private static Dictionary<string, PresetDeclaration> CollectOwnPresets(Program program)
     {
-        var map = new Dictionary<string, PresetDeclaration>(comparer: System.StringComparer.Ordinal);
+        var map = new Dictionary<string, PresetDeclaration>(comparer: StringComparer.Ordinal);
         foreach (ISyntaxTreeNode decl in program.Declarations)
             if (decl is PresetDeclaration preset)
                 map[key: preset.Name] = preset;
@@ -84,7 +90,7 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
         // Synthesized variant bodies are compiler-generated and not tied to a source file. They never
         // reference file-private secret presets, so an empty own-set is correct (public presets still
         // inline via the registry).
-        _ownPresets = new Dictionary<string, PresetDeclaration>(comparer: System.StringComparer.Ordinal);
+        _ownPresets = new Dictionary<string, PresetDeclaration>(comparer: StringComparer.Ordinal);
         foreach (string key in ctx.VariantBodies.Keys.ToList())
         {
             Statement body = ctx.VariantBodies[key];
@@ -270,10 +276,13 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
         {
             VariableInfo? v = ctx.Registry.LookupVariable(id.Name);
 
-            // A `secret preset` is file-private: only inline it inside the file that declares it. A
-            // cross-file reference is left un-inlined — since it stays a bare identifier that resolves
-            // to a preset, the backend-entry validator flags it (RF-S958), so a secret constant cannot
-            // silently be used from another file. Public presets always inline.
+            // A `secret preset` is MODULE-private: inline it inside any file of the module that declares
+            // it (same granularity as `secret record`/`secret entity`). A reference from ANOTHER module is
+            // left un-inlined — since it stays a bare identifier that resolves to a preset, the
+            // backend-entry validator flags it (RF-S958), so a secret constant cannot silently be used
+            // from another module. Public presets always inline. When there is no current module
+            // (`_currentModule == null` for synthesized variant bodies), a secret with a known module is
+            // treated as foreign and left un-inlined, preserving the prior variant-body behavior.
             if (v is { IsPreset: true, IsSecret: true }
                 && _ownPresets is not null
                 && !_ownPresets.ContainsKey(key: id.Name))
