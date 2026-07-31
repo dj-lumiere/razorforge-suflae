@@ -573,7 +573,7 @@ public sealed partial class SemanticVerifier
         // handle. A writer (`claim`) conflicts with any other hold; readers (`inspect`) coexist.
         // The hold is pushed for the duration of the body and popped on exit, so only OVERLAPPING
         // scopes conflict (sequential `using`s on the same handle are fine).
-        string accessBase = GetBaseTypeName(typeName: resourceType.Name);
+        string accessBase = resourceType.BareName;
         bool opensAccessToken = accessBase is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
         string? accessHandle = opensAccessToken
             ? ExtractAccessReceiverName(resource: usingStmt.Resource)

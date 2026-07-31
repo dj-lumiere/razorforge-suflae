@@ -531,7 +531,7 @@ internal sealed class SignatureResolver
     {
         string conv = ext.CallingConvention ?? "C";
         string variadic = ext.IsVariadic ? "..." : "";
-        string failable = ext.Name.EndsWith(value: '!') ? "!" : "";
+        string failable = ext.IsFailable ? "!" : "";
         var parts = new List<string>();
         foreach (Parameter p in ext.Parameters)
         {
@@ -895,7 +895,7 @@ internal sealed class SignatureResolver
         // Check if the protocol is directly declared (or via parent protocols recursively)
         return implementedProtocols.Any(implemented =>
             implemented.Name == protocolName ||
-            GetBaseTypeName(typeName: implemented.Name) == protocolName ||
+            implemented.BareName == protocolName ||
             (implemented is ProtocolTypeInfo proto &&
              _sa.CheckParentProtocols(proto: proto, targetName: protocolName)));
     }
@@ -973,21 +973,13 @@ internal sealed class SignatureResolver
 
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
 
-    private static string GetBaseTypeName(string typeName)
-    {
-        int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0
-            ? typeName[..genericIndex]
-            : typeName;
-    }
-
     private static bool IsTransparentMarkerProtocol(ProtocolTypeInfo proto)
     {
         if (proto.TypeArguments is not { Count: 1 })
         {
             return false;
         }
-        string baseName = GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name);
+        string baseName = (proto.GenericDefinition ?? proto).BareName;
         return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
     }
 }

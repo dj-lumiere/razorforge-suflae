@@ -773,9 +773,8 @@ public partial class LlvmCodeGenerator
         out RoutineInfo? routine)
     {
         routine = null;
-        string bareName = name.EndsWith(value: '!')
-            ? name[..^1]
-            : name;
+        // The identifier name is bare; the failable `!` is a structured flag (routineType.IsFailable).
+        string bareName = name;
         string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
                              _currentEmittingRoutine?.Module;
 
@@ -847,7 +846,7 @@ public partial class LlvmCodeGenerator
                     ResolvedReturnType: call.ResolvedType,
                     TypeArguments: call.TypeArguments,
                     LoweringKind: call.LoweringKind,
-                    ConstructedType: call.ConstructedType));
+                    ConstructedType: call.ConstructedType) { IsFailable = call.IsFailable });
         }
 
         return call.Callee switch
@@ -866,7 +865,7 @@ public partial class LlvmCodeGenerator
                     ResolvedReturnType: call.ResolvedType,
                     TypeArguments: call.TypeArguments,
                     LoweringKind: call.LoweringKind,
-                    ConstructedType: call.ConstructedType)),
+                    ConstructedType: call.ConstructedType) { IsFailable = call.IsFailable }),
             _ => throw new NotImplementedException(
                 message: $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
         };

@@ -109,7 +109,7 @@ public sealed partial class SemanticVerifier
     /// <returns>True if the type is a wrapper type.</returns>
     private static bool IsWrapperType(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return WrapperTypes.Contains(value: baseName);
     }
 
@@ -120,7 +120,7 @@ public sealed partial class SemanticVerifier
     /// <returns>True if the wrapper is read-only.</returns>
     private static bool IsReadOnlyWrapper(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return ReadOnlyWrapperTypes.Contains(value: baseName);
     }
 
@@ -188,7 +188,7 @@ public sealed partial class SemanticVerifier
         // Read-only wrappers can only access @readonly methods
         if (!method.IsReadOnly)
         {
-            string wrapperName = GetBaseTypeName(typeName: wrapperType.Name);
+            string wrapperName = wrapperType.BareName;
             ReportError(code: SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
                 message:
                 $"Cannot call writable method '{method.Name}' through read-only wrapper '{wrapperName}[T]'. " +
@@ -260,7 +260,7 @@ public sealed partial class SemanticVerifier
     /// <c>steal</c>-moved so unsynchronized state can never alias across the boundary.
     /// </summary>
     private static bool IsThreadShareable(TypeSymbol type) =>
-        GetBaseTypeName(typeName: type.Name) is Compiler.Resolution.RuntimeContract.Atomic
+        type.BareName is Compiler.Resolution.RuntimeContract.Atomic
             or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched
             or Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
 
@@ -324,7 +324,7 @@ public sealed partial class SemanticVerifier
 
         (string, string)? FindCore(TypeSymbol type, string prefix, HashSet<string> visited)
         {
-            string baseName = GetBaseTypeName(typeName: type.Name);
+            string baseName = type.BareName;
             if (NonTriviallyCopyableWrappers.ContainsKey(key: baseName))
             {
                 return (baseName, prefix.Length == 0 ? "<value>" : prefix);

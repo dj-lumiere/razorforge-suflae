@@ -41,11 +41,9 @@ public partial class Parser
 
         string name = nameSb.ToString();
 
-        // Support ! suffix for failable routines
-        if (Match(type: TokenType.Bang))
-        {
-            name += "!";
-        }
+        // Support ! suffix for failable routines. The `!` is a STRUCTURED flag on the
+        // ExternalDeclaration — the name stays bare.
+        bool isFailable = Match(type: TokenType.Bang);
 
         // Check for generic parameters with inline constraints
         List<string>? genericParams = null;
@@ -116,7 +114,10 @@ public partial class Parser
             IsVariadic: isVariadic,
             Annotations: annotations,
             IsDangerous: isDangerous,
-            Location: location);
+            Location: location)
+        {
+            IsFailable = isFailable
+        };
     }
 
     /// <summary>

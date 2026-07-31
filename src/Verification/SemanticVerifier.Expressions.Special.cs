@@ -101,7 +101,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Extract base name (e.g., "List" from "List[S32]")
-        string baseName = GetBaseTypeName(typeName: resolution.Name);
+        string baseName = resolution.BareName;
         TypeSymbol? def = _registry.LookupType(name: baseName);
         // Try slash-qualified module path lookup for non-Core types (e.g., "Collections/Deque")
         if (def == null && !string.IsNullOrEmpty(value: resolution.Module))
@@ -287,7 +287,7 @@ public sealed partial class SemanticVerifier
         // so `steal` (an exclusive-transfer marker) is a category error: moving one handle proves
         // nothing about the others. Clone with `.retain()`/`.track()`, or convert to `Shared`/
         // `Watched` (atomic Arc) to move ownership across a coroutine/thread boundary.
-        if (GetBaseTypeName(typeName: operandType.Name) is
+        if (operandType.BareName is
             Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
         {
             ReportError(code: SemanticDiagnosticCode.StealSharedOwnership,

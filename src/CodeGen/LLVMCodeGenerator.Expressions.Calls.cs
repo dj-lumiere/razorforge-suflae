@@ -27,8 +27,8 @@ public partial class LlvmCodeGenerator
         if (loweringKind == CallLoweringKind.Unknown)
             loweringKind = CallLoweringKind.DirectRoutine;
 
-        functionName = NormalizeRoutineCallName(functionName: functionName,
-            out bool isFailableCallSyntax);
+        // The failable `!` is a structured flag on the request; the FunctionName is bare.
+        bool isFailableCallSyntax = req.IsFailable;
 
         string? intrinsicCall = TryEmitRecoveredFreeIntrinsicCall(sb: sb,
             functionName: functionName,
@@ -1477,17 +1477,6 @@ public partial class LlvmCodeGenerator
     // -----------------------------------------------------------------------------
 
     /// <summary>
-    /// Normalize routine call name as part of this compiler phase.
-    /// </summary>
-    private static string NormalizeRoutineCallName(string functionName, out bool isFailableCallSyntax)
-    {
-        isFailableCallSyntax = functionName.EndsWith(value: '!');
-        return isFailableCallSyntax
-            ? functionName[..^1]
-            : functionName;
-    }
-
-    /// <summary>
     /// Attempts to emit recovered free intrinsic call and reports whether it succeeded.
     /// </summary>
     private string? TryEmitRecoveredFreeIntrinsicCall(StringBuilder sb, string functionName,
@@ -1878,4 +1867,11 @@ internal sealed record RoutineCallRequest(
     TypeInfo? ResolvedReturnType,
     List<TypeExpression>? TypeArguments,
     CallLoweringKind LoweringKind,
-    TypeInfo? ConstructedType);
+    TypeInfo? ConstructedType)
+{
+    /// <summary>
+    /// True when the call site used the failable `!` marker. The <see cref="FunctionName"/> is BARE
+    /// — this structured flag records failability instead of a trailing `!` in the name.
+    /// </summary>
+    public bool IsFailable { get; init; }
+}

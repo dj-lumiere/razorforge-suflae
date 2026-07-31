@@ -375,6 +375,13 @@ public record CallExpression(
     public RoutineInfo? ResolvedRoutine { get; set; }
 
     /// <summary>
+    /// True when the call site used the failable `!` marker (e.g. <c>foo!(args)</c>).
+    /// The Callee's name stays BARE — this structured flag records the `!` instead of baking
+    /// it into the identifier string.
+    /// </summary>
+    public bool IsFailable { get; init; }
+
+    /// <summary>
     /// Semantic-owned lowering classification for this call.
     /// Later phases should prefer this over re-deriving call meaning from AST shape.
     /// </summary>

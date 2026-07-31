@@ -430,14 +430,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 ? ctx.Registry.LookupMethodOverload(type: recv, methodName: methodName, argTypes: [arg])
                 : null;
             resolved ??= ctx.Registry.LookupMethod(type: recv, methodName: methodName);
-            if (resolved == null && !methodName.EndsWith('!'))
-            {
-                string failable = methodName + "!";
-                resolved = arg != null
-                    ? ctx.Registry.LookupMethodOverload(type: recv, methodName: failable, argTypes: [arg])
-                    : null;
-                resolved ??= ctx.Registry.LookupMethod(type: recv, methodName: failable);
-            }
+            // Operator method names are bare; the failable `!` is a structured flag. If the plain
+            // lookup missed, retry filtering for a same-named failable implementation.
+            resolved ??= ctx.Registry.LookupMethod(type: recv, methodName: methodName, isFailable: true);
             if (resolved != null) EnqueueCallee(callee: resolved);
             return;
         }
@@ -2034,7 +2029,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (_localTypes.ContainsKey(key: id.Name))
             return null;
 
-        string bareName = id.Name.EndsWith(value: '!') ? id.Name[..^1] : id.Name;
+        // Identifier names are bare; the failable `!` is a structured flag (routineType.IsFailable).
+        string bareName = id.Name;
         List<TypeInfo> paramTypes = routineType.ParameterTypes.ToList();
         string? moduleName = frame.Routine.OwnerType?.Module ?? frame.Routine.Module;
 

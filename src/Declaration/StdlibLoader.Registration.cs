@@ -450,6 +450,7 @@ public sealed partial class StdlibLoader
         var routineInfo = new RoutineInfo(name: external.Name)
         {
             Kind = RoutineKind.External,
+            IsFailable = external.IsFailable,
             CallingConvention = external.CallingConvention ?? "C",
             IsVariadic = external.IsVariadic,
             Parameters = parameters,
@@ -1335,9 +1336,8 @@ public sealed partial class StdlibLoader
             bool needsRefresh = false;
             foreach (RoutineSignature method in protocolDecl.Methods)
             {
-                string rawName = method.Name;
-                bool isFailable = rawName.EndsWith(value: '!');
-                string fullName = isFailable ? rawName[..^1] : rawName;
+                bool isFailable = method.IsFailable;
+                string fullName = method.Name;
                 bool isInstance = fullName.StartsWith(value: "Me.");
                 string methodName = isInstance ? fullName[3..] : fullName;
 
@@ -1531,11 +1531,8 @@ public sealed partial class StdlibLoader
         var methods = new List<ProtocolMethodInfo>();
         foreach (RoutineSignature method in protocol.Methods)
         {
-            string rawName = method.Name;
-            bool isFailable = rawName.EndsWith(value: '!');
-            string fullName = isFailable
-                ? rawName[..^1]
-                : rawName;
+            bool isFailable = method.IsFailable;
+            string fullName = method.Name;
             bool isInstance = fullName.StartsWith(value: "Me.");
             string methodName = isInstance
                 ? fullName[3..]

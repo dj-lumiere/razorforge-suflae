@@ -297,15 +297,10 @@ public partial class Parser
         // ===============================================================================
         // PHASE 2c: Parse failable marker (!)
         // ===============================================================================
-        // Support ! suffix for failable routines (can appear after qualified name)
+        // Support ! suffix for failable routines (can appear after qualified name).
+        // The `!` is a separate Bang token — ConsumeIdentifier/ConsumeMethodName never fold it
+        // into the name, so the stored name is always bare and only this flag records failability.
         bool isFailable = Match(type: TokenType.Bang);
-
-        // ConsumeMethodName may have already included '!' in the name
-        if (name.EndsWith(value: '!'))
-        {
-            isFailable = true;
-            name = name[..^1]; // Strip the '!' from name, we track it separately
-        }
 
         // A failable free routine writes the bang immediately after the base name, with its
         // type-level generics following it: `race![T](...)`. (Member routines instead carry their

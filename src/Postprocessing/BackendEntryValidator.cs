@@ -161,9 +161,7 @@ public sealed class BackendEntryValidator
                 ConstructedType: null,
                 ResolvedType: null
             } unresolvedFreeCall &&
-            registry.LookupRoutine(fullName: routineCallee.Name.EndsWith(value: '!')
-                    ? routineCallee.Name[..^1]
-                    : routineCallee.Name) != null)
+            registry.LookupRoutine(fullName: routineCallee.Name) != null)
         {
             error = new SemanticError(
                 Code: SemanticDiagnosticCode.MissingCallLoweringMetadata,

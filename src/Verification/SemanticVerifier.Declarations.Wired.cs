@@ -73,6 +73,7 @@ public sealed partial class SemanticVerifier
         var routineInfo = new RoutineInfo(name: external.Name)
         {
             Kind = RoutineKind.External,
+            IsFailable = external.IsFailable,
             CallingConvention = external.CallingConvention,
             IsVariadic = external.IsVariadic,
             Visibility = VisibilityModifier.Open, // External declarations are always open

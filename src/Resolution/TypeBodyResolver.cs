@@ -167,7 +167,7 @@ internal sealed class TypeBodyResolver
                     !TypeRegistry.IsValueType(type: memberVariableType) &&
                     !isReferenceTyped &&
                     !(memberVariableType is WrapperTypeInfo wrapper &&
-                      StorableWrapperTypes.Contains(item: GetBaseTypeName(typeName: wrapper.Name))))
+                      StorableWrapperTypes.Contains(item: wrapper.BareName)))
                 {
                     _sa.ReportError(code: SemanticDiagnosticCode.RecordContainsNonValueType,
                         message:
@@ -374,10 +374,8 @@ internal sealed class TypeBodyResolver
         var methods = new List<ProtocolMethodInfo>();
         foreach (RoutineSignature sig in protocol.Methods)
         {
-            bool isFailable = sig.Name.EndsWith(value: '!');
-            string fullName = isFailable
-                ? sig.Name[..^1]
-                : sig.Name;
+            bool isFailable = sig.IsFailable;
+            string fullName = sig.Name;
 
             // Check if this is an instance method (has "Me." prefix).
             // Protocol methods: "Me.methodName" = instance, "methodName" = type-level.
@@ -852,14 +850,6 @@ internal sealed class TypeBodyResolver
     private static bool IsCarrierType(TypeSymbol type) => GetCarrierBaseName(type: type) != null;
 
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
-
-    private static string GetBaseTypeName(string typeName)
-    {
-        int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0
-            ? typeName[..genericIndex]
-            : typeName;
-    }
 
     private static readonly HashSet<string> StorableWrapperTypes =
     [

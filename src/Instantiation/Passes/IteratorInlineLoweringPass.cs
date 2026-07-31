@@ -340,8 +340,8 @@ internal sealed class IteratorInlineLoweringPass
         {
             if (call.ResolvedRoutine is { IsFailable: true } r)
             {
-                string baseName = (r.OriginalName ?? r.Name).TrimStart('$');
-                if (baseName == "emit") return true;
+                // Name/OriginalName are bare (the wired `$` is a structured attribute, not in the name).
+                if ((r.OriginalName ?? r.Name) == "emit") return true;
             }
             if (call.Callee is MemberExpression { MemberName: "emit" }) return true;
         }

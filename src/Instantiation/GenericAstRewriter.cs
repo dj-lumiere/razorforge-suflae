@@ -512,10 +512,9 @@ internal static class GenericAstRewriter
             IdentifierExpression identifier,
             TypeInfo? expressionType, List<TypeInfo> callArgTypes)
         {
-            string callName = identifier.Name.EndsWith(value: '!')
-                ? identifier.Name[..^1]
-                : identifier.Name;
-            bool isFailable = identifier.Name.EndsWith(value: '!');
+            // Identifier names are bare; the failable `!` is a structured flag on the call node.
+            string callName = identifier.Name;
+            bool isFailable = call.IsFailable;
 
             RoutineInfo? InstantiateFreeRoutine(RoutineInfo candidate)
             {

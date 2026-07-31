@@ -642,7 +642,14 @@ public record RoutineSignature(
     List<Parameter> Parameters,
     TypeExpression? ReturnType,
     List<string>? Annotations,
-    SourceLocation Location);
+    SourceLocation Location)
+{
+    /// <summary>
+    /// True when the signature was written with the failable `!` marker. The `!` is a STRUCTURED
+    /// attribute — <see cref="Name"/> stays bare.
+    /// </summary>
+    public bool IsFailable { get; init; }
+}
 
 #endregion
 
@@ -744,6 +751,12 @@ public record ExternalDeclaration(
     bool IsDangerous,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <summary>
+    /// True when the external routine was declared with the failable `!` marker. The `!` is a
+    /// STRUCTURED attribute — <see cref="Name"/> stays bare.
+    /// </summary>
+    public bool IsFailable { get; init; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

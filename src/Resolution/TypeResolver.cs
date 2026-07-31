@@ -958,7 +958,7 @@ internal sealed class TypeResolver
         foreach (TypeExpression allowedExpr in constraint.ConstraintTypes)
         {
             if (typeArg.Name == allowedExpr.Name ||
-                GetBaseTypeName(typeName: typeArg.Name) == allowedExpr.Name)
+                typeArg.BareName == allowedExpr.Name)
             {
                 return; // Found a match
             }
@@ -1180,14 +1180,6 @@ internal sealed class TypeResolver
     }
 
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == MaybeTypeName;
-
-    private static string GetBaseTypeName(string typeName)
-    {
-        int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0
-            ? typeName[..genericIndex]
-            : typeName;
-    }
 
     #endregion
 }

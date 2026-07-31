@@ -817,7 +817,7 @@ public sealed partial class SemanticVerifier
         {
             RecordTypeInfo { GenericDefinition: { } def } => def.Name,
             EntityTypeInfo { GenericDefinition: { } def } => def.Name,
-            _ => GetBaseTypeName(typeName: type.Name)
+            _ => type.BareName
         };
 
         // Skip — this obeyer is blessed. (Wrappers in the closed set may declare obeys freely.)
@@ -855,7 +855,7 @@ public sealed partial class SemanticVerifier
 
     private bool IsMarkerProtocolTransitive(ProtocolTypeInfo protoInfo)
     {
-        string baseName = GetBaseTypeName(typeName: protoInfo.GenericDefinition?.Name ?? protoInfo.Name);
+        string baseName = (protoInfo.GenericDefinition ?? protoInfo).BareName;
         if (_markerProtocolNames.Contains(item: baseName))
             return true;
 
@@ -889,13 +889,16 @@ public sealed partial class SemanticVerifier
             }
 
             // Look for the method on the type (not on its protocols — that would find the protocol's own declaration)
+            // Routine names are bare; the failable `!` is a structured flag. Match the bare name,
+            // then (for a failable requirement) fall back to a same-named failable implementation.
             IEnumerable<RoutineInfo> ownMethods = _registry.GetMethodsForType(type: type);
             RoutineInfo? typeMethod =
                 ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name);
             if (typeMethod == null && requiredMethod.IsFailable)
             {
                 typeMethod =
-                    ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name + "!");
+                    ownMethods.FirstOrDefault(predicate: m =>
+                        m.Name == requiredMethod.Name && m.IsFailable);
             }
 
             if (typeMethod == null)

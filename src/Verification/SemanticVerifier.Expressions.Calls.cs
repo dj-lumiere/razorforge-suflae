@@ -26,11 +26,10 @@ public sealed partial class SemanticVerifier
             // Get the callee type/routine
             case IdentifierExpression id:
             {
-                bool isFailableCall = id.Name.EndsWith(value: '!');
-                // Strip '!' suffix for failable calls (e.g., "stop!" -> "stop")
-                string callName = isFailableCall
-                    ? id.Name[..^1]
-                    : id.Name;
+                // The failable `!` marker is a structured flag on the CallExpression, not part of
+                // the identifier string (which is bare).
+                bool isFailableCall = call.IsFailable;
+                string callName = id.Name;
                 // Look up the type with `!` stripped — `U32!(level)` is a failable type
                 // constructor call routing to `U32.create!(from: U64)`. Without stripping,
                 // `LookupTypeWithImports("U32!")` returns null and the call falls through to
@@ -1076,7 +1075,7 @@ public sealed partial class SemanticVerifier
                     if (member.MemberName is Compiler.Resolution.RuntimeContract.RefCount.Retain or Compiler.Resolution.RuntimeContract.RefCount.Track &&
                         member.Object is IdentifierExpression consumedId)
                     {
-                        string baseName = GetBaseTypeName(typeName: objectType.Name);
+                        string baseName = objectType.BareName;
                         bool consumesSource = baseName == Compiler.Resolution.RuntimeContract.Owned || objectType is EntityTypeInfo;
                         if (consumesSource)
                         {
@@ -1190,7 +1189,7 @@ public sealed partial class SemanticVerifier
                     // a function argument, an unbound statement — with RF-S629. (The "cannot bind to a
                     // var" half is already enforced for inline-only tokens at var-declaration sites.)
                     if (method.ReturnType is { } mtReturn &&
-                        GetBaseTypeName(typeName: mtReturn.Name) is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
+                        mtReturn.BareName is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
                         !ReferenceEquals(objA: call, objB: _usingResourceNode))
                     {
                         ReportError(code: SemanticDiagnosticCode.MtTokenRequiresUsing,
@@ -1233,7 +1232,7 @@ public sealed partial class SemanticVerifier
                     // #104/#23: Channel send() makes source variable a deadref
                     if (member is { MemberName: "send", Object: IdentifierExpression sendSource })
                     {
-                        string baseObjType = GetBaseTypeName(typeName: objectType.Name);
+                        string baseObjType = objectType.BareName;
                         if (baseObjType == "Channel")
                         {
                             _deadrefVariables.Add(item: sendSource.Name);
@@ -1686,7 +1685,7 @@ public sealed partial class SemanticVerifier
                 continue;
 
             TypeInfo bound = boundArgs[index: paramIndex];
-            string boundBase = GetBaseTypeName(typeName: bound.Name);
+            string boundBase = bound.BareName;
             string boundShort = boundBase.Contains(value: '.')
                 ? boundBase[(boundBase.LastIndexOf(value: '.') + 1)..]
                 : boundBase;

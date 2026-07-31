@@ -45,14 +45,8 @@ public partial class Parser
                     Consume(type: TokenType.RightParen,
                         errorMessage: ExpectedRightParenAfterArguments);
 
-                    string methodName = expression.Name;
-                    if (isMemoryOperation)
-                    {
-                        methodName += "!";
-                    }
-
                     expr = new GenericMethodCallExpression(Object: expression,
-                        MethodName: methodName,
+                        MethodName: expression.Name,
                         TypeArguments: typeArgs,
                         Arguments: args,
                         IsMemoryOperation: isMemoryOperation,
@@ -80,16 +74,16 @@ public partial class Parser
                 if (expr is IdentifierExpression identExpr)
                 {
                     expr = new CallExpression(
-                        Callee: new IdentifierExpression(Name: identExpr.Name + "!",
+                        Callee: new IdentifierExpression(Name: identExpr.Name,
                             Location: identExpr.Location),
                         Arguments: args,
-                        Location: expr.Location);
+                        Location: expr.Location) { IsFailable = true };
                 }
                 else
                 {
                     expr = new CallExpression(Callee: expr,
                         Arguments: args,
-                        Location: expr.Location);
+                        Location: expr.Location) { IsFailable = true };
                 }
             }
             else if (Match(type: TokenType.LeftParen))
@@ -176,14 +170,8 @@ public partial class Parser
                         Consume(type: TokenType.RightParen,
                             errorMessage: ExpectedRightParenAfterArguments);
 
-                        string methodName = member;
-                        if (isGenericMemOp)
-                        {
-                            methodName += "!";
-                        }
-
                         expr = new GenericMethodCallExpression(Object: expr,
-                            MethodName: methodName,
+                            MethodName: member,
                             TypeArguments: typeArgs,
                             Arguments: genericArgs,
                             IsMemoryOperation: isGenericMemOp,

@@ -237,11 +237,9 @@ public sealed partial class SemanticVerifier
             return type;
         }
 
-        // Try to look up as routine (function reference)
-        // Strip '!' suffix for failable routine references (e.g., "stop!" -> "stop")
-        string routineLookupName = id.Name.EndsWith(value: '!')
-            ? id.Name[..^1]
-            : id.Name;
+        // Try to look up as routine (function reference).
+        // Identifier names are bare — the failable `!` is a structured flag, never in the name.
+        string routineLookupName = id.Name;
         RoutineInfo? routine = _registry.LookupRoutine(fullName: routineLookupName);
         // Try current module prefix (e.g., "infinite_loop" -> "HelloWorld.infinite_loop")
         if (routine == null && _currentModuleName != null &&

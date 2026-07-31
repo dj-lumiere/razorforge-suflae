@@ -742,11 +742,9 @@ public partial class Parser
 
                 string methodName = methodNameSb.ToString();
 
-                // Support failable member routines: "routine!"
-                if (Match(type: TokenType.Bang))
-                {
-                    methodName += "!";
-                }
+                // Support failable member routines: "routine!". The `!` is a STRUCTURED flag on
+                // the RoutineSignature — the name stays bare.
+                bool methodIsFailable = Match(type: TokenType.Bang);
 
                 // Parameters
                 Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after member routine name");
@@ -815,7 +813,10 @@ public partial class Parser
                     Annotations: methodAnnotations.Count > 0
                         ? methodAnnotations
                         : null,
-                    Location: GetLocation()));
+                    Location: GetLocation())
+                {
+                    IsFailable = methodIsFailable
+                });
                 Match(type: TokenType.Newline);
             }
             else

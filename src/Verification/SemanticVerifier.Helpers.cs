@@ -441,7 +441,7 @@ public sealed partial class SemanticVerifier
                 : argExpr;
             // Borrow protocols (Referring[T] / Controlling[T]) accept the source by reference —
             // no copy/move is happening at the call site, so no verb is required.
-            string paramBase = GetBaseTypeName(typeName: paramType.Name);
+            string paramBase = paramType.BareName;
             bool paramIsBorrow = paramType.Category == TypeCategory.Protocol &&
                                  paramBase is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
             if (_registry.Language == Language.RazorForge &&
@@ -709,7 +709,7 @@ public sealed partial class SemanticVerifier
         // Generic type matching - check if resolution matches definition
         if (target.IsGenericDefinition && source.IsGenericResolution)
         {
-            string baseName = GetBaseTypeName(typeName: source.Name);
+            string baseName = source.BareName;
             if (baseName == target.Name)
             {
                 return true;
@@ -722,7 +722,7 @@ public sealed partial class SemanticVerifier
         if (source.IsGenericDefinition && target is { IsGenericResolution: true, TypeArguments: not null } &&
             target.TypeArguments.All(predicate: t => t is GenericParameterTypeInfo))
         {
-            string baseName = GetBaseTypeName(typeName: target.Name);
+            string baseName = target.BareName;
             if (baseName == source.Name)
             {
                 return true;
@@ -736,7 +736,7 @@ public sealed partial class SemanticVerifier
             // bare source whose inner type matches T. Retained/Modifying are accepted by
             // both; Viewing is readonly so accepted only by Referring; Hijacked needs explicit
             // .as_entity() — never accepted by implicit borrow coercion.
-            string targetBase = GetBaseTypeName(typeName: target.Name);
+            string targetBase = target.BareName;
             if ((targetBase == Compiler.Resolution.RuntimeContract.Referring || targetBase == Compiler.Resolution.RuntimeContract.Controlling) &&
                 target.TypeArguments is { Count: 1 } borrowArgs)
             {
@@ -757,7 +757,7 @@ public sealed partial class SemanticVerifier
                 if (source.Category == TypeCategory.Entity &&
                     (source.FullName == borrowInner.FullName ||
                      source.Name == borrowInner.Name ||
-                     GetBaseTypeName(typeName: source.Name) == GetBaseTypeName(typeName: borrowInner.Name)))
+                     source.BareName == borrowInner.BareName))
                     return true;
             }
 
@@ -828,7 +828,7 @@ public sealed partial class SemanticVerifier
     private static bool TryGetOwnershipWrapperInner(TypeSymbol type, out string? wrapperBase,
         out TypeSymbol? inner)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         if (baseName is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Viewing
             or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Hijacked)
         {
@@ -858,7 +858,7 @@ public sealed partial class SemanticVerifier
             return true;
         }
 
-        if (GetBaseTypeName(typeName: type.Name) == Compiler.Resolution.RuntimeContract.Owned &&
+        if (type.BareName == Compiler.Resolution.RuntimeContract.Owned &&
             type.TypeArguments is { Count: 1 } args)
         {
             inner = args[index: 0];
@@ -870,9 +870,12 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Gets the base type name without generic arguments.
+    /// Strips the generic-arg suffix from a RAW type-name string (e.g. "List[S64]" -> "List").
+    /// Prefer <see cref="TypeInfo.BareName"/> when a TypeInfo is in hand; this exists only for the
+    /// few call sites that carry a bare string (e.g. a <c>TypeExpression.Name</c> or a protocol-name
+    /// parameter) with no TypeInfo to read <c>.BareName</c> from.
     /// </summary>
-    private static string GetBaseTypeName(string typeName)
+    private static string BareTypeName(string typeName)
     {
         int genericIndex = typeName.IndexOf(value: '[');
         return genericIndex >= 0
@@ -982,7 +985,7 @@ public sealed partial class SemanticVerifier
     private static TypeSymbol UnwrapBorrowProtocol(TypeSymbol type)
     {
         if (type.Category == TypeCategory.Protocol &&
-            GetBaseTypeName(typeName: type.Name) is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling &&
+            type.BareName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling &&
             type.TypeArguments is { Count: > 0 } args)
         {
             return args[index: 0];
@@ -1071,8 +1074,7 @@ public sealed partial class SemanticVerifier
         if (proto is not ProtocolTypeInfo p) return false;
         visited ??= new HashSet<string>(StringComparer.Ordinal);
         if (!visited.Add(item: p.Name)) return false;
-        if (p.Methods.Any(predicate: m =>
-                m.Name == methodName || m.Name + "!" == methodName))
+        if (p.Methods.Any(predicate: m => m.Name == methodName))
             return true;
         return p.ParentProtocols.Any(parent =>
             ProtocolDeclaresMethod(proto: parent, methodName: methodName, visited: visited));
@@ -1359,7 +1361,7 @@ public sealed partial class SemanticVerifier
                     continue;
                 foreach (TypeExpression protocolExpr in c.ConstraintTypes)
                 {
-                    if (GetBaseTypeName(typeName: protocolExpr.Name) != "Iterable") continue;
+                    if (BareTypeName(typeName: protocolExpr.Name) != "Iterable") continue;
                     TypeSymbol resolved = _typeResolver.ResolveType(typeExpr: protocolExpr);
                     if (resolved.TypeArguments is { Count: > 0 })
                         return resolved.TypeArguments[index: 0];
@@ -1403,7 +1405,7 @@ public sealed partial class SemanticVerifier
         {
             foreach (TypeSymbol proto in protocols)
             {
-                if (GetBaseTypeName(typeName: proto.Name) == "Iterable" &&
+                if (proto.BareName == "Iterable" &&
                     proto.TypeArguments is { Count: > 0 })
                 {
                     TypeInfo elementType = proto.TypeArguments[index: 0];
@@ -1524,7 +1526,7 @@ public sealed partial class SemanticVerifier
             return;
 
         ProtocolTypeInfo def = proto.GenericDefinition ?? proto;
-        string baseName = GetBaseTypeName(typeName: def.Name);
+        string baseName = def.BareName;
         string methodName;
         if (baseName == Compiler.Resolution.RuntimeContract.Controlling) methodName = "control";
         else if (baseName == Compiler.Resolution.RuntimeContract.Referring) methodName = "refer";

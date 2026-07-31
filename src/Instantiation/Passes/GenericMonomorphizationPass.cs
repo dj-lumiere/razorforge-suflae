@@ -1410,16 +1410,12 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             ? genericAstName[..genericAstName.IndexOf("[generic]", StringComparison.Ordinal)]
             : genericAstName;
 
+        // Routine names (both index keys and the composed baseName) are bare — the failable `!` is
+        // a structured flag (RoutineDeclaration.IsFailable), never part of the name — so a plain
+        // lookup on the bare name already reaches failable overloads.
         if (!_routineIndex.TryGetValue(key: baseName, value: out List<RoutineDeclaration>? candidates))
         {
-            // Failable methods are indexed under their name WITHOUT '!' (parser strips it,
-            // sets IsFailable=true). When baseName ends with '!', retry without it and
-            // keep only the failable overloads.
-            if (!baseName.EndsWith('!') ||
-                !_routineIndex.TryGetValue(key: baseName[..^1], value: out candidates))
-                return null;
-            candidates = candidates!.Where(d => d.IsFailable).ToList();
-            if (candidates.Count == 0) return null;
+            return null;
         }
 
         RoutineDeclaration? countOnlyMatch = null;

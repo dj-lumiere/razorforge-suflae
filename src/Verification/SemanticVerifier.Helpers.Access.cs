@@ -16,7 +16,7 @@ public sealed partial class SemanticVerifier
 {
     private static bool IsInlineOnlyTokenType(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return InlineOnlyTokenTypes.Contains(value: baseName);
     }
 
@@ -25,7 +25,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static string GetTokenKindDescription(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return baseName switch
         {
             Compiler.Resolution.RuntimeContract.Viewing => "read-only token (Viewing)",
@@ -109,8 +109,7 @@ public sealed partial class SemanticVerifier
             }
 
             // Convert AST TypeInfo back to get the type name
-            string typeName = arg.ResolvedType.Name;
-            string baseName = GetBaseTypeName(typeName: typeName);
+            string baseName = arg.ResolvedType.BareName;
 
             if (!ExclusiveTokenTypes.Contains(value: baseName))
             {
@@ -182,7 +181,7 @@ public sealed partial class SemanticVerifier
             // a concurrency boundary IS the escape event, and codegen inserts `promote()` on the arg
             // before the spawn (LOCAL -> ESCAPED: atomic refcount + armed reentrant lock). So the same
             // object is thread-safe by the time the callee touches it — accepted here, no RF-S632.
-            if (GetBaseTypeName(typeName: type.Name) == Compiler.Resolution.RuntimeContract.Roamed)
+            if (type.BareName == Compiler.Resolution.RuntimeContract.Roamed)
             {
                 continue;
             }
