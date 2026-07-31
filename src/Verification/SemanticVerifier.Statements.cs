@@ -139,12 +139,15 @@ public sealed partial class SemanticVerifier
                 : $"{module}.{routine.Name}";
         }
 
-        // Prefer the structured binding attached at registration (SignatureResolver / StdlibLoader)
-        // over re-deriving the routine by parsing the name string — the same reason codegen reads
-        // RoutineDeclaration.ResolvedInfo directly. This also correctly binds CONSTRUCTORS
-        // (`routine T(...)`): their name carries no `.create` for the dot-based string logic below to
-        // key on, so the registry lookup would miss and the body would be analyzed against a stub.
-        if (routine.ResolvedInfo?.OwnerType is { } resolvedInfoOwner)
+        // CONSTRUCTORS (`routine T(...)`) are the one case the dot-based name-string logic above
+        // can't bind: their AST name is the bare type ("U64", "List") with no ".create" to key on,
+        // so the registry lookup misses and the body would analyze against a stub. Use the structured
+        // binding attached at registration (ResolvedInfo) for THAT case only — every other routine
+        // (dotted members, protocol extensions like `MutableIndexable[T].pick`) keeps the existing
+        // path, whose `me`-typing special-casing must not be bypassed.
+        bool isConstructorDecl = !routine.Name.Contains(value: '.')
+            && routine.ResolvedInfo is { Name: "create", OwnerType: not null };
+        if (isConstructorDecl && routine.ResolvedInfo!.OwnerType is { } resolvedInfoOwner)
         {
             routineOwnerType = resolvedInfoOwner;
         }
@@ -163,7 +166,7 @@ public sealed partial class SemanticVerifier
             OwnerType = routineOwnerType
         };
 
-        RoutineInfo? routineInfo = routine.ResolvedInfo;
+        RoutineInfo? routineInfo = isConstructorDecl ? routine.ResolvedInfo : null;
         if (routineInfo == null && routine.Parameters.Count > 0)
         {
             IEnumerable<string> paramTypeNames = routine.Parameters

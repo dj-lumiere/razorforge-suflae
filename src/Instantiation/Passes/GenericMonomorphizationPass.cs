@@ -24,7 +24,7 @@ namespace Compiler.Instantiation.Passes;
 /// definition's methods.  Bodies are sourced from three places:
 /// <list type="bullet">
 ///   <item><see cref="DesugaringContext.VariantBodies"/> -> WiredRoutinePass-generated
-///         bodies (<c>$represent</c>, <c>$diagnose</c>) and ErrorHandlingVariantPass
+///         bodies (<c>represent</c>, <c>diagnose</c>) and ErrorHandlingVariantPass
 ///         bodies (<c>try_emit</c>, etc.).</item>
 ///   <item><c>Registry.StdlibPrograms</c> and <c>Registry.UserPrograms</c> AST declarations -> source bodies.</item>
 /// </list>
