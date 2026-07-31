@@ -66,7 +66,17 @@ public sealed class StdlibApiTests
 
         Directory.CreateDirectory(HarnessDir);
         var lines = new List<string> { $"module {HarnessModule}", "", "import IO/Console" };
-        lines.AddRange(entries.Select(selector: e => $"import {e.Module}"));
+        // Prefix/package import: a single `import Tests/Stdlib` pulls in every Tests/Stdlib/* fixture
+        // module (all fixtures share that namespace), replacing one `import` line per fixture. Falls
+        // back to per-module imports if the fixtures ever stop sharing a common namespace prefix.
+        string commonPrefix = entries.Count > 0 && entries[0].Module.Contains('/')
+            ? entries[0].Module[..entries[0].Module.LastIndexOf('/')]
+            : "";
+        if (commonPrefix.Length > 0 &&
+            entries.All(e => e.Module.StartsWith(commonPrefix + "/", StringComparison.Ordinal)))
+            lines.Add($"import {commonPrefix}");
+        else
+            lines.AddRange(entries.Select(selector: e => $"import {e.Module}"));
         lines.Add("");
         lines.Add("routine start()");
         foreach ((string stem, _, string leaf) in entries)
