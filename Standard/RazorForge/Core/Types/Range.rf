@@ -87,7 +87,7 @@ entity RangeEmittable[T] needs T obeys Comparable, Numeric
 ### The emitter starts at `me.start`.
 ### :returns: The resulting `RangeEmittable[T]` value.
 @readonly
-routine Range[T].$iter() -> RangeEmittable[T]
+routine Range[T].iter() -> RangeEmittable[T]
   return RangeEmittable[T](
     current: me.start,
     end: me.end,
@@ -101,7 +101,7 @@ routine Range[T].$iter() -> RangeEmittable[T]
 ### Each successful call yields the current value and advances by `step`.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
-routine RangeEmittable[T].$emit!() -> T
+routine RangeEmittable[T].emit!() -> T
   if me.done
     absent
 

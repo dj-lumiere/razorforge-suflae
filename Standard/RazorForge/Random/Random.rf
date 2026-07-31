@@ -122,7 +122,7 @@ routine List[T].shuffle(rng: Modifying[Random]) -> Blank
     # modulo cannot divide by zero.
     var j = 0u64
     danger
-      j = (rng.next_u64()).$mod_unchecked(you: i +% 1u64)
+      j = (rng.next_u64()).mod_unchecked(you: i +% 1u64)
     if j != i
       var a = me.get_raw(index: i)
       var b = me.get_raw(index: j)

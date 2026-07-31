@@ -13,7 +13,7 @@ relates ReverseEmittable[T] as Iter
 ### Materializes the source into a buffer and returns an iterator that walks it backwards.
 ### :returns: The resulting `ReverseEmittable[T]` value.
 @readonly
-routine ReverseIterable[T, S].$iter() -> ReverseEmittable[T]
+routine ReverseIterable[T, S].iter() -> ReverseEmittable[T]
   danger
     var buffer = me.source.as_entity().List()
     var n = buffer.count()
@@ -30,7 +30,7 @@ entity ReverseEmittable[T] obeys Emittable[T]
 ### Returns the next element counting backward through the buffer.
 ### Signals absence once all elements have been yielded.
 ### :returns: The resulting `T` value.
-routine ReverseEmittable[T].$emit!() -> T
+routine ReverseEmittable[T].emit!() -> T
   if me.index == 0u64
     absent
   me.index = me.index - 1u64

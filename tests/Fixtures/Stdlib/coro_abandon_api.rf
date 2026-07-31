@@ -3,8 +3,8 @@ module Tests/Stdlib/CoroAbandonApi
 # v0.2.0 coroutine abandon-teardown end-to-end (Mechanism C). A coroutine body owns an entity
 # `Box`; the compiler instruments its construction with a cancellation push and its teardown with
 # a pop. Two cases prove the owned value is destroyed EXACTLY once on each path:
-#   1. Abandon while parked  -> the cancellation shadow stack runs Box.$destroy.
-#   2. Resume to completion   -> the inline teardown runs Box.$destroy; the node was popped, so
+#   1. Abandon while parked  -> the cancellation shadow stack runs Box.destroy.
+#   2. Resume to completion   -> the inline teardown runs Box.destroy; the node was popped, so
 #      the later delete does not re-fire (no double-free).
 # These exercise the substrate directly (no scheduler yet), so they live in a danger block.
 
@@ -13,7 +13,7 @@ import IO/Console
 entity Box
   value: S64
 
-dangerous routine Box.$destroy()
+dangerous routine Box.destroy()
   show(value: "Box destroyed")
   me.hijack().invalidate()
   return

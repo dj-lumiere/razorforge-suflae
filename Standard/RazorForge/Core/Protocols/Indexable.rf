@@ -11,4 +11,4 @@ protocol Indexable[V] obeys Sized
   ### :returns: The element at that position.
   ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
   @readonly
-  routine Me.$getitem!(index: U64) -> V
+  routine Me.getitem!(index: U64) -> V

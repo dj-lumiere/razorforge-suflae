@@ -1,7 +1,7 @@
 module Core
 
 # TaskSpawnError / TaskTimeoutError are defined in Core/Errors/Common.rf (alongside the other
-# Core crashables) so their synthesized $represent/$diagnose resolve crash_message correctly.
+# Core crashables) so their synthesized represent/diagnose resolve crash_message correctly.
 
 ### Which substrate runs an `Agent[T]`. One concrete handle backs both so a heterogeneous set can be
 ### raced from a single `List[Agent[T]]`.
@@ -22,7 +22,7 @@ choice AgentKind
 ### Teardown is status-based (NOT done in `retrieve!`): a completed Agent is freed; one still in
 ### flight is abandoned — a parked coroutine runs its cancellation shadow stack, while a running
 ### worker thread (which cannot be killed) is joined before its block is freed, so the worker never
-### writes into freed memory. `retrieve!` only extracts the value; `$destroy` always does the freeing.
+### writes into freed memory. `retrieve!` only extracts the value; `destroy` always does the freeing.
 record Agent[T]
   ### CORO = coroutine-backed (suspended routine); THREAD = thread-backed (threaded routine).
   secret kind: AgentKind
@@ -77,7 +77,7 @@ routine Agent[T].is_running() -> Bool
   return not me.is_done()
 
 ### Requests cooperative cancellation of this agent — sets a flag in NATIVE memory (reached through
-### the handle) and returns; it NEVER frees or unwinds (teardown stays in `$destroy`, the sole
+### the handle) and returns; it NEVER frees or unwinds (teardown stays in `destroy`, the sole
 ### freer). A coroutine observes the request at its next suspend point (`waitfor` returns early) or
 ### via `cancellation_requested()`; a worker thread observes it only by polling
 ### `cancellation_requested()` (a thread cannot be killed). Internal plumbing for `Nursery[T].cancel`,
@@ -106,7 +106,7 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
 ### on a plain thread it blocks. A coroutine-backed Agent drives this thread's implicit scheduler
 ### until THIS coroutine finishes (siblings spawned earlier progress concurrently). A deadline
 ### (`agent.waitfor(d).retrieve!()`) races completion against the timer and throws {TaskTimeoutError}
-### if the deadline wins. `retrieve!` only reads the value out; freeing happens later in `$destroy`.
+### if the deadline wins. `retrieve!` only reads the value out; freeing happens later in `destroy`.
 ### :throws: {TaskSpawnError} if the work could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
@@ -129,7 +129,7 @@ routine Agent[T].retrieve!() -> T
       if rf_in_coroutine() != 0_u32
         # Inside a scheduler-driven coroutine: race the worker against the deadline WITHOUT
         # blocking. Park on a deadline timer that is also externally wakeable; siblings run.
-        # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — $destroy
+        # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — destroy
         # joins the still-running worker before freeing (the timeout does not stop it).
         var outcome = rf_task_await_coro_deadline(task: me.agent, timeout_ns: U64(total))
         if outcome == 0_u32
@@ -161,7 +161,7 @@ routine Agent[T].retrieve!() -> T
 ### JOINED before the block is freed (a thread cannot be killed, and the worker keeps writing into
 ### the block until it finishes) — abandoning a thread therefore means detach-and-discard-the-result,
 ### not stop-the-thread.
-dangerous routine Agent[T].$destroy()
+dangerous routine Agent[T].destroy()
   if me.kind is AgentKind.CORO
     if not me.coro.is_none()
       var status = rf_coro_status_get(coro: me.coro)

@@ -17,9 +17,9 @@ relates TakeWhileEmittable[T, S/Iter] as Iter
 ### never resumes after termination.
 ### :returns: The resulting `TakeWhileEmittable[T, S/Iter]` value.
 @readonly
-routine TakeWhileIterable[T, S].$iter() -> TakeWhileEmittable[T, S/Iter]
+routine TakeWhileIterable[T, S].iter() -> TakeWhileEmittable[T, S/Iter]
   danger
-    return TakeWhileEmittable[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, done: false)
+    return TakeWhileEmittable[T, S/Iter](source: me.source.as_entity().iter(), predicate: me.predicate, done: false)
 
 ### Iterates over a source sequence until the continuation predicate fails.
 ### :typeparam T: The element type produced by the source sequence.
@@ -38,11 +38,11 @@ needs SE obeys Emittable[T]
 ### calls.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the predicate has failed or the source ends first.
-routine TakeWhileEmittable[T, SE].$emit!() -> T
+routine TakeWhileEmittable[T, SE].emit!() -> T
   danger
     if me.done
       absent
-    var item = me.source.as_entity().$emit!()
+    var item = me.source.as_entity().emit!()
     if not me.predicate(item)
       me.done = true
       absent

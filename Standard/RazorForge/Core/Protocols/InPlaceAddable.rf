@@ -8,4 +8,4 @@ protocol InPlaceAddable
   ### Implementations should leave `you` unchanged while updating `me`.
   ### :param you: The other value to add.
   @writable
-  routine Me.$iadd(you: Me)
+  routine Me.iadd(you: Me)

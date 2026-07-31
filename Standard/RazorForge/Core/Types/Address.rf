@@ -10,7 +10,7 @@ obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtr
   pass
 
 # ============================================================================
-# No $create routines — Address has no implicit or explicit conversions.
+# No create routines — Address has no implicit or explicit conversions.
 # Use Hijacked[T] for converting between Address and other types.
 # ============================================================================
 
@@ -18,7 +18,7 @@ obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtr
 ### This creator exists only as the identity conversion for `Address`.
 ### :param from: The address value to reuse.
 ### :returns: The resulting `Address` value.
-routine Address.$create(from: Address) -> Address
+routine Address.create(from: Address) -> Address
   return from
 
 # ============================================================================
@@ -32,14 +32,14 @@ routine Address.$create(from: Address) -> Address
 ### :param you: The address offset or peer address value to add.
 ### :returns: The resulting `Address` value.
 @readonly
-routine Address.$add_wrap(you: Address) -> Address
+routine Address.add_wrap(you: Address) -> Address
   return add[Address](me, you)
 
 ### Returns the wrapping difference between two raw addresses.
 ### :param you: The address value to subtract.
 ### :returns: The resulting `Address` value.
 @readonly
-routine Address.$sub_wrap(you: Address) -> Address
+routine Address.sub_wrap(you: Address) -> Address
   return sub[Address](me, you)
 
 # Note: Address × Address and Address // Address have no meaningful semantics
@@ -55,14 +55,14 @@ routine Address.$sub_wrap(you: Address) -> Address
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Address.$eq(you: Address) -> Bool
+routine Address.eq(you: Address) -> Bool
   return int_eq[Address](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Address.$cmp(you: Address) -> ComparisonSign
+routine Address.cmp(you: Address) -> ComparisonSign
   if unsigned_lt[Address](me, you)
     return ME_SMALL
   if unsigned_gt[Address](me, you)
@@ -106,21 +106,21 @@ routine Address.is_power_of_two() -> Bool
 ### :param offset: The byte count to add.
 ### :returns: The resulting `Address` value.
 @readonly
-routine Address.$add(offset: ByteSize) -> Address
+routine Address.add(offset: ByteSize) -> Address
   return add[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
 
 ### Returns the byte distance from this address to another address.
 ### :param other: The address to subtract.
 ### :returns: The resulting `ByteSize` value.
 @readonly
-routine Address.$sub(other: Address) -> ByteSize
+routine Address.sub(other: Address) -> ByteSize
   return ByteSize(U64(sub[Address](me, other)))
 
 ### Returns the result of stepping this address back by a byte size.
 ### :param offset: The byte count to subtract.
 ### :returns: The resulting `Address` value.
 @readonly
-routine Address.$sub(offset: ByteSize) -> Address
+routine Address.sub(offset: ByteSize) -> Address
   return sub[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
 
 # ============================================================================
@@ -132,7 +132,7 @@ routine Address.$sub(offset: ByteSize) -> Address
 ### easier to scan in diagnostics.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Address.$represent() -> Text
+routine Address.represent() -> Text
   # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
   var digits = List[Character]()
   digits.add_last(Character(0x0030u32))
@@ -153,8 +153,8 @@ routine Address.$represent() -> Text
 ### Returns the diagnostic form of this address.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Address.$diagnose() -> Text
-  return "Address(" + me.$represent() + ")"
+routine Address.diagnose() -> Text
+  return "Address(" + me.represent() + ")"
 
 ### Parses an address from hexadecimal text.
 ### The accepted format is hex digits with an optional `0x`/`0X` prefix and
@@ -162,7 +162,7 @@ routine Address.$diagnose() -> Text
 ### :param from_text: The text to parse.
 ### :returns: The resulting `Address` value.
 ### :throws: May throw {InvalidValueError}.
-routine Address.$create!(from_text: Text) -> Address
+routine Address.create!(from_text: Text) -> Address
   # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "Address")

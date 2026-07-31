@@ -38,20 +38,20 @@ routine CStr.ptr() -> Hijacked[Byte]
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The pointer to wrap.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from_ptr: Hijacked[Byte]) -> CStr
+routine CStr.create(from_ptr: Hijacked[Byte]) -> CStr
   return reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
 
 ### Wraps an existing raw address as `CStr`.
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The address to wrap.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from_ptr: Address) -> CStr
+routine CStr.create(from_ptr: Address) -> CStr
   return reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
 
 ### Creates a null-terminated C string by copying raw bytes and appending a trailing null byte.
 ### :param from: The byte sequence to copy.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from: Bytes) -> CStr
+routine CStr.create(from: Bytes) -> CStr
   var len = from.count()
   danger
     var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
@@ -69,7 +69,7 @@ routine CStr.$create(from: Bytes) -> CStr
 ### Creates a UTF-8 encoded null-terminated C string from `Text`.
 ### :param from: The text value to encode and copy.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from: Text) -> CStr
+routine CStr.create(from: Text) -> CStr
   var len = from.count()
   danger
     if len == 0u64
@@ -129,19 +129,19 @@ routine CStr.is_empty() -> Bool
 ### This does not copy the string and assumes the caller stays within bounds.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
-dangerous routine CStr.$getitem(index: U64) -> Byte
+dangerous routine CStr.getitem(index: U64) -> Byte
   return me.ptr().offset(ByteSize(bytes: index)).peek()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
-routine CStr.$eq(you: CStr) -> Bool
+routine CStr.eq(you: CStr) -> Bool
   return rf_cstr_compare(a: me, b: you) == 0s32
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
-routine CStr.$cmp(you: CStr) -> ComparisonSign
+routine CStr.cmp(you: CStr) -> ComparisonSign
   var cmp = rf_cstr_compare(a: me, b: you)
   if cmp < 0s32
     return ME_SMALL

@@ -70,14 +70,14 @@ routine Retained[T].weak_count() -> U32
     return ctrl.weak_count()
 
 # ============================================================================
-# Marker-protocol coercion ($refer/$control) — yields the inner entity as T
+# Marker-protocol coercion (refer/control) — yields the inner entity as T
 # ============================================================================
 
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`.
 ### :returns: The inner entity as `T`.
 @[readonly, inline]
-routine Retained[T].$refer() -> T
+routine Retained[T].refer() -> T
   danger
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
     return ctrl.borrow_data().as_entity()
@@ -86,7 +86,7 @@ routine Retained[T].$refer() -> T
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
 ### :returns: The inner entity as `T`.
 @inline
-routine Retained[T].$control() -> T
+routine Retained[T].control() -> T
   danger
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
     return ctrl.borrow_data().as_entity()
@@ -98,22 +98,22 @@ routine Retained[T].$control() -> T
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Retained[T].$represent() -> Text
+routine Retained[T].represent() -> Text
   danger
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
-    return ctrl.borrow_data().as_entity().$represent()
+    return ctrl.borrow_data().as_entity().represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Retained[T].$diagnose() -> Text
+routine Retained[T].diagnose() -> Text
   danger
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
     var addr = ctrl.borrow_data().get_address()
-    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + ctrl.borrow_data().as_entity().$diagnose() + ")"
+    return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ", " + ctrl.borrow_data().as_entity().diagnose() + ")"
 
-dangerous routine Retained[T].$destroy()
+dangerous routine Retained[T].destroy()
   me.release()
   return

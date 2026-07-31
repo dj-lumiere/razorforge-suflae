@@ -27,7 +27,7 @@ record Integer obeys Copyable, Integral, Divisible, Negatable, Ordered, Hashable
 ### Use this overload when the surrounding context needs an explicit `Integer`
 ### instead of a fixed-width literal.
 ### :returns: The resulting `Integer` value.
-routine Integer.$create() -> Integer
+routine Integer.create() -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   return int
 
@@ -36,7 +36,7 @@ routine Integer.$create() -> Integer
 ### so the result is no longer limited by `S64` range after construction.
 ### :param value: The initial signed value.
 ### :returns: The resulting `Integer` value.
-routine Integer.$create(value: S64) -> Integer
+routine Integer.create(value: S64) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_set_i64(handle: int.handle, value: value)
   return int
@@ -46,7 +46,7 @@ routine Integer.$create(value: S64) -> Integer
 ### unsigned integer data.
 ### :param value: The initial unsigned value.
 ### :returns: The resulting `Integer` value.
-routine Integer.$create(value: U64) -> Integer
+routine Integer.create(value: U64) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_set_u64(handle: int.handle, value: value)
   return int
@@ -60,7 +60,7 @@ routine Integer.$create(value: U64) -> Integer
 
 # Private 64-bit base builders. They reuse the EXISTING native setters (no new FFI) and
 # construct via the real handle/ctrl fields, so they avoid the `Integer(value:)` call form
-# (which mis-lowers) and don't collide with the `$create(value: S64/U64)` overloads.
+# (which mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
 routine integer_of_s64(v: S64) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_set_i64(handle: int.handle, value: v)
@@ -72,46 +72,46 @@ routine integer_of_u64(v: U64) -> Integer
 
 ### Widens a fixed-width integer into an `Integer` (exact). 64-bit limbs go through the
 ### native setters; wider widths compose them with shift+add — no new FFI surface. (`S64`
-### and `U64` keep their existing `$create(value:)` overloads, which a label-blind mangle
+### and `U64` keep their existing `create(value:)` overloads, which a label-blind mangle
 ### would collide with.)
 ### :param from: The signed source value.
 ### :returns: The equal `Integer` value.
-routine Integer.$create(from: S8) -> Integer
+routine Integer.create(from: S8) -> Integer
   return integer_of_s64(v: sign_extend[S8, S64](from))
-routine Integer.$create(from: S16) -> Integer
+routine Integer.create(from: S16) -> Integer
   return integer_of_s64(v: sign_extend[S16, S64](from))
-routine Integer.$create(from: S32) -> Integer
+routine Integer.create(from: S32) -> Integer
   return integer_of_s64(v: sign_extend[S32, S64](from))
-routine Integer.$create(from: S128) -> Integer
+routine Integer.create(from: S128) -> Integer
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
   var r = Integer(from: mag)
-  return if neg then r.$neg() else r
-routine Integer.$create(from: S256) -> Integer
+  return if neg then r.neg() else r
+routine Integer.create(from: S256) -> Integer
   var neg = signed_lt[S256](a: from, b: 0_s256)
   var mag = if neg then reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: from)) else reinterpret_bits[S256, U256](from)
   var r = Integer(from: mag)
-  return if neg then r.$neg() else r
+  return if neg then r.neg() else r
 
 ### Widens an unsigned fixed-width integer into an `Integer` (exact).
 ### :param from: The unsigned source value.
 ### :returns: The equal `Integer` value.
-routine Integer.$create(from: U8) -> Integer
+routine Integer.create(from: U8) -> Integer
   return integer_of_u64(v: zero_extend[U8, U64](from))
-routine Integer.$create(from: U16) -> Integer
+routine Integer.create(from: U16) -> Integer
   return integer_of_u64(v: zero_extend[U16, U64](from))
-routine Integer.$create(from: U32) -> Integer
+routine Integer.create(from: U32) -> Integer
   return integer_of_u64(v: zero_extend[U32, U64](from))
-routine Integer.$create(from: U128) -> Integer
+routine Integer.create(from: U128) -> Integer
   # value = hi * 2^64 + lo, from the two 64-bit limbs.
   var hi = integer_of_u64(v: int_truncate[U128, U64](from >>> 64u32))
   var lo = integer_of_u64(v: int_truncate[U128, U64](from))
-  return hi.$shl(bits: 64_s32).$add(other: lo)
-routine Integer.$create(from: U256) -> Integer
+  return hi.shl(bits: 64_s32).add(other: lo)
+routine Integer.create(from: U256) -> Integer
   # value = hi * 2^128 + lo, reusing the U128 widening for each 128-bit half.
   var hi = Integer(from: int_truncate[U256, U128](from >>> 128u32))
   var lo = Integer(from: int_truncate[U256, U128](from))
-  return hi.$shl(bits: 128_s32).$add(other: lo)
+  return hi.shl(bits: 128_s32).add(other: lo)
 
 ### Parses an integer from text using the requested radix.
 ### The input may include the sign and digits accepted by the selected base.
@@ -119,7 +119,7 @@ routine Integer.$create(from: U256) -> Integer
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Integer` value.
 ### :throws: {ValueError} if `text` is not a valid integer in `radix`.
-routine Integer.$create!(text: Text, radix: S32 = 10) -> Integer
+routine Integer.create!(text: Text, radix: S32 = 10) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
   if result != 0
@@ -128,10 +128,10 @@ routine Integer.$create!(text: Text, radix: S32 = 10) -> Integer
 
 ### Materializes an `Integer` from a tokenizer-validated decimal digit string.
 ### Used by literal lowering for `n` literals (e.g. `123n`); the input is guaranteed
-### valid by the tokenizer, so this is infallible (unlike the public `$create!(text:)`).
+### valid by the tokenizer, so this is infallible (unlike the public `create!(text:)`).
 ### :param text: The decimal digit string (no suffix, no separators).
 ### :returns: The resulting `Integer` value.
-common routine Integer.$from_literal(text: Text) -> Integer
+common routine Integer.from_literal(text: Text) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   discard rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   return int
@@ -141,7 +141,7 @@ common routine Integer.$from_literal(text: Text) -> Integer
 ### controller (transient zero) the copy is a bitwise duplicate with no atomic op.
 ### :returns: The resulting `Integer` value.
 @[readonly, inline]
-routine Integer.$store() -> Integer
+routine Integer.store() -> Integer
   danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()
@@ -149,7 +149,7 @@ routine Integer.$store() -> Integer
 
 ### Releases this value's reference. Frees the handle + controller when this
 ### was the last live ref. No-op when `ctrl` is null.
-dangerous routine Integer.$destroy()
+dangerous routine Integer.destroy()
   if me.ctrl.is_none()
     return
   var prev = me.ctrl.as_entity().decrease_strong_count()
@@ -167,7 +167,7 @@ dangerous routine Integer.$destroy()
 ### :param other: The value to add.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$add(other: Integer) -> Integer
+routine Integer.add(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_add(result.handle, me.handle, other.handle)
   return result
@@ -176,7 +176,7 @@ routine Integer.$add(other: Integer) -> Integer
 ### :param other: The value to subtract.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$sub(other: Integer) -> Integer
+routine Integer.sub(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_sub(result.handle, me.handle, other.handle)
   return result
@@ -185,7 +185,7 @@ routine Integer.$sub(other: Integer) -> Integer
 ### :param other: The value to multiply by.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$mul(other: Integer) -> Integer
+routine Integer.mul(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_mul(result.handle, me.handle, other.handle)
   return result
@@ -195,7 +195,7 @@ routine Integer.$mul(other: Integer) -> Integer
 ### :param other: The non-zero divisor.
 ### :returns: The integer quotient.
 @readonly
-routine Integer.$floordiv!(other: Integer) -> Integer
+routine Integer.floordiv!(other: Integer) -> Integer
   if other.is_zero()
     throw DivisionByZeroError()
   var quotient = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
@@ -207,7 +207,7 @@ routine Integer.$floordiv!(other: Integer) -> Integer
 ### :param other: The non-zero divisor.
 ### :returns: The remainder value associated with `//`.
 @readonly
-routine Integer.$mod!(other: Integer) -> Integer
+routine Integer.mod!(other: Integer) -> Integer
   if other.is_zero()
     throw DivisionByZeroError()
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
@@ -217,7 +217,7 @@ routine Integer.$mod!(other: Integer) -> Integer
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$neg() -> Integer
+routine Integer.neg() -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_neg(result: result.handle, a: me.handle)
   return result
@@ -230,14 +230,14 @@ routine Integer.$neg() -> Integer
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Integer.$eq(you: Integer) -> Bool
+routine Integer.eq(you: Integer) -> Bool
   return rf_bigint_cmp(a: me.handle, b: you.handle) == 0
 
 ### Compares this value with `you` using numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Integer.$cmp(you: Integer) -> ComparisonSign
+routine Integer.cmp(you: Integer) -> ComparisonSign
   var comparison_value = rf_bigint_cmp(a: me.handle, b: you.handle)
   if comparison_value < 0
     return ME_SMALL
@@ -254,7 +254,7 @@ routine Integer.$cmp(you: Integer) -> ComparisonSign
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$bitand(other: Integer) -> Integer
+routine Integer.bitand(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_and(result.handle, me.handle, other.handle)
   return result
@@ -263,7 +263,7 @@ routine Integer.$bitand(other: Integer) -> Integer
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$bitor(other: Integer) -> Integer
+routine Integer.bitor(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_or(result.handle, me.handle, other.handle)
   return result
@@ -272,7 +272,7 @@ routine Integer.$bitor(other: Integer) -> Integer
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$bitxor(other: Integer) -> Integer
+routine Integer.bitxor(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_xor(result.handle, me.handle, other.handle)
   return result
@@ -282,7 +282,7 @@ routine Integer.$bitxor(other: Integer) -> Integer
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$shl(bits: S32) -> Integer
+routine Integer.shl(bits: S32) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_shl(result.handle, me.handle, bits)
   return result
@@ -291,7 +291,7 @@ routine Integer.$shl(bits: S32) -> Integer
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$shr(bits: S32) -> Integer
+routine Integer.shr(bits: S32) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_shr(result.handle, me.handle, bits)
   return result
@@ -312,7 +312,7 @@ routine Integer.abs() -> Integer
 ### :param exp: The exponent value.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$pow(exp: U32) -> Integer
+routine Integer.pow(exp: U32) -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_pow(result.handle, me.handle, exp)
   return result
@@ -379,7 +379,7 @@ routine Integer.signum() -> S32
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.is_even() -> Bool
-  return me.$bitand(other: Integer.one()).is_zero()
+  return me.bitand(other: Integer.one()).is_zero()
 
 ### Returns `true` when this value is odd.
 ### :returns: The resulting `Bool` value.
@@ -393,13 +393,13 @@ routine Integer.is_odd() -> Bool
 routine Integer.is_power_of_two() -> Bool
   if not me.is_positive()
     return false
-  return me.$bitand(other: me.$sub(other: Integer.one())).is_zero()
+  return me.bitand(other: me.sub(other: Integer.one())).is_zero()
 
 ### Returns the bitwise complement `~me`, defined in the two's-complement sense as `-me - 1`.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.$bitnot() -> Integer
-  return me.$add(other: Integer.one()).$neg()
+routine Integer.bitnot() -> Integer
+  return me.add(other: Integer.one()).neg()
 
 ### Returns the number of bits in the magnitude of this value (0 for zero).
 ### :returns: The resulting `U64` value.
@@ -414,18 +414,18 @@ routine Integer.bit_length() -> U64
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.min(other: Integer) -> Integer
-  if me.$cmp(you: other) is ME_LARGE
-    return other.$store()
-  return me.$store()
+  if me.cmp(you: other) is ME_LARGE
+    return other.store()
+  return me.store()
 
 ### Returns the larger of this value and `other`.
 ### :param other: The value to compare against.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.max(other: Integer) -> Integer
-  if me.$cmp(you: other) is ME_SMALL
-    return other.$store()
-  return me.$store()
+  if me.cmp(you: other) is ME_SMALL
+    return other.store()
+  return me.store()
 
 ### Clamps this value into the inclusive range `[low, high]`.
 ### :param low: The lower bound.
@@ -433,11 +433,11 @@ routine Integer.max(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.clamp(low: Integer, high: Integer) -> Integer
-  if me.$cmp(you: low) is ME_SMALL
-    return low.$store()
-  if me.$cmp(you: high) is ME_LARGE
-    return high.$store()
-  return me.$store()
+  if me.cmp(you: low) is ME_SMALL
+    return low.store()
+  if me.cmp(you: high) is ME_LARGE
+    return high.store()
+  return me.store()
 
 ### Divides by `other`, returning the Euclidean quotient and remainder together.
 ### :param other: The non-zero divisor.
@@ -465,13 +465,13 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
   if exp.is_negative()
     throw NumericDomainError(description: "modpow: negative exponent")
   var result = Integer.one()
-  var base = me.$mod!(other: modulus)
-  var e = exp.$store()
+  var base = me.mod!(other: modulus)
+  var e = exp.store()
   while not e.is_zero()
     if e.is_odd()
-      result = result.$mul(other: base).$mod!(other: modulus)
-    e = e.$shr(bits: 1_s32)
-    base = base.$mul(other: base).$mod!(other: modulus)
+      result = result.mul(other: base).mod!(other: modulus)
+    e = e.shr(bits: 1_s32)
+    base = base.mul(other: base).mod!(other: modulus)
   return result
 
 # ============================================================================
@@ -483,7 +483,7 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
 ### range.
 ### :param from: The source value to convert.
 ### :returns: The resulting `S64` value.
-routine S64.$create!(from: Integer) -> S64
+routine S64.create!(from: Integer) -> S64
   return rf_bigint_get_i64(from.handle)
 
 ### Converts an arbitrary-precision integer to `U64`.
@@ -491,14 +491,14 @@ routine S64.$create!(from: Integer) -> S64
 ### range.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U64` value.
-routine U64.$create!(from: Integer) -> U64
+routine U64.create!(from: Integer) -> U64
   return rf_bigint_get_u64(from.handle)
 
-### Formats this value as base-10 text. Standard `$represent` shape (no args)
+### Formats this value as base-10 text. Standard `represent` shape (no args)
 ### so the f-string machinery can dispatch without supplying a radix.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Integer.$represent() -> Text
+routine Integer.represent() -> Text
   return me.represent_radix(radix: 10_s32)
 
 ### Formats this value as text in the requested radix.
@@ -520,8 +520,8 @@ routine Integer.represent_radix(radix: S32) -> Text
 ### Hashes the canonical base-10 representation, so equal integers hash equally.
 ### :returns: The 64-bit hash.
 @readonly
-routine Integer.$fast_hash() -> U64
-  return me.represent_radix(radix: 10_s32).$fast_hash()
+routine Integer.fast_hash() -> U64
+  return me.represent_radix(radix: 10_s32).fast_hash()
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### Hashes the canonical base-10 representation under the supplied key pair.
@@ -529,8 +529,8 @@ routine Integer.$fast_hash() -> U64
 ### :param k1: The second 64-bit key word.
 ### :returns: The 64-bit keyed hash.
 @readonly
-routine Integer.$hash(k0: U64, k1: U64) -> U64
-  return me.represent_radix(radix: 10_s32).$hash(k0: k0, k1: k1)
+routine Integer.hash(k0: U64, k1: U64) -> U64
+  return me.represent_radix(radix: 10_s32).hash(k0: k0, k1: k1)
 
 # ============================================================================
 # Factory Methods
@@ -542,7 +542,7 @@ routine Integer.$hash(k0: U64, k1: U64) -> U64
 ### :param text: The text to parse.
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
-routine Integer.$create!(text: Text) -> Integer
+routine Integer.create!(text: Text) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   if result != 0

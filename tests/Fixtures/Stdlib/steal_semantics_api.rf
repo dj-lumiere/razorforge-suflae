@@ -2,19 +2,19 @@ module Tests/Stdlib/StealSemanticsApi
 import IO/Console
 
 # Verifies ownership-transfer via `steal`: source is consumed; pattern observable
-# from $destroy not firing twice. Compile-time use-after-steal rejection (S413
+# from destroy not firing twice. Compile-time use-after-steal rejection (S413
 # class) lives in playground BUILDERR fixtures — here we test the *runtime*
 # half: when destruction occurs and that it's exactly-once.
 entity Resource
   tag: S64
 
-routine Resource.$create(tag: S32) -> Resource
+routine Resource.create(tag: S32) -> Resource
   show(f"  create({tag})")
   return Resource(tag: S64(tag))
 
-dangerous routine Resource.$destroy()
+dangerous routine Resource.destroy()
   show(f"  destroy({me.tag})")
-  me.tag.$destroy()
+  me.tag.destroy()
   me.hijack().invalidate()
   return
 
@@ -26,7 +26,7 @@ routine make_box() -> Resource
 routine consume(r: Resource)  # this should be ?Resource
   show(f" consume: tag={r.tag}")
   return
-  # $destroy fires here when r goes out of scope
+  # destroy fires here when r goes out of scope
 
 routine start()
   show("--- transfer via return ---")

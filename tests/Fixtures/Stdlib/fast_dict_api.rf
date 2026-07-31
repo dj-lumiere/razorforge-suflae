@@ -32,7 +32,7 @@ routine start()
   show(f"contents after remove two: {d}")
   show(f"contains_key 'two' after remove: {"two" in d}")
 
-  show(f"diagnose: {d.$diagnose()}")
+  show(f"diagnose: {d.diagnose()}")
   show(f"is_empty: {d.is_empty()}")
 
   show("DONE")

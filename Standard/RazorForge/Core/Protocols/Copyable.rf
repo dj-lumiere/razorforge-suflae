@@ -2,8 +2,8 @@ module Core
 
 ### The protocol for values that can produce an independent DEEP copy of themselves — a new object
 ### with its own lifetime, sharing no externally visible mutable state. `Copyable obeys Storable`
-### (the capability rule: copy-able ⇒ $store-able ⇒ assignable), so a `Copyable` value can also be
-### `$store`-d and assigned. `copy` is inserted wherever an independent duplicate is required — not
+### (the capability rule: copy-able ⇒ store-able ⇒ assignable), so a `Copyable` value can also be
+### `store`-d and assigned. `copy` is inserted wherever an independent duplicate is required — not
 ### only at assignment, but at every materialization point (e.g. building a value into a collection).
 protocol Copyable obeys Storable
   ### Returns a deep, independent copy of this value.

@@ -420,11 +420,11 @@ routine d64_div(a: D64, b: D64) -> D64
 # ---- wired operators + represent ----
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
-# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+# keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
 
-### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw
+### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
-routine D64.$add!(you: D64) -> D64
+routine D64.add!(you: D64) -> D64
   var r = d64_add(a: me, b: you)
   if r.is_finite()
     return r
@@ -432,9 +432,9 @@ routine D64.$add!(you: D64) -> D64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw
+### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
-routine D64.$sub!(you: D64) -> D64
+routine D64.sub!(you: D64) -> D64
   var r = d64_sub(a: me, b: you)
   if r.is_finite()
     return r
@@ -442,9 +442,9 @@ routine D64.$sub!(you: D64) -> D64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw
+### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
-routine D64.$mul!(you: D64) -> D64
+routine D64.mul!(you: D64) -> D64
   var r = d64_mul(a: me, b: you)
   if r.is_finite()
     return r
@@ -454,8 +454,8 @@ routine D64.$mul!(you: D64) -> D64
 
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
-### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
-routine D64.$truediv!(you: D64) -> D64
+### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+routine D64.truediv!(you: D64) -> D64
   var r = d64_div(a: me, b: you)
   if r.is_finite()
     return r
@@ -466,24 +466,24 @@ routine D64.$truediv!(you: D64) -> D64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D64.$add_unchecked(you: D64) -> D64
+routine D64.add_unchecked(you: D64) -> D64
   return d64_add(a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D64.$sub_unchecked(you: D64) -> D64
+routine D64.sub_unchecked(you: D64) -> D64
   return d64_sub(a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D64.$mul_unchecked(you: D64) -> D64
+routine D64.mul_unchecked(you: D64) -> D64
   return d64_mul(a: me, b: you)
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
-routine D64.$truediv_unchecked(you: D64) -> D64
+routine D64.truediv_unchecked(you: D64) -> D64
   return d64_div(a: me, b: you)
 
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;
 ### finite values compare by value, so different cohorts of the same number are equal).
-routine D64.$eq(you: D64) -> Bool
+routine D64.eq(you: D64) -> Bool
   if me.is_nan() or you.is_nan()
     return false
   if me.is_infinite() or you.is_infinite()
@@ -493,7 +493,7 @@ routine D64.$eq(you: D64) -> Bool
   return int_eq[U64](a: d64_sub(a: me, b: you).decode().coeff, b: 0_u64)
 
 ### Three-way decimal comparison (NaN unordered -> SAME; finite by sign of me - you).
-routine D64.$cmp(you: D64) -> ComparisonSign
+routine D64.cmp(you: D64) -> ComparisonSign
   if me.is_nan() or you.is_nan()
     return SAME
   if me.is_infinite() or you.is_infinite()
@@ -510,7 +510,7 @@ routine D64.$cmp(you: D64) -> ComparisonSign
   return if d.sign then ME_SMALL else ME_LARGE
 
 ### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
-routine D64.$pow!(you: D64) -> D64
+routine D64.pow!(you: D64) -> D64
   var r = me.pow_unchecked(you: you)
   if r.is_finite()
     return r
@@ -519,12 +519,12 @@ routine D64.$pow!(you: D64) -> D64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Shortest decimal text (widens to D128Parts and reuses the shared formatter).
-routine D64.$represent() -> Text
+routine D64.represent() -> Text
   return d128_represent(p: d64parts_to_d128(p: me.decode()))
 
 ### Debug form: `D64(<value>)`.
-routine D64.$diagnose() -> Text
-  return "D64(" + me.$represent() + ")"
+routine D64.diagnose() -> Text
+  return "D64(" + me.represent() + ")"
 
 # ============================================================================
 # Public surface — creators / presets / parser / hash / bytes
@@ -551,51 +551,51 @@ preset D64_EPSILON: D64 = 1e-15_d64
 # ============================================================================
 
 ### Converts an S8 to D64 (widen to S64, exponent 0).
-routine D64.$create(from: S8) -> D64
+routine D64.create(from: S8) -> D64
   return D64.from_int64(value: S64(from))
 
 ### Converts an S16 to D64 (widen to S64, exponent 0).
-routine D64.$create(from: S16) -> D64
+routine D64.create(from: S16) -> D64
   return D64.from_int64(value: S64(from))
 
 ### Converts an S32 to D64 (widen to S64, exponent 0).
-routine D64.$create(from: S32) -> D64
+routine D64.create(from: S32) -> D64
   return D64.from_int64(value: S64(from))
 
 ### Converts an S64 to D64 (exponent 0; rounded to 16 digits).
-routine D64.$create(from: S64) -> D64
+routine D64.create(from: S64) -> D64
   return D64.from_int64(value: from)
 
 ### Converts an S128 to D64 via D128 (rounded to 16 digits).
-routine D64.$create(from: S128) -> D64
+routine D64.create(from: S128) -> D64
   return D64(from: D128(from: from))
 
 ### Converts an S256 to D64 via D128 (rounded to 16 digits).
-routine D64.$create(from: S256) -> D64
+routine D64.create(from: S256) -> D64
   return D64(from: D128(from: from))
 
 ### Converts a U8 to D64 (exponent 0).
-routine D64.$create(from: U8) -> D64
+routine D64.create(from: U8) -> D64
   return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U16 to D64 (exponent 0).
-routine D64.$create(from: U16) -> D64
+routine D64.create(from: U16) -> D64
   return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U32 to D64 (exponent 0).
-routine D64.$create(from: U32) -> D64
+routine D64.create(from: U32) -> D64
   return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U64 to D64 (exponent 0; rounded to 16 digits).
-routine D64.$create(from: U64) -> D64
+routine D64.create(from: U64) -> D64
   return D64.from_components(sign: false, coeff: from, exp: 0_s64)
 
 ### Converts a U128 to D64 via D128 (rounded to 16 digits).
-routine D64.$create(from: U128) -> D64
+routine D64.create(from: U128) -> D64
   return D64(from: D128(from: from))
 
 ### Converts a U256 to D64 via D128 (rounded to 16 digits).
-routine D64.$create(from: U256) -> D64
+routine D64.create(from: U256) -> D64
   return D64(from: D128(from: from))
 
 # ============================================================================
@@ -603,19 +603,19 @@ routine D64.$create(from: U256) -> D64
 # ============================================================================
 
 ### Converts an F16 to D64 (via F64, then F128 -> D64, correctly rounded).
-routine D64.$create(from: F16) -> D64
+routine D64.create(from: F16) -> D64
   return D64(from: F64(from))
 
 ### Converts an F32 to D64 (via F64, then F128 -> D64, correctly rounded).
-routine D64.$create(from: F32) -> D64
+routine D64.create(from: F32) -> D64
   return D64(from: F64(from))
 
 ### Converts an F64 to D64 (widened to F128 for correctly-rounded decimal conversion).
-routine D64.$create(from: F64) -> D64
+routine D64.create(from: F64) -> D64
   return f128_to_d64(x: F128(from: from))
 
 ### Converts an F128 to D64 (correctly-rounded binary -> decimal).
-routine D64.$create(from: F128) -> D64
+routine D64.create(from: F128) -> D64
   return f128_to_d64(x: from)
 
 # ============================================================================
@@ -623,15 +623,15 @@ routine D64.$create(from: F128) -> D64
 # ============================================================================
 
 ### Converts a D32 to D64 (always exact — every decimal32 fits decimal64).
-routine D64.$create(from: D32) -> D64
+routine D64.create(from: D32) -> D64
   return d64_of_parts(p: d128_to_d64parts(p: d32parts_to_d128(p: from.decode())))
 
 ### Identity conversion (D64 -> D64).
-routine D64.$create(from: D64) -> D64
+routine D64.create(from: D64) -> D64
   return from
 
 ### Converts a D128 to D64 (rounded to 16 digits / decimal64 range).
-routine D64.$create(from: D128) -> D64
+routine D64.create(from: D128) -> D64
   return d64_of_parts(p: d128_to_d64parts(p: from.decode()))
 
 # ============================================================================
@@ -640,7 +640,7 @@ routine D64.$create(from: D128) -> D64
 
 ### Parses a decimal literal into a `D64`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
-routine D64.$create!(from_text: Text) -> D64
+routine D64.create!(from_text: Text) -> D64
   return D64(from: parse_decimal_d128!(from_text: from_text))
 
 # ============================================================================
@@ -648,7 +648,7 @@ routine D64.$create!(from_text: Text) -> D64
 # ============================================================================
 
 ### Returns an xxHash64-based hash of the raw decimal64 encoding.
-routine D64.$fast_hash() -> U64
+routine D64.fast_hash() -> U64
   return __hash_u128(v: zero_extend[U64, U128](me.to_bits()))
 
 # ============================================================================

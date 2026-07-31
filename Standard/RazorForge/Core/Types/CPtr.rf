@@ -28,14 +28,14 @@ dangerous routine CPtr.get_address() -> Address
 ### the user's problem — the same FFI contract that lets `CPtr` exist at all.
 ### :returns: A bitwise duplicate of this pointer.
 @readonly
-routine CPtr.$store() -> CPtr
+routine CPtr.store() -> CPtr
   return me
 
 ### Reinterprets a raw address as `CPtr`.
 ### This does not validate ownership or liveness of the pointed runtime object.
 ### :param from: The address to wrap.
 ### :returns: The resulting `CPtr` value.
-dangerous routine CPtr.$create(from: Address) -> CPtr
+dangerous routine CPtr.create(from: Address) -> CPtr
   return reinterpret_bits[Hijacked[CPtr], CPtr](int_to_pointer[Address, CPtr](from))
 
 ### Returns the null `CPtr` value.
@@ -53,15 +53,15 @@ routine CPtr.is_none() -> Bool
 ### Formats this pointer as its raw address.
 ### :returns: The resulting `Text` value.
 @readonly
-routine CPtr.$represent() -> Text
+routine CPtr.represent() -> Text
   danger
-    return me.get_address().$represent()
+    return me.get_address().represent()
 
-### Diagnostic representation for debugging — same as `$represent`.
+### Diagnostic representation for debugging — same as `represent`.
 ### :returns: The resulting `Text` value.
 @readonly
-routine CPtr.$diagnose() -> Text
-  return "CPtr(" + me.$represent() + ")"
+routine CPtr.diagnose() -> Text
+  return "CPtr(" + me.represent() + ")"
 
 ### Compatibility helper: alias of `cptr_none()` for legacy bigint-handle call sites.
 ### Deprecated — prefer `cptr_none()`.
@@ -76,8 +76,8 @@ routine bigdec_handle_none() -> CPtr
 ### `CPtr` is a non-owning, type-erased `void*` — it never owns the memory it
 ### points at. The pointee may be a stack slot, an interior field address, an
 ### FFI-borrowed buffer, or a runtime handle whose real owner frees it explicitly
-### (e.g. `Integer.$destroy` calls `rf_bigint_clear`). Freeing here would either
+### (e.g. `Integer.destroy` calls `rf_bigint_clear`). Freeing here would either
 ### corrupt non-heap memory or double-free an owner-managed handle, so teardown
 ### is a deliberate no-op.
-dangerous routine CPtr.$destroy()
+dangerous routine CPtr.destroy()
   return

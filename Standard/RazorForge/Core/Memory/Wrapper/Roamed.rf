@@ -10,7 +10,7 @@ import BuilderService
 ### guarantee). Aliasing is free (`.roam()`), so `b = a` maps here, NOT to a bare single-owner entity.
 ###
 ### **Access is lock-wrapped, NEVER coerced.** `Roamed` deliberately does NOT `obeys Controlling[T]`
-### and has NO `$refer`/`$control`: those hand out a raw inner reference that would bypass the lock
+### and has NO `refer`/`control`: those hand out a raw inner reference that would bypass the lock
 ### and break escaped-mode serialization. Real access goes through compiler-inserted `lock_enter` /
 ### `lock_exit` wrapping (Stage 2). The `borrow()` here is a Stage-1 test hatch only.
 ###
@@ -128,7 +128,7 @@ routine Roamed[T].strong_count() -> U64
     return ctrl.strong_count()
 
 ### Reports this handle's controller to the collector as a traced child. The compiler-synthesized
-### `$roam_trace_impl` calls this for each `Roamed` field of an entity, so the collector sees the
+### `roam_trace_impl` calls this for each `Roamed` field of an entity, so the collector sees the
 ### object graph's strong edges. A none handle owns no edge and is skipped. Runs inside the (dangerous)
 ### synthesized trace, so no `danger` here.
 dangerous routine Roamed[T].cc_visit_self()
@@ -145,7 +145,7 @@ dangerous routine Roamed[T].controller_address() -> Address
   return Hijacked[RoamController[T]](me).get_address()
 
 ### The inner entity as a raw, UNLOCKED reference — STAGE-1/2 TEST HATCH ONLY. Real access is lock-wrapped
-### by the compiler (Stage 2c); this must never become `$refer`/`$control` (they would hand out a
+### by the compiler (Stage 2c); this must never become `refer`/`control` (they would hand out a
 ### lock-bypassing reference).
 ### :returns: The inner entity.
 dangerous routine Roamed[T].raw_inner() -> T
@@ -159,19 +159,19 @@ dangerous routine Roamed[T].raw_inner() -> T
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Roamed[T].$represent() -> Text
+routine Roamed[T].represent() -> Text
   danger
     return me.type_name()
 
 ### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Roamed[T].$diagnose() -> Text
+routine Roamed[T].diagnose() -> Text
   danger
     var ctrl = Hijacked[RoamController[T]](me).as_entity()
     var rc = ctrl.strong_count()
-    return me.type_name() + "(holding: " + rc.$represent() + ", escaped: " + ctrl.is_escaped().$represent() + ")"
+    return me.type_name() + "(holding: " + rc.represent() + ", escaped: " + ctrl.is_escaped().represent() + ")"
 
-dangerous routine Roamed[T].$destroy()
+dangerous routine Roamed[T].destroy()
   me.release()
   return

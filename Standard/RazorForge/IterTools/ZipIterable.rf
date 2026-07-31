@@ -18,9 +18,9 @@ relates ZipEmittable[T, U, S1/Iter, S2/Iter] as Iter
 ### Returns the stateful iterator that produces paired tuples lazily.
 ### :returns: The resulting `ZipEmittable[T, U, S1/Iter, S2/Iter]` value.
 @readonly
-routine ZipIterable[T, U, S1, S2].$iter() -> ZipEmittable[T, U, S1/Iter, S2/Iter]
+routine ZipIterable[T, U, S1, S2].iter() -> ZipEmittable[T, U, S1/Iter, S2/Iter]
   danger
-    return ZipEmittable[T, U, S1/Iter, S2/Iter](first: me.first.as_entity().$iter(), second: me.second.as_entity().$iter())
+    return ZipEmittable[T, U, S1/Iter, S2/Iter](first: me.first.as_entity().iter(), second: me.second.as_entity().iter())
 
 ### Iterates over two source sequences simultaneously, pairing one element from each.
 ### Iteration ends when either source is exhausted.
@@ -39,10 +39,10 @@ needs SE2 obeys Emittable[U]
 ### Returns the next paired tuple from both source iterators.
 ### Propagates absence as soon as either source is exhausted.
 ### :returns: The resulting `Tuple[T, U]` value.
-routine ZipEmittable[T, U, SE1, SE2].$emit!() -> Tuple[T, U]
+routine ZipEmittable[T, U, SE1, SE2].emit!() -> Tuple[T, U]
   danger
-    var a = me.first.as_entity().$emit!()
-    var b = me.second.as_entity().$emit!()
+    var a = me.first.as_entity().emit!()
+    var b = me.second.as_entity().emit!()
     return (a, b)
 
 ### Returns a lazy adapter that pairs each element of this iterable with an element from `other`.

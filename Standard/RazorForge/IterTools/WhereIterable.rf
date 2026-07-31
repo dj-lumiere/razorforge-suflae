@@ -18,9 +18,9 @@ relates WhereEmittable[T, S/Iter] as Iter
 ### Source values are examined only as the caller requests more output values.
 ### :returns: The resulting `WhereEmittable[T, S/Iter]` value.
 @readonly
-routine WhereIterable[T, S].$iter() -> WhereEmittable[T, S/Iter]
+routine WhereIterable[T, S].iter() -> WhereEmittable[T, S/Iter]
   danger
-    return WhereEmittable[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, inverted: me.inverted)
+    return WhereEmittable[T, S/Iter](source: me.source.as_entity().iter(), predicate: me.predicate, inverted: me.inverted)
 
 ### Iterates over a source sequence while yielding only values that satisfy the effective filter.
 ### :typeparam T: The element type produced by the source sequence.
@@ -37,10 +37,10 @@ needs SE obeys Emittable[T]
 ### Returns the next value that satisfies the effective filter condition.
 ### Source values are consumed and discarded until one passes the filter.
 ### :returns: The resulting `T` value.
-routine WhereEmittable[T, SE].$emit!() -> T
+routine WhereEmittable[T, SE].emit!() -> T
   danger
     loop
-      var item = me.source.as_entity().$emit!()
+      var item = me.source.as_entity().emit!()
       var matches = me.predicate(item)
       if me.inverted
         matches = not matches

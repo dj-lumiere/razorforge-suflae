@@ -690,7 +690,7 @@ external("llvm") routine load_element_ref[Coll, T](ptr: Hijacked[Coll], index: U
 ### Stores `value` into the element at `index` of contiguous storage addressed by `ptr`.
 ### Writes a single element in place through the pointer (no whole-aggregate copy); the mutation is
 ### visible to the pointer's owner. The pointer is typically `me.hijack()` of an inline-backed
-### collection (`Array`, `BitArray`) whose `$setitem!` receives `me` by reference.
+### collection (`Array`, `BitArray`) whose `setitem!` receives `me` by reference.
 ### :param ptr: A pointer to the collection's element storage.
 ### :param index: The zero-based element position (strided by `sizeof(T)`).
 ### :param value: The element value to store.

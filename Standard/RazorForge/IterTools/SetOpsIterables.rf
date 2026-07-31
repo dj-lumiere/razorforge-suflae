@@ -17,11 +17,11 @@ relates IntersectEmittable[T, S/Iter] as Iter
 ### Materializes `other` into a set and returns an iterator that filters `source` against it.
 ### :returns: The resulting `IntersectEmittable[T, S/Iter]` value.
 @readonly
-routine IntersectIterable[T, S, SO].$iter() -> IntersectEmittable[T, S/Iter]
+routine IntersectIterable[T, S, SO].iter() -> IntersectEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
   danger
     var other_set = me.other.as_entity().Set()
-    return IntersectEmittable[T, S/Iter](source: me.source.as_entity().$iter(), other: steal other_set)
+    return IntersectEmittable[T, S/Iter](source: me.source.as_entity().iter(), other: steal other_set)
 
 ### Iterates over a source sequence and keeps only elements that appear in the membership set.
 ### :typeparam T: The element type of the filtered sequence.
@@ -36,12 +36,12 @@ needs SE obeys Emittable[T]
 ### Returns the next source element that is also present in the membership set.
 ### Source elements not found in the set are consumed and discarded.
 ### :returns: The resulting `T` value.
-routine IntersectEmittable[T, SE].$emit!() -> T
+routine IntersectEmittable[T, SE].emit!() -> T
 needs T obeys Hashable, Comparable
   danger
     loop
-      var item = me.source.as_entity().$emit!()
-      if me.other.$contains(item)
+      var item = me.source.as_entity().emit!()
+      if me.other.contains(item)
         return item
 
 ### Returns a lazy adapter that keeps only elements also present in `other`.
@@ -71,11 +71,11 @@ relates ExcludeEmittable[T, S/Iter] as Iter
 ### Materializes `other` into a set and returns an iterator that removes matching elements.
 ### :returns: The resulting `ExcludeEmittable[T, S/Iter]` value.
 @readonly
-routine ExcludeIterable[T, S, SO].$iter() -> ExcludeEmittable[T, S/Iter]
+routine ExcludeIterable[T, S, SO].iter() -> ExcludeEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
   danger
     var other_set = me.other.as_entity().Set()
-    return ExcludeEmittable[T, S/Iter](source: me.source.as_entity().$iter(), other: steal other_set)
+    return ExcludeEmittable[T, S/Iter](source: me.source.as_entity().iter(), other: steal other_set)
 
 ### Iterates over a source sequence and suppresses elements found in the exclusion set.
 ### :typeparam T: The element type of the filtered sequence.
@@ -90,12 +90,12 @@ needs SE obeys Emittable[T]
 ### Returns the next source element that is not present in the exclusion set.
 ### Source elements found in the set are consumed and discarded.
 ### :returns: The resulting `T` value.
-routine ExcludeEmittable[T, SE].$emit!() -> T
+routine ExcludeEmittable[T, SE].emit!() -> T
 needs T obeys Hashable, Comparable
   danger
     loop
-      var item = me.source.as_entity().$emit!()
-      if not me.other.$contains(item)
+      var item = me.source.as_entity().emit!()
+      if not me.other.contains(item)
         return item
 
 ### Returns a lazy adapter that suppresses all elements also found in `other`.

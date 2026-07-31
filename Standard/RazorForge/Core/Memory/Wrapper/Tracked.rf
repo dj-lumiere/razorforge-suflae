@@ -72,19 +72,19 @@ routine Tracked[T].weak_count() -> U32
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Tracked[T].$represent() -> Text
+routine Tracked[T].represent() -> Text
   return me.type_name()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Tracked[T].$diagnose() -> Text
+routine Tracked[T].diagnose() -> Text
   danger
     var ctrl = hijacked_from[RetainController[T]](me.get_address()).as_entity()
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
-    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", alive: " + (rc > 0).$represent() + ")"
+    return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", alive: " + (rc > 0).represent() + ")"
 
-dangerous routine Tracked[T].$destroy()
+dangerous routine Tracked[T].destroy()
   me.release()
   return

@@ -35,7 +35,7 @@ needs TPriority obeys Comparable
 ### | `peek!` / `peek_priority!` / `peek_entry!` | O(1) |
 ### | `add_all` | O(k log n) |
 ### | `drain` | O(n log n) |
-### | `$contains` | O(n) |
+### | `contains` | O(n) |
 ### | Iteration | O(n), heap order |
 ###
 ### :typeparam TPriority: The comparable type used for heap ordering. Smaller values rank higher.
@@ -55,7 +55,7 @@ needs TPriority obeys Comparable
 
 ### Creates an empty priority queue with no allocated backing storage.
 ### Storage is acquired lazily on the first insertion or explicit `reserve`.
-routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement].create() -> PriorityQueue[TPriority, TElement]
   return PriorityQueue[TPriority, TElement](
     priorities: hijacked_none[TPriority](),
     elements: hijacked_none[TElement](),
@@ -66,7 +66,7 @@ routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority,
 ### Creates an empty priority queue with storage pre-allocated for `capacity` entries.
 ### Use this when the expected queue size is known and early reallocations should be avoided.
 ### :param capacity: The number of entries to reserve space for.
-routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQueue[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement].create(capacity: U64) -> PriorityQueue[TPriority, TElement]
   var priority_byte_size = TPriority.data_size() * capacity
   var element_byte_size = TElement.data_size() * capacity
   danger
@@ -344,7 +344,7 @@ needs TPriority obeys Copyable
   var i = 0u64
   var limit = if elements.count() < priorities.count() then elements.count() else priorities.count()
   while i < limit
-    # `clone` out of the read-only borrows (elided for trivial types; retain-aware via `$store` for
+    # `clone` out of the read-only borrows (elided for trivial types; retain-aware via `store` for
     # RC records) — `add` takes ownership, so aliasing would double-free when both queues drop.
     me.add(element: elements[i].copy(), priority: priorities[i].copy())
     i = i +% 1u64
@@ -367,7 +367,7 @@ routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
 ### :param element: The element value to search for.
 ### :returns: `true` if `element` is found in any heap entry; `false` otherwise.
 @readonly
-routine PriorityQueue[TPriority, TElement].$contains(element: TElement) -> Bool
+routine PriorityQueue[TPriority, TElement].contains(element: TElement) -> Bool
 needs TElement obeys Equatable
   var i = 0u64
   while i < me.count
@@ -381,7 +381,7 @@ needs TElement obeys Equatable
 ### Use `drain()` on a copy if you need priority order without consuming the queue.
 ### :param source: The queue to copy entries from.
 ### :returns: A `List[PQEntry[TPriority, TElement]]` in heap array order.
-routine List[PQEntry[TPriority, TElement]].$create(source: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
+routine List[PQEntry[TPriority, TElement]].create(source: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
   var result = List[PQEntry[TPriority, TElement]](source.count())
   var i = 0u64
   while i < source.count()
@@ -408,7 +408,7 @@ entity PriorityQueueEmittable[TPriority, TElement] obeys Emittable[PQEntry[TPrio
   secret index: U64
 
 @readonly
-routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueEmittable[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement].iter() -> PriorityQueueEmittable[TPriority, TElement]
   danger
     return PriorityQueueEmittable[TPriority, TElement](
       priorities: me.priorities,
@@ -420,7 +420,7 @@ routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueEmittable[TPr
 ### Returns the next heap entry in storage order.
 ### :returns: The next priority–element pair from the heap array.
 ### :absent: All entries captured at iterator creation have been yielded.
-routine PriorityQueueEmittable[TPriority, TElement].$emit!() -> PQEntry[TPriority, TElement]
+routine PriorityQueueEmittable[TPriority, TElement].emit!() -> PQEntry[TPriority, TElement]
   if me.index >= me.count
     absent
   lateinit var p: TPriority
@@ -432,35 +432,35 @@ routine PriorityQueueEmittable[TPriority, TElement].$emit!() -> PQEntry[TPriorit
   me.index = me.index + 1u64
   return _result
 
-routine PriorityQueue[TPriority, TElement].$represent() -> Text
+routine PriorityQueue[TPriority, TElement].represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.priority.$represent() + ": " + entry.element.$represent()
+    result = result + entry.priority.represent() + ": " + entry.element.represent()
     i = i +% 1u64
   result = result + "])"
   return steal result
 
-routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
+routine PriorityQueue[TPriority, TElement].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.priority.$represent() + ": " + entry.element.$represent()
+    result = result + entry.priority.represent() + ": " + entry.element.represent()
     i = i +% 1u64
   result = result + "])"
   return steal result
 
-dangerous routine PriorityQueue[TPriority, TElement].$destroy()
+dangerous routine PriorityQueue[TPriority, TElement].destroy()
   # Tear down each stored priority and element before freeing the buffers. No-op for value
   # types; frees owned entity priorities/elements.
   var i = 0u64
   while i < me.count
-    me.priorities.offset(TPriority.data_size() * i).peek().$destroy()
-    me.elements.offset(TElement.data_size() * i).peek().$destroy()
+    me.priorities.offset(TPriority.data_size() * i).peek().destroy()
+    me.elements.offset(TElement.data_size() * i).peek().destroy()
     i = i + 1u64
   me.priorities.invalidate()
   me.elements.invalidate()

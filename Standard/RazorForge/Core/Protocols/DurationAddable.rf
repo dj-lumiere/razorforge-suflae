@@ -8,4 +8,4 @@ protocol DurationAddable
   ### :param you: The duration to add.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$add(you: Duration) -> Me
+  routine Me.add(you: Duration) -> Me

@@ -18,9 +18,9 @@ relates SelectEmittable[T, U, S/Iter] as Iter
 ### source value.
 ### :returns: The resulting `SelectEmittable[T, U, S/Iter]` value.
 @readonly
-routine SelectIterable[T, U, S].$iter() -> SelectEmittable[T, U, S/Iter]
+routine SelectIterable[T, U, S].iter() -> SelectEmittable[T, U, S/Iter]
   danger
-    return SelectEmittable[T, U, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform)
+    return SelectEmittable[T, U, S/Iter](source: me.source.as_entity().iter(), transform: me.transform)
 
 ### Iterates over a source sequence and projects each yielded value through a transform routine.
 ### :typeparam T: The source element type.
@@ -36,9 +36,9 @@ needs SE obeys Emittable[T]
 ### Returns the next projected value from the mapped sequence.
 ### The transform runs once for each successfully yielded source value.
 ### :returns: The resulting `U` value.
-routine SelectEmittable[T, U, SE].$emit!() -> U
+routine SelectEmittable[T, U, SE].emit!() -> U
   danger
-    var item = me.source.as_entity().$emit!()
+    var item = me.source.as_entity().emit!()
     return me.transform(item)
 
 ### Returns a lazy projection of this iterable.

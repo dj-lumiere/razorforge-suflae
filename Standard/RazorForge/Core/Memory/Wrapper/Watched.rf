@@ -74,19 +74,19 @@ routine Watched[T, P].weak_count() -> U64
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Watched[T, P].$represent() -> Text
+routine Watched[T, P].represent() -> Text
   return me.type_name()
 
 ### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Watched[T, P].$diagnose() -> Text
+routine Watched[T, P].diagnose() -> Text
   danger
     var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
-    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", alive: " + (rc > 0_u64).$represent() + ")"
+    return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", alive: " + (rc > 0_u64).represent() + ")"
 
-dangerous routine Watched[T, P].$destroy()
+dangerous routine Watched[T, P].destroy()
   me.release()
   return

@@ -9,4 +9,4 @@ protocol Multiplicable
   ### :param you: The other factor.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$mul!(you: Me) -> Me
+  routine Me.mul!(you: Me) -> Me

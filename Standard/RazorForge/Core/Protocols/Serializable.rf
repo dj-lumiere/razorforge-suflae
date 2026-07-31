@@ -2,7 +2,7 @@ module Core
 
 ### Represents the protocol for values that can be lowered to a `SerialValue` tree.
 ### `Serializable` is auto-derived for every user aggregate (records, entities, …): the compiler
-### synthesizes `serialize()` by walking every member variable, exactly like `$represent`. Because
+### synthesizes `serialize()` by walking every member variable, exactly like `represent`. Because
 ### the body is always generated, aggregate category protocols (`RecordType`, `EntityType`, …) may
 ### `obey Serializable` safely — unlike `Equatable`/`Hashable`, which are hand-written promises and
 ### would leave an abstract method behind. A type may hand-override `serialize()` to hide a field or

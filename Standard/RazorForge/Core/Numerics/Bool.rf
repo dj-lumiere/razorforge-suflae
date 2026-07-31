@@ -12,7 +12,7 @@ record Bool obeys Equatable, ConstCompatible
 ### Returns `true` when both values are equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
-routine Bool.$eq(you: Bool) -> Bool
+routine Bool.eq(you: Bool) -> Bool
   return int_eq[Bool](me, you)
 
 # ============================================================================
@@ -21,14 +21,14 @@ routine Bool.$eq(you: Bool) -> Bool
 
 ### Converts this boolean to an `S32` integer.
 ### :returns: `1` if `me` is `true`; `0` if `me` is `false`.
-routine S32.$create(from: Bool) -> S32
+routine S32.create(from: Bool) -> S32
   if from
     return 1_s32
   return 0_s32
 
 ### Converts this boolean to a `U8` byte.
 ### :returns: `1u8` if `me` is `true`; `0u8` if `me` is `false`.
-routine U8.$create(from: Bool) -> U8
+routine U8.create(from: Bool) -> U8
   if from
     return U8(1)
   return U8(0)
@@ -39,14 +39,14 @@ routine U8.$create(from: Bool) -> U8
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
-routine Bool.$diagnose() -> Text
+routine Bool.diagnose() -> Text
   if me
     return "Bool(true)"
   return "Bool(false)"
 
 ### Returns the human-readable text of this value.
 ### :returns: The value rendered as `Text`.
-routine Bool.$represent() -> Text
+routine Bool.represent() -> Text
   if me
     return "true"
   return "false"
@@ -57,12 +57,12 @@ routine Bool.$represent() -> Text
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash — `0` maps to a hash of `0`, `1` maps to a hash of `1`.
-routine Bool.$fast_hash() -> U64
+routine Bool.fast_hash() -> U64
   return __hash_leaf(v: zero_extend[Bool, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine Bool.$hash(k0: U64, k1: U64) -> U64
+routine Bool.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[Bool, U64](me), k0: k0, k1: k1)

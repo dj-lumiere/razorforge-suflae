@@ -11,7 +11,7 @@ import BuilderService
 ### **When to use**
 ### - You need a dynamic set of boolean flags whose count is not known at compile time.
 ### - Memory compactness matters (e.g., processing large data sets or bitmap masks).
-### - You need bitwise bulk operations (`$bitand`, `$bitor`, `$bitxor`, `$bitnot`).
+### - You need bitwise bulk operations (`bitand`, `bitor`, `bitxor`, `bitnot`).
 ### - Use {BitArray[N]} instead when the bit count is a compile-time constant.
 ### - Use {List[Bool]} instead when you need reference semantics or very fast single-bit mutation
 ###   without the read-modify-write overhead.
@@ -21,12 +21,12 @@ import BuilderService
 ### |---|---|
 ### | `add_last` | O(1) amortized |
 ### | `remove_last!` | O(1) |
-### | `$getitem!` / `$setitem!` | O(1) |
+### | `getitem!` / `setitem!` | O(1) |
 ### | `flip!` | O(1) |
 ### | `set_all` / `flip_all` | O(capacity / 64) |
 ### | `count_ones` / `count_zeros` | O(N) |
 ### | `any` / `all` / `none` | O(N) best/worst |
-### | `$bitand` / `$bitor` / `$bitxor` / `$bitnot` | O(N) |
+### | `bitand` / `bitor` / `bitxor` / `bitnot` | O(N) |
 ### | Iteration | O(N) |
 ###
 ### :see: {BitArray[N]} for a compile-time-sized, value-semantic alternative.
@@ -47,7 +47,7 @@ relates BitListEmittable as Iter
 ### Creates an empty bit list with no allocated storage.
 ### The first append allocates the initial packed word buffer.
 ### :returns: An empty `BitList`.
-routine BitList.$create() -> BitList
+routine BitList.create() -> BitList
   # Create empty bit list with default capacity
   return BitList(
     data: hijacked_none[U64](),
@@ -60,7 +60,7 @@ routine BitList.$create() -> BitList
 ### bit sets incrementally.
 ### :param capacity: The minimum number of bits to reserve.
 ### :returns: An empty `BitList` with preallocated storage.
-routine BitList.$create(capacity: U64) -> BitList
+routine BitList.create(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var word_size = (capacity +% 63u64) >> 6u32
   danger
@@ -225,7 +225,7 @@ routine BitList.clear()
 ### :returns: The resulting `Bool` value.
 ### :throws: May throw {IndexOutOfBoundsError}.
 @readonly
-routine BitList.$getitem!(index: U64) -> Bool
+routine BitList.getitem!(index: U64) -> Bool
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   return me.get_bit_internal(index)
@@ -234,7 +234,7 @@ routine BitList.$getitem!(index: U64) -> Bool
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement bit value.
 ### :throws: May throw {IndexOutOfBoundsError}.
-routine BitList.$setitem!(index: U64, value: Bool)
+routine BitList.setitem!(index: U64, value: Bool)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   me.set_bit_internal(index: index, value: value)
@@ -344,7 +344,7 @@ routine BitList.none() -> Bool
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are `me[i] and other[i]`.
 @readonly
-routine BitList.$bitand(other: Referring[BitList]) -> BitList
+routine BitList.bitand(other: Referring[BitList]) -> BitList
   # Bitwise AND - returns new BitList with shorter length
   var min_count = if me.count < other.count then me.count else other.count
   var result = BitList(min_count)
@@ -361,7 +361,7 @@ routine BitList.$bitand(other: Referring[BitList]) -> BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose length matches the longer input.
 @readonly
-routine BitList.$bitor(other: Referring[BitList]) -> BitList
+routine BitList.bitor(other: Referring[BitList]) -> BitList
   # Bitwise OR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -379,7 +379,7 @@ routine BitList.$bitor(other: Referring[BitList]) -> BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are set where exactly one input bit is set.
 @readonly
-routine BitList.$bitxor(other: Referring[BitList]) -> BitList
+routine BitList.bitxor(other: Referring[BitList]) -> BitList
   # Bitwise XOR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -395,7 +395,7 @@ routine BitList.$bitxor(other: Referring[BitList]) -> BitList
 ### Returns a new bit list with every stored bit inverted.
 ### :returns: A copy of this list with `true` and `false` swapped at each position.
 @readonly
-routine BitList.$bitnot() -> BitList
+routine BitList.bitnot() -> BitList
   # Bitwise NOT - returns new BitList with flipped bits
   var result = BitList(me.count)
 
@@ -413,7 +413,7 @@ routine BitList.$bitnot() -> BitList
 ### Bits are yielded from index `0` to `count - 1`.
 ### :returns: The resulting `BitListEmittable` value.
 @readonly
-routine BitList.$iter() -> BitListEmittable
+routine BitList.iter() -> BitListEmittable
   danger
     return BitListEmittable(data: me.data, count: me.count(), index: 0u64)
 
@@ -430,7 +430,7 @@ entity BitListEmittable obeys Emittable[Bool]
 ### Returns the next bit from the iterator.
 ### :returns: The resulting `Bool` value.
 ### :absent: Returns absent when the iterator reaches the captured bit count.
-routine BitListEmittable.$emit!() -> Bool
+routine BitListEmittable.emit!() -> Bool
   if me.index >= me.count
     absent
   var word_idx = me.index >> 6u32
@@ -487,7 +487,7 @@ routine BitList.reverse() -> BitList
 ### :param other: The other bit list to compare against.
 ### :returns: `true` if both have the same count and all corresponding bits match.
 @readonly
-routine BitList.$eq(other: Referring[BitList]) -> Bool
+routine BitList.eq(other: Referring[BitList]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64
@@ -602,13 +602,13 @@ common routine BitList.from_u32(value: U32) -> BitList
 ### Returns a compact display form of the logical bit sequence.
 ### :returns: The resulting `Text` value.
 @readonly
-routine BitList.$represent() -> Text
+routine BitList.represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$represent()
+    result = result + v.represent()
     i = i +% 1u64
   result = result + "])"
   return result
@@ -616,13 +616,13 @@ routine BitList.$represent() -> Text
 ### Returns a diagnostic form that includes the bit count, one-bit count, and contents.
 ### :returns: The resulting `Text` value.
 @readonly
-routine BitList.$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
+routine BitList.diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$represent()
+    result = result + v.represent()
     i = i +% 1u64
   result = result + "])"
   return result
@@ -640,7 +640,7 @@ common routine BitList.from_u64(value: U64) -> BitList
     i = i +% 1u64
   return steal result
 
-dangerous routine BitList.$destroy()
+dangerous routine BitList.destroy()
   me.data.invalidate()
   me.hijack().invalidate()
   return

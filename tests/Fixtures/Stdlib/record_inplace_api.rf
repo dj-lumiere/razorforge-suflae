@@ -13,7 +13,7 @@ import IO/Console
 record Tagged
   pass
 
-routine Tagged.$create(from: S64) -> Tagged
+routine Tagged.create(from: S64) -> Tagged
   return reinterpret_bits[S64, Tagged](from)
 
 @readonly

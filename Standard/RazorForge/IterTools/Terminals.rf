@@ -36,16 +36,16 @@ routine Iterable[T].get_count() -> U64
 ### :returns: The resulting `T` value.
 @readonly
 routine Iterable[T].first!() -> T
-  var emitter = me.$iter()
-  return emitter.$emit!()
+  var emitter = me.iter()
+  return emitter.emit!()
 
 ### Returns the last value produced by this iterable.
 ### The iterable is consumed fully in order to find the final element.
 ### :returns: The resulting `T` value.
 @readonly
 routine Iterable[T].last!() -> T
-  var emitter = me.$iter()
-  var latest = emitter.$emit!()
+  var emitter = me.iter()
+  var latest = emitter.emit!()
   loop
     var item = emitter.try_emit()
     when item
@@ -93,8 +93,8 @@ routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
 @readonly
 routine Iterable[T].sum!() -> T
 needs T obeys Addable
-  var emitter = me.$iter()
-  var result = emitter.$emit!()
+  var emitter = me.iter()
+  var result = emitter.emit!()
   loop
     var item = emitter.try_emit()
     when item
@@ -106,8 +106,8 @@ needs T obeys Addable
 @readonly
 routine Iterable[T].min!() -> T
 needs T obeys Comparable
-  var emitter = me.$iter()
-  var result = emitter.$emit!()
+  var emitter = me.iter()
+  var result = emitter.emit!()
   loop
     var item = emitter.try_emit()
     when item
@@ -121,8 +121,8 @@ needs T obeys Comparable
 @readonly
 routine Iterable[T].max!() -> T
 needs T obeys Comparable
-  var emitter = me.$iter()
-  var result = emitter.$emit!()
+  var emitter = me.iter()
+  var result = emitter.emit!()
   loop
     var item = emitter.try_emit()
     when item
@@ -137,8 +137,8 @@ needs T obeys Comparable
 @readonly
 routine Iterable[T].min_by![U](selector: Routine[(T,), U]) -> T
 needs U obeys Comparable
-  var emitter = me.$iter()
-  var best = emitter.$emit!()
+  var emitter = me.iter()
+  var best = emitter.emit!()
   var best_key = selector(best)
   loop
     var item = emitter.try_emit()
@@ -156,8 +156,8 @@ needs U obeys Comparable
 @readonly
 routine Iterable[T].max_by![U](selector: Routine[(T,), U]) -> T
 needs U obeys Comparable
-  var emitter = me.$iter()
-  var best = emitter.$emit!()
+  var emitter = me.iter()
+  var best = emitter.emit!()
   var best_key = selector(best)
   loop
     var item = emitter.try_emit()
@@ -185,7 +185,7 @@ routine Iterable[T].get_count(predicate: Routine[(T,), Bool]) -> U64
 ### :returns: The resulting `T` value.
 @readonly
 routine Iterable[T].first_or_default(default: T) -> T
-  var emitter = me.$iter()
+  var emitter = me.iter()
   var result = emitter.try_emit()
   when result
     is None => return default

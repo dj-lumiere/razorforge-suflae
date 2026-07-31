@@ -9,7 +9,7 @@ protocol FastHashable
   ### Returns the fast (unkeyed) hash of this value.
   ### Values considered equal should produce the same hash, though unequal values
   ### may still collide. Suitable only for trusted input; for adversarial keys,
-  ### use `Hashable.$hash(k0, k1)` instead.
+  ### use `Hashable.hash(k0, k1)` instead.
   ### :returns: A `U64` hash code for this value.
   @readonly
-  routine Me.$fast_hash() -> U64
+  routine Me.fast_hash() -> U64

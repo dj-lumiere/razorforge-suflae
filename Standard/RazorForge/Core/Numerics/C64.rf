@@ -24,109 +24,109 @@ preset C64_I: C64 = C64(real: 0.0_f64, imag: 1.0_f64)
 ### Constructs a `C64` with the given real component and zero imaginary part.
 ### :param from: The real-axis value.
 ### :returns: The corresponding `C64` value.
-routine C64.$create(from: F64) -> C64
+routine C64.create(from: F64) -> C64
   return C64(real: from, imag: 0.0_f64)
 
 ### Widens a `C32` to `C64` by extending each component to `F64`.
 ### :param from: The single-precision complex value to widen.
 ### :returns: A `C64` carrying the same numeric value.
-routine C64.$create(from: C32) -> C64
+routine C64.create(from: C32) -> C64
   return C64(real: F64(from.real), imag: F64(from.imag))
 
 ### Narrows a `C128` to `C64` by truncating each component to `F64`.
 ### :param from: The quadruple-precision complex value to narrow.
 ### :returns: The nearest representable `C64`.
-routine C64.$create(from: C128) -> C64
+routine C64.create(from: C128) -> C64
   return C64(real: F64(from.real), imag: F64(from.imag))
 
 ### Real scalar -> `C64` (imaginary part 0), routing the value through `F64`.
 ### :param from: A real integer or float value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: S8) -> C64
+routine C64.create(from: S8) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S16` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: S16) -> C64
+routine C64.create(from: S16) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S32` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: S32) -> C64
+routine C64.create(from: S32) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S64` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: S64) -> C64
+routine C64.create(from: S64) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S128` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: S128) -> C64
+routine C64.create(from: S128) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `S256` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: S256) -> C64
+routine C64.create(from: S256) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U8` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: U8) -> C64
+routine C64.create(from: U8) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U16` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: U16) -> C64
+routine C64.create(from: U16) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U32` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: U32) -> C64
+routine C64.create(from: U32) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U64` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: U64) -> C64
+routine C64.create(from: U64) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U128` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: U128) -> C64
+routine C64.create(from: U128) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `U256` scalar -> `C64` (imaginary part 0), value routed through `F64`.
 ### :param from: A real integer value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: U256) -> C64
+routine C64.create(from: U256) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `F16` scalar -> `C64` (imaginary part 0), value widened to `F64`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: F16) -> C64
+routine C64.create(from: F16) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `F32` scalar -> `C64` (imaginary part 0), value widened to `F64`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: F32) -> C64
+routine C64.create(from: F32) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Real `F128` scalar -> `C64` (imaginary part 0), value narrowed to `F64`.
 ### :param from: A real float value.
 ### :returns: `from + 0i` in double precision.
-routine C64.$create(from: F128) -> C64
+routine C64.create(from: F128) -> C64
   return C64(real: F64(from: from), imag: 0.0_f64)
 
 ### Constructs a `C64` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
@@ -144,19 +144,19 @@ routine C64.from_polar(r: F64, theta: F64) -> C64
 ### Returns the complex sum `me + you` (component-wise addition).
 ### :param you: The addend.
 ### :returns: A `C64` whose components are the sums of the corresponding components.
-routine C64.$add(you: C64) -> C64
+routine C64.add(you: C64) -> C64
   return C64(real: me.real + you.real, imag: me.imag + you.imag)
 
 ### Returns the complex difference `me - you` (component-wise subtraction).
 ### :param you: The value to subtract.
 ### :returns: A `C64` whose components are the differences of the corresponding components.
-routine C64.$sub(you: C64) -> C64
+routine C64.sub(you: C64) -> C64
   return C64(real: me.real - you.real, imag: me.imag - you.imag)
 
 ### Returns the complex product `me * you` using the formula `(ac−bd) + (ad+bc)i`.
 ### :param you: The right operand.
 ### :returns: The Gaussian product.
-routine C64.$mul(you: C64) -> C64
+routine C64.mul(you: C64) -> C64
   # (a+bi)(c+di) = (ac − bd) + (ad + bc)i.
   return C64(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
@@ -164,7 +164,7 @@ routine C64.$mul(you: C64) -> C64
 ### Divides by the squared modulus of `you`.
 ### :param you: The divisor.
 ### :returns: The complex quotient.
-routine C64.$truediv(you: C64) -> C64
+routine C64.truediv(you: C64) -> C64
   # (a+bi)/(c+di) = (a+bi)(c−di)/|c+di|², with d = |denom|² = c²+d².
   var d = you.real * you.real + you.imag * you.imag
   # Real = (ac+bd)/d, imag = (bc−ad)/d.
@@ -172,7 +172,7 @@ routine C64.$truediv(you: C64) -> C64
 
 ### Returns the arithmetic negation of this value.
 ### :returns: A `C64` with both components negated.
-routine C64.$neg() -> C64
+routine C64.neg() -> C64
   return C64(real: -me.real, imag: -me.imag)
 
 # ============================================================================
@@ -182,7 +182,7 @@ routine C64.$neg() -> C64
 ### Returns `true` if both components compare equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me.real == you.real` and `me.imag == you.imag`.
-routine C64.$eq(you: C64) -> Bool
+routine C64.eq(you: C64) -> Bool
   return me.real == you.real and me.imag == you.imag
 
 # ============================================================================
@@ -397,7 +397,7 @@ routine C64.sqrt_unchecked() -> C64
 ### Returns this complex value raised to the complex power `you`.
 ### :param you: The complex exponent.
 ### :returns: `me ** you`, computed as `exp(you · log(me))`.
-routine C64.$pow(you: C64) -> C64
+routine C64.pow(you: C64) -> C64
   # z^w = exp(w·log z); principal branch via log_unchecked.
   return (you * me.log_unchecked()).exp_unchecked()
 
@@ -426,11 +426,11 @@ routine C64.is_imaginary() -> Bool
 
 ### Formats this value compactly as `a+bj` / `a-bj` (e.g. `1.5+2j`). The `j`
 ### spelling matches the imaginary literal suffixes, so output is valid
-### literal syntax. Standard `$represent` shape (no args) for f-string dispatch.
+### literal syntax. Standard `represent` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
-routine C64.$represent() -> Text
-  var real_text = me.real.$represent()
-  var imag_abs = me.imag.abs().$represent()
+routine C64.represent() -> Text
+  var real_text = me.real.represent()
+  var imag_abs = me.imag.abs().represent()
   if me.imag < 0.0_f64
     return real_text + "-" + imag_abs + "j"
   return real_text + "+" + imag_abs + "j"
@@ -446,10 +446,10 @@ routine C64.imag_part() -> F64
   return me.imag
 
 ### Returns a diagnostic string wrapping the value with its type name (e.g. `C64(1.5+2j)`).
-### Standard `$diagnose` shape (no args) for f-string dispatch.
+### Standard `diagnose` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
-routine C64.$diagnose() -> Text
-  return "C64(" + me.$represent() + ")"
+routine C64.diagnose() -> Text
+  return "C64(" + me.represent() + ")"
 
 # ============================================================================
 # Hashing
@@ -457,16 +457,16 @@ routine C64.$diagnose() -> Text
 
 ### Returns an xxHash64-based hash of this complex value.
 ### :returns: A `U64` hash combining both components.
-routine C64.$fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.real.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.imag.$fast_hash())
+routine C64.fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.real.fast_hash())
+  acc = __hash_round(acc: acc, h: me.imag.fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this complex value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine C64.$hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0u64, h: me.real.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.imag.$hash(k0: k0, k1: k1))
+routine C64.hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.real.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.imag.hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

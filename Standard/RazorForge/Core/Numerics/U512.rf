@@ -52,7 +52,7 @@ routine udiv512_by_u256_sticky(num: U512, den: U512) -> U512
 
 ### Returns me // you via the generic base-2⁶⁴ Knuth-D kernel (`knuth_divide[8]`,
 ### hardware `DIV r64` per step) instead of the slow inline-expanded `udiv i512`.
-routine U512.$floordiv(you: U512) -> U512
+routine U512.floordiv(you: U512) -> U512
   var av = me
   var bv = you
   var rem = Array[U64, 8]()
@@ -81,7 +81,7 @@ routine udiv512_sticky(num: U512, den: U512) -> U512
     return q
 
 ### Returns me % you (remainder from the same Knuth-D kernel).
-routine U512.$mod(you: U512) -> U512
+routine U512.mod(you: U512) -> U512
   var av = me
   var bv = you
   var rem = Array[U64, 8]()
@@ -93,9 +93,9 @@ routine U512.$mod(you: U512) -> U512
     return reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
-routine U512.$represent() -> Text
+routine U512.represent() -> Text
   return wide_dec[U512](me)
 
 ### Diagnostic representation tagged with the type name.
-routine U512.$diagnose() -> Text
+routine U512.diagnose() -> Text
   return "U512"

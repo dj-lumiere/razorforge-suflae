@@ -2,7 +2,7 @@ module Tests/Stdlib/BackIndexApi
 import IO/Console
 
 # Back-indexing — `^N` (or whatever the syntax is) for indexing from the end.
-# Stdlib signatures show `$getitem!(index: BackIndex)` on List/Text/Bytes/Array.
+# Stdlib signatures show `getitem!(index: BackIndex)` on List/Text/Bytes/Array.
 routine start()
   var l: List[S64] = [10, 20, 30, 40, 50]
   show(f"l[^1]: {l[^1]}")    # last

@@ -13,7 +13,7 @@ import BuilderService
 ### atomic-refcounted handle to an immutable byte buffer. Copying a `Bytes`
 ### bumps the underlying refcount via SeqCst atomic; the last drop frees the
 ### buffer + controller. When `ctrl` is null (`hijacked_none[...]()`), the
-### value represents an empty or static-literal sequence and `$store`/`$destroy`
+### value represents an empty or static-literal sequence and `store`/`destroy`
 ### are no-ops.
 record Bytes obeys Copyable, Iterable[Byte]
   ### Raw buffer of byte values.
@@ -29,7 +29,7 @@ record Bytes obeys Copyable, Iterable[Byte]
 ### with no atomic op.
 ### :returns: The resulting `Bytes` value.
 @[readonly, inline]
-routine Bytes.$store() -> Bytes
+routine Bytes.store() -> Bytes
   danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()
@@ -37,7 +37,7 @@ routine Bytes.$store() -> Bytes
 
 ### Releases this value's reference. Frees the buffer + controller when this
 ### was the last live ref. No-op when `ctrl` is null (empty / static literal).
-dangerous routine Bytes.$destroy()
+dangerous routine Bytes.destroy()
   if me.ctrl.is_none()
     return
   var prev = me.ctrl.as_entity().decrease_strong_count()
@@ -48,13 +48,13 @@ dangerous routine Bytes.$destroy()
 
 ### Creates an empty byte sequence.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create() -> Bytes
+routine Bytes.create() -> Bytes
   return Bytes(data: hijacked_none[Byte](), count: 0u64, ctrl: hijacked_none[ImmutableSharedController]())
 
 ### Creates a byte sequence by copying the contents of `from_list`.
 ### :param from_list: The source list of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(from_list: List[Byte]) -> Bytes
+routine Bytes.create(from_list: List[Byte]) -> Bytes
   var n = from_list.count()
   if n == 0u64
     return Bytes(data: hijacked_none[Byte](), count: 0u64, ctrl: hijacked_none[ImmutableSharedController]())
@@ -71,7 +71,7 @@ routine Bytes.$create(from_list: List[Byte]) -> Bytes
 ### Creates a one-byte sequence from `from_byte`.
 ### :param from_byte: The single byte to store.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(from_byte: Byte) -> Bytes
+routine Bytes.create(from_byte: Byte) -> Bytes
   danger
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size()))
     buf.poke(value: from_byte)
@@ -81,7 +81,7 @@ routine Bytes.$create(from_byte: Byte) -> Bytes
 ### Copying stops at the first null byte.
 ### :param ptr: The source pointer to read from.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
+routine Bytes.create(ptr: Hijacked[Byte]) -> Bytes
   danger
     var len: U64 = 0u64
     loop
@@ -98,7 +98,7 @@ routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
 ### No text decoding is performed.
 ### :param ptr: The source C string.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: CStr) -> Bytes
+routine Bytes.create(ptr: CStr) -> Bytes
   var len = rf_cstr_count(ptr)
   if len == 0u64
     return Bytes()
@@ -111,7 +111,7 @@ routine Bytes.$create(ptr: CStr) -> Bytes
 ### :param ptr: The source address.
 ### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: Address, count: U64) -> Bytes
+routine Bytes.create(ptr: Address, count: U64) -> Bytes
   if count == 0u64
     return Bytes()
   danger
@@ -123,7 +123,7 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
 ### :param source: The source pointer.
 ### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(srcptr: Hijacked[Byte], count: U64) -> Bytes
+routine Bytes.create(srcptr: Hijacked[Byte], count: U64) -> Bytes
   if count == 0u64
     return Bytes()
   danger
@@ -164,7 +164,7 @@ routine Bytes.is_empty() -> Bool
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 @readonly
-routine Bytes.$getitem!(index: U64) -> Byte
+routine Bytes.getitem!(index: U64) -> Byte
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   danger
@@ -195,7 +195,7 @@ routine Bytes.concat(other: Bytes) -> Bytes
 ### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.$add(other: Bytes) -> Bytes
+routine Bytes.add(other: Bytes) -> Bytes
   return me.concat(other)
 
 ### Returns whether both values are equal.
@@ -203,7 +203,7 @@ routine Bytes.$add(other: Bytes) -> Bytes
 ### :param other: The other byte sequence to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Bytes.$eq(other: Bytes) -> Bool
+routine Bytes.eq(other: Bytes) -> Bool
   if me.count != other.count
     return false
   var i: U64 = 0u64
@@ -320,7 +320,7 @@ routine Bytes.repeat(times: U64) -> Bytes
 ### Creates a mutable byte list by copying the contents of `Bytes`.
 ### :param source: The byte sequence to convert.
 ### :returns: The resulting `List[Byte]` value.
-routine List[Byte].$create(source: Bytes) -> List[Byte]
+routine List[Byte].create(source: Bytes) -> List[Byte]
   var result = List[Byte](source.count)
   var i: U64 = 0u64
   loop
@@ -344,14 +344,14 @@ entity BytesEmittable
 ### The iterator starts at byte index `0`.
 ### :returns: The resulting `BytesEmittable` value.
 @readonly
-routine Bytes.$iter() -> BytesEmittable
+routine Bytes.iter() -> BytesEmittable
   return BytesEmittable(bytes: me, index: 0u64)
 
 ### Returns the next byte from this iterator.
 ### Each successful call yields one byte and advances the internal index.
 ### :returns: The resulting `Byte` value.
 ### :absent: Returns absent when the requested value is unavailable.
-routine BytesEmittable.$emit!() -> Byte
+routine BytesEmittable.emit!() -> Byte
   if me.index >= me.bytes.count
     absent
   var value = me.bytes[me.index]
@@ -366,13 +366,13 @@ routine BytesEmittable.$emit!() -> Byte
 ### Each byte is rendered using its escaped `\\xHH` representation.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Bytes.$represent() -> Text
+routine Bytes.represent() -> Text
   var result = List[Character]()
   var i: U64 = 0u64
   loop
     if i >= me.count
       break
-    var byte_text = me[i].$represent()
+    var byte_text = me[i].represent()
     var j: U64 = 0u64
     loop
       if j >= byte_text.count()
@@ -386,8 +386,8 @@ routine Bytes.$represent() -> Text
 ### The diagnostic form includes both the byte count and the escaped payload.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Bytes.$diagnose() -> Text
-  return "Bytes(count: " + me.count.$represent() + ", " + me.$represent() + ")"
+routine Bytes.diagnose() -> Text
+  return "Bytes(count: " + me.count.represent() + ", " + me.represent() + ")"
 
 # ============================================================================
 # Encoding Conversions
@@ -609,20 +609,20 @@ routine Bytes.interpret_as_utf8_lossy() -> BytesUtf8LossyView
 ### Returns an iterator over this strict UTF-8 view.
 ### :returns: The resulting `BytesUtf8Emittable` value.
 @readonly
-routine BytesUtf8View.$iter() -> BytesUtf8Emittable
+routine BytesUtf8View.iter() -> BytesUtf8Emittable
   return BytesUtf8Emittable(data: me.data, byte_count: me.byte_count, index: 0u64)
 
 ### Returns an iterator over this lossy UTF-8 view.
 ### :returns: The resulting `BytesUtf8LossyEmittable` value.
 @readonly
-routine BytesUtf8LossyView.$iter() -> BytesUtf8LossyEmittable
+routine BytesUtf8LossyView.iter() -> BytesUtf8LossyEmittable
   return BytesUtf8LossyEmittable(data: me.data, byte_count: me.byte_count, index: 0u64)
 
 ### Returns the next decoded character from this strict UTF-8 iterator.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when iteration is exhausted.
 ### :throws: {MalformedUtf8Error} on the first ill-formed subsequence.
-routine BytesUtf8Emittable.$emit!() -> Character
+routine BytesUtf8Emittable.emit!() -> Character
   danger
     if me.index >= me.byte_count
       absent
@@ -676,7 +676,7 @@ routine BytesUtf8Emittable.$emit!() -> Character
 ### Malformed subsequences are surfaced as the replacement character (U+FFFD).
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when iteration is exhausted.
-routine BytesUtf8LossyEmittable.$emit!() -> Character
+routine BytesUtf8LossyEmittable.emit!() -> Character
   danger
     if me.index >= me.byte_count
       absent
@@ -828,7 +828,7 @@ routine List[U16].decode_as_utf16() -> Text
 
 ### Returns an xxHash64 hash of the underlying byte buffer's address.
 ### :returns: A `U64` hash of this view.
-routine BytesUtf8View.$fast_hash() -> U64
+routine BytesUtf8View.fast_hash() -> U64
   danger
     return __hash_leaf(v: U64(me.data.address()))
 
@@ -836,24 +836,24 @@ routine BytesUtf8View.$fast_hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine BytesUtf8View.$hash(k0: U64, k1: U64) -> U64
+routine BytesUtf8View.hash(k0: U64, k1: U64) -> U64
   danger
     return __secure_hash_u64(v: U64(me.data.address()), k0: k0, k1: k1)
 
 ### Returns an xxHash64 hash of this iterator's buffer address and current index.
 ### :returns: A `U64` hash combining the buffer address and the current index.
-routine BytesUtf8Emittable.$fast_hash() -> U64
+routine BytesUtf8Emittable.fast_hash() -> U64
   danger
     var acc = __hash_round(acc: 0u64, h: __hash_leaf(v: U64(me.data.address())))
-    acc = __hash_round(acc: acc, h: me.index.$fast_hash())
+    acc = __hash_round(acc: acc, h: me.index.fast_hash())
     return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this iterator.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine BytesUtf8Emittable.$hash(k0: U64, k1: U64) -> U64
+routine BytesUtf8Emittable.hash(k0: U64, k1: U64) -> U64
   danger
     var acc = __hash_round(acc: 0u64, h: __secure_hash_u64(v: U64(me.data.address()), k0: k0, k1: k1))
-    acc = __hash_round(acc: acc, h: me.index.$hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.index.hash(k0: k0, k1: k1))
     return __hash_finalize(h: acc)

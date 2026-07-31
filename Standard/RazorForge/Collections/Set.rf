@@ -28,7 +28,7 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### |---|---|---|
 ### | `add` | O(1) | O(n) (rehash) |
 ### | `remove` | O(1) | O(n) |
-### | `$contains` | O(1) | O(n) |
+### | `contains` | O(1) | O(n) |
 ### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
 ### :typeparam T: The element type. Must obey {Hashable} and {Equatable}.
@@ -53,10 +53,10 @@ relates SetEmittable[T] as Iter
 # Creators
 # ============================================================================
 
-routine Set[T].$create() -> Set[T]
+routine Set[T].create() -> Set[T]
   return Set[T](key: SecureHashKey.random())
 
-routine Set[T].$create(key: SecureHashKey) -> Set[T]
+routine Set[T].create(key: SecureHashKey) -> Set[T]
   var cap = SET_INITIAL_CAPACITY
   var ecap = SET_INITIAL_ENTRIES
   var set = Set[T](
@@ -80,7 +80,7 @@ routine Set[T].$create(key: SecureHashKey) -> Set[T]
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal set
 
-routine Set[T].$create(key: SecureHashKey, capacity: U64) -> Set[T]
+routine Set[T].create(key: SecureHashKey, capacity: U64) -> Set[T]
   var cap = SET_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -127,7 +127,7 @@ routine Set[T].read_index(slot: U64) -> U64
 
 @readonly
 routine Set[T].find_slot(value: T) -> U64
-  var h = value.$hash(k0: me.k0, k1: me.k1)
+  var h = value.hash(k0: me.k0, k1: me.k1)
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
@@ -211,7 +211,7 @@ routine Set[T].rehash()
         me.slots.offset(T.data_size() * new_ei).poke(val)
         me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
-        me.insert_index_raw(h: val.$hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
+        me.insert_index_raw(h: val.hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
@@ -247,7 +247,7 @@ routine Set[T].clear()
   return
 
 @readonly
-routine Set[T].$contains(value: T) -> Bool
+routine Set[T].contains(value: T) -> Bool
   return me.find_slot(value) < me.capacity
 
 routine Set[T].add(value: T) -> Bool
@@ -260,7 +260,7 @@ routine Set[T].add(value: T) -> Bool
     me.slots.offset(T.data_size() * ei).poke(value)
     me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
-  me.insert_index_raw(h: value.$hash(k0: me.k0, k1: me.k1), entry_index: ei)
+  me.insert_index_raw(h: value.hash(k0: me.k0, k1: me.k1), entry_index: ei)
   me.count = me.count +% 1u64
   return true
 
@@ -281,7 +281,7 @@ routine Set[T].remove(value: T) -> Bool
 # ============================================================================
 
 @readonly
-routine Set[T].$iter() -> SetEmittable[T]
+routine Set[T].iter() -> SetEmittable[T]
   danger
     return SetEmittable[T](
       slots: me.slots,
@@ -297,7 +297,7 @@ entity SetEmittable[T] obeys Emittable[T]
   secret entries_used: U64
   secret pos: U64
 
-routine SetEmittable[T].$emit!() -> T
+routine SetEmittable[T].emit!() -> T
   danger
     while me.pos < me.entries_used
       var p = me.pos
@@ -373,7 +373,7 @@ routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
 ### Creates a {List[T]} from all elements of `from` in insertion order.
 ### :param from: The set to copy elements from.
 ### :returns: A new {List[T]} containing all elements of `from`.
-routine List[T].$create(from: Set[T]) -> List[T]
+routine List[T].create(from: Set[T]) -> List[T]
   var result = List[T](capacity: from.count)
   for val in from
     result.add_last(val)
@@ -384,7 +384,7 @@ routine List[T].$create(from: Set[T]) -> List[T]
 # ============================================================================
 
 @readonly
-routine Set[T].$represent() -> Text
+routine Set[T].represent() -> Text
   if me.is_empty()
     return "{}"
   var result = "{"
@@ -392,19 +392,19 @@ routine Set[T].$represent() -> Text
   for val in me
     if not first
       result = result + ", "
-    result = result + val.$represent()
+    result = result + val.represent()
     first = false
   result = result + "}"
   return steal result
 
 @readonly
-routine Set[T].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
+routine Set[T].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
   for val in me
     if not first
       result = result + ", "
-    result = result + val.$represent()
+    result = result + val.represent()
     first = false
   result = result + "})"
   return steal result
@@ -414,7 +414,7 @@ routine Set[T].$diagnose() -> Text
 # ============================================================================
 
 @readonly
-routine Set[T].$eq(other: Referring[Set[T]]) -> Bool
+routine Set[T].eq(other: Referring[Set[T]]) -> Bool
   if me.count != other.count
     return false
   for val in me
@@ -422,14 +422,14 @@ routine Set[T].$eq(other: Referring[Set[T]]) -> Bool
       return false
   return true
 
-dangerous routine Set[T].$destroy()
+dangerous routine Set[T].destroy()
   # Tear down each live element before freeing the buffers (mirrors the live-entry scan in
-  # SetEmittable.$emit!). For value elements `$destroy` is a no-op; for owned entity elements
+  # SetEmittable.emit!). For value elements `destroy` is a no-op; for owned entity elements
   # this frees them. Must run before invalidating `slots`/`entry_live`.
   var p = 0u64
   while p < me.entries_used
     if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
-      me.slots.offset(T.data_size() * p).peek().$destroy()
+      me.slots.offset(T.data_size() * p).peek().destroy()
     p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()

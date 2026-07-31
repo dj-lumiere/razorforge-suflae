@@ -5,38 +5,38 @@ module Core
 ### consistent with equality and can drive the relational operator family.
 protocol Comparable obeys Equatable
   ### Compares this value with the other value.
-  ### Implementations should return a result consistent with `$eq` and stable
+  ### Implementations should return a result consistent with `eq` and stable
   ### across repeated calls for the same operands.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `ComparisonSign` value.
   @readonly
-  routine Me.$cmp(you: Me) -> ComparisonSign
+  routine Me.cmp(you: Me) -> ComparisonSign
 
   ### Returns whether this value is strictly less than `you`.
-  ### This generated helper is derived from `$cmp` and should not need a custom
+  ### This generated helper is derived from `cmp` and should not need a custom
   ### implementation in most conforming types.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `Bool` value.
   @[readonly, generated]
-  routine Me.$lt(you: Me) -> Bool
+  routine Me.lt(you: Me) -> Bool
 
   ### Returns whether this value is less than or equal to `you`.
-  ### This generated helper is derived from `$cmp`.
+  ### This generated helper is derived from `cmp`.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `Bool` value.
   @[readonly, generated]
-  routine Me.$le(you: Me) -> Bool
+  routine Me.le(you: Me) -> Bool
 
   ### Returns whether this value is strictly greater than `you`.
-  ### This generated helper is derived from `$cmp`.
+  ### This generated helper is derived from `cmp`.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `Bool` value.
   @[readonly, generated]
-  routine Me.$gt(you: Me) -> Bool
+  routine Me.gt(you: Me) -> Bool
 
   ### Returns whether this value is greater than or equal to `you`.
-  ### This generated helper is derived from `$cmp`.
+  ### This generated helper is derived from `cmp`.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `Bool` value.
   @[readonly, generated]
-  routine Me.$ge(you: Me) -> Bool
+  routine Me.ge(you: Me) -> Bool

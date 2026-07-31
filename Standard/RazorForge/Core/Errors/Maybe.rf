@@ -15,7 +15,7 @@ record Maybe[T]
 ### Returns the display form of this optional value.
 ### Present values are rendered using the wrapped value's text form.
 ### :returns: The resulting `Text` value.
-routine Maybe[T].$represent() -> Text
+routine Maybe[T].represent() -> Text
   if not me.is_present()
     return "none"
   return f"{me.value}"
@@ -23,7 +23,7 @@ routine Maybe[T].$represent() -> Text
 ### Returns the diagnostic form of this optional value.
 ### This form keeps the `Maybe` wrapper visible for debugging and logs.
 ### :returns: The resulting `Text` value.
-routine Maybe[T].$diagnose() -> Text
+routine Maybe[T].diagnose() -> Text
   if not me.is_present()
     return f"{me.full_type_name()}(none)"
   return f"{me.full_type_name()}({me.value})"
@@ -31,16 +31,16 @@ routine Maybe[T].$diagnose() -> Text
 ### Frees the wrapped value when present; a no-op when absent. Defined explicitly (rather than
 ### auto-derived) so the per-instantiation body is monomorphized and emitted like the other carrier
 ### routines, and so the `value` field is only touched when actually present.
-dangerous routine Maybe[T].$destroy()
+dangerous routine Maybe[T].destroy()
   if me.is_present()
-    me.value.$destroy()
+    me.value.destroy()
   return
 
 ### Returns the wrapped value.
 ### Use this when absence is a logic error rather than an expected branch.
 ### :returns: The contained `T` value.
 ### :throws: {AbsentValueError} if this `Maybe` is absent.
-routine Maybe[T].$unwrap!() -> T
+routine Maybe[T].unwrap!() -> T
   if not me.is_present()
     throw AbsentValueError()
   return me.value
@@ -49,7 +49,7 @@ routine Maybe[T].$unwrap!() -> T
 ### This avoids branching at the call site when a fixed fallback is acceptable.
 ### :param fallback: The fallback value to return when absent.
 ### :returns: The contained `T` value, or `fallback` if this `Maybe` is absent.
-routine Maybe[T].$unwrap_or(fallback: T) -> T
+routine Maybe[T].unwrap_or(fallback: T) -> T
   if not me.is_present()
     return fallback
   return me.value

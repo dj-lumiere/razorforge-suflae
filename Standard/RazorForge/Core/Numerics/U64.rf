@@ -20,7 +20,7 @@ preset U64_ONE: U64 = 1_u64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is negative.
-routine U64.$create!(from: S8) -> U64
+routine U64.create!(from: S8) -> U64
   if from < 0_s8
     throw IntegerOverflowError()
   return sign_extend[S8, U64](from)
@@ -29,7 +29,7 @@ routine U64.$create!(from: S8) -> U64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is negative.
-routine U64.$create!(from: S16) -> U64
+routine U64.create!(from: S16) -> U64
   if from < 0_s16
     throw IntegerOverflowError()
   return sign_extend[S16, U64](from)
@@ -38,7 +38,7 @@ routine U64.$create!(from: S16) -> U64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is negative.
-routine U64.$create!(from: S32) -> U64
+routine U64.create!(from: S32) -> U64
   if from < 0_s32
     throw IntegerOverflowError()
   return sign_extend[S32, U64](from)
@@ -47,7 +47,7 @@ routine U64.$create!(from: S32) -> U64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is negative.
-routine U64.$create!(from: S64) -> U64
+routine U64.create!(from: S64) -> U64
   if from < 0_s64
     throw IntegerOverflowError()
   return reinterpret_bits[S64, U64](from)
@@ -56,7 +56,7 @@ routine U64.$create!(from: S64) -> U64
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside the `U64` range.
-routine U64.$create!(from: S128) -> U64
+routine U64.create!(from: S128) -> U64
   if not (0_s128 <= from <= 18446744073709551615_s128)
     throw IntegerOverflowError()
   return int_truncate[S128, U64](from)
@@ -64,32 +64,32 @@ routine U64.$create!(from: S128) -> U64
 ### Zero-extends an unsigned 8-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.$create(from: U8) -> U64
+routine U64.create(from: U8) -> U64
   return zero_extend[U8, U64](from)
 
 ### Zero-extends an unsigned 16-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.$create(from: U16) -> U64
+routine U64.create(from: U16) -> U64
   return zero_extend[U16, U64](from)
 
 ### Zero-extends an unsigned 32-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.$create(from: U32) -> U64
+routine U64.create(from: U32) -> U64
   return zero_extend[U32, U64](from)
 
 ### Returns `from` unchanged (identity conversion).
 ### :param from: The source value.
 ### :returns: `from`.
-routine U64.$create(from: U64) -> U64
+routine U64.create(from: U64) -> U64
   return from
 
 ### Truncates an unsigned 128-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The lower 64 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` exceeds `U64_MAX`.
-routine U64.$create!(from: U128) -> U64
+routine U64.create!(from: U128) -> U64
   if from > 18446744073709551615_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U64](from)
@@ -98,7 +98,7 @@ routine U64.$create!(from: U128) -> U64
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 64 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside 0..18446744073709551615.
-routine U64.$create!(from: S256) -> U64
+routine U64.create!(from: S256) -> U64
   if not (0_s256 <= from <= 18446744073709551615_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, U64](from)
@@ -107,7 +107,7 @@ routine U64.$create!(from: S256) -> U64
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 64 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 18446744073709551615`.
-routine U64.$create!(from: U256) -> U64
+routine U64.create!(from: U256) -> U64
   if from > 18446744073709551615_u256
     throw IntegerOverflowError()
   return int_truncate[U256, U64](from)
@@ -115,13 +115,13 @@ routine U64.$create!(from: U256) -> U64
 ### Truncates a 16-bit float to `U64` by first widening to `F32`.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64.$create!(from: F16) -> U64
+routine U64.create!(from: F16) -> U64
   return from.F32().U64!()
 
 ### Truncates a 32-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64.$create!(from: F32) -> U64
+routine U64.create!(from: F32) -> U64
   if from.is_nan() or not (0.0_f32 <= from <= 18446744073709551615.0_f32)
     throw IntegerOverflowError()
   return float_to_unsigned[F32, U64](from)
@@ -129,7 +129,7 @@ routine U64.$create!(from: F32) -> U64
 ### Truncates a 64-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64.$create!(from: F64) -> U64
+routine U64.create!(from: F64) -> U64
   if from.is_nan() or not (0.0_f64 <= from <= 18446744073709551615.0_f64)
     throw IntegerOverflowError()
   return float_to_unsigned[F64, U64](from)
@@ -137,25 +137,25 @@ routine U64.$create!(from: F64) -> U64
 ### Truncates a 128-bit float to `U64` by narrowing to `F64` first.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64.$create!(from: F128) -> U64
+routine U64.create!(from: F128) -> U64
   return from.F64!().U64!()
 
 ### Converts a 32-bit decimal float to `U64` via `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `U64` representation.
-routine U64.$create!(from: D32) -> U64
+routine U64.create!(from: D32) -> U64
   return from.S64!().U64!()
 
 ### Converts a 64-bit decimal float to `U64` via `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `U64` representation.
-routine U64.$create!(from: D64) -> U64
+routine U64.create!(from: D64) -> U64
   return from.S64!().U64!()
 
 ### Converts a 128-bit decimal float to `U64` via `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `U64` representation.
-routine U64.$create!(from: D128) -> U64
+routine U64.create!(from: D128) -> U64
   return from.S64!().U64!()
 
 # ============================================================================
@@ -184,7 +184,7 @@ routine U64.mul_with_overflow(you: U64) -> (U64, Bool)
 ### :param you: The right operand.
 ### :returns: The sum.
 ### :throws: {IntegerOverflowError} if the result exceeds `U64_MAX`.
-routine U64.$add!(you: U64) -> U64
+routine U64.add!(you: U64) -> U64
   var result = me.add_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -194,7 +194,7 @@ routine U64.$add!(you: U64) -> U64
 ### :param you: The value to subtract.
 ### :returns: The difference.
 ### :throws: {IntegerOverflowError} if the result would go below zero.
-routine U64.$sub!(you: U64) -> U64
+routine U64.sub!(you: U64) -> U64
   var result = me.sub_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -204,7 +204,7 @@ routine U64.$sub!(you: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The product.
 ### :throws: {IntegerOverflowError} if the result exceeds `U64_MAX`.
-routine U64.$mul!(you: U64) -> U64
+routine U64.mul!(you: U64) -> U64
   var result = me.mul_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -214,7 +214,7 @@ routine U64.$mul!(you: U64) -> U64
 ### :param you: The divisor.
 ### :returns: The quotient, rounding toward zero.
 ### :throws: {DivisionByZeroError} if `you == 0`.
-routine U64.$floordiv!(you: U64) -> U64
+routine U64.floordiv!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
   return unsigned_div[U64](a: me, b: you)
@@ -223,7 +223,7 @@ routine U64.$floordiv!(you: U64) -> U64
 ### :param you: The divisor.
 ### :returns: The remainder.
 ### :throws: {DivisionByZeroError} if `you == 0`.
-routine U64.$mod!(you: U64) -> U64
+routine U64.mod!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
   return unsigned_rem[U64](a: me, b: you)
@@ -235,19 +235,19 @@ routine U64.$mod!(you: U64) -> U64
 ### Returns `(me + you) mod 2⁶⁴` without overflow check.
 ### :param you: The right operand.
 ### :returns: The wrapped sum.
-routine U64.$add_wrap(you: U64) -> U64
+routine U64.add_wrap(you: U64) -> U64
   return add[U64](a: me, b: you)
 
 ### Returns `(me - you) mod 2⁶⁴` without underflow check.
 ### :param you: The value to subtract.
 ### :returns: The wrapped difference.
-routine U64.$sub_wrap(you: U64) -> U64
+routine U64.sub_wrap(you: U64) -> U64
   return sub[U64](a: me, b: you)
 
 ### Returns `(me * you) mod 2⁶⁴` without overflow check.
 ### :param you: The right operand.
 ### :returns: The wrapped product.
-routine U64.$mul_wrap(you: U64) -> U64
+routine U64.mul_wrap(you: U64) -> U64
   return mul[U64](a: me, b: you)
 
 # ============================================================================
@@ -257,31 +257,31 @@ routine U64.$mul_wrap(you: U64) -> U64
 ### Returns `me + you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The sum.
-dangerous routine U64.$add_unchecked(you: U64) -> U64
+dangerous routine U64.add_unchecked(you: U64) -> U64
   return unsigned_add_exact[U64](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference.
-dangerous routine U64.$sub_unchecked(you: U64) -> U64
+dangerous routine U64.sub_unchecked(you: U64) -> U64
   return unsigned_sub_exact[U64](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product.
-dangerous routine U64.$mul_unchecked(you: U64) -> U64
+dangerous routine U64.mul_unchecked(you: U64) -> U64
   return unsigned_mul_exact[U64](a: me, b: you)
 
 ### Returns `me // you` with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient.
-dangerous routine U64.$floordiv_unchecked(you: U64) -> U64
+dangerous routine U64.floordiv_unchecked(you: U64) -> U64
   return unsigned_div[U64](a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The remainder.
-dangerous routine U64.$mod_unchecked(you: U64) -> U64
+dangerous routine U64.mod_unchecked(you: U64) -> U64
   return unsigned_rem[U64](a: me, b: you)
 
 # ============================================================================
@@ -291,19 +291,19 @@ dangerous routine U64.$mod_unchecked(you: U64) -> U64
 ### Returns `me + you`, clamped to `U64_MAX` on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, or `U64_MAX` if it would overflow.
-routine U64.$add_clamp(you: U64) -> U64
+routine U64.add_clamp(you: U64) -> U64
   return unsigned_add_sat[U64](a: me, b: you)
 
 ### Returns `me - you`, clamped to `U64_MIN` on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `0` if it would underflow.
-routine U64.$sub_clamp(you: U64) -> U64
+routine U64.sub_clamp(you: U64) -> U64
   return unsigned_sub_sat[U64](a: me, b: you)
 
 ### Returns `me * you`, clamped to `U64_MAX` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `U64_MAX` if it would overflow.
-routine U64.$mul_clamp(you: U64) -> U64
+routine U64.mul_clamp(you: U64) -> U64
   var wide = mul[U128](zero_extend[U64, U128](me), zero_extend[U64, U128](you))
   if unsigned_gt[U128](wide, 18446744073709551615_u128)
     return U64_MAX
@@ -338,7 +338,7 @@ routine U64.pow_with_overflow(exp: U64) -> (U64, Bool)
 ### :param exp: The exponent.
 ### :returns: The result.
 ### :throws: {IntegerOverflowError} if the result exceeds `U64_MAX`.
-routine U64.$pow!(exp: U64) -> U64
+routine U64.pow!(exp: U64) -> U64
   var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
@@ -347,29 +347,29 @@ routine U64.$pow!(exp: U64) -> U64
 ### Returns `me ** exp` with wrapping arithmetic.
 ### :param exp: The exponent.
 ### :returns: The result modulo 2⁶⁴.
-routine U64.$pow_wrap(exp: U64) -> U64
+routine U64.pow_wrap(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.$mul_wrap(base)
+      result = result.mul_wrap(base)
     e = e >> 1_u32
     if e > 0
-      base = base.$mul_wrap(base)
+      base = base.mul_wrap(base)
   return result
 
 ### Returns `me ** exp` clamped to `U64_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The clamped result.
-routine U64.$pow_clamp(exp: U64) -> U64
+routine U64.pow_clamp(exp: U64) -> U64
   var result: U64 = 1
   var base: U64 = me
   var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.$mul_clamp(base)
-    base = base.$mul_clamp(base)
+      result = result.mul_clamp(base)
+    base = base.mul_clamp(base)
     e = e >> 1_u32
   return result
 
@@ -380,24 +380,24 @@ routine U64.$pow_clamp(exp: U64) -> U64
 ### Returns `me & you` (bitwise AND).
 ### :param you: The right operand.
 ### :returns: The bitwise intersection.
-routine U64.$bitand(you: U64) -> U64
+routine U64.bitand(you: U64) -> U64
   return bit_and[U64](a: me, b: you)
 
 ### Returns `me | you` (bitwise OR).
 ### :param you: The right operand.
 ### :returns: The bitwise union.
-routine U64.$bitor(you: U64) -> U64
+routine U64.bitor(you: U64) -> U64
   return bit_or[U64](a: me, b: you)
 
 ### Returns `me ^ you` (bitwise XOR).
 ### :param you: The right operand.
 ### :returns: The bitwise exclusive-or.
-routine U64.$bitxor(you: U64) -> U64
+routine U64.bitxor(you: U64) -> U64
   return bit_xor[U64](a: me, b: you)
 
 ### Returns `~me` (bitwise NOT).
 ### :returns: The bitwise complement.
-routine U64.$bitnot() -> U64
+routine U64.bitnot() -> U64
   return bit_xor[U64](a: me, b: U64_MAX)
 
 # ============================================================================
@@ -408,25 +408,25 @@ routine U64.$bitnot() -> U64
 ### Returns `me << bits` (arithmetic left shift).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
-routine U64.$ashl(bits: U32) -> U64
+routine U64.ashl(bits: U32) -> U64
   return shift_left[U64](me, U64(bits))
 
 ### Returns `me >> bits` (arithmetic right shift, zero-filling for unsigned).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
-routine U64.$ashr(bits: U32) -> U64
+routine U64.ashr(bits: U32) -> U64
   return shift_right_unsigned[U64](me, U64(bits))
 
 ### Returns `me << bits` (logical left shift).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
-routine U64.$lshl(bits: U32) -> U64
+routine U64.lshl(bits: U32) -> U64
   return shift_left[U64](me, U64(bits))
 
 ### Returns `me >> bits` (logical right shift, zero-filling).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
-routine U64.$lshr(bits: U32) -> U64
+routine U64.lshr(bits: U32) -> U64
   return shift_right_unsigned[U64](me, U64(bits))
 
 # ============================================================================
@@ -436,13 +436,13 @@ routine U64.$lshr(bits: U32) -> U64
 ### Returns true if both values are equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`.
-routine U64.$eq(you: U64) -> Bool
+routine U64.eq(you: U64) -> Bool
   return int_eq[U64](a: me, b: you)
 
 ### Returns the ordering relationship between this value and `you`.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
-routine U64.$cmp(you: U64) -> ComparisonSign
+routine U64.cmp(you: U64) -> ComparisonSign
   if unsigned_lt[U64](me, you)
     return ME_SMALL
   if unsigned_gt[U64](me, you)
@@ -500,12 +500,12 @@ routine U64.trailing_zeros() -> U64
 ### Returns the number of consecutive one bits before the highest clear bit.
 ### :returns: The leading one count.
 routine U64.leading_ones() -> U64
-  return me.$bitnot().leading_zeros()
+  return me.bitnot().leading_zeros()
 
 ### Returns the number of consecutive one bits starting from the least significant bit.
 ### :returns: The trailing one count.
 routine U64.trailing_ones() -> U64
-  return me.$bitnot().trailing_zeros()
+  return me.bitnot().trailing_zeros()
 
 ### Returns this value with the bit order reversed.
 ### :returns: The bit-reversed value.
@@ -598,7 +598,7 @@ routine U64.is_odd() -> Bool
 
 ### Returns the human-readable text of this value.
 ### :returns: The value rendered as `Text`.
-routine U64.$represent() -> Text
+routine U64.represent() -> Text
   if me == 0u64
     return "0"
   var digits = List[Character]()
@@ -611,14 +611,14 @@ routine U64.$represent() -> Text
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
-routine U64.$diagnose() -> Text
-  return "U64(" + me.$represent() + ")"
+routine U64.diagnose() -> Text
+  return "U64(" + me.represent() + ")"
 
 ### Parses a decimal text representation of a `U64`.
 ### :param from_text: A non-empty string of ASCII decimal digits.
 ### :returns: The parsed `U64` value.
 ### :throws: {InvalidValueError} if the text is empty or contains non-digit characters.
-routine U64.$create!(from_text: Text) -> U64
+routine U64.create!(from_text: Text) -> U64
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "U64")
   var result = 0u64
@@ -638,12 +638,12 @@ routine U64.$create!(from_text: Text) -> U64
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: The 64-bit hash.
-routine U64.$fast_hash() -> U64
+routine U64.fast_hash() -> U64
   return __hash_leaf(v: me)
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The 64-bit keyed hash.
-routine U64.$hash(k0: U64, k1: U64) -> U64
+routine U64.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: me, k0: k0, k1: k1)

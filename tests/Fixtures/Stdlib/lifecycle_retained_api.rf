@@ -1,15 +1,15 @@
 module Tests/Stdlib/LifecycleRetainedApi
 import IO/Console
 
-# Verifies Retained refcount: $destroy fires only when the last strong handle drops.
+# Verifies Retained refcount: destroy fires only when the last strong handle drops.
 entity Tracer
   tag: S64
 
-routine Tracer.$create(tag: S32) -> Tracer
+routine Tracer.create(tag: S32) -> Tracer
   show(f"  create({tag})")
   return Tracer(tag: S64(tag))
 
-dangerous routine Tracer.$destroy()
+dangerous routine Tracer.destroy()
   show(f"  destroy({me.tag})")
   return
 
@@ -23,7 +23,7 @@ routine inner()
   show(f" after r2 = r1.retain(), strong={r1.strong_count()}")
 
   # When inner() returns, r1 and r2 both go out of scope — refcount goes 2->1->0,
-  # then $destroy fires.
+  # then destroy fires.
   return
 
 routine start()

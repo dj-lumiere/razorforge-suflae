@@ -23,7 +23,7 @@ routine iif(x: Bool) -> S64
 routine truth() -> Bool
   return not not not false
 
-# widen: $create conversion ladder across every signed width
+# widen: create conversion ladder across every signed width
 routine widen() -> S128
   return S128(S64(S32(S16(S8(1)))))
 

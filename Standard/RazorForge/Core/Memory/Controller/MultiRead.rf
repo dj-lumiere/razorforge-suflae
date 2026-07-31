@@ -16,7 +16,7 @@ record MultiRead obeys LockPolicy
 
 ### Creates an unlocked reader-writer policy.
 ### :returns: The resulting `MultiRead` value.
-routine MultiRead.$create() -> MultiRead
+routine MultiRead.create() -> MultiRead
   return MultiRead(
     readers: Atomic[S32](initial: 0_s32),
     writer: Atomic[U8](initial: 0_u8),

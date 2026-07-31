@@ -15,9 +15,9 @@ relates SkipEmittable[T, S/Iter] as Iter
 ### The returned emitter defers the actual skipping until iteration begins.
 ### :returns: The resulting `SkipEmittable[T, S/Iter]` value.
 @readonly
-routine SkipIterable[T, S].$iter() -> SkipEmittable[T, S/Iter]
+routine SkipIterable[T, S].iter() -> SkipEmittable[T, S/Iter]
   danger
-    return SkipEmittable[T, S/Iter](source: me.source.as_entity().$iter(), remaining: me.count)
+    return SkipEmittable[T, S/Iter](source: me.source.as_entity().iter(), remaining: me.count)
 
 ### Iterates over a source sequence after discarding an initial prefix.
 ### :typeparam T: The element type produced by the source sequence.
@@ -32,12 +32,12 @@ needs SE obeys Emittable[T]
 ### Returns the next value after any remaining skipped prefix has been consumed.
 ### Values are discarded only until `remaining` reaches zero.
 ### :returns: The resulting `T` value.
-routine SkipEmittable[T, SE].$emit!() -> T
+routine SkipEmittable[T, SE].emit!() -> T
   danger
     while me.remaining > 0u64
-      me.source.as_entity().$emit!()
+      me.source.as_entity().emit!()
       me.remaining = me.remaining - 1u64
-    return me.source.as_entity().$emit!()
+    return me.source.as_entity().emit!()
 
 ### Returns a lazy adapter that skips the first `count` values.
 ### :param count: The number of leading values to discard.

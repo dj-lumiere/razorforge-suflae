@@ -29,7 +29,7 @@ entity SignalCaster
 
 ### Creates a new monitor.
 ### :returns: A fresh `SignalCaster`.
-routine SignalCaster.$create() -> SignalCaster
+routine SignalCaster.create() -> SignalCaster
   danger
     return SignalCaster(sig: rf_signal_create())
 
@@ -83,6 +83,6 @@ routine SignalCaster.duplicate() -> SignalCaster
     return SignalCaster(sig: me.sig)
 
 ### Drops this handle; the monitor frees once the last handle goes.
-dangerous routine SignalCaster.$destroy()
+dangerous routine SignalCaster.destroy()
   rf_signal_drop(sig: me.sig)
   return

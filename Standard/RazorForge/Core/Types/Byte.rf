@@ -14,13 +14,13 @@ record Byte obeys ConstCompatible
 ### standard construction surface.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
-routine Byte.$create(from: Byte) -> Byte
+routine Byte.create(from: Byte) -> Byte
   return from
 
 ### Reinterprets an unsigned 8-bit integer as `Byte`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
-routine Byte.$create(from: U8) -> Byte
+routine Byte.create(from: U8) -> Byte
   return reinterpret_bits[U8, Byte](value: from)
 
 # Common byte constants
@@ -51,14 +51,14 @@ routine Byte.codepoint() -> U32
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Byte.$eq(other: Byte) -> Bool
+routine Byte.eq(other: Byte) -> Bool
   return U8(me) == U8(other)
 
 ### Compares this value with the other value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Byte.$cmp(other: Byte) -> ComparisonSign
+routine Byte.cmp(other: Byte) -> ComparisonSign
   return U8(me) <=> U8(other)
 
 # ============================================================================
@@ -131,7 +131,7 @@ routine Byte.hex_value!() -> U8
 ### encoding context.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Byte.$represent() -> Text
+routine Byte.represent() -> Text
   var digits = List[Character]()
   digits.add_last(Character(0x005Cu32))  # \
   digits.add_last(Character(0x0078u32))  # x
@@ -153,8 +153,8 @@ routine Byte.$represent() -> Text
 ### byte representation.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Byte.$diagnose() -> Text
-  return "Byte(" + U8(me).$represent() + ", " + me.$represent() + ")"
+routine Byte.diagnose() -> Text
+  return "Byte(" + U8(me).represent() + ", " + me.represent() + ")"
 
 # ============================================================================
 # Hashing
@@ -163,7 +163,7 @@ routine Byte.$diagnose() -> Text
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Byte.$fast_hash() -> U64
+routine Byte.fast_hash() -> U64
   return __hash_leaf(v: zero_extend[Byte, U64](me))
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -171,5 +171,5 @@ routine Byte.$fast_hash() -> U64
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Byte.$hash(k0: U64, k1: U64) -> U64
+routine Byte.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[Byte, U64](me), k0: k0, k1: k1)

@@ -16,9 +16,9 @@ relates TakeEmittable[T, S/Iter] as Iter
 ### yield.
 ### :returns: The resulting `TakeEmittable[T, S/Iter]` value.
 @readonly
-routine TakeIterable[T, S].$iter() -> TakeEmittable[T, S/Iter]
+routine TakeIterable[T, S].iter() -> TakeEmittable[T, S/Iter]
   danger
-    return TakeEmittable[T, S/Iter](source: me.source.as_entity().$iter(), remaining: me.limit)
+    return TakeEmittable[T, S/Iter](source: me.source.as_entity().iter(), remaining: me.limit)
 
 ### Iterates over at most the configured number of values from the source sequence.
 ### :typeparam T: The element type produced by the source sequence.
@@ -35,11 +35,11 @@ needs SE obeys Emittable[T]
 ### source still has more values available.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the take limit has been exhausted or the source ends first.
-routine TakeEmittable[T, SE].$emit!() -> T
+routine TakeEmittable[T, SE].emit!() -> T
   danger
     if me.remaining == 0u64
       absent
-    var _result = me.source.as_entity().$emit!()
+    var _result = me.source.as_entity().emit!()
     me.remaining = me.remaining - 1u64
     return _result
 

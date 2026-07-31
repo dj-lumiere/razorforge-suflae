@@ -10,7 +10,7 @@ import IO/Console
 entity Node
   secret id: S64
 
-dangerous routine Node.$destroy()
+dangerous routine Node.destroy()
   show(f"destroying node {me.id}")
   return
 

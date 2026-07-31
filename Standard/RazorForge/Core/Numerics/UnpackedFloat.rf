@@ -35,12 +35,12 @@ needs W is U64
   fpclass: SignedFpClass
 
 ### No-op teardown: all fields are plain values (no owned entities).
-dangerous routine UnpackedFloat[M, L, W].$destroy()
+dangerous routine UnpackedFloat[M, L, W].destroy()
   return
 
 ### Decimal digit string of a wide unsigned integer (MSD first; "0" for zero). Repeated
 ### div/mod by 10 through the type's knuth-based FloorDivisible — table-free, any width.
-### Backs the wide-int and Decimal `$represent`s.
+### Backs the wide-int and Decimal `represent`s.
 routine wide_dec[T](v: T) -> Text
 needs T obeys FloorDivisible
   if int_eq[T](a: v, b: zero_extend[U64, T](0_u64))
@@ -57,7 +57,7 @@ needs T obeys FloorDivisible
 
 ### An unpacked value paired with an integer exponent/quadrant. Used instead of a
 ### `(UnpackedFloat, S64)` tuple because tuples of generic records hit a compiler
-### `$destroy` synthesis gap (the tuple type's teardown is never emitted).
+### `destroy` synthesis gap (the tuple type's teardown is never emitted).
 record UFExp[M, L, W]
 needs W is U64
   ### The reduced/fractional unpacked value.
@@ -305,7 +305,7 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
   return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, fpclass: SignedFpClass.from_flags(sign: rsign2, iszero: amzero, isinf: false, isnan: false))
 
 ### Returns `me - you`. Wired `-`; `.sub(you:)` callers resolve here by bare-name lookup.
-routine UnpackedFloat[M, L, W].$sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.faddsub(you: you, negate: true)
 
 # ============================================================================
@@ -313,7 +313,7 @@ routine UnpackedFloat[M, L, W].$sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloa
 # ============================================================================
 
 ### Returns `me * you`. Wired `*`; `.mul(you:)` callers resolve here by bare-name lookup.
-routine UnpackedFloat[M, L, W].$mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   if me.isnan() or you.isnan() or (me.iszero() and you.isinf()) or (me.isinf() and you.iszero()) or me.isinf() or you.isinf()
     if me.isnan()
       return me
@@ -416,11 +416,11 @@ routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> UnpackedFloat
 
 ### Wired `+` — returns `me + you`. Also the `.add(you:)` method (same bare name `add`); callers
 ### that write `x.add(y)` resolve here by bare-name lookup, and `x + y` lowers here.
-routine UnpackedFloat[M, L, W].$add(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].add(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.faddsub(you: you, negate: false)
 
 ### Wired `/` — returns `me / you`.
-routine UnpackedFloat[M, L, W].$truediv(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
+routine UnpackedFloat[M, L, W].truediv(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   return me.div(you: you)
 
 # ============================================================================
