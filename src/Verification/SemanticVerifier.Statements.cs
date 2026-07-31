@@ -139,6 +139,16 @@ public sealed partial class SemanticVerifier
                 : $"{module}.{routine.Name}";
         }
 
+        // Prefer the structured binding attached at registration (SignatureResolver / StdlibLoader)
+        // over re-deriving the routine by parsing the name string — the same reason codegen reads
+        // RoutineDeclaration.ResolvedInfo directly. This also correctly binds CONSTRUCTORS
+        // (`routine T(...)`): their name carries no `.create` for the dot-based string logic below to
+        // key on, so the registry lookup would miss and the body would be analyzed against a stub.
+        if (routine.ResolvedInfo?.OwnerType is { } resolvedInfoOwner)
+        {
+            routineOwnerType = resolvedInfoOwner;
+        }
+
         // Look up by RegistryKey (BaseName + param types) for overload disambiguation,
         // then fall back to BaseName for the first-overload-wins entry.
         // Set up generic parameter context so ResolveType recognizes T, U, etc.
@@ -153,8 +163,8 @@ public sealed partial class SemanticVerifier
             OwnerType = routineOwnerType
         };
 
-        RoutineInfo? routineInfo = null;
-        if (routine.Parameters.Count > 0)
+        RoutineInfo? routineInfo = routine.ResolvedInfo;
+        if (routineInfo == null && routine.Parameters.Count > 0)
         {
             IEnumerable<string> paramTypeNames = routine.Parameters
                                                         .Select(selector: p =>

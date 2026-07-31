@@ -56,14 +56,30 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
-                if (!_routineIndex.TryGetValue(key: decl.Name, value: out List<RoutineDeclaration>? bucket))
+                AddDeclToIndex(key: decl.Name, decl: decl);
+
+                // A constructor `routine T(...)` / `routine T[params](...)` is registered with the
+                // canonical creator name "create" on its owner type (ResolvedInfo), but its AST
+                // decl.Name is just the bare base type ("List", generics live in GenericParameters).
+                // Monomorphization looks a creator up via BuildAstName(owner, "create") →
+                // "List[T].create", so index it under that key too — otherwise generic constructor
+                // bodies (List[Byte].create) never get monomorphized and codegen over-prunes them.
+                if (decl.ResolvedInfo is { Name: "create", OwnerType: { } ctorOwner })
                 {
-                    bucket = [];
-                    _routineIndex[key: decl.Name] = bucket;
+                    AddDeclToIndex(key: BuildAstName(genDef: ctorOwner, routineName: "create"),
+                        decl: decl);
                 }
-                bucket.Add(item: decl);
             }
         }
+    }
+    private void AddDeclToIndex(string key, RoutineDeclaration decl)
+    {
+        if (!_routineIndex.TryGetValue(key: key, value: out List<RoutineDeclaration>? bucket))
+        {
+            bucket = [];
+            _routineIndex[key: key] = bucket;
+        }
+        bucket.Add(item: decl);
     }
     // Public entry point
 

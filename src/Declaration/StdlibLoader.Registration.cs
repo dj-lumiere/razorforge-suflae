@@ -614,6 +614,24 @@ public sealed partial class StdlibLoader
                 }
             }
         }
+        else
+        {
+            // No dot: a top-level free function, OR a CONSTRUCTOR `routine T(...)` /
+            // `routine T[params](...)` (renamed from `routine T.create(...)`). Detect the
+            // constructor by matching the bare name against a known type and route it to the
+            // reserved creator name "create" with that type as owner — mirroring the old
+            // `T.create` registration so call-site construction resolves the creator. The
+            // trailing `!` (failable) is carried structurally on routine.IsFailable.
+            int bracketIndex = routineName.IndexOf(value: '[');
+            string bareName = bracketIndex > 0 ? routineName[..bracketIndex] : routineName;
+            TypeInfo? ctorOwner = registry.LookupType(name: bareName) ??
+                                  registry.LookupType(name: $"{moduleName}.{bareName}");
+            if (ctorOwner != null)
+            {
+                ownerType = ctorOwner;
+                methodName = "create";
+            }
+        }
 
         // Collect generic params from owner type + routine itself for type resolution context
         var genericContext = new List<string>();

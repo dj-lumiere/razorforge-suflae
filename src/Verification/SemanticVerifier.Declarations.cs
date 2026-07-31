@@ -556,10 +556,12 @@ public sealed partial class SemanticVerifier
         if (_currentType != null)
         {
             // Inside a type body
+            // TODO: create routine name is dead.
             kind = routine.Name == "create"
                 ? RoutineKind.Creator
                 : RoutineKind.MemberRoutine;
         }
+        // TODO: Why is this handled here? This name parsing thing should have been parser's role.
         else if (routine.Name.Contains(value: '.'))
         {
             // Member routine syntax: "Type.routine" or "Type[T].routine"
@@ -572,6 +574,7 @@ public sealed partial class SemanticVerifier
 
             // Always strip generic params first (e.g., "Stack[T]" -> "Stack") to look up
             // the generic definition, not a resolution cache entry.
+            // TODO: Why is this handled here? This name parsing thing should have been parser's role.
             string lookupName = typeName.Contains(value: '[')
                 ? typeName[..typeName.IndexOf(value: '[')]
                 : typeName;
@@ -579,8 +582,29 @@ public sealed partial class SemanticVerifier
         }
         else
         {
-            // Top-level function
-            kind = RoutineKind.Function;
+            // Top-level routine. A routine whose bare name matches a known type is a
+            // CONSTRUCTOR — the surface syntax `routine T(...)` / `routine T[params](...)`
+            // (renamed from the old `routine T.create(...)`). Route it to the reserved
+            // creator kind with the type as owner and the canonical internal name "create",
+            // so registration/monomorphization/reachability/codegen treat it exactly as the
+            // old `T.create` spelling did. The trailing `!` (failable) is carried structurally
+            // on routine.IsFailable, not in the name.
+            // TODO: Why is this handled here? This name parsing thing should have been parser's role.
+            string ctorLookup = routine.Name.Contains(value: '[')
+                ? routine.Name[..routine.Name.IndexOf(value: '[')]
+                : routine.Name;
+            TypeSymbol? ctorOwner = LookupTypeWithImports(name: ctorLookup);
+            if (ctorOwner is EntityTypeInfo or RecordTypeInfo or ChoiceTypeInfo
+                or FlagsTypeInfo or VariantTypeInfo or CrashableTypeInfo)
+            {
+                kind = RoutineKind.Creator;
+                ownerType = ctorOwner;
+                routineName = "create";
+            }
+            else
+            {
+                kind = RoutineKind.Function;
+            }
         }
 
         // Validate that choice types cannot define any operator wired methods
@@ -609,6 +633,7 @@ public sealed partial class SemanticVerifier
         // failable variant) are validated in CheckReservedVariantCollision, which runs after
         // all routines are registered — the failable base may be declared later in the file,
         // so it isn't reliably visible here at collection time.
+        // TODO: Why is this handled here? This name parsing thing should have been parser's role.
         string baseName = routineName.Contains(value: '.')
             ? routineName[(routineName.IndexOf(value: '.') + 1)..]
             : routineName;

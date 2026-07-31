@@ -756,12 +756,17 @@ public partial class LlvmCodeGenerator
             {
                 foreach (RoutineDeclaration routine in EnumerateStdlibRoutines(program: program))
                 {
+                    // Prefer the structured binding attached at registration (StdlibLoader /
+                    // SignatureResolver) — the exact overload for THIS decl. This is the only
+                    // reliable identity for a CONSTRUCTOR (`routine T(...)`), whose AST name is the
+                    // bare type ("U64") with no ".create" for the name-string lookups below to key on.
                     // Look up routine info — try multiple keys:
                     // 1. Raw AST name (e.g., "show")
                     // 2. Module-qualified (e.g., "IO.show")
                     // 3. Short name fallback via LookupRoutineByName
                     // 4. Overload-based lookup using AST parameter types
-                    RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routine.Name);
+                    RoutineInfo? routineInfo = routine.ResolvedInfo
+                                               ?? _registry.LookupRoutine(fullName: routine.Name);
                     if (routineInfo == null && !string.IsNullOrEmpty(value: module))
                     {
                         routineInfo =
@@ -803,8 +808,9 @@ public partial class LlvmCodeGenerator
                     // For overloaded routines (e.g., $create), try to find the
                     // specific overload matching this AST declaration's parameter types.
                     // This includes 0-arg overloads — LookupRoutine returns an arbitrary
-                    // overload, so we must disambiguate for all param counts.
-                    if (routineInfo != null)
+                    // overload, so we must disambiguate for all param counts. Skipped when
+                    // ResolvedInfo already pinned the exact overload for this decl.
+                    if (routineInfo != null && routine.ResolvedInfo == null)
                     {
                         var astParamTypes = new List<TypeInfo>();
                         foreach (Parameter param in routine.Parameters)

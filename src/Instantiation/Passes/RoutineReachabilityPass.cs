@@ -198,6 +198,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 AddDecl(map: _userByName, name: decl.Name, decl: decl);
+                IndexCreatorDecl(map: _userByName, decl: decl);
                 // Also index MODULE-LEVEL routines under their module-qualified name so FindDecl can
                 // disambiguate same-named routines across modules (e.g. each imported test module's
                 // `start`). Members keep the bare index (their harness contamination is a separate
@@ -214,6 +215,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
                 AddDecl(map: _stdlibByName, name: decl.Name, decl: decl);
+                IndexCreatorDecl(map: _stdlibByName, decl: decl);
                 // Imported project modules are carried here too; index MODULE-LEVEL routines under the
                 // module-qualified name so FindDecl can disambiguate same-named routines across modules
                 // (see the user-index note above).
@@ -222,6 +224,25 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     AddDecl(map: _stdlibByName, name: $"{module}.{decl.Name}", decl: decl);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// A constructor `routine T(...)` / `routine T[params](...)` is registered with the canonical
+    /// creator name "create" on its owner type (ResolvedInfo), but its AST decl.Name is just the bare
+    /// base type ("CStr", "List"). FindDecl resolves a creator callee under "Owner.create" (concrete)
+    /// or "Owner[params].create" (generic def). Index those keys here so the walk finds the
+    /// constructor body — otherwise routines called only inside constructor bodies get over-pruned.
+    /// </summary>
+    private static void IndexCreatorDecl(Dictionary<string, List<RoutineDeclaration>> map,
+        RoutineDeclaration decl)
+    {
+        if (decl.ResolvedInfo is not { Name: "create", OwnerType: { } owner }) return;
+        AddDecl(map: map, name: $"{owner.Name}.create", decl: decl);
+        if (owner.GenericParameters is { Count: > 0 } gps)
+        {
+            AddDecl(map: map, name: $"{owner.Name}[{string.Join(separator: ", ", values: gps)}].create",
+                decl: decl);
         }
     }
 
