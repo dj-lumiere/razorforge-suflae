@@ -176,8 +176,13 @@ public sealed class RoutineInfo
     /// from rvalue `T` back to lvalue `T` at the binding site.</summary>
     public bool IsInFlightReturn { get; init; }
 
-    /// <summary>Whether this routine can fail (has ! suffix).</summary>
-    public bool IsFailable { get; init; }
+    /// <summary>Whether this routine can fail. Set from the declared <c>!</c> suffix at registration,
+    /// then RE-DERIVED by the failability-inference fixpoint (<c>InferFailableRoutines</c>) after Phase-5
+    /// body analysis: a routine is failable iff it was declared <c>!</c> OR its body throws/absents OR it
+    /// propagates an unhandled failable callee. The <c>internal set</c> lets that pass overwrite the
+    /// declared value before codegen keys the failable-carrier ABI on it (mirrors
+    /// <see cref="IsWiredMemberRoutine"/>).</summary>
+    public bool IsFailable { get; internal set; }
 
     /// <summary>
     /// Whether this is a WIRED member routine — one the source spells with a leading <c>$</c>

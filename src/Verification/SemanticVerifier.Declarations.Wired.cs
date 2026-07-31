@@ -103,6 +103,42 @@ public sealed partial class SemanticVerifier
         return protos.Any(predicate: p => ExplicitlyImplementsProtocol(type: owner, protocolName: p));
     }
 
+    /// <summary>
+    /// Re-derives <see cref="RoutineInfo.IsFailable"/> for every registered routine from INFERENCE,
+    /// after Phase-5 body analysis has populated <see cref="RoutineInfo.HasThrow"/> /
+    /// <see cref="RoutineInfo.HasAbsent"/> / <see cref="RoutineInfo.FailableCallees"/>.
+    ///
+    /// <para>A routine is failable iff it was DECLARED <c>!</c> (kept — the annotation is now OPTIONAL
+    /// but honest) OR its body directly <c>throw</c>s / <c>absent</c>s. The declaration <c>!</c> is
+    /// never REMOVED by inference; inference only ADDS failability to a routine that throws/absents
+    /// without a declared <c>!</c> (the newly-allowed un-declared-failable case).</para>
+    ///
+    /// <para>Failability is NOT propagated through the call graph here: a non-failable routine calling
+    /// a failable one is the language's established CRASH-ONLY path (the call fails ⇒ the program
+    /// crashes), and that caller keeps its non-failable ABI. Making every such caller failable would
+    /// rewrite the failable-carrier ABI of a large fraction of the stdlib for no behavioural gain.
+    /// (Purely-PROPAGATED failability of a routine that IS declared <c>!</c> — e.g. a <c>!</c> wrapper
+    /// whose body only returns an inner <c>!</c> call — is preserved because its declared <c>!</c>
+    /// seeds it here; <c>ErrorHandlingVariantPass</c> still fans throw/absent through
+    /// <see cref="RoutineInfo.FailableCallees"/> for variant generation.)</para>
+    ///
+    /// <para>Runs after ALL bodies are analyzed and BEFORE codegen, which keys the failable-carrier ABI
+    /// on <see cref="RoutineInfo.IsFailable"/>. Mirrors <see cref="InferWiredMemberRoutines"/>: a
+    /// post-analysis pass that overwrites a declared flag with the derived value. On a codebase where
+    /// every throwing routine is already declared <c>!</c> this is a no-op (inference AGREES with the
+    /// declarations), so it stays ABI-consistent — verified by the stdlib harness.</para>
+    /// </summary>
+    private void InferFailableRoutines()
+    {
+        foreach (RoutineInfo r in _registry.GetAllRoutines())
+        {
+            if (r.HasThrow || r.HasAbsent)
+            {
+                r.IsFailable = true;
+            }
+        }
+    }
+
     private void CollectExternalDeclaration(ExternalDeclaration external)
     {
         // #123: Suflae cannot use C interop directly

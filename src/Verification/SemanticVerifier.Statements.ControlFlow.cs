@@ -423,17 +423,11 @@ public sealed partial class SemanticVerifier
             return;
         }
 
-        // `pierce` (IsFatal) is a fatal, uncatchable crash: it does NOT require the routine to be
-        // failable and generates no variants. Only the recoverable `throw` needs the `!` contract.
-        if (!throwStmt.IsFatal && !_currentRoutine.IsFailable)
-        {
-            ReportError(code: SemanticDiagnosticCode.ThrowOutsideFailableFunction,
-                message: "Throw statement in a non-failable routine: add '!' suffix to signal " +
-                         "callers and enable safe variant generation, or use `pierce` for an " +
-                         "uncatchable fatal crash.",
-                location: throwStmt.Location);
-        }
-
+        // Failability is now INFERRED: a recoverable `throw` in a routine not declared `!` is FINE —
+        // it simply makes the routine inferred-failable (the `InferFailableRoutines` fixpoint sets
+        // IsFailable=true before codegen). The declaration `!` is an OPTIONAL honest annotation, no
+        // longer required at the throw site. `pierce` (IsFatal) stays a fatal uncatchable crash that
+        // never marks the routine failable.
         TypeSymbol errorType = AnalyzeExpression(expression: throwStmt.Error);
 
         // Only `crashable`-kind types are throwable errors. The `crashable` keyword implicitly
@@ -453,24 +447,27 @@ public sealed partial class SemanticVerifier
                 location: throwStmt.Error.Location);
         }
 
-        // Mark routine as having throw statements (for variant generation). A `pierce` never triggers
-        // variant generation — it is a crash, not a recoverable failure.
-        if (!throwStmt.IsFatal && _currentRoutine.IsFailable)
+        // Mark routine as having throw statements (drives both failability inference and variant
+        // generation). Recorded UNCONDITIONALLY for a recoverable `throw` — the inference fixpoint reads
+        // HasThrow to derive IsFailable, so it must be set even when `!` was not declared. A `pierce`
+        // never marks failable — it is a crash, not a recoverable failure.
+        if (!throwStmt.IsFatal)
             _currentRoutine.HasThrow = true;
     }
 
     private void AnalyzeAbsentStatement(AbsentStatement absent)
     {
-        if (_currentRoutine == null || !_currentRoutine.IsFailable)
+        if (_currentRoutine == null)
         {
-            ReportError(code: SemanticDiagnosticCode.AbsentOutsideFailableFunction,
-                message:
-                "Absent statement in a non-failable routine — add '!' suffix to signal callers and enable safe variant generation.",
+            ReportWarning(code: SemanticWarningCode.ThrowAbsentInNonFailable,
+                message: "Absent statement outside any routine.",
                 location: absent.Location);
             return;
         }
 
-        // Mark routine as having absent statements (for variant generation)
+        // Failability is INFERRED: an `absent` in a routine not declared `!` is FINE and simply makes
+        // the routine inferred-failable. Mark routine as having absent statements (for both inference
+        // and variant generation) UNCONDITIONALLY — the fixpoint reads HasAbsent to derive IsFailable.
         _currentRoutine.HasAbsent = true;
     }
 

@@ -120,10 +120,11 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Verifies that throw is only allowed inside failable routines.
+    /// Failability is now INFERRED: a <c>throw</c> inside a routine NOT declared <c>!</c> no longer
+    /// errors (the declaration is optional). The routine is inferred-failable instead.
     /// </summary>
     [Fact]
-    public void Analyze_ThrowInNonFailableRoutine_ReportsError()
+    public void Analyze_ThrowInNonFailableRoutine_NoLongerErrors()
     {
         string source = """
                         crashable SampleError
@@ -135,15 +136,16 @@ public class WikiLanguageBreakageTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
     }
 
     /// <summary>
-    /// Verifies that absent is only allowed inside failable routines.
+    /// Failability is now INFERRED: an <c>absent</c> inside a routine NOT declared <c>!</c> no longer
+    /// errors (the declaration is optional). The routine is inferred-failable instead.
     /// </summary>
     [Fact]
-    public void Analyze_AbsentInNonFailableRoutine_ReportsError()
+    public void Analyze_AbsentInNonFailableRoutine_NoLongerErrors()
     {
         string source = """
                         routine test() -> S32
@@ -152,7 +154,7 @@ public class WikiLanguageBreakageTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
 

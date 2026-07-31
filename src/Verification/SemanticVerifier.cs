@@ -384,6 +384,11 @@ public sealed partial class SemanticVerifier
         Mark(label: "Phase 3 Desugaring");
         RunPhase5Verification(program: program);
         Mark(label: "Phase 5 Verification");
+        // Failability inference: recompute RoutineInfo.IsFailable from throw/absent + propagated
+        // failable callees now that all bodies (incl. synthesized) are analyzed, BEFORE variant
+        // generation and codegen key the failable-carrier ABI on it.
+        InferFailableRoutines();
+        Mark(label: "Failability inference");
         // Register user program before global desugaring so GenericMonomorphizationPass can
         // search user-program ASTs for generic routine bodies (like FindInStdlib does for stdlib).
         _registry.RegisterUserProgram(program: program,
@@ -1187,6 +1192,12 @@ public sealed partial class SemanticVerifier
                 count: _errors.Count - errorsBeforeStdlib);
         EagerSynthesizeAllWrapperForwarders();
         Mark(label: "Phase 5 global -> EagerSynthesizeAllWrapperForwarders");
+
+        // Failability inference: recompute RoutineInfo.IsFailable from throw/absent + propagated
+        // failable callees now that all bodies (user + stdlib + synthesized) are analyzed, BEFORE
+        // variant generation and codegen key the failable-carrier ABI on it.
+        InferFailableRoutines();
+        Mark(label: "Phase 5 global -> InferFailableRoutines");
 
         // If SA produced errors in user code, skip desugaring. Lowering passes over a broken
         // AST produce garbage types and can drive GenericMonomorphizationPass's fixed-point loop
