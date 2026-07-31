@@ -19,7 +19,7 @@ record CPtr obeys Storable
 ### This is a low-level runtime integration surface, not a stable user API.
 ### :returns: The resulting `Address` value.
 @readonly
-dangerous routine CPtr.get_address() -> Address
+routine CPtr.get_address() -> Address
   return pointer_to_int[CPtr, Address](me)
 
 ### Returns a bitwise duplicate of this raw pointer.

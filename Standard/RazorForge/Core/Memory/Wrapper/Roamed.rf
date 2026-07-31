@@ -141,7 +141,7 @@ dangerous routine Roamed[T].cc_visit_self()
 ### pure reinterpretation, no load.
 ### :returns: The controller address.
 @readonly
-dangerous routine Roamed[T].controller_address() -> Address
+routine Roamed[T].controller_address() -> Address
   return Hijacked[RoamController[T]](me).get_address()
 
 ### The inner entity as a raw, UNLOCKED reference — STAGE-1/2 TEST HATCH ONLY. Real access is lock-wrapped

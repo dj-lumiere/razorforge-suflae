@@ -79,7 +79,7 @@ routine ShareController[T, P].weak_count() -> U64
 
 ### Returns a non-owning pointer to the managed data.
 ### :returns: The resulting `Hijacked[T]` value.
-dangerous routine ShareController[T, P].borrow_data() -> Hijacked[T]
+routine ShareController[T, P].borrow_data() -> Hijacked[T]
   return me.data
 
 # ============================================================================

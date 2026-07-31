@@ -316,7 +316,7 @@ dangerous routine RoamController[T].guard_exit()
 
 ### Returns a non-owning pointer to the managed entity.
 ### :returns: The resulting `Hijacked[T]` value.
-dangerous routine RoamController[T].data_ptr() -> Hijacked[T]
+routine RoamController[T].data_ptr() -> Hijacked[T]
   return me.data
 
 ### Destroys the managed entity. Call only when the strong count reaches zero.
