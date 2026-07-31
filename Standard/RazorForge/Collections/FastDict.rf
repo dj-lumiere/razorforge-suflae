@@ -46,7 +46,7 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Set[K]} for key-only storage with the same hash table design.
 ### :see: {SortedDict[K, V]} for sorted key-value storage.
 ### :see: {Dict[K, V]} for the safe-by-default counterpart used with untrusted input.
-entity FastDict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable
+entity FastDict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable, Container
 needs K obeys FastHashable, Equatable
 relates FastDictEmittable[K, V] as Iter
 relates K as Key

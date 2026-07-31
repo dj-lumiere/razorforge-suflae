@@ -45,7 +45,7 @@ needs T obeys Comparable
 ### :typeparam T: The stored element type. Must obey {Comparable}.
 ### :see: {SortedSet[T]} for a duplicate-free sorted collection.
 ### :see: {SortedDict[K, V]} for sorted key-value storage.
-entity SortedList[T] obeys Iterable[T]
+entity SortedList[T] obeys Iterable[T], Container
 needs T obeys Comparable
 relates SortedListEmittable[T] as Iter
   secret root: Hijacked[BTreeListNode[T]]?

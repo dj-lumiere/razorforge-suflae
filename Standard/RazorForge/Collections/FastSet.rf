@@ -44,7 +44,7 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Dict[K, V]} for key-value storage with the same hash table design.
 ### :see: {SortedSet[T]} for a sorted, duplicate-free collection.
 ### :see: {Set[T]} for the safe-by-default counterpart used with untrusted input.
-entity FastSet[T] obeys Iterable[T]
+entity FastSet[T] obeys Iterable[T], Container
 needs T obeys FastHashable, Equatable
 relates FastSetEmittable[T] as Iter
   secret ctrl: Hijacked[U8]

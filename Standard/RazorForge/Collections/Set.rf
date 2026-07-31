@@ -34,7 +34,7 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### :typeparam T: The element type. Must obey {Hashable} and {Equatable}.
 ### :see: {FastSet[T]} for an unkeyed faster variant when keys are fully trusted.
 ### :see: {Dict[K, V]} for the dictionary counterpart.
-entity Set[T] obeys Iterable[T]
+entity Set[T] obeys Iterable[T], Container
 needs T obeys Hashable, Equatable
 relates SetEmittable[T] as Iter
   secret ctrl: Hijacked[U8]

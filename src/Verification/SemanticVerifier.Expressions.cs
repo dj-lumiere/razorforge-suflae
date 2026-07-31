@@ -468,17 +468,20 @@ public sealed partial class SemanticVerifier
             // the wrong signature is correctly rejected. Only Record/Entity types are checked (that is
             // where ImplementsProtocol resolves structurally); tuples/numerically-intrinsic and generic
             // parameters (conformance via `needs` constraints, checked at instantiation) are deferred.
-            // Scope: enforce for VALUE-PRODUCING operators (arithmetic/bitwise/shift) where a
-            // coincidental same-named method with the wrong shape would silently MIS-BIND (the
-            // `set + x` → `Set.add` hazard). Comparison (`==`/`<`/…) and membership (`in`) are excluded:
-            // they often rely on built-in/element-wise semantics with no conforming method, and a
-            // mis-bind there is far less harmful, so requiring their protocols would be over-strict.
-            if (!IsComparisonOperator(op: binary.Operator)
-                && binary.Operator is not (BinaryOperator.In or BinaryOperator.NotIn)
-                && leftType is RecordTypeInfo or EntityTypeInfo
+            // An overloadable operator binds ONLY to a type that satisfies the operator's protocol —
+            // never to a coincidental same-named method with the wrong shape (`set + x` must NOT lower
+            // to `Set.add`). Conformance is STRUCTURAL (ImplementsProtocol checks the required method
+            // signatures), so a type need not spell `obeys` to use `==`/`in`/`+`, but a wrong-signature
+            // name is rejected. Only Record/Entity types are checked (where ImplementsProtocol resolves
+            // structurally); built-in structural types (tuples) and generic parameters (conformance via
+            // `needs` constraints, checked at instantiation) are deferred. Membership operators
+            // (`in`/`notin`) reverse to `rhs.contains(lhs)`, so the RIGHT operand is the receiver.
+            bool operatorIsReversed = binary.Operator is BinaryOperator.In or BinaryOperator.NotIn;
+            TypeSymbol operatorReceiverType = operatorIsReversed ? rightType : leftType;
+            if (operatorReceiverType is RecordTypeInfo or EntityTypeInfo
                 && GetRequiredProtocols(wiredName: operatorMethod) is { Count: > 0 } requiredProtocols
                 && !requiredProtocols.Any(predicate: p =>
-                    ImplementsProtocol(type: leftType, protocolName: p)))
+                    ImplementsProtocol(type: operatorReceiverType, protocolName: p)))
             {
                 string protoText = requiredProtocols.Count == 1
                     ? $"'{requiredProtocols[0]}'"
@@ -487,7 +490,7 @@ public sealed partial class SemanticVerifier
                 ReportError(code: SemanticDiagnosticCode.BinaryOperatorNotFound,
                     message:
                     $"Operator '{binary.Operator.ToStringRepresentation()}' is not defined for " +
-                    $"'{leftType.Name}': the type must obey {protoText}.",
+                    $"'{operatorReceiverType.Name}': the type must obey {protoText}.",
                     location: binary.Location);
                 return ErrorTypeInfo.Instance;
             }

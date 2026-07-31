@@ -15,7 +15,7 @@ import BuilderService
 ### buffer + controller. When `ctrl` is null (`hijacked_none[...]()`), the
 ### value represents an empty or static-literal sequence and `store`/`destroy`
 ### are no-ops.
-record Bytes obeys Copyable, Iterable[Byte]
+record Bytes obeys Copyable, Iterable[Byte], Equatable
   ### Raw buffer of byte values.
   secret data: Hijacked[Byte]
   ### Number of bytes in the buffer.
