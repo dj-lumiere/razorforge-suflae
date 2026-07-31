@@ -124,7 +124,7 @@ public class IndexExpectedTypeTests
         if (node == null) return;
         if (node is IndexExpression ix) sink.Add(item: ix);
 
-        System.Type t = node.GetType();
+        Type t = node.GetType();
         if (t.IsPrimitive || node is string || t.IsEnum) return;
 
         foreach (System.Reflection.PropertyInfo prop in t.GetProperties())
@@ -135,7 +135,7 @@ public class IndexExpectedTypeTests
             catch { continue; }
             if (value == null) continue;
 
-            if (value is Expression || value is Statement || value is Declaration)
+            if (value is Expression or Statement or Declaration)
             {
                 Collect(node: value, sink: sink);
             }

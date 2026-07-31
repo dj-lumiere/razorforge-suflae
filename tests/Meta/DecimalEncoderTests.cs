@@ -58,7 +58,7 @@ public sealed class DecimalEncoderTests
     public void EncodeDecimal_OverflowThrows()
     {
         // q max is 1572795; 1e1572800 (coeff 1, exp 1572800) exceeds it -> overflow -> throw.
-        Assert.Throws<System.OverflowException>(() => NumericLiteralParser.EncodeDecimal("1e1572900"));
+        Assert.Throws<OverflowException>(() => NumericLiteralParser.EncodeDecimal("1e1572900"));
     }
 
     private static void ParseRational(string s, out BigInteger num, out BigInteger den)
