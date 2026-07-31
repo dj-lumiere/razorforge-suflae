@@ -4,8 +4,14 @@ The channels release. v0.2.0 shipped the execution model — coroutines, threads
 `Agent[T]` handle over both. v0.3.0 adds the communication layer that was promised next: **typed
 channels** for streaming values between concurrent work, a **`SignalCaster`** condition-variable monitor
 for hand-built coordination, and an **M:N work-stealing scheduler** so coroutines actually run in
-parallel across cores. Failure stays marked (`!`) and ownership transfer stays marked (`steal`) all the
-way through the new surface.
+parallel across cores.
+
+It also carries a **ceremony pass** over the language. A marker earns its keystrokes only when the
+danger it guards is *silent* — so ownership transfer stays marked (`steal`, or your variable vanishes
+under you) and memory-unsafety stays marked (`dangerous`, narrowed this release to only the ops that can
+actually corrupt memory or race). Markers that merely restated something already *loud* or *derivable*
+are gone: the failable `!` is now optional (a failure crashes with a message on its own), the wired `$`
+sigil is removed, and the redundant `isonly` flags operator is dropped.
 
 ## 📡 Channels
 
@@ -17,7 +23,7 @@ Typed streaming conduits between producers and consumers — the piece v0.2.0 ex
 - **`Receiver[T]`** — a single-consumer receiver, directly **iterable** (`obeys Iterable[T]`).
 - **`SharedReceiver[T]`** — a multi-consumer (MPMC) receiver for worker-pool patterns, also iterable
   and cloneable.
-- **`ChannelDrain[T]`** — the emittable iterator (`$emit!`) that iteration drains a receiver through.
+- **`ChannelDrain[T]`** — the emittable iterator (`emit`) that iteration drains a receiver through.
 - **Factories:** `make_channel[T](capacity:) -> (Sender, Receiver)` and
   `make_shared_channel[T](capacity:) -> (Sender, SharedReceiver)`.
 - **`send!` is failable** — a closed channel is a marked failure you handle with `when` / `try_`, never
@@ -58,6 +64,28 @@ to share across the boundary (RF-S632). A bare, single-owner entity may cross on
 `steal` (the move is provably exclusive); shared-ownership handles must cross as `Shared`/`Watched`.
 Single-thread tokens are rejected at the boundary rather than racing at runtime.
 
+## ✍️ Less ceremony
+
+The language cleanup that ships alongside channels — same programs, fewer required sigils.
+
+- **Constructors read as the type.** `routine T(from: X)` replaces `routine T.create(...)`; you write
+  `Point(x: 1, y: 2)` / `S64(from: n)` and the definition site matches the call site. The internal
+  `create` name is gone from the surface.
+- **The failable `!` is optional.** A routine's failability is inferred from its body (`throw` /
+  `absent`), and a bare call to a failable routine propagates the crash on its own — no more threading
+  `!` through every declaration and call site just to restate that a failure is possible. `!` still
+  reads fine where you want it explicit (`send!`, `retrieve!`), and *recovery* is unchanged: the
+  generated `try_` → `Maybe[T]`, `check_` → `Result[T]`, and `lookup_` → `Lookup[T]` variants plus
+  `when` are how you handle a failure instead of crashing.
+- **The wired `$` sigil is removed.** Operator hooks and lifecycle methods are plain names (`add`, `eq`,
+  `iter`, `destroy`, …); a method's wired-ness is inferred from the protocol its owner obeys, and
+  `a + b` now requires the type to actually implement the operator's protocol (a missing hook is a
+  compile error, not a codegen surprise).
+- **`dangerous` narrowed.** The unsafe gate now sits only on operations that genuinely deref raw
+  pointers, hand-manage memory (`destroy`), or touch concurrency-fatal primitives — not on every
+  token-passing container routine. `danger` is also a plain keyword now (was `danger!`).
+- **`flags isonly X` → `flags == X`.** One redundant keyword removed; the codegen was already identical.
+
 ## 🩹 Runtime stability
 
 - **Per-thread coroutine context on the M:N pool.** The stackful-coroutine backend's active-context
@@ -66,10 +94,10 @@ Single-thread tokens are rejected at the boundary rather than racing at runtime.
 
 ## ✅ Tests
 
-Full stdlib end-to-end suite green — **163 fixtures**, including the new `channel_*` (backpressure,
+Full stdlib end-to-end suite green — **162 fixtures**, including the `channel_*` (backpressure,
 fan-in, rendezvous, try-feed, worker-pool, introspection), `signalcaster_*` (predicate, timeout), and
 `coro_*` scheduler fixtures (migration, parallel, work-steal) — alongside the analyzer and unit suites
-(1,642 tests total). CI green on Linux, macOS, and Windows.
+(**1,475 tests total**). CI green on Linux, macOS, and Windows.
 
 ## ⚠️ Not yet
 
