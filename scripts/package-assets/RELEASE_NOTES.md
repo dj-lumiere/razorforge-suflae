@@ -1,74 +1,78 @@
-# RazorForge v0.2.0
+# RazorForge v0.3.0
 
-The concurrency release. RazorForge gains a full asynchronous execution model — stackful coroutines, a
-cooperative scheduler, OS threads, and a single owned handle that unifies both — plus structured
-concurrency, subprocess orchestration, and async file I/O. The design goal throughout: concurrency you
-write as straight-line code, with ownership and failure stayed explicit.
+The channels release. v0.2.0 shipped the execution model — coroutines, threads, and a single owned
+`Agent[T]` handle over both. v0.3.0 adds the communication layer that was promised next: **typed
+channels** for streaming values between concurrent work, a **`SignalCaster`** condition-variable monitor
+for hand-built coordination, and an **M:N work-stealing scheduler** so coroutines actually run in
+parallel across cores. Failure stays marked (`!`) and ownership transfer stays marked (`steal`) all the
+way through the new surface.
 
-## 🧵 Concurrency model
+## 📡 Channels
 
-- **`suspended routine` and `threaded routine`.** Calling one *starts* the work and hands back an
-  owned **`Agent[T]`** — no `spawn` keyword, the call is the spawn. A `suspended` routine runs as a
-  stackful coroutine on this thread's implicit scheduler; a `threaded` routine runs on an OS thread.
-  One handle type backs both, so a mixed set can be awaited together.
-- **`agent.retrieve!()` — uncolored await.** Drives the work and returns its value. Inside a
-  scheduler-driven coroutine it *parks* (siblings keep running); on a plain thread it blocks. No
-  function coloring: the same call site works in either context.
-- **`waitfor(duration)`** — uncolored timed wait (parks under the scheduler, sleeps on a thread), and
-  **`agent.waitfor(d).retrieve!()`** for a per-agent timeout.
-- **Drop = abandon.** An un-retrieved `Agent` that goes out of scope is cleanly torn down: a parked
-  coroutine unwinds its cancellation shadow stack; a running worker thread is joined then discarded.
+Typed streaming conduits between producers and consumers — the piece v0.2.0 explicitly deferred.
 
-## 🪢 Structured concurrency
+- **`Sender[T]`** — the producer end; **cloneable** (`sender.clone()`), so many producers can feed one
+  channel (fan-in via `steal sender.clone()`). Send with `send!(item:)`; `close()` / `is_closed()`
+  manage the lifecycle.
+- **`Receiver[T]`** — a single-consumer receiver, directly **iterable** (`obeys Iterable[T]`).
+- **`SharedReceiver[T]`** — a multi-consumer (MPMC) receiver for worker-pool patterns, also iterable
+  and cloneable.
+- **`ChannelDrain[T]`** — the emittable iterator (`$emit!`) that iteration drains a receiver through.
+- **Factories:** `make_channel[T](capacity:) -> (Sender, Receiver)` and
+  `make_shared_channel[T](capacity:) -> (Sender, SharedReceiver)`.
+- **`send!` is failable** — a closed channel is a marked failure you handle with `when` / `try_`, never
+  a silent drop. Bounded capacity gives natural backpressure: a full channel parks the producing
+  coroutine (or blocks the producing thread) until a consumer makes room.
 
-A `List[Agent[T]]` *is* the scope — its ownership already guarantees no child outlives it. The scope
-operations are member routines on that list:
+## 📶 SignalCaster
 
-- **`agents.gather!()`** — drive all concurrently, return every result in input order, fail-fast.
-- **`agents.race!()`** — drive all, return the first finisher's value; losers are abandoned.
-- **`agents.cancel_all!()`** — request cooperative cancellation of every agent, then wait out the
-  wind-down. Cancellation is request-only and never frees (teardown stays at scope exit); an agent
-  observes it via `cancellation_requested()` (the only way to halt a worker thread, which cannot be
-  killed) or via an interruptible `waitfor`.
+A condition-variable monitor with its own internal mutex, for coordination patterns channels don't cover.
 
-## ⚙️ Runtime
+- **`lock` / `unlock` / `wait` / `wait_within(deadline)` / `cast_one` / `cast_all` / `clone`.**
+- **`wait` is uncolored** — a coroutine parks, a thread blocks, same call site (the same contract as
+  `retrieve!` and `waitfor`). `wait_within` adds a timed variant.
+- Predicate-style waits and timeouts are covered end-to-end.
 
-- **Stackful coroutines** backed by native fibers on Windows (`CreateFiberEx`) and libco elsewhere, so
-  a coroutine can suspend from any call depth — including deep C-runtime calls like `fopen`.
-- **Cooperative scheduler** (ready FIFO + timer list) with **cross-thread wake**, the bridge that lets
-  a coroutine await a worker thread without blocking and lets parked work resume from any thread.
-- **Demand-committed coroutine stacks** — reserve large, commit on touch — so very many coroutines
-  coexist (≈14 KB resident per live coroutine, not 1 MiB); allocation failure raises a diagnosed
-  `OutOfMemoryError` instead of crashing.
+## ⚙️ M:N work-stealing scheduler
 
-## 🔌 Subprocess & async I/O
+The v0.2.0 scheduler was a per-thread, caller-driven event loop — a coroutine only advanced while its
+owning thread was inside an await. v0.3.0 replaces it with a **process-global pool of N daemon worker
+threads** (N = host cores by default) with **per-worker work-stealing**, so independent coroutines make
+progress on multiple cores at once.
 
-- **`run_process(command) -> ProcessResult`** — run an external program (shell), capturing stdout,
-  stderr, exit code, and signal, while parking the calling coroutine. Orchestrate programs
-  concurrently with `gather!`.
-- **Uncolored file I/O** — `read_text(path)` and `write_text(path, content)` carry no `_async`
-  variant and no function color. Inside a `suspended routine` the calling coroutine *parks* while a
-  vendored libuv loop on its own thread does the blocking transfer (siblings keep progressing);
-  outside one it runs inline. Same call site, either context — the same contract as `retrieve!` and
-  `waitfor`. For whole-file work prefer these to opening a `FileHandle` and calling the blocking
-  `read_all` inside a coroutine.
+- **Per-worker local deques** (owner pushes/pops one end, idle workers steal from the other) plus a
+  shared injector queue for off-pool spawns and wakes.
+- **`RF_WORKERS`** environment knob pins the worker count (`RF_WORKERS=1` for deterministic,
+  single-worker execution); otherwise it tracks host cores.
+- A **worker-safe park/wake state machine** keeps a wake that races a park from ever resuming a
+  coroutine on two workers at once, and the deadlock detector is N-aware — it only flags a genuine
+  stall once *every* worker is idle with work outstanding.
+- Coroutines may **migrate** between workers across a park; single-thread-only access tokens
+  (`Viewing`/`Modifying`) and bare entities are held to their thread, while the thread-shareable set
+  (`Atomic`/`Shared`/`Watched`/`Inspecting`/`Claiming`) may cross.
 
-## 🛠️ Language & compiler
+## 🛡️ Thread-crossing soundness
 
-- **Member routines on specialized generic receivers** — e.g. `routine List[Agent[V]].gather!()`,
-  where `me` is typed as the specialized receiver. This is what lets the structured-concurrency
-  operations live directly on `List[Agent[T]]`.
-- **Named-argument evaluation order fixed** — named arguments are bound to parameters by name (not
-  source order) across every call path; order-independent named calls now evaluate and bind correctly.
+Passing a value into a `threaded` or `suspended` routine now **checks at compile time** that it is safe
+to share across the boundary (RF-S632). A bare, single-owner entity may cross only when moved with
+`steal` (the move is provably exclusive); shared-ownership handles must cross as `Shared`/`Watched`.
+Single-thread tokens are rejected at the boundary rather than racing at runtime.
 
-## ⚠️ Not yet
+## 🩹 Runtime stability
 
-Honesty about scope: **channels** (typed streaming conduits) are designed but land in **v0.3.0**, and
-**async networking** is not yet implemented. v0.2.0 is the execution model; streaming/communication
-come next.
+- **Per-thread coroutine context on the M:N pool.** The stackful-coroutine backend's active-context
+  pointer is now correctly thread-local under the multi-worker scheduler, fixing an intermittent
+  crash that surfaced only once coroutines ran on more than one worker thread.
 
 ## ✅ Tests
 
-Full stdlib end-to-end suite green — 146 fixtures across coroutines, threads, `Agent`/`race!`/
-`gather!`/`cancel_all!`, subprocess, and async I/O — alongside the analyzer and unit suites (1615
-tests total). CI green on Linux, macOS, and Windows.
+Full stdlib end-to-end suite green — **163 fixtures**, including the new `channel_*` (backpressure,
+fan-in, rendezvous, try-feed, worker-pool, introspection), `signalcaster_*` (predicate, timeout), and
+`coro_*` scheduler fixtures (migration, parallel, work-steal) — alongside the analyzer and unit suites
+(1,642 tests total). CI green on Linux, macOS, and Windows.
+
+## ⚠️ Not yet
+
+**Async networking** is still not implemented (async file I/O and subprocess orchestration from v0.2.0
+remain the async I/O surface). The **Suflae** sister language is in progress and not part of this
+release.

@@ -150,6 +150,9 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
     { Visit(e: node.Object); VisitAll(xs: node.Arguments); return false; }
     public bool VisitGenericMemberExpression(GenericMemberExpression node)
     { Visit(e: node.Object); return false; }
+    public bool VisitBracketAccessExpression(BracketAccessExpression node) =>
+        throw new System.InvalidOperationException(
+            "BracketAccessExpression must be lowered by BracketReclassifyPass before analysis.");
     public bool VisitCarrierPayloadExpression(CarrierPayloadExpression node)
     { Visit(e: node.Carrier); return false; }
     public bool VisitIsPatternExpression(IsPatternExpression node)

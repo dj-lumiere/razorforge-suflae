@@ -19,46 +19,57 @@ public partial class Parser
         while (true)
         {
             // ===============================================================================
-            // CASE 1: Generic function call - func[T]() or func![T]()
+            // CASE 1: Uniform bracket access - expr[...], expr[...](...), expr![...](...)
             // ===============================================================================
-            // The ! must come BEFORE [ if present: func![T]() not func[T]!()
-            // IsLikelyGenericAfterIdentifier() checks bracket content and what follows ]
-            // to distinguish generic args from index/slice (e.g. list[5], list[0 to 5])
-            if (expr is IdentifierExpression expression && IsLikelyGenericAfterIdentifier())
+            // The parser NO LONGER decides whether the brackets are a generic type-argument
+            // list or a value index. It parses the bracket contents uniformly as expressions
+            // and emits a BracketAccessExpression; the BracketReclassifyPass (run before the
+            // main semantic resolve) rewrites this into an IndexExpression /
+            // GenericMethodCallExpression / GenericMemberExpression.
+            //
+            // A failable `!` may precede the brackets (func![T](x)); it is recorded as
+            // BracketAccessExpression.IsFailable, never baked into a name.
+            if (Check(type: TokenType.LeftBracket) ||
+                (Check(type: TokenType.Bang) && PeekToken(offset: 1).Type == TokenType.LeftBracket))
             {
-                // Check for failable marker ! before generic parameters: func![T]
-                bool isMemoryOperation = Match(type: TokenType.Bang);
+                bool isFailable = Match(type: TokenType.Bang);
 
                 Advance(); // consume '['
-                var typeArgs = new List<TypeExpression>();
+                var bracketArgs = new List<Expression>();
                 do
                 {
-                    typeArgs.Add(item: ParseTypeOrConstGeneric());
+                    bracketArgs.Add(item: ParseBracketArg());
                 } while (Match(type: TokenType.Comma));
 
                 Consume(type: TokenType.RightBracket,
-                    errorMessage: "Expected ']' after generic type arguments");
+                    errorMessage: "Expected ']' after bracket contents");
 
+                List<Expression>? callArgs = null;
                 if (Match(type: TokenType.LeftParen))
                 {
-                    List<Expression> args = ParseArgumentList();
+                    callArgs = ParseArgumentList();
                     Consume(type: TokenType.RightParen,
                         errorMessage: ExpectedRightParenAfterArguments);
+                }
 
-                    expr = new GenericMethodCallExpression(Object: expression,
-                        MethodName: expression.Name,
-                        TypeArguments: typeArgs,
-                        Arguments: args,
-                        IsMemoryOperation: isMemoryOperation,
-                        Location: expression.Location);
-                }
-                else
+                // Slice syntax (xs[a to b]) remains unsupported for the single-arg no-call
+                // subscript form (an index).
+                if (callArgs is null && !isFailable && bracketArgs.Count == 1 &&
+                    bracketArgs[index: 0] is RangeExpression)
                 {
-                    expr = new GenericMemberExpression(Object: expr,
-                        MemberName: ((IdentifierExpression)expr).Name,
-                        TypeArguments: typeArgs,
-                        Location: expr.Location);
+                    throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                        message: "Slice syntax 'xs[a to b]' is not supported.",
+                        fileName: FileName,
+                        line: CurrentToken.Line,
+                        column: CurrentToken.Column,
+                        language: _language);
                 }
+
+                var bracketNode = new BracketAccessExpression(Object: expr,
+                    Args: bracketArgs,
+                    CallArgs: callArgs,
+                    Location: expr.Location) { IsFailable = isFailable };
+                expr = BracketReclassifyPass.Reclassify(node: bracketNode);
             }
             // Throwable function call: identifier!(args) with named arguments
             else if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
@@ -94,23 +105,6 @@ public partial class Parser
                     errorMessage: ExpectedRightParenAfterArguments);
                 expr = new CallExpression(Callee: expr, Arguments: args, Location: expr.Location);
             }
-            else if (Match(type: TokenType.LeftBracket))
-            {
-                Expression index = ParseExpression();
-                Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after index");
-
-                if (index is RangeExpression)
-                {
-                    throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
-                        message: "Slice syntax 'xs[a to b]' is not supported.",
-                        fileName: FileName,
-                        line: CurrentToken.Line,
-                        column: CurrentToken.Column,
-                        language: _language);
-                }
-
-                expr = new IndexExpression(Object: expr, Index: index, Location: expr.Location);
-            }
             else if (Match(type: TokenType.QuestionDot))
             {
                 // Optional chaining: obj?.member
@@ -139,51 +133,44 @@ public partial class Parser
                 string member = CurrentToken.Text;
                 Advance();
 
-                // Check for failable marker ! before generic parameters: obj.method![T]
-                bool isGenericMemOp = false;
-                if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
-                       .Type == TokenType.LeftBracket)
+                // Generic member access / call: obj.method[T](...) or obj.method![T](...).
+                // Parsed uniformly (no generic-vs-index decision): the `.method` folds into a
+                // MemberExpression and the brackets attach as a BracketAccessExpression whose
+                // Object is that MemberExpression. BracketReclassifyPass rewrites this into a
+                // GenericMethodCallExpression / GenericMemberExpression. A `!` before the
+                // brackets is the memory-op marker, recorded as BracketAccessExpression.IsFailable.
+                if ((Check(type: TokenType.Bang) && PeekToken(offset: 1)
+                        .Type == TokenType.LeftBracket) ||
+                    Check(type: TokenType.LeftBracket))
                 {
-                    isGenericMemOp = true;
-                    Match(type: TokenType.Bang);
-                }
+                    bool isGenericMemOp = Match(type: TokenType.Bang);
 
-                // Check for generic method call with type parameters
-                // Disambiguate by checking bracket content (must look like type args)
-                // and what follows ] (must be ( or .)
-                if (Check(type: TokenType.LeftBracket) &&
-                    (isGenericMemOp || IsLikelyGenericAfterIdentifier()))
-                {
                     Advance(); // consume '['
-                    var typeArgs = new List<TypeExpression>();
+                    var bracketArgs = new List<Expression>();
                     do
                     {
-                        typeArgs.Add(item: ParseType());
+                        bracketArgs.Add(item: ParseBracketArg());
                     } while (Match(type: TokenType.Comma));
 
                     Consume(type: TokenType.RightBracket,
-                        errorMessage: "Expected ']' after generic type arguments");
+                        errorMessage: "Expected ']' after bracket contents");
 
+                    List<Expression>? callArgs = null;
                     if (Match(type: TokenType.LeftParen))
                     {
-                        List<Expression> genericArgs = ParseArgumentList();
+                        callArgs = ParseArgumentList();
                         Consume(type: TokenType.RightParen,
                             errorMessage: ExpectedRightParenAfterArguments);
+                    }
 
-                        expr = new GenericMethodCallExpression(Object: expr,
-                            MethodName: member,
-                            TypeArguments: typeArgs,
-                            Arguments: genericArgs,
-                            IsMemoryOperation: isGenericMemOp,
-                            Location: expr.Location);
-                    }
-                    else
-                    {
-                        expr = new GenericMemberExpression(Object: expr,
-                            MemberName: member,
-                            TypeArguments: typeArgs,
-                            Location: expr.Location);
-                    }
+                    Expression memberObj = new MemberExpression(Object: expr,
+                        MemberName: member,
+                        Location: expr.Location);
+                    var bracketNode = new BracketAccessExpression(Object: memberObj,
+                        Args: bracketArgs,
+                        CallArgs: callArgs,
+                        Location: expr.Location) { IsFailable = isGenericMemOp };
+                    expr = BracketReclassifyPass.Reclassify(node: bracketNode);
 
                     continue;
                 }

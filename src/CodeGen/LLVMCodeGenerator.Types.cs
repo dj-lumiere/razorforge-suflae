@@ -813,13 +813,9 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string GetMemberRoutineLookupName(RoutineInfo routine)
     {
-        string name = !string.IsNullOrEmpty(routine.BaseName)
-            ? routine.BaseName
-            : routine.Name;
-        int dotIndex = name.LastIndexOf('.');
-        return dotIndex >= 0 && dotIndex + 1 < name.Length
-            ? name[(dotIndex + 1)..]
-            : name;
+        // The bare method name is already the structured RoutineInfo.Name; BaseName is
+        // "Owner.name" (or "Module.name"), so its last dot-segment is exactly Name.
+        return routine.Name;
     }
 
     /// <summary>

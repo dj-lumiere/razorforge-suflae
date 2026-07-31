@@ -224,6 +224,52 @@ public partial class Parser
     }
 
     /// <summary>
+    /// Parses a single bracket argument uniformly as an expression, for the parser's
+    /// classification-free <see cref="SyntaxTree.BracketAccessExpression"/>.
+    /// <see cref="BracketReclassifyPass"/> later decides whether the whole bracket is a generic
+    /// type-argument list or a value index and, in the generic case, converts each argument to a
+    /// <see cref="TypeExpression"/> via <c>ExpressionToTypeArg</c>.
+    /// </summary>
+    /// <remarks>
+    /// The one grammar gap between "expression" and "type argument" is the self-TYPE token
+    /// <c>Me</c> (<see cref="TokenType.MyType"/>, and its projections <c>Me/Iter</c>), which is not
+    /// a valid expression primary. Those are handled here by materializing <c>Me</c>/<c>Me/Iter</c>
+    /// as an identifier / <c>/</c>-chain expression — structurally identical to how <c>S/Iter</c>
+    /// parses — so the reclassifier's <c>ExpressionToTypeArg</c> flattens both uniformly. Note this
+    /// is the capitalized self-TYPE only; the lowercase <c>me</c> receiver
+    /// (<see cref="TokenType.Me"/>) is a normal expression and is NOT intercepted here (so
+    /// <c>me.list[me.index]</c> parses its inner <c>me.index</c> as an ordinary member access).
+    /// Everything else (<c>S64</c>, <c>i+1</c>, <c>4</c>, <c>List[S64]</c>, <c>S/Iter</c>) is a
+    /// plain expression.
+    /// </remarks>
+    private Expression ParseBracketArg()
+    {
+        if (Check(type: TokenType.MyType))
+        {
+            SourceLocation location = GetLocation();
+            string headText = CurrentToken.Text;
+            Advance(); // consume Me / MyType
+            Expression head = new IdentifierExpression(Name: headText, Location: location);
+
+            // Projection chain: Me/Iter, Me/Iter/Inner — modeled as a left-nested `/` chain,
+            // matching the shape ordinary `S/Iter` produces from expression parsing.
+            while (Match(type: TokenType.Slash))
+            {
+                string seg = ConsumeIdentifier(
+                    errorMessage: "Expected associated-type name after '/' in projection");
+                head = new BinaryExpression(Left: head,
+                    Operator: BinaryOperator.TrueDivide,
+                    Right: new IdentifierExpression(Name: seg, Location: location),
+                    Location: location);
+            }
+
+            return head;
+        }
+
+        return ParseExpression();
+    }
+
+    /// <summary>
     /// Parses generic parameters with optional inline constraints like [T obeys Integral].
     /// Returns both the parameter names and any inline constraints found.
     /// </summary>

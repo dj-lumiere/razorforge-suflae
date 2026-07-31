@@ -170,15 +170,6 @@ public sealed partial class SemanticVerifier
     internal string UnknownTypeSuggestion(string typeName) =>
         DidYouMean(target: typeName, candidates: TypeSuggestionCandidates());
 
-    /// <summary>Strips owner qualification, returning the bare member name. Wired ($) routines are
-    /// filtered out by the caller via <see cref="RoutineInfo.IsWiredMemberRoutine"/> (the `$` is a
-    /// structured attribute, never part of the routine name).</summary>
-    private static string CleanMemberName(string name)
-    {
-        int lastDot = name.LastIndexOf(value: '.');
-        return lastDot >= 0 ? name[(lastDot + 1)..] : name;
-    }
-
     /// <summary>
     /// Member names (non-wired methods + member variables) of the receiver type for
     /// member-not-found suggestions. Walks ALL registered routines matched by owner —
@@ -205,7 +196,7 @@ public sealed partial class SemanticVerifier
         foreach (RoutineInfo method in _registry.GetMethodsForType(type: type))
         {
             if (method.IsWiredMemberRoutine) continue;
-            string methodName = CleanMemberName(name: method.Name);
+            string methodName = method.Name;
             if (methodName.Length > 0 && seen.Add(item: methodName))
             {
                 yield return methodName;
@@ -217,7 +208,7 @@ public sealed partial class SemanticVerifier
             foreach (RoutineInfo method in _registry.GetMethodsForType(type: genericDef))
             {
                 if (method.IsWiredMemberRoutine) continue;
-                string methodName = CleanMemberName(name: method.Name);
+                string methodName = method.Name;
                 if (methodName.Length > 0 && seen.Add(item: methodName))
                 {
                     yield return methodName;
@@ -246,7 +237,7 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
-            string name = CleanMemberName(name: routine.Name);
+            string name = routine.Name;
             if (name.Length > 0 && seen.Add(item: name))
             {
                 yield return name;

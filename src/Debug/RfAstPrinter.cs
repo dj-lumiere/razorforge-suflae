@@ -495,6 +495,17 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         return $"{node.Object.Accept(this)}.{node.MemberName}{typeArgs}";
     }
 
+    /// <inheritdoc/>
+    public string VisitBracketAccessExpression(BracketAccessExpression node)
+    {
+        string bang = node.IsFailable ? "!" : "";
+        string args = string.Join(", ", node.Args.Select(a => a.Accept(this)));
+        string call = node.CallArgs is null
+            ? ""
+            : $"({string.Join(", ", node.CallArgs.Select(a => a.Accept(this)))})";
+        return $"{node.Object.Accept(this)}{bang}[{args}]{call}";
+    }
+
 
     /// <inheritdoc/>
     public string VisitFlagsTestExpression(FlagsTestExpression node)

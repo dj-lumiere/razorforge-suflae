@@ -960,6 +960,39 @@ public record GenericMemberExpression(
     }
 }
 
+/// <summary>
+/// Unclassified bracket-access expression produced by the parser for any <c>expr[...]</c>,
+/// <c>expr[...](...)</c>, or <c>expr![...](...)</c> form. The parser does NOT decide whether the
+/// brackets are a generic type-argument list or a value index — it parses the bracket contents
+/// uniformly as expressions and the <c>BracketReclassifyPass</c>
+/// reclassifies every such node into an existing <see cref="IndexExpression"/>,
+/// <see cref="GenericMethodCallExpression"/>, or <see cref="GenericMemberExpression"/> before the
+/// main semantic resolve runs. No downstream consumer should ever observe this node.
+/// </summary>
+/// <param name="Object">Expression the brackets apply to (identifier, member access, etc.).</param>
+/// <param name="Args">Bracket contents parsed as expressions (one per comma-separated entry).</param>
+/// <param name="CallArgs">Trailing <c>(...)</c> call arguments, or null when there is no call.</param>
+/// <param name="Location">Source location information.</param>
+public record BracketAccessExpression(
+    Expression Object,
+    List<Expression> Args,
+    List<Expression>? CallArgs,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    /// <summary>
+    /// True when the failable <c>!</c> marker preceded the brackets or the call parens
+    /// (e.g. <c>foo![T](x)</c> / <c>obj.method![T](x)</c>). Maps to
+    /// <see cref="GenericMethodCallExpression.IsMemoryOperation"/> after reclassification.
+    /// </summary>
+    public bool IsFailable { get; init; }
+
+    /// <summary>Accepts a visitor for AST traversal and transformation.</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitBracketAccessExpression(node: this);
+    }
+}
+
 #endregion
 
 #region Carrier Pattern Expressions

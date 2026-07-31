@@ -152,69 +152,6 @@ public partial class Parser
         }
     }
 
-    /// <summary>
-    /// Returns true if the current token sequence looks like generic type arguments
-    /// (i.e., <c>func[T]()</c>, <c>func![T]()</c>, or a generic-type static access
-    /// <c>Type[A, B].method(...)</c>), as opposed to an index expression (<c>arr[0]</c>).
-    /// Disambiguation is structural: the token after the matching <c>]</c> and whether the
-    /// brackets hold a top-level comma — never the meaning of the content inside <c>[...]</c>.
-    /// </summary>
-    private bool IsLikelyGenericAfterIdentifier()
-    {
-        // func![T](...) — failable generic call: ! always means call
-        if (Check(type: TokenType.Bang) && PeekToken(offset: 1).Type == TokenType.LeftBracket)
-        {
-            return true;
-        }
-
-        if (!Check(type: TokenType.LeftBracket))
-        {
-            return false;
-        }
-
-        // Scan forward to find the matching ], noting whether a top-level comma appears inside.
-        int offset = 1;
-        int depth = 1;
-        bool hasTopLevelComma = false;
-        while (depth > 0)
-        {
-            TokenType t = PeekToken(offset: offset).Type;
-            if (t is TokenType.Eof or TokenType.Newline or TokenType.Indent or TokenType.Dedent)
-            {
-                return false;
-            }
-
-            if (t == TokenType.LeftBracket)
-            {
-                depth++;
-            }
-            else if (t == TokenType.RightBracket)
-            {
-                depth--;
-            }
-            else if (t == TokenType.Comma && depth == 1)
-            {
-                hasTopLevelComma = true;
-            }
-
-            offset++;
-        }
-
-        TokenType after = PeekToken(offset: offset).Type;
-
-        // `]` immediately followed by `(` is a generic call: func[T]().
-        if (after == TokenType.LeftParen)
-        {
-            return true;
-        }
-
-        // `]` followed by `.` is a generic-type static access — `Type[A, B].method(...)` — but
-        // only when the brackets hold a top-level comma. Indexing never contains a top-level comma,
-        // so a comma is an unambiguous signal of type arguments; a single subscript followed by
-        // member access (`list[0].name`) has no comma and stays an index expression.
-        return after == TokenType.Dot && hasTopLevelComma;
-    }
-
     #endregion
 
     #region Argument Parsing
