@@ -2,21 +2,31 @@ module Tests/Stdlib/CoroMigrationApi
 
 # v0.3.x M:N scheduler (step 2b) — proves coroutines MIGRATE across the worker pool. A coroutine is no
 # longer pinned to the OS thread that started it: it may park on one worker and resume on another. Each
-# probe records its worker's OS thread id (rf_current_thread_id) BEFORE and AFTER a park; if the two
-# differ, that coroutine ran on two different workers. Across 40 probes parked together on an N-worker
-# pool, at least one is overwhelmingly certain to migrate (the same timing-robustness the race! fixture
-# relies on). The verdict is core-count-ROBUST so the snapshot is stable on any host: a single-worker
-# pool CANNOT migrate (that is correct), and only a multi-worker pool that pins every coroutine to its
-# birth worker — the exact 2b regression — is reported BROKEN.
+# probe records its BIRTH worker's OS thread id (rf_current_thread_id), then repeatedly parks + yields
+# MANY times, checking after each whether it resumed on a different worker; if it EVER did, that
+# coroutine migrated. The many-cycle sweep is what makes the verdict robust to scheduler timing: a
+# single park can, by luck (or under a loaded few-core CI runner), always be picked back up by the birth
+# worker even though migration is fully working — but across 40 probes × dozens of park/yield cycles the
+# work-stealing pool is overwhelmingly certain to move at least one. The verdict stays core-count-ROBUST
+# so the snapshot is stable on any host: a single-worker pool CANNOT migrate (that is correct), and only
+# a multi-worker pool that pins every coroutine to its birth worker — the exact 2b regression — is
+# reported BROKEN.
 
 import IO/Console
 
-# Returns 1 if this coroutine resumed on a different worker than it started on, else 0.
+# Returns 1 if this coroutine EVER resumed on a different worker than it was born on, else 0.
+# Sweeps many park (waitfor) + yield cycles so a working pool reliably migrates it at least once.
 suspended routine probe() -> S64
   var w0 = rf_current_thread_id()
-  waitfor(5ms)                       # park under the pool; some worker picks us back up
-  var w1 = rf_current_thread_id()
-  return if w0 == w1 then 0_s64 else 1_s64
+  var moved = 0_s64
+  var j = 0_s64
+  while j < 64_s64
+    waitfor(1ms)                       # park under the pool; some worker picks us back up
+    yield_now()                        # requeue: another worker may steal us while the birth one is busy
+    if rf_current_thread_id() != w0
+      moved = 1_s64
+    j = j + 1_s64
+  return moved
 
 routine start()
   var workers = rf_sched_worker_count()
