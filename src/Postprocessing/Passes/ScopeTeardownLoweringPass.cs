@@ -241,6 +241,22 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             if (s is DeclarationStatement { Declaration: VariableDeclaration v })
             {
                 stmts.Add(item: s);
+
+                // A `var buf = _lit_N` binding takes over ownership of a hoisted collection-literal
+                // temporary (ExpressionLoweringPass lowers `var buf = []` to
+                // `var _lit_N = List(); _lit_N.add(...); var buf = _lit_N`). `buf` and `_lit_N` alias
+                // the SAME object, so only ONE may be torn down. When this pass runs AFTER that lowering
+                // (stdlib + synthesized variant bodies — user programs are lowered later), both would be
+                // live and BOTH destroyed → double-free. Treat the move as consuming the temp: drop it
+                // from `live` and record it moved so no scope-exit/return teardown frees it.
+                if (v.Initializer is IdentifierExpression { Name: var srcName }
+                    && srcName.StartsWith(value: "_lit_", comparisonType: StringComparison.Ordinal))
+                {
+                    _movedNames.Add(item: srcName);
+                    int srcIdx = live.FindLastIndex(match: o => o.Name == srcName);
+                    if (srcIdx >= 0) live.RemoveAt(index: srcIdx);
+                }
+
                 TypeInfo? t = v.Type?.ResolvedType ?? v.Initializer?.ResolvedType;
                 if (t != null && !_movedNames.Contains(item: v.Name) && !IsUsingBinding(v: v)
                     && !IsViewBinding(v: v)
