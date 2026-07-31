@@ -896,9 +896,21 @@ public sealed partial class SemanticVerifier
         return RuntimeContractCheck.Check(registry: _registry);
     }
 
+    /// <summary>True while <see cref="ValidateStdlibBodies"/> runs its reduced-phase stdlib check, so
+    /// the structural operator-protocol gate (which needs full-pipeline derived operators) is suppressed.</summary>
+    private bool _isReducedStdlibValidation;
+
     public List<SemanticError> ValidateStdlibBodies()
     {
         int errorsBefore = _errors.Count;
+
+        // The operator-protocol conformance gate (AnalyzeBinaryExpression) relies on STRUCTURAL
+        // conformance, whose derived operator methods (e.g. ByteSize's wrapping-multiply) are only
+        // fully materialized by the FULL pipeline — this reduced validation phase runs a trimmed
+        // GenerateDerivedOperators, so structural conformance under-reports and the gate false-fires
+        // on stdlib operators that the full-pipeline StdlibHarness already validates. Suppress the gate
+        // here; it stays active for user code, which is where an operator mis-bind actually matters.
+        _isReducedStdlibValidation = true;
 
         // Run global phases that stdlib body analysis depends on
         // (StdlibLoader registered types and routines, but these phases were not run)

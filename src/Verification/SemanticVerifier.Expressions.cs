@@ -436,7 +436,8 @@ public sealed partial class SemanticVerifier
             // (`in`/`notin`) reverse to `rhs.contains(lhs)`, so the RIGHT operand is the receiver.
             bool operatorIsReversed = binary.Operator is BinaryOperator.In or BinaryOperator.NotIn;
             TypeSymbol operatorReceiverType = operatorIsReversed ? rightType : leftType;
-            if (operatorReceiverType is RecordTypeInfo or EntityTypeInfo
+            if (!_isReducedStdlibValidation
+                && operatorReceiverType is RecordTypeInfo or EntityTypeInfo
                 && GetRequiredProtocols(wiredName: operatorMethod) is { Count: > 0 } requiredProtocols
                 && !requiredProtocols.Any(predicate: p =>
                     ImplementsProtocol(type: operatorReceiverType, protocolName: p)))
