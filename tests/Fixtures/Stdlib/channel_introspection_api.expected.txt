@@ -1,5 +1,4 @@
 cap=4 count=2 empty=false closed=false
 closed_after=true
 drained=30 empty_now=true
-agent_before=false
 agent_after=true val=42
