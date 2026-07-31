@@ -193,6 +193,39 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void ProcessImportDeclaration(ImportDeclaration import)
     {
+        // Prefix/package import: `import A/B` also pulls in every submodule under `A/B` (recursively) —
+        // e.g. `import Tests/Stdlib` imports Tests/Stdlib/AddressApi, .../AgentApi, … at once, instead
+        // of one line per module. Each submodule's leaf becomes callable (leaf-qualified resolution),
+        // with cross-module name clashes disambiguated by a longer namespace prefix (RF-S513). When the
+        // prefix is a leaf module (no submodules), this list is empty and we fall through to the plain
+        // single-module load below.
+        IReadOnlyList<string> submodules = _registry.EnumerateSubmodules(prefix: import.ModulePath);
+        if (submodules.Count > 0)
+        {
+            bool anyLoaded = false;
+            // Load the prefix module itself too if it happens to be a real module (a namespace-only
+            // prefix just fails silently here — the submodules are what matter).
+            foreach (string modulePath in submodules.Prepend(element: import.ModulePath).Distinct())
+            {
+                if (_registry.LoadModule(importPath: modulePath,
+                        currentFile: _currentFilePath,
+                        location: import.Location,
+                        effectiveModule: out string? subEffective))
+                {
+                    anyLoaded = true;
+                    if (subEffective != null) _importedModules.Add(item: subEffective);
+                }
+            }
+
+            if (!anyLoaded)
+            {
+                ReportError(code: SemanticDiagnosticCode.ModuleNotFound,
+                    message: $"Cannot resolve import '{import.ModulePath}'. Module not found.",
+                    location: import.Location);
+            }
+            return;
+        }
+
         // Load the module on-demand
         // This handles both Core modules and non-Core modules (Collections, ErrorHandling, etc.)
         bool success = _registry.LoadModule(importPath: import.ModulePath,

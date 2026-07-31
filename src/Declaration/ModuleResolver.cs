@@ -93,6 +93,28 @@ public sealed class ModuleResolver
     }
 
     /// <summary>
+    /// Enumerates every MODULE registered under the namespace <paramref name="prefix"/> — i.e. every
+    /// module whose declared path is a strict descendant (`prefix/Sub`, `prefix/Sub/Deep`, …). Powers
+    /// the prefix/package import `import A/B`, which pulls in all of `A/B`'s submodules at once. Only
+    /// module keys are returned: symbol keys carry a `.` (`Module.Symbol`) while a module path is pure
+    /// slash-hierarchy, so `!Contains('.')` distinguishes them. Sorted for deterministic load order.
+    /// </summary>
+    public IReadOnlyList<string> EnumerateSubmodulePaths(string prefix)
+    {
+        string p = prefix.Replace(oldChar: '\\', newChar: '/');
+        string needle = p + "/";
+        var result = new List<string>();
+        foreach (string key in _index.Keys)
+        {
+            if (key.Contains(value: '.')) continue; // symbol key, not a module
+            if (key.StartsWith(value: needle, comparisonType: StringComparison.OrdinalIgnoreCase))
+                result.Add(item: key);
+        }
+        result.Sort(comparer: StringComparer.Ordinal);
+        return result;
+    }
+
+    /// <summary>
     /// Resolves an import path to a source file path.
     /// Checks the pre-built AST index first; falls back to filesystem probing for project files.
     /// </summary>

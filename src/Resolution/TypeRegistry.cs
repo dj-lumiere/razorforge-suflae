@@ -380,6 +380,14 @@ public sealed partial class TypeRegistry
     /// <param name="location">Source location for error reporting.</param>
     /// <param name="effectiveModule">The effective module name of the loaded module, or null on failure.</param>
     /// <returns>True if the module was loaded successfully or was already loaded, false on error.</returns>
+    /// <summary>
+    /// Every MODULE registered under the namespace <paramref name="prefix"/> (strict descendants:
+    /// `prefix/Sub`, `prefix/Sub/Deep`, …), for the prefix/package import `import A/B`. Empty when the
+    /// resolver isn't injected or the prefix is a leaf module with no submodules.
+    /// </summary>
+    public IReadOnlyList<string> EnumerateSubmodules(string prefix)
+        => _moduleResolver?.EnumerateSubmodulePaths(prefix: prefix) ?? [];
+
     public bool LoadModule(string importPath, string currentFile, SourceLocation location,
         out string? effectiveModule)
     {

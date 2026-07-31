@@ -278,6 +278,25 @@ public sealed class BuildDriver
                     continue;
                 }
 
+                // Prefix/package import: `import A/B` pulls in every submodule declaring `module A/B/...`
+                // (keyed by DECLARED module path, not directory — a file's path need not mirror its
+                // module). Process each submodule's file into the graph so SA sees them all.
+                IReadOnlyList<string> submodules =
+                    _resolver.EnumerateSubmodulePaths(prefix: import.ModulePath);
+                if (submodules.Count > 0)
+                {
+                    foreach (string submodule in submodules)
+                    {
+                        string? subPath = _resolver.TryResolveImport(importPath: submodule);
+                        if (subPath != null)
+                            ProcessFile(filePath: subPath,
+                                fromFile: filePath,
+                                importLocation: import.Location,
+                                importPathString: submodule);
+                    }
+                    continue;
+                }
+
                 // Truly unresolved — report it (TryResolveImport, unlike ResolveImport, records
                 // no error of its own).
                 _errors.Add(item: new SemanticError(
