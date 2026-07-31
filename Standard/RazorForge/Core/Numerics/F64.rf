@@ -145,13 +145,10 @@ routine F64(from: F32) -> F64
 routine F64(from: F64) -> F64
   return from
 
-### Narrows a quadruple-precision float to double precision.
-### :param from: The `F128` value to convert.
-### :returns: The nearest representable `F64` value.
-routine F64(from: F128) -> F64
-  return from.F64()
+### (`F64(from: F128)` is provided by the quadruple-precision engine — `F128.rf` — which owns
+### the bit-surgery narrowing; a forwarding stub here would recurse into itself.)
 
-### (`F64.create(from: D32)` is provided by the decimal32 engine — `D32Trans.rf`.)
+### (`F64(from: D32)` is provided by the decimal32 engine — `D32Trans.rf`.)
 
 ### Converts a decimal64 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.

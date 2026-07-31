@@ -135,11 +135,8 @@ routine F32(from: F32) -> F32
 routine F32(from: F64) -> F32
   return float_narrow[F64, F32](from)
 
-### Narrows a quadruple-precision float to single precision.
-### :param from: The `F128` value to convert.
-### :returns: The nearest representable `F32` value.
-routine F32(from: F128) -> F32
-  return from.F32()
+### (`F32(from: F128)` is provided by the quadruple-precision engine — `F128.rf` — which owns
+### the bit-surgery narrowing; a forwarding stub here would recurse into itself.)
 
 ### Converts a decimal32 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
