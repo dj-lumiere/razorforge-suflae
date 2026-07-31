@@ -748,6 +748,12 @@ public sealed partial class StdlibLoader
         // directly rather than re-deriving the routine by module-blind name lookup.
         routine.ResolvedInfo = routineInfo;
 
+        // Constructor divergent-duplicate guard: hash the body so RegisterRoutine can distinguish a
+        // benign identical cross-file duplicate creator from a divergent one (see
+        // TypeRegistry.DivergentDuplicateCreators).
+        if (methodName == "create")
+            routineInfo.BodyHash = TypeRegistry.ComputeCreatorBodyHash(body: routine.Body);
+
         try
         {
             registry.RegisterRoutine(routine: routineInfo);

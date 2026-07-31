@@ -280,6 +280,16 @@ public sealed class RoutineInfo
     /// <summary>Source location where this routine is defined.</summary>
     public SourceLocation? Location { get; init; }
 
+    /// <summary>
+    /// Structural hash of a CONSTRUCTOR body, set at registration for the divergent-duplicate guard.
+    /// Two constructors can share a signature across files (e.g. <c>U16(from: U8)</c> in both U8.rf and
+    /// U16.rf) — benign when the bodies are identical (same hash), but a DIVERGENT one (same signature,
+    /// different body) means one silently shadows the other under last-wins registration, the hazard
+    /// class that made <c>F64(from: F128)</c> resolve to a recursive-forwarder stub. Null for non-creators
+    /// / extern bodies. See <see cref="Compiler.Resolution.TypeRegistry.RegisterRoutine"/>.
+    /// </summary>
+    public int? BodyHash { get; set; }
+
     /// <summary>The module this routine belongs to.</summary>
     public string? Module { get; init; }
 

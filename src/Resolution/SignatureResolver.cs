@@ -430,6 +430,12 @@ internal sealed class SignatureResolver
         // case — SAME signature (e.g. redundant `$add(you:T)` + `add(you:T)`) — is already caught by the
         // RegistryKey duplicate check above (RF-S406). DIFFERENT-signature pairs (e.g. `hash()` +
         // `$hash(k0,k1)`) are legitimate distinct routines and MUST coexist, so no extra guard is added.
+
+        // Constructor divergent-duplicate guard (mainly for the stdlib path; user cross-file dups are
+        // already RF-S406 above): hash the body so RegisterRoutine distinguishes identical from
+        // divergent same-signature creators.
+        if (pending.RoutineName == "create")
+            finalRoutine.BodyHash = TypeRegistry.ComputeCreatorBodyHash(body: routine.Body);
         _sa._registry.RegisterRoutine(routine: finalRoutine);
 
         // Pin the decl → info binding so codegen reads it directly instead of re-deriving the routine

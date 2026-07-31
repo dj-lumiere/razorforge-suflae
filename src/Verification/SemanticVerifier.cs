@@ -1118,6 +1118,23 @@ public sealed partial class SemanticVerifier
         }
         Mark(label: "Phase 2 -> Type/signature resolution");
 
+        // Divergent cross-file duplicate constructors: same signature + different body in different
+        // files -> last-wins registration silently shadows one (the F64(from:F128) recursion class).
+        // Benign identical duplicates (equal BodyHash) were not recorded, so anything here is a real bug.
+        foreach ((RoutineInfo first, RoutineInfo second) in _registry.DivergentDuplicateCreators)
+        {
+            SourceLocation? loc = second.Location ?? first.Location;
+            if (loc == null) continue;
+            ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
+                message:
+                $"Constructor '{second.OwnerType?.Name}({string.Join(separator: ", ", values: second.Parameters.Select(selector: p => p.Type.Name))})' " +
+                $"is defined with DIFFERENT bodies in two files ('{first.Location?.FileName}' and " +
+                $"'{second.Location?.FileName}'). Registration is last-wins, so one silently shadows the " +
+                "other — remove the redundant definition (keep the real one; a same-signature forwarder " +
+                "stub self-recurses). Identical duplicates are allowed.",
+                location: loc);
+        }
+
         // Reject self-containing value records (incl. cross-file mutual recursion) BEFORE conformance
         // analysis, which computes LlvmType/SizeBytes and would otherwise stack-overflow on the cycle.
         // Bail out entirely on a cycle — every downstream phase computes layout and would crash.

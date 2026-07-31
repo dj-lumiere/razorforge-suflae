@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using SyntaxTree;
@@ -18,6 +19,29 @@ public sealed partial class TypeRegistry
     /// and BaseName for first-overload-wins unqualified lookup.
     /// </summary>
     /// <param name="routine">The routine to register.</param>
+    /// <summary>
+    /// Divergent cross-file duplicate constructors found during registration: two creators sharing a
+    /// signature but with DIFFERENT bodies, defined in DIFFERENT files. Registration is last-wins, so
+    /// one silently shadows the other — the hazard class that made <c>F64(from: F128)</c> resolve to a
+    /// recursive-forwarder stub instead of the real engine impl (infinite recursion). Surfaced as a
+    /// build error by <see cref="Verification.SemanticVerifier"/>. Benign identical duplicates (same
+    /// body, e.g. <c>U16(from: U8)</c> in both U8.rf and U16.rf) are NOT recorded (equal BodyHash).
+    /// </summary>
+    public List<(RoutineInfo First, RoutineInfo Second)> DivergentDuplicateCreators { get; } = [];
+
+    /// <summary>
+    /// Location-free structural hash of a constructor body for the divergent-duplicate guard (source
+    /// text, not record ToString which embeds SourceLocation — so identical logic in two files hashes
+    /// equal). Null for empty / extern (PassStatement) bodies. Computed only for creators by the two
+    /// registration paths (StdlibLoader, SignatureResolver).
+    /// </summary>
+    public static int? ComputeCreatorBodyHash(Statement? body)
+    {
+        if (body is null or PassStatement) return null;
+        return body.Accept(visitor: new Builder.RfSyntaxTreePrinter())
+                   .GetHashCode(comparisonType: StringComparison.Ordinal);
+    }
+
     public void RegisterRoutine(RoutineInfo routine) // NOSONAR S3776
     {
         string registryKey = routine.RegistryKey;
@@ -31,6 +55,22 @@ public sealed partial class TypeRegistry
             _routines.TryGetValue(key: registryKey, value: out RoutineInfo? existingByKey);
         if (keyExisted)
         {
+            // Divergent cross-file duplicate constructor guard (see DivergentDuplicateCreators):
+            // same signature + SAME failability, both real (non-synthetic), different files, DIFFERENT
+            // bodies. Failability must match: a checked `T!(from: X)` and a reinterpret `T(from: X)`
+            // legitimately share a signature (they coexist via the owner+IsFailable index) and are NOT a
+            // divergent duplicate — only same-failability same-signature different-body pairs are the bug.
+            if (existingByKey is { IsSynthesized: false, BodyHash: { } h1 }
+                && routine is { IsSynthesized: false, BodyHash: { } h2 }
+                && existingByKey.IsFailable == routine.IsFailable
+                && h1 != h2
+                && existingByKey.Location?.FileName is { } f1
+                && routine.Location?.FileName is { } f2
+                && !string.Equals(a: f1, b: f2, comparisonType: StringComparison.OrdinalIgnoreCase))
+            {
+                DivergentDuplicateCreators.Add(item: (existingByKey, routine));
+            }
+
             bool existingIsUser = !existingByKey!.IsSynthesized;
             bool incomingIsSynthetic = routine.IsSynthesized;
             if (!(existingIsUser && incomingIsSynthetic))
