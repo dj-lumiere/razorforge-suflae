@@ -150,8 +150,24 @@ internal sealed class TypeResolver
     {
         if (_sa._registry.Language != Language.Suflae) return resolved;
         if (_sa.IsStdlibFile(filePath: _sa._currentFilePath)) return resolved;
-        if (IsRoamed(type: resolved)) return resolved;
         if (_sa._registry.LookupType(name: RuntimeContract.Roamed) is not { } roamedDef) return resolved;
+        return RoamSlot(resolved: resolved, roamedDef: roamedDef);
+    }
+
+    /// <summary>
+    /// Substitutes an <c>entity E</c> slot to <c>Roamed[E]</c>, recursing into generic type ARGUMENTS so
+    /// a container's element type is also lowered: <c>List[Box]</c> → <c>Roamed[List[Roamed[Box]]]</c>
+    /// (the outer <c>List</c> is itself an entity, the inner <c>Box</c> is an element). Without the
+    /// recursion the element stays a bare single-owner entity and the RC copy machinery never engages —
+    /// storing it drops the refcount → dangling → UAF on read-back.
+    /// </summary>
+    private TypeSymbol RoamSlot(TypeSymbol resolved, TypeInfo roamedDef)
+    {
+        // Already Roamed — idempotent, and its inner arg is intentionally left as-is (no Roamed[Roamed[E]]).
+        if (IsRoamed(type: resolved)) return resolved;
+
+        // Lower entity type ARGUMENTS first (List[Box] → List[Roamed[Box]]), then wrap the top level.
+        resolved = RoamTypeArguments(resolved: resolved, roamedDef: roamedDef);
 
         switch (resolved)
         {
@@ -165,6 +181,36 @@ internal sealed class TypeResolver
             default:
                 return resolved;
         }
+    }
+
+    /// <summary>
+    /// Recursively lowers each entity generic type argument to <c>Roamed[E]</c> and rebuilds the generic
+    /// resolution. <c>Maybe[...]</c> is skipped (the caller's switch collapses it); an already-<c>Roamed</c>
+    /// argument is left untouched by <see cref="RoamSlot"/>'s idempotency guard.
+    /// </summary>
+    private TypeSymbol RoamTypeArguments(TypeSymbol resolved, TypeInfo roamedDef)
+    {
+        (TypeInfo? genericDef, IReadOnlyList<TypeInfo>? args) = resolved switch
+        {
+            EntityTypeInfo { IsGenericResolution: true, GenericDefinition: { } gd, TypeArguments: { } a } => ((TypeInfo?)gd, (IReadOnlyList<TypeInfo>?)a),
+            RecordTypeInfo { IsGenericResolution: true, GenericDefinition: { } gd, TypeArguments: { } a } => (gd, a),
+            _ => (null, null)
+        };
+        if (genericDef == null || args == null || args.Count == 0) return resolved;
+        // Maybe[E] is collapsed to a nullable bare Roamed[E] by RoamSlot's switch, not element-substituted.
+        if (genericDef.Name == MaybeTypeName) return resolved;
+
+        var newArgs = new List<TypeInfo>(capacity: args.Count);
+        bool changed = false;
+        foreach (TypeInfo arg in args)
+        {
+            TypeSymbol lowered = RoamSlot(resolved: arg, roamedDef: roamedDef);
+            if (!ReferenceEquals(objA: lowered, objB: arg)) changed = true;
+            newArgs.Add(item: lowered);
+        }
+        return changed
+            ? _sa._registry.GetOrCreateResolution(genericDef: genericDef, typeArguments: newArgs)
+            : resolved;
     }
 
     private static bool IsRoamed(TypeSymbol type) =>

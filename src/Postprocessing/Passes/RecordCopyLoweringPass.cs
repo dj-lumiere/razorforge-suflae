@@ -39,6 +39,66 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     // primitive itself, so it must NOT be rewritten to `me.store()` (that would recurse forever).
     private bool _inCopyRoutine;
 
+    // The retaining-copy verbs: a `$store`, a variant deep `copy`, and every RC-wrapper refcount verb
+    // (retain/track/share/watch/roam). Inside ANY of these bodies the bare `return me` is the identity-copy
+    // primitive and must NOT be re-injected with a copy (that recurses infinitely). GetLifecycle now returns
+    // the RC verb as a type's Copy, so — unlike before — a `retain`/`roam` body is itself a copy routine.
+    private static readonly System.Collections.Generic.HashSet<string> RcCopyVerbs =
+        [.. Compiler.Resolution.RuntimeContract.RcCopyVerb.Values];
+
+    // True while lowering an RC-wrapper's refcount COPY VERB body (roam/retain/share/track/watch). These are
+    // hand-written refcount primitives that reference `me` in many forms (receiver, ctor arg, temp spill) —
+    // ANY retain-copy injection inside them makes the verb call itself → infinite recursion. So inside such a
+    // body, suppress ALL copy injection (stronger than `_inCopyRoutine`, which only guards `return me`).
+    private bool _inRcCopyVerb;
+
+    // The method-name segment of a routine name/key: strips a leading `Owner.` qualifier and any
+    // `(params)` / `[typeargs]` suffix. A stdlib generic DEF is keyed by its FULL name (e.g.
+    // `Roamed[T].roam`), so a bare-name equality check would miss `roam` — extract the tail first.
+    private static string MethodTail(string nameOrKey)
+    {
+        int lastDot = nameOrKey.LastIndexOf(value: '.');
+        string tail = lastDot >= 0 ? nameOrKey[(lastDot + 1)..] : nameOrKey;
+        int cut = tail.IndexOfAny(anyOf: ['(', '[']);
+        return cut >= 0 ? tail[..cut] : tail;
+    }
+
+    // The OWNER type's base name of a `Owner.method` routine name/key (strips generic args + module path):
+    // `Core.Roamed[Main.Box].roam` -> `Roamed`. Empty for a free routine.
+    private static string OwnerBase(string nameOrKey)
+    {
+        int lastDot = nameOrKey.LastIndexOf(value: '.');
+        if (lastDot < 0) return "";
+        string owner = nameOrKey[..lastDot];
+        int br = owner.IndexOf(value: '[');
+        if (br >= 0) owner = owner[..br];
+        int od = owner.LastIndexOf(value: '.');
+        return od >= 0 ? owner[(od + 1)..] : owner;
+    }
+
+    // True when the routine is a METHOD of an RC wrapper (Retained/Tracked/Shared/Watched/Roamed). Inside ANY
+    // such method `me` is the primitive handle — retain-copying it makes the method call the wrapper's copy verb
+    // (`roam`), and the copy verb itself calls other wrapper methods (controller_address, …) which would ALSO
+    // get `me.roam()` injected → mutual recursion (StackOverflow). So suppress all injection in EVERY RC-wrapper
+    // method body, not just the copy verb.
+    private static bool NameIsRcCopyVerb(string name) =>
+        RuntimeContract.RcWrapperBaseNames.Contains(item: OwnerBase(nameOrKey: name));
+
+    private static bool KeyIsRcCopyVerb(string key) =>
+        RuntimeContract.RcWrapperBaseNames.Contains(item: OwnerBase(nameOrKey: key));
+
+    private static bool NameIsCopyRoutine(string name)
+    {
+        string tail = MethodTail(nameOrKey: name);
+        return tail == "store" || tail == "copy" || RcCopyVerbs.Contains(item: tail);
+    }
+
+    private static bool KeyIsCopyRoutine(string key)
+    {
+        if (key.Contains(value: "store") || key.Contains(value: ".copy")) return true;
+        return RcCopyVerbs.Contains(item: MethodTail(nameOrKey: key));
+    }
+
     /// <summary>
     /// Runs this compiler phase over its configured input.
     /// </summary>
@@ -50,7 +110,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             {
                 case RoutineDeclaration r:
                 {
-                    _inCopyRoutine = r.Name.EndsWith(value: "store");
+                    _inCopyRoutine = NameIsCopyRoutine(name: r.Name); _inRcCopyVerb = NameIsRcCopyVerb(name: r.Name);
                     Statement newBody = LowerStatement(stmt: r.Body);
                     if (!ReferenceEquals(newBody, r.Body))
                         program.Declarations[i] = r with { Body = newBody };
@@ -84,7 +144,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             // its non-destructible (scalar/None) arms. Since a destructible-arm variant now carries a
             // GetLifecycle.Copy, that bare `return me` would otherwise re-inject `me.copy()` → infinite
             // recursion. Treat the copy body like `$store`: its `return me` is the identity primitive.
-            _inCopyRoutine = key.Contains(value: "store") || key.Contains(value: ".copy");
+            _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = KeyIsRcCopyVerb(key: key);
             Statement lowered = LowerStatement(stmt: body);
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
@@ -108,7 +168,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue; // pure-synthesized: no AST to walk
-            _inCopyRoutine = key.Contains(value: "store");
+            _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = KeyIsRcCopyVerb(key: key);
             Statement lowered = LowerStatement(stmt: entry.Ast.Body);
             if (!ReferenceEquals(lowered, entry.Ast.Body))
                 instantiatedGenericBodies[key] = entry with
@@ -127,7 +187,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             if (members[i] is RoutineDeclaration mr)
             {
-                _inCopyRoutine = mr.Name.EndsWith(value: "store");
+                _inCopyRoutine = NameIsCopyRoutine(name: mr.Name); _inRcCopyVerb = NameIsRcCopyVerb(name: mr.Name);
                 Statement newBody = LowerStatement(stmt: mr.Body);
                 if (!ReferenceEquals(newBody, mr.Body))
                     members[i] = mr with { Body = newBody };
@@ -349,7 +409,15 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 || tn.StartsWith(value: "__tt_", comparisonType: StringComparison.Ordinal)))
             return expr;
 
-        if (expr is IdentifierExpression or MemberExpression
+        // Inside a copy-verb body (`$store` / variant `copy` / an RC-wrapper's refcount verb like `roam`),
+        // `me` is the identity-copy primitive in EVERY position — not just `return me`. E.g. `Roamed.roam`
+        // reinterprets `me` via `Hijacked[RoamController[T]](me)`; retain-copying that `me` argument would
+        // make `roam` call `roam` → infinite recursion (StackOverflow). Never retain-copy `me` here.
+        if (_inCopyRoutine && expr is IdentifierExpression { Name: "me" })
+            return expr;
+
+        if (!_inRcCopyVerb
+            && expr is IdentifierExpression or MemberExpression
             && NeedsRetainingCopy(type: expr.ResolvedType, copyMethod: out RoutineInfo? copyMethod))
         {
             if (isReturn && expr is IdentifierExpression id)

@@ -1631,7 +1631,22 @@ public sealed partial class TypeRegistry
         // field-walk copy — but a variant is a { tag, payload } union whose deep copy needs tag
         // dispatch (BuildVariantCopyBody). Using the record copy on a variant double-frees / corrupts
         // its heap arm (the nested_serialize regression).
-        if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
+        // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) define no literal `store` method — their
+        // retaining copy IS the refcount verb (retain/track/share/watch/roam). LookupMethod redirects
+        // `store`→that verb, but GetOwnMethodsResolved (below) never surfaces a `store` for them, so the
+        // record branch's name=="store" filter would miss it → Copy=null → no retain injected. A container
+        // storing a Roamed element (`List[Roamed[E]].add_last`'s `poke(value)`) then aliases without a
+        // refcount bump → the element dangles when the caller's handle releases (the List[entity] UAF).
+        // Resolve the copy verb through the redirect so instantiated generic bodies get a real retaining
+        // copy — checked BEFORE the RecordTypeInfo branch (RC wrappers ARE records). SUFLAE-ONLY: in SF an
+        // `entity` is a `Roamed` and containers hold `Roamed[E]` elements that MUST auto-retain on store; in
+        // RazorForge `Roamed`/RC handles are managed MANUALLY (`.roam()`/`.release()` in danger blocks, e.g.
+        // roamed_cycle_api), so auto-retain here would double-count and leak. Gate to the SF compile.
+        if (Language == TypeModel.Enums.Language.Suflae && GetRcWrapperBaseName(type: type) is not null)
+        {
+            copy = LookupMethod(type: type, methodName: "store");
+        }
+        else if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
         {
             // A variant with a destructible arm (an arm whose own $destroy does real work — a heap
             // entity like a collection, a managed leaf like Text, or a record that transitively owns
