@@ -1582,28 +1582,21 @@ public sealed partial class TypeRegistry
     /// <c>$store</c> hook to the wrapper's concrete refcount copy verb (see
     /// <see cref="RuntimeContract.RcCopyVerb"/>).
     /// </summary>
-    private static string? GetRcWrapperBaseName(TypeInfo type)
+    internal static string? GetRcWrapperBaseName(TypeInfo type)
     {
-        string? name = type switch
+        // Prefer the generic DEFINITION's name (a resolution's own Name may carry a module prefix, e.g.
+        // `Core.Roamed[...]`, which would not match the bare `Roamed` allowlist). `BareName` drops the
+        // `[typeargs]` suffix, so no manual bracket parsing here.
+        string? baseName = type switch
         {
-            RecordTypeInfo { GenericDefinition: { } gd } => gd.Name,
-            WrapperTypeInfo wt => wt.Name,
-            RecordTypeInfo r => r.Name,
+            RecordTypeInfo { GenericDefinition: { } gd } => gd.BareName,
+            WrapperTypeInfo wt => wt.BareName,
+            RecordTypeInfo r => r.BareName,
             _ => null
         };
-        if (name is null)
-        {
-            return null;
-        }
 
-        int bracket = name.IndexOf(value: '[');
-        if (bracket >= 0)
-        {
-            name = name[..bracket];
-        }
-
-        return RuntimeContract.RcWrapperBaseNames.Contains(item: name)
-            ? name
+        return baseName is not null && RuntimeContract.RcWrapperBaseNames.Contains(item: baseName)
+            ? baseName
             : null;
     }
 

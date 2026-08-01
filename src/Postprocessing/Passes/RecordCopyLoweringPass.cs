@@ -87,6 +87,13 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     private static bool KeyIsRcCopyVerb(string key) =>
         RuntimeContract.RcWrapperBaseNames.Contains(item: OwnerBase(nameOrKey: key));
 
+    // True when the type is an RC wrapper record (Retained/Tracked/Shared/Watched/Roamed). A field of such a
+    // type has its release-old/retain-new RC owned by codegen (isRoamedField), so the copy pass must NOT also
+    // retain a field-write RHS of this type (double-count). Delegates to the registry's canonical
+    // structural check (matches on GenericDefinition/WrapperTypeInfo) — no ad-hoc name parsing here.
+    private static bool IsRcWrapperType(TypeInfo? type) =>
+        type is not null && Compiler.Resolution.TypeRegistry.GetRcWrapperBaseName(type: type) is not null;
+
     private static bool NameIsCopyRoutine(string name)
     {
         string tail = MethodTail(nameOrKey: name);
@@ -527,6 +534,13 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             // (use-after-free). Mirrors the AssignmentStatement / DeclarationStatement handling.
             case BinaryExpression { Operator: BinaryOperator.Assign } bin:
             {
+                // Field-write to an RC-wrapper / Roamed field: codegen owns the release-old + retain-new RC
+                // (isRoamedField), so retaining the RHS here too DOUBLE-counts — an SF self-cycle
+                // (`a.next = a`) then never reaches refcount 0 and cc_collect reclaims nothing. Recurse for
+                // nested copies but do NOT retain the top-level RHS. Local / non-RC-field targets keep the
+                // normal retain (managed leaves like Text ARE pass-owned).
+                if (bin.Left is MemberExpression lhsm && IsRcWrapperType(type: lhsm.ResolvedType))
+                    return bin with { Right = StripStealFromExpr(expr: bin.Right) };
                 Expression newRight = LowerOwnership(expr: bin.Right, isReturn: false);
                 return ReferenceEquals(newRight, bin.Right) ? bin : bin with { Right = newRight };
             }
