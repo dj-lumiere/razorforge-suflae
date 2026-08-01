@@ -80,12 +80,16 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     // such method `me` is the primitive handle — retain-copying it makes the method call the wrapper's copy verb
     // (`roam`), and the copy verb itself calls other wrapper methods (controller_address, …) which would ALSO
     // get `me.roam()` injected → mutual recursion (StackOverflow). So suppress all injection in EVERY RC-wrapper
-    // method body, not just the copy verb.
-    private static bool NameIsRcCopyVerb(string name) =>
-        RuntimeContract.RcWrapperBaseNames.Contains(item: OwnerBase(nameOrKey: name));
+    // method body, not just the copy verb. AST-declaration sites (Run / LowerMemberList) and variant-body keys
+    // only carry the routine NAME string, so the owner is parsed out of it; the instantiated-generic site has a
+    // structural `RoutineInfo.OwnerType` and uses `OwnerTypeIsRcWrapper` instead.
+    private static bool OwnerNameIsRcWrapper(string nameOrKey) =>
+        RuntimeContract.RcWrapperBaseNames.Contains(item: OwnerBase(nameOrKey: nameOrKey));
 
-    private static bool KeyIsRcCopyVerb(string key) =>
-        RuntimeContract.RcWrapperBaseNames.Contains(item: OwnerBase(nameOrKey: key));
+    // Structural form of the above: the routine's OwnerType is an RC wrapper record. Preferred wherever a
+    // `RoutineInfo` is on hand — delegates to the same registry check as `IsRcWrapperType`, no name parsing.
+    private static bool OwnerTypeIsRcWrapper(TypeInfo? owner) =>
+        owner is not null && TypeRegistry.GetRcWrapperBaseName(type: owner) is not null;
 
     // True when the type is an RC wrapper record (Retained/Tracked/Shared/Watched/Roamed). A field of such a
     // type has its release-old/retain-new RC owned by codegen (isRoamedField), so the copy pass must NOT also
@@ -117,7 +121,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             {
                 case RoutineDeclaration r:
                 {
-                    _inCopyRoutine = NameIsCopyRoutine(name: r.Name); _inRcCopyVerb = NameIsRcCopyVerb(name: r.Name);
+                    _inCopyRoutine = NameIsCopyRoutine(name: r.Name); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: r.Name);
                     Statement newBody = LowerStatement(stmt: r.Body);
                     if (!ReferenceEquals(newBody, r.Body))
                         program.Declarations[i] = r with { Body = newBody };
@@ -151,7 +155,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             // its non-destructible (scalar/None) arms. Since a destructible-arm variant now carries a
             // GetLifecycle.Copy, that bare `return me` would otherwise re-inject `me.copy()` → infinite
             // recursion. Treat the copy body like `$store`: its `return me` is the identity primitive.
-            _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = KeyIsRcCopyVerb(key: key);
+            _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: key);
             Statement lowered = LowerStatement(stmt: body);
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
@@ -175,7 +179,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue; // pure-synthesized: no AST to walk
-            _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = KeyIsRcCopyVerb(key: key);
+            _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = OwnerTypeIsRcWrapper(owner: entry.Info.OwnerType);
             Statement lowered = LowerStatement(stmt: entry.Ast.Body);
             if (!ReferenceEquals(lowered, entry.Ast.Body))
                 instantiatedGenericBodies[key] = entry with
@@ -194,7 +198,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             if (members[i] is RoutineDeclaration mr)
             {
-                _inCopyRoutine = NameIsCopyRoutine(name: mr.Name); _inRcCopyVerb = NameIsRcCopyVerb(name: mr.Name);
+                _inCopyRoutine = NameIsCopyRoutine(name: mr.Name); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: mr.Name);
                 Statement newBody = LowerStatement(stmt: mr.Body);
                 if (!ReferenceEquals(newBody, mr.Body))
                     members[i] = mr with { Body = newBody };
