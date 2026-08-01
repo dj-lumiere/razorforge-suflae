@@ -539,6 +539,15 @@ internal sealed class LiteralLoweringPass
         {
             TokenType.IntegerLiteral when _integerType != null && _integerFromLiteral != null =>
                 MakeFromLiteralCall(s, "n", _integerType, _integerFromLiteral, loc),
+            // Suflae: an UNSUFFIXED integer literal that SA resolved to `Integer` (the SF default; RF
+            // defaults to S64) is still `UndecidedInteger` at this pass — ExpressionLoweringPass only
+            // rewrites the token to IntegerLiteral LATER, after this construction pass has already run.
+            // So match the RESOLVED TYPE here and construct it too; otherwise codegen emits an invalid
+            // raw `store <int> %Record.Integer` (Integer is a LibTomMath-handle record, not a scalar).
+            TokenType.UndecidedInteger
+                when literal.ResolvedType?.Name == "Integer"
+                     && _integerType != null && _integerFromLiteral != null =>
+                MakeFromLiteralCall(s, "n", _integerType, _integerFromLiteral, loc),
             // Decimal is now @llvm("i256") BID — its literals bake to a compile-time i256 constant
             // (NumericLiteralParser.EncodeDecimal) like D128, not a runtime from-string call.
             _ => null
