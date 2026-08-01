@@ -198,21 +198,22 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Suflae's unsuffixed-literal defaults (Integer/Decimal) apply ONLY to Suflae source. The shared RF
-    /// stdlib keeps RF's S64/F64 defaults even under a Suflae compile, so a stdlib literal like
-    /// <c>int_eq[U256](b: 0)</c> stays a coercible scalar instead of a heap Integer record. Keys on the
-    /// literal's own file (its Location), because <c>_currentFilePath</c> is the user entry when a
-    /// cross-module stdlib body is (re-)analyzed during monomorphization.
+    /// The unsuffixed-literal default (Integer/Decimal vs S64/F64) follows the literal's SOURCE-FILE
+    /// LANGUAGE, not the compile's language and not stdlib-ness: a <c>.sf</c> file uses Suflae defaults,
+    /// a <c>.rf</c> file uses RF defaults. This is correct for every mix — RF/SF user code, the shared RF
+    /// stdlib (<c>.rf</c>) borrowed by an SF compile (must keep S64/F64 so `int_eq[U256](b: 0)` stays a
+    /// coercible scalar, not a heap Integer record), AND a future dedicated Suflae stdlib (<c>.sf</c>),
+    /// which SHOULD get Suflae defaults. (Keying on <c>_registry.Language</c> wrongly gave RF stdlib bodies
+    /// the SF default when re-analyzed under an SF compile; keying on stdlib-directory membership would
+    /// wrongly force RF defaults onto a future <c>.sf</c> stdlib.) Uses the literal's OWN file (its
+    /// Location) — <c>_currentFilePath</c> is the user entry when a cross-module stdlib body is
+    /// (re-)analyzed during monomorphization, so it is unreliable here.
     /// </summary>
     private bool UsesSuflaeNumericDefaults(LiteralExpression literal)
     {
-        if (_registry.Language != Language.Suflae)
-        {
-            return false;
-        }
         string? litFile = literal.Location.FileName;
         string probeFile = string.IsNullOrEmpty(value: litFile) ? _currentFilePath ?? "" : litFile;
-        return !IsStdlibFile(filePath: probeFile);
+        return probeFile.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
