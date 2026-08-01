@@ -30,102 +30,102 @@ preset F16_SQRT_2: F16 = 1.414063_f16
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F16` value.
 @inline
-routine F16.$create(from: S8) -> F16
+routine F16(from: S8) -> F16
   return signed_to_float[S8, F16](from)
 
 ### Converts an `S16` into half-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 @inline
-routine F16.$create(from: S16) -> F16
+routine F16(from: S16) -> F16
   return signed_to_float[S16, F16](from)
 
 ### Converts an `S32` into half-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: S32) -> F16
-  return signed_to_float[S32, F16](from).finite!()
+routine F16!(from: S32) -> F16
+  return signed_to_float[S32, F16](from).finite()
 
 ### Converts an `S64` into half-precision floating-point form.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: S64) -> F16
-  return signed_to_float[S64, F16](from).finite!()
+routine F16!(from: S64) -> F16
+  return signed_to_float[S64, F16](from).finite()
 
 ### Converts an `S128` into half-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: S128) -> F16
-  return signed_to_float[S128, F16](from).finite!()
+routine F16!(from: S128) -> F16
+  return signed_to_float[S128, F16](from).finite()
 
 ### Converts a `U8` into half-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F16` value.
 @inline
-routine F16.$create(from: U8) -> F16
+routine F16(from: U8) -> F16
   return unsigned_to_float[U8, F16](from)
 
 ### Converts a `U16` into half-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: U16) -> F16
-  return unsigned_to_float[U16, F16](from).finite!()
+routine F16!(from: U16) -> F16
+  return unsigned_to_float[U16, F16](from).finite()
 
 ### Converts a `U32` into half-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: U32) -> F16
-  return unsigned_to_float[U32, F16](from).finite!()
+routine F16!(from: U32) -> F16
+  return unsigned_to_float[U32, F16](from).finite()
 
 ### Converts a `U64` into half-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: U64) -> F16
-  return unsigned_to_float[U64, F16](from).finite!()
+routine F16!(from: U64) -> F16
+  return unsigned_to_float[U64, F16](from).finite()
 
 ### Converts a `U128` into half-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: U128) -> F16
-  return unsigned_to_float[U128, F16](from).finite!()
+routine F16!(from: U128) -> F16
+  return unsigned_to_float[U128, F16](from).finite()
 
 ### Converts an `S256` into half-precision floating-point form.
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: S256) -> F16
-  return signed_to_float[S256, F16](from).finite!()
+routine F16!(from: S256) -> F16
+  return signed_to_float[S256, F16](from).finite()
 
 ### Converts a `U256` into half-precision floating-point form.
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F16` value.
-routine F16.$create!(from: U256) -> F16
-  return unsigned_to_float[U256, F16](from).finite!()
+routine F16!(from: U256) -> F16
+  return unsigned_to_float[U256, F16](from).finite()
 
 ### Returns an existing `F16` unchanged.
 ### :param from: The half-precision value to forward.
 ### :returns: `from`.
 @inline
-routine F16.$create(from: F16) -> F16
+routine F16(from: F16) -> F16
   return from
 
 ### Narrows a single-precision float to half precision.
 ### :param from: The `F32` value to convert.
 ### :returns: The nearest representable `F16` value.
 @inline
-routine F16.$create(from: F32) -> F16
+routine F16(from: F32) -> F16
   return float_narrow[F32, F16](from)
 
 ### Narrows a double-precision float to half precision.
 ### :param from: The `F64` value to convert.
 ### :returns: The nearest representable `F16` value.
 @inline
-routine F16.$create(from: F64) -> F16
+routine F16(from: F64) -> F16
   return float_narrow[F64, F16](from)
 
 ### Narrows a quadruple-precision float to half precision.
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F16` value.
-routine F16.$create(from: F128) -> F16
+routine F16(from: F128) -> F16
   # Narrow to F32 first (F32 keeps more than enough precision that the second
   # rounding step is harmless in practice), then to F16.
   return F16(from: from.F32())
@@ -133,19 +133,19 @@ routine F16.$create(from: F128) -> F16
 ### Converts a decimal32 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
-routine F16.$create(from: D32) -> F16
+routine F16(from: D32) -> F16
   return float_narrow[F32, F16](F32(from: F64(from)))
 
 ### Converts a decimal64 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
-routine F16.$create(from: D64) -> F16
+routine F16(from: D64) -> F16
   return float_narrow[F32, F16](F32(from: F64(from)))
 
 ### Converts a decimal128 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
-routine F16.$create(from: D128) -> F16
+routine F16(from: D128) -> F16
   return float_narrow[F32, F16](F32(from: F64(from)))
 
 # ============================================================================
@@ -154,13 +154,13 @@ routine F16.$create(from: D128) -> F16
 
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
-# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+# keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
 
-### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `$add_unchecked` for
+### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `add_unchecked` for
 ### raw IEEE.
 ### :param you: The addend.
 ### :returns: The half-precision sum (always finite).
-routine F16.$add!(you: F16) -> F16
+routine F16.add!(you: F16) -> F16
   var r = float_add[F16](a: me, b: you)
   if r.is_finite()
     return r
@@ -168,11 +168,11 @@ routine F16.$add!(you: F16) -> F16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me - you`. Checked: crashes if the IEEE result is non-finite. Use `$sub_unchecked` for
+### Returns `me - you`. Checked: crashes if the IEEE result is non-finite. Use `sub_unchecked` for
 ### raw IEEE.
 ### :param you: The value to subtract.
 ### :returns: The half-precision difference (always finite).
-routine F16.$sub!(you: F16) -> F16
+routine F16.sub!(you: F16) -> F16
   var r = float_sub[F16](a: me, b: you)
   if r.is_finite()
     return r
@@ -180,11 +180,11 @@ routine F16.$sub!(you: F16) -> F16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me * you`. Checked: crashes if the IEEE result is non-finite. Use `$mul_unchecked` for
+### Returns `me * you`. Checked: crashes if the IEEE result is non-finite. Use `mul_unchecked` for
 ### raw IEEE.
 ### :param you: The multiplier.
 ### :returns: The half-precision product (always finite).
-routine F16.$mul!(you: F16) -> F16
+routine F16.mul!(you: F16) -> F16
   var r = float_mul[F16](a: me, b: you)
   if r.is_finite()
     return r
@@ -194,10 +194,10 @@ routine F16.$mul!(you: F16) -> F16
 
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
-### Use `$truediv_unchecked` for raw IEEE 754, or `(a / b).finite!()` for recoverable handling.
+### Use `truediv_unchecked` for raw IEEE 754, or `(a / b).finite()` for recoverable handling.
 ### :param you: The divisor.
 ### :returns: The half-precision quotient (always finite).
-routine F16.$truediv!(you: F16) -> F16
+routine F16.truediv!(you: F16) -> F16
   var r = float_div[F16](a: me, b: you)
   if r.is_finite()
     return r
@@ -208,7 +208,7 @@ routine F16.$truediv!(you: F16) -> F16
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
-### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite()`.
 ### :returns: `me`, when finite.
 ### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
 routine F16.finite!() -> F16
@@ -218,26 +218,26 @@ routine F16.finite!() -> F16
 
 ### Returns the negated value.
 ### :returns: The resulting `F16` value.
-routine F16.$neg() -> F16
+routine F16.neg() -> F16
   return float_neg[F16](me)
 
 # Unchecked variants — raw IEEE 754 propagation (the float analog of integer `+%`/`+^`). Plain
 # (NOT `dangerous`): inf/NaN are valid IEEE values, the `_unchecked` spelling is the marker.
 
 ### Returns `me / you` with raw IEEE 754 semantics: `x/0` -> ±infinity, `0/0` -> NaN. No crash.
-routine F16.$truediv_unchecked(you: F16) -> F16
+routine F16.truediv_unchecked(you: F16) -> F16
   return float_div[F16](a: me, b: you)
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F16.$add_unchecked(you: F16) -> F16
+routine F16.add_unchecked(you: F16) -> F16
   return float_add[F16](a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F16.$sub_unchecked(you: F16) -> F16
+routine F16.sub_unchecked(you: F16) -> F16
   return float_sub[F16](a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F16.$mul_unchecked(you: F16) -> F16
+routine F16.mul_unchecked(you: F16) -> F16
   return float_mul[F16](a: me, b: you)
 
 # ============================================================================
@@ -247,13 +247,13 @@ routine F16.$mul_unchecked(you: F16) -> F16
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
-routine F16.$eq(you: F16) -> Bool
+routine F16.eq(you: F16) -> Bool
   return float_eq[F16](a: me, b: you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
-routine F16.$cmp(you: F16) -> ComparisonSign
+routine F16.cmp(you: F16) -> ComparisonSign
   if float_lt[F16](a: me, b: you)
     return ME_SMALL
   if float_gt[F16](a: me, b: you)
@@ -406,7 +406,7 @@ common routine F16.signaling_nan() -> F16
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F16.$represent() -> Text
+routine F16.represent() -> Text
   if me.is_signaling()
     return "snan"
   var cstr_result = rf_format_F16(me)
@@ -414,14 +414,14 @@ routine F16.$represent() -> Text
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F16.$diagnose() -> Text
-  return "F16(" + me.$represent() + ")"
+routine F16.diagnose() -> Text
+  return "F16(" + me.represent() + ")"
 
 ### Implements the wired routine behavior for this value.
 ### :param from_text: The `from_text` value.
 ### :returns: The resulting `F16` value.
 ### :throws: May throw {InvalidValueError}.
-routine F16.$create!(from_text: Text) -> F16
+routine F16!(from_text: Text) -> F16
   var len = from_text.count()
   if len == 0u64
     throw InvalidValueError(input: from_text, target: "F16")
@@ -484,7 +484,7 @@ routine F16.$create!(from_text: Text) -> F16
 
 ### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
 ### :returns: A `U64` hash of the 16-bit float encoding.
-routine F16.$fast_hash() -> U64
+routine F16.fast_hash() -> U64
   return __hash_leaf(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)))
 
 # ============================================================================
@@ -513,7 +513,7 @@ routine F16.to_bytes_be() -> Array[Byte, 2]
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
-routine F16.$hash(k0: U64, k1: U64) -> U64
+routine F16.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)), k0: k0, k1: k1)
 
 # ============================================================================
@@ -823,7 +823,7 @@ routine F16.pow_unchecked(exp: F16) -> F16
 ### NaN). Use `pow_unchecked` for raw IEEE 754 propagation.
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp` (always finite).
-routine F16.$pow!(exp: F16) -> F16
+routine F16.pow!(exp: F16) -> F16
   var rr = me.pow_unchecked(exp: exp)
   if rr.is_finite()
     return rr

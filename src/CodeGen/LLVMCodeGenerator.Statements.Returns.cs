@@ -162,7 +162,7 @@ public partial class LlvmCodeGenerator
     private void EmitEntityCleanup(StringBuilder sb, string? returnedVarName)
     {
         // Scope-exit teardown of owned locals is lowered into the AST as explicit
-        // `local.$destroy()` calls by ScopeTeardownLoweringPass (Phase 7), so codegen emits none.
+        // `local.destroy()` calls by ScopeTeardownLoweringPass (Phase 7), so codegen emits none.
         //
         // The entity self-free (freeing the heap allocation backing `me`) is ALSO lowered into the
         // synthesized `$destroy` body as `me.hijack().invalidate()` (see
@@ -501,7 +501,7 @@ public partial class LlvmCodeGenerator
         string dataPtr = "null";
         string msgLen = "0";
         ResolvedMemberRoutine? resolvedCrash = errorType != null
-            ? ResolveMemberRoutine(receiverType: errorType, methodName: "crash_message")
+            ? ResolveMemberRoutine(receiverType: errorType, methodName: Resolution.RuntimeContract.CrashMessage)
             : null;
         if (resolvedCrash != null)
         {
@@ -514,13 +514,13 @@ public partial class LlvmCodeGenerator
             // field 1 (count) directly from the SSA struct.
             string textVal = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {textVal} = call %Record.Text @{mangledCrash}({llvmReceiverType} {errorVal})");
+                line: $"  {textVal} = call %Record.Core.Text @{mangledCrash}({llvmReceiverType} {errorVal})");
             dataPtr = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {dataPtr} = extractvalue %Record.Text {textVal}, 0");
+                line: $"  {dataPtr} = extractvalue %Record.Core.Text {textVal}, 0");
             msgLen = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {msgLen} = extractvalue %Record.Text {textVal}, 1");
+                line: $"  {msgLen} = extractvalue %Record.Core.Text {textVal}, 1");
         }
 
         string typeCStr = EmitCStringConstant(value: typeName);

@@ -301,23 +301,6 @@ public partial class Parser
 
                 _inWhenPatternContext = false;
             }
-            else if (Match(type: TokenType.IsOnly))
-            {
-                _inWhenPatternContext = true;
-                var flagNames = new List<string>();
-                flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'"));
-                while (Match(type: TokenType.And))
-                {
-                    flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
-                }
-
-                pattern = new FlagsPattern(FlagNames: flagNames,
-                    Connective: FlagsTestConnective.And,
-                    ExcludedFlags: null,
-                    IsExact: true,
-                    Location: clauseLocation);
-                _inWhenPatternContext = false;
-            }
             else if (IsComparisonOperator(tokenType: CurrentToken.Type))
             {
                 pattern = ParseComparisonPattern();

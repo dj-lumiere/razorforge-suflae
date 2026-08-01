@@ -4,8 +4,8 @@ import BuilderService
 
 ### Represents temporary thread-safe exclusive (read/write) access to data guarded by a {Shared[T, P]}.
 ### `Claiming[T]` is the non-storable token produced by `Shared.claim()` for exclusive access. It holds
-### the shared {ShareController[T, P]} pointer; entering its `using` scope (`$enter`) acquires the
-### exclusive claimer hold on the controller's access-discipline lock and exiting (`$exit`) releases it,
+### the shared {ShareController[T, P]} pointer; entering its `using` scope (`enter`) acquires the
+### exclusive claimer hold on the controller's access-discipline lock and exiting (`exit`) releases it,
 ### so the lock spans exactly the `using` block. At most one claimer may exist, with no concurrent
 ### {Inspecting[T]}; the readers-XOR-writer borrow checker enforces this. Must be opened with `using` —
 ### a bare/inline `claim()` would never acquire the lock.
@@ -25,41 +25,50 @@ needs T is EntityType, P obeys LockPolicy
 # ============================================================================
 
 ### Called on entry to the `using` block: acquires the exclusive claimer hold on the controller's
-### access-discipline lock, then passes the token through as the bound value. Pairs with `$exit`,
+### access-discipline lock, then passes the token through as the bound value. Pairs with `exit`,
 ### so the lock spans exactly the `using` scope.
 ### :returns: This token as `Claiming[T, P]`.
-routine Claiming[T, P].$enter() -> Claiming[T, P]
-  danger!
+routine Claiming[T, P].enter() -> Claiming[T, P]
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.add_claimer()
   return me
 
+### Called on entry to a *fallible* `using ... fallback` block: attempts the exclusive claimer hold
+### once, without blocking. Returns `true` if the hold was acquired (the `using` body runs and `exit`
+### will release it) or `false` on contention (the `fallback` branch runs; nothing is held).
+### :returns: `true` if the exclusive hold was acquired, `false` otherwise.
+routine Claiming[T, P].try_enter() -> Bool
+  danger
+    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    return ctrl.try_add_claimer()
+
 ### Called on exit from the `using` block (and on every escape): releases the claimer hold.
-routine Claiming[T, P].$exit()
-  danger!
+routine Claiming[T, P].exit()
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.remove_claimer()
   return
 
 # ============================================================================
-# Marker-protocol coercion ($refer / $control) — yields the guarded entity as ?T
+# Marker-protocol coercion (refer / control) — yields the guarded entity as T
 # ============================================================================
 
-### Yields the guarded entity as an in-flight `?T` reference for read-only access.
+### Yields the guarded entity as an in-flight `T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`.
-### :returns: The guarded entity as `?T`.
+### :returns: The guarded entity as `T`.
 @[readonly, inline]
-routine Claiming[T, P].$refer() -> ?T
-  danger!
+routine Claiming[T, P].refer() -> T
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return ctrl.borrow_data().as_entity()
 
-### Yields the guarded entity as an in-flight `?T` reference for read/write access.
+### Yields the guarded entity as an in-flight `T` reference for read/write access.
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
-### :returns: The guarded entity as `?T`.
+### :returns: The guarded entity as `T`.
 @inline
-routine Claiming[T, P].$control() -> ?T
-  danger!
+routine Claiming[T, P].control() -> T
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return ctrl.borrow_data().as_entity()
 
@@ -70,20 +79,20 @@ routine Claiming[T, P].$control() -> ?T
 ### Returns the display form of the claimed entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Claiming[T, P].$represent() -> Text
-  danger!
+routine Claiming[T, P].represent() -> Text
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-    return ctrl.borrow_data().as_entity().$represent()
+    return ctrl.borrow_data().as_entity().represent()
 
 ### Returns the diagnostic form of the claimed entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Claiming[T, P].$diagnose() -> Text
-  danger!
+routine Claiming[T, P].diagnose() -> Text
+  danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-    return me.type_name() + "(" + ctrl.borrow_data().as_entity().$diagnose() + ")"
+    return me.type_name() + "(" + ctrl.borrow_data().as_entity().diagnose() + ")"
 
 ### No-op: the token owns no heap (it only aliases the controller), and the claimer hold is
-### released by `$exit`. Releasing here too would double-release the lock.
-dangerous routine Claiming[T, P].$destroy()
+### released by `exit`. Releasing here too would double-release the lock.
+dangerous routine Claiming[T, P].destroy()
   return

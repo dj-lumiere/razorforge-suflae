@@ -266,7 +266,7 @@ public partial class Parser
             TokenType.And or TokenType.Or or TokenType.Not or TokenType.Is or TokenType.IsNot
                 or TokenType.In or TokenType.NotIn or TokenType.Obeys or TokenType.Disobeys
                 or TokenType.If or TokenType.Else or TokenType.While or TokenType.For
-                or TokenType.Return or TokenType.Throw or TokenType.When or TokenType.Then
+                or TokenType.Return or TokenType.Throw or TokenType.Pierce or TokenType.When or TokenType.Then
                 or TokenType.To or TokenType.Til or TokenType.By => true,
             _ => false
         };

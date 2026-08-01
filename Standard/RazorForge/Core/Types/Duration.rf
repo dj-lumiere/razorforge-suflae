@@ -75,7 +75,7 @@ routine normalize_duration(seconds: S64, nanoseconds: S64) -> Duration
 ### :param seconds: The whole-second component.
 ### :param nanoseconds: The nanosecond component within the current second.
 ### :returns: The resulting `Duration` value.
-routine Duration.$create(seconds: S64, nanoseconds: U32) -> Duration
+routine Duration(seconds: S64, nanoseconds: U32) -> Duration
   return normalize_duration(seconds: seconds, nanoseconds: S64(nanoseconds))
 
 ### Returns the zero duration.
@@ -182,7 +182,7 @@ routine Duration.total_days() -> S64
   return me.seconds // SECONDS_PER_DAY
 
 # ============================================================================
-# Component accessors (extract individual components of the duration)
+# Component accessors (peek individual components of the duration)
 # ============================================================================
 
 ### Returns the days component.
@@ -255,7 +255,7 @@ routine Duration.is_negative() -> Bool
 routine Duration.int_abs() -> Duration
   if me.seconds >= 0_s64
     return me
-  return me.$neg()
+  return me.neg()
 
 # ============================================================================
 # Arithmetic operators
@@ -265,20 +265,20 @@ routine Duration.int_abs() -> Duration
 ### :param you: The addend.
 ### :returns: The combined `Duration`.
 @readonly
-routine Duration.$add(you: Duration) -> Duration
+routine Duration.add(you: Duration) -> Duration
   return normalize_duration(seconds: me.seconds +% you.seconds, nanoseconds: S64(me.nanoseconds) +% S64(you.nanoseconds))
 
 ### Returns `me - you`, subtracting `you` from this duration and normalizing.
 ### :param you: The duration to subtract.
 ### :returns: The resulting `Duration`.
 @readonly
-routine Duration.$sub(you: Duration) -> Duration
+routine Duration.sub(you: Duration) -> Duration
   return normalize_duration(seconds: me.seconds -% you.seconds, nanoseconds: S64(me.nanoseconds) -% S64(you.nanoseconds))
 
 ### Returns the negated value.
 ### :returns: The resulting `Duration` value.
 @readonly
-routine Duration.$neg() -> Duration
+routine Duration.neg() -> Duration
   if me.nanoseconds == 0_u32
     return Duration(seconds: 0_s64 -% me.seconds, nanoseconds: 0_u32)
   # -(s, ns) = (-s - 1, 1_000_000_000 - ns)
@@ -297,14 +297,14 @@ routine Duration.scale(factor: S64) -> Duration
 ### :param factor: The scale factor to apply.
 ### :returns: The resulting `Duration` value.
 @readonly
-routine Duration.$mul(factor: S64) -> Duration
+routine Duration.mul(factor: S64) -> Duration
   return me.scale(factor)
 
 ### Returns how many times `you` fits into this duration (floor division).
 ### :param you: The divisor duration.
 ### :returns: The integer quotient as `S64`.
 @readonly
-routine Duration.$floordiv(you: Duration) -> S64
+routine Duration.floordiv(you: Duration) -> S64
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
   return signed_div[S64](me_ns, you_ns)
@@ -313,7 +313,7 @@ routine Duration.$floordiv(you: Duration) -> S64
 ### :param you: The divisor duration.
 ### :returns: The remaining `Duration`.
 @readonly
-routine Duration.$mod(you: Duration) -> Duration
+routine Duration.mod(you: Duration) -> Duration
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
   return Duration.from_nanoseconds(signed_rem[S64](me_ns, you_ns))
@@ -330,7 +330,7 @@ routine Duration.div_by(divisor: S64) -> Duration
 ### :param divisor: The divisor to apply.
 ### :returns: The resulting `Duration` value.
 @readonly
-routine Duration.$floordiv(divisor: S64) -> Duration
+routine Duration.floordiv(divisor: S64) -> Duration
   return me.div_by(divisor)
 
 # ============================================================================
@@ -341,14 +341,14 @@ routine Duration.$floordiv(divisor: S64) -> Duration
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Duration.$eq(you: Duration) -> Bool
+routine Duration.eq(you: Duration) -> Bool
   return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Duration.$cmp(you: Duration) -> ComparisonSign
+routine Duration.cmp(you: Duration) -> ComparisonSign
   if me.seconds < you.seconds
     return ME_SMALL
   if me.seconds > you.seconds
@@ -365,7 +365,7 @@ routine Duration.$cmp(you: Duration) -> ComparisonSign
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine Duration.$represent() -> Text
+routine Duration.represent() -> Text
   if me.is_zero()
     return "0s"
 
@@ -400,8 +400,8 @@ routine Duration.$represent() -> Text
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine Duration.$diagnose() -> Text
-  return "Duration(seconds: " + me.seconds.$represent() + ", nanoseconds: " + me.nanoseconds.$represent() + ")"
+routine Duration.diagnose() -> Text
+  return "Duration(seconds: " + me.seconds.represent() + ", nanoseconds: " + me.nanoseconds.represent() + ")"
 
 # ============================================================================
 # Hashing
@@ -409,16 +409,16 @@ routine Duration.$diagnose() -> Text
 
 ### Returns an xxHash64-based hash of this duration.
 ### :returns: A `U64` hash combining the seconds and nanoseconds components.
-routine Duration.$fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.seconds.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.nanoseconds.$fast_hash())
+routine Duration.fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.seconds.fast_hash())
+  acc = __hash_round(acc: acc, h: me.nanoseconds.fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this duration.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine Duration.$hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0u64, h: me.seconds.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.nanoseconds.$hash(k0: k0, k1: k1))
+routine Duration.hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.seconds.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.nanoseconds.hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

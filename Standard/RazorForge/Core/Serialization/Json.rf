@@ -1,0 +1,146 @@
+module Core
+
+import Collections
+
+### JSON encoder over the `SerialValue` tree. Any `Serializable` value reaches JSON via
+### `value.serialize().to_json_bytes()`. This is a format encoder in the sense of
+### `Serializable`'s doc: it walks the neutral `SerialValue` tree and renders one concrete wire
+### format. Encoding is total — every arm has a rendering, so it never fails.
+###
+### Format notes (lossy round-trip — JSON has fewer types than `SerialValue`):
+###   - `None`            -> `null`
+###   - `Bool`            -> `true` / `false`
+###   - integers          -> decimal digits
+###   - `F32` / `F64`     -> decimal (non-finite floats are out of scope)
+###   - `Text`            -> a JSON string with quote, backslash and control chars escaped
+###   - `Moment`          -> a JSON string of its `represent()`
+###   - `Bytes`           -> a JSON array of byte VALUES (`[10, 20]`), since JSON has no byte type
+###   - `List`            -> a JSON array
+###   - `Dict[Text, _]`   -> a JSON object (keys are the Text keys, escaped)
+
+### Maps a 4-bit nibble (0..15) to its lowercase hex digit as a one-character `Text`.
+### :param nibble: The value to render; only the low 4 bits are meaningful.
+### :returns: `"0".."9"` or `"a".."f"`.
+secret routine json_hex_digit(nibble: U32) -> Text
+  if nibble < 10u32
+    return Character(0x30u32 + nibble).represent()
+  return Character(0x61u32 + (nibble - 10u32)).represent()
+
+### Renders the low byte of `cp` as two lowercase hex digits (for the u00XX control escape form).
+### :param cp: The code point whose low 8 bits are rendered.
+### :returns: A two-character hex `Text`.
+secret routine json_hex2(cp: U32) -> Text
+  var hi = (cp >>> 4u32) & 0xFu32
+  var lo = cp & 0xFu32
+  return json_hex_digit(nibble: hi) + json_hex_digit(nibble: lo)
+
+### Renders `t` as a quoted, escaped JSON string.
+### Escapes the quote, the backslash, the named controls (b, t, n, f, r), and any other control
+### code as the u00XX form.
+### :param t: The text to encode.
+### :returns: The JSON string literal, including the surrounding quotes.
+secret routine json_string(t: Text) -> Text
+  var result: Text = "\""
+  for ch in t
+    var cp = ch.codepoint()
+    when cp
+      == 0x22u32 =>
+        result = result + "\\\""
+      == 0x5Cu32 =>
+        result = result + "\\\\"
+      == 0x08u32 =>
+        result = result + "\\b"
+      == 0x09u32 =>
+        result = result + "\\t"
+      == 0x0Au32 =>
+        result = result + "\\n"
+      == 0x0Cu32 =>
+        result = result + "\\f"
+      == 0x0Du32 =>
+        result = result + "\\r"
+      < 0x20u32 =>
+        result = result + "\\u00" + json_hex2(cp: cp)
+      else =>
+        result = result + ch.represent()
+  result = result + "\""
+  return steal result
+
+### Encodes this `SerialValue` tree as JSON `Text`. Total — never fails.
+### :returns: The JSON rendering.
+@readonly
+routine SerialValue.to_json_text() -> Text
+  when me
+    is None =>
+      return "null"
+    is Bool b =>
+      return if b then "true" else "false"
+    is S8 v =>
+      return v.represent()
+    is S16 v =>
+      return v.represent()
+    is S32 v =>
+      return v.represent()
+    is S64 v =>
+      return v.represent()
+    is U8 v =>
+      return v.represent()
+    is U16 v =>
+      return v.represent()
+    is U32 v =>
+      return v.represent()
+    is U64 v =>
+      return v.represent()
+    is F32 v =>
+      return v.represent()
+    is F64 v =>
+      return v.represent()
+    is Moment v =>
+      return json_string(t: v.represent())
+    is Text v =>
+      return json_string(t: v)
+    is Bytes v =>
+      var body: Text = "["
+      var first = true
+      for byte in v
+        if not first
+          body = body + ","
+        body = body + U8(from: byte).represent()
+        first = false
+      body = body + "]"
+      return steal body
+    is List[SerialValue] xs =>
+      var body: Text = "["
+      var first = true
+      for x in xs
+        if not first
+          body = body + ","
+        body = body + x.to_json_text()
+        first = false
+      body = body + "]"
+      return steal body
+    is Dict[Text, SerialValue] d =>
+      # Walk keys()/values() by index rather than `for entry in d`. The type-resolution gap that
+      # blocked `for entry in d` in a concrete stdlib method is fixed (GetIterableElementType now
+      # resolves the element via the iterator's `emit!` return), so it COMPILES — but tearing down
+      # the per-iteration `DictEntry` loop variable (whose `value` is a copied nested-Dict SerialValue)
+      # still double-frees here, a separate concrete-method teardown bug. keys()/values() (concrete
+      # element types) sidesteps the DictEntry loop variable entirely.
+      var ks = d.keys()
+      var vs = d.values()
+      var body: Text = "{"
+      var i = 0u64
+      while i < ks.count()
+        if i > 0u64
+          body = body + ","
+        body = body + json_string(t: ks[i]) + ":" + vs[i].to_json_text()
+        i = i + 1u64
+      body = body + "}"
+      return steal body
+    else =>
+      return "null"
+
+### Encodes this `SerialValue` tree as UTF-8 JSON `Bytes`. Total — never fails.
+### :returns: The UTF-8 encoded JSON.
+@readonly
+routine SerialValue.to_json_bytes() -> Bytes
+  return me.to_json_text().encode_as_utf8()

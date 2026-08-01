@@ -29,7 +29,7 @@ routine start()
   bits_eq(got: F128(from: 1_s64).acosh_unchecked(), want: F128(from: 0_s64), label: "acosh(1)==0")
 
   # asinh is odd: asinh(-x) == -asinh(x), bit-exact.
-  bits_eq(got: F128(from: -5_s64).asinh(), want: F128(from: 5_s64).asinh().$neg(), label: "asinh odd (-5)")
+  bits_eq(got: F128(from: -5_s64).asinh(), want: F128(from: 5_s64).asinh().neg(), label: "asinh odd (-5)")
 
   # acosh(cosh(t)) == t EXACTLY for integer t, including large arguments (the case that
   # exposed the original disproportionate-cost path). Bit-exact across t=1..12.

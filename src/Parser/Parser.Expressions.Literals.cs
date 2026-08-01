@@ -70,24 +70,13 @@ public partial class Parser
         }
 
         Token token = PeekToken(offset: -1);
-        string value = token.Text;
-
-        // Regular text literals
-        if (value.StartsWith('"') && value.EndsWith('"'))
-        {
-            value = value.Substring(startIndex: 1, length: value.Length - 2);
-        }
-        else if (value.StartsWith(value: "b\""))
-        {
-            int prefixEnd = value.IndexOf(value: '"');
-            if (prefixEnd > 0)
-            {
-                value = value.Substring(startIndex: prefixEnd + 1,
-                    length: value.Length - prefixEnd - 2);
-            }
-        }
-
-        result = new LiteralExpression(Value: value, LiteralType: token.Type, Location: location);
+        // The tokenizer (ScanStringLiteral) already stripped the surrounding delimiters and the
+        // `b`/`r`/`f` prefix and processed escapes — token.Text IS the final string value. Do NOT
+        // re-strip a leading/trailing quote here: a literal whose CONTENT begins and ends with `"`
+        // (e.g. `"\""` → the one-char value `"`) would be corrupted, and a single `"` would compute
+        // a negative Substring length and throw.
+        result = new LiteralExpression(Value: token.Text, LiteralType: token.Type,
+            Location: location);
         return true;
     }
 

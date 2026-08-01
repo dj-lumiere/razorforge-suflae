@@ -30,7 +30,7 @@ routine start()
   show(f"contents after remove: {d}")
   show(f"contains_key 2 after remove: {2 in d}")
 
-  show(f"diagnose: {d.$diagnose()}")
+  show(f"diagnose: {d.diagnose()}")
 
   show("DONE")
   return

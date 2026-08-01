@@ -1,7 +1,9 @@
 module Core
 
-### Represents the aggregate protocol for unsigned fixed-width integers.
-### `UnsignedIntegral` covers bounded machine integer types whose domain contains
-### only non-negative values.
-protocol UnsignedIntegral obeys FixedIntegral
+### Represents the aggregate protocol for tagged-union variant types.
+### `VariantType` identifies sum types whose value is one of a fixed set of member types,
+### discriminated by the stored type tag. Like `RecordType`, it bundles only AUTO-DERIVED
+### capabilities (`Diagnosable`, `Serializable`) — never hand-written promises such as
+### `Equatable`/`Hashable`, which would leave an abstract method behind for constrained generics.
+protocol VariantType obeys Diagnosable, Serializable
   pass

@@ -1,0 +1,9 @@
+leaf: SerialValue({x: SerialValue(42)})
+mid: SerialValue({a: SerialValue({x: SerialValue(69)}), y: SerialValue(74)})
+tree: SerialValue({b: SerialValue({a: SerialValue({x: SerialValue(1)}), y: SerialValue(2)}), z: SerialValue(3)})
+tree again: SerialValue({b: SerialValue({a: SerialValue({x: SerialValue(1)}), y: SerialValue(2)}), z: SerialValue(3)})
+extract explicit: {a: SerialValue({x: SerialValue(1)}), y: SerialValue(2)}
+extract positional: {a: SerialValue({x: SerialValue(1)}), y: SerialValue(2)}
+extract chain: {a: SerialValue({x: SerialValue(1)}), y: SerialValue(2)}
+bag: SerialValue({items: SerialValue([SerialValue(10), SerialValue(20)]), tag: SerialValue(7)})
+DONE

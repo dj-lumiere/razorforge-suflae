@@ -14,7 +14,7 @@ namespace Compiler.Resolution;
 /// <remarks>
 /// Used to gate codegen `declare` emission and reachability seeding for wired
 /// routine families whose body has a built-in constraint surface that the registered
-/// implementation can't satisfy for every instantiation — e.g. `Array[T, N].$eq`
+/// implementation can't satisfy for every instantiation — e.g. `Array[T, N].eq`
 /// declares `needs T obeys Equatable`, so `Array[X, 64]` should NOT carry an
 /// `$eq` symbol because `X` is not equatable.
 ///
@@ -25,7 +25,7 @@ namespace Compiler.Resolution;
 /// </remarks>
 public sealed partial class TypeRegistry
 {
-    private const string ContainsMethodName = "$contains";
+    private const string ContainsMethodName = "contains";
 
     private readonly Dictionary<(string FullName, string Protocol), bool> _capabilityCache =
         new();
@@ -71,13 +71,13 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>Returns true if the type implements <c>Equatable</c> ($eq).</summary>
-    public bool TypeHasEquality(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$eq");
+    public bool TypeHasEquality(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "eq");
     /// <summary>Returns true if the type implements <c>Containable</c> ($contains).</summary>
     public bool TypeHasContainment(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: ContainsMethodName);
     /// <summary>Returns true if the type implements <c>Hashable</c> ($hash).</summary>
-    public bool TypeHasHashing(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$hash");
+    public bool TypeHasHashing(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "hash");
     /// <summary>Returns true if the type implements <c>Comparable</c> ($cmp).</summary>
-    public bool TypeHasComparison(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$cmp");
+    public bool TypeHasComparison(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "cmp");
 
     private bool HasCapability(TypeInfo type, string protocol, string wiredName)
     {
@@ -111,7 +111,7 @@ public sealed partial class TypeRegistry
         // For a generic resolution G[T1, T2, ...], the generic def's wired-method may carry
         // `Ti obeys P` constraints. Each must hold for the corresponding type arg, where
         // the capability being demanded is keyed by P (not by the outer `protocol` we're
-        // currently evaluating) — e.g. Array.$contains demands `T obeys Equatable`, so we
+        // currently evaluating) — e.g. Array.contains demands `T obeys Equatable`, so we
         // recurse for Equatable on T, not for Container.
         TypeInfo? genericDef = type switch
         {
@@ -155,7 +155,7 @@ public sealed partial class TypeRegistry
         }
 
         // Direct support: type has a CONCRETE impl of the method (explicit or synthesised).
-        // A lookup that resolves to the ABSTRACT protocol method (e.g. `Equatable.$eq` for a
+        // A lookup that resolves to the ABSTRACT protocol method (e.g. `Equatable.eq` for a
         // plain record that neither defines `$eq` nor obeys Equatable) does NOT count — it has no
         // body, so reporting capability here would let callers emit a call to the unimplemented
         // abstract symbol (LINKERR). Genuine conformance is established by the TypeObeysProtocol
@@ -182,7 +182,7 @@ public sealed partial class TypeRegistry
     ///   <item><description>Generic parameters: false (decision deferred to instantiation).</description></item>
     /// </list>
     /// Raw-pointer types like <c>Hijacked[T]</c> and <c>CPtr</c> are ptr-shaped and
-    /// therefore must opt in manually with a trivial <c>$copy() -> Me  return me</c>.
+    /// therefore must opt in manually with a trivial <c>$store() -> Me  return me</c>.
     /// </summary>
     public bool CanAutoDeriveAssignable(TypeInfo type)
     {

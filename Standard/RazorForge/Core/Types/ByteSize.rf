@@ -35,7 +35,7 @@ record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible, Scalable, 
 ### Creates a `ByteSize` from a raw byte count.
 ### :param bytes: The number of bytes.
 ### :returns: The resulting `ByteSize` value.
-routine ByteSize.$create(bytes: U64) -> ByteSize
+routine ByteSize(bytes: U64) -> ByteSize
   return reinterpret_bits[U64, ByteSize](bytes)
 
 ### Returns a decimal terabyte size.
@@ -136,28 +136,28 @@ routine ByteSize.gb_size() -> F64
 ### :param you: The addend.
 ### :returns: The combined `ByteSize`.
 @readonly
-routine ByteSize.$add(you: ByteSize) -> ByteSize
+routine ByteSize.add(you: ByteSize) -> ByteSize
   return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) + reinterpret_bits[ByteSize, U64](you))
 
 ### Returns `me - you`, subtracting `you` from this size.
 ### :param you: The size to subtract.
 ### :returns: The resulting `ByteSize`.
 @readonly
-routine ByteSize.$sub(you: ByteSize) -> ByteSize
+routine ByteSize.sub(you: ByteSize) -> ByteSize
   return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) - reinterpret_bits[ByteSize, U64](you))
 
 ### Returns this size multiplied by an integral factor.
 ### :param factor: The scale factor to apply.
 ### :returns: The resulting `ByteSize` value.
 @readonly
-routine ByteSize.$mul(factor: U64) -> ByteSize
+routine ByteSize.mul(factor: U64) -> ByteSize
   return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) *% factor)
 
 ### Returns how many times `you` fits into this size.
 ### :param you: The size divisor.
 ### :returns: The resulting `U64` value.
 @readonly
-routine ByteSize.$floordiv(you: ByteSize) -> U64
+routine ByteSize.floordiv(you: ByteSize) -> U64
   return reinterpret_bits[ByteSize, U64](me) // reinterpret_bits[ByteSize, U64](you)
 
 ### Returns this byte size divided by an integral factor.
@@ -171,7 +171,7 @@ routine ByteSize.div_by(divisor: U64) -> ByteSize
 ### :param you: The divisor size.
 ### :returns: The remaining `ByteSize`.
 @readonly
-routine ByteSize.$mod(you: ByteSize) -> ByteSize
+routine ByteSize.mod(you: ByteSize) -> ByteSize
   return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) % reinterpret_bits[ByteSize, U64](you))
 
 # ============================================================================
@@ -182,14 +182,14 @@ routine ByteSize.$mod(you: ByteSize) -> ByteSize
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine ByteSize.$eq(you: ByteSize) -> Bool
+routine ByteSize.eq(you: ByteSize) -> Bool
   return reinterpret_bits[ByteSize, U64](me) == reinterpret_bits[ByteSize, U64](you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
+routine ByteSize.cmp(you: ByteSize) -> ComparisonSign
   var lhs = reinterpret_bits[ByteSize, U64](me)
   var rhs = reinterpret_bits[ByteSize, U64](you)
   if lhs < rhs
@@ -205,9 +205,9 @@ routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
 ### Returns the display form of this byte size.
 ### Breaks the raw byte count into binary unit components (PiB, TiB, GiB, MiB,
 ### KiB, B) and concatenates the non-zero parts, matching the component-wise
-### style of `Duration.$represent`.
+### style of `Duration.represent`.
 ### :returns: The resulting `Text` value.
-routine ByteSize.$represent() -> Text
+routine ByteSize.represent() -> Text
   var raw = reinterpret_bits[ByteSize, U64](me)
   if raw == 0u64
     return "0B"
@@ -252,8 +252,8 @@ routine ByteSize.$represent() -> Text
 
 ### Returns the diagnostic form of this byte size.
 ### :returns: The resulting `Text` value.
-routine ByteSize.$diagnose() -> Text
-  return "ByteSize(" + reinterpret_bits[ByteSize, U64](me).$represent() + ")"
+routine ByteSize.diagnose() -> Text
+  return "ByteSize(" + reinterpret_bits[ByteSize, U64](me).represent() + ")"
 
 # ============================================================================
 # Hashing
@@ -261,12 +261,12 @@ routine ByteSize.$diagnose() -> Text
 
 ### Returns an xxHash64-based hash of this byte size.
 ### :returns: A `U64` hash of the underlying byte count.
-routine ByteSize.$fast_hash() -> U64
+routine ByteSize.fast_hash() -> U64
   return __hash_leaf(v: reinterpret_bits[ByteSize, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this byte size.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine ByteSize.$hash(k0: U64, k1: U64) -> U64
+routine ByteSize.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: reinterpret_bits[ByteSize, U64](me), k0: k0, k1: k1)

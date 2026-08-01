@@ -29,11 +29,20 @@ public sealed partial class SemanticVerifier
         NarrowingInfo? narrowing = TryExtractNarrowingFromCondition(condition: ifStmt.Condition);
 
         // Analyze then branch (with narrowing if applicable)
-        if (narrowing?.ThenBranchType != null)
+        if (narrowing?.ThenBranchType != null || narrowing is { ThenNonNull: true })
         {
             _registry.EnterScope(kind: ScopeKind.Block, name: "if_then");
-            _registry.NarrowVariable(name: narrowing.VariableName,
-                narrowedType: narrowing.ThenBranchType);
+            if (narrowing.ThenBranchType != null)
+            {
+                _registry.NarrowVariable(name: narrowing.VariableName,
+                    narrowedType: narrowing.ThenBranchType);
+            }
+
+            if (narrowing.ThenNonNull)
+            {
+                _registry.MarkVariableNonNull(name: narrowing.VariableName);
+            }
+
             AnalyzeStatement(statement: ifStmt.ThenStatement);
             _registry.ExitScope();
         }
@@ -45,11 +54,20 @@ public sealed partial class SemanticVerifier
         // Analyze else branch if present (with inverse narrowing if applicable)
         if (ifStmt.ElseStatement != null)
         {
-            if (narrowing?.ElseBranchType != null)
+            if (narrowing?.ElseBranchType != null || narrowing is { ElseNonNull: true })
             {
                 _registry.EnterScope(kind: ScopeKind.Block, name: "if_else");
-                _registry.NarrowVariable(name: narrowing.VariableName,
-                    narrowedType: narrowing.ElseBranchType);
+                if (narrowing.ElseBranchType != null)
+                {
+                    _registry.NarrowVariable(name: narrowing.VariableName,
+                        narrowedType: narrowing.ElseBranchType);
+                }
+
+                if (narrowing.ElseNonNull)
+                {
+                    _registry.MarkVariableNonNull(name: narrowing.VariableName);
+                }
+
                 AnalyzeStatement(statement: ifStmt.ElseStatement);
                 _registry.ExitScope();
             }
@@ -61,11 +79,18 @@ public sealed partial class SemanticVerifier
 
         // Guard clause narrowing: if the then branch definitely exits,
         // apply else narrowing to the remainder of the current scope
-        if (ifStmt.ElseStatement == null && narrowing?.ElseBranchType != null &&
-            HasDefiniteExit(statement: ifStmt.ThenStatement))
+        if (ifStmt.ElseStatement == null && HasDefiniteExit(statement: ifStmt.ThenStatement))
         {
-            _registry.NarrowVariable(name: narrowing.VariableName,
-                narrowedType: narrowing.ElseBranchType);
+            if (narrowing?.ElseBranchType != null)
+            {
+                _registry.NarrowVariable(name: narrowing.VariableName,
+                    narrowedType: narrowing.ElseBranchType);
+            }
+
+            if (narrowing is { ElseNonNull: true })
+            {
+                _registry.MarkVariableNonNull(name: narrowing.VariableName);
+            }
         }
     }
 
@@ -216,6 +241,19 @@ public sealed partial class SemanticVerifier
         bool handledNone = false;
         bool handledBlank = false;
         bool handledCrashable = false;
+
+        // Suflae: `when` is for variants / carriers / values — not entity references. An entity
+        // reference has only two flow states (none / present), for which `if x is None` /
+        // `if x isnot None` is the idiom (and the only shape with a null-check codegen lowering).
+        // Reject `when <entity-ref>` up front so it can't silently miscompile.
+        if (_registry.Language == Language.Suflae && IsEntityRefType(type: matchedType))
+        {
+            ReportError(code: SemanticDiagnosticCode.NullableEntityDeref,
+                message:
+                "Cannot use 'when' on an entity reference. Match its none-state with " +
+                "'if x is None' / 'if x isnot None' instead.",
+                location: whenStmt.Expression.Location);
+        }
 
         foreach (WhenClause clause in whenStmt.Clauses)
         {
@@ -385,14 +423,11 @@ public sealed partial class SemanticVerifier
             return;
         }
 
-        if (!_currentRoutine.IsFailable)
-        {
-            ReportError(code: SemanticDiagnosticCode.ThrowOutsideFailableFunction,
-                message: "Throw statement in a non-failable routine: add '!' suffix to signal " +
-                         "callers and enable safe variant generation.",
-                location: throwStmt.Location);
-        }
-
+        // Failability is now INFERRED: a recoverable `throw` in a routine not declared `!` is FINE —
+        // it simply makes the routine inferred-failable (the `InferFailableRoutines` fixpoint sets
+        // IsFailable=true before codegen). The declaration `!` is an OPTIONAL honest annotation, no
+        // longer required at the throw site. `pierce` (IsFatal) stays a fatal uncatchable crash that
+        // never marks the routine failable.
         TypeSymbol errorType = AnalyzeExpression(expression: throwStmt.Error);
 
         // Only `crashable`-kind types are throwable errors. The `crashable` keyword implicitly
@@ -412,23 +447,27 @@ public sealed partial class SemanticVerifier
                 location: throwStmt.Error.Location);
         }
 
-        // Mark routine as having throw statements (for variant generation)
-        if (_currentRoutine.IsFailable)
+        // Mark routine as having throw statements (drives both failability inference and variant
+        // generation). Recorded UNCONDITIONALLY for a recoverable `throw` — the inference fixpoint reads
+        // HasThrow to derive IsFailable, so it must be set even when `!` was not declared. A `pierce`
+        // never marks failable — it is a crash, not a recoverable failure.
+        if (!throwStmt.IsFatal)
             _currentRoutine.HasThrow = true;
     }
 
     private void AnalyzeAbsentStatement(AbsentStatement absent)
     {
-        if (_currentRoutine == null || !_currentRoutine.IsFailable)
+        if (_currentRoutine == null)
         {
-            ReportError(code: SemanticDiagnosticCode.AbsentOutsideFailableFunction,
-                message:
-                "Absent statement in a non-failable routine — add '!' suffix to signal callers and enable safe variant generation.",
+            ReportWarning(code: SemanticWarningCode.ThrowAbsentInNonFailable,
+                message: "Absent statement outside any routine.",
                 location: absent.Location);
             return;
         }
 
-        // Mark routine as having absent statements (for variant generation)
+        // Failability is INFERRED: an `absent` in a routine not declared `!` is FINE and simply makes
+        // the routine inferred-failable. Mark routine as having absent statements (for both inference
+        // and variant generation) UNCONDITIONALLY — the fixpoint reads HasAbsent to derive IsFailable.
         _currentRoutine.HasAbsent = true;
     }
 
@@ -531,14 +570,14 @@ public sealed partial class SemanticVerifier
         // handle. A writer (`claim`) conflicts with any other hold; readers (`inspect`) coexist.
         // The hold is pushed for the duration of the body and popped on exit, so only OVERLAPPING
         // scopes conflict (sequential `using`s on the same handle are fine).
-        string accessBase = GetBaseTypeName(typeName: resourceType.Name);
-        bool opensAccessToken = accessBase is "Inspecting" or "Claiming";
+        string accessBase = resourceType.BareName;
+        bool opensAccessToken = accessBase is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
         string? accessHandle = opensAccessToken
             ? ExtractAccessReceiverName(resource: usingStmt.Resource)
             : null;
         if (accessHandle != null)
         {
-            bool isWriter = accessBase == "Claiming";
+            bool isWriter = accessBase == Compiler.Resolution.RuntimeContract.Claiming;
             int accessIdentity = GetOrAssignHandleIdentity(path: accessHandle);
             foreach ((string Handle, int Identity, bool IsWriter, SourceLocation Location) hold
                      in _activeAccessHolds)
@@ -590,11 +629,25 @@ public sealed partial class SemanticVerifier
             else
             {
                 // The bound variable's type is `$enter`'s return type when non-void (pass-through).
-                // LookupMethod handles generic fallback (Viewing[Point].$enter -> Viewing.$enter).
+                // LookupMethod handles generic fallback (Viewing[Point].enter -> Viewing.enter).
                 RoutineInfo? enterMethod =
-                    _registry.LookupMethod(type: resourceType, methodName: "$enter");
+                    _registry.LookupMethod(type: resourceType, methodName: "enter");
                 if (enterMethod?.ReturnType is { IsBlank: false } enterReturn)
                     boundType = enterReturn;
+
+                // A `fallback` branch drives a non-blocking acquisition — the resource must
+                // provide `$try_enter` (returns Bool: did the hold succeed?). Types whose entry
+                // can only block (no `$try_enter`) cannot take a `fallback`.
+                if (usingStmt.FallbackBody != null &&
+                    _registry.LookupMethod(type: resourceType, methodName: "try_enter") == null)
+                {
+                    ReportError(code: SemanticDiagnosticCode.UsingFallbackRequiresTryEnter,
+                        message:
+                        $"'using ... fallback' requires the resource type '{resourceType.Name}' to " +
+                        "provide '$try_enter' (a non-blocking acquisition). This type only supports " +
+                        "blocking entry — drop the 'fallback' branch.",
+                        location: usingStmt.Location);
+                }
             }
         }
 
@@ -616,6 +669,15 @@ public sealed partial class SemanticVerifier
         // Pop the MT access hold now that the scope has closed (readers-XOR-writer, RF-S630).
         if (accessHandle != null)
             _activeAccessHolds.RemoveAt(index: _activeAccessHolds.Count - 1);
+
+        // The `fallback` branch runs when acquisition fails: no hold is taken and the bound
+        // name is NOT in scope. Analyze it in its own fresh scope, outside the access hold.
+        if (usingStmt.FallbackBody != null)
+        {
+            _registry.EnterScope(kind: ScopeKind.Block, name: "using-fallback");
+            AnalyzeStatement(statement: usingStmt.FallbackBody);
+            _registry.ExitScope();
+        }
     }
 
     /// <summary>
@@ -648,7 +710,7 @@ public sealed partial class SemanticVerifier
         return expr switch
         {
             IdentifierExpression id => id.Name,
-            MemberExpression { Object: var inner, PropertyName: var prop } =>
+            MemberExpression { Object: var inner, MemberName: var prop } =>
                 BuildAccessPath(expr: inner) is { } prefix ? $"{prefix}.{prop}" : null,
             _ => null
         };
@@ -690,7 +752,7 @@ public sealed partial class SemanticVerifier
                 {
                     Callee: MemberExpression
                     {
-                        Object: var receiver, PropertyName: "share" or "watch"
+                        Object: var receiver, MemberName: "share" or "watch"
                     }
                 } when BuildAccessPath(expr: receiver) is { } recvPath =>
                 GetOrAssignHandleIdentity(path: recvPath),

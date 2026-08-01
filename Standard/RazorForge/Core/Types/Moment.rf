@@ -1,5 +1,6 @@
 module Core
 
+
 # ============================================================================
 # Record definition
 # ============================================================================
@@ -123,7 +124,7 @@ routine days_to_day(days_since_epoch: S64) -> S64
 ### :param minute: The minute component.
 ### :param second: The second component.
 ### :returns: The resulting `Moment` value.
-routine Moment.$create(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
+routine Moment(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
   var d = ymd_to_days(year: year, month: month, day: day)
   var s = d *% SECONDS_PER_DAY +% hour *% SECONDS_PER_HOUR +% minute *% SECONDS_PER_MINUTE +% second
   return Moment(seconds: s, nanoseconds: 0_u32)
@@ -252,7 +253,7 @@ routine Moment.add_duration(duration: Duration) -> Moment
 ### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.subtract_duration(duration: Duration) -> Moment
-  return me.add_duration(duration.$neg())
+  return me.add_duration(duration.neg())
 
 ### Returns the elapsed duration from `earlier` to this moment.
 ### Positive results mean this moment occurs after `earlier`.
@@ -266,21 +267,21 @@ routine Moment.elapsed_since(earlier: Moment) -> Duration
 ### :param you: The duration to advance by.
 ### :returns: The resulting `Moment`.
 @readonly
-routine Moment.$add(you: Duration) -> Moment
+routine Moment.add(you: Duration) -> Moment
   return me.add_duration(you)
 
 ### Returns the moment reached by retreating this one by `you`.
 ### :param you: The duration to subtract.
 ### :returns: The resulting `Moment`.
 @readonly
-routine Moment.$sub(you: Duration) -> Moment
+routine Moment.sub(you: Duration) -> Moment
   return me.subtract_duration(you)
 
 ### Returns the elapsed time from `you` to this moment.
 ### :param you: The earlier moment to measure from.
 ### :returns: The `Duration` between the two moments.
 @readonly
-routine Moment.$sub(you: Moment) -> Duration
+routine Moment.sub(you: Moment) -> Duration
   return me.elapsed_since(you)
 
 # ============================================================================
@@ -291,14 +292,14 @@ routine Moment.$sub(you: Moment) -> Duration
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Moment.$eq(you: Moment) -> Bool
+routine Moment.eq(you: Moment) -> Bool
   return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Moment.$cmp(you: Moment) -> ComparisonSign
+routine Moment.cmp(you: Moment) -> ComparisonSign
   if me.seconds < you.seconds
     return ME_SMALL
   if me.seconds > you.seconds
@@ -315,7 +316,7 @@ routine Moment.$cmp(you: Moment) -> ComparisonSign
 
 ### Returns the display form of this moment in a compact UTC civil-time style.
 ### :returns: The resulting `Text` value.
-routine Moment.$represent() -> Text
+routine Moment.represent() -> Text
   var y = me.year()
   var mo = me.month()
   var d = me.day()
@@ -327,8 +328,8 @@ routine Moment.$represent() -> Text
 ### Returns the diagnostic form of this moment using its normalized internal
 ### representation.
 ### :returns: The resulting `Text` value.
-routine Moment.$diagnose() -> Text
-  return "Moment(seconds: " + me.seconds.$represent() + ", nanoseconds: " + me.nanoseconds.$represent() + ")"
+routine Moment.diagnose() -> Text
+  return "Moment(seconds: " + me.seconds.represent() + ", nanoseconds: " + me.nanoseconds.represent() + ")"
 
 # ============================================================================
 # Hashing
@@ -336,16 +337,16 @@ routine Moment.$diagnose() -> Text
 
 ### Returns an xxHash64-based hash of this moment.
 ### :returns: A `U64` hash combining the seconds and nanoseconds components.
-routine Moment.$fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.seconds.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.nanoseconds.$fast_hash())
+routine Moment.fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.seconds.fast_hash())
+  acc = __hash_round(acc: acc, h: me.nanoseconds.fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this moment.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine Moment.$hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0u64, h: me.seconds.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.nanoseconds.$hash(k0: k0, k1: k1))
+routine Moment.hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.seconds.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.nanoseconds.hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

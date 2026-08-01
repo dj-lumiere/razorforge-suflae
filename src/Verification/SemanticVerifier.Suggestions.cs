@@ -135,7 +135,7 @@ public sealed partial class SemanticVerifier
         {
             string name = routine.Name;
             if (routine.OwnerType == null && name.Length > 0 && !name.Contains(value: '.') &&
-                !name.StartsWith(value: '$'))
+                !routine.IsWiredMemberRoutine)
             {
                 yield return name;
             }
@@ -170,18 +170,6 @@ public sealed partial class SemanticVerifier
     internal string UnknownTypeSuggestion(string typeName) =>
         DidYouMean(target: typeName, candidates: TypeSuggestionCandidates());
 
-    /// <summary>Strips owner qualification and rejects wired ($-prefixed) names.</summary>
-    private static string CleanMemberName(string name)
-    {
-        int lastDot = name.LastIndexOf(value: '.');
-        if (lastDot >= 0)
-        {
-            name = name[(lastDot + 1)..];
-        }
-
-        return name.StartsWith(value: '$') ? string.Empty : name;
-    }
-
     /// <summary>
     /// Member names (non-wired methods + member variables) of the receiver type for
     /// member-not-found suggestions. Walks ALL registered routines matched by owner —
@@ -199,8 +187,7 @@ public sealed partial class SemanticVerifier
         };
 
         // "List[Core.S64]" must also match methods owned by the bare "List" definition.
-        int bracketIndex = type.Name.IndexOf(value: '[');
-        string baseName = bracketIndex > 0 ? type.Name[..bracketIndex] : type.Name;
+        string baseName = type.BareName;
 
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -208,7 +195,8 @@ public sealed partial class SemanticVerifier
         // not include them all); query both the resolution and its generic definition.
         foreach (RoutineInfo method in _registry.GetMethodsForType(type: type))
         {
-            string methodName = CleanMemberName(name: method.Name);
+            if (method.IsWiredMemberRoutine) continue;
+            string methodName = method.Name;
             if (methodName.Length > 0 && seen.Add(item: methodName))
             {
                 yield return methodName;
@@ -219,7 +207,8 @@ public sealed partial class SemanticVerifier
         {
             foreach (RoutineInfo method in _registry.GetMethodsForType(type: genericDef))
             {
-                string methodName = CleanMemberName(name: method.Name);
+                if (method.IsWiredMemberRoutine) continue;
+                string methodName = method.Name;
                 if (methodName.Length > 0 && seen.Add(item: methodName))
                 {
                     yield return methodName;
@@ -248,7 +237,7 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
-            string name = CleanMemberName(name: routine.Name);
+            string name = routine.Name;
             if (name.Length > 0 && seen.Add(item: name))
             {
                 yield return name;
@@ -259,7 +248,6 @@ public sealed partial class SemanticVerifier
         {
             RecordTypeInfo record => record.MemberVariables,
             EntityTypeInfo entity => entity.MemberVariables,
-            CrashableTypeInfo crashable => crashable.MemberVariables,
             _ => null
         };
 

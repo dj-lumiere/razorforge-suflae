@@ -186,7 +186,7 @@ public sealed class MutationInference
 
         // A direct write to a Hijacked[T] field relocates the buffer pointer — migratable.
         if (assignment.Target is MemberExpression { Object: IdentifierExpression { Name: "me" } } direct
-            && IsHijackedField(ownerType: node.Routine.OwnerType, fieldName: direct.PropertyName))
+            && IsHijackedField(ownerType: node.Routine.OwnerType, fieldName: direct.MemberName))
         {
             node.DirectlyMigrates = true;
             node.InferredMutation = MutationCategory.Migratable;
@@ -202,12 +202,11 @@ public sealed class MutationInference
         {
             EntityTypeInfo e => e.MemberVariables,
             RecordTypeInfo r => r.MemberVariables,
-            CrashableTypeInfo c => c.MemberVariables,
             _ => null
         };
 
         MemberVariableInfo? field = fields?.FirstOrDefault(predicate: f => f.Name == fieldName);
-        return field?.Type.Name.StartsWith(value: "Hijacked", comparisonType: StringComparison.Ordinal) == true;
+        return field?.Type.Name.StartsWith(value: RuntimeContract.Hijacked, comparisonType: StringComparison.Ordinal) == true;
     }
 
     /// <summary>

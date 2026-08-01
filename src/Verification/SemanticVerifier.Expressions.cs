@@ -34,7 +34,7 @@ public sealed partial class SemanticVerifier
             CompoundAssignmentExpression compound => AnalyzeCompoundAssignment(compound: compound),
             BinaryExpression binary => AnalyzeBinaryExpression(binary: binary),
             UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
-            CallExpression call => AnalyzeCallExpression(call: call),
+            CallExpression call => AnalyzeCallExpression(call: call, expectedType: expectedType),
             MemberExpression member => AnalyzeMemberExpression(member: member),
             OptionalMemberExpression optMember => AnalyzeOptionalMemberExpression(
                 optMember: optMember),
@@ -155,8 +155,13 @@ public sealed partial class SemanticVerifier
                     return _currentRoutine.OwnerType;
                 }
 
-                // Re-lookup to get the updated type with resolved protocols/member variables
-                TypeSymbol? ownerType = _registry.LookupType(name: _currentRoutine.OwnerType.Name);
+                // Re-lookup to get the updated type with resolved protocols/member variables.
+                // Use the module-qualified FullName, not the bare Name: two modules can each declare
+                // a `Point`, and a bare `LookupType("Point")` collapses to a first-wins short-name
+                // match — binding `me` to the WRONG module's type (cross-module contamination).
+                TypeSymbol? ownerType =
+                    _registry.LookupType(name: _currentRoutine.OwnerType.FullName)
+                    ?? _registry.LookupType(name: _currentRoutine.OwnerType.Name);
                 if (ownerType != null)
                 {
                     return ownerType;
@@ -169,9 +174,10 @@ public sealed partial class SemanticVerifier
                 return _registry.LookupType(name: "Maybe") ?? ErrorTypeInfo.Instance;
         }
 
-        // Flag-context resolution: when analyzing the RHS of `p isonly READ` (where p: Perm),
-        // bare `READ` resolves against `Perm`'s flag members. The matching FlagsMemberInfo
-        // bit is stashed on the identifier so ExpressionLoweringPass can emit the bitmask.
+        // Flag-context resolution: while a flags type is the active flag-context, a bare
+        // identifier (e.g. `READ`) resolves against that type's flag members. The matching
+        // FlagsMemberInfo bit is stashed on the identifier so ExpressionLoweringPass can emit
+        // the bitmask.
         if (_flagsContextStack.Count > 0 && id.Name.Length > 0 && !id.Name.Contains(value: '.'))
         {
             TypeSymbol flagsCtx = _flagsContextStack.Peek();
@@ -232,11 +238,9 @@ public sealed partial class SemanticVerifier
             return type;
         }
 
-        // Try to look up as routine (function reference)
-        // Strip '!' suffix for failable routine references (e.g., "stop!" -> "stop")
-        string routineLookupName = id.Name.EndsWith(value: '!')
-            ? id.Name[..^1]
-            : id.Name;
+        // Try to look up as routine (function reference).
+        // Identifier names are bare — the failable `!` is a structured flag, never in the name.
+        string routineLookupName = id.Name;
         RoutineInfo? routine = _registry.LookupRoutine(fullName: routineLookupName);
         // Try current module prefix (e.g., "infinite_loop" -> "HelloWorld.infinite_loop")
         if (routine == null && _currentModuleName != null &&
@@ -264,6 +268,14 @@ public sealed partial class SemanticVerifier
             return new GenericParameterTypeInfo(name: id.Name);
         }
 
+        // A `secret` type of this name exists but lives in another module (module-private): resolution
+        // above deliberately hid it. Say so explicitly — "Unknown identifier" reads like a typo and
+        // hides the real reason (the type is intentionally not exported).
+        if (TryReportSecretTypeAccess(name: id.Name, location: id.Location))
+        {
+            return ErrorTypeInfo.Instance;
+        }
+
         ReportError(code: SemanticDiagnosticCode.UnknownIdentifier,
             message:
             $"Unknown identifier '{id.Name}'.{DidYouMean(target: id.Name, candidates: IdentifierSuggestionCandidates())}",
@@ -272,9 +284,35 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
+    /// If a <c>secret</c> (module-private) type whose bare name matches <paramref name="name"/> exists
+    /// in a module OTHER than the current one, resolution deliberately hid it — report a dedicated
+    /// RF-S402 explaining that (instead of letting the caller emit a misleading "unknown type/identifier"
+    /// that reads like a typo), and return true. Returns false when no such type exists.
+    /// </summary>
+    internal bool TryReportSecretTypeAccess(string name, SourceLocation location)
+    {
+        foreach (TypeInfo t in _registry.GetAllTypes())
+        {
+            if (t is { Visibility: VisibilityModifier.Secret }
+                && t.Name == name
+                && t.Module != _currentModuleName)
+            {
+                ReportError(code: SemanticDiagnosticCode.SecretTypeAccess,
+                    message:
+                    $"'{name}' is a secret (module-private) type of module '{t.Module}' " +
+                    $"and cannot be used from module '{_currentModuleName ?? "?"}'.",
+                    location: location);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Analyzes binary expressions that remain as BinaryExpression nodes after parsing.
     /// Note: Most arithmetic, comparison, and bitwise operators are desugared to method calls
-    /// in the parser (e.g., a + b -> a.$add(b)). This method only handles operators that
+    /// in the parser (e.g., a + b -> a.add(b)). This method only handles operators that
     /// are NOT desugared:
     /// - Assignment (=)
     /// - Logical operators (and, or) — require short-circuit evaluation
@@ -288,49 +326,6 @@ public sealed partial class SemanticVerifier
         if (binary is { Operator: BinaryOperator.Assign, Left: IdentifierExpression rebindId })
         {
             _deadrefVariables.Remove(item: rebindId.Name);
-        }
-
-        // `p isonly RHS` — analyze LHS first, then analyze RHS with flag-context so bare flag
-        // names (READ, WRITE) and bare-name combinations (READ and WRITE) resolve against the
-        // LHS flags type without needing the type qualifier.
-        if (binary.Operator == BinaryOperator.IsOnly)
-        {
-            TypeSymbol lhsType = AnalyzeExpression(expression: binary.Left);
-            TypeSymbol rhsType;
-            if (lhsType is FlagsTypeInfo)
-            {
-                _flagsContextStack.Push(item: lhsType);
-                try
-                {
-                    rhsType = AnalyzeExpression(expression: binary.Right);
-                }
-                finally
-                {
-                    _flagsContextStack.Pop();
-                }
-            }
-            else
-            {
-                rhsType = AnalyzeExpression(expression: binary.Right);
-                if (lhsType is not ErrorTypeInfo)
-                {
-                    ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
-                        message:
-                        $"'isonly' requires a flags value on the left side, but got '{lhsType.Name}'.",
-                        location: binary.Location);
-                }
-            }
-
-            if (lhsType is FlagsTypeInfo && rhsType is not ErrorTypeInfo &&
-                rhsType.Name != lhsType.Name)
-            {
-                ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
-                    message:
-                    $"'isonly' requires both operands to be the same flags type, but got '{lhsType.Name}' and '{rhsType.Name}'.",
-                    location: binary.Location);
-            }
-
-            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
         }
 
         // TODO: This should be done with not operator, but with member routines.
@@ -384,7 +379,7 @@ public sealed partial class SemanticVerifier
                 return ErrorTypeInfo.Instance;
             case BinaryOperator.But:
                 return leftType;
-            // #128: 'or' cannot be used to combine flags outside is/isnot/isonly tests
+            // #128: 'or' cannot be used to combine flags outside is/isnot tests
             case BinaryOperator.Or when
                 (leftType is FlagsTypeInfo || rightType is FlagsTypeInfo):
                 ReportError(code: SemanticDiagnosticCode.FlagsOrInAssignment,
@@ -414,12 +409,49 @@ public sealed partial class SemanticVerifier
                     ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
                         message:
                         $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used " +
-                        $"with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but'/'isonly' for " +
+                        $"with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but' for " +
                         $"" +
                         $"flag" +
                         $" operations.",
                         location: binary.Location);
                     return ErrorTypeInfo.Instance;
+            }
+
+            // An overloadable operator binds ONLY to a type that satisfies the operator's protocol —
+            // it must not bind to a method merely NAMED the same on a non-conforming type (e.g.
+            // `Set.add(value:)->Bool` inserts an element; its signature does not match
+            // `Addable.add(other:Self)->Self`, so `set + x` must be an error, not a silent insert).
+            // Conformance here is STRUCTURAL (ImplementsProtocol checks the required method signatures),
+            // so a type need not spell `obeys` just to use `==`/`in`/`<` — but a coincidental name with
+            // the wrong signature is correctly rejected. Only Record/Entity types are checked (that is
+            // where ImplementsProtocol resolves structurally); tuples/numerically-intrinsic and generic
+            // parameters (conformance via `needs` constraints, checked at instantiation) are deferred.
+            // An overloadable operator binds ONLY to a type that satisfies the operator's protocol —
+            // never to a coincidental same-named method with the wrong shape (`set + x` must NOT lower
+            // to `Set.add`). Conformance is STRUCTURAL (ImplementsProtocol checks the required method
+            // signatures), so a type need not spell `obeys` to use `==`/`in`/`+`, but a wrong-signature
+            // name is rejected. Only Record/Entity types are checked (where ImplementsProtocol resolves
+            // structurally); built-in structural types (tuples) and generic parameters (conformance via
+            // `needs` constraints, checked at instantiation) are deferred. Membership operators
+            // (`in`/`notin`) reverse to `rhs.contains(lhs)`, so the RIGHT operand is the receiver.
+            bool operatorIsReversed = binary.Operator is BinaryOperator.In or BinaryOperator.NotIn;
+            TypeSymbol operatorReceiverType = operatorIsReversed ? rightType : leftType;
+            if (!_isReducedStdlibValidation
+                && operatorReceiverType is RecordTypeInfo or EntityTypeInfo
+                && GetRequiredProtocols(wiredName: operatorMethod) is { Count: > 0 } requiredProtocols
+                && !requiredProtocols.Any(predicate: p =>
+                    ImplementsProtocol(type: operatorReceiverType, protocolName: p)))
+            {
+                string protoText = requiredProtocols.Count == 1
+                    ? $"'{requiredProtocols[0]}'"
+                    : string.Join(separator: " or ",
+                        values: requiredProtocols.Select(selector: p => $"'{p}'"));
+                ReportError(code: SemanticDiagnosticCode.BinaryOperatorNotFound,
+                    message:
+                    $"Operator '{binary.Operator.ToStringRepresentation()}' is not defined for " +
+                    $"'{operatorReceiverType.Name}': the type must obey {protoText}.",
+                    location: binary.Location);
+                return ErrorTypeInfo.Instance;
             }
         }
 
@@ -492,7 +524,7 @@ public sealed partial class SemanticVerifier
 
             // User type — look up $unwrap_or method
             RoutineInfo? unwrapOrMethod =
-                _registry.LookupMethod(type: leftType, methodName: "$unwrap_or");
+                _registry.LookupMethod(type: leftType, methodName: "unwrap_or");
             if (unwrapOrMethod != null)
             {
                 return unwrapOrMethod.ReturnType ?? rightType;
@@ -664,6 +696,32 @@ public sealed partial class SemanticVerifier
                         location: location);
                 }
 
+                // Suflae flow typing: reassigning an entity reference re-derives its nullability.
+                if (_registry.Language == Language.Suflae && varInfo != null &&
+                    IsEntityRefType(type: varInfo.Type))
+                {
+                    bool valueNullable = IsNullableEntityRead(expr: value);
+                    if (varInfo.IsNullable)
+                    {
+                        // A nullable local: a possibly-none RHS re-nullifies it (shadowing any prior
+                        // null-check); a non-null RHS proves it non-none for the rest of this flow.
+                        if (valueNullable)
+                        {
+                            _registry.MarkVariableNullableAgain(name: id.Name);
+                        }
+                        else
+                        {
+                            _registry.MarkVariableNonNull(name: id.Name);
+                        }
+                    }
+                    else if (valueNullable)
+                    {
+                        // A non-null local cannot take a possibly-none value.
+                        ReportNullableIntoNonNull(target: $"variable '{id.Name}'", value: value,
+                            optionalHint: $"{id.Name}: <Type>?");
+                    }
+                }
+
                 break;
             }
             // Validate member variable write access (setter visibility)
@@ -676,14 +734,28 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                         message:
-                        $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
+                        $"Cannot write to member '{member.MemberName}' through read-only wrapper '{objectType.Name}'. " +
                         "Use Modifying[T] for exclusive write access or Claiming[T] for locked write access.",
                         location: location);
                 }
 
                 ValidateMemberVariableWriteAccess(objectType: objectType,
-                    memberVariableName: member.PropertyName,
+                    memberVariableName: member.MemberName,
                     location: location);
+
+                // Suflae: a NON-NULLABLE entity field (`x: E`) rejects `o.x = <possibly-none>` — literal
+                // `none` or an unchecked `E?` read. Only an optional field (`x: E?`) may hold a null Roamed
+                // handle. Mirrors the construction check; the field's IsNullable is set in TypeBodyResolver.
+                if (_registry.Language == Language.Suflae &&
+                    objectType is EntityTypeInfo writeEntity &&
+                    writeEntity.LookupMemberVariable(memberVariableName: member.MemberName) is
+                        { IsNullable: false, Type: RecordTypeInfo
+                            { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed } } writeField &&
+                    IsNullableEntityRead(expr: value))
+                {
+                    ReportNullableIntoNonNull(target: $"field '{writeField.Name}'",
+                        value: value, optionalHint: $"{writeField.Name}: <Type>?");
+                }
 
                 // Check if we're in a @readonly method trying to modify 'me'
                 if (_currentRoutine is { IsReadOnly: true } &&
@@ -691,7 +763,7 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                         message:
-                        $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                        $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
                         "Use @migratable to allow mutations.",
                         location: location);
                 }
@@ -704,13 +776,13 @@ public sealed partial class SemanticVerifier
                 TypeSymbol indexedObjectType = AnalyzeExpression(expression: index.Object);
 
                 // Failability: lookup $setitem on the indexed type and propagate `!` to caller.
-                // `arr[i] = v` desugars to `arr.$setitem!(i, v)` for failable indexers; a
+                // `arr[i] = v` desugars to `arr.setitem!(i, v)` for failable indexers; a
                 // non-failable caller must mark HasFailableCalls so its `!` decl is justified.
                 TryGetTransparentProtocolTarget(type: indexedObjectType,
                     targetType: out TypeSymbol setLookupType);
                 RoutineInfo? setItem = _registry.LookupMethod(type: setLookupType,
-                    methodName: "$setitem") ?? _registry.LookupMethod(type: setLookupType,
-                    methodName: "$setitem", isFailable: true);
+                    methodName: "setitem") ?? _registry.LookupMethod(type: setLookupType,
+                    methodName: "setitem", isFailable: true);
                 if (setItem is { IsFailable: true } && _currentRoutine != null)
                 {
                     _currentRoutine.HasFailableCalls = true;
@@ -842,7 +914,7 @@ public sealed partial class SemanticVerifier
             {
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
                 ValidateMemberVariableWriteAccess(objectType: objectType,
-                    memberVariableName: member.PropertyName,
+                    memberVariableName: member.MemberName,
                     location: compound.Location);
 
                 if (_currentRoutine is { IsReadOnly: true } &&
@@ -850,7 +922,7 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                         message:
-                        $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                        $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
                         "Use @migratable to allow mutations.",
                         location: compound.Location);
                 }
@@ -917,7 +989,7 @@ public sealed partial class SemanticVerifier
                 ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
                     message:
                     $"Operator '{compound.Operator.ToStringRepresentation()}=' cannot be used with flags type '{targetType.Name}'. " +
-                    "Use 'but' to remove flags and 'is'/'isnot'/'isonly' to test flags.",
+                    "Use 'but' to remove flags and 'is'/'isnot' to test flags.",
                     location: compound.Location);
                 return ErrorTypeInfo.Instance;
         }
@@ -937,7 +1009,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Step 2: Fallback to create-and-assign (a = a.$add(b)) — not allowed for entity types
+        // Step 2: Fallback to create-and-assign (a = a.add(b)) — not allowed for entity types
         if (targetType.Category == TypeCategory.Entity)
         {
             string opSymbol = compound.Operator.ToStringRepresentation();
@@ -1006,7 +1078,7 @@ public sealed partial class SemanticVerifier
             case UnaryOperator.Minus:
                 if (operandType != ErrorTypeInfo.Instance &&
                     !IsNumericType(type: operandType) &&
-                    _registry.LookupMethod(type: operandType, methodName: "$neg") == null)
+                    _registry.LookupMethod(type: operandType, methodName: "neg") == null)
                 {
                     ReportError(code: SemanticDiagnosticCode.NegationRequiresNumeric,
                         message: "Negation operator requires a numeric operand.",
@@ -1037,7 +1109,7 @@ public sealed partial class SemanticVerifier
                         IsOwnedOf(type: inner, out TypeSymbol ownedInner))
                     {
                         return _registry.GetOrCreateWrapperType(
-                            wrapperName: "Modifying",
+                            wrapperName: Compiler.Resolution.RuntimeContract.Modifying,
                             innerType: ownedInner,
                             isReadOnly: false);
                     }
@@ -1047,7 +1119,7 @@ public sealed partial class SemanticVerifier
                 // User type — look up $unwrap method
             {
                 RoutineInfo? unwrapMethod =
-                    _registry.LookupMethod(type: operandType, methodName: "$unwrap");
+                    _registry.LookupMethod(type: operandType, methodName: "unwrap");
                 if (unwrapMethod != null)
                 {
                     return unwrapMethod.ReturnType ?? ErrorTypeInfo.Instance;

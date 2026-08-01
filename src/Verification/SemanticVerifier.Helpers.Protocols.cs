@@ -86,7 +86,7 @@ public sealed partial class SemanticVerifier
         if (protocol is not { Category: TypeCategory.Protocol } &&
             protocolName.Contains(value: '['))
         {
-            string baseProtocolName = GetBaseTypeName(typeName: protocolName);
+            string baseProtocolName = BareTypeName(typeName: protocolName);
             protocol = LookupTypeWithImports(name: baseProtocolName);
         }
         if (protocol is not { Category: TypeCategory.Protocol })
@@ -151,7 +151,7 @@ public sealed partial class SemanticVerifier
         // Check if the protocol is directly declared (or via parent protocols recursively)
         if (implementedProtocols.Any(implemented =>
                 implemented.Name == protocolName ||
-                GetBaseTypeName(typeName: implemented.Name) == protocolName ||
+                implemented.BareName == protocolName ||
                 (implemented is ProtocolTypeInfo proto &&
                  CheckParentProtocols(proto: proto, targetName: protocolName))))
             return true;
@@ -164,9 +164,8 @@ public sealed partial class SemanticVerifier
                 protoType.TypeArguments is { Count: 1 } args &&
                 args[index: 0].Name == type.Name)
             {
-                string baseProto =
-                    GetBaseTypeName(typeName: protoType.GenericDefinition?.Name ?? protoType.Name);
-                if (baseProto is "Referring" or "Controlling")
+                string baseProto = (protoType.GenericDefinition ?? protoType).BareName;
+                if (baseProto is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling)
                 {
                     return true;
                 }
@@ -210,7 +209,7 @@ public sealed partial class SemanticVerifier
 
         return implementedProtocols.Any(implemented =>
             implemented.Name == protocolName ||
-            GetBaseTypeName(typeName: implemented.Name) == protocolName ||
+            implemented.BareName == protocolName ||
             (implemented is ProtocolTypeInfo proto &&
              CheckParentProtocols(proto: proto, targetName: protocolName)));
     }
@@ -222,7 +221,7 @@ public sealed partial class SemanticVerifier
     {
         foreach (ProtocolTypeInfo parent in proto.ParentProtocols)
         {
-            if (parent.Name == targetName || GetBaseTypeName(typeName: parent.Name) == targetName)
+            if (parent.Name == targetName || parent.BareName == targetName)
             {
                 return true;
             }
@@ -272,11 +271,12 @@ public sealed partial class SemanticVerifier
                 _registry.LookupMethod(type: type, methodName: requiredMethod.Name);
             if (typeMethod == null)
             {
-                // Also check with failable suffix
+                // Method names are bare; the failable `!` is a structured flag. Retry matching a
+                // same-named failable implementation via the isFailable filter.
                 if (requiredMethod.IsFailable)
                 {
                     typeMethod = _registry.LookupMethod(type: type,
-                        methodName: requiredMethod.Name + "!");
+                        methodName: requiredMethod.Name, isFailable: true);
                 }
 
                 if (typeMethod == null)
@@ -400,8 +400,8 @@ public sealed partial class SemanticVerifier
     {
         foreach (TypeSymbol proto in protocols)
         {
-            string baseName = GetBaseTypeName(typeName: proto.Name);
-            if (baseName is "Referring" or "Controlling" && proto.TypeArguments is { Count: 1 })
+            string baseName = proto.BareName;
+            if (baseName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling && proto.TypeArguments is { Count: 1 })
                 return proto.TypeArguments[index: 0];
         }
 
@@ -429,7 +429,7 @@ public sealed partial class SemanticVerifier
         // Handle generic resolutions
         if (expected.IsGenericDefinition && actual.IsGenericResolution)
         {
-            string baseName = GetBaseTypeName(typeName: actual.Name);
+            string baseName = actual.BareName;
             if (baseName == expected.Name)
             {
                 return true;

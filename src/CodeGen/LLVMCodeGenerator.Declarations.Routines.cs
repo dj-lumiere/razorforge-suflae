@@ -124,8 +124,7 @@ public partial class LlvmCodeGenerator
 
         // Struct returns classified Indirect by the target ABI go through a hidden sret pointer.
         // For external("C") this matches the platform C ABI (Win-x64 MSVC: structs > 8 bytes);
-        // for RF routines it is the ABI boundary-coercion return form (see
-        // internal-wiki/v0.1.x-struct-abi-boundary-coercion.md). The declaration, definition,
+        // for RF routines it is the ABI boundary-coercion return form. The declaration, definition,
         // every return, and every call site must agree — see ReturnsViaSret / _currentReturnViaSret.
         bool needsSret = isCExtern
             ? NeedsCExternSret(routine: routine)
@@ -177,24 +176,29 @@ public partial class LlvmCodeGenerator
     private string ClosureStructName(RoutineInfo lambda)
     {
         string name = $"%\"Closure.{lambda.Name}\"";
-        if (!_typeDeclarationsClosure.ContainsKey(key: name))
+        if (_typeDeclarationsClosure.ContainsKey(key: name))
         {
-            var fields = new List<string> { "ptr" };
-            if (lambda.ClosureCaptures != null)
-            {
-                foreach ((string _, TypeInfo capType) in lambda.ClosureCaptures)
-                    fields.Add(item: GetLlvmType(type: capType));
-            }
-            _typeDeclarationsClosure[key: name] =
-                $"{name} = type {{ {string.Join(separator: ", ", values: fields)} }}\n";
+            return name;
         }
+
+        var fields = new List<string> { "ptr" };
+        if (lambda.ClosureCaptures != null)
+        {
+            foreach ((string _, TypeInfo capType) in lambda.ClosureCaptures)
+                fields.Add(item: GetLlvmType(type: capType));
+        }
+        _typeDeclarationsClosure[key: name] =
+            $"{name} = type {{ {string.Join(separator: ", ", values: fields)} }}\n";
         return name;
     }
 
     private void GenerateRoutineDefinition(RoutineDeclaration routine,
-        RoutineInfo? preResolvedInfo = null, string? nameOverride = null)
+        RoutineInfo? preResolvedInfo = null, string? nameOverride = null,
+        string? moduleContext = null)
     {
-        RoutineInfo? routineInfo = preResolvedInfo;
+        // The binding attached at registration is authoritative — it is the exact RoutineInfo this
+        // declaration was registered as, so it needs no name re-parsing or module-blind owner lookup.
+        RoutineInfo? routineInfo = preResolvedInfo ?? routine.ResolvedInfo;
 
         if (routineInfo == null)
         {
@@ -202,7 +206,38 @@ public partial class LlvmCodeGenerator
             // For module-qualified names like "Console.show", the registry key may be
             // "IO.show" (module.name). Try full AST name first, then short name lookup.
             string baseName = routine.Name;
-            routineInfo = _registry.LookupRoutine(fullName: baseName);
+
+            // MEMBER decl in a known module: resolve OWNER-SCOPED to this module FIRST. A bare
+            // `LookupRoutine("Box.destroy")` returns a first-wins entry, so when two modules each
+            // declare `record Box` with a `$destroy`/0-param method, this module's body would be
+            // emitted under the OTHER module's symbol — leaving this module's symbol undefined (the
+            // module-scoped-type over-prune). The overload block below only rescues >0-param methods;
+            // 0-param ones (`$destroy()`, `bump()`) must be pinned here, before the bare lookup.
+            int memberDot = baseName.IndexOf(value: '.');
+            if (!string.IsNullOrEmpty(value: moduleContext) && memberDot > 0)
+            {
+                string ownerSeg = baseName[..memberDot];
+                int obrk = ownerSeg.IndexOf(value: '[');
+                if (obrk > 0) ownerSeg = ownerSeg[..obrk];
+                TypeInfo? scopedOwner = _registry.LookupType(name: $"{moduleContext}.{ownerSeg}");
+                if (scopedOwner != null)
+                {
+                    routineInfo = _registry.LookupMethod(type: scopedOwner,
+                        methodName: baseName[(memberDot + 1)..]);
+                }
+            }
+
+            routineInfo ??= _registry.LookupRoutine(fullName: baseName);
+            // Module-level routine (no dot): prefer the module-qualified key so that two modules'
+            // same-named routines (e.g. each of several imported test modules with a `start`) each
+            // bind to their OWN RoutineInfo. Without this, the bare LookupRoutineByName fallback
+            // below returns a first-wins entry and this module's body is emitted under another
+            // module's symbol.
+            if (routineInfo == null && !string.IsNullOrEmpty(value: moduleContext) &&
+                !baseName.Contains(value: '.'))
+            {
+                routineInfo = _registry.LookupRoutine(fullName: $"{moduleContext}.{baseName}");
+            }
             if (routineInfo == null)
             {
                 int dotIdx = baseName.IndexOf(value: '.');
@@ -212,15 +247,19 @@ public partial class LlvmCodeGenerator
                     // to the owner type FIRST: the owner-qualified LookupRoutine above can miss
                     // when the AST name carries generic params (BaseName drops them), and a bare
                     // short-name lookup could otherwise bind this method's body to a same-named
-                    // free/external routine of a DIFFERENT owner. That mis-binds a generic method
-                    // (e.g. UnpackedFloat.cbrt) to a concrete routine, bypassing the generic-def
-                    // skip below and emitting its body with unbound generics ("Unresolved generic
-                    // method ... reached LLVM codegen").
+                    // free/external routine of a DIFFERENT owner.
                     string ownerPart = baseName[..dotIdx];
                     int bracketIdx = ownerPart.IndexOf(value: '[');
                     if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
                     string shortName = baseName[(dotIdx + 1)..];
-                    TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                    // MODULE-SCOPED owner resolution: prefer the emitting program's own module so two
+                    // modules that each declare `record Box` bind this decl to the CORRECT `Mod.Box`.
+                    // A bare `LookupType("Box")` returns a first-wins entry, emitting this module's body
+                    // under the other module's symbol (leaving THIS module's symbol undefined — the
+                    // module-scoped-type over-prune the harness caught).
+                    TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
+                        ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
+                        : null) ?? _registry.LookupType(name: ownerPart);
                     if (ownerType != null)
                         routineInfo = _registry.LookupMethod(type: ownerType, methodName: shortName);
                     routineInfo ??= _registry.LookupRoutine(fullName: shortName) ??
@@ -262,8 +301,8 @@ public partial class LlvmCodeGenerator
 
                     // Member declaration (Owner.method): disambiguate OWNER-SCOPED. The base-name
                     // path below fails here — routineInfo.BaseName for a member routine is the bare
-                    // "F64.$create" (no module prefix), but overloads register under
-                    // "Core.F64.$create#…", and LookupRoutineOverload's Core-prefix fallback is
+                    // "F64.create" (no module prefix), but overloads register under
+                    // "Core.F64.create#…", and LookupRoutineOverload's Core-prefix fallback is
                     // disabled whenever the base name contains a '.' (which member names always do).
                     // So it would silently fall back to the first-registered overload, ignoring the
                     // arg types we just computed. LookupMethodOverload collects the owner type's
@@ -275,7 +314,11 @@ public partial class LlvmCodeGenerator
                         int bracketIdx = ownerPart.IndexOf(value: '[');
                         if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
                         string shortName = routine.Name[(dotIdx + 1)..];
-                        TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
+                        // Module-scoped owner (see the resolution above) so the overload is matched on
+                        // THIS module's same-named type, not a first-wins cross-module one.
+                        TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
+                            ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
+                            : null) ?? _registry.LookupType(name: ownerPart);
                         if (ownerType != null)
                             overload = _registry.LookupMethodOverload(type: ownerType,
                                 methodName: shortName, argTypes: astParamTypes);
@@ -439,6 +482,8 @@ public partial class LlvmCodeGenerator
         string defineHeader =
             $"define {returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;
+        RecordDebugSubprogram(funcName: funcName, location: routineInfo.Location);
+        _currentDbgLoc = null; // reset the Layer-2 location cursor at each routine boundary
         EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();
@@ -450,7 +495,7 @@ public partial class LlvmCodeGenerator
             // Without this, codegen falls through GenerateRoutineBody on a null AST and emits
             // an empty function returning zero/null — every page_size() call returns 0,
             // every target_os() returns null ptr, and `show(f"target_os: {os}")` AVs in
-            // CStr.$create(from: null).
+            // CStr.create(from: null).
             Statement effectiveBody = routine.Body;
             // Stub routines (declared without a body, like BuilderService.page_size()) get
             // their synthesized body from WiredRoutinePass via _synthesizedBodies. The parser
@@ -725,7 +770,7 @@ public partial class LlvmCodeGenerator
     internal static string MangleRoutineName(RoutineInfo routine)
     {
         // All routines with parameters are disambiguated by parameter type. Overloads
-        // sharing only a name (e.g. LocalMoment.$sub(Duration) vs $sub(LocalMoment),
+        // sharing only a name (e.g. LocalMoment.sub(Duration) vs $sub(LocalMoment),
         // or $hash() vs $hash(k0, k1)) collapse to the same symbol otherwise and the
         // linker arbitrarily picks one definition, mis-typing every call site.
         static bool ShouldDisambiguateByParameterTypes(RoutineInfo candidate) =>
@@ -737,6 +782,36 @@ public partial class LlvmCodeGenerator
         // a unique symbol and the bang would only be decorative. Kept as a no-op wrapper so the
         // owner-case call sites below read uniformly.
         static string Bang(string name, bool failable) => name;
+
+        // Structured attribute prefix — the routine's PROPERTIES (kind, wired-ness, failability,
+        // async mode, storage) are obfuscated into a bracketed list so the name itself carries only
+        // the module-qualified raw identifier. E.g. `[member, wired] Core.Address.create(...)`,
+        // `[independent, crashable] Foo.parse(...)`. External("C") routines are EXEMPT (they keep the
+        // raw C symbol so the LLVM declare links against the native lib), so this is not called there.
+        static string AttrPrefix(RoutineInfo r)
+        {
+            var attrs = new List<string> { r.OwnerType != null ? "member" : "independent" };
+            if (r.IsCommon) attrs.Add(item: "common");
+            if (r.IsWiredMemberRoutine) attrs.Add(item: "wired");
+            if (r.IsFailable) attrs.Add(item: "crashable");
+            if (r.IsDangerous) attrs.Add(item: "dangerous");
+            // Visibility is an attribute too. A member of a `secret` (module-private) type is itself
+            // module-private regardless of its own modifier (owner-secrecy cap), so decorate `secret`
+            // when EITHER the routine or its owner type is secret. `open` is the default → not emitted.
+            // (`posted` is member-variable-only — routines are only secret/open/external.)
+            bool ownerSecret = r.OwnerType is { Visibility: VisibilityModifier.Secret };
+            if (r.Visibility == VisibilityModifier.Secret || ownerSecret) attrs.Add(item: "secret");
+            if (r.IsSuspended) attrs.Add(item: "suspended");
+            else if (r.IsThreaded) attrs.Add(item: "threaded");
+            attrs.Sort();
+            return $"[{string.Join(separator: ", ", values: attrs)}] ";
+        }
+
+        // Labeled parameter list — `(label: Core.Type, …)` — the label participates in overload
+        // identity (RazorForge dispatches on named args), so it belongs in the mangled symbol.
+        static string LabeledParams(RoutineInfo r) =>
+            "(" + string.Join(separator: ", ",
+                values: r.Parameters.Select(selector: p => $"{p.Name}: {p.Type.FullName}")) + ")";
 
         // Lambda closures: [lambda]filename:line:col!(paramTypes)
         if (routine.IsLambda)
@@ -762,11 +837,10 @@ public partial class LlvmCodeGenerator
         string name = SanitizeLlvmName(name: routine.Name);
         if (routine.OwnerType == null)
         {
-            // Top-level: Module.Name!#(typeargs)(paramTypes)
-            // BaseName preserves the module-qualified form. `!` sits on the routine name
-            // itself, before generic-arg and parameter-type suffixes.
-            string fullName = Bang(name: SanitizeLlvmName(name: routine.BaseName),
-                failable: routine.IsFailable);
+            // Top-level: `[independent, …] Module.name(typeargs)(label: Type, …)`.
+            // BaseName preserves the module-qualified form; attributes + labeled params carry the
+            // former `!`/`$`/decoration.
+            string fullName = AttrPrefix(r: routine) + SanitizeLlvmName(name: routine.BaseName);
 
             // Generic instance: append type arguments (e.g., IO.show -> IO.show#S64)
             if (routine.TypeArguments is { Count: > 0 })
@@ -780,30 +854,22 @@ public partial class LlvmCodeGenerator
                 fullName = $"{fullName}({typeArgSuffix}{variadicMarker})";
             }
 
-            if (ShouldDisambiguateByParameterTypes(candidate: routine))
-            {
-                string paramTypes = string.Join(separator: ",",
-                    values: routine.Parameters.Select(selector: p => p.Type.FullName));
-                fullName = $"{fullName}({paramTypes})";
-            }
-
+            fullName += LabeledParams(r: routine);
             return Q(name: fullName);
         }
 
-        // Common (type-level static) routines: [common]Module.Type.name!(paramTypes)
+        // Common (type-level static) routines: `[member, common, …] Module.Type.name(label: Type, …)`.
         if (routine.IsCommon)
         {
             string typeName = routine.OwnerType.FullName;
-            string paramTypes = string.Join(separator: ",",
-                values: routine.Parameters.Select(selector: p => p.Type.FullName));
-            string commonName = Bang(name: $"[common]{typeName}.{name}",
-                failable: routine.IsFailable);
-            return Q(name: $"{commonName}({paramTypes})");
+            return Q(name: $"{AttrPrefix(r: routine)}{typeName}.{name}{LabeledParams(r: routine)}");
         }
 
-        // Method: Module.OwnerType.Name! (OwnerType.FullName includes module)
+        // Method: `[member, wired?, crashable?, …] Module.OwnerType.name(label: Type, …)`
+        // (OwnerType.FullName includes module). The `$`/`!` are gone from the name — they are in the
+        // attribute prefix.
         string ownerTypeName = routine.OwnerType.FullName;
-        string baseName = Bang(name: $"{ownerTypeName}.{name}", failable: routine.IsFailable);
+        string baseName = AttrPrefix(r: routine) + $"{ownerTypeName}.{name}";
 
         // Method-level type arguments (e.g., Hijacked[U64].recast_as[BTreeListNode[S64]]).
         // Distinct from owner type args already in OwnerType.FullName.
@@ -843,16 +909,12 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Disambiguate synthesized error-handling variants and creators by all
-        // parameter types so overloads like try_create(S8) / try_create(Text) and
-        // try_find(Character) / try_find(Referring[Text]) do not collapse.
-        if (ShouldDisambiguateByParameterTypes(candidate: routine))
-        {
-            string paramTypes = string.Join(separator: ",",
-                values: routine.Parameters.Select(
-                    selector: p => MangleParamTypeName(routine: routine, paramType: p.Type)));
-            baseName = $"{baseName}({paramTypes})";
-        }
+        // Labeled parameter list — `(label: Type, …)` — always appended (even empty `()`); the label
+        // is part of overload identity. Uses MangleParamTypeName for wrapper-forwarder inner-generic
+        // param mapping.
+        baseName += "(" + string.Join(separator: ", ",
+            values: routine.Parameters.Select(
+                selector: p => $"{p.Name}: {MangleParamTypeName(routine: routine, paramType: p.Type)}")) + ")";
 
         return Q(name: baseName);
     }
@@ -929,9 +991,9 @@ public partial class LlvmCodeGenerator
 
     private static bool IsCreatorRoutine(RoutineInfo routine)
     {
-        return routine.Name.Contains(value: "$create") ||
+        return routine.Name.Contains(value: "create") ||
                routine.Name is "try_create" or "check_create" or "lookup_create" ||
-               routine.OriginalName?.Contains(value: "$create") == true;
+               routine.OriginalName?.Contains(value: "create") == true;
     }
 
     private string GetImplicitMeParameterDeclaration(RoutineInfo routine, bool includeName)
@@ -965,7 +1027,7 @@ public partial class LlvmCodeGenerator
         //     at the call boundary by the entity-ownership rule),
         //   - `Modifying[T]` (scope-bound exclusive borrow — its definition).
         bool isExclusive = routine.OwnerType is EntityTypeInfo
-                           || routine.OwnerType is WrapperTypeInfo { Name: "Modifying" };
+                           || routine.OwnerType is WrapperTypeInfo { Name: Resolution.RuntimeContract.Modifying };
         if (isExclusive)
         {
             return routine.MutationCategory == MutationCategory.Readonly
@@ -987,7 +1049,7 @@ public partial class LlvmCodeGenerator
 
     private static string GetExplicitParameterAttributes(TypeInfo? type) =>
         type is EntityTypeInfo
-        || type is WrapperTypeInfo { Name: "Modifying" }
+        || type is WrapperTypeInfo { Name: Resolution.RuntimeContract.Modifying }
             ? "noalias"
             : string.Empty;
 
@@ -1034,7 +1096,7 @@ public partial class LlvmCodeGenerator
     /// and "mutates in place" never overlap.</item>
     /// </list>
     /// Entities are already by-ref via their pointer ABI. This replaces the old <c>$setitem</c>
-    /// name-check: <c>Array.$setitem</c> is by-ref because Array is aggregate-backed, like every
+    /// name-check: <c>Array.setitem</c> is by-ref because Array is aggregate-backed, like every
     /// other Array method — not because of its name.
     /// </summary>
     internal static bool IsByRefMeRecord(TypeInfo? ownerType) => ownerType switch
@@ -1077,7 +1139,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static bool IsThreadShareableType(TypeInfo? type) =>
         type != null &&
-        GetGenericBaseNameStatic(type: type) is "Atomic" or "Shared" or "Watched";
+        GetGenericBaseNameStatic(type: type) is Resolution.RuntimeContract.Atomic or Resolution.RuntimeContract.Shared or Resolution.RuntimeContract.Watched;
 
     /// <summary>
     /// Gets the zero/default value for a type.

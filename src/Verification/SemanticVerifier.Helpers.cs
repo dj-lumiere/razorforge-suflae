@@ -384,6 +384,16 @@ public sealed partial class SemanticVerifier
             Expression argExpr = binding.Value;
             TypeSymbol argType = AnalyzeExpression(expression: argExpr, expectedType: paramType);
 
+            // Suflae: a NON-NULL entity parameter rejects a possibly-none argument. Every SF entity
+            // parameter is non-null — a nullable one would be `Maybe[E]`, a distinct type — so any
+            // entity-reference param must be fed a checked (non-none) value. A nullable Roamed arg is
+            // still IsAssignableTo the bare-entity param (the E↔Roamed bridge), so this is the only gate.
+            if (IsEntityRefType(type: paramType) && IsNullableEntityRead(expr: argExpr))
+            {
+                ReportNullableIntoNonNull(target: $"parameter '{param.Name}' of '{routine.Name}'",
+                    value: argExpr, optionalHint: $"{param.Name}: <Type>?");
+            }
+
             if (argType.Category == TypeCategory.Error || paramType.Category == TypeCategory.Error)
             {
                 continue;
@@ -416,9 +426,9 @@ public sealed partial class SemanticVerifier
             else
             {
                 // Implicit $refer/$control coercion for marker-protocol params.
-                // Wraps the argument expression as `arg.$refer()` / `arg.$control()` so
+                // Wraps the argument expression as `arg.refer()` / `arg.control()` so
                 // codegen, reachability, and call-classification all see a fully resolved
-                // routine reference. The wrapper's $refer/$control method returns ?T (the
+                // routine reference. The wrapper's $refer/$control method returns T (the
                 // inner entity), which matches the rewritten signature post-Phase 7.
                 TryInjectMarkerCoercion(routine, arguments, binding.Key, paramType, argType);
             }
@@ -431,9 +441,9 @@ public sealed partial class SemanticVerifier
                 : argExpr;
             // Borrow protocols (Referring[T] / Controlling[T]) accept the source by reference —
             // no copy/move is happening at the call site, so no verb is required.
-            string paramBase = GetBaseTypeName(typeName: paramType.Name);
+            string paramBase = paramType.BareName;
             bool paramIsBorrow = paramType.Category == TypeCategory.Protocol &&
-                                 paramBase is "Referring" or "Controlling";
+                                 paramBase is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
             if (_registry.Language == Language.RazorForge &&
                 argValue is IdentifierExpression or MemberExpression &&
                 !IsTriviallyCopyable(type: argType) &&
@@ -454,12 +464,27 @@ public sealed partial class SemanticVerifier
                 }
             }
 
-            // NOTE: a call-site "bare entity passed to a consuming param needs `steal`" check used
-            // to live here, but it false-positived on borrow parameters: a `Referring[T]` /
-            // `Controlling[T]` parameter binding has its ResolvedType stripped to the inner entity
-            // `T`, so the check could not distinguish a borrow param from a consuming one and
-            // flagged legitimate stdlib borrows (FastSet.is_subset, List.add_range). Re-add only
-            // with a reliable borrow-vs-consume signal (e.g. an unstripped declared-type marker).
+            // Bare entity passed to a CONSUMING parameter needs an explicit `steal` (RF-S413).
+            // The old check false-positived because it looked at a stripped type; the reliable
+            // signal is STRUCTURAL and read here at Phase 5, BEFORE MarkerProtocolDesugarPass strips
+            // borrow params to their inner `T`: a consuming param is bare `EntityTypeInfo`, while
+            // every borrow is a Protocol (`Referring`/`Controlling`) or a Record wrapper
+            // (`Viewing`/`Modifying`/…) — never bare `EntityTypeInfo`. So gating on
+            // `paramType is EntityTypeInfo` excludes all borrow forms with no name list. Verb-wrapped
+            // arguments (`steal x`, `x.copy()`, `x.share()`) are Steal/Call expressions, not
+            // Identifier/Member, so they are excluded automatically. Safety comes from move tracking;
+            // this check makes the destructive transfer visible in source.
+            if (_registry.Language == Language.RazorForge
+                && argValue is IdentifierExpression or MemberExpression
+                && argType is EntityTypeInfo
+                && paramType is EntityTypeInfo)
+            {
+                ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
+                    message:
+                    $"Cannot pass entity '{argType.Name}' to consuming parameter '{param.Name}' of " +
+                    $"'{routine.Name}' directly. Use 'steal' for ownership transfer, or pass a borrow.",
+                    location: argValue.Location);
+            }
         }
     }
 
@@ -502,8 +527,8 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Rewrites `show(x)` / `alert(x)` arguments in-place when `x` is a copy-restricted
-    /// wrapper (Owned, Retained, Tracked, ...). Each such argument becomes `x.$represent()`
-    /// (for show) or `x.$diagnose()` (for alert). The display protocols guarantee `@readonly`,
+    /// wrapper (Owned, Retained, Tracked, ...). Each such argument becomes `x.represent()`
+    /// (for show) or `x.diagnose()` (for alert). The display protocols guarantee `@readonly`,
     /// so the method call is a borrow — `x` is not consumed. The resulting `Text` matches
     /// the `show(value: Referring[Text])` / `alert(value: Referring[Text])` overload
     /// (value-record, no copy verb), so subsequent overload resolution picks that branch
@@ -542,15 +567,15 @@ public sealed partial class SemanticVerifier
             //     returns false; we need the rewrite to avoid S420.
             //   - raw entities (List[T], Set[T], Dict[K,V]) — `IsTriviallyCopyable` returns
             //     true (fallback), but the generic `alert[T]` / `show[T]` monomorphization
-            //     copies the entity ptr by value, which corrupts. Rewriting to `arg.$diagnose()`
+            //     copies the entity ptr by value, which corrupts. Rewriting to `arg.diagnose()`
             //     extracts a Text and uses the cleaner `Referring[Text]` overload instead.
             bool isEntity = argType is EntityTypeInfo;
             if (!isEntity && IsTriviallyCopyable(type: argType)) continue;
 
-            string methodName = isAlert ? "$diagnose" : "$represent";
+            string methodName = isAlert ? "diagnose" : "represent";
             var memberAccess = new MemberExpression(
                 Object: innerExpr,
-                PropertyName: methodName,
+                MemberName: methodName,
                 Location: innerExpr.Location);
             var displayCall = new CallExpression(
                 Callee: memberAccess,
@@ -593,6 +618,21 @@ public sealed partial class SemanticVerifier
     /// Handles error types (to suppress cascading errors), generic resolution matching, and protocol conformance.
     /// No implicit numeric or widening conversions are performed.
     /// </summary>
+    /// <summary>True when <paramref name="type"/> is `Roamed[E]` (record or wrapper form) for the given
+    /// entity — used to treat a bare SF entity and its Roamed handle as mutually assignable.</summary>
+    private static bool IsRoamedOfEntity(TypeSymbol type, EntityTypeInfo entity)
+    {
+        string baseName = type switch
+        {
+            RecordTypeInfo { GenericDefinition: { } gd } => gd.Name,
+            WrapperTypeInfo w => w.Name,
+            _ => string.Empty
+        };
+        return baseName == Compiler.Resolution.RuntimeContract.Roamed
+            && type.TypeArguments is [{ } inner]
+            && inner.FullName == entity.FullName;
+    }
+
     private bool IsAssignableTo(TypeSymbol source, TypeSymbol target)
     {
         // Same type
@@ -607,6 +647,18 @@ public sealed partial class SemanticVerifier
         if (source.FullName == target.FullName)
         {
             return true;
+        }
+
+        // Suflae: a bare entity `E` and `Roamed[E]` are the same thing to an SF user (entity FIELDS are
+        // the `Roamed[E]` record at collection; entity LOCALS stay bare `E` in SA until the Phase-6 SF
+        // lowering pass retypes them). Treat them as mutually assignable — the pass + codegen insert the
+        // `.roam()` / field release-old+retain-new. RazorForge keeps the strict distinction.
+        if (_registry.Language == Language.Suflae)
+        {
+            // Both `x: E` (non-null) and `x: E?` (optional) fields are `Roamed[E]`, so a bare entity is
+            // assignable to either (the pass inserts the roam). `E?`'s `none` is a null Roamed handle.
+            if (source is EntityTypeInfo se && IsRoamedOfEntity(type: target, entity: se)) return true;
+            if (target is EntityTypeInfo te && IsRoamedOfEntity(type: source, entity: te)) return true;
         }
 
         // Error types are assignable to anything (to reduce cascading errors)
@@ -657,7 +709,7 @@ public sealed partial class SemanticVerifier
         // Generic type matching - check if resolution matches definition
         if (target.IsGenericDefinition && source.IsGenericResolution)
         {
-            string baseName = GetBaseTypeName(typeName: source.Name);
+            string baseName = source.BareName;
             if (baseName == target.Name)
             {
                 return true;
@@ -670,7 +722,7 @@ public sealed partial class SemanticVerifier
         if (source.IsGenericDefinition && target is { IsGenericResolution: true, TypeArguments: not null } &&
             target.TypeArguments.All(predicate: t => t is GenericParameterTypeInfo))
         {
-            string baseName = GetBaseTypeName(typeName: target.Name);
+            string baseName = target.BareName;
             if (baseName == source.Name)
             {
                 return true;
@@ -684,18 +736,18 @@ public sealed partial class SemanticVerifier
             // bare source whose inner type matches T. Retained/Modifying are accepted by
             // both; Viewing is readonly so accepted only by Referring; Hijacked needs explicit
             // .as_entity() — never accepted by implicit borrow coercion.
-            string targetBase = GetBaseTypeName(typeName: target.Name);
-            if ((targetBase == "Referring" || targetBase == "Controlling") &&
+            string targetBase = target.BareName;
+            if ((targetBase == Compiler.Resolution.RuntimeContract.Referring || targetBase == Compiler.Resolution.RuntimeContract.Controlling) &&
                 target.TypeArguments is { Count: 1 } borrowArgs)
             {
                 TypeSymbol borrowInner = borrowArgs[index: 0];
                 if (TryGetOwnershipWrapperInner(type: source, wrapperBase: out string? srcWrapper,
                         inner: out TypeSymbol? srcInner))
                 {
-                    bool wrapperAllowed = targetBase == "Referring"
-                        ? srcWrapper is "Retained" or "Modifying" or "Viewing"
-                            or "Controlling" or "Referring"
-                        : srcWrapper is "Retained" or "Modifying" or "Controlling";
+                    bool wrapperAllowed = targetBase == Compiler.Resolution.RuntimeContract.Referring
+                        ? srcWrapper is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Viewing
+                            or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Referring
+                        : srcWrapper is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Controlling;
                     if (wrapperAllowed && srcInner != null &&
                         (srcInner.FullName == borrowInner.FullName ||
                          srcInner.Name == borrowInner.Name))
@@ -705,7 +757,7 @@ public sealed partial class SemanticVerifier
                 if (source.Category == TypeCategory.Entity &&
                     (source.FullName == borrowInner.FullName ||
                      source.Name == borrowInner.Name ||
-                     GetBaseTypeName(typeName: source.Name) == GetBaseTypeName(typeName: borrowInner.Name)))
+                     source.BareName == borrowInner.BareName))
                     return true;
             }
 
@@ -776,9 +828,9 @@ public sealed partial class SemanticVerifier
     private static bool TryGetOwnershipWrapperInner(TypeSymbol type, out string? wrapperBase,
         out TypeSymbol? inner)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
-        if (baseName is "Retained" or "Tracked" or "Modifying" or "Viewing"
-            or "Controlling" or "Referring" or "Hijacked")
+        string baseName = type.BareName;
+        if (baseName is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Viewing
+            or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Hijacked)
         {
             if (type is WrapperTypeInfo { InnerType: not null } w)
             {
@@ -800,13 +852,13 @@ public sealed partial class SemanticVerifier
 
     private static bool IsOwnedOf(TypeSymbol type, out TypeSymbol inner)
     {
-        if (type is WrapperTypeInfo { Name: "Owned" } wrapped)
+        if (type is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned } wrapped)
         {
             inner = wrapped.InnerType;
             return true;
         }
 
-        if (GetBaseTypeName(typeName: type.Name) == "Owned" &&
+        if (type.BareName == Compiler.Resolution.RuntimeContract.Owned &&
             type.TypeArguments is { Count: 1 } args)
         {
             inner = args[index: 0];
@@ -818,9 +870,12 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Gets the base type name without generic arguments.
+    /// Strips the generic-arg suffix from a RAW type-name string (e.g. "List[S64]" -> "List").
+    /// Prefer <see cref="TypeInfo.BareName"/> when a TypeInfo is in hand; this exists only for the
+    /// few call sites that carry a bare string (e.g. a <c>TypeExpression.Name</c> or a protocol-name
+    /// parameter) with no TypeInfo to read <c>.BareName</c> from.
     /// </summary>
-    private static string GetBaseTypeName(string typeName)
+    private static string BareTypeName(string typeName)
     {
         int genericIndex = typeName.IndexOf(value: '[');
         return genericIndex >= 0
@@ -930,7 +985,7 @@ public sealed partial class SemanticVerifier
     private static TypeSymbol UnwrapBorrowProtocol(TypeSymbol type)
     {
         if (type.Category == TypeCategory.Protocol &&
-            GetBaseTypeName(typeName: type.Name) is "Referring" or "Controlling" &&
+            type.BareName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling &&
             type.TypeArguments is { Count: > 0 } args)
         {
             return args[index: 0];
@@ -945,12 +1000,12 @@ public sealed partial class SemanticVerifier
         // ($ne is auto-derived from $eq), and all ordering operators are backed by `$cmp`
         // ($lt/$le/$gt/$ge are auto-derived). Protocols (Equatable/Comparable) declare only the
         // base method, so checking the derived name would spuriously fail for constrained generics
-        // (e.g. `me[i] != other[i]` inside `List[T].$eq needs T obeys Equatable`).
+        // (e.g. `me[i] != other[i]` inside `List[T].eq needs T obeys Equatable`).
         string? methodName = op switch
         {
-            BinaryOperator.Equal or BinaryOperator.NotEqual => "$eq",
+            BinaryOperator.Equal or BinaryOperator.NotEqual => "eq",
             BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
-                or BinaryOperator.GreaterEqual or BinaryOperator.ThreeWayComparator => "$cmp",
+                or BinaryOperator.GreaterEqual or BinaryOperator.ThreeWayComparator => "cmp",
             _ => op.GetMethodName()
         };
         if (methodName == null)
@@ -958,10 +1013,10 @@ public sealed partial class SemanticVerifier
             return false;
         }
 
-        // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].$eq).
+        // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].eq).
         // A resolution whose owner is a ProtocolTypeInfo is the ABSTRACT protocol declaration
         // (RF protocols have no default implementations) — for a CONCRETE receiver it would link
-        // to nothing (e.g. `record Cat` with no `$eq` resolving `==` to `Equatable.$eq`). Only a
+        // to nothing (e.g. `record Cat` with no `$eq` resolving `==` to `Equatable.eq`). Only a
         // concrete implementation counts as support here; generic-parameter receivers get their
         // constraint-based support from the dedicated branch below.
         RoutineInfo? resolved = _registry.LookupMethod(type: type, methodName: methodName);
@@ -1019,8 +1074,7 @@ public sealed partial class SemanticVerifier
         if (proto is not ProtocolTypeInfo p) return false;
         visited ??= new HashSet<string>(StringComparer.Ordinal);
         if (!visited.Add(item: p.Name)) return false;
-        if (p.Methods.Any(predicate: m =>
-                m.Name == methodName || m.Name + "!" == methodName))
+        if (p.Methods.Any(predicate: m => m.Name == methodName))
             return true;
         return p.ParentProtocols.Any(parent =>
             ProtocolDeclaresMethod(proto: parent, methodName: methodName, visited: visited));
@@ -1091,26 +1145,26 @@ public sealed partial class SemanticVerifier
     private static readonly HashSet<string> OperatorWiredMethods =
     [
         // Arithmetic
-        "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
+        "add", "sub", "mul", "truediv", "floordiv", "mod", "pow",
         // Wrapping arithmetic
-        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
+        "add_wrap", "sub_wrap", "mul_wrap", "pow_wrap",
         // Clamping arithmetic
-        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
+        "add_clamp", "sub_clamp", "mul_clamp", "truediv_clamp", "pow_clamp",
         // Comparison
-        "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
+        "eq", "ne", "lt", "le", "gt", "ge", "cmp",
         // Bitwise
-        "$bitand", "$bitor", "$bitxor",
-        "$ashl", "$ashr", "$lshl", "$lshr",
+        "bitand", "bitor", "bitxor",
+        "ashl", "ashr", "lshl", "lshr",
         // Unary
-        "$neg", "$bitnot",
+        "neg", "bitnot",
         // Membership
-        "$contains", "$notcontains",
+        "contains", "notcontains",
         // Indexing
-        "$getitem", "$setitem",
+        "getitem", "setitem",
         // Iteration
-        "$iter", "$next",
+        "iter", "emit",
         // Context management
-        "$enter", "$exit"
+        "enter", "exit"
     ];
 
     /// <summary>Returns true if the given method name is an operator wired (e.g., <c>$add</c>, <c>$eq</c>).</summary>
@@ -1152,7 +1206,7 @@ public sealed partial class SemanticVerifier
         if (op is BinaryOperator.In or BinaryOperator.NotIn)
         {
             RoutineInfo? containsMethod =
-                _registry.LookupMethod(type: right, methodName: "$contains");
+                _registry.LookupMethod(type: right, methodName: "contains");
             if (containsMethod == null)
             {
                 ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
@@ -1178,7 +1232,7 @@ public sealed partial class SemanticVerifier
         // backing wired method ($eq for ==/!=, $cmp for </<=/>/>=). These are desugared to method
         // calls by OperatorLoweringPass (after SA), so without this check an unsupported operator
         // would slip past SA and surface as an undefined-symbol LINKERR at codegen — e.g. a record
-        // with no $eq whose `==` resolves to the abstract `Equatable.$eq`. A LINKERR on SA-passing
+        // with no $eq whose `==` resolves to the abstract `Equatable.eq`. A LINKERR on SA-passing
         // code is a compiler bug; catch it here with a clean diagnostic.
         if (op is not (BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
             or BinaryOperator.GreaterEqual or BinaryOperator.Equal or BinaryOperator.NotEqual))
@@ -1307,7 +1361,7 @@ public sealed partial class SemanticVerifier
                     continue;
                 foreach (TypeExpression protocolExpr in c.ConstraintTypes)
                 {
-                    if (GetBaseTypeName(typeName: protocolExpr.Name) != "Iterable") continue;
+                    if (BareTypeName(typeName: protocolExpr.Name) != "Iterable") continue;
                     TypeSymbol resolved = _typeResolver.ResolveType(typeExpr: protocolExpr);
                     if (resolved.TypeArguments is { Count: > 0 })
                         return resolved.TypeArguments[index: 0];
@@ -1322,7 +1376,7 @@ public sealed partial class SemanticVerifier
         if (!obeysIterable && iterableType.IsGenericResolution)
         {
             RoutineInfo? seqMethod =
-                _registry.LookupMethod(type: iterableType, methodName: "$iter");
+                _registry.LookupMethod(type: iterableType, methodName: "iter");
             if (seqMethod != null)
             {
                 obeysIterable = true;
@@ -1351,7 +1405,7 @@ public sealed partial class SemanticVerifier
         {
             foreach (TypeSymbol proto in protocols)
             {
-                if (GetBaseTypeName(typeName: proto.Name) == "Iterable" &&
+                if (proto.BareName == "Iterable" &&
                     proto.TypeArguments is { Count: > 0 })
                 {
                     TypeInfo elementType = proto.TypeArguments[index: 0];
@@ -1387,13 +1441,32 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Strategy 2: Look for $iter method to get element type from Iterator[T] return type
-        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.$iter");
+        // Strategy 1.5 (ground truth): the element is exactly what the iterator's `$emit!` returns.
+        // Resolve `iterable.iter()` to the concrete iterator type, then that iterator's `$emit!`
+        // return type. This mirrors the for-loop lowering (IteratorInlineLoweringPass) and, unlike
+        // Strategy 1, does NOT depend on the instance's ImplementedProtocols being populated — so it
+        // works for a generic-instance collection (e.g. `Dict[Text, SerialValue]`) iterated inside a
+        // CONCRETE method compiled before that instance is monomorphized. There, ImplementedProtocols
+        // is still empty and the naive `TypeArguments[0]` fallback below would wrongly pick the first
+        // type arg (`K`, i.e. `Text` for a Dict) instead of `DictEntry[Text, SerialValue]`.
+        RoutineInfo? iterMethod = _registry.LookupMethod(type: iterableType, methodName: "iter");
+        if (iterMethod?.ReturnType is { } iteratorType and not ErrorTypeInfo)
+        {
+            RoutineInfo? emitMethod =
+                _registry.LookupMethod(type: iteratorType, methodName: "emit", isFailable: true);
+            if (emitMethod?.ReturnType is { } emittedType and not (ErrorTypeInfo or GenericParameterTypeInfo))
+            {
+                return emittedType;
+            }
+        }
 
-        // Generic fallback: Range[S64].$iter -> Range.$iter via LookupMethod
+        // Strategy 2: Look for $iter method to get element type from Iterator[T] return type
+        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.iter");
+
+        // Generic fallback: Range[S64].iter -> Range.iter via LookupMethod
         if (seqMethod2 == null)
         {
-            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "$iter");
+            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "iter");
         }
 
         if (seqMethod2?.ReturnType?.TypeArguments is { Count: > 0 })
@@ -1442,7 +1515,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// If <paramref name="paramType"/> is a marker protocol (Referring[T]/Controlling[T])
     /// and the argument isn't already an in-flight inner T, wraps the argument expression
-    /// as `arg.$refer()` or `arg.$control()`. The resulting CallExpression has
+    /// as `arg.refer()` or `arg.control()`. The resulting CallExpression has
     /// ResolvedRoutine and ResolvedType set so downstream passes (reachability, codegen,
     /// CallOverloadResolutionPass) treat it as a normal resolved method call.
     /// </summary>
@@ -1453,10 +1526,10 @@ public sealed partial class SemanticVerifier
             return;
 
         ProtocolTypeInfo def = proto.GenericDefinition ?? proto;
-        string baseName = GetBaseTypeName(typeName: def.Name);
+        string baseName = def.BareName;
         string methodName;
-        if (baseName == "Controlling") methodName = "$control";
-        else if (baseName == "Referring") methodName = "$refer";
+        if (baseName == Compiler.Resolution.RuntimeContract.Controlling) methodName = "control";
+        else if (baseName == Compiler.Resolution.RuntimeContract.Referring) methodName = "refer";
         else return;
 
         // Pass-through: the argument is already typed as the same marker protocol. No
@@ -1501,7 +1574,7 @@ public sealed partial class SemanticVerifier
         Expression inner = slotExpr is NamedArgumentExpression nx ? nx.Value : slotExpr;
 
         // Skip if already coerced.
-        if (inner is CallExpression { Callee: MemberExpression { PropertyName: "$refer" or "$control" } })
+        if (inner is CallExpression { Callee: MemberExpression { MemberName: "refer" or "control" } })
             return;
 
         // Resolve the method on the source argument type.
@@ -1512,7 +1585,7 @@ public sealed partial class SemanticVerifier
 
         var memberCallee = new MemberExpression(
             Object: inner,
-            PropertyName: methodName,
+            MemberName: methodName,
             Location: inner.Location);
         var coerced = new CallExpression(
             Callee: memberCallee,

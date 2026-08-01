@@ -1,0 +1,24 @@
+module Tests/Stdlib/ChannelApi
+
+# v0.3.0 channels — first end-to-end smoke test (single-threaded, buffered, no parking yet). A Sender
+# sends three values into a capacity-4 Receiver; after close, the `for` loop drains the buffer in order
+# then ends when the channel is closed-and-empty. Exercises make_channel, send!, close, and the
+# Iterable receive path (Receiver.iter -> ChannelDrain.emit!) through real codegen.
+
+import IO/Console
+
+routine start()
+  var (feeder, hop) = make_channel[S64](capacity: 4)
+  danger
+    feeder.send(item: 10)
+    feeder.send(item: 20)
+    feeder.send(item: 30)
+  feeder.close()
+
+  var total = 0_s64
+  var seen = 0_s64
+  for v in hop
+    total = total + v
+    seen = seen + 1
+  show(f"count={seen} sum={total}")
+  return

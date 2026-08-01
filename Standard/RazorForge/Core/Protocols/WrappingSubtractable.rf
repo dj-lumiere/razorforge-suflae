@@ -9,4 +9,4 @@ protocol WrappingSubtractable
   ### :param you: The value to subtract.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$sub_wrap(you: Me) -> ?Me
+  routine Me.sub_wrap(you: Me) -> Me

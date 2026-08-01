@@ -13,16 +13,16 @@ routine start()
   show(f"after add_last 10/20 + add_first 0, size: {dq.count()}")
 
   # peek
-  show(f"first: {dq.first!()}")
-  show(f"last: {dq.last!()}")
+  show(f"first: {dq.first()}")
+  show(f"last: {dq.last()}")
 
   # iteration in order
   for x in dq
     show(f"  iter: {x}")
 
   # remove_first
-  discard dq.remove_first!()
-  show(f"first after remove_first: {dq.first!()}")
+  discard dq.remove_first()
+  show(f"first after remove_first: {dq.first()}")
   show(f"size: {dq.count()}")
 
   show("DONE")

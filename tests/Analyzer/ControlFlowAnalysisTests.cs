@@ -228,11 +228,11 @@ public class ControlFlowAnalysisTests
 
     #region Failable Routine Analysis
     /// <summary>
-    /// Verifies semantic analysis behavior for absent in non failable and reports the expected warning.
+    /// Failability is now INFERRED: an <c>absent</c> in a routine NOT declared <c>!</c> no longer emits
+    /// AbsentOutsideFailableFunction — the routine is inferred-failable instead.
     /// </summary>
-
     [Fact]
-    public void Analyze_AbsentInNonFailable_ReportsWarning()
+    public void Analyze_AbsentInNonFailable_NoLongerErrors()
     {
         string source = """
                         routine test() -> S32
@@ -241,7 +241,7 @@ public class ControlFlowAnalysisTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
     /// <summary>

@@ -1,0 +1,36 @@
+module Tests/Stdlib/FallibleLockApi
+import IO/Console
+import BuilderService
+
+entity Counter
+  value: S64
+
+routine Counter.bump(inc: S64)
+  me.value = me.value + inc
+  return
+
+routine start()
+  var s = Counter(value: 10).share[Exclusive]()
+
+  # Fallible exclusive access. Uncontended, so `try_enter` succeeds and the body runs;
+  # the `fallback` branch is skipped.
+  using s.try_claim() as c
+    c.bump(inc: 5)
+    show("claimed")
+  fallback
+    show("contended-1")
+
+  # The claimer hold was released by `exit` at the previous block's end (NOT held to
+  # function exit), so this second non-blocking acquisition also succeeds.
+  using s.try_claim() as c2
+    c2.bump(inc: 100)
+    show("claimed-again")
+  fallback
+    show("contended-2")
+
+  # Mutations from both claims persisted.
+  using s.claim() as c3
+    show(f"value: {c3.value}")
+
+  show("DONE")
+  return

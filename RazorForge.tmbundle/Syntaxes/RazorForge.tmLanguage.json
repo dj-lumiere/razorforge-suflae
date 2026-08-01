@@ -50,7 +50,7 @@
         {
           "comment": "Type and pattern operations",
           "name": "keyword.operator.razorforge",
-          "match": "\\b(is|isnot|isonly|obeys|disobeys|in|notin|but)\\b"
+          "match": "\\b(is|isnot|obeys|disobeys|in|notin|but)\\b"
         },
         {
           "comment": "Module system",
@@ -85,7 +85,7 @@
         {
           "comment": "Danger block keyword",
           "name": "keyword.other.razorforge",
-          "match": "\\bdanger!"
+          "match": "\\bdanger"
         },
         {
           "comment": "Special keywords",

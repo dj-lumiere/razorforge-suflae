@@ -11,7 +11,7 @@ namespace TypeModel.Types;
 /// Type information for entities (reference types, heap-allocated).
 /// Entity variables cannot be reassigned - they have stable identity.
 /// </summary>
-public sealed class EntityTypeInfo : TypeInfo
+public class EntityTypeInfo : TypeInfo
 {
     /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Entity;

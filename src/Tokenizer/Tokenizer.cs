@@ -180,6 +180,7 @@ public partial class Tokenizer
             [key: "continue"] = TokenType.Continue,
             [key: "return"] = TokenType.Return,
             [key: "throw"] = TokenType.Throw,
+            [key: "pierce"] = TokenType.Pierce,
             [key: "absent"] = TokenType.Absent,
             [key: "becomes"] = TokenType.Becomes,
 
@@ -206,7 +207,6 @@ public partial class Tokenizer
             [key: "and"] = TokenType.And,
             [key: "or"] = TokenType.Or,
             [key: "not"] = TokenType.Not,
-            [key: "isonly"] = TokenType.IsOnly,
             [key: "but"] = TokenType.But,
 
             // Literals
@@ -225,7 +225,7 @@ public partial class Tokenizer
         // RF-only keywords
         if (_language == Language.RazorForge)
         {
-            _keywords[key: "danger!"] = TokenType.Danger;
+            _keywords[key: "danger"] = TokenType.Danger;
             _keywords[key: "dangerous"] = TokenType.Dangerous;
             _keywords[key: "external"] = TokenType.External;
             _keywords[key: "steal"] = TokenType.Steal;

@@ -2,10 +2,10 @@ module Tests/Stdlib/FStringFormatSpecsApi
 import IO/Console
 
 # Exercises the four f-string format specs:
-#   {x}    -> $represent()
-#   {x:?}  -> $diagnose()
-#   {x:=}  -> "name=" + $represent()
-#   {x:=?} -> "name=" + $diagnose()
+#   {x}    -> represent()
+#   {x:?}  -> diagnose()
+#   {x:=}  -> "name=" + represent()
+#   {x:=?} -> "name=" + diagnose()
 record Point
   x: S64
   y: S64

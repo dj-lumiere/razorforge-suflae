@@ -449,11 +449,11 @@ routine d32_div(a: D32, b: D32) -> D32
 # ---- wired operators + represent ----
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
-# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+# keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
 
-### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw
+### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
-routine D32.$add!(you: D32) -> D32
+routine D32.add!(you: D32) -> D32
   var r = d32_add(a: me, b: you)
   if r.is_finite()
     return r
@@ -461,9 +461,9 @@ routine D32.$add!(you: D32) -> D32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw
+### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
-routine D32.$sub!(you: D32) -> D32
+routine D32.sub!(you: D32) -> D32
   var r = d32_sub(a: me, b: you)
   if r.is_finite()
     return r
@@ -471,9 +471,9 @@ routine D32.$sub!(you: D32) -> D32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw
+### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
-routine D32.$mul!(you: D32) -> D32
+routine D32.mul!(you: D32) -> D32
   var r = d32_mul(a: me, b: you)
   if r.is_finite()
     return r
@@ -483,8 +483,8 @@ routine D32.$mul!(you: D32) -> D32
 
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
-### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
-routine D32.$truediv!(you: D32) -> D32
+### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+routine D32.truediv!(you: D32) -> D32
   var r = d32_div(a: me, b: you)
   if r.is_finite()
     return r
@@ -495,24 +495,24 @@ routine D32.$truediv!(you: D32) -> D32
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D32.$add_unchecked(you: D32) -> D32
+routine D32.add_unchecked(you: D32) -> D32
   return d32_add(a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D32.$sub_unchecked(you: D32) -> D32
+routine D32.sub_unchecked(you: D32) -> D32
   return d32_sub(a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D32.$mul_unchecked(you: D32) -> D32
+routine D32.mul_unchecked(you: D32) -> D32
   return d32_mul(a: me, b: you)
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
-routine D32.$truediv_unchecked(you: D32) -> D32
+routine D32.truediv_unchecked(you: D32) -> D32
   return d32_div(a: me, b: you)
 
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;
 ### finite values compare by value, so different cohorts of the same number are equal).
-routine D32.$eq(you: D32) -> Bool
+routine D32.eq(you: D32) -> Bool
   if me.is_nan() or you.is_nan()
     return false
   if me.is_infinite() or you.is_infinite()
@@ -522,7 +522,7 @@ routine D32.$eq(you: D32) -> Bool
   return int_eq[U64](a: d32_sub(a: me, b: you).decode().coeff, b: 0_u64)
 
 ### Three-way decimal comparison (NaN unordered -> SAME; finite by sign of me - you).
-routine D32.$cmp(you: D32) -> ComparisonSign
+routine D32.cmp(you: D32) -> ComparisonSign
   if me.is_nan() or you.is_nan()
     return SAME
   if me.is_infinite() or you.is_infinite()
@@ -539,7 +539,7 @@ routine D32.$cmp(you: D32) -> ComparisonSign
   return if d.sign then ME_SMALL else ME_LARGE
 
 ### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
-routine D32.$pow!(you: D32) -> D32
+routine D32.pow!(you: D32) -> D32
   var r = me.pow_unchecked(you: you)
   if r.is_finite()
     return r
@@ -548,12 +548,12 @@ routine D32.$pow!(you: D32) -> D32
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Shortest decimal text (widens to D128Parts and reuses the shared formatter).
-routine D32.$represent() -> Text
+routine D32.represent() -> Text
   return d128_represent(p: d32parts_to_d128(p: me.decode()))
 
 ### Debug form: `D32(<value>)`.
-routine D32.$diagnose() -> Text
-  return "D32(" + me.$represent() + ")"
+routine D32.diagnose() -> Text
+  return "D32(" + me.represent() + ")"
 
 # ============================================================================
 # Public surface — creators / presets / parser / hash / bytes
@@ -561,7 +561,7 @@ routine D32.$diagnose() -> Text
 # The construction/conversion web, presets, byte/hash views, and the decimal-text
 # parser. Storage, arithmetic, comparison, libm, and formatting are the software BID
 # engine above (`@llvm("i32") record D32 obeys Numeric, Ordered`). The matched
-# `D32.$create(from: F64)` / `F64.$create(from: D32)` live with the engine. Pure RF.
+# `D32.create(from: F64)` / `F64.create(from: D32)` live with the engine. Pure RF.
 # ============================================================================
 
 # ============================================================================
@@ -581,51 +581,51 @@ preset D32_EPSILON: D32 = 1e-6_d32
 # ============================================================================
 
 ### Converts an S8 to D32 (widen to S64, exponent 0; rounded to 7 digits).
-routine D32.$create(from: S8) -> D32
+routine D32(from: S8) -> D32
   return D32.from_int64(value: S64(from))
 
 ### Converts an S16 to D32 (widen to S64, exponent 0; rounded to 7 digits).
-routine D32.$create(from: S16) -> D32
+routine D32(from: S16) -> D32
   return D32.from_int64(value: S64(from))
 
 ### Converts an S32 to D32 (widen to S64, exponent 0; rounded to 7 digits).
-routine D32.$create(from: S32) -> D32
+routine D32(from: S32) -> D32
   return D32.from_int64(value: S64(from))
 
 ### Converts an S64 to D32 (exponent 0; rounded to 7 digits).
-routine D32.$create(from: S64) -> D32
+routine D32(from: S64) -> D32
   return D32.from_int64(value: from)
 
 ### Converts an S128 to D32 via D128 (rounded to 7 digits).
-routine D32.$create(from: S128) -> D32
+routine D32(from: S128) -> D32
   return D32(from: D128(from: from))
 
 ### Converts an S256 to D32 via D128 (rounded to 7 digits).
-routine D32.$create(from: S256) -> D32
+routine D32(from: S256) -> D32
   return D32(from: D128(from: from))
 
 ### Converts a U8 to D32 (exponent 0).
-routine D32.$create(from: U8) -> D32
+routine D32(from: U8) -> D32
   return D32.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U16 to D32 (exponent 0).
-routine D32.$create(from: U16) -> D32
+routine D32(from: U16) -> D32
   return D32.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U32 to D32 (exponent 0; rounded to 7 digits).
-routine D32.$create(from: U32) -> D32
+routine D32(from: U32) -> D32
   return D32.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U64 to D32 (exponent 0; rounded to 7 digits).
-routine D32.$create(from: U64) -> D32
+routine D32(from: U64) -> D32
   return D32.from_components(sign: false, coeff: from, exp: 0_s64)
 
 ### Converts a U128 to D32 via D128 (rounded to 7 digits).
-routine D32.$create(from: U128) -> D32
+routine D32(from: U128) -> D32
   return D32(from: D128(from: from))
 
 ### Converts a U256 to D32 via D128 (rounded to 7 digits).
-routine D32.$create(from: U256) -> D32
+routine D32(from: U256) -> D32
   return D32(from: D128(from: from))
 
 # ============================================================================
@@ -633,15 +633,15 @@ routine D32.$create(from: U256) -> D32
 # ============================================================================
 
 ### Converts an F16 to D32 (via F64, correctly rounded binary -> decimal).
-routine D32.$create(from: F16) -> D32
+routine D32(from: F16) -> D32
   return D32(from: F64(from))
 
 ### Converts an F32 to D32 (via F64, correctly rounded binary -> decimal).
-routine D32.$create(from: F32) -> D32
+routine D32(from: F32) -> D32
   return D32(from: F64(from))
 
 ### Converts an F128 to D32 (narrow to F64 first, then F64 -> D32 via the engine).
-routine D32.$create(from: F128) -> D32
+routine D32(from: F128) -> D32
   return D32(from: from.F64())
 
 # ============================================================================
@@ -649,15 +649,15 @@ routine D32.$create(from: F128) -> D32
 # ============================================================================
 
 ### Identity conversion (D32 -> D32).
-routine D32.$create(from: D32) -> D32
+routine D32(from: D32) -> D32
   return from
 
 ### Converts a D64 to D32 (rounded to 7 digits / decimal32 range).
-routine D32.$create(from: D64) -> D32
+routine D32(from: D64) -> D32
   return d32_of_parts(p: d128_to_d32parts(p: d64parts_to_d128(p: from.decode())))
 
 ### Converts a D128 to D32 (rounded to 7 digits / decimal32 range).
-routine D32.$create(from: D128) -> D32
+routine D32(from: D128) -> D32
   return d32_of_parts(p: d128_to_d32parts(p: from.decode()))
 
 # ============================================================================
@@ -666,15 +666,15 @@ routine D32.$create(from: D128) -> D32
 
 ### Parses a decimal literal into a `D32`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
-routine D32.$create!(from_text: Text) -> D32
-  return D32(from: parse_decimal_d128!(from_text: from_text))
+routine D32!(from_text: Text) -> D32
+  return D32(from: parse_decimal_d128(from_text: from_text))
 
 # ============================================================================
 # Hashing
 # ============================================================================
 
 ### Returns an xxHash64-based hash of the raw decimal32 encoding.
-routine D32.$fast_hash() -> U64
+routine D32.fast_hash() -> U64
   return __hash_u128(v: zero_extend[U32, U128](me.to_bits()))
 
 # ============================================================================

@@ -6,9 +6,9 @@ module Core
 ### :typeparam T: The referenced entity type.
 protocol Referring[T]
 needs T is EntityType
-  ### Yields the inner entity as an in-flight `?T` reference for read-only access.
+  ### Yields the inner entity as an in-flight `T` reference for read-only access.
   ### Implicitly inserted by the compiler at call sites whose target parameter is
   ### `Referring[T]` and whose argument is any obeyer of `Referring[T]`.
-  ### :returns: The inner entity as `?T` (scoped borrow shape).
+  ### :returns: The inner entity as `T` (scoped borrow shape).
   @readonly
-  routine Me.$refer() -> ?T
+  routine Me.refer() -> T

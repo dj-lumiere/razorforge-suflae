@@ -75,6 +75,17 @@ public partial class LlvmCodeGenerator
             // Store the value
             EmitLine(sb: sb,
                 line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
+
+            // Roamed[T] field: take a strong ref (COPY semantics — the constructor arg keeps its own
+            // reference; the caller skips consuming it). Mirrors the reassignment path
+            // (EmitEntityMemberVariableWrite). Null/none values retain as a no-op (null-safe), so the
+            // zero-init caller (a $create prologue) is unaffected.
+            if (memberVariable.Type is RecordTypeInfo roamedField
+                && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed)
+            {
+                EmitRetainedVarRetain(sb: sb, llvmAddr: memberVariablePtr,
+                    recordType: (RecordTypeInfo)memberVariable.Type);
+            }
         }
 
         return rawPtr;
@@ -113,10 +124,10 @@ public partial class LlvmCodeGenerator
                 ConstructedType: type));
         }
 
+        // Ordered most-derived-first: Variant/Crashable must precede their bases (Record/Entity),
+        // since a base arm would otherwise capture them.
         return type switch
         {
-            EntityTypeInfo entity => EmitEntityConstruction(sb: sb, entity: entity, expr: expr),
-            RecordTypeInfo record => EmitRecordConstruction(sb: sb, record: record, expr: expr),
             VariantTypeInfo variant => EmitVariantConstruction(sb: sb, variant: variant, expr: expr),
             // Crashable types are entity-like (heap-allocated, ptr semantics).
             CrashableTypeInfo crashable => EmitCrashableConstruction(
@@ -126,6 +137,8 @@ public partial class LlvmCodeGenerator
                     .Select(mv => (Expression)new NamedArgumentExpression(
                         Name: mv.Name, Value: mv.Value, Location: expr.Location))
                     .ToList()),
+            EntityTypeInfo entity => EmitEntityConstruction(sb: sb, entity: entity, expr: expr),
+            RecordTypeInfo record => EmitRecordConstruction(sb: sb, record: record, expr: expr),
             _ => throw new InvalidOperationException(
                 message: $"Cannot construct type: {type.Category}")
         };
@@ -220,9 +233,19 @@ public partial class LlvmCodeGenerator
         // Field initializers with `steal` transfer ownership from local entity vars into
         // the new entity. Drop the source locals from the cleanup set so the function-exit
         // rf_invalidate pass doesn't free the same allocation now held by the field.
-        foreach ((string _, Expression fieldExpr) in expr.MemberVariables)
+        // Roamed[T] fields are the exception: they use COPY semantics (EmitEntityAllocation retains the
+        // stored value), so their arg is NOT moved — it keeps its own reference and tears down normally.
+        // Consuming it here would drop a ref the field just retained → underflow.
+        foreach ((string fieldName, Expression fieldExpr) in expr.MemberVariables)
         {
-            ConsumeTransferredLocalOwnership(expr: fieldExpr);
+            MemberVariableInfo? fieldInfo = entity.MemberVariables
+                .FirstOrDefault(predicate: mv => mv.Name == fieldName);
+            bool isRoamedField = fieldInfo?.Type is RecordTypeInfo roamedFieldInfo
+                && GetGenericBaseName(type: roamedFieldInfo) == Resolution.RuntimeContract.Roamed;
+            if (!isRoamedField)
+            {
+                ConsumeTransferredLocalOwnership(expr: fieldExpr);
+            }
         }
 
         // Allocate and initialize
@@ -239,7 +262,7 @@ public partial class LlvmCodeGenerator
     {
         // Backend-annotated or single-member-variable wrapper: just return the inner value.
         // BUT: only when there's no explicit `$create(from: argType)` overload — those have
-        // real conversion bodies (e.g. `CStr.$create(from: Referring[Text])` UTF-8-encodes a
+        // real conversion bodies (e.g. `CStr.create(from: Referring[Text])` UTF-8-encodes a
         // Text into bytes). Passing the Text entity ptr through as if it were a CStr ptr
         // skips the conversion and `rf_console_show` ends up dumping the entity struct as
         // bytes, producing garbled output for every non-Text `show(value: T)` callsite.
@@ -255,7 +278,7 @@ public partial class LlvmCodeGenerator
             // arg is an entity type (heap-allocated reference), the wrapper construction is
             // a real conversion, not a representation passthrough. Example:
             // `CStr(from: text)` where text is the Text entity ptr — must call
-            // `CStr.$create(from: Referring[Text])` to UTF-8-encode the codepoints. Without
+            // `CStr.create(from: Referring[Text])` to UTF-8-encode the codepoints. Without
             // this dispatch the passthrough returns the entity ptr and `rf_console_show`
             // dumps raw entity-struct bytes.
             if (argType is EntityTypeInfo &&
@@ -264,7 +287,7 @@ public partial class LlvmCodeGenerator
             {
                 var argTypes = new List<TypeInfo> { argType };
                 RoutineInfo? createOverload = _registry.LookupRoutineOverload(
-                    baseName: $"{record.FullName}.$create",
+                    baseName: $"{record.FullName}.create",
                     argTypes: argTypes);
                 if (createOverload is { OwnerType: not null })
                 {
@@ -398,25 +421,41 @@ public partial class LlvmCodeGenerator
 
         // Initialize fields. Named arguments may be written in any order; bind each field to the
         // argument whose name matches it (falling back to positional for unnamed args).
+        // Roamed[T] fields use COPY semantics: retain the stored value and DON'T consume the arg (it
+        // keeps its own reference). Every other field keeps move/steal semantics — consumed below.
+        var argsToConsume = new List<Expression>();
         for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
+            MemberVariableInfo field = entity.MemberVariables[index: i];
             Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
-                fieldName: entity.MemberVariables[index: i].Name, positionalIndex: i);
+                fieldName: field.Name, positionalIndex: i);
             if (fieldArg == null)
                 continue;
             Expression arg = fieldArg is NamedArgumentExpression named ? named.Value : fieldArg;
             string value = EmitExpression(sb: sb, expr: arg);
-            string fieldType = GetLlvmType(type: entity.MemberVariables[index: i].Type);
+            string fieldType = GetLlvmType(type: field.Type);
             string fieldPtr = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {fieldPtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {i}");
             EmitLine(sb: sb, line: $"  store {fieldType} {value}, ptr {fieldPtr}");
+
+            if (field.Type is RecordTypeInfo roamedField
+                && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed)
+            {
+                EmitRetainedVarRetain(sb: sb, llvmAddr: fieldPtr,
+                    recordType: (RecordTypeInfo)field.Type);
+            }
+            else
+            {
+                argsToConsume.Add(item: fieldArg);
+            }
         }
 
         // Field initializers with `steal` transfer ownership from local entity vars into
         // the new entity. Drop the source locals from the cleanup set so the function-exit
-        // rf_invalidate pass doesn't free the same allocation now held by the field.
-        ConsumeTransferredCallOwnership(arguments: arguments);
+        // rf_invalidate pass doesn't free the same allocation now held by the field. (Roamed fields
+        // are excluded — they were retained above, and their arg keeps its own reference.)
+        ConsumeTransferredCallOwnership(arguments: argsToConsume);
 
         return entityPtr;
     }
@@ -465,7 +504,7 @@ public partial class LlvmCodeGenerator
     /// <returns>The temporary variable holding the member variable value.</returns>
     private string EmitMemberVariableAccess(StringBuilder sb, MemberExpression expr)
     {
-        string propertyName = expr.PropertyName;
+        string memberName = expr.MemberName;
 
         // Choice / Flags case-member access (e.g. FileMode.WRITE) reaches codegen unfolded
         // when it appears in a parameter default value: ExpressionLoweringPass only walks
@@ -477,7 +516,7 @@ public partial class LlvmCodeGenerator
         if (choiceFlagsLookup is ChoiceTypeInfo choiceType)
         {
             ChoiceCaseInfo? caseInfo = choiceType.Cases
-                .FirstOrDefault(predicate: c => c.Name == propertyName);
+                .FirstOrDefault(predicate: c => c.Name == memberName);
             if (caseInfo != null)
             {
                 return caseInfo.ComputedValue.ToString();
@@ -486,7 +525,7 @@ public partial class LlvmCodeGenerator
         if (choiceFlagsLookup is FlagsTypeInfo flagsType)
         {
             FlagsMemberInfo? memberInfo = flagsType.Members
-                .FirstOrDefault(predicate: m => m.Name == propertyName);
+                .FirstOrDefault(predicate: m => m.Name == memberName);
             if (memberInfo != null)
             {
                 return (1UL << memberInfo.BitPosition).ToString();
@@ -515,13 +554,13 @@ public partial class LlvmCodeGenerator
             WrapperTypeNames.Contains(item: wrapRecBaseName) &&
             wrapperRecOfRec is { HasDirectBackendType: true, TypeArguments.Count: > 0 } &&
             wrapperRecOfRec.TypeArguments[index: 0] is RecordTypeInfo innerRecord &&
-            !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == propertyName))
+            !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == memberName))
         {
             int fieldIndex = -1;
             MemberVariableInfo? fieldInfo = null;
             for (int i = 0; i < innerRecord.MemberVariables.Count; i++)
             {
-                if (innerRecord.MemberVariables[index: i].Name == propertyName)
+                if (innerRecord.MemberVariables[index: i].Name == memberName)
                 {
                     fieldIndex = i;
                     fieldInfo = innerRecord.MemberVariables[index: i];
@@ -550,7 +589,7 @@ public partial class LlvmCodeGenerator
             WrapperTypeNames.Contains(item: wrapBaseName) &&
             wrapperRecord.TypeArguments is { Count: > 0 } &&
             wrapperRecord.TypeArguments[index: 0] is EntityTypeInfo innerEntity &&
-            !wrapperRecord.MemberVariables.Any(predicate: mv => mv.Name == propertyName))
+            !wrapperRecord.MemberVariables.Any(predicate: mv => mv.Name == memberName))
         {
             // For @llvm("ptr") wrappers, the value IS the pointer directly
             // For struct wrappers, extract the inner Hijacked[T] (ptr) from field 0
@@ -561,7 +600,7 @@ public partial class LlvmCodeGenerator
             // dereferencing the controller first; otherwise `ra.value` reads
             // controller.strong_count (offset 0) instead of the actual field.
             if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == "Retained" || wrapBaseName == "Tracked"))
+                (wrapBaseName == Resolution.RuntimeContract.Retained || wrapBaseName == Resolution.RuntimeContract.Tracked))
             {
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RetainController[{innerEntity.FullName}]")
@@ -581,7 +620,7 @@ public partial class LlvmCodeGenerator
                 }
             }
             else if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == "Inspecting" || wrapBaseName == "Claiming") &&
+                (wrapBaseName == Resolution.RuntimeContract.Inspecting || wrapBaseName == Resolution.RuntimeContract.Claiming) &&
                 wrapperRecord.TypeArguments is { Count: > 1 })
             {
                 // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets
@@ -606,6 +645,34 @@ public partial class LlvmCodeGenerator
                     innerPtr = target;
                 }
             }
+            else if (wrapperRecord.HasDirectBackendType &&
+                wrapBaseName == Resolution.RuntimeContract.Roamed)
+            {
+                // Roamed[T] is an `@llvm("ptr")` handle targeting RoamController[T], NOT the entity.
+                // Project the read through the controller's `data` field AND bracket it with the
+                // mode-checked lock (lock_enter/lock_exit) so an ESCAPED object's field touch is
+                // serialized — a no-op while LOCAL. Does the full read + early-returns.
+                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_enter");
+                if (enterM != null)
+                {
+                    GenerateRoutineDeclaration(routine: enterM);
+                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: enterM)}(ptr {target})");
+                }
+                TypeInfo? controllerType = _registry.LookupType(
+                    name: $"RoamController[{innerEntity.FullName}]")
+                    ?? _registry.LookupType(name: $"Core.RoamController[{innerEntity.FullName}]");
+                string roamEntPtr = controllerType is EntityTypeInfo controllerEntity
+                    ? EmitEntityMemberVariableRead(sb: sb, entityPtr: target, entity: controllerEntity, memberVariableName: "data")
+                    : target;
+                string roamLoaded = EmitEntityMemberVariableRead(sb: sb, entityPtr: roamEntPtr, entity: innerEntity, memberVariableName: memberName);
+                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_exit");
+                if (exitM != null)
+                {
+                    GenerateRoutineDeclaration(routine: exitM);
+                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: exitM)}(ptr {target})");
+                }
+                return roamLoaded;
+            }
             else if (wrapperRecord.HasDirectBackendType)
             {
                 innerPtr = target;
@@ -620,7 +687,7 @@ public partial class LlvmCodeGenerator
                 for (int fi = 0; fi < wrapperRecord.MemberVariables.Count; fi++)
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
-                        { Name: "Hijacked", TypeArguments.Count: > 0
+                        { Name: Resolution.RuntimeContract.Hijacked, TypeArguments.Count: > 0
                         } hijacked
                         && hijacked.TypeArguments![index: 0] is EntityTypeInfo fieldInner
                         && fieldInner.FullName == innerEntity.FullName)
@@ -636,32 +703,33 @@ public partial class LlvmCodeGenerator
             return EmitEntityMemberVariableRead(sb: sb,
                 entityPtr: innerPtr,
                 entity: innerEntity,
-                memberVariableName: propertyName);
+                memberVariableName: memberName);
         }
 
+        // Most-derived-first: Crashable (an Entity) and Variant (a Record) precede their bases.
         return targetType switch
         {
-            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb: sb,
-                entityPtr: target,
-                entity: entity,
-                memberVariableName: propertyName),
-            TupleTypeInfo tuple => EmitTupleMemberVariableRead(sb: sb,
-                tupleValue: target,
-                tuple: tuple,
-                memberVariableName: propertyName),
-            RecordTypeInfo record => EmitRecordMemberVariableRead(sb: sb,
-                recordValue: target,
-                record: record,
-                memberVariableName: propertyName),
             CrashableTypeInfo crashable => EmitCrashableMemberVariableRead(sb: sb,
                 crashablePtr: target,
                 crashable: crashable,
-                memberVariableName: propertyName),
+                memberVariableName: memberName),
+            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb: sb,
+                entityPtr: target,
+                entity: entity,
+                memberVariableName: memberName),
+            TupleTypeInfo tuple => EmitTupleMemberVariableRead(sb: sb,
+                tupleValue: target,
+                tuple: tuple,
+                memberVariableName: memberName),
             // Synthetic type_id access generated by PatternLoweringPass for variant subjects.
-            VariantTypeInfo variant when propertyName == "type_id" =>
+            VariantTypeInfo variant when memberName == "type_id" =>
                 EmitVariantTagAccess(sb: sb, variantValue: target, variant: variant),
+            RecordTypeInfo record => EmitRecordMemberVariableRead(sb: sb,
+                recordValue: target,
+                record: record,
+                memberVariableName: memberName),
             _ => throw new InvalidOperationException(
-                message: $"Cannot access member variable '{propertyName}' on type: {targetType.Name} (category: {targetType.Category}), in routine: {_currentEmittingRoutine?.RegistryKey ?? "<unknown>"}")
+                message: $"Cannot access member variable '{memberName}' on type: {targetType.Name} (category: {targetType.Category}), in routine: {_currentEmittingRoutine?.RegistryKey ?? "<unknown>"}")
         };
     }
 
@@ -933,8 +1001,32 @@ public partial class LlvmCodeGenerator
             line:
             $"  {memberVariablePtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {memberVariableIndex}");
 
+        // Roamed[T] field reassignment uses COPY semantics (biased RC — aliasing is free): drop the
+        // old strong ref and take a fresh one on the new value. Unlike the strict wrappers
+        // (Retained/Tracked, which forbid implicit copy so a reassignment MOVES a fresh handle in),
+        // `me.roamed_field = x` must release the overwritten handle and retain the incoming one so the
+        // field owns its own reference — otherwise the count is off by one and teardown double-frees.
+        // Both helpers are null-safe (none handle / no old value). This is the reassignment path only;
+        // initial construction stores fields directly and never reaches here.
+        // Both a NON-NULL (`x: E`) and an OPTIONAL (`x: E?`) entity field are a bare `Roamed[E]` in
+        // Suflae — the optional one just permits a null handle (roamed_none). Reassignment drops the old
+        // strong ref and takes a fresh one; the helpers are null-safe so a null (none) handle is a no-op.
+        bool isRoamedField = memberVariable.Type is RecordTypeInfo roamedField
+            && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed;
+        if (isRoamedField)
+        {
+            EmitRetainedVarRelease(sb: sb, llvmAddr: memberVariablePtr,
+                recordType: (RecordTypeInfo)memberVariable.Type);
+        }
+
         // Store the value
         EmitLine(sb: sb, line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
+
+        if (isRoamedField)
+        {
+            EmitRetainedVarRetain(sb: sb, llvmAddr: memberVariablePtr,
+                recordType: (RecordTypeInfo)memberVariable.Type);
+        }
     }
 
     /// <summary>
@@ -1088,8 +1180,8 @@ public partial class LlvmCodeGenerator
         if (typeExpr.GenericArguments is { Count: > 0 } genericArgs)
         {
             if (genericArgs.Count == 1 &&
-                typeExpr.Name is "Hijacked" or "Viewing" or "Modifying" or "Inspecting" or
-                    "Claiming" or "Retained" or "Shared" or "Tracked" or "Watched")
+                typeExpr.Name is Resolution.RuntimeContract.Hijacked or Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Modifying or Resolution.RuntimeContract.Inspecting or
+                    Resolution.RuntimeContract.Claiming or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Shared or Resolution.RuntimeContract.Tracked or Resolution.RuntimeContract.Watched)
             {
                 TypeInfo? innerType = ResolveEntityMemberTypeFromAst(typeExpr: genericArgs[index: 0],
                     moduleName: moduleName,
@@ -1099,7 +1191,7 @@ public partial class LlvmCodeGenerator
                     return null;
                 }
 
-                bool isReadOnly = typeExpr.Name is "Viewing" or "Inspecting";
+                bool isReadOnly = typeExpr.Name is Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Inspecting;
                 return _registry.GetOrCreateWrapperType(wrapperName: typeExpr.Name,
                     innerType: innerType,
                     isReadOnly: isReadOnly);

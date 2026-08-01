@@ -58,7 +58,12 @@ public sealed partial class SemanticVerifier
                     bool allowsNone = matchedType is ErrorTypeInfo
                         || IsMaybeType(type: matchedType)
                         || GetCarrierBaseName(type: matchedType) == "Lookup"
-                        || matchedType is VariantTypeInfo;
+                        || matchedType is VariantTypeInfo
+                        // Suflae: a nullable entity reference (`E?`) is a Roamed[E] handle that may be a
+                        // null/none handle, so `is None` / `isnot None` is a legal none-check on it.
+                        || (_registry.Language == Language.Suflae
+                            && matchedType is RecordTypeInfo
+                                { GenericDefinition.Name: Compiler.Resolution.RuntimeContract.Roamed });
                     if (!allowsNone)
                     {
                         ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
@@ -284,26 +289,6 @@ public sealed partial class SemanticVerifier
                                 $"Flags type '{flagsTypeForPat.Name}' does not have a member named '{flagName}'.",
                                 location: flagsPat.Location);
                         }
-                    }
-                }
-
-                // #133: isonly rejects 'or' and 'but'
-                if (flagsPat.IsExact)
-                {
-                    if (flagsPat.Connective == FlagsTestConnective.Or)
-                    {
-                        ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
-                            message:
-                            "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
-                            location: flagsPat.Location);
-                    }
-
-                    if (flagsPat.ExcludedFlags is { Count: > 0 })
-                    {
-                        ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
-                            message:
-                            "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
-                            location: flagsPat.Location);
                     }
                 }
 

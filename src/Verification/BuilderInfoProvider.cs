@@ -19,51 +19,10 @@ using TypeSymbol = TypeInfo;
 public static class BuilderInfoProvider
 {
     /// <summary>Per-type BuilderService member routines (require 'import BuilderService').</summary>
-    private static readonly HashSet<string> PerTypeRoutines = new(comparer: StringComparer.Ordinal)
-    {
-        "type_name",
-        "type_kind",
-        "type_id",
-        "module_name",
-        "is_generic",
-        "is_in_flight",
-        "generic_args",
-        "member_variable_count",
-        "member_variable_info",
-        "protocols",
-        "protocol_info",
-        "routine_names",
-        "routine_info",
-        "annotations",
-        "data_size",
-        "full_type_name",
-        "dependencies",
-        "member_type_id"
-    };
+    private static readonly IReadOnlySet<string> PerTypeRoutines = RuntimeContract.BuilderPerTypeRoutines;
 
     /// <summary>Standalone BuilderService routines (require 'import BuilderService').</summary>
-    private static readonly HashSet<string> StandaloneRoutines =
-        new(comparer: StringComparer.Ordinal)
-        {
-            "source_file",
-            "source_line",
-            "source_column",
-            "source_routine",
-            "source_module",
-            "source_text",
-            "caller_file",
-            "caller_line",
-            "caller_routine",
-            // Platform/build info (formerly module-level, now standalone)
-            "target_os",
-            "target_arch",
-            "builder_version",
-            "build_mode",
-            "build_timestamp",
-            "page_size",
-            "cache_line",
-            "word_size"
-        };
+    private static readonly IReadOnlySet<string> StandaloneRoutines = RuntimeContract.BuilderStandaloneRoutines;
 
     /// <summary>Returns true if the routine name is a per-type BuilderService member routine.</summary>
     public static bool IsBuilderServiceRoutine(string name)
@@ -121,7 +80,7 @@ public static class BuilderInfoProvider
         if (registry.Language == Language.RazorForge && byteSizeType != null)
         {
             MaybeRegister(owner: type,
-                name: "data_size",
+                name: RuntimeContract.DataSize,
                 returnType: byteSizeType,
                 existingMethods: existingMethods,
                 registry: registry);

@@ -240,6 +240,16 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the generic member expression</returns>
     T VisitGenericMemberExpression(GenericMemberExpression node);
 
+    /// <summary>Visits an unclassified bracket-access node (must be lowered by BracketReclassifyPass)</summary>
+    /// <param name="node">The bracket-access expression to visit</param>
+    /// <returns>Result of visiting the bracket-access expression</returns>
+    /// <remarks>
+    /// This node is a transient parser output; the reclassify pass rewrites it into an
+    /// IndexExpression / GenericMethodCallExpression / GenericMemberExpression before analysis.
+    /// Any visitor reaching it indicates the reclassify pass was skipped.
+    /// </remarks>
+    T VisitBracketAccessExpression(BracketAccessExpression node);
+
     /// <summary>Visits a type-id expression node (compile-time FNV-1a type_id constant)</summary>
     /// <param name="node">The type-id expression to visit</param>
     /// <returns>Result of visiting the type-id expression</returns>

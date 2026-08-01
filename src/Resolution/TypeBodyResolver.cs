@@ -167,7 +167,7 @@ internal sealed class TypeBodyResolver
                     !TypeRegistry.IsValueType(type: memberVariableType) &&
                     !isReferenceTyped &&
                     !(memberVariableType is WrapperTypeInfo wrapper &&
-                      StorableWrapperTypes.Contains(item: GetBaseTypeName(typeName: wrapper.Name))))
+                      StorableWrapperTypes.Contains(item: wrapper.BareName)))
                 {
                     _sa.ReportError(code: SemanticDiagnosticCode.RecordContainsNonValueType,
                         message:
@@ -256,12 +256,25 @@ internal sealed class TypeBodyResolver
                     ? _typeResolver.ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
+                // Suflae: an entity-typed field is a `Roamed[E]` biased-RC handle. The substitution now
+                // happens at the single ResolveType choke point (TypeResolver.RoamSuflaeEntitySlot), so
+                // memberVariableType is ALREADY `Roamed[E]` here (bare `x: E`) or a nullable `Roamed[E]`
+                // (`x: E?` — the choke point collapses `Maybe[E]` to a bare nullable Roamed, since an
+                // entity reference carries its own none via a null handle). We only still record
+                // NULLABILITY as a flow fact: it is no longer visible in the resolved type, so detect it
+                // from the AST — the field was written `E?`, which desugars to a `Maybe[...]` type expr.
+                bool fieldNullable = _sa._registry.Language == Language.Suflae
+                    && memberVariable.Type is { Name: "Maybe" }
+                    && memberVariableType is RecordTypeInfo
+                        { GenericDefinition.Name: RuntimeContract.Roamed };
+
                 var memberVariableInfo =
                     new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
                     {
                         Visibility = memberVariable.Visibility,
                         Index = memberVariableIndex++,
                         HasDefaultValue = memberVariable.Initializer != null,
+                        IsNullable = fieldNullable,
                         Location = memberVariable.Location,
                         Owner = _sa._currentType
                     };
@@ -361,10 +374,8 @@ internal sealed class TypeBodyResolver
         var methods = new List<ProtocolMethodInfo>();
         foreach (RoutineSignature sig in protocol.Methods)
         {
-            bool isFailable = sig.Name.EndsWith(value: '!');
-            string fullName = isFailable
-                ? sig.Name[..^1]
-                : sig.Name;
+            bool isFailable = sig.IsFailable;
+            string fullName = sig.Name;
 
             // Check if this is an instance method (has "Me." prefix).
             // Protocol methods: "Me.methodName" = instance, "methodName" = type-level.
@@ -840,20 +851,12 @@ internal sealed class TypeBodyResolver
 
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
 
-    private static string GetBaseTypeName(string typeName)
-    {
-        int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0
-            ? typeName[..genericIndex]
-            : typeName;
-    }
-
     private static readonly HashSet<string> StorableWrapperTypes =
     [
-        "Hijacked", // Unmanaged raw pointer handle
-        "Retained", // Reference-counted handle
-        "Shared",   // Reference-counted multi-threaded handle
-        "Tracked",  // Weak reference handle
-        "Watched",  // Weak reference multi-threaded handle
+        RuntimeContract.Hijacked, // Unmanaged raw pointer handle
+        RuntimeContract.Retained, // Reference-counted handle
+        RuntimeContract.Shared,   // Reference-counted multi-threaded handle
+        RuntimeContract.Tracked,  // Weak reference handle
+        RuntimeContract.Watched,  // Weak reference multi-threaded handle
     ];
 }

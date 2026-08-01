@@ -3,16 +3,16 @@ import IO/Console
 
 # Verifies that reassigning a plain (non-lateinit) entity var destroys the old value
 # at the reassignment point. Regression lock: the old entity used to leak — its
-# $destroy never fired; only the final value was torn down at scope exit.
+# destroy never fired; only the final value was torn down at scope exit.
 
 entity Tracer
   tag: S64
 
-routine Tracer.$create(tag: S32) -> ?Tracer
+routine Tracer.create(tag: S32) -> Tracer
   show(f"  create({tag})")
   return Tracer(tag: S64(tag))
 
-dangerous routine Tracer.$destroy()
+dangerous routine Tracer.destroy()
   show(f"  destroy({me.tag})")
   return
 

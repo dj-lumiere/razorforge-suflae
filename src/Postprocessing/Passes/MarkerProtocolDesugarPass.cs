@@ -10,10 +10,10 @@ namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
 /// Rewrites Referring[T]/Controlling[T] parameter types to the inner entity T
-/// and injects implicit .$refer()/.$control() coercion at matching call-site arguments.
+/// and injects implicit .refer()/.control() coercion at matching call-site arguments.
 /// After this pass runs, no marker-protocol types remain in routine signatures or
 /// argument expression types — bodies see entity T directly, and call sites pass
-/// in-flight ?T produced by the wrapper's $refer/$control implementation.
+/// in-flight T produced by the wrapper's $refer/$control implementation.
 /// </summary>
 internal sealed class MarkerProtocolDesugarPass
 {
@@ -33,8 +33,8 @@ internal sealed class MarkerProtocolDesugarPass
         _registry = ctx.Registry;
         _variantBodies = ctx.VariantBodies;
         _synthesizedBodies = ctx.SynthesizedBodies;
-        _referringProto = _registry.LookupType("Referring") as ProtocolTypeInfo;
-        _controllingProto = _registry.LookupType("Controlling") as ProtocolTypeInfo;
+        _referringProto = _registry.LookupType(RuntimeContract.Referring) as ProtocolTypeInfo;
+        _controllingProto = _registry.LookupType(RuntimeContract.Controlling) as ProtocolTypeInfo;
         Snapshot();
     }
 
@@ -305,7 +305,7 @@ internal sealed class MarkerProtocolDesugarPass
     private static TypeExpression? UnwrapMarker(TypeExpression? t)
     {
         if (t == null) return null;
-        if ((t.Name == "Referring" || t.Name == "Controlling")
+        if ((t.Name == RuntimeContract.Referring || t.Name == RuntimeContract.Controlling)
             && t.GenericArguments is { Count: > 0 } args)
             return args[0];
         return null;
@@ -377,6 +377,7 @@ internal sealed class MarkerProtocolDesugarPass
                 break;
             case UsingStatement us:
                 WalkStatement(us.Body);
+                if (us.FallbackBody != null) WalkStatement(us.FallbackBody);
                 break;
             case DangerStatement danger:
                 WalkStatement(danger.Body);
@@ -512,14 +513,14 @@ internal sealed class MarkerProtocolDesugarPass
 
             // Skip if arg already coerces to inner T explicitly.
             if (valueExpr is CallExpression { Callee: MemberExpression mem }
-                && (mem.PropertyName == "$refer" || mem.PropertyName == "$control"))
+                && (mem.MemberName == "refer" || mem.MemberName == "control"))
                 continue;
 
-            string methodName = mk.Kind == MarkerKind.Control ? "$control" : "$refer";
+            string methodName = mk.Kind == MarkerKind.Control ? "control" : "refer";
             var coerced = new CallExpression(
                 Callee: new MemberExpression(
                     Object: valueExpr,
-                    PropertyName: methodName,
+                    MemberName: methodName,
                     Location: valueExpr.Location),
                 Arguments: [],
                 Location: valueExpr.Location)

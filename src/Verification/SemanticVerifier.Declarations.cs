@@ -53,6 +53,50 @@ public sealed partial class SemanticVerifier
         {
             CollectDeclaration(node: declaration);
         }
+
+        ReportPresetTypeNameCollisions(program: program);
+    }
+
+    /// <summary>
+    /// Reports a compile error when a file declares both a <c>preset</c> and a type of the same name.
+    /// Cross-file clashes are fine — presets are file-scoped (public ones inline by value; secret ones
+    /// are file-private) — but within one file the identifier is genuinely ambiguous: a call like
+    /// <c>Foo(...)</c> could mean the constructor or the constant. Scans the file's declarations directly
+    /// so it catches the clash regardless of declaration order.
+    /// </summary>
+    private void ReportPresetTypeNameCollisions(Program program)
+    {
+        var typeNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach (ISyntaxTreeNode node in program.Declarations)
+        {
+            string? typeName = node switch
+            {
+                RecordDeclaration r => r.Name,
+                EntityDeclaration e => e.Name,
+                ChoiceDeclaration c => c.Name,
+                FlagsDeclaration f => f.Name,
+                CrashableDeclaration cr => cr.Name,
+                VariantDeclaration v => v.Name,
+                _ => null
+            };
+            if (typeName != null)
+            {
+                typeNames.Add(item: typeName);
+            }
+        }
+
+        foreach (ISyntaxTreeNode node in program.Declarations)
+        {
+            if (node is PresetDeclaration preset && typeNames.Contains(item: preset.Name))
+            {
+                ReportError(code: SemanticDiagnosticCode.PresetTypeNameCollision,
+                    message:
+                    $"Preset '{preset.Name}' collides with a type of the same name declared in this file. " +
+                    "A bare identifier would be ambiguous between the constant and the type — rename one " +
+                    "(a secret preset is only file-private, so it still clashes within its own file).",
+                    location: preset.Location);
+            }
+        }
     }
 
     /// <summary>
@@ -149,6 +193,39 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void ProcessImportDeclaration(ImportDeclaration import)
     {
+        // Prefix/package import: `import A/B` also pulls in every submodule under `A/B` (recursively) —
+        // e.g. `import Tests/Stdlib` imports Tests/Stdlib/AddressApi, .../AgentApi, … at once, instead
+        // of one line per module. Each submodule's leaf becomes callable (leaf-qualified resolution),
+        // with cross-module name clashes disambiguated by a longer namespace prefix (RF-S513). When the
+        // prefix is a leaf module (no submodules), this list is empty and we fall through to the plain
+        // single-module load below.
+        IReadOnlyList<string> submodules = _registry.EnumerateSubmodules(prefix: import.ModulePath);
+        if (submodules.Count > 0)
+        {
+            bool anyLoaded = false;
+            // Load the prefix module itself too if it happens to be a real module (a namespace-only
+            // prefix just fails silently here — the submodules are what matter).
+            foreach (string modulePath in submodules.Prepend(element: import.ModulePath).Distinct())
+            {
+                if (_registry.LoadModule(importPath: modulePath,
+                        currentFile: _currentFilePath,
+                        location: import.Location,
+                        effectiveModule: out string? subEffective))
+                {
+                    anyLoaded = true;
+                    if (subEffective != null) _importedModules.Add(item: subEffective);
+                }
+            }
+
+            if (!anyLoaded)
+            {
+                ReportError(code: SemanticDiagnosticCode.ModuleNotFound,
+                    message: $"Cannot resolve import '{import.ModulePath}'. Module not found.",
+                    location: import.Location);
+            }
+            return;
+        }
+
         // Load the module on-demand
         // This handles both Core modules and non-Core modules (Collections, ErrorHandling, etc.)
         bool success = _registry.LoadModule(importPath: import.ModulePath,
@@ -267,7 +344,8 @@ public sealed partial class SemanticVerifier
             _registry.RegisterPreset(name: preset.Name,
                 type: presetType,
                 module: module,
-                value: preset.Value);
+                value: preset.Value,
+                isSecret: preset.IsSecret);
         }
     }
 
@@ -511,10 +589,12 @@ public sealed partial class SemanticVerifier
         if (_currentType != null)
         {
             // Inside a type body
-            kind = routine.Name == "$create"
+            // TODO: create routine name is dead.
+            kind = routine.Name == "create"
                 ? RoutineKind.Creator
                 : RoutineKind.MemberRoutine;
         }
+        // TODO: Why is this handled here? This name parsing thing should have been parser's role.
         else if (routine.Name.Contains(value: '.'))
         {
             // Member routine syntax: "Type.routine" or "Type[T].routine"
@@ -527,6 +607,7 @@ public sealed partial class SemanticVerifier
 
             // Always strip generic params first (e.g., "Stack[T]" -> "Stack") to look up
             // the generic definition, not a resolution cache entry.
+            // TODO: Why is this handled here? This name parsing thing should have been parser's role.
             string lookupName = typeName.Contains(value: '[')
                 ? typeName[..typeName.IndexOf(value: '[')]
                 : typeName;
@@ -534,8 +615,29 @@ public sealed partial class SemanticVerifier
         }
         else
         {
-            // Top-level function
-            kind = RoutineKind.Function;
+            // Top-level routine. A routine whose bare name matches a known type is a
+            // CONSTRUCTOR — the surface syntax `routine T(...)` / `routine T[params](...)`
+            // (renamed from the old `routine T.create(...)`). Route it to the reserved
+            // creator kind with the type as owner and the canonical internal name "create",
+            // so registration/monomorphization/reachability/codegen treat it exactly as the
+            // old `T.create` spelling did. The trailing `!` (failable) is carried structurally
+            // on routine.IsFailable, not in the name.
+            // TODO: Why is this handled here? This name parsing thing should have been parser's role.
+            string ctorLookup = routine.Name.Contains(value: '[')
+                ? routine.Name[..routine.Name.IndexOf(value: '[')]
+                : routine.Name;
+            TypeSymbol? ctorOwner = LookupTypeWithImports(name: ctorLookup);
+            if (ctorOwner is EntityTypeInfo or RecordTypeInfo or ChoiceTypeInfo
+                or FlagsTypeInfo or VariantTypeInfo or CrashableTypeInfo)
+            {
+                kind = RoutineKind.Creator;
+                ownerType = ctorOwner;
+                routineName = "create";
+            }
+            else
+            {
+                kind = RoutineKind.Function;
+            }
         }
 
         // Validate that choice types cannot define any operator wired methods
@@ -556,28 +658,24 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.FlagsCustomOperatorNotAllowed,
                 message:
                 $"Flags type '{ownerType.Name}' cannot define operator '{routineName}'. " +
-                "Flags only support built-in operators: 'is', 'isnot', 'isonly', and 'but'.",
+                "Flags only support built-in operators: 'is', 'isnot', and 'but'.",
                 location: routine.Location);
         }
 
-        // Validate reserved prefixes (try_, check_, lookup_) for user functions
+        // Reserved-prefix collisions (try_/check_/lookup_ shadowing a compiler-generated
+        // failable variant) are validated in CheckReservedVariantCollision, which runs after
+        // all routines are registered — the failable base may be declared later in the file,
+        // so it isn't reliably visible here at collection time.
+        // TODO: Why is this handled here? This name parsing thing should have been parser's role.
         string baseName = routineName.Contains(value: '.')
             ? routineName[(routineName.IndexOf(value: '.') + 1)..]
             : routineName;
 
-        if (IsReservedRoutinePrefix(name: baseName))
-        {
-            ReportError(code: SemanticDiagnosticCode.ReservedRoutinePrefix,
-                message: $"Routine name '{baseName}' uses a reserved prefix. " +
-                         "Prefixes 'try_', 'check_', and 'lookup_' are reserved for auto-generated error handling variants.",
-                location: routine.Location);
-        }
-
         // Validate $ prefixed names are known built-in methods
-        if (IsUnknownWiredMethod(name: baseName))
+        if (IsUnknownWiredMethod(bareName: baseName, isWired: routine.IsWiredMemberRoutine))
         {
             ReportError(code: SemanticDiagnosticCode.UnknownWiredRoutine,
-                message: $"Routine name '{baseName}' uses reserved '$' prefix. " +
+                message: $"Routine name '${baseName}' uses reserved '$' prefix. " +
                          "Names starting with '$' are reserved for built-in methods.",
                 location: routine.Location);
         }
@@ -665,16 +763,6 @@ public sealed partial class SemanticVerifier
             RoutineName: routineName,
             Module: GetCurrentModuleName(),
             FilePath: _currentFilePath));
-    }
-
-    /// <summary>
-    /// Checks if a routine name uses a reserved prefix.
-    /// </summary>
-    private static bool IsReservedRoutinePrefix(string name)
-    {
-        return name.StartsWith(value: "try_", comparisonType: StringComparison.Ordinal) ||
-               name.StartsWith(value: "check_", comparisonType: StringComparison.Ordinal) ||
-               name.StartsWith(value: "lookup_", comparisonType: StringComparison.Ordinal);
     }
 
     #endregion
@@ -765,14 +853,14 @@ public sealed partial class SemanticVerifier
     /// </remarks>
     private static readonly HashSet<string> _markerProtocolBlessedWrappers = new(comparer: StringComparer.Ordinal)
     {
-        "Retained", "Viewing", "Modifying", "Hijacked", "Tracked",
+        Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Viewing, Compiler.Resolution.RuntimeContract.Modifying, Compiler.Resolution.RuntimeContract.Hijacked, Compiler.Resolution.RuntimeContract.Tracked,
         // Deferred concurrency wrappers (planned for v0.2+):
-        "Shared", "Watched", "Inspecting", "Claiming",
+        Compiler.Resolution.RuntimeContract.Shared, Compiler.Resolution.RuntimeContract.Watched, Compiler.Resolution.RuntimeContract.Inspecting, Compiler.Resolution.RuntimeContract.Claiming,
     };
 
     private static readonly HashSet<string> _markerProtocolNames = new(comparer: StringComparer.Ordinal)
     {
-        "Referring", "Controlling",
+        Compiler.Resolution.RuntimeContract.Referring, Compiler.Resolution.RuntimeContract.Controlling,
     };
 
     /// <summary>
@@ -787,7 +875,7 @@ public sealed partial class SemanticVerifier
         {
             RecordTypeInfo { GenericDefinition: { } def } => def.Name,
             EntityTypeInfo { GenericDefinition: { } def } => def.Name,
-            _ => GetBaseTypeName(typeName: type.Name)
+            _ => type.BareName
         };
 
         // Skip — this obeyer is blessed. (Wrappers in the closed set may declare obeys freely.)
@@ -825,7 +913,7 @@ public sealed partial class SemanticVerifier
 
     private bool IsMarkerProtocolTransitive(ProtocolTypeInfo protoInfo)
     {
-        string baseName = GetBaseTypeName(typeName: protoInfo.GenericDefinition?.Name ?? protoInfo.Name);
+        string baseName = (protoInfo.GenericDefinition ?? protoInfo).BareName;
         if (_markerProtocolNames.Contains(item: baseName))
             return true;
 
@@ -859,13 +947,16 @@ public sealed partial class SemanticVerifier
             }
 
             // Look for the method on the type (not on its protocols — that would find the protocol's own declaration)
+            // Routine names are bare; the failable `!` is a structured flag. Match the bare name,
+            // then (for a failable requirement) fall back to a same-named failable implementation.
             IEnumerable<RoutineInfo> ownMethods = _registry.GetMethodsForType(type: type);
             RoutineInfo? typeMethod =
                 ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name);
             if (typeMethod == null && requiredMethod.IsFailable)
             {
                 typeMethod =
-                    ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name + "!");
+                    ownMethods.FirstOrDefault(predicate: m =>
+                        m.Name == requiredMethod.Name && m.IsFailable);
             }
 
             if (typeMethod == null)

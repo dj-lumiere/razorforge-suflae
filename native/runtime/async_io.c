@@ -89,6 +89,8 @@ extern rf_sched* rf_sched_current(void);
 extern rf_coro*  rf_coro_current(void);
 extern void      rf_sched_park_external(void);
 extern void      rf_sched_wake(rf_sched* sched, rf_coro* coro);
+extern void      rf_sched_arm_cross_waker(rf_sched* sched);
+extern void      rf_sched_disarm_cross_waker(rf_sched* sched);
 
 typedef enum rf_io_kind {
     RF_IO_READ_FILE = 0,
@@ -387,6 +389,9 @@ static void rf_io_run(rf_io_req* req)
         req->sched = sched;
         req->coro = self;
         rf_io_submit(req);
+        /* The I/O threadpool will wake us cross-thread (rf_io_after_cb -> rf_sched_wake): arm a
+         * cross-waker so the run loop does not read this park as a deadlock, and disarm on resume. */
+        rf_sched_arm_cross_waker(sched);
         /* Park EXACTLY ONCE to pair with the exactly-once wake from rf_io_after_cb. Do NOT loop on
          * req->done: the work can complete (and wake us) before we park, in which case rf_sched_wake
          * already queued us to ready and a single rf_sched_park_external switch-out is resumed from
@@ -394,6 +399,7 @@ static void rf_io_run(rf_io_req* req)
          * in the ready queue -> use-after-free once the coroutine completes and is freed. The wake
          * sets req->done before signalling, so after the resume req->done is reliably 1. */
         rf_sched_park_external();
+        rf_sched_disarm_cross_waker(sched);
     } else {
         /* Not on a scheduler-driven coroutine (or the loop failed to start): run inline. */
         req->work.data = req;
@@ -558,7 +564,11 @@ static int64_t rf_proc_exec(rf_proc_state* st)
         req->sched = sched;
         req->coro = self;
         rf_io_submit(req);
+        /* Woken cross-thread exactly once by rf_proc_finalize: arm/disarm a cross-waker around the
+         * park so the run loop does not mistake it for a deadlock. */
+        rf_sched_arm_cross_waker(sched);
         rf_sched_park_external();   /* woken exactly once by rf_proc_finalize */
+        rf_sched_disarm_cross_waker(sched);
     } else if (g_io_ok) {
         st->use_sem = 1;
         uv_sem_init(&st->sem, 0);

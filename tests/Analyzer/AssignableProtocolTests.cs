@@ -9,14 +9,14 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for the Assignable protocol — the gate for implicit-copy positions
-/// (var binding, non-steal arg-pass, non-?T return, <c>with</c> base).
+/// (var binding, non-steal arg-pass, non-in-flight-T return, <c>with</c> base).
 ///
 /// Coverage:
 ///   * Auto-derivation rule — records whose @llvm layout contains no `ptr` get
 ///     Assignable for free; ownership-bearing wrappers do not.
 ///   * Choice / Flags auto-derive Assignable unconditionally (scalar layout).
 ///   * Tuples cascade — Assignable iff every element is Assignable.
-///   * Raw-pointer wrappers (Hijacked[T], CPtr) opt in with a one-line $copy body.
+///   * Raw-pointer wrappers (Hijacked[T], CPtr) opt in with a one-line $store body.
 ///   * <c>with</c> expression now requires Assignable on the base; gate diagnostic
 ///     is <c>WithBaseNotAssignable</c> (S785).
 /// </summary>
@@ -196,7 +196,7 @@ public class AssignableProtocolTests
     {
         string source = """
                         routine start()
-                          danger!
+                          danger
                             var a = Hijacked[U8](0_addr)
                             var b = a
                           return
@@ -311,7 +311,7 @@ public class AssignableProtocolTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithBaseNotAssignable &&
-                         e.Message.Contains(value: "Assignable",
+                         e.Message.Contains(value: "Storable",
                              comparisonType: StringComparison.Ordinal));
     }
 
@@ -368,7 +368,7 @@ public class AssignableProtocolTests
 
     #endregion
 
-    #region $copy synthesis — direct calls succeed on auto-derived Assignable types
+    #region $store synthesis — direct calls succeed on auto-derived Assignable types
 
     [Fact]
     public void Analyze_CopyMethod_DirectCall_OnPrimitiveRecord_NoError()
@@ -380,7 +380,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Point(x: 1, y: 2)
-                          var b = a.$copy()
+                          var b = a.store()
                           return
                         """;
 
@@ -399,7 +399,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Color.Red
-                          var b = a.$copy()
+                          var b = a.store()
                           return
                         """;
 
@@ -418,7 +418,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Perms.Read
-                          var b = a.$copy()
+                          var b = a.store()
                           return
                         """;
 
@@ -429,8 +429,8 @@ public class AssignableProtocolTests
     [Fact]
     public void Analyze_CopyMethod_DirectCall_OnRecordWithRetained_NoMethodFound()
     {
-        // Record with Retained field doesn't auto-derive Assignable → no synthesized $copy.
-        // User-written $copy would be required; without it the direct call fails to resolve.
+        // Record with Retained field doesn't auto-derive Assignable → no synthesized $store.
+        // User-written $store would be required; without it the direct call fails to resolve.
         string source = """
                         entity Node
                           value: S64
@@ -441,7 +441,7 @@ public class AssignableProtocolTests
                         routine start()
                           var a = Node(value: 1)
                           var b = Box(handle: a.retain())
-                          var c = b.$copy()
+                          var c = b.store()
                           return
                         """;
 
@@ -463,7 +463,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Point(x: 1, y: 2)
-                          var b = a.clone()
+                          var b = a.copy()
                           return
                         """;
 
@@ -482,7 +482,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Color.Red
-                          var b = a.clone()
+                          var b = a.copy()
                           return
                         """;
 
@@ -501,7 +501,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Perms.Read
-                          var b = a.clone()
+                          var b = a.copy()
                           return
                         """;
 
@@ -522,7 +522,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Outer(inner: Inner(v: 1), tag: 42)
-                          var b = a.clone()
+                          var b = a.copy()
                           return
                         """;
 
@@ -534,7 +534,7 @@ public class AssignableProtocolTests
     public void Analyze_Clone_OnRecordWithRetained_Fails()
     {
         // Record with Retained field does not auto-derive Assignable, so it also
-        // does not auto-derive Cloneable — calling .clone() should fail to resolve.
+        // does not auto-derive Cloneable — calling .copy() should fail to resolve.
         string source = """
                         entity Node
                           value: S64
@@ -545,7 +545,7 @@ public class AssignableProtocolTests
                         routine start()
                           var a = Node(value: 1)
                           var b = Box(handle: a.retain())
-                          var c = b.clone()
+                          var c = b.copy()
                           return
                         """;
 

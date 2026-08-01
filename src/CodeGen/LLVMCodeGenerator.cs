@@ -87,17 +87,13 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Live concrete owner type FullNames from RoutineReachabilityPass. Used to drive Phase C
-    /// monomorphization of synthesized routines (try_next, $represent, $diagnose) for generic owners.
+    /// monomorphization of synthesized routines (try_emit, $represent, $diagnose) for generic owners.
     /// </summary>
     private HashSet<string> _liveOwnerTypeNames = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
     // TODO: It shouldn't know about all these types because they are going to be llvm ptr anyway.
-    private static readonly HashSet<string> WrapperTypeNames =
-    [
-        "Viewing", "Modifying", "Retained", "Tracked", "Inspecting", "Claiming", "Shared",
-        "Watched", "Hijacked"
-    ];
+    private static readonly IReadOnlySet<string> WrapperTypeNames = RuntimeContract.WrapperTypes;
 
     /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>
     private readonly List<(Program Program, string FilePath, string Module)>
@@ -226,8 +222,8 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// True when the current function returns its value through a hidden <c>ptr sret(%T) %sret</c>
-    /// first parameter rather than by value (the ABI Indirect return form — see
-    /// internal-wiki/v0.1.x-struct-abi-boundary-coercion.md). When set, every <c>return</c> stores
+    /// first parameter rather than by value (the ABI Indirect return form of the struct-ABI
+    /// boundary-coercion design). When set, every <c>return</c> stores
     /// through <c>%sret</c> and emits <c>ret void</c>.
     /// </summary>
     private bool _currentReturnViaSret;
@@ -298,7 +294,8 @@ public partial class LlvmCodeGenerator
         IReadOnlyCollection<string>? liveOwnerTypeNames = null,
         IReadOnlyCollection<string>? maySuspendRoutineKeys = null) :
         this(userPrograms:
-            [(program, program.Location.FileName, "")],
+            [(program, program.Location.FileName,
+                program.Declarations.OfType<ModuleDeclaration>().FirstOrDefault()?.Path ?? "")],
             registry: registry,
             stdlibPrograms: stdlibPrograms,
             target: target,
@@ -417,7 +414,6 @@ public partial class LlvmCodeGenerator
             RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
             EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
             ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
-            VariantTypeInfo { GenericDefinition: not null } v => v.GenericDefinition,
             _ => null
         };
     }
@@ -447,6 +443,13 @@ public partial class LlvmCodeGenerator
     /// <see cref="Generate"/>. Mirrors the <c>sa-timing</c> manifest flag for codegen visibility.
     /// </summary>
     public bool Timing { get; set; }
+
+    /// <summary>
+    /// The manifest executable module (the entry file's module). Selects which <c>start</c> becomes
+    /// the program entry when several modules define one (e.g. a test harness importing many
+    /// modules). Null/empty for a single-module program, where the sole <c>start</c> is used.
+    /// </summary>
+    public string? EntryModule { get; init; }
 
     /// <summary>Generates LLVM IR for all user programs and returns it as a string.</summary>
     public string Generate()
@@ -725,13 +728,13 @@ public partial class LlvmCodeGenerator
     private void GenerateRoutineDefinitions()
     {
         // First, generate user program routines (these take priority)
-        foreach ((Program userProgram, string _, string _) in _userPrograms)
+        foreach ((Program userProgram, string _, string userModule) in _userPrograms)
         {
             foreach (ISyntaxTreeNode decl in userProgram.Declarations)
             {
                 if (decl is RoutineDeclaration routine)
                 {
-                    GenerateRoutineDefinition(routine: routine);
+                    GenerateRoutineDefinition(routine: routine, moduleContext: userModule);
                 }
             }
         }
@@ -753,12 +756,17 @@ public partial class LlvmCodeGenerator
             {
                 foreach (RoutineDeclaration routine in EnumerateStdlibRoutines(program: program))
                 {
+                    // Prefer the structured binding attached at registration (StdlibLoader /
+                    // SignatureResolver) — the exact overload for THIS decl. This is the only
+                    // reliable identity for a CONSTRUCTOR (`routine T(...)`), whose AST name is the
+                    // bare type ("U64") with no ".create" for the name-string lookups below to key on.
                     // Look up routine info — try multiple keys:
                     // 1. Raw AST name (e.g., "show")
                     // 2. Module-qualified (e.g., "IO.show")
                     // 3. Short name fallback via LookupRoutineByName
                     // 4. Overload-based lookup using AST parameter types
-                    RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routine.Name);
+                    RoutineInfo? routineInfo = routine.ResolvedInfo
+                                               ?? _registry.LookupRoutine(fullName: routine.Name);
                     if (routineInfo == null && !string.IsNullOrEmpty(value: module))
                     {
                         routineInfo =
@@ -800,8 +808,9 @@ public partial class LlvmCodeGenerator
                     // For overloaded routines (e.g., $create), try to find the
                     // specific overload matching this AST declaration's parameter types.
                     // This includes 0-arg overloads — LookupRoutine returns an arbitrary
-                    // overload, so we must disambiguate for all param counts.
-                    if (routineInfo != null)
+                    // overload, so we must disambiguate for all param counts. Skipped when
+                    // ResolvedInfo already pinned the exact overload for this decl.
+                    if (routineInfo != null && routine.ResolvedInfo == null)
                     {
                         var astParamTypes = new List<TypeInfo>();
                         foreach (Parameter param in routine.Parameters)
@@ -840,7 +849,7 @@ public partial class LlvmCodeGenerator
                         // LookupRoutineOverload may return the wrong overload (or fail).
                         // Build the AST param-type name list directly and match against
                         // candidate parameter type names. Determine the owner type from the
-                        // AST routine name (e.g. "Bytes.$create") rather than the possibly-
+                        // AST routine name (e.g. "Bytes.create") rather than the possibly-
                         // wrong initial routineInfo, since LookupRoutineByName returns an
                         // arbitrary overload (possibly from a different type).
                         TypeInfo? resolvedOwner = routineInfo?.OwnerType;
@@ -1078,8 +1087,8 @@ public partial class LlvmCodeGenerator
                 RoutineInfo? synthInfo = _registry.LookupRoutine(fullName: key);
                 if (synthInfo == null || synthInfo.IsGenericDefinition) continue;
                 // Wrapper-forwarder synthesized bodies are anchored on the generic-def owner
-                // (e.g. Retained[T].$eq). Reachability seeds the *concrete* monomorphizations
-                // (Retained[Text].$eq), not the gen-def routine itself, so the gen-def synth
+                // (e.g. Retained[T].eq). Reachability seeds the *concrete* monomorphizations
+                // (Retained[Text].eq), not the gen-def routine itself, so the gen-def synth
                 // would always fail this gate. The inner per-concrete loop below has its own
                 // liveness check (_generatedRoutines.Contains), so it's safe to bypass here.
                 bool isWrapperForwarderGenDef =
@@ -1095,7 +1104,7 @@ public partial class LlvmCodeGenerator
                 // hijacked_from[T]); owner-generic types need a separate guard.
                 if (synthInfo.OwnerType != null && ContainsGenericParameter(synthInfo.OwnerType))
                     continue;
-                // Skip derived operators on generic owner types (e.g. ArrayIterator.$ne).
+                // Skip derived operators on generic owner types (e.g. ArrayIterator.ne).
                 // GMP monomorphizes these into InstantiatedGenericBodies (Phase B); emitting the
                 // generic-def version here would call a non-existent generic $eq/$contains.
                 // Exception: synthesized wrapper forwarder bodies (T.key_get, etc.) are
@@ -1103,7 +1112,7 @@ public partial class LlvmCodeGenerator
                 // emit the body with the wrapper's type parameter substituted.
                 if (synthInfo.OwnerType?.IsGenericDefinition == true)
                 {
-                    // Non-wrapper synthesized bodies on generic-def owners (try_next, $represent,
+                    // Non-wrapper synthesized bodies on generic-def owners (try_emit, $represent,
                     // $diagnose, $hash, $eq for generic types like ListEmitter[T], List[T]).
                     // For each live concrete instantiation of this owner, lookup the substituted
                     // method (LookupMethod normalizes generic-def methods onto concrete owners),
@@ -1281,6 +1290,11 @@ public partial class LlvmCodeGenerator
                 string sample = string.Join(separator: "\n",
                     values: overPruned.Take(count: 20).Select(selector: n => $"  @{n}"));
                 string more = overPruned.Count > 20 ? $"\n  … and {overPruned.Count - 20} more" : "";
+                if (Environment.GetEnvironmentVariable(variable: "RF_OVERPRUNE_WARN") == "1")
+                {
+                    Console.Error.WriteLine(value: $"[OVERPRUNE-WARN] {overPruned.Count}:\n{sample}{more}");
+                    return;
+                }
                 throw new InvalidOperationException(
                     message:
                     $"Codegen bug: {overPruned.Count} referenced routine(s) were declared and called " +
@@ -1528,12 +1542,29 @@ public partial class LlvmCodeGenerator
             output.Append(value: _functionDefinitions);
         }
 
-        // Emit main() entry point that calls the module's start() / start!() routine.
-        // Failable entry points have the symbol decorated with `!`, so we accept both forms.
-        string? startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
-            f == "start" || f == "start!" ||
-            f.EndsWith(value: ".start") || f.EndsWith(value: ".start!") ||
-            f.EndsWith(value: ".start\"") || f.EndsWith(value: ".start!\""));
+        // Emit main() entry point that calls the module's start() routine. The mangled symbol is
+        // `"[independent(, crashable)] <module.>start()"` — attributes are in the bracket prefix and
+        // the name is the bare module-qualified `start` with an (always-empty) labeled param list.
+        static bool IsStartSymbol(string f) =>
+            f.EndsWith(value: ".start()\"") || f.EndsWith(value: " start()\"");
+
+        // Prefer the ENTRY module's own start. `_generatedRoutineDefs` is a hash set (unordered),
+        // so a bare FirstOrDefault would pick an arbitrary `.start` when several imported modules
+        // each define one (e.g. a test harness importing many modules) — non-deterministically
+        // making the wrong module's start the program entry. The first user program is the entry
+        // (manifest executable module); its start is the intended entry point.
+        // The program entry is the manifest executable module's start — NOT an arbitrary `.start`.
+        // With several imported modules each defining `start` (e.g. a test harness), selecting by
+        // name alone is ambiguous, so the entry module is passed in explicitly. Fall back to a
+        // lone start only when no entry module is set (single-module program).
+        string? startFunc = null;
+        if (!string.IsNullOrEmpty(value: EntryModule))
+        {
+            // Match `"[independent(, …)] {EntryModule}.start()"` regardless of the attribute prefix.
+            startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
+                f.EndsWith(value: $"{EntryModule}.start()\""));
+        }
+        startFunc ??= _generatedRoutineDefs.SingleOrDefault(predicate: IsStartSymbol);
         if (startFunc != null)
         {
             // Select trace mode: 2=shadow (debug+release), 1=platform (hardware faults only), 0=none (release-time/space)
@@ -1564,7 +1595,10 @@ public partial class LlvmCodeGenerator
         var normalized = output.ToString()
                                .Replace(oldValue: "\r\n", newValue: "\n")
                                .Replace(oldValue: "\r", newValue: "\n");
-        return ApplyTbaa(normalized);
+        // TBAA first (tags loads/stores), then line-tables debug info (tags instructions + define
+        // headers). Both are text post-passes that append their own metadata block; DI numbers itself
+        // above TBAA's fixed !0..!22. ApplyDebugInfo is a no-op outside debug builds.
+        return ApplyDebugInfo(ApplyTbaa(normalized));
     }
 
     #endregion

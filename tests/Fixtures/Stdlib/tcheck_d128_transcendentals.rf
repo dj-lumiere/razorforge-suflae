@@ -7,11 +7,11 @@ import IO/Console
 # These cover the mid branch (|z|<3.1) and the tail (|z|>=3.1) and must reproduce the full-level
 # octuple result exactly.
 routine start()
-  show((1.0_d128).erf().$represent())
-  show((0.5_d128).erf().$represent())
-  show((3.5_d128).erf().$represent())
-  show((-2.0_d128).erf().$represent())
-  show((1.0_d128).erfc().$represent())
-  show((4.0_d128).erfc().$represent())
-  show((-1.5_d128).erfc().$represent())
+  show((1.0_d128).erf().represent())
+  show((0.5_d128).erf().represent())
+  show((3.5_d128).erf().represent())
+  show((-2.0_d128).erf().represent())
+  show((1.0_d128).erfc().represent())
+  show((4.0_d128).erfc().represent())
+  show((-1.5_d128).erfc().represent())
   return

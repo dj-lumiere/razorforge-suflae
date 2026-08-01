@@ -174,8 +174,12 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
     private UsingStatement LowerUsing(UsingStatement usingStmt)
     {
         Statement body = LowerStatement(usingStmt.Body);
+        Statement? fb = usingStmt.FallbackBody != null
+            ? LowerStatement(usingStmt.FallbackBody)
+            : null;
         return !ReferenceEquals(body, usingStmt.Body)
-            ? usingStmt with { Body = body }
+               || !ReferenceEquals(fb, usingStmt.FallbackBody)
+            ? usingStmt with { Body = body, FallbackBody = fb }
             : usingStmt;
     }
 
@@ -226,7 +230,8 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
                 forStmt.ElseBranch != null && ContainsBecomes(forStmt.ElseBranch),
             WhenStatement whenStmt => whenStmt.Clauses.Any(clause => ContainsBecomes(clause.Body)),
             DangerStatement danger => ContainsBecomes(danger.Body),
-            UsingStatement usingStmt => ContainsBecomes(usingStmt.Body),
+            UsingStatement usingStmt => ContainsBecomes(usingStmt.Body) ||
+                usingStmt.FallbackBody != null && ContainsBecomes(usingStmt.FallbackBody),
             _ => false
         };
     }
@@ -285,7 +290,10 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             },
             UsingStatement usingStmt => usingStmt with
             {
-                Body = RewriteBecomes(usingStmt.Body, target)
+                Body = RewriteBecomes(usingStmt.Body, target),
+                FallbackBody = usingStmt.FallbackBody != null
+                    ? RewriteBecomes(usingStmt.FallbackBody, target)
+                    : null
             },
             _ => statement
         };

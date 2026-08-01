@@ -1,4 +1,4 @@
-module Tests/Stdlib/ArrayAPi
+module Tests/Stdlib/ArrayApi
 import IO/Console
 import Collections
 
@@ -20,13 +20,13 @@ routine start()
   show(f"a[3]: {a[3]}")
 
   # first/last (failable)
-  show(f"first: {a.first!()}")
-  show(f"last: {a.last!()}")
+  show(f"first: {a.first()}")
+  show(f"last: {a.last()}")
 
   # contains / index_of
   show(f"contains 20: {20 in a}")
   show(f"contains 99: {99 in a}")
-  show(f"index_of 30: {a.index_of!(value: 30)}")
+  show(f"index_of 30: {a.index_of(value: 30)}")
 
   # Iteration (deterministic — array order is fixed)
   var sum = 0_s64

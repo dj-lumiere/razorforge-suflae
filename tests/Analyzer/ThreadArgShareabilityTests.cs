@@ -6,12 +6,15 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for the threaded-routine argument boundary (RF-S632). A `threaded routine` spawns an OS
-/// thread, so every parameter must cross the boundary safely: trivially-copyable value data is
-/// passed BY VALUE (an independent copy); a thread-shareable wrapper (Atomic/Shared/Watched) is
-/// passed BY REFERENCE (carries its own synchronization). Anything else — a bare entity, or a
-/// record/tuple that transitively owns a single-threaded RC wrapper or a scoped token — would
-/// silently alias unsynchronized state across threads and is rejected.
+/// Tests for the async-spawn argument boundary (RF-S632). A `threaded routine` spawns an OS thread
+/// and — under M:N — a `suspended routine` yields a coroutine that may migrate to any worker in
+/// parallel with its siblings, so BOTH boundaries enforce the same crossing rule: an argument is
+/// safe when it is `steal`-moved (exclusive transfer), trivially-copyable value data (passed BY
+/// VALUE), or a thread-shareable wrapper (Atomic/Shared/Watched/Inspecting/Claiming — carries its
+/// own synchronization). Anything else passed by copy — a bare entity, or a record/tuple that
+/// transitively owns a single-threaded RC wrapper (Retained/Tracked) or single-threaded token
+/// (Viewing/Modifying) — would silently alias unsynchronized state across parallel coroutines and
+/// is rejected.
 /// </summary>
 public class ThreadArgShareabilityTests
 {
@@ -114,7 +117,7 @@ public class ThreadArgShareabilityTests
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "cannot cross the thread boundary safely");
+            expectedErrorSubstring: "of a threaded routine cannot cross the spawn boundary safely");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
     }
@@ -140,6 +143,120 @@ public class ThreadArgShareabilityTests
 
         AnalysisResult result = AssertHasErrorSa(source: source,
             expectedErrorSubstring: "transitively owns `Retained`");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
+    }
+
+    [Fact]
+    public void Analyze_StealBareEntityThreadArg_Ok()
+    {
+        // A `steal`-moved bare entity is an EXCLUSIVE transfer — the caller loses access, so exactly
+        // one live handle survives. Safe to cross even though the param type is a bare entity. (This
+        // is the over-strictness the steal-credit removed: the type-only check rejected it before.)
+        string source = Prelude + """
+                                  threaded routine work(node: Node) -> S64
+                                    return node.value
+
+                                  routine start()
+                                    var n = Node(value: 1)
+                                    var t = work(node: steal n)
+                                    discard t.retrieve!()
+                                    return
+                                  """;
+
+        AssertAnalyzesSa(source: source);
+    }
+
+    [Fact]
+    public void Analyze_ScalarSuspendedArg_Ok()
+    {
+        // A trivially-copyable scalar is copied by value — safe across the suspended boundary too.
+        string source = Prelude + """
+                                  suspended routine work(n: S64) -> S64
+                                    return n + 1
+
+                                  routine start()
+                                    var t = work(n: 5)
+                                    discard t.retrieve!()
+                                    return
+                                  """;
+
+        AssertAnalyzesSa(source: source);
+    }
+
+    [Fact]
+    public void Analyze_RecordOwningRetainedSuspendedArg_Errors()
+    {
+        // The suspended boundary was previously UNCHECKED — harmless single-threaded, but a UAF hole
+        // under M:N: a copied record owning a non-atomic Retained refcount would race across parallel
+        // coroutines. The same crossing rule now applies here (RF-S632).
+        string source = Prelude + """
+                                  record Holder
+                                    posted node: Retained[Node]
+
+                                  suspended routine work(h: Holder) -> S64
+                                    return 0_s64
+
+                                  routine start()
+                                    var h = Holder(node: Node(value: 1).retain())
+                                    var t = work(h: h)
+                                    discard t.retrieve!()
+                                    return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "of a suspended routine cannot cross the spawn boundary safely");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
+    }
+
+    [Fact]
+    public void Analyze_StealRetained_Rejected()
+    {
+        // A `Retained` is a reference-counted handle — SHARED ownership, not unique. `steal` (an
+        // exclusive-transfer marker) is a category error on it: moving one handle proves nothing
+        // about sibling handles racing the non-atomic count. So `steal r` is rejected at the steal
+        // itself (RF-S617), independent of the async boundary — the honest fix is `Shared`/`Watched`.
+        string source = Prelude + """
+                                  suspended routine work(r: Retained[Node]) -> S64
+                                    return r.value
+
+                                  routine start()
+                                    var r = Node(value: 1).retain()
+                                    var t = work(r: steal r)
+                                    discard t.retrieve!()
+                                    return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "a reference-counted handle is shared ownership");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.StealSharedOwnership);
+    }
+
+    [Fact]
+    public void Analyze_StealRecordOwningRetainedSuspendedArg_Errors()
+    {
+        // `steal` on a plain record IS allowed (no-op), but stealing a record that transitively owns
+        // a Retained does NOT make it safe to cross: moving the record doesn't make its interior
+        // non-atomic refcount exclusive. The boundary credits `steal` ONLY for a bare entity, so this
+        // is still rejected (RF-S632) — must use `Shared`/`Watched`.
+        string source = Prelude + """
+                                  record Holder
+                                    posted node: Retained[Node]
+
+                                  suspended routine work(h: Holder) -> S64
+                                    return 0_s64
+
+                                  routine start()
+                                    var h = Holder(node: Node(value: 1).retain())
+                                    var t = work(h: steal h)
+                                    discard t.retrieve!()
+                                    return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "of a suspended routine cannot cross the spawn boundary safely");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
     }

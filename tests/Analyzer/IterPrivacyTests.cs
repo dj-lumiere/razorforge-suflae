@@ -20,7 +20,7 @@ public class IterPrivacyTests
         string source = """
                         routine start()
                           var xs = [1_s64, 2_s64, 3_s64]
-                          var it = xs.$iter()
+                          var it = xs.iter()
                           return
                         """;
 
@@ -53,7 +53,7 @@ public class IterPrivacyTests
 
                         routine start()
                           var c = Counter(value: 1)
-                          var r = c.$refer()
+                          var r = c.refer()
                           return
                         """;
 
@@ -71,7 +71,7 @@ public class IterPrivacyTests
 
                         routine start()
                           var c = Counter(value: 1)
-                          var w = c.$control()
+                          var w = c.control()
                           return
                         """;
 
@@ -83,7 +83,7 @@ public class IterPrivacyTests
     [Fact]
     public void ReferringParam_CallSiteCoercion_Resolves()
     {
-        // The compiler injects `.$refer()` automatically at the Referring[T] param.
+        // The compiler injects `.refer()` automatically at the Referring[T] param.
         // No user-visible $refer call appears in source; the check must not fire on the
         // synthesized coercion.
         string source = """
@@ -113,7 +113,7 @@ public class IterPrivacyTests
                         record Bag
                           n: S64
 
-                        routine Bag.$iter() -> Bag
+                        routine Bag.iter() -> Bag
                           return me
                         """;
 

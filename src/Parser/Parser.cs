@@ -384,7 +384,25 @@ public partial class Parser
             Advance(); // consume 'lateinit'
             declLateInit = true;
         }
-        if (Match(TokenType.Var, TokenType.Preset))
+        // `secret preset NAME` (visibility-prefixed preset) — route to the dedicated preset parser so
+        // it becomes a PresetDeclaration carrying its secret (file-private) flag, not a VariableDeclaration.
+        if (Check(type: TokenType.Preset))
+        {
+            if (_parsingTypeBody)
+            {
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: "Type member variables cannot use 'var' or 'preset'. " +
+                             "Use 'name: Type' syntax instead",
+                    fileName: FileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
+            }
+
+            Advance(); // consume 'preset'
+            return ParsePresetDeclaration(isSecret: visibility == VisibilityModifier.Secret);
+        }
+        if (Match(TokenType.Var))
         {
             // In type bodies (record, entity), var/preset are not allowed
             // MemberVariables use 'name: Type' syntax without var keywords
@@ -548,7 +566,7 @@ public partial class Parser
     /// <summary>
     /// Parses a single statement within a block or function body.
     /// Handles: if, while, for, when, return, throw, absent, break, continue, and expression statements.
-    /// RazorForge-only: danger! block, steal expression, release statement, block statements.
+    /// RazorForge-only: danger block, steal expression, release statement, block statements.
     /// </summary>
     /// <remarks>
     /// Statement types (checked in sequence):
@@ -576,7 +594,7 @@ public partial class Parser
     ///   using        - Resource management (declaration form)
     ///
     /// MEMORY BLOCKS (RazorForge only):
-    ///   danger!      - Unsafe block (raw pointers, FFI)
+    ///   danger      - Unsafe block (raw pointers, FFI)
     ///   release      - Early resource cleanup
     ///
     /// DECLARATIONS IN STATEMENT CONTEXT:
@@ -671,7 +689,12 @@ public partial class Parser
 
         if (Match(type: TokenType.Throw))
         {
-            return ParseThrowStatement();
+            return ParseThrowStatement(isFatal: false);
+        }
+
+        if (Match(type: TokenType.Pierce))
+        {
+            return ParseThrowStatement(isFatal: true);
         }
 
         // Using block (scoped resource management with indented body)

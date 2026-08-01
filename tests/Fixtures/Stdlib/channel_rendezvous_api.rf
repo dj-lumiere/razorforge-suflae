@@ -1,0 +1,33 @@
+module Tests/Stdlib/ChannelRendezvousApi
+
+# v0.3.0 channels — rendezvous (capacity 0). With no buffer, every send! is hand-to-hand: it parks
+# until a consumer takes that exact item, so a completed send means the hand-off happened. Here a
+# coroutine producer and a coroutine consumer cooperatively rendezvous three times on this thread's
+# scheduler. Proves the capacity-0 path (send waits for a taker, not for buffer space).
+
+import IO/Console
+
+suspended routine produce(out: Sender[S64]) -> S64
+  danger
+    out.send(item: 7)     # each parks until the consumer takes it
+    out.send(item: 8)
+    out.send(item: 9)
+  return 3
+
+suspended routine consume(inbox: Receiver[S64]) -> S64
+  var total = 0_s64
+  for v in inbox
+    total = total + v
+  return total
+
+routine start()
+  var (feeder, hop) = make_channel[S64](capacity: 0)   # rendezvous: no buffered slots
+
+  var p = produce(out: steal feeder)
+  var c = consume(inbox: steal hop)
+
+  danger
+    var sum = c.retrieve()
+    discard p.retrieve()
+    show(f"sum={sum}")
+  return

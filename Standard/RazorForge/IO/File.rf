@@ -22,14 +22,14 @@ choice FileMode
 ### Represents an open file handle.
 ### `FileHandle` owns a unique OS descriptor with a `close` teardown, so it is an `entity` (single
 ### owner, no implicit copy — preventing double-close) and obeys {Enterable} for scoped `using`
-### access. The fallible acquisition lives in the `open!` factory; `$enter` is pass-through.
+### access. The fallible acquisition lives in the `open!` factory; `enter` is pass-through.
 entity FileHandle obeys Enterable
   ### Stores the native file descriptor.
   secret fd: S32
   ### Stores the mode used to open the file.
   secret mode: FileMode
-  ### Whether the descriptor has been closed. Guards `close()` so it is idempotent — `$exit`
-  ### (early close) and `$destroy` (RAII close at scope exit) can both run without double-closing.
+  ### Whether the descriptor has been closed. Guards `close()` so it is idempotent — `exit`
+  ### (early close) and `destroy` (RAII close at scope exit) can both run without double-closing.
   secret is_closed: Bool
 
 # ============================================================================
@@ -37,12 +37,12 @@ entity FileHandle obeys Enterable
 # ============================================================================
 
 ### Opens a file using the requested access mode.
-### The returned handle owns the underlying descriptor until `close()` or `$exit()` runs.
+### The returned handle owns the underlying descriptor until `close()` or `exit()` runs.
 ### :param path: The path to open.
 ### :param mode: The mode to use for the opened file.
 ### :returns: The resulting `FileHandle` value.
 ### :throws: May throw {IOError}.
-routine open!(path: Text, mode: FileMode = FileMode.READ) -> ?FileHandle
+routine open!(path: Text, mode: FileMode = FileMode.READ) -> FileHandle
   var cstr = CStr(from: path)
   var mode_val = mode.S32()
   var fd = rf_file_open(cstr, cstr.count().S32!(), mode_val)
@@ -51,7 +51,7 @@ routine open!(path: Text, mode: FileMode = FileMode.READ) -> ?FileHandle
   return FileHandle(fd: fd, mode: mode, is_closed: false)
 
 ### Closes the file handle. Idempotent — closing an already-closed handle is a no-op, so explicit
-### `close()`, scope-exit `$exit`, and teardown `$destroy` never double-close the descriptor.
+### `close()`, scope-exit `exit`, and teardown `destroy` never double-close the descriptor.
 routine FileHandle.close()
   if me.is_closed
     return
@@ -128,7 +128,7 @@ routine FileHandle.write(value: Text, end: Text = "\n")
 ### :param value: The value to render and write.
 ### :param end: The trailing text to append after `value`.
 routine FileHandle.write[T](value: T, end: Text = "\n")
-  var text = value.$represent()
+  var text = value.represent()
   me.write(text, end: end)
   return
 
@@ -157,23 +157,23 @@ routine FileHandle.is_eof() -> Bool
   return rf_file_is_eof(me.fd)
 
 # ============================================================================
-# Resource management — enables `using open!(path) as f`
+# Resource management — enables `using open(path) as f`
 # ============================================================================
 
 ### Enters a `using` scope with this file handle, passing it through as the bound value.
 ### :returns: This handle as `?FileHandle`.
-routine FileHandle.$enter() -> ?FileHandle
+routine FileHandle.enter() -> FileHandle
   return me
 
 ### Closes the file handle when leaving a `using` scope.
 ### This provides deterministic cleanup for scoped file access.
-routine FileHandle.$exit()
+routine FileHandle.exit()
   me.close()
   return
 
 ### Closes the file handle at scope exit (RAII), so a handle bound without `using` still releases
-### its descriptor. Idempotent with `$exit`/`close()` via the `is_closed` guard, so no double-close.
-dangerous routine FileHandle.$destroy()
+### its descriptor. Idempotent with `exit`/`close()` via the `is_closed` guard, so no double-close.
+dangerous routine FileHandle.destroy()
   me.close()
   return
 
@@ -186,7 +186,7 @@ dangerous routine FileHandle.$destroy()
 ### :param path: The path to read.
 ### :returns: The resulting `Text` value.
 routine read_all!(path: Text) -> Text
-  var file = open!(path, mode: FileMode.READ)
+  var file = open(path, mode: FileMode.READ)
   var content = file.read_all()
   file.close()
   return content
@@ -196,7 +196,7 @@ routine read_all!(path: Text) -> Text
 ### :param path: The path to write.
 ### :param content: The text to write.
 routine write_all!(path: Text, content: Text)
-  var file = open!(path, mode: FileMode.WRITE)
+  var file = open(path, mode: FileMode.WRITE)
   file.write(content, end: "")
   file.close()
   return
@@ -206,7 +206,7 @@ routine write_all!(path: Text, content: Text)
 ### :param path: The path to append to.
 ### :param content: The text to append.
 routine append_all!(path: Text, content: Text)
-  var file = open!(path, mode: FileMode.APPEND)
+  var file = open(path, mode: FileMode.APPEND)
   file.write(content, end: "")
   file.close()
   return

@@ -1,0 +1,35 @@
+module Tests/Stdlib/ChannelBackpressureApi
+
+# v0.3.x M:N + channels — SUSTAINED worker↔worker backpressure. A producer coroutine feeds 500 items
+# through a small capacity-4 channel to a single consumer coroutine. With the buffer this small vs the
+# volume, the producer repeatedly PARKS on a full channel and the consumer PARKS on an empty one, so the
+# run is hundreds of hand-off park/wake cycles bouncing between workers on the pool. The total is
+# deterministic (sum 1..500 = 125250) no matter how the pool schedules or steals — a lost wake, a
+# double-resume, or a dropped item under backpressure would wrong the sum or hang. The high-volume
+# counterpart to channel_workerpool (6 jobs) and channel_rendezvous (3 hand-offs).
+
+import IO/Console
+
+suspended routine produce(out: Sender[S64], n: S64) -> S64
+  var i = 1_s64
+  while i <= n
+    out.send(item: i)
+    i = i + 1
+  return n
+
+suspended routine consume(inbox: Receiver[S64]) -> S64
+  var total = 0_s64
+  for v in inbox
+    total = total + v
+  return total
+
+routine start()
+  var (feeder, hop) = make_channel[S64](capacity: 4)
+
+  var p = produce(out: steal feeder, n: 500)
+  var c = consume(inbox: steal hop)
+
+  var sum = c.retrieve()      # drains until the producer's Sender drops and the channel closes
+  discard p.retrieve()
+  show(f"backpressure sum 1..500: {sum}")
+  return

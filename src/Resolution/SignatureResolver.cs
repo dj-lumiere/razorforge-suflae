@@ -28,11 +28,11 @@ internal sealed class SignatureResolver
     }
 
     /// <summary>
-    /// Reports S802 for any `?T` rvalue mark in a slot-position type expression.
-    /// Vars, fields, and type-args hold lvalue, so `?T` is rejected there. A routine return type
-    /// and a parameter type may carry `?T`: the return is an rvalue producer and a `?T` parameter
+    /// Reports S802 for any `T` rvalue mark in a slot-position type expression.
+    /// Vars, fields, and type-args hold lvalue, so `T` is rejected there. A routine return type
+    /// and a parameter type may carry `T`: the return is an rvalue producer and a `T` parameter
     /// is an ownership-transfer (steal) slot. The top-level allowance does not recurse — a nested
-    /// type argument is always an lvalue slot, so `List[?T]` stays rejected even on a parameter.
+    /// type argument is always an lvalue slot, so `List[T]` stays rejected even on a parameter.
     /// </summary>
     private void RejectRvalueMarkInSlot(TypeExpression? typeExpr, string positionDescription,
         bool allowTopLevelRvalue = false)
@@ -42,7 +42,7 @@ internal sealed class SignatureResolver
         {
             _sa.ReportError(code: SemanticDiagnosticCode.RvalueMarkInSlotPosition,
                 message:
-                $"`?T` rvalue mark is not valid in {positionDescription}; rvalue is return-only.",
+                $"`T` rvalue mark is not valid in {positionDescription}; rvalue is return-only.",
                 location: typeExpr.Location);
         }
 
@@ -107,6 +107,14 @@ internal sealed class SignatureResolver
             ? (_sa._registry.LookupType(name: pending.OwnerType.FullName) ?? pending.OwnerType)
             : null;
 
+        // Suflae representation unification: in a Suflae USER file, an `entity` is a `Roamed[E]` handle,
+        // so entity types in its routine SIGNATURES (params + return + `me`) are substituted to
+        // `Roamed[E]` — the same rule TypeBodyResolver applies to entity FIELDS. Gated to non-stdlib:
+        // the borrowed RF stdlib is RazorForge source (bare single-owner entities), and its concrete
+        // entity signatures must NOT be rewritten even though it's loaded under an SF compile.
+        bool sfUserEntity = _sa._registry.Language == Language.Suflae
+            && !_sa.IsStdlibFile(filePath: pending.FilePath);
+
         // Filter routine.GenericParameters to exclude names that resolve to real types in the
         // registry. The parser collects leaf identifiers from nested receiver types like
         // `List[DictEntry[K, V]]` — these include both unresolved names (K, V) which are
@@ -128,6 +136,7 @@ internal sealed class SignatureResolver
             GenericConstraints = routine.GenericConstraints,
             Module = pending.Module,
             IsFailable = routine.IsFailable,
+            IsWiredMemberRoutine = routine.IsWiredMemberRoutine,
             Location = routine.Location
         };
 
@@ -156,6 +165,10 @@ internal sealed class SignatureResolver
 
             RejectRvalueMarkInSlot(typeExpr: param.Type,
                 positionDescription: $"parameter '{param.Name}'", allowTopLevelRvalue: true);
+            // Suflae entity params resolve to `Roamed[E]` at the single ResolveType choke point
+            // (TypeResolver.RoamSuflaeEntitySlot) — no per-site substitution here. The callee receives
+            // the caller's Roamed handle directly (a BORROW; ScopeTeardownLoweringPass skips SF Roamed
+            // params). `me` has no type expression (inferred from OwnerType) so it is set via MeType below.
             TypeSymbol paramType = _typeResolver.ResolveType(typeExpr: param.Type);
 
             // #74: Varargs parameter gets wrapped as List[T]
@@ -230,7 +243,7 @@ internal sealed class SignatureResolver
         // (e.g. `$create(tag: S32)` for field `tag: S64`) is allowed and routes normally.
         // The synthesized memberwise creator is registered elsewhere (AutoWiredRegistrationPass),
         // so it never reaches here.
-        if (pending.RoutineName is "$create" or "$create!")
+        if (pending.RoutineName is "create" or "create!")
         {
             List<MemberVariableInfo>? fields = refreshedOwnerType switch
             {
@@ -254,8 +267,8 @@ internal sealed class SignatureResolver
             }
         }
 
-        // Resolve return type. Top-level `?T` is legal (entity rvalue, return-position only);
-        // nested `?T` inside generic args is a slot position and rejected.
+        // Resolve return type. Top-level `T` is legal (entity rvalue, return-position only);
+        // nested `T` inside generic args is a slot position and rejected.
         if (routine.ReturnType?.GenericArguments is { } retArgs)
         {
             foreach (TypeExpression arg in retArgs)
@@ -264,6 +277,10 @@ internal sealed class SignatureResolver
             }
         }
 
+        // SF entity RETURN types resolve to `Roamed[E]` via the ResolveType choke point, so `return me`
+        // (me is `Roamed[E]` via MeType below) yields a retained handle to the SAME controller. `$create`
+        // returns the raw entity it builds; its return goes through the memberwise-synthesis path (not
+        // this ResolveType call), so no explicit carve-out is needed here.
         TypeSymbol? returnType = routine.ReturnType != null
             ? _typeResolver.ResolveType(typeExpr: routine.ReturnType)
             : null;
@@ -281,18 +298,15 @@ internal sealed class SignatureResolver
                 location: routine.ReturnType?.Location ?? routine.Location);
         }
 
-        // Post-Owned-retirement: bare entity / generic-param in return position must use `?T`.
-        // Bound `T` is for lvalue/slot storage; returns produce values "in flight" (rvalue).
-        // Generic params require the mark because the instantiated T may be an entity; for
-        // records the `?` is a no-op, so requiring it costs nothing.
-        bool isRvalueReturn = routine.ReturnType?.IsRvalue ?? false;
-        if (!isRvalueReturn && returnType is EntityTypeInfo or GenericParameterTypeInfo)
-        {
-            _sa.ReportError(code: SemanticDiagnosticCode.BareEntityReturnMissingRvalueMark,
-                message: $"Return type '{returnType.Name}' must use the rvalue mark `?{returnType.Name}` " +
-                         "in return position.",
-                location: routine.ReturnType?.Location ?? routine.Location);
-        }
+        // Entity / generic-param returns are ALWAYS rvalue (in-flight) — INFERRED, not required
+        // (RF-S803 relaxed 2026-07-13). A return produces a value, and single ownership means an
+        // entity leaves a routine only by MOVE (implicit return-move) — there is no bound-lvalue-copy
+        // mode for entities. The move-vs-link distinction that actually matters is already carried by
+        // the type shape (bare `T` = move, borrow-wrapper = link) plus `steal` at use sites, so the
+        // `T` return mark is redundant with position and is now inferred. The explicit mark is still
+        // accepted for back-compat; for records the rvalue bit is a no-op.
+        bool isRvalueReturn = (routine.ReturnType?.IsRvalue ?? false)
+            || returnType is EntityTypeInfo or GenericParameterTypeInfo;
 
         // Merge implicit generics with explicit generics
         List<string> allGenericParams = filteredGenericParams?.ToList() ?? [];
@@ -334,7 +348,7 @@ internal sealed class SignatureResolver
         TypeSymbol? meType = null;
         if (pending.Kind == RoutineKind.MemberRoutine
             && refreshedOwnerType is EntityTypeInfo or RecordTypeInfo
-            && pending.RoutineName is not ("$create" or "$create!")
+            && pending.RoutineName is not ("create" or "create!")
             && routine.Name.Contains(value: '.'))
         {
             string recvText = routine.Name[..routine.Name.IndexOf(value: '.')];
@@ -354,6 +368,20 @@ internal sealed class SignatureResolver
             }
         }
 
+        // SF slice 2: `me` of a USER entity member routine is the `Roamed[E]` handle (not bare `E`), so
+        // `me.field` routes through the Roamed access machinery and `return me` type-matches the now
+        // `Roamed[E]` return. Creators ($create/$create!) keep bare `me` — they build the raw entity
+        // before any controller exists. A specialized `meType` (generic receiver) takes precedence.
+        if (sfUserEntity && meType == null
+            && pending.Kind == RoutineKind.MemberRoutine
+            && pending.RoutineName is not ("create" or "create!")
+            && refreshedOwnerType is EntityTypeInfo ownerEntity
+            && _sa._registry.LookupType(name: RuntimeContract.Roamed) is { } roamedOwnerDef)
+        {
+            meType = _sa._registry.GetOrCreateResolution(
+                genericDef: roamedOwnerDef, typeArguments: [ownerEntity]);
+        }
+
         _sa._currentRoutine = prevRoutine;
 
         // Create the final RoutineInfo with fully resolved signature
@@ -365,7 +393,8 @@ internal sealed class SignatureResolver
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
-            IsInFlightReturn = routine.ReturnType?.IsRvalue ?? false,
+            IsWiredMemberRoutine = routine.IsWiredMemberRoutine,
+            IsInFlightReturn = isRvalueReturn,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
             GenericParameters = allGenericParams.Count > 0
                 ? allGenericParams
@@ -397,7 +426,21 @@ internal sealed class SignatureResolver
             return;
         }
 
+        // NOTE: a wired `$X` and a plain `X` share the canonical bare name `X`. The truly-conflicting
+        // case — SAME signature (e.g. redundant `$add(you:T)` + `add(you:T)`) — is already caught by the
+        // RegistryKey duplicate check above (RF-S406). DIFFERENT-signature pairs (e.g. `hash()` +
+        // `$hash(k0,k1)`) are legitimate distinct routines and MUST coexist, so no extra guard is added.
+
+        // Constructor divergent-duplicate guard (mainly for the stdlib path; user cross-file dups are
+        // already RF-S406 above): hash the body so RegisterRoutine distinguishes identical from
+        // divergent same-signature creators.
+        if (pending.RoutineName == "create")
+            finalRoutine.BodyHash = TypeRegistry.ComputeCreatorBodyHash(body: routine.Body);
         _sa._registry.RegisterRoutine(routine: finalRoutine);
+
+        // Pin the decl → info binding so codegen reads it directly instead of re-deriving the routine
+        // by parsing the name and looking the owner type up by bare name (module-blind).
+        routine.ResolvedInfo = finalRoutine;
 
         // Post-registration validation
         ValidateOperatorProtocolConformance(routineInfo: finalRoutine,
@@ -494,7 +537,7 @@ internal sealed class SignatureResolver
     {
         string conv = ext.CallingConvention ?? "C";
         string variadic = ext.IsVariadic ? "..." : "";
-        string failable = ext.Name.EndsWith(value: '!') ? "!" : "";
+        string failable = ext.IsFailable ? "!" : "";
         var parts = new List<string>();
         foreach (Parameter p in ext.Parameters)
         {
@@ -791,6 +834,15 @@ internal sealed class SignatureResolver
             return;
         }
 
+        // Only WIRED operator methods ($add, $sub, …) require the operator protocol. A plain user
+        // routine that merely shares the bare name (e.g. `routine Counter.add(n)`) is NOT an operator
+        // and must not be forced to obey Addable — the name alone no longer distinguishes them, so
+        // gate on the structural wired attribute.
+        if (!routineInfo.IsWiredMemberRoutine)
+        {
+            return;
+        }
+
         // Get the required protocol for this wired method
         List<string>? requiredProtocols = SemanticVerifier.GetRequiredProtocols(wiredName: routineInfo.Name);
         if (requiredProtocols == null || requiredProtocols.Count == 0)
@@ -814,9 +866,14 @@ internal sealed class SignatureResolver
             string protocolText = requiredProtocols.Count == 1
                 ? $"'{requiredProtocols[0]}'"
                 : string.Join(separator: " or ", values: requiredProtocols.Select(selector: p => $"'{p}'"));
+            // Render the wired sigil ('$') the user actually wrote — the canonical Name is bare, but the
+            // `$` remains surface syntax, so the diagnostic must name the operator as `$add`, not `add`.
+            string displayName = routineInfo.IsWiredMemberRoutine
+                ? $"${routineInfo.Name}"
+                : routineInfo.Name;
             _sa.ReportError(code: SemanticDiagnosticCode.OperatorWithoutProtocol,
                 message:
-                $"Type '{currentOwnerType.Name}' defines '{routineInfo.Name}' but does not follow {protocolText}. " +
+                $"Type '{currentOwnerType.Name}' defines '{displayName}' but does not follow {protocolText}. " +
                 $"Add the matching 'obeys' protocol to the type declaration.",
                 location: location ?? new SourceLocation("", 0, 0, 0));
         }
@@ -844,7 +901,7 @@ internal sealed class SignatureResolver
         // Check if the protocol is directly declared (or via parent protocols recursively)
         return implementedProtocols.Any(implemented =>
             implemented.Name == protocolName ||
-            GetBaseTypeName(typeName: implemented.Name) == protocolName ||
+            implemented.BareName == protocolName ||
             (implemented is ProtocolTypeInfo proto &&
              _sa.CheckParentProtocols(proto: proto, targetName: protocolName)));
     }
@@ -880,7 +937,7 @@ internal sealed class SignatureResolver
             });
         }
 
-        // Resolve return type. Top-level `?T` legal; nested `?T` in generic args rejected.
+        // Resolve return type. Top-level `T` legal; nested `T` in generic args rejected.
         if (externalDecl.ReturnType?.GenericArguments is { } extRetArgs)
         {
             foreach (TypeExpression arg in extRetArgs)
@@ -922,21 +979,13 @@ internal sealed class SignatureResolver
 
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
 
-    private static string GetBaseTypeName(string typeName)
-    {
-        int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0
-            ? typeName[..genericIndex]
-            : typeName;
-    }
-
     private static bool IsTransparentMarkerProtocol(ProtocolTypeInfo proto)
     {
         if (proto.TypeArguments is not { Count: 1 })
         {
             return false;
         }
-        string baseName = GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name);
-        return baseName is "Referring" or "Controlling";
+        string baseName = (proto.GenericDefinition ?? proto).BareName;
+        return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
     }
 }

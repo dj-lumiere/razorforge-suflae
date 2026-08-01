@@ -23,8 +23,8 @@ import BuilderService
 ### | `remove_last!` | O(1) |
 ### | `add_first` / `add_at!` | O(n) |
 ### | `remove_first!` / `remove_at!` | O(n) |
-### | `$getitem!` / `$setitem!` | O(1) |
-### | `$contains` | O(n) |
+### | `getitem!` / `setitem!` | O(1) |
+### | `contains` | O(n) |
 ### | `sort` | O(n log n) |
 ### | `reverse` | O(n) |
 ### | Iteration | O(n) |
@@ -32,8 +32,8 @@ import BuilderService
 ### :typeparam T: The element type stored in the list.
 ### :see: {Deque[T]} for efficient double-ended insertion and removal.
 ### :see: {SortedList[T]} for a list that maintains ascending order automatically.
-entity List[T] obeys Iterable[T], MutableIndexable[T]
-relates ListEmitter[T] as Iter
+entity List[T] obeys Iterable[T], MutableIndexable[T], Sized, Container, Equatable
+relates ListEmittable[T] as Iter
   ### Stores the backing buffer.
   secret data: Hijacked[T]
   ### Stores the number of initialized elements.
@@ -43,7 +43,7 @@ relates ListEmitter[T] as Iter
 
 # Creators
 
-routine List[T].$create() -> ?List[T]
+routine List[T]() -> List[T]
   return List[T](
     data: hijacked_none[T](),
     count: 0u64,
@@ -54,9 +54,9 @@ routine List[T].$create() -> ?List[T]
 ### No elements are initialized, but the backing allocation is made immediately to
 ### avoid the first few growth steps.
 ### :param capacity: The initial capacity to reserve.
-routine List[T].$create(capacity: U64) -> ?List[T]
+routine List[T](capacity: U64) -> List[T]
   var byte_size = T.data_size() * capacity
-  danger!
+  danger
     var ptr = rf_allocate_dynamic_uninit(byte_size)
     return List[T](
       data: hijacked_from[T](ptr),
@@ -66,23 +66,23 @@ routine List[T].$create(capacity: U64) -> ?List[T]
 
 ### Creates a list of `count` copies of `fill_value`. The backing buffer is sized
 ### exactly to `count` and every slot is initialized with an independent copy of
-### `fill_value`. Equivalent to {List[T].$create()} when `count == 0`.
+### `fill_value`. Equivalent to {List[T].create()} when `count == 0`.
 ### :param count: The number of elements to produce.
 ### :param fill_value: The value to copy into each slot.
 ### :returns: A list containing `count` copies of `fill_value`.
-routine List[T].$create(count: U64, fill_value: T) -> ?List[T]
-needs T is Cloneable
+routine List[T](count: U64, fill_value: T) -> List[T]
+needs T is Copyable
   if count == 0u64
     return List[T]()
 
   var byte_size = T.data_size() * count
   var t_size = T.data_size()
-  danger!
+  danger
     var ptr = rf_allocate_dynamic_uninit(byte_size)
     var data = hijacked_from[T](ptr)
     var i = 0u64
     while i < count
-      data.offset(t_size *% i).inject(fill_value)
+      data.offset(t_size *% i).poke(fill_value)
       i = i +% 1u64
     return List[T](
       data: data,
@@ -120,8 +120,8 @@ routine List[T].add_last(value: T)
     me.reserve(new_capacity)
 
   var byte_offset = T.data_size() * me.count
-  danger!
-    me.data.offset(byte_offset).inject(value)
+  danger
+    me.data.offset(byte_offset).poke(value)
   me.count = me.count +% 1u64
   return
 
@@ -153,21 +153,21 @@ routine List[T].add_range(other: Referring[Iterable[T]])
 ### :returns: The element that was at the back.
 ### :absent: The list is empty.
 @migratable
-routine List[T].remove_last!() -> ?T
+routine List[T].remove_last!() -> T
   if me.is_empty()
     absent
 
   me.count = me.count - 1u64
   var byte_offset = T.data_size() * me.count
-  danger!
-    return me.data.offset(byte_offset).extract()
+  danger
+    return me.data.offset(byte_offset).peek()
 
 ### Inserts `value` at the front of the list.
 ### All existing elements are shifted one position toward the back. This is O(n).
 ### :param value: The value to insert.
 @migratable
 routine List[T].add_first(value: T)
-  me.add_at!(index: 0u64, value: value)
+  me.add_at(index: 0u64, value: value)
   return
 
 ### Inserts `value` at `index`, shifting later elements right by one position.
@@ -186,14 +186,14 @@ routine List[T].add_at!(index: U64, value: T)
 
   # Shift elements right via memmove
   if index < me.count
-    danger!
+    danger
       var elem_size = T.data_size()
       var src_ptr:Hijacked[T] = me.data.offset(elem_size * index)
       var dst_ptr:Hijacked[T] = me.data.offset(elem_size * (index + 1u64))
       rf_copy_bytes_at(dest: dst_ptr.get_address(), src: src_ptr.get_address(), size: elem_size * (me.count - index))
 
-  danger!
-    me.data.offset(T.data_size() * index).inject(value)
+  danger
+    me.data.offset(T.data_size() * index).poke(value)
   me.count = me.count + 1u64
   return
 
@@ -201,23 +201,23 @@ routine List[T].add_at!(index: U64, value: T)
 ### :returns: The element that was at the front.
 ### :absent: The list is empty.
 @migratable
-routine List[T].remove_first!() -> ?T
+routine List[T].remove_first!() -> T
   if me.is_empty()
     absent
-  return me.remove_at!(0u64)
+  return me.remove_at(0u64)
 
 ### Removes and returns the element at `index`, shifting later elements left by one position.
 ### :param index: The zero-based position to remove.
 ### :returns: The element that was at `index`.
 ### :throws: {IndexOutOfBoundsError} if `index` is out of range.
 @migratable
-routine List[T].remove_at!(index: U64) -> ?T
+routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
 
   var byte_offset = T.data_size() * index
-  danger!
-    var value = me.data.offset(byte_offset).extract()
+  danger
+    var value = me.data.offset(byte_offset).peek()
 
     # Shift elements left via memmove
     if index < me.count - 1u64
@@ -233,22 +233,22 @@ routine List[T].remove_at!(index: U64) -> ?T
 ### :returns: The current first element.
 ### :absent: The list is empty.
 @readonly
-routine List[T].first!() -> ?T
+routine List[T].first!() -> T
   if me.is_empty()
     absent
-  danger!
-    return me.data.extract()
+  danger
+    return me.data.peek()
 
 ### Returns the last element without removing it.
 ### :returns: The current last element.
 ### :absent: The list is empty.
 @readonly
-routine List[T].last!() -> ?T
+routine List[T].last!() -> T
   if me.is_empty()
     absent
   var byte_offset = T.data_size() * (me.count - 1u64)
-  danger!
-    return me.data.offset(byte_offset).extract()
+  danger
+    return me.data.offset(byte_offset).peek()
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -259,23 +259,23 @@ routine List[T].last!() -> ?T
 ### :returns: The element at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
-routine List[T].$getitem!(index: U64) -> ?T
+routine List[T].getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
-  danger!
-    return me.data.offset(byte_offset).extract()
+  danger
+    return me.data.offset(byte_offset).peek()
 
 ### Replaces the element at `index` with `value`.
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-routine List[T].$setitem!(index: U64, value: ?T)
+routine List[T].setitem!(index: U64, value: T)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
-  danger!
-    me.data.offset(byte_offset).inject(value)
+  danger
+    me.data.offset(byte_offset).poke(value)
   return
 
 # ============================================================================
@@ -286,16 +286,16 @@ routine List[T].$setitem!(index: U64, value: ?T)
 ### Only call this when the index is already proven to be in range.
 @readonly
 @inline
-routine List[T].get_raw(index: U64) -> ?T
-  danger!
-    return me.data.offset(T.data_size() * index).extract()
+routine List[T].get_raw(index: U64) -> T
+  danger
+    return me.data.offset(T.data_size() * index).peek()
 
 ### Writes `value` at `index` without bounds checking.
 ### Only call this when the index is already proven to be in range.
 @inline
 routine List[T].set_raw(index: U64, value: T)
-  danger!
-    me.data.offset(T.data_size() * index).inject(value)
+  danger
+    me.data.offset(T.data_size() * index).poke(value)
   return
 
 ### Ensures the backing allocation holds at least `new_capacity` elements.
@@ -306,7 +306,7 @@ routine List[T].reserve(new_capacity: U64)
   if new_capacity > me.capacity
     var new_byte_size = T.data_size() * new_capacity
 
-    danger!
+    danger
       if me.data.is_none()
         var ptr = rf_allocate_dynamic_uninit(new_byte_size)
         me.data = hijacked_from[T](ptr)
@@ -332,7 +332,7 @@ routine List[T].clear()
 ### The iterator captures a raw pointer and element count at creation so it does
 ### not hold a live reference to the list; mutations during iteration are unsafe.
 ### :typeparam T: The element type produced by the iterator.
-entity ListEmitter[T] obeys Iterator[T]
+entity ListEmittable[T] obeys Emittable[T]
   ### Stores a pointer into the source list buffer.
   secret data: Hijacked[T]
   ### Stores the element count captured at iterator creation.
@@ -341,15 +341,15 @@ entity ListEmitter[T] obeys Iterator[T]
   secret index: U64
 
 @readonly
-routine List[T].$iter() -> ?ListEmitter[T]
-  danger!
-    return ListEmitter[T](data: me.data, count: me.count(), index: 0u64)
+routine List[T].iter() -> ListEmittable[T]
+  danger
+    return ListEmittable[T](data: me.data, count: me.count(), index: 0u64)
 
-routine ListEmitter[T].$next!() -> ?T
+routine ListEmittable[T].emit!() -> T
   if me.index >= me.count
     absent
-  danger!
-    var _result = me.data.offset(T.data_size() * me.index).extract()
+  danger
+    var _result = me.data.offset(T.data_size() * me.index).peek()
     me.index = me.index + 1u64
     return _result
 
@@ -357,7 +357,7 @@ routine ListEmitter[T].$next!() -> ?T
 ### :param other: The other list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine List[T].$eq(other: Referring[List[T]]) -> Bool
+routine List[T].eq(other: Referring[List[T]]) -> Bool
 needs T obeys Equatable
   if me.count() != other.count()
     return false
@@ -373,7 +373,7 @@ needs T obeys Equatable
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
-routine List[T].$contains(value: Referring[T]) -> Bool
+routine List[T].contains(value: Referring[T]) -> Bool
 needs T obeys Equatable
   var i = 0u64
   while i < me.count()
@@ -383,25 +383,25 @@ needs T obeys Equatable
   return false
 
 @readonly
-routine List[T].$represent() -> Text
+routine List[T].represent() -> Text
   var result = "["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$represent()
+    result = result + v.represent()
     i = i +% 1u64
   result = result + "]"
   return steal result
 
 @readonly
-routine List[T].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
+routine List[T].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$represent()
+    result = result + v.represent()
     i = i +% 1u64
   result = result + "])"
   return steal result
@@ -414,7 +414,7 @@ routine List[T].$diagnose() -> Text
 ### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
 @migratable
 routine List[T].add_range!(source: Referring[List[T]], from: U64, count: U64)
-needs T obeys Cloneable
+needs T obeys Copyable
   if count == 0u64
     return
   if from + count > source.count()
@@ -425,13 +425,41 @@ needs T obeys Cloneable
     me.reserve(new_count * 2u64)
 
   # Clone each element through the read-only borrow. `clone` is elided for trivially-copyable T
-  # (no symbol) and delegates to the retain-aware `$copy` for RC records like Text, so appended
+  # (no symbol) and delegates to the retain-aware `store` for RC records like Text, so appended
   # elements are owned independently. The prior bitwise copy aliased buffer pointers (double-free).
   var i = 0u64
   while i < count
-    me.add_last(value: source[from + i].clone())
+    me.add_last(value: source[from + i].copy())
     i = i + 1u64
   return
+
+### Returns a deep, independent copy of this list. Each element is copied through `copy`,
+### so the result shares no heap storage with the original (managed leaves like `Text` bump
+### their refcount; aggregate elements are duplicated recursively). This is the deep-copy point
+### the compiler inserts when a `List[T]` is an owned arm of a value being copied.
+### :returns: A new `List[T]` owning independent copies of every element.
+routine List[T].copy() -> List[T]
+needs T obeys Copyable
+  var result = List[T](capacity: me.count)
+  var i = 0u64
+  while i < me.count
+    result.add_last(value: me[i].copy())
+    i = i +% 1u64
+  return steal result
+
+### Serializes this list to a `SerialValue.List`, serializing each element in order. Overrides the
+### default field-walk so a `List[T]` renders as a sequence of serialized elements, not its internal
+### buffer/count layout.
+### :returns: The `SerialValue.List` holding each element's serialized form.
+@[readonly, generated]
+routine List[T].serialize() -> SerialValue
+needs T obeys Serializable
+  var result = List[SerialValue]()
+  var i = 0u64
+  while i < me.count
+    result.add_last(value: me[i].serialize())
+    i = i +% 1u64
+  return SerialValue(steal result)
 
 ### Shortens the list to `new_count` elements by discarding elements past the new boundary.
 ### The backing allocation is not changed.
@@ -449,7 +477,7 @@ routine List[T].truncate!(new_count: U64)
 # ============================================================================
 
 ### The maximum run length sorted with insertion sort before the merge phase begins.
-preset SORT_MIN_RUN: U64 = 32u64
+secret preset SORT_MIN_RUN: U64 = 32u64
 
 ### Sorts the list in ascending order in place using the element's natural `<` ordering.
 ### Uses a stable, iterative bottom-up merge sort with insertion sort for small runs.
@@ -558,10 +586,10 @@ routine List[T].sort_by(compare: Routine[(T, T), Bool])
 ### The original list is left unchanged.
 ### :returns: A new `List[T]` whose elements are in ascending order.
 @readonly
-routine List[T].sorted() -> ?List[T]
+routine List[T].sorted() -> List[T]
 needs T obeys Comparable
   var copy = List[T](capacity: me.count)
-  copy.add_range!(source: me, from: 0u64, count: me.count)
+  copy.add_range(source: me, from: 0u64, count: me.count)
   copy.sort()
   return steal copy
 
@@ -570,9 +598,9 @@ needs T obeys Comparable
 ### :param compare: A two-argument routine that returns `true` when its first argument precedes its second.
 ### :returns: A new `List[T]` whose elements are ordered according to `compare`.
 @readonly
-routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> ?List[T]
+routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> List[T]
   var copy = List[T](capacity: me.count)
-  copy.add_range!(source: me, from: 0u64, count: me.count)
+  copy.add_range(source: me, from: 0u64, count: me.count)
   copy.sort_by(compare)
   return steal copy
 
@@ -744,11 +772,11 @@ routine List[T].merge_into_by(left: U64, mid: U64, right: U64, buffer: Controlli
   return
 
 ### Destroys each live element (no-op for value-typed `T`), then frees the backing buffer.
-dangerous routine List[T].$destroy()
+dangerous routine List[T].destroy()
   var elem_size = T.data_size()
   var i: U64 = 0u64
   while i < me.count
-    me.data.offset(elem_size * i).extract().$destroy()
+    me.data.offset(elem_size * i).peek().destroy()
     i = i + 1u64
   me.data.invalidate()
   me.hijack().invalidate()

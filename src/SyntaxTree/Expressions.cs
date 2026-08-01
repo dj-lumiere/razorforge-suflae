@@ -43,7 +43,7 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
     public BackendRepr? ResolvedRepr { get; set; }
 
     /// <summary>
-    /// True if this expression produces an in-flight entity (`?T`) — a freshly produced
+    /// True if this expression produces an in-flight entity (`T`) — a freshly produced
     /// entity value that has not yet been bound to a name. Set by SA on:
     ///   - call expressions whose callee's <c>RoutineInfo.IsInFlightReturn</c> is true,
     ///   - `steal x` expressions (consume binding → produce in-flight),
@@ -51,7 +51,7 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
     ///   - collection literals,
     ///   - expressions whose inner expression is in-flight and structurally forwards it.
     /// Drives auto-bind at binding sites and distinct diagnostic formatting
-    /// (`?T` vs `T` render differently — `?Counter(value: 10)` vs `Counter(value: 10)`).
+    /// (`T` vs `T` render differently — `?Counter(value: 10)` vs `Counter(value: 10)`).
     /// Kept independent of <see cref="ResolvedType"/>, which carries only the bare entity
     /// type — in-flight-ness is a per-expression production attribute, not a type identity.
     /// </summary>
@@ -228,11 +228,20 @@ public record IdentifierExpression(string Name, SourceLocation Location)
     : Expression(Location: Location)
 {
     /// <summary>
-    /// When set, this identifier resolved as a flag member in flag-context (e.g. bare
-    /// `READ` inside `p isonly READ`). The bit position lets ExpressionLoweringPass emit
+    /// When set, this identifier resolved as a flag member in flag-context (e.g. a bare
+    /// `READ` in a flags test). The bit position lets ExpressionLoweringPass emit
     /// the bitmask literal without re-doing the lookup.
     /// </summary>
     public int? ResolvedFlagsBit { get; set; }
+
+    /// <summary>
+    /// When set, this identifier is a routine-VALUE reference whose routine is already resolved —
+    /// codegen materializes it as a closure directly, skipping name-based lookup. Used for
+    /// references a lowering pass constructs (e.g. an unbound member-routine reference for a cycle-
+    /// collector trace/free hook), where the bare name cannot be resolved by lookup because it needs
+    /// the owner type. <see cref="ResolvedType"/> must be the matching <c>RoutineTypeInfo</c>.
+    /// </summary>
+    public RoutineInfo? ResolvedRoutine { get; set; }
 
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
@@ -248,7 +257,7 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 /// <summary>
 /// Expression representing a compound assignment operation (e.g., a += b).
 /// The semantic analyzer dispatches this to an in-place wired method ($iadd, etc.)
-/// or falls back to create-and-assign (a = a.$add(b)) when no in-place operator exists.
+/// or falls back to create-and-assign (a = a.add(b)) when no in-place operator exists.
 /// </summary>
 /// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
 /// <param name="Operator">The base binary operator (Add, Subtract, etc. — not Assign)</param>
@@ -337,7 +346,7 @@ public record UnaryExpression(UnaryOperator Operator, Expression Operand, Source
 /// <item>Method calls: me.method(x, y)</item>
 /// <item>Creator calls: Point(x, y)</item>
 /// <item>Lambda calls: ((x) => x + 1)(42)</item>
-/// <item>Operator method calls: me.$add(you)</item>
+/// <item>Operator method calls: me.add(you)</item>
 /// </list>
 /// </remarks>
 public record CallExpression(
@@ -364,6 +373,13 @@ public record CallExpression(
     /// When set, the codegen should use this instead of performing its own lookup.
     /// </summary>
     public RoutineInfo? ResolvedRoutine { get; set; }
+
+    /// <summary>
+    /// True when the call site used the failable `!` marker (e.g. <c>foo!(args)</c>).
+    /// The Callee's name stays BARE — this structured flag records the `!` instead of baking
+    /// it into the identifier string.
+    /// </summary>
+    public bool IsFailable { get; init; }
 
     /// <summary>
     /// Semantic-owned lowering classification for this call.
@@ -393,7 +409,7 @@ public record CallExpression(
 
     /// <summary>
     /// True when this call was synthesized by a compiler lowering pass (e.g.
-    /// <c>ControlFlowLoweringPass</c> emitting <c>iter.$iter()</c> / <c>iter.try_next()</c>
+    /// <c>ControlFlowLoweringPass</c> emitting <c>iter.iter()</c> / <c>iter.try_emit()</c>
     /// for a for-loop). SA uses this to skip checks meant to gate user code from invoking
     /// dunder-private methods directly.
     /// </summary>
@@ -520,23 +536,32 @@ public record WithExpression(
 }
 
 /// <summary>
-/// Expression that accesses a member (member variable, property, or method) of an object.
+/// Expression that accesses a member (member variable or member routine) of an object.
 /// Represents the dot notation for accessing object members.
 /// </summary>
 /// <param name="Object">Expression that evaluates to the object containing the member</param>
-/// <param name="PropertyName">Name of the member to access</param>
+/// <param name="MemberName">Bare name of the member to access — never carries a trailing
+/// <c>!</c>; the failable marker is tracked structurally in <see cref="IsFailable"/>.</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Member access patterns:
 /// <list type="bullet">
-/// <item>Field access: obj.memberVar</item>
-/// <item>Method reference: obj.method (not a call)</item>
+/// <item>Member-variable access: obj.memberVar</item>
+/// <item>Member-routine reference: obj.routine (not a call)</item>
 /// <item>Chained access: obj.child.grandchild</item>
 /// </list>
 /// </remarks>
-public record MemberExpression(Expression Object, string PropertyName, SourceLocation Location)
+public record MemberExpression(Expression Object, string MemberName, SourceLocation Location)
     : Expression(Location: Location)
 {
+    /// <summary>
+    /// True when the source wrote the failable marker (<c>obj.routine!(...)</c>). The <c>!</c> is
+    /// consumed by the parser as a separate token and recorded here — it is NEVER part of
+    /// <see cref="MemberName"/>. Consumers that need failable overload resolution read this flag
+    /// instead of scanning the name for a trailing <c>!</c>.
+    /// </summary>
+    public bool IsFailable { get; init; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -549,7 +574,7 @@ public record MemberExpression(Expression Object, string PropertyName, SourceLoc
 /// Represents the ?. operator for safe navigation / optional chaining.
 /// </summary>
 /// <param name="Object">Expression that may evaluate to none</param>
-/// <param name="PropertyName">Name of the property/member variable to access if object is not none</param>
+/// <param name="MemberName">Name of the property/member variable to access if object is not none</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Examples: obj?.memberVar, result?.value
@@ -557,7 +582,7 @@ public record MemberExpression(Expression Object, string PropertyName, SourceLoc
 /// </remarks>
 public record OptionalMemberExpression(
     Expression Object,
-    string PropertyName,
+    string MemberName,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -596,7 +621,7 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
     /// When this IndexExpression is the target of an assignment, set by OperatorLoweringPass
     /// to the method-generic-resolved <c>$setitem</c>/<c>$setitem!</c> routine. Codegen uses
     /// this in place of a fresh registry lookup so method-level generics (e.g.
-    /// <c>BitList.$setitem![I]</c> -> <c>BitList.$setitem![S64]</c>) dispatch to the
+    /// <c>BitList.setitem![I]</c> -> <c>BitList.setitem![S64]</c>) dispatch to the
     /// monomorphized entry.
     /// </summary>
     public RoutineInfo? ResolvedSetItem { get; set; }
@@ -791,7 +816,7 @@ public record Parameter(
 /// <param name="Name">Base type name (s32, Text, MyClass, etc.)</param>
 /// <param name="GenericArguments">Optional list of type arguments for generic types</param>
 /// <param name="Location">Source location information</param>
-/// <param name="IsRvalue">True if this type was written with the `?T` prefix mark (entity rvalue, return-position only). SA enforces position validity.</param>
+/// <param name="IsRvalue">True if this type was written with the `T` prefix mark (entity rvalue, return-position only). SA enforces position validity.</param>
 /// <remarks>
 /// Type expression patterns:
 /// <list type="bullet">
@@ -932,6 +957,39 @@ public record GenericMemberExpression(
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
         return visitor.VisitGenericMemberExpression(node: this);
+    }
+}
+
+/// <summary>
+/// Unclassified bracket-access expression produced by the parser for any <c>expr[...]</c>,
+/// <c>expr[...](...)</c>, or <c>expr![...](...)</c> form. The parser does NOT decide whether the
+/// brackets are a generic type-argument list or a value index — it parses the bracket contents
+/// uniformly as expressions and the <c>BracketReclassifyPass</c>
+/// reclassifies every such node into an existing <see cref="IndexExpression"/>,
+/// <see cref="GenericMethodCallExpression"/>, or <see cref="GenericMemberExpression"/> before the
+/// main semantic resolve runs. No downstream consumer should ever observe this node.
+/// </summary>
+/// <param name="Object">Expression the brackets apply to (identifier, member access, etc.).</param>
+/// <param name="Args">Bracket contents parsed as expressions (one per comma-separated entry).</param>
+/// <param name="CallArgs">Trailing <c>(...)</c> call arguments, or null when there is no call.</param>
+/// <param name="Location">Source location information.</param>
+public record BracketAccessExpression(
+    Expression Object,
+    List<Expression> Args,
+    List<Expression>? CallArgs,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    /// <summary>
+    /// True when the failable <c>!</c> marker preceded the brackets or the call parens
+    /// (e.g. <c>foo![T](x)</c> / <c>obj.method![T](x)</c>). Maps to
+    /// <see cref="GenericMethodCallExpression.IsMemoryOperation"/> after reclassification.
+    /// </summary>
+    public bool IsFailable { get; init; }
+
+    /// <summary>Accepts a visitor for AST traversal and transformation.</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitBracketAccessExpression(node: this);
     }
 }
 

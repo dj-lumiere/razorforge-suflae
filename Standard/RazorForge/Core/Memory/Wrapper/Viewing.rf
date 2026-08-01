@@ -16,7 +16,7 @@ record Viewing[T] obeys Referring[T], Enterable
 ###        not supported in v0.0.1a. Use `entity` if you need a viewable reference.
 routine T.view() -> Viewing[T]
 needs T is EntityType
-  danger!
+  danger
     return Viewing[T](me.hijack())
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
@@ -30,23 +30,23 @@ needs T is EntityType
 ### Called on entry to a `using` block; passes the view through as the bound value (access is
 ### already established by `.view()`).
 ### :returns: This view as `Viewing[T]`.
-routine Viewing[T].$enter() -> Viewing[T]
+routine Viewing[T].enter() -> Viewing[T]
   return me
 
 ### Called on exit from a `using` block; no-op for a view (the compiler handles scope cleanup).
-routine Viewing[T].$exit()
+routine Viewing[T].exit()
   return
 
 # ============================================================================
-# Marker-protocol coercion ($refer) — yields the inner entity as ?T
+# Marker-protocol coercion (refer) — yields the inner entity as T
 # ============================================================================
 
-### Yields the inner entity as an in-flight `?T` reference for read-only access.
+### Yields the inner entity as an in-flight `T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`.
-### :returns: The inner entity as `?T`.
+### :returns: The inner entity as `T`.
 @[readonly, inline]
-routine Viewing[T].$refer() -> ?T
-  danger!
+routine Viewing[T].refer() -> T
+  danger
     return Hijacked[T](me).as_entity()
 
 # ============================================================================
@@ -56,18 +56,18 @@ routine Viewing[T].$refer() -> ?T
 ### Returns the display form of the viewed entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Viewing[T].$represent() -> Text
-  danger!
+routine Viewing[T].represent() -> Text
+  danger
     var hijacked = Hijacked[T](me)
-    return hijacked.as_entity().$represent()
+    return hijacked.as_entity().represent()
 
 ### Returns the diagnostic form of the viewed entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Viewing[T].$diagnose() -> Text
-  danger!
+routine Viewing[T].diagnose() -> Text
+  danger
     var hijacked = Hijacked[T](me)
-    return me.type_name() + "(" + hijacked.as_entity().$diagnose() + ")"
+    return me.type_name() + "(" + hijacked.as_entity().diagnose() + ")"
 
-dangerous routine Viewing[T].$destroy()
+dangerous routine Viewing[T].destroy()
   return

@@ -10,18 +10,20 @@ namespace TypeModel.Types;
 /// Variants are local-only and unmodifiable with no methods.
 /// Members are types — the type IS the tag. No named cases.
 /// </summary>
-public sealed class VariantTypeInfo : TypeInfo
+// Variant is a value type ({ i64 tag, [payload] } aggregate, like a record) → extends RecordTypeInfo,
+// sharing MemberVariables / ImplementedProtocols / AssociatedTypeBindings / GenericDefinition. Variant
+// arm data lives in Members. NOTE: any codegen/lifecycle switch that handles RecordTypeInfo must place
+// a `case VariantTypeInfo` FIRST where variant semantics differ (tag+payload layout, not record fields)
+// — a missing Variant case silently treats a variant as a record (wrong copy/$diagnose/serialize).
+public sealed class VariantTypeInfo : RecordTypeInfo
 {
     /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Variant;
 
-    /// <summary>The member types of this variant.</summary>
-    public List<VariantMemberInfo> Members { get; init; } = [];
-
-    /// <summary>
-    /// For generic definitions, the original generic type this was resolved from.
-    /// </summary>
-    public VariantTypeInfo? GenericDefinition { get; init; }
+    /// <summary>The member types of this variant. Settable so the stdlib registration fixpoint
+    /// (<c>ResolveProgramMemberVariables</c>) can re-resolve arms that had unresolvable forward or
+    /// self references (e.g. a recursive <c>List[SerialValue]</c>) on the first pass.</summary>
+    public List<VariantMemberInfo> Members { get; set; } = [];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VariantTypeInfo"/> class.
@@ -133,7 +135,7 @@ public sealed class VariantTypeInfo : TypeInfo
     /// <summary>
     /// Recursively substitutes type parameters in a type.
     /// </summary>
-    private static TypeInfo SubstituteType(TypeInfo type,
+    private static new TypeInfo SubstituteType(TypeInfo type,
         Dictionary<string, TypeInfo> substitution)
     {
         if (substitution.TryGetValue(key: type.Name, value: out TypeInfo? substituted))

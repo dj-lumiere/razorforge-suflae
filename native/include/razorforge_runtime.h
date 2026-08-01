@@ -113,6 +113,41 @@ uint64_t rf_task_id(rf_task* task);
 /* Opaque, stable identifier for the calling OS thread. Used by the lock policies to detect a
  * re-entrant claim (a thread acquiring an exclusive lock it already holds = self-deadlock). */
 uint64_t rf_current_thread_id(void);
+
+/* Identity of the current logical execution context: the coroutine (rf_coro*) if inside one — stable
+ * across worker migration, which is exactly why Roamed's reentrant lock keys on it and NOT the OS
+ * thread — else the OS thread id. Only equality matters. See rf_current_task_id in coro_runtime.c. */
+uint64_t rf_current_task_id(void);
+
+// Cycle collector (Bacon-Rajan synchronous recycler) — native buffers backing the RF-side collector
+// (Core/Memory/CycleCollector.rf). See internal-wiki/v0.4.x-cycle-collector.md.
+//
+// rf_cc_add_candidate is the SOLE collector entry point: a Roamed strong-decrement that leaves the
+// count > 0 reports the controller here as a possible cycle root (the RF side dedups via the
+// controller `buffered` flag first). Pure-RF programs with no Roamed cycles never call it.
+void rf_cc_add_candidate(void* obj);
+uint64_t rf_cc_roots_count(void);
+void* rf_cc_roots_at(uint64_t i);
+void rf_cc_roots_clear(void);
+void rf_cc_roots_remove_front(uint64_t n);  // drop the first n (processed) candidates, keep late ones
+void rf_cc_roots_remove(void* ptr);         // drop one candidate about to be freed (eager release path)
+// scratch = one controller's children, filled by its trace hook and drained by RF.
+void rf_cc_scratch_reset(void);
+uint64_t rf_cc_scratch_count(void);
+void* rf_cc_scratch_at(uint64_t i);
+void rf_cc_visit_child(void* child_ctrl);      // called by a per-type trace hook
+// reap = deferred-free buffer for collected white controllers.
+void rf_cc_reap_push(void* ctrl);
+uint64_t rf_cc_reap_count(void);
+void* rf_cc_reap_at(uint64_t i);
+void rf_cc_reap_clear(void);
+void rf_cc_trace_into_scratch(void* trace_hook, void* controller);  // SOLE trace indirect-call site
+void rf_cc_invoke_free(void* free_hook, void* controller);          // free indirect-call site
+// Auto-collection trigger (candidate-set threshold; RF_CC_THRESHOLD env, default 128).
+int rf_cc_should_collect(void);
+void rf_cc_enter_collect(void);
+void rf_cc_exit_collect(void);
+
 rf_task_kind rf_task_kind_get(rf_task* task);
 rf_task_status rf_task_status_get(rf_task* task);
 rf_task_completion_kind rf_task_completion_kind_get(rf_task* task);
@@ -129,8 +164,9 @@ uint32_t rf_task_await_coro(rf_task* task);
  * scheduler-driven coroutine (block-wait with the deadline instead). */
 uint32_t rf_task_await_coro_deadline(rf_task* task, uint64_t timeout_ns);
 /* Register (s != NULL) / clear (s == NULL) the scheduler a `race!` over a set including this task is
- * driving, so the worker signals that loop on completion (see rf_race_wait). */
-void rf_task_race_register(rf_task* task, rf_sched* s);
+ * driving, plus the racing coroutine `coro` (NULL for a top-level thread racer). On completion the
+ * worker wakes `coro` by name if set, else signals that loop's cond (see rf_race_wait). */
+void rf_task_race_register(rf_task* task, rf_sched* s, rf_coro* coro);
 int rf_task_spawn_threaded(rf_task* task, rf_task_entry_fn entry, void* userdata);
 
 void rf_task_mark_ready(rf_task* task);
@@ -168,7 +204,7 @@ void rf_waitfor_duration(int64_t duration_seconds, uint32_t duration_nanoseconds
 
 /* ---------------------------------------------------------------------------
  * v0.2.0 stackful coroutine primitive (Phase 1: context-switch spike).
- * Single coroutine, no scheduler. See internal-wiki/v0.2.0-coroutine-primitive.md.
+ * Single coroutine, no scheduler.
  * --------------------------------------------------------------------------- */
 typedef enum rf_coro_status {
     RF_CORO_NEW = 0,        /* created, never resumed                        */
@@ -282,6 +318,17 @@ void rf_sched_run_until(rf_sched* sched, rf_coro* target);
  * gives a `race!` loop on completing a competitor task. Safe to call from ANY thread. */
 void rf_sched_signal(rf_sched* sched);
 
+/* Cross-thread wake bookkeeping for the deadlock diagnostic. A coroutine that parks awaiting a wake
+ * from ANOTHER thread — a threaded Task's completion, an async-I/O finish, a SignalCaster cast, or a
+ * `race!` thread competitor — arms one of these before parking and disarms once the wake resolves;
+ * the count is the number of such outstanding cross-thread wake promises. The run loop uses it to
+ * tell a genuine all-coroutine deadlock (nothing runnable AND no cross-thread wake can ever arrive)
+ * apart from a legitimate wait on another thread. Channel parks do NOT arm it: the RF-S632 entity
+ * aliasing barrier keeps a channel's counterpart on the SAME scheduler, so a channel wake is never
+ * cross-thread. Both are safe to call from any thread; disarm is clamped at zero. */
+void rf_sched_arm_cross_waker(rf_sched* sched);
+void rf_sched_disarm_cross_waker(rf_sched* sched);
+
 /* ---- race!: drive a heterogeneous Agent set until the first competitor finishes -------------- */
 
 /* An opaque competitor set built incrementally by the stdlib `race!`, one entry per Agent in List
@@ -325,6 +372,75 @@ void rf_sched_run_until_default(rf_coro* target);
  * before rf_coro_abandon on a spawned-but-never-retrieved coroutine, so the scheduler drops its
  * reference + live count instead of dangling. */
 int rf_sched_unschedule_default(rf_coro* coro);
+
+/* Number of worker threads driving the process pool (fixed host-core-count, min 1). Creates the pool
+ * on first call. Coroutine migration across workers can only occur when this is > 1. */
+uint64_t rf_sched_worker_count(void);
+
+/* ---- Channels: streaming conduit (`Hopper[T]` / `Conveyor[T]`) --------------------------- */
+
+/* Refcounted ring buffer carrying payload pointers between agents. feed (full) and next (empty)
+ * park the caller inside a coroutine (rf_sched_park_external + rf_sched_wake) or block it on a plain
+ * thread — the same uncolored contract as retrieve!/waitfor. Backed by channel_runtime.c. */
+typedef struct rf_channel rf_channel;
+
+/* Create a channel. capacity = buffered slots; 0 = rendezvous (feed waits for a taker). Throws
+ * OutOfMemoryError on a capacity*sizeof(slot) overflow or allocation failure. Starts with one
+ * producer ref + one consumer ref (the Feeder + receiver returned by make_*). */
+rf_channel* rf_channel_create(uint64_t capacity);
+
+/* Handle refcounting: a clone adds a ref on its side; a drop releases one. Last Feeder drop
+ * auto-closes; the struct frees when both producer and consumer refs reach 0. */
+void rf_channel_add_feeder(rf_channel* chan);
+void rf_channel_drop_feeder(rf_channel* chan);
+void rf_channel_add_consumer(rf_channel* chan);
+void rf_channel_drop_consumer(rf_channel* chan);
+
+/* Send: 1 on success, 0 if closed or consumer-less (RF lowers 0 to a failable throw). Backpressure:
+ * blocks/parks while full. Receive: returns a payload, or NULL when closed AND drained. */
+uint32_t rf_channel_feed(rf_channel* chan, void* payload);
+void* rf_channel_next(rf_channel* chan);
+
+/* Explicit early close (drop auto-closes too). Not dangerous; double-close is a no-op. */
+void rf_channel_close(rf_channel* chan);
+
+/* Introspection snapshots (racy by nature, not synchronization primitives): buffered item count,
+ * whether the channel is closed, and the buffered capacity it was created with (0 = rendezvous). */
+uint64_t rf_channel_count(rf_channel* chan);
+uint32_t rf_channel_is_closed(rf_channel* chan);
+uint64_t rf_channel_capacity(rf_channel* chan);
+
+/* ---- SignalCaster: a condition-variable monitor ----------------------------------------- */
+
+/* A self-contained monitor (internal mutex + wait set). wait is UNCOLORED: it parks a coroutine
+ * (rf_sched_park_external + rf_sched_wake) or blocks a plain thread on the internal condvar, releasing
+ * and re-acquiring the monitor lock around the suspend. Refcounted so it can be shared across agents.
+ * Backed by signal_runtime.c. */
+typedef struct rf_signal rf_signal;
+
+/* Create a monitor (refcount 1). Throws OutOfMemoryError on allocation failure. */
+rf_signal* rf_signal_create(void);
+/* Handle refcounting: clone adds a ref, drop releases one; the struct frees at 0. */
+void rf_signal_add_ref(rf_signal* sig);
+void rf_signal_drop(rf_signal* sig);
+
+/* Acquire / release the monitor lock that guards the caller's shared predicate. */
+void rf_signal_lock(rf_signal* sig);
+void rf_signal_unlock(rf_signal* sig);
+
+/* Wait for a cast — MUST hold the monitor lock. Atomically drops the lock, suspends (coroutine park
+ * or thread condvar), and re-acquires the lock before returning. Callers re-check the predicate in a
+ * loop. This is a suspend primitive (see SuspendPrimitives in MaySuspendAnalysis). */
+void rf_signal_wait(rf_signal* sig);
+
+/* Timed wait — like rf_signal_wait but bounded by timeout_ns. Returns 1 if woken before the deadline
+ * (re-check the predicate), 0 if the deadline elapsed. Also a suspend primitive. */
+uint32_t rf_signal_wait_deadline(rf_signal* sig, uint64_t timeout_ns);
+
+/* Wake one / all waiter(s). Call after updating the predicate (typically just after unlock), NOT while
+ * holding the monitor lock — these acquire it internally. */
+void rf_signal_cast_one(rf_signal* sig);
+void rf_signal_cast_all(rf_signal* sig);
 
 #ifdef __cplusplus
 }

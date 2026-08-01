@@ -21,26 +21,26 @@ preset S32_ONE: S32 = 1_s32
 ### Sign-extends an `S8` to `S32`.
 ### :param from: The `S8` value to widen.
 ### :returns: An `S32` with the same signed value as `from`.
-routine S32.$create(from: S8) -> S32
+routine S32(from: S8) -> S32
   return sign_extend[S8, S32](from)
 
 ### Sign-extends an `S16` to `S32`.
 ### :param from: The `S16` value to widen.
 ### :returns: An `S32` with the same signed value as `from`.
-routine S32.$create(from: S16) -> S32
+routine S32(from: S16) -> S32
   return sign_extend[S16, S32](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S32` value to return.
 ### :returns: `from` unchanged.
-routine S32.$create(from: S32) -> S32
+routine S32(from: S32) -> S32
   return from
 
 ### Converts an `S64` to `S32`, throwing if the value is outside the S32 range.
 ### :param from: The `S64` value to convert.
 ### :returns: The lower 32 bits of `from` interpreted as signed.
 ### :throws: {IntegerOverflowError} if `from` is not in `-2147483648..=2147483647`.
-routine S32.$create!(from: S64) -> S32
+routine S32!(from: S64) -> S32
   unless S64(S32_MIN) <= from <= S64(S32_MAX)
     throw IntegerOverflowError()
   return int_truncate[S64, S32](from)
@@ -49,7 +49,7 @@ routine S32.$create!(from: S64) -> S32
 ### :param from: The `S128` value to convert.
 ### :returns: The lower 32 bits of `from` interpreted as signed.
 ### :throws: {IntegerOverflowError} if `from` is not in `-2147483648..=2147483647`.
-routine S32.$create!(from: S128) -> S32
+routine S32!(from: S128) -> S32
   unless S128(S32_MIN) <= from <= S128(S32_MAX)
     throw IntegerOverflowError()
   return int_truncate[S128, S32](from)
@@ -57,20 +57,20 @@ routine S32.$create!(from: S128) -> S32
 ### Zero-extends a `U8` to `S32` (always succeeds — `U8` max 255 fits in S32).
 ### :param from: The `U8` value to widen.
 ### :returns: An `S32` equal in value to `from`.
-routine S32.$create(from: U8) -> S32
+routine S32(from: U8) -> S32
   return zero_extend[U8, S32](from)
 
 ### Zero-extends a `U16` to `S32` (always succeeds — `U16` max 65535 fits in S32).
 ### :param from: The `U16` value to widen.
 ### :returns: An `S32` equal in value to `from`.
-routine S32.$create(from: U16) -> S32
+routine S32(from: U16) -> S32
   return zero_extend[U16, S32](from)
 
 ### Reinterprets a `U32` as `S32` using two's complement, throwing if the value exceeds S32_MAX.
 ### :param from: The `U32` value to convert.
 ### :returns: The same bit pattern interpreted as `S32`.
 ### :throws: {IntegerOverflowError} if `from > 2147483647`.
-routine S32.$create!(from: U32) -> S32
+routine S32!(from: U32) -> S32
   unless from <= U32(S32_MAX)
     throw IntegerOverflowError()
   return reinterpret_bits[U32, S32](from)
@@ -79,7 +79,7 @@ routine S32.$create!(from: U32) -> S32
 ### :param from: The `U64` value to convert.
 ### :returns: The lower 32 bits interpreted as a signed `S32`.
 ### :throws: {IntegerOverflowError} if `from > 2147483647`.
-routine S32.$create!(from: U64) -> S32
+routine S32!(from: U64) -> S32
   unless from <= U64(S32_MAX)
     throw IntegerOverflowError()
   return int_truncate[U64, S32](from)
@@ -88,7 +88,7 @@ routine S32.$create!(from: U64) -> S32
 ### :param from: The `U128` value to convert.
 ### :returns: The lower 32 bits interpreted as a signed `S32`.
 ### :throws: {IntegerOverflowError} if `from > 2147483647`.
-routine S32.$create!(from: U128) -> S32
+routine S32!(from: U128) -> S32
   unless from <= U128(S32_MAX)
     throw IntegerOverflowError()
   return int_truncate[U128, S32](from)
@@ -97,7 +97,7 @@ routine S32.$create!(from: U128) -> S32
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 32 bits reinterpreted as an `S32`.
 ### :throws: {IntegerOverflowError} if `from` is outside −2147483648..2147483647.
-routine S32.$create!(from: S256) -> S32
+routine S32!(from: S256) -> S32
   if not (-2147483648_s256 <= from <= 2147483647_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, S32](from)
@@ -106,7 +106,7 @@ routine S32.$create!(from: S256) -> S32
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 32 bits reinterpreted as an `S32`.
 ### :throws: {IntegerOverflowError} if `from > 2147483647`.
-routine S32.$create!(from: U256) -> S32
+routine S32!(from: U256) -> S32
   if from > 2147483647_u256
     throw IntegerOverflowError()
   return int_truncate[U256, S32](from)
@@ -115,14 +115,14 @@ routine S32.$create!(from: U256) -> S32
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.$create!(from: F16) -> S32
+routine S32!(from: F16) -> S32
   return from.F32().S32!()
 
 ### Converts an `F32` to `S32`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the value is outside the S32 range.
-routine S32.$create!(from: F32) -> S32
+routine S32!(from: F32) -> S32
   if from.is_nan() or not (-2147483648.0_f32 <= from <= 2147483647.0_f32)
     throw IntegerOverflowError()
   return float_to_signed[F32, S32](from)
@@ -131,7 +131,7 @@ routine S32.$create!(from: F32) -> S32
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the value is outside the S32 range.
-routine S32.$create!(from: F64) -> S32
+routine S32!(from: F64) -> S32
   if from.is_nan() or not (-2147483648.0_f64 <= from <= 2147483647.0_f64)
     throw IntegerOverflowError()
   return float_to_signed[F64, S32](from)
@@ -140,28 +140,28 @@ routine S32.$create!(from: F64) -> S32
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.$create!(from: F128) -> S32
+routine S32!(from: F128) -> S32
   return from.F64!().S32!()
 
 ### Converts a `D32` decimal to `S32` via its packed bit representation.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.$create!(from: D32) -> S32
+routine S32!(from: D32) -> S32
   return S128(from: D128(from: from)).S32!()
 
 ### Converts a `D64` decimal to `S32` via its packed bit representation.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.$create!(from: D64) -> S32
+routine S32!(from: D64) -> S32
   return S128(from: D128(from: from)).S32!()
 
 ### Converts a `D128` decimal to `S32` via its low/high 64-bit halves.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
-routine S32.$create!(from: D128) -> S32
+routine S32!(from: D128) -> S32
   return S128(from: from).S32!()
 
 # ============================================================================
@@ -190,7 +190,7 @@ routine S32.mul_with_overflow(you: S32) -> (S32, Bool)
 ### :param you: The right operand.
 ### :returns: The sum `me + you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S32 range.
-routine S32.$add!(you: S32) -> S32
+routine S32.add!(you: S32) -> S32
   var result = me.add_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -200,7 +200,7 @@ routine S32.$add!(you: S32) -> S32
 ### :param you: The value to subtract.
 ### :returns: The difference `me - you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S32 range.
-routine S32.$sub!(you: S32) -> S32
+routine S32.sub!(you: S32) -> S32
   var result = me.sub_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -210,20 +210,20 @@ routine S32.$sub!(you: S32) -> S32
 ### :param you: The right operand.
 ### :returns: The product `me * you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S32 range.
-routine S32.$mul!(you: S32) -> S32
+routine S32.mul!(you: S32) -> S32
   var result = me.mul_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
 
 ### Returns `me // you` (euclidean division), throwing on errors.
-### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `$mod!`.
+### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `mod!`.
 ### The special case `S32_MIN // -1` would overflow and throws.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S32_MIN` and `you == -1`.
-routine S32.$floordiv!(you: S32) -> S32
+routine S32.floordiv!(you: S32) -> S32
   if you == 0
     throw DivisionByZeroError()
   if me == S32_MIN and you == -1_s32
@@ -240,7 +240,7 @@ routine S32.$floordiv!(you: S32) -> S32
 ### :param you: The divisor.
 ### :returns: The euclidean remainder — always non-negative.
 ### :throws: {DivisionByZeroError} if `you == 0`.
-routine S32.$mod!(you: S32) -> S32
+routine S32.mod!(you: S32) -> S32
   if you == 0
     throw DivisionByZeroError()
   var remainder = signed_rem[S32](a: me, b: you)
@@ -252,7 +252,7 @@ routine S32.$mod!(you: S32) -> S32
 
 ### Returns `-me` (arithmetic negation), with wrapping behavior on `S32_MIN`.
 ### :returns: The negated value. `-S32_MIN` wraps to `S32_MIN` (−2147483648).
-routine S32.$neg!() -> S32
+routine S32.neg!() -> S32
   if me == -2147483648_s32
     throw IntegerOverflowError()
   return sub[S32](a: 0_s32, b: me)
@@ -264,19 +264,19 @@ routine S32.$neg!() -> S32
 ### Returns `(me + you)` with wrapping arithmetic (mod 2³², signed).
 ### :param you: The right operand.
 ### :returns: The sum, wrapping on overflow.
-routine S32.$add_wrap(you: S32) -> S32
+routine S32.add_wrap(you: S32) -> S32
   return add[S32](a: me, b: you)
 
 ### Returns `(me - you)` with wrapping arithmetic (mod 2³², signed).
 ### :param you: The value to subtract.
 ### :returns: The difference, wrapping on underflow.
-routine S32.$sub_wrap(you: S32) -> S32
+routine S32.sub_wrap(you: S32) -> S32
   return sub[S32](a: me, b: you)
 
 ### Returns `(me * you)` with wrapping arithmetic (mod 2³², signed).
 ### :param you: The right operand.
 ### :returns: The product, wrapping on overflow.
-routine S32.$mul_wrap(you: S32) -> S32
+routine S32.mul_wrap(you: S32) -> S32
   return mul[S32](a: me, b: you)
 
 # ============================================================================
@@ -286,25 +286,25 @@ routine S32.$mul_wrap(you: S32) -> S32
 ### Returns `me + you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
-dangerous routine S32.$add_unchecked(you: S32) -> S32
+dangerous routine S32.add_unchecked(you: S32) -> S32
   return signed_add_exact[S32](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no overflow.
-dangerous routine S32.$sub_unchecked(you: S32) -> S32
+dangerous routine S32.sub_unchecked(you: S32) -> S32
   return signed_sub_exact[S32](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
-dangerous routine S32.$mul_unchecked(you: S32) -> S32
+dangerous routine S32.mul_unchecked(you: S32) -> S32
   return signed_mul_exact[S32](a: me, b: you)
 
 ### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
-dangerous routine S32.$floordiv_unchecked(you: S32) -> S32
+dangerous routine S32.floordiv_unchecked(you: S32) -> S32
   var quotient = signed_div[S32](a: me, b: you)
   var remainder = signed_rem[S32](a: me, b: you)
   if remainder < 0_s32
@@ -316,7 +316,7 @@ dangerous routine S32.$floordiv_unchecked(you: S32) -> S32
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The euclidean remainder, assuming `you != 0`.
-dangerous routine S32.$mod_unchecked(you: S32) -> S32
+dangerous routine S32.mod_unchecked(you: S32) -> S32
   var remainder = signed_rem[S32](a: me, b: you)
   if remainder < 0_s32
     if you > 0_s32
@@ -331,19 +331,19 @@ dangerous routine S32.$mod_unchecked(you: S32) -> S32
 ### Returns `me + you`, clamped to `S32_MAX` or `S32_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, or `2147483647` / `−2147483648` if it would overflow.
-routine S32.$add_clamp(you: S32) -> S32
+routine S32.add_clamp(you: S32) -> S32
   return signed_add_sat[S32](a: me, b: you)
 
 ### Returns `me - you`, clamped to `S32_MAX` or `S32_MIN` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `2147483647` / `−2147483648` if it would overflow.
-routine S32.$sub_clamp(you: S32) -> S32
+routine S32.sub_clamp(you: S32) -> S32
   return signed_sub_sat[S32](a: me, b: you)
 
 ### Returns `me * you`, clamped to `S32_MAX` or `S32_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `2147483647` / `−2147483648` if it would overflow.
-routine S32.$mul_clamp(you: S32) -> S32
+routine S32.mul_clamp(you: S32) -> S32
   var wide = mul[S64](sign_extend[S32, S64](me), sign_extend[S32, S64](you))
   if signed_gt[S64](wide, 2147483647_s64)
     return S32_MAX
@@ -383,8 +383,8 @@ routine S32.pow_with_overflow!(exp: S32) -> (S32, Bool)
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result is outside the S32 range.
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S32.$pow!(exp: S32) -> S32
-  var result = me.pow_with_overflow!(exp)
+routine S32.pow!(exp: S32) -> S32
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -393,7 +393,7 @@ routine S32.$pow!(exp: S32) -> S32
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result modulo 2³² (signed wrap).
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S32.$pow_wrap!(exp: S32) -> S32
+routine S32.pow_wrap!(exp: S32) -> S32
   if exp < 0_s32
     throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S32 = 1
@@ -401,17 +401,17 @@ routine S32.$pow_wrap!(exp: S32) -> S32
   var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.$mul_wrap(base)
+      result = result.mul_wrap(base)
     e = e >> 1_u32
     if e > 0
-      base = base.$mul_wrap(base)
+      base = base.mul_wrap(base)
   return result
 
 ### Returns `me ** exp`, clamped to `S32_MAX` or `S32_MIN` on overflow.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result, or `2147483647` / `−2147483648` if it would overflow.
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S32.$pow_clamp!(exp: S32) -> S32
+routine S32.pow_clamp!(exp: S32) -> S32
   if exp < 0
     throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S32 = 1
@@ -419,10 +419,10 @@ routine S32.$pow_clamp!(exp: S32) -> S32
   var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.$mul_clamp(base)
+      result = result.mul_clamp(base)
     e = e >> 1_u32
     if e > 0
-      base = base.$mul_clamp(base)
+      base = base.mul_clamp(base)
   return result
 
 # ============================================================================
@@ -432,24 +432,24 @@ routine S32.$pow_clamp!(exp: S32) -> S32
 ### Returns the bitwise AND of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me & you`.
-routine S32.$bitand(you: S32) -> S32
+routine S32.bitand(you: S32) -> S32
   return bit_and[S32](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
-routine S32.$bitor(you: S32) -> S32
+routine S32.bitor(you: S32) -> S32
   return bit_or[S32](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
-routine S32.$bitxor(you: S32) -> S32
+routine S32.bitxor(you: S32) -> S32
   return bit_xor[S32](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
-routine S32.$bitnot() -> S32
+routine S32.bitnot() -> S32
   return bit_xor[S32](a: me, b: -1)
 
 # ============================================================================
@@ -459,25 +459,25 @@ routine S32.$bitnot() -> S32
 ### Left-shifts this value by `bits` positions, filling vacated bits with zero.
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
-routine S32.$ashl(bits: U32) -> S32
+routine S32.ashl(bits: U32) -> S32
   return shift_left[S32](me, bits)
 
 ### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits`, copying the sign bit into vacated positions.
-routine S32.$ashr(bits: U32) -> S32
+routine S32.ashr(bits: U32) -> S32
   return shift_right_signed[S32](me, bits)
 
-### Left-shifts this value by `bits` positions (same as `$ashl` for signed integers).
+### Left-shifts this value by `bits` positions (same as `ashl` for signed integers).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
-routine S32.$lshl(bits: U32) -> S32
+routine S32.lshl(bits: U32) -> S32
   return shift_left[S32](me, bits)
 
 ### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
-routine S32.$lshr(bits: U32) -> S32
+routine S32.lshr(bits: U32) -> S32
   return shift_right_unsigned[S32](me, bits)
 
 # ============================================================================
@@ -487,13 +487,13 @@ routine S32.$lshr(bits: U32) -> S32
 ### Returns `true` when both values are equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
-routine S32.$eq(you: S32) -> Bool
+routine S32.eq(you: S32) -> Bool
   return int_eq[S32](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
-routine S32.$cmp(you: S32) -> ComparisonSign
+routine S32.cmp(you: S32) -> ComparisonSign
   if signed_lt[S32](me, you)
     return ME_SMALL
   if signed_gt[S32](me, you)
@@ -559,12 +559,12 @@ routine S32.trailing_zeros() -> S32
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `32` if the value is `−1` (all bits set).
 routine S32.leading_ones() -> S32
-  return me.$bitnot().leading_zeros()
+  return me.bitnot().leading_zeros()
 
 ### Returns the number of trailing one bits, starting from the least-significant bit.
 ### :returns: The trailing one count; `32` if the value is `−1` (all bits set).
 routine S32.trailing_ones() -> S32
-  return me.$bitnot().trailing_zeros()
+  return me.bitnot().trailing_zeros()
 
 ### Returns this value with its bits reversed (bit 31 ↔ bit 0, etc.).
 ### :returns: The bit-reversed `S32`.
@@ -654,26 +654,26 @@ routine S32.is_power_of_two() -> Bool
 
 ### Returns the human-readable text of this value.
 ### :returns: The value rendered as `Text`.
-routine S32.$represent() -> Text
+routine S32.represent() -> Text
   if me == 0s32
     return "0"
   if me > 0s32
-    return U32(me).$represent()
-  # Use reinterpret_bits (not U32(me)) — U32.$create!(S32) throws on negative inputs,
+    return U32(me).represent()
+  # Use reinterpret_bits (not U32(me)) — U32.create(S32) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u32 -% bits`
   # yields |me| (works correctly even for S32.MIN, whose absolute value overflows S32).
-  return "-" + (0u32 -% reinterpret_bits[S32, U32](me)).$represent()
+  return "-" + (0u32 -% reinterpret_bits[S32, U32](me)).represent()
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
-routine S32.$diagnose() -> Text
-  return "S32(" + me.$represent() + ")"
+routine S32.diagnose() -> Text
+  return "S32(" + me.represent() + ")"
 
 ### Parses a decimal string into an `S32`, accepting an optional leading `+` or `−` sign.
 ### :param from_text: The decimal string to parse.
 ### :returns: The parsed `S32` value.
 ### :throws: {InvalidValueError} if `from_text` is empty, sign-only, or contains non-digit characters.
-routine S32.$create!(from_text: Text) -> S32
+routine S32!(from_text: Text) -> S32
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S32")
   var start = 0u64
@@ -707,12 +707,12 @@ routine S32.$create!(from_text: Text) -> S32
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the zero-extended 32-bit representation.
-routine S32.$fast_hash() -> U64
+routine S32.fast_hash() -> U64
   return __hash_leaf(v: zero_extend[S32, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine S32.$hash(k0: U64, k1: U64) -> U64
+routine S32.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[S32, U64](me), k0: k0, k1: k1)

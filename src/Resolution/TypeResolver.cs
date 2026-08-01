@@ -43,34 +43,53 @@ internal sealed class TypeResolver
     /// </summary>
     internal TypeSymbol? LookupTypeWithImports(string name)
     {
-        // Try the registry's built-in lookup (exact match + Core fallback)
-        TypeSymbol? result = _sa._registry.LookupType(name: name);
-        if (result != null)
+        // Already-qualified names (and the resolution cache for generic instances) are handled
+        // directly by the registry — no module search needed.
+        if (name.Contains(value: '.'))
         {
-            return result;
+            return _sa._registry.LookupType(name: name);
         }
 
-        // Try each imported module
+        // MODULE-SCOPED resolution (module A's `Point` and module B's `Point` are DISTINCT types):
+        //   1. The current module's own declaration SHADOWS everything else.
+        //   2. Then imported modules, in import order.
+        //   3. Only if both miss, fall back to the registry's context-free lookup (Core auto-import,
+        //      resolution cache, and the cross-module short-name scan). The short-name scan returns
+        //      an arbitrary first match, so it MUST be last — otherwise a same-named type in an
+        //      unrelated module would win over the current module's own type (the old bug: a member
+        //      routine `Type.m` in module B resolved its owner to module A's same-named `Type`).
+        if (_sa._currentModuleName != null)
+        {
+            TypeSymbol? own = _sa._registry.LookupType(name: $"{_sa._currentModuleName}.{name}");
+            if (own != null)
+            {
+                return own;
+            }
+        }
+
         foreach (string ns in _sa._importedModules)
         {
-            result = _sa._registry.LookupType(name: $"{ns}.{name}");
-            if (result != null)
+            TypeSymbol? imported = _sa._registry.LookupType(name: $"{ns}.{name}");
+            if (imported != null)
             {
-                return result;
+                // `secret record`/`secret entity` are MODULE-PRIVATE: visible only within their own
+                // module (step 1 above), INVISIBLE to importers. Skip so an external reference resolves
+                // as "unknown type" rather than leaking an internal engine (e.g. Core's UnpackedFloat).
+                if (imported.Visibility == VisibilityModifier.Secret) continue;
+                return imported;
             }
         }
 
-        // Try current module (user-defined types are registered as "Module.Name")
-        if (_sa._currentModuleName != null && !name.Contains(value: '.'))
+        // Context-free fallback (Core auto-import, resolution cache, cross-module short-name scan).
+        // Hide a module-private `secret` type here too when it belongs to a DIFFERENT module than the
+        // referrer — a null current-module context must not accidentally expose another module's secret.
+        TypeSymbol? fallback = _sa._registry.LookupType(name: name);
+        if (fallback is { Visibility: VisibilityModifier.Secret }
+            && fallback.Module != _sa._currentModuleName)
         {
-            result = _sa._registry.LookupType(name: $"{_sa._currentModuleName}.{name}");
-            if (result != null)
-            {
-                return result;
-            }
+            return null;
         }
-
-        return null;
+        return fallback;
     }
 
     /// <summary>
@@ -111,9 +130,46 @@ internal sealed class TypeResolver
         }
 
         TypeSymbol resolved = ResolveTypeCore(typeExpr: typeExpr);
+        resolved = RoamSuflaeEntitySlot(resolved: resolved);
         typeExpr.ResolvedType = resolved;
         return resolved;
     }
+
+    /// <summary>
+    /// Suflae representation unification, centralized: in a Suflae USER file an <c>entity E</c> is a
+    /// <c>Roamed[E]</c> biased-RC handle, so any entity type resolved through <see cref="ResolveType"/>
+    /// (fields, parameters, returns, local annotations, container element types — every slot) is
+    /// substituted to <c>Roamed[E]</c> at this single choke point instead of per-site gates.
+    /// <para>Carve-outs: the stdlib is excluded (borrowed RazorForge source keeps bare single-owner
+    /// entities); an already-<c>Roamed[...]</c> type is idempotent (no <c>Roamed[Roamed[E]]</c>); and
+    /// <c>Maybe[E]</c> / <c>Maybe[Roamed[E]]</c> (from the <c>E?</c> desugaring) COLLAPSES to a nullable
+    /// bare <c>Roamed[E]</c> — an entity reference carries its own none via a null handle, so it needs no
+    /// <c>Maybe</c> wrapper (value types still use <c>Maybe[T]</c> for <c>T?</c>).</para>
+    /// </summary>
+    private TypeSymbol RoamSuflaeEntitySlot(TypeSymbol resolved)
+    {
+        if (_sa._registry.Language != Language.Suflae) return resolved;
+        if (_sa.IsStdlibFile(filePath: _sa._currentFilePath)) return resolved;
+        if (IsRoamed(type: resolved)) return resolved;
+        if (_sa._registry.LookupType(name: RuntimeContract.Roamed) is not { } roamedDef) return resolved;
+
+        switch (resolved)
+        {
+            case EntityTypeInfo entity:
+                return _sa._registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [entity]);
+            case RecordTypeInfo { GenericDefinition.Name: MaybeTypeName, TypeArguments: [EntityTypeInfo innerEntity] }:
+                return _sa._registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [innerEntity]);
+            case RecordTypeInfo { GenericDefinition.Name: MaybeTypeName, TypeArguments: [{ } innerRoamed] }
+                when IsRoamed(type: innerRoamed):
+                return innerRoamed;
+            default:
+                return resolved;
+        }
+    }
+
+    private static bool IsRoamed(TypeSymbol type) =>
+        type is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed }
+             or WrapperTypeInfo { Name: RuntimeContract.Roamed };
 
     private TypeSymbol ResolveTypeCore(TypeExpression typeExpr) // NOSONAR S3776
     {
@@ -234,7 +290,12 @@ internal sealed class TypeResolver
             return presetConst;
         }
 
-        // Type not found
+        // Type not found — but a module-private `secret` type of this name may exist and have been
+        // hidden on purpose; if so, report that explicitly rather than a misleading "unknown type".
+        if (_sa.TryReportSecretTypeAccess(name: typeExpr.Name, location: typeExpr.Location))
+        {
+            return ErrorTypeInfo.Instance;
+        }
         _sa.ReportError(code: SemanticDiagnosticCode.UnknownType,
             message: $"Unknown type '{typeExpr.Name}'.{_sa.UnknownTypeSuggestion(typeName: typeExpr.Name)}",
             location: typeExpr.Location);
@@ -261,7 +322,7 @@ internal sealed class TypeResolver
         }
 
         // Associated-type projection in a protocol signature (e.g. `Me/Iter` in
-        // `routine Me.$iter() -> Me/Iter`). `Me` here is the abstract protocol self, so the
+        // `routine Me.iter() -> Me/Iter`). `Me` here is the abstract protocol self, so the
         // projection is deferred and resolved per-implementer during monomorphization.
         if (typeExpr.Name.Contains(value: '/'))
         {
@@ -297,6 +358,10 @@ internal sealed class TypeResolver
         TypeSymbol? genericDef = LookupTypeWithImports(name: typeExpr.Name);
         if (genericDef == null)
         {
+            if (_sa.TryReportSecretTypeAccess(name: typeExpr.Name, location: typeExpr.Location))
+            {
+                return ErrorTypeInfo.Instance;
+            }
             _sa.ReportError(code: SemanticDiagnosticCode.UnknownType,
                 message: $"Unknown type '{typeExpr.Name}'.{_sa.UnknownTypeSuggestion(typeName: typeExpr.Name)}",
                 location: typeExpr.Location);
@@ -358,8 +423,8 @@ internal sealed class TypeResolver
         // Result[T] / Lookup[T] over a bare entity is now a valid carrier shape — the
         // carrier owns the bound entity directly. The previous S953 rejection of this
         // case was removed alongside Maybe's `needs T is RecordType` constraint.
-        // The identity/ownership-transfer semantics of `Maybe[Entity].$unwrap() -> T`
-        // are still an open design question (likely `?T` — return-position rvalue).
+        // The identity/ownership-transfer semantics of `Maybe[Entity].unwrap() -> T`
+        // are still an open design question (likely `T` — return-position rvalue).
 
         // Post-Owned-retirement: bare entity T in collection slots is fine — bound T is
         // record-shaped (pointer-sized) so List[T]/Dict[K,T] hold the same layout regardless
@@ -893,7 +958,7 @@ internal sealed class TypeResolver
         foreach (TypeExpression allowedExpr in constraint.ConstraintTypes)
         {
             if (typeArg.Name == allowedExpr.Name ||
-                GetBaseTypeName(typeName: typeArg.Name) == allowedExpr.Name)
+                typeArg.BareName == allowedExpr.Name)
             {
                 return; // Found a match
             }
@@ -1115,14 +1180,6 @@ internal sealed class TypeResolver
     }
 
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == MaybeTypeName;
-
-    private static string GetBaseTypeName(string typeName)
-    {
-        int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0
-            ? typeName[..genericIndex]
-            : typeName;
-    }
 
     #endregion
 }

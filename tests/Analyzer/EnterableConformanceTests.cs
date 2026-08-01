@@ -72,10 +72,10 @@ public class EnterableConformanceTests
                         record MyGuard obeys Enterable
                           secret n: S32
 
-                        routine MyGuard.$enter() -> MyGuard
+                        routine MyGuard.enter() -> MyGuard
                           return me
 
-                        routine MyGuard.$exit()
+                        routine MyGuard.exit()
                           return
                         """;
 
@@ -92,10 +92,10 @@ public class EnterableConformanceTests
                         entity Session obeys Enterable
                           secret n: S32
 
-                        routine Session.$enter() -> ?Session
+                        routine Session.enter() -> Session
                           return me
 
-                        routine Session.$exit()
+                        routine Session.exit()
                           return
 
                         routine start()
@@ -193,10 +193,10 @@ public class EnterableConformanceTests
                         record Bare
                           n: S32
 
-                        routine Bare.$enter() -> Bare
+                        routine Bare.enter() -> Bare
                           return me
 
-                        routine Bare.$exit()
+                        routine Bare.exit()
                           return
 
                         routine test()

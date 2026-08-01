@@ -2,13 +2,13 @@ module Collections
 
 import BuilderService
 
-preset FAST_SET_INITIAL_CAPACITY: U64 = 16u64
-preset FAST_SET_INITIAL_ENTRIES: U64 = 16u64
-preset CTRL_EMPTY: U8 = 128_u8
-preset CTRL_TOMBSTONED: U8 = 254_u8
-preset CTRL_H2_MASK: U8 = 127_u8
-preset ENTRY_DEAD: U8 = 0_u8
-preset ENTRY_LIVE: U8 = 1_u8
+secret preset FAST_SET_INITIAL_CAPACITY: U64 = 16u64
+secret preset FAST_SET_INITIAL_ENTRIES: U64 = 16u64
+secret preset CTRL_EMPTY: U8 = 128_u8
+secret preset CTRL_TOMBSTONED: U8 = 254_u8
+secret preset CTRL_H2_MASK: U8 = 127_u8
+secret preset ENTRY_DEAD: U8 = 0_u8
+secret preset ENTRY_LIVE: U8 = 1_u8
 
 ### An insertion-ordered collection of unique values backed by an open-addressed hash table.
 ###
@@ -36,7 +36,7 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### |---|---|---|
 ### | `add` | O(1) | O(n) (rehash) |
 ### | `remove` | O(1) | O(n) |
-### | `$contains` | O(1) | O(n) |
+### | `contains` | O(1) | O(n) |
 ### | `union` / `intersection` / `difference` | O(n) | O(n²) |
 ### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
@@ -44,9 +44,9 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Dict[K, V]} for key-value storage with the same hash table design.
 ### :see: {SortedSet[T]} for a sorted, duplicate-free collection.
 ### :see: {Set[T]} for the safe-by-default counterpart used with untrusted input.
-entity FastSet[T] obeys Iterable[T]
+entity FastSet[T] obeys Iterable[T], Container
 needs T obeys FastHashable, Equatable
-relates FastSetIterator[T] as Iter
+relates FastSetEmittable[T] as Iter
   secret ctrl: Hijacked[U8]
   secret indices: Hijacked[U64]
   secret slots: Hijacked[T]
@@ -62,7 +62,7 @@ relates FastSetIterator[T] as Iter
 # ============================================================================
 
 ### Creates an empty set using the default initial table size.
-routine FastSet[T].$create() -> ?FastSet[T]
+routine FastSet[T]() -> FastSet[T]
   var cap = FAST_SET_INITIAL_CAPACITY
   var ecap = FAST_SET_INITIAL_ENTRIES
   var set = FastSet[T](
@@ -76,7 +76,7 @@ routine FastSet[T].$create() -> ?FastSet[T]
     capacity: cap,
     entries_cap: ecap
   )
-  danger!
+  danger
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
@@ -86,7 +86,7 @@ routine FastSet[T].$create() -> ?FastSet[T]
 
 ### Creates an empty set pre-sized to hold at least `capacity` live elements without rehashing.
 ### :param capacity: Minimum number of live elements to accommodate before the first rehash.
-routine FastSet[T].$create(capacity: U64) -> ?FastSet[T]
+routine FastSet[T](capacity: U64) -> FastSet[T]
   var cap = FAST_SET_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -104,7 +104,7 @@ routine FastSet[T].$create(capacity: U64) -> ?FastSet[T]
     capacity: cap,
     entries_cap: ecap
   )
-  danger!
+  danger
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
@@ -126,28 +126,28 @@ routine FastSet[T].h1(hash: U64) -> U64
 
 @readonly
 routine FastSet[T].read_index(slot: U64) -> U64
-  danger!
-    return me.indices.offset(U64.data_size() * slot).extract()
+  danger
+    return me.indices.offset(U64.data_size() * slot).peek()
 
 @readonly
-routine FastSet[T].read_value_at(ei: U64) -> ?T
-  danger!
-    return me.slots.offset(T.data_size() * ei).extract()
+routine FastSet[T].read_value_at(ei: U64) -> T
+  danger
+    return me.slots.offset(T.data_size() * ei).peek()
 
 @readonly
 routine FastSet[T].find_slot(value: T) -> U64
-  var h = value.$fast_hash()
+  var h = value.fast_hash()
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
-  danger!
+  danger
     loop
-      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
         return me.capacity
       if c == target
-        var ei = me.indices.offset(U64.data_size() * i).extract()
-        if me.slots.offset(T.data_size() * ei).extract() == value
+        var ei = me.indices.offset(U64.data_size() * i).peek()
+        if me.slots.offset(T.data_size() * ei).peek() == value
           return i
       i = (i +% 1u64) & mask
   return me.capacity
@@ -156,16 +156,16 @@ routine FastSet[T].insert_index_raw(h: U64, entry_index: U64)
   var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
-  danger!
+  danger
     loop
-      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
       if c == CTRL_EMPTY
-        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
-        me.indices.offset(U64.data_size() * i).inject(entry_index)
+        me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+        me.indices.offset(U64.data_size() * i).poke(entry_index)
         return
       if c == CTRL_TOMBSTONED
-        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
-        me.indices.offset(U64.data_size() * i).inject(entry_index)
+        me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+        me.indices.offset(U64.data_size() * i).poke(entry_index)
         me.deleted = me.deleted -% 1u64
         return
       i = (i +% 1u64) & mask
@@ -198,7 +198,7 @@ routine FastSet[T].rehash()
   if me.count *% 2u64 >= old_ecap
     new_ecap = old_ecap *% 2u64
 
-  danger!
+  danger
     me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
     me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
@@ -212,19 +212,19 @@ routine FastSet[T].rehash()
 
   var i = 0u64
   while i < old_entries_used
-    danger!
-      var live = old_entry_live.offset(ByteSize(bytes: i)).extract()
+    danger
+      var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
       if live == ENTRY_LIVE
-        var val = old_slots.offset(T.data_size() * i).extract()
+        var val = old_slots.offset(T.data_size() * i).peek()
         var new_ei = me.entries_used
-        me.slots.offset(T.data_size() * new_ei).inject(val)
-        me.entry_live.offset(ByteSize(bytes: new_ei)).inject(ENTRY_LIVE)
+        me.slots.offset(T.data_size() * new_ei).poke(val)
+        me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
-        me.insert_index_raw(h: val.$fast_hash(), entry_index: new_ei)
+        me.insert_index_raw(h: val.fast_hash(), entry_index: new_ei)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
-  danger!
+  danger
     if not old_ctrl.is_none()
       rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
     if not old_indices.is_none()
@@ -249,7 +249,7 @@ routine FastSet[T].is_empty() -> Bool
 
 @migratable
 routine FastSet[T].clear()
-  danger!
+  danger
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
@@ -257,7 +257,7 @@ routine FastSet[T].clear()
   return
 
 @readonly
-routine FastSet[T].$contains(value: T) -> Bool
+routine FastSet[T].contains(value: T) -> Bool
   return me.find_slot(value) < me.capacity
 
 ### Inserts `value` if it is not already present.
@@ -270,11 +270,11 @@ routine FastSet[T].add(value: T) -> Bool
   if me.find_slot(value) < me.capacity
     return false
   var ei = me.entries_used
-  danger!
-    me.slots.offset(T.data_size() * ei).inject(value)
-    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_LIVE)
+  danger
+    me.slots.offset(T.data_size() * ei).poke(value)
+    me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
-  me.insert_index_raw(h: value.$fast_hash(), entry_index: ei)
+  me.insert_index_raw(h: value.fast_hash(), entry_index: ei)
   me.count = me.count +% 1u64
   return true
 
@@ -287,9 +287,9 @@ routine FastSet[T].remove(value: T) -> Bool
   if slot >= me.capacity
     return false
   var ei = me.read_index(slot)
-  danger!
-    me.ctrl.offset(ByteSize(bytes: slot)).inject(CTRL_TOMBSTONED)
-    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_DEAD)
+  danger
+    me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
+    me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
   me.count = me.count -% 1u64
   me.deleted = me.deleted +% 1u64
   return true
@@ -299,7 +299,7 @@ routine FastSet[T].remove(value: T) -> Bool
 # ============================================================================
 
 @readonly
-routine FastSet[T].union(other: Referring[FastSet[T]]) -> ?FastSet[T]
+routine FastSet[T].union(other: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T](me.count +% other.count)
   for val in me
     discard result.add(val)
@@ -308,7 +308,7 @@ routine FastSet[T].union(other: Referring[FastSet[T]]) -> ?FastSet[T]
   return steal result
 
 @readonly
-routine FastSet[T].intersection(other: Referring[FastSet[T]]) -> ?FastSet[T]
+routine FastSet[T].intersection(other: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   for val in me
     if val in other
@@ -316,7 +316,7 @@ routine FastSet[T].intersection(other: Referring[FastSet[T]]) -> ?FastSet[T]
   return steal result
 
 @readonly
-routine FastSet[T].difference(other: Referring[FastSet[T]]) -> ?FastSet[T]
+routine FastSet[T].difference(other: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   for val in me
     if val notin other
@@ -324,7 +324,7 @@ routine FastSet[T].difference(other: Referring[FastSet[T]]) -> ?FastSet[T]
   return steal result
 
 @readonly
-routine FastSet[T].symmetric_difference(other: Referring[FastSet[T]]) -> ?FastSet[T]
+routine FastSet[T].symmetric_difference(other: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   for val in me
     if val notin other
@@ -361,7 +361,7 @@ routine FastSet[T].is_disjoint(other: Referring[FastSet[T]]) -> Bool
 ### Creates a {List[T]} from all elements of `from` in insertion order.
 ### :param from: The set to copy elements from.
 ### :returns: A new {List[T]} containing all elements of `from`.
-routine List[T].$create(from: Referring[FastSet[T]]) -> ?List[T]
+routine List[T](from: Referring[FastSet[T]]) -> List[T]
   var result = List[T](capacity: from.count)
   for val in from
     result.add_last(val)
@@ -372,30 +372,30 @@ routine List[T].$create(from: Referring[FastSet[T]]) -> ?List[T]
 # ============================================================================
 
 @readonly
-routine FastSet[T].$iter() -> ?FastSetIterator[T]
-  danger!
-    return FastSetIterator[T](
+routine FastSet[T].iter() -> FastSetEmittable[T]
+  danger
+    return FastSetEmittable[T](
       slots: me.slots,
       entry_live: me.entry_live,
       entries_used: me.entries_used,
       pos: 0u64
     )
 
-### Iterator that walks the dense entries array of a {FastSet[T]} in insertion order.
+### Emittable that walks the dense entries array of a {FastSet[T]} in insertion order.
 ### Tombstoned (removed) entries are silently skipped.
-entity FastSetIterator[T] obeys Iterator[T]
+entity FastSetEmittable[T] obeys Emittable[T]
   secret slots: Hijacked[T]
   secret entry_live: Hijacked[U8]
   secret entries_used: U64
   secret pos: U64
 
-routine FastSetIterator[T].$next!() -> ?T
-  danger!
+routine FastSetEmittable[T].emit!() -> T
+  danger
     while me.pos < me.entries_used
       var p = me.pos
       me.pos = me.pos + 1u64
-      if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
-        return me.slots.offset(T.data_size() * p).extract()
+      if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+        return me.slots.offset(T.data_size() * p).peek()
   absent
 
 # ============================================================================
@@ -403,25 +403,25 @@ routine FastSetIterator[T].$next!() -> ?T
 # ============================================================================
 
 @readonly
-routine FastSet[T].$represent() -> Text
+routine FastSet[T].represent() -> Text
   var result = "FastSet({"
   var first = true
   for val in me
     if not first
       result = result + ", "
-    result = result + val.$represent()
+    result = result + val.represent()
     first = false
   result = result + "})"
   return steal result
 
 @readonly
-routine FastSet[T].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
+routine FastSet[T].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
   for val in me
     if not first
       result = result + ", "
-    result = result + val.$represent()
+    result = result + val.represent()
     first = false
   result = result + "})"
   return steal result
@@ -432,18 +432,18 @@ routine FastSet[T].$diagnose() -> Text
 
 ### Returns true if both sets contain exactly the same elements (order-independent).
 @readonly
-routine FastSet[T].$eq(other: Referring[FastSet[T]]) -> Bool
+routine FastSet[T].eq(other: Referring[FastSet[T]]) -> Bool
   if me.count != other.count
     return false
   return me.is_subset(other)
 
-dangerous routine FastSet[T].$destroy()
-  # Tear down each live element before freeing the buffers (mirrors FastSetIterator.$next!).
+dangerous routine FastSet[T].destroy()
+  # Tear down each live element before freeing the buffers (mirrors FastSetEmittable.emit!).
   # No-op for value types; frees owned entity elements.
   var p = 0u64
   while p < me.entries_used
-    if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
-      me.slots.offset(T.data_size() * p).extract().$destroy()
+    if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+      me.slots.offset(T.data_size() * p).peek().destroy()
     p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()
@@ -451,3 +451,13 @@ dangerous routine FastSet[T].$destroy()
   me.entry_live.invalidate()
   me.hijack().invalidate()
   return
+
+### Serializes this collection to a `SerialValue.List`, serializing each element.
+### :returns: The `SerialValue.List` of each element's serialized form.
+@[readonly, generated]
+routine FastSet[T].serialize() -> SerialValue
+needs T obeys Serializable
+  var __sv = List[SerialValue]()
+  for __x in me
+    __sv.add_last(value: __x.serialize())
+  return SerialValue(steal __sv)

@@ -628,7 +628,7 @@ routine F128.exp10_unchecked() -> F128
   return me.to_oct().mul(you: UnpackedFloat[U256, U512, 256].ln10()).exp(n: 20_s64).to_f128()
 
 ### Returns `me ^ you` (computed in octuple).
-routine F128.$pow!(you: F128) -> F128
+routine F128.pow!(you: F128) -> F128
   var rr = me.pow_unchecked(you: you)
   if rr.is_finite()
     return rr
@@ -648,7 +648,7 @@ routine F128.pow_unchecked(you: F128) -> F128
 ### degrees of the general path.
 routine F128.pow_unchecked_p(you: F128, logn: S64, expn: S64, fast: Bool) -> F128
   var one = UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).to_f128()
-  var negone = one.$neg()
+  var negone = one.neg()
   var yo = you.to_oct()
   # Integer/odd-integer exponent classification drives sign rules and domain checks below.
   var yisint = yo.isint()
@@ -891,7 +891,7 @@ routine F128.acosh_unchecked() -> F128
 # ============================================================================
 
 ### Reads `nbytes` table bytes starting at `start`, MSB-first, into an `L`.
-common routine L.read_table_bytes(start: S64, nbytes: S64) -> ?L
+common routine L.read_table_bytes(start: S64, nbytes: S64) -> L
   var acc = L.to_width(s: 0_s64)
   var i = 0_s64
   while signed_lt[S64](a: i, b: nbytes)

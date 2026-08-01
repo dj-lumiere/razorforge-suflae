@@ -209,9 +209,17 @@ public record BecomesStatement(Expression Value, SourceLocation Location)
 /// </code>
 /// Builder generates safe variants: try_divide() -> s32?, check_divide() -> Result[s32]
 /// </remarks>
-public record ThrowStatement(Expression Error, SourceLocation Location)
+public record ThrowStatement(Expression Error, SourceLocation Location, bool IsFatal = false)
     : Statement(Location: Location)
 {
+    /// <summary>
+    /// When true this is a `pierce` (fatal, uncatchable crash): it does NOT make the routine failable,
+    /// is NOT rewritten into a recoverable return in try_/check_/lookup_ variants, and pierces through
+    /// every handler to abort. When false this is a recoverable `throw`. Codegen is identical (both
+    /// lower to rf_crash) — the difference is purely in the error-handling/variant machinery.
+    /// </summary>
+    public bool IsFatal { get; init; } = IsFatal;
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -391,6 +399,15 @@ public record LoopStatement(
     {
         return visitor.VisitLoopStatement(node: this);
     }
+
+    /// <summary>
+    /// True when <see cref="Compiler.Desugaring.Passes.ControlFlowLoweringPass"/> synthesized this
+    /// loop as the body of a lowered <c>for x in coll</c> — i.e. its body is a
+    /// <see cref="WhenStatement"/> over an <c>iter.try_emit()</c> call. Marks the loop so the
+    /// <c>IteratorInlineLoweringPass</c> can find the iterator-advance loops to rewrite, instead of
+    /// brittle shape-matching against every <c>loop</c>.
+    /// </summary>
+    public bool IsIteratorForLoop { get; init; }
 }
 
 /// <summary>
@@ -620,19 +637,17 @@ public record NegatedTypePattern(TypeExpression Type, SourceLocation Location)
 
 /// <summary>
 /// Pattern that matches flag combinations in when clauses.
-/// Used for both 'is' flags patterns (has flags) and 'isonly' patterns (exact match).
-/// Examples: is READ and WRITE => ..., isonly READ and WRITE => ..., is READ or WRITE => ...
+/// Used for 'is' flags patterns (has flags).
+/// Examples: is READ and WRITE => ..., is READ or WRITE => ...
 /// </summary>
 /// <param name="FlagNames">List of flag member names to test</param>
 /// <param name="Connective">How the flags are combined: And (all required) or Or (any required)</param>
 /// <param name="ExcludedFlags">Optional flags to exclude with 'but' (only valid with And connective)</param>
-/// <param name="IsExact">True for isonly (exact match), false for is (has flags)</param>
 /// <param name="Location">Source location information</param>
 public record FlagsPattern(
     List<string> FlagNames,
     FlagsTestConnective Connective,
     List<string>? ExcludedFlags,
-    bool IsExact,
     SourceLocation Location) : Pattern(Location: Location);
 
 /// <summary>
@@ -832,7 +847,7 @@ public record TypeDestructuringPattern(
 #region Unsafe Statements
 
 /// <summary>
-/// Statement representing a danger! block that disables safety checks.
+/// Statement representing a danger block that disables safety checks.
 /// Allows access to unsafe memory operations and bypasses normal language restrictions.
 /// </summary>
 /// <param name="Body">Block statement containing the unsafe operations</param>
@@ -925,7 +940,8 @@ public record UsingStatement(
     Expression Resource,
     string Name,
     Statement Body,
-    SourceLocation Location) : Statement(Location: Location)
+    SourceLocation Location,
+    Statement? FallbackBody = null) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

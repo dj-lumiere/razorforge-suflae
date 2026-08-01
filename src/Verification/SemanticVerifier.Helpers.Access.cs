@@ -16,7 +16,7 @@ public sealed partial class SemanticVerifier
 {
     private static bool IsInlineOnlyTokenType(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return InlineOnlyTokenTypes.Contains(value: baseName);
     }
 
@@ -25,13 +25,13 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static string GetTokenKindDescription(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return baseName switch
         {
-            "Viewing" => "read-only token (Viewing)",
-            "Modifying" => "exclusive write token (Modifying)",
-            "Inspecting" => "shared read token (Inspecting)",
-            "Claiming" => "exclusive shared write token (Claiming)",
+            Compiler.Resolution.RuntimeContract.Viewing => "read-only token (Viewing)",
+            Compiler.Resolution.RuntimeContract.Modifying => "exclusive write token (Modifying)",
+            Compiler.Resolution.RuntimeContract.Inspecting => "shared read token (Inspecting)",
+            Compiler.Resolution.RuntimeContract.Claiming => "exclusive shared write token (Claiming)",
             _ => "token"
         };
     }
@@ -109,8 +109,7 @@ public sealed partial class SemanticVerifier
             }
 
             // Convert AST TypeInfo back to get the type name
-            string typeName = arg.ResolvedType.Name;
-            string baseName = GetBaseTypeName(typeName: typeName);
+            string baseName = arg.ResolvedType.BareName;
 
             if (!ExclusiveTokenTypes.Contains(value: baseName))
             {
@@ -139,21 +138,36 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Validates that every parameter of a <c>threaded routine</c> can cross the thread boundary
-    /// safely. A threaded call spawns an OS thread, so each argument is either passed BY VALUE (an
-    /// independent copy) when its type is trivially copyable, or BY REFERENCE when its type is a
-    /// thread-shareable wrapper (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>) that carries its own
-    /// synchronization. A type that is neither — e.g. a record owning an entity
-    /// (<c>Retained</c>/<c>Tracked</c>), or a bare entity — would silently alias unsynchronized
-    /// state across threads, so it is rejected (RF-S632). Synchronization must be MARKED, never
-    /// implied (same ethos as <c>steal</c>/<c>!</c>/overflow).
+    /// Validates that every argument crossing an async spawn boundary can do so soundly. Under M:N
+    /// both a <c>threaded routine</c> (OS thread) and a <c>suspended routine</c> (coroutine that may
+    /// migrate to any worker) are potentially parallel, so the SAME crossing rule applies to both:
+    /// an argument is safe when it is
+    /// <list type="bullet">
+    /// <item><c>steal</c>-moved — exclusive transfer, the caller loses access (safe regardless of
+    /// type — a moved bare entity / <c>Retained</c> leaves exactly one live handle);</item>
+    /// <item>trivially copyable — passed BY VALUE as an independent copy;</item>
+    /// <item>a thread-shareable wrapper (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>/<c>Inspecting</c>/
+    /// <c>Claiming</c>) — carries its own synchronization (atomic refcount or lock).</item>
+    /// </list>
+    /// A parameter that is none of these <em>and</em> is not steal-moved at the call site — e.g. a
+    /// bare entity or a record transitively owning a single-threaded wrapper
+    /// (<c>Retained</c>/<c>Tracked</c>/<c>Viewing</c>/<c>Modifying</c>) passed by copy — would
+    /// silently alias unsynchronized state across parallel coroutines (non-atomic refcount / unsynced
+    /// access = UAF), so it is rejected (RF-S632). Synchronization must be MARKED, never implied
+    /// (same ethos as <c>steal</c>/<c>!</c>/overflow). Applying this at the <c>suspended</c> boundary
+    /// (previously unchecked — harmless when single-threaded) is required for M:N soundness; crediting
+    /// <c>steal</c> also removes the old over-strictness at the <c>threaded</c> boundary.
     /// </summary>
-    private void ValidateThreadedRoutineArguments(RoutineInfo routine, SourceLocation location)
+    private void ValidateAsyncRoutineArguments(RoutineInfo routine,
+        IReadOnlyList<Expression> arguments, string boundaryKind, SourceLocation location)
     {
         if (_registry.Language != Language.RazorForge)
         {
             return;
         }
+
+        HashSet<string> stolenParams = CollectStolenParameters(routine: routine,
+            arguments: arguments);
 
         foreach (ParameterInfo param in routine.Parameters)
         {
@@ -163,13 +177,33 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
-            // A bare entity is a heap handle; passing it copies the pointer, so the same object
-            // would be aliased across threads. A record/tuple that transitively owns a
-            // single-threaded RC wrapper (Retained/Tracked) or a scoped token would alias its
-            // interior the same way. Pure value data has neither and is copied safely. (Structural
-            // walk — does NOT depend on `Assignable` protocol population, which is not attached to
-            // the resolved parameter-type instances reached here.)
+            // A `Roamed` handle crosses the boundary by being PROMOTED, not rejected: passing it across
+            // a concurrency boundary IS the escape event, and codegen inserts `promote()` on the arg
+            // before the spawn (LOCAL -> ESCAPED: atomic refcount + armed reentrant lock). So the same
+            // object is thread-safe by the time the callee touches it — accepted here, no RF-S632.
+            if (type.BareName == Compiler.Resolution.RuntimeContract.Roamed)
+            {
+                continue;
+            }
+
+            // A bare entity is a heap handle; passing it by copy copies the pointer, so the same
+            // object would be aliased across parallel coroutines/threads. A record/tuple that
+            // transitively owns a single-threaded RC wrapper (Retained/Tracked) or a scoped token
+            // would alias its interior the same way. Pure value data has neither and is copied
+            // safely. (Structural walk — does NOT depend on `Assignable` protocol population, which
+            // is not attached to the resolved parameter-type instances reached here.)
             bool isEntity = type is EntityTypeInfo;
+
+            // `steal` credits ONLY a bare entity: it is single-owner, so a move leaves exactly one
+            // live handle (provably exclusive — the caller loses access). It does NOT credit a type
+            // that (transitively) owns a single-threaded RC wrapper: moving one `Retained`/`Tracked`
+            // handle does not prove no siblings exist, and a bare `Retained`/`Tracked` cannot be
+            // `steal`-moved at all (RF-S617). Such a value must cross via `Shared`/`Watched` (atomic).
+            if (isEntity && stolenParams.Contains(item: param.Name))
+            {
+                continue;
+            }
+
             (string Wrapper, string Path)? offender =
                 isEntity ? null : FindNonTriviallyCopyableWrapper(type: type);
             if (!isEntity && offender == null)
@@ -178,15 +212,53 @@ public sealed partial class SemanticVerifier
             }
 
             string reason = isEntity
-                ? "a bare entity aliases the same object across threads"
+                ? "a bare entity aliases the same object across parallel coroutines"
                 : $"it transitively owns `{offender!.Value.Wrapper}` at `{offender.Value.Path}`";
+            string fix = isEntity
+                ? "`steal`-move it, share it with `Shared`/`Watched`/`Atomic`/`Inspecting`/`Claiming`, " +
+                  "or pass a copyable value"
+                : "share it with `Shared`/`Watched`/`Atomic`/`Inspecting`/`Claiming`, or pass a copyable value";
             ReportError(code: SemanticDiagnosticCode.ThreadArgNotShareable,
                 message:
-                $"Parameter `{param.Name}: {type.Name}` of a threaded routine cannot cross the " +
-                $"thread boundary safely — {reason}. Share it across threads with " +
-                "`Shared`/`Watched`/`Atomic`, or pass a copyable value.",
+                $"Parameter `{param.Name}: {type.Name}` of a {boundaryKind} routine cannot cross the " +
+                $"spawn boundary safely — {reason}. {fix}.",
                 location: location);
         }
+    }
+
+    /// <summary>
+    /// Returns the set of parameter names whose call-site argument is a <c>steal</c> move (an
+    /// exclusive ownership transfer). Such arguments cross an async spawn boundary safely regardless
+    /// of type, because the caller loses access — exactly one live handle survives. Handles both
+    /// positional arguments (matched by position) and <c>NamedArgumentExpression</c> (matched by
+    /// name); named and positional are never mixed in a single call (RF-S512).
+    /// </summary>
+    private static HashSet<string> CollectStolenParameters(RoutineInfo routine,
+        IReadOnlyList<Expression> arguments)
+    {
+        var stolen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var positional = 0;
+        foreach (Expression arg in arguments)
+        {
+            if (arg is NamedArgumentExpression named)
+            {
+                if (named.Value is StealExpression)
+                {
+                    stolen.Add(item: named.Name);
+                }
+
+                continue;
+            }
+
+            if (positional < routine.Parameters.Count && arg is StealExpression)
+            {
+                stolen.Add(item: routine.Parameters[index: positional].Name);
+            }
+
+            positional++;
+        }
+
+        return stolen;
     }
 
     /// <summary>
@@ -199,7 +271,7 @@ public sealed partial class SemanticVerifier
         {
             IdentifierExpression id => id.Name,
             MemberExpression member =>
-                $"{GetExpressionKey(expression: member.Object)}.{member.PropertyName}",
+                $"{GetExpressionKey(expression: member.Object)}.{member.MemberName}",
             _ => null
         };
     }
@@ -290,12 +362,12 @@ public sealed partial class SemanticVerifier
             ownerType: routine.OwnerType,
             accessLocation: accessLocation);
 
-        // Dangerous routines can only be called inside danger! blocks
+        // Dangerous routines can only be called inside danger blocks
         if (routine.IsDangerous && !InDangerBlock)
         {
             ReportError(code: SemanticDiagnosticCode.DangerousCallOutsideDangerBlock,
                 message:
-                $"Dangerous routine '{routine.Name}' can only be called inside a 'danger!' block.",
+                $"Dangerous routine '{routine.Name}' can only be called inside a 'danger' block.",
                 location: accessLocation);
         }
     }
@@ -311,6 +383,21 @@ public sealed partial class SemanticVerifier
     private void ValidateMemberAccess(VisibilityModifier visibility, string memberKind,
         string memberName, TypeSymbol? ownerType, SourceLocation accessLocation)
     {
+        // Owner secrecy CAPS member visibility: a `secret` (module-private) type's members are
+        // module-private too, no matter their own modifier. The type name is already hidden cross-module,
+        // but an importer can still obtain an instance by inference through a non-secret factory that
+        // returns it — this closes that hole. No per-member `secret` annotation is required.
+        if (ownerType is { Visibility: VisibilityModifier.Secret }
+            && !IsAccessingFromSameModule(memberModule: ownerType.Module))
+        {
+            ReportError(code: SemanticDiagnosticCode.SecretMemberAccess,
+                message:
+                $"Cannot access {memberKind} '{memberName}' of secret (module-private) type '{ownerType.Name}' " +
+                $"from outside its module.",
+                location: accessLocation);
+            return;
+        }
+
         switch (visibility)
         {
             case VisibilityModifier.Secret:

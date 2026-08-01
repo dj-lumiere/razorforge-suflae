@@ -15,11 +15,11 @@ namespace Compiler.Postprocessing.Passes;
 /// <code>
 /// {
 ///   var __uf_N = resource
-///   var x = __uf_N.$enter()      // if $enter returns a value
-///   // OR: __uf_N.$enter(); var x = __uf_N   // if $enter is void
+///   var x = __uf_N.enter()      // if $enter returns a value
+///   // OR: __uf_N.enter(); var x = __uf_N   // if $enter is void
 ///   // OR: var x = __uf_N                     // if no $enter
 ///   [body, with $exit() injected before every escape]
-///   __uf_N.$exit()               // normal-path exit (unreachable if body always terminates)
+///   __uf_N.exit()               // normal-path exit (unreachable if body always terminates)
 /// }
 /// </code>
 ///
@@ -157,6 +157,9 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         // Lower body first -> nested usings expand bottom-up.
         Statement loweredBody = LowerStatement(u.Body);
 
+        if (u.FallbackBody != null)
+            return LowerFallibleUsing(u, loweredBody);
+
         TypeInfo? resourceType = u.Resource.ResolvedType;
         SourceLocation loc = u.Location;
 
@@ -167,10 +170,10 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         };
 
         RoutineInfo? enterMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "$enter")
+            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "enter")
             : null;
         RoutineInfo? exitMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "$exit")
+            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "exit")
             : null;
 
         var stmts = new List<Statement>();
@@ -182,7 +185,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (enterMethod != null)
         {
             var enterCallee = new MemberExpression(
-                Object: resTempIdent, PropertyName: "$enter", Location: loc);
+                Object: resTempIdent, MemberName: "enter", Location: loc);
             var enterCall = new CallExpression(
                 Callee: enterCallee, Arguments: [], Location: loc)
             {
@@ -215,7 +218,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (exitMethod != null)
         {
             var exitCallee = new MemberExpression(
-                Object: resTempIdent, PropertyName: "$exit", Location: loc);
+                Object: resTempIdent, MemberName: "exit", Location: loc);
             var exitCall = new CallExpression(
                 Callee: exitCallee, Arguments: [], Location: loc)
             {
@@ -235,6 +238,94 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         if (exitCallStmt != null)
             stmts.Add(exitCallStmt);
 
+        return new BlockStatement(Statements: stmts, Location: loc);
+    }
+
+    /// <summary>
+    /// Lowers a fallible <c>using resource as x { body } fallback { alt }</c> to:
+    /// <code>
+    /// {
+    ///   var __uf_N = resource
+    ///   if __uf_N.try_enter():        // Bool: did the non-blocking acquire succeed?
+    ///     var x = __uf_N
+    ///     [body, with $exit() injected before every escape]
+    ///     __uf_N.exit()               // normal-path release
+    ///   else:
+    ///     [fallback]                    // nothing acquired -> no $exit
+    /// }
+    /// </code>
+    /// The hold is released by <c>$exit</c> on every exit from the success branch only; the
+    /// fallback branch never acquired it, so it carries no teardown.
+    /// </summary>
+    private BlockStatement LowerFallibleUsing(UsingStatement u, Statement loweredBody)
+    {
+        Statement loweredFallback = LowerStatement(u.FallbackBody!);
+
+        TypeInfo? resourceType = u.Resource.ResolvedType;
+        SourceLocation loc = u.Location;
+
+        string resTemp = NextResTemp();
+        var resTempIdent = new IdentifierExpression(Name: resTemp, Location: loc)
+        {
+            ResolvedType = resourceType
+        };
+
+        RoutineInfo? tryEnterMethod = resourceType != null
+            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "try_enter")
+            : null;
+        RoutineInfo? exitMethod = resourceType != null
+            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "exit")
+            : null;
+
+        var stmts = new List<Statement>();
+
+        // var __uf_N = resource
+        stmts.Add(MakeBinding(name: resTemp, value: u.Resource, type: resourceType, loc: loc));
+
+        // Condition: __uf_N.try_enter()  (Bool; SA has already verified $try_enter exists)
+        var tryEnterCallee = new MemberExpression(
+            Object: resTempIdent, MemberName: "try_enter", Location: loc);
+        var tryEnterCall = new CallExpression(
+            Callee: tryEnterCallee, Arguments: [], Location: loc)
+        {
+            ResolvedRoutine = tryEnterMethod,
+            ResolvedType = tryEnterMethod?.ReturnType
+        };
+
+        // Success branch: bind the token, run body with $exit injected, then normal-path $exit.
+        var thenStmts = new List<Statement>
+        {
+            MakeBinding(name: u.Name, value: resTempIdent, type: resourceType, loc: loc)
+        };
+
+        ExpressionStatement? exitCallStmt = null;
+        if (exitMethod != null)
+        {
+            var exitCallee = new MemberExpression(
+                Object: resTempIdent, MemberName: "exit", Location: loc);
+            var exitCall = new CallExpression(
+                Callee: exitCallee, Arguments: [], Location: loc)
+            {
+                ResolvedRoutine = exitMethod,
+                ResolvedType = null
+            };
+            exitCallStmt = new ExpressionStatement(Expression: exitCall, Location: loc);
+        }
+
+        Statement successBody = exitCallStmt != null
+            ? InjectExitBeforeEscapes(loweredBody, exitCallStmt, loopDepth: 0)
+            : loweredBody;
+        thenStmts.Add(successBody);
+        if (exitCallStmt != null)
+            thenStmts.Add(exitCallStmt);
+
+        var ifStmt = new IfStatement(
+            Condition: tryEnterCall,
+            ThenStatement: new BlockStatement(Statements: thenStmts, Location: loc),
+            ElseStatement: loweredFallback,
+            Location: loc);
+
+        stmts.Add(ifStmt);
         return new BlockStatement(Statements: stmts, Location: loc);
     }
 

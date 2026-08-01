@@ -178,12 +178,12 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> ?T
+                        routine Box[T].fetch() -> T
                           return me.value
 
                         routine start() -> S32
                           var box = Box[S32](value: 7_s32)
-                          return box.peek()
+                          return box.fetch()
                         """;
 
         Program program = Parse(source: source);
@@ -192,9 +192,11 @@ public class CompilerPipelineLoweringTests
 
         Assert.Empty(collection: result.Errors);
 
+        // `fetch` (not `peek`) — `peek` now also names the stdlib `Hijacked[T].peek` accessor, whose
+        // many monomorphizations would make this filter ambiguous.
         MonomorphizedBody body = Assert.Single(
             collection: result.InstantiatedGenericBodies.Values.Where(candidate =>
-                candidate.Info.Name == "peek"));
+                candidate.Info.Name == "fetch"));
 
         Assert.False(condition: ContainsGenericPlaceholder(type: body.Info.OwnerType));
         Assert.DoesNotContain(body.Info.Parameters,
@@ -249,10 +251,10 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> ?T
+                        routine Box[T].peek() -> T
                           return me.value
 
-                        routine Box[T].copy_value() -> ?T
+                        routine Box[T].copy_value() -> T
                           return me.peek()
 
                         routine start() -> S32
@@ -414,7 +416,7 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "Core.List[Core.List[Core.S64]].$create",
+        Assert.Contains(expectedSubstring: "Core.List[Core.List[Core.S64]].create",
             actualString: llvmIr);
     }
 
@@ -443,11 +445,13 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "\"Core.S32.$sub(Core.S32)\"", actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "\"Core.S32.$add(Core.S32)\"", actualString: llvmIr);
-        Assert.DoesNotContain(expectedSubstring: "declare void @Core.S32.$sub",
+        Assert.Contains(expectedSubstring: "\"[crashable, member, wired] Core.S32.sub(you: Core.S32)\"",
             actualString: llvmIr);
-        Assert.DoesNotContain(expectedSubstring: "declare void @Core.S32.$add",
+        Assert.Contains(expectedSubstring: "\"[crashable, member, wired] Core.S32.add(you: Core.S32)\"",
+            actualString: llvmIr);
+        Assert.DoesNotContain(expectedSubstring: "declare void @\"[crashable, member, wired] Core.S32.sub",
+            actualString: llvmIr);
+        Assert.DoesNotContain(expectedSubstring: "declare void @\"[crashable, member, wired] Core.S32.add",
             actualString: llvmIr);
     }
 
@@ -510,7 +514,7 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define void @\"Collections.BitList.add_last(",
+        Assert.Contains(expectedSubstring: "define void @\"[member] Collections.BitList.add_last(",
             actualString: llvmIr);
     }
 
@@ -546,7 +550,7 @@ public class CompilerPipelineLoweringTests
         Assert.DoesNotContain(expectedSubstring: "call i64 @rf_allocate_dynamic_uninit({ i64 }",
             actualString: llvmIr);
         Assert.DoesNotContain(
-            expectedSubstring: "call i64 @rf_allocate_dynamic_uninit(%Record.ByteSize",
+            expectedSubstring: "call i64 @rf_allocate_dynamic_uninit(%Record.Core.ByteSize",
             actualString: llvmIr);
     }
 
@@ -605,7 +609,7 @@ public class CompilerPipelineLoweringTests
 
         string llvmIr = generator.Generate();
         string body = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define [8 x i8] @Core.U64.to_bytes_le");
+            functionMarker: "define [8 x i8] @\"[member] Core.U64.to_bytes_le");
         Assert.Contains(expectedSubstring: "alloca [8 x i8]", actualString: body);
         Assert.DoesNotContain(expectedSubstring: "[i64 x i8]", actualString: llvmIr);
     }
@@ -637,12 +641,12 @@ public class CompilerPipelineLoweringTests
 
         string llvmIr = generator.Generate();
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define %\"Record.Maybe[Core.U8]\" @Collections.BitList.try_to_u8");
-        Assert.Contains(expectedSubstring: "call i64 @\"Core.Hijacked[Core.U64].extract\"",
+            functionMarker: "define %\"Record.Core.Maybe[Core.U8]\" @\"[member] Collections.BitList.try_to_u8");
+        Assert.Contains(expectedSubstring: "call i64 @\"[dangerous, member] Core.Hijacked[Core.U64].peek()\"",
             actualString: tryToU8Body);
-        Assert.DoesNotContain(expectedSubstring: "@\"Core.Hijacked[Core.Bytes].extract\"",
+        Assert.DoesNotContain(expectedSubstring: "@\"[dangerous, member] Core.Hijacked[Core.Bytes].peek()\"",
             actualString: tryToU8Body);
-        Assert.DoesNotContain(expectedSubstring: "@Core.Bytes.$bitand", actualString: tryToU8Body);
+        Assert.DoesNotContain(expectedSubstring: "Core.Bytes.bitand", actualString: tryToU8Body);
     }
 
     /// <summary>
@@ -691,8 +695,8 @@ public class CompilerPipelineLoweringTests
             IsSynthesized = true
         });
 
-        Assert.Equal(expected: "\"Core.S64.try_create(Core.S8)\"", actual: fromS8);
-        Assert.Equal(expected: "\"Core.S64.try_create(Core.Text)\"", actual: fromText);
+        Assert.Equal(expected: "\"[member] Core.S64.try_create(from: Core.S8)\"", actual: fromS8);
+        Assert.Equal(expected: "\"[member] Core.S64.try_create(from_text: Core.Text)\"", actual: fromText);
         Assert.NotEqual(expected: fromS8, actual: fromText);
     }
 
@@ -754,7 +758,7 @@ public class CompilerPipelineLoweringTests
         Assert.DoesNotContain(expectedSubstring: "call ptr @Core.hijacked_from(",
             actualString: llvmIr);
         Assert.Contains(
-            expectedSubstring: "define ptr @\"Core.hijacked_from(S64)(Core.Address)\"(i64 %addr)",
+            expectedSubstring: "define ptr @\"[independent] Core.hijacked_from(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
     }
 
@@ -768,7 +772,7 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> ?T
+                        routine Box[T].peek() -> T
                           return me.value
 
                         routine make_box() -> Box[S32]
@@ -791,8 +795,8 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define i32 @test()", actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "@\"Box[Core.S32].peek\"", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "define i32 @\"[independent] test()\"", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "@\"[member] Box[Core.S32].peek()\"", actualString: llvmIr);
     }
 
     /// <summary>
@@ -803,7 +807,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         dangerous routine test(ptr: Hijacked[S64]) -> S64
-                          return ptr.extract()
+                          return ptr.peek()
                         """;
 
         Program program = Parse(source: source);
@@ -819,9 +823,9 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define i64 @\"test(Core.Hijacked[Core.S64])\"(ptr %ptr)",
+        Assert.Contains(expectedSubstring: "define i64 @\"[dangerous, independent] test(ptr: Core.Hijacked[Core.S64])\"(ptr %ptr)",
             actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "@\"Core.Hijacked[Core.S64].extract\"",
+        Assert.Contains(expectedSubstring: "@\"[dangerous, member] Core.Hijacked[Core.S64].peek()\"",
             actualString: llvmIr);
     }
 
@@ -852,9 +856,9 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define i32 @\"test(Core.Text)\"(", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "define i32 @\"[independent] test(text: Core.Text)\"(", actualString: llvmIr);
         Assert.Contains(expectedSubstring: "trunc i64", actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "call i32 @\"helper(Core.S32)\"(i32 ", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "call i32 @\"[independent] helper(value: Core.S32)\"(i32 ", actualString: llvmIr);
     }
 
     /// <summary>
@@ -876,9 +880,9 @@ public class CompilerPipelineLoweringTests
 
         var matchingBodies = result.SynthesizedBodies
                                    .Where(pair =>
-                                        pair.Key.Contains("BytesUtf8Iterator.try_next",
+                                        pair.Key.Contains("BytesUtf8Emittable.try_emit",
                                             StringComparison.Ordinal) ||
-                                        pair.Key.Contains("BytesUtf8Iterator.lookup_next",
+                                        pair.Key.Contains("BytesUtf8Emittable.lookup_emit",
                                             StringComparison.Ordinal))
                                    .ToList();
 
@@ -958,11 +962,11 @@ public class CompilerPipelineLoweringTests
         string warnings = errorWriter.ToString();
         Assert.DoesNotContain(
             expectedSubstring:
-            "Warning: Synthesized codegen failed for 'Core.BytesUtf8Iterator.try_next'",
+            "Warning: Synthesized codegen failed for 'Core.BytesUtf8Emittable.try_emit'",
             actualString: warnings);
         Assert.DoesNotContain(
             expectedSubstring:
-            "Warning: Synthesized codegen failed for 'Core.BytesUtf8Iterator.lookup_next'",
+            "Warning: Synthesized codegen failed for 'Core.BytesUtf8Emittable.lookup_emit'",
             actualString: warnings);
     }
 
@@ -1148,7 +1152,7 @@ public class CompilerPipelineLoweringTests
                         needs N is Address
                           data: T
 
-                        routine Buffer[T, N].first() -> ?T
+                        routine Buffer[T, N].first() -> T
                           return me.data
 
                         routine start(buf: Buffer[U8, WIDTH]) -> U8
@@ -1181,7 +1185,7 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define i8 @\"start(", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "define i8 @\"[independent] start(", actualString: llvmIr);
     }
 
     /// <summary>
@@ -1214,7 +1218,7 @@ public class CompilerPipelineLoweringTests
         // S64.data_size() must fold against the SEMANTIC receiver (S64 -> 8 bytes) at
         // the call site rather than emitting a data_size call.
         string startBody = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define i64 @start()");
+            functionMarker: "define i64 @\"[independent] start()\"");
         Assert.Contains(expectedSubstring: "ret i64 8", actualString: startBody);
         Assert.DoesNotContain(expectedSubstring: "call i64 @Core.S64.data_size",
             actualString: startBody);
@@ -1247,10 +1251,10 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define ptr @\"wrap_addr(S64)(Core.Address)\"(i64 %addr)",
+        Assert.Contains(expectedSubstring: "define ptr @\"[dangerous, independent] wrap_addr(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
         Assert.Contains(
-            expectedSubstring: "define ptr @\"Core.hijacked_from(S64)(Core.Address)\"(i64 %addr)",
+            expectedSubstring: "define ptr @\"[independent] Core.hijacked_from(S64)(addr: Core.Address)\"(i64 %addr)",
             actualString: llvmIr);
     }
 
@@ -1670,7 +1674,7 @@ public class CompilerPipelineLoweringTests
 
     /// <summary>
     /// Yields every expression node reachable from <paramref name="statement"/>, including
-    /// nodes inside <c>danger!</c> blocks, loops, and variant-return wrappers that the
+    /// nodes inside <c>danger</c> blocks, loops, and variant-return wrappers that the
     /// narrower <see cref="FindCalls(Statement)"/> walker does not traverse.
     /// </summary>
     private static IEnumerable<Expression> EnumerateExpressions(Statement statement)

@@ -17,17 +17,17 @@ namespace Compiler.Postprocessing.Passes;
 /// <para>Transformations:</para>
 /// <list type="bullet">
 ///   <item><see cref="IndexExpression"/> (<c>obj[i]</c>) ??
-///         <c>obj.$getitem!(i)</c> -> failable method call.</item>
+///         <c>obj.getitem!(i)</c> -> failable method call.</item>
 ///   <item><see cref="GenericMemberExpression"/> (<c>obj.field[i]</c>, parser quirk) ??
 ///         <c>MemberExpression(obj, field)</c> + <c>IndexExpression</c> ??<c>$getitem!</c>.</item>
 ///   <item><see cref="BinaryExpression"/> with an overloadable operator ??
-///         <c>left.$method(you: right)</c>. Membership operators reverse operands:
-///         <c>x in coll</c> ??<c>coll.$contains(x)</c>.</item>
+///         <c>left.method(you: right)</c>. Membership operators reverse operands:
+///         <c>x in coll</c> ??<c>coll.contains(x)</c>.</item>
 ///   <item><see cref="UnaryExpression"/> with <c>!!</c> (<see cref="UnaryOperator.ForceUnwrap"/>) ??
-///         <c>operand.$unwrap()</c> -> always lowered, even in stdlib bodies (which bypass
+///         <c>operand.unwrap()</c> -> always lowered, even in stdlib bodies (which bypass
 ///         <see cref="ExpressionLoweringPass"/>).</item>
 ///   <item><see cref="UnaryExpression"/> with a wired method (<c>-</c>, <c>~</c>) ??
-///         <c>operand.$neg()</c> / <c>operand.$bitnot()</c> when the method is resolved.</item>
+///         <c>operand.neg()</c> / <c>operand.bitnot()</c> when the method is resolved.</item>
 /// </list>
 ///
 /// <para>Only the <em>value</em> side of <see cref="AssignmentStatement"/> is lowered.
@@ -163,8 +163,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             {
                 Expression res = LowerExpression(u.Resource);
                 Statement body = LowerStatement(u.Body);
-                bool changed = !ReferenceEquals(res, u.Resource) || !ReferenceEquals(body, u.Body);
-                return changed ? u with { Resource = res, Body = body } : stmt;
+                Statement? fb = u.FallbackBody != null ? LowerStatement(u.FallbackBody) : null;
+                bool changed = !ReferenceEquals(res, u.Resource) || !ReferenceEquals(body, u.Body)
+                               || !ReferenceEquals(fb, u.FallbackBody);
+                return changed ? u with { Resource = res, Body = body, FallbackBody = fb } : stmt;
             }
 
             case DangerStatement d:
@@ -277,14 +279,14 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 // Resolve $setitem with method-level generic monomorphization (parallel to the
                 // $getitem! lowering path). Non-generic owners with method-level generics (e.g.
-                // BitList.$setitem![I]) need the resolved routine stashed so codegen can dispatch
+                // BitList.setitem![I]) need the resolved routine stashed so codegen can dispatch
                 // to the monomorphized entry rather than hitting ResolveMethod's generic-def guard.
                 RoutineInfo? resolvedSetItem = null;
                 TypeInfo? targetType = obj.ResolvedType ?? idx.Object.ResolvedType;
                 if (targetType != null)
                 {
                     resolvedSetItem =
-                        ctx.Registry.LookupMethod(type: targetType, methodName: "$setitem");
+                        ctx.Registry.LookupMethod(type: targetType, methodName: "setitem");
                     if (resolvedSetItem != null)
                     {
                         var argTypes = new List<TypeInfo>();
@@ -317,7 +319,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     {
         switch (expr)
         {
-            // IndexExpression -> obj.$getitem!(idx)
+            // IndexExpression -> obj.getitem!(idx)
             case IndexExpression idx:
             {
                 // Typewise type-receiver: `NumericSumAdd[T].method()` parses as
@@ -331,7 +333,6 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     RecordTypeInfo { GenericDefinition: { } d } => d.Name,
                     EntityTypeInfo { GenericDefinition: { } d } => d.Name,
                     ProtocolTypeInfo { GenericDefinition: { } d } => d.Name,
-                    VariantTypeInfo { GenericDefinition: { } d } => d.Name,
                     _ => null
                 };
                 if (idx is { Object: IdentifierExpression typeObjId, ResolvedType: { IsGenericResolution: true } resolvedTy } &&
@@ -352,7 +353,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // Failability is a property, not part of the name — the property name is always
                 // the bare `$getitem`; codegen dispatches via ResolvedRoutine (which carries
                 // IsFailable). Resolve the method to set ResolvedRoutine / lowering kind.
-                const string propertyName = "$getitem";
+                const string propertyName = "getitem";
                 RoutineInfo? resolvedGetItem = null;
                 TypeInfo? targetType = idx.Object.ResolvedType;
 
@@ -374,9 +375,9 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     // Pick the `$getitem` overload by the (now forward U64) index argument type.
                     resolvedGetItem = indexType != null
                         ? ctx.Registry.LookupMethodOverload(type: targetType,
-                              methodName: "$getitem", argTypes: [indexType])
-                          ?? ctx.Registry.LookupMethod(type: targetType, methodName: "$getitem")
-                        : ctx.Registry.LookupMethod(type: targetType, methodName: "$getitem");
+                              methodName: "getitem", argTypes: [indexType])
+                          ?? ctx.Registry.LookupMethod(type: targetType, methodName: "getitem")
+                        : ctx.Registry.LookupMethod(type: targetType, methodName: "getitem");
                     if (resolvedGetItem != null && indexType != null)
                     {
                         resolvedGetItem = ResolveMethodGenericRoutine(routine: resolvedGetItem,
@@ -391,7 +392,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         : CallLoweringKind.Unknown;
                 var member = new MemberExpression(
                     Object: loweredObj,
-                    PropertyName: propertyName,
+                    MemberName: propertyName,
                     Location: idx.Location);
                 return new CallExpression(
                     Callee: member,
@@ -417,7 +418,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression loweredObj = LowerExpression(gme.Object);
                 var memberExpr = new MemberExpression(
                     Object: loweredObj,
-                    PropertyName: gme.MemberName,
+                    MemberName: gme.MemberName,
                     Location: gme.Location)
                 {
                     ResolvedType = gme.ResolvedType
@@ -465,7 +466,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     ? expr
                     : new MemberExpression(
                         Object: loweredObj,
-                        PropertyName: gme.MemberName,
+                        MemberName: gme.MemberName,
                         Location: gme.Location)
                     {
                         ResolvedType = gme.ResolvedType
@@ -514,7 +515,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return LowerExpression(result);
             }
 
-            //  BinaryExpression -> receiver.$method(you: arg)
+            //  BinaryExpression -> receiver.method(you: arg)
             // Operators with GetMethodName() == null (And, Or, Is, Identical, But, ...)
             // are not overloadable and stay as BinaryExpression for codegen.
 
@@ -549,14 +550,14 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression left = LowerExpression(bin.Left);
                 Expression right = LowerExpression(bin.Right);
 
-                // Membership operators reverse receiver/argument: x in coll -> coll.$contains(x)
+                // Membership operators reverse receiver/argument: x in coll -> coll.contains(x)
                 bool isReversed = bin.Operator is BinaryOperator.In or BinaryOperator.NotIn;
                 Expression receiver = isReversed ? right : left;
                 Expression argument = isReversed ? left : right;
 
                 // Look up the exact overload (by arg type) to get failable suffix, param name, and
-                // ResolvedRoutine. LookupMethodOverload disambiguates e.g. Moment.$sub(Moment)->Duration
-                // from Moment.$sub(Duration)->Moment. Setting ResolvedRoutine tells codegen which
+                // ResolvedRoutine. LookupMethodOverload disambiguates e.g. Moment.sub(Moment)->Duration
+                // from Moment.sub(Duration)->Moment. Setting ResolvedRoutine tells codegen which
                 // overload to call without performing its own (potentially ambiguous) lookup.
                 TypeInfo? receiverType = receiver.ResolvedType;
                 TypeInfo? argType = argument.ResolvedType;
@@ -569,18 +570,17 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         : ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
                     resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
                         methodName: methodName);
-                    // If the non-failable form doesn't exist, try the failable form ($sub -> $sub!).
-                    // Types like U64 only define $sub! (underflow would be undefined behaviour).
-                    // Methods are stored under their full name including '!' (e.g. "$sub!").
-                    if (resolvedMethod == null && !methodName.EndsWith('!'))
+                    // If the non-failable form doesn't exist, try the failable form (sub -> sub!).
+                    // Types like U64 only define sub! (underflow would be undefined behavior).
+                    // The name is BARE; failability is structural — retry with isFailable: true.
+                    if (resolvedMethod == null)
                     {
-                        string failableName = methodName + "!";
                         resolvedMethod = argType != null
                             ? ctx.Registry.LookupMethodOverload(type: receiverType,
-                                methodName: failableName, argTypes: [argType])
+                                methodName: methodName, argTypes: [argType])
                             : null;
                         resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
-                            methodName: failableName);
+                            methodName: methodName, isFailable: true);
                     }
                 }
 
@@ -629,7 +629,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // Skip method-call lowering so the BinaryExpression stays and codegen emits the
                 // instruction directly, avoiding infinite recursion in the generated $eq/$ne body.
                 if (receiverType is FlagsTypeInfo
-                    && methodName is "$bitand" or "$bitor" or "$bitxor" or "$eq" or "$ne")
+                    && methodName is "bitand" or "bitor" or "bitxor" or "eq" or "ne")
                 {
                     return ReferenceEquals(left, bin.Left) && ReferenceEquals(right, bin.Right)
                         ? expr
@@ -643,17 +643,17 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // (e.g., stdlib bodies where ResolvedType is null).  When ResolvedRoutine is null,
                 // codegen's EmitMethodCall resolves the method at emission time using the receiver's
                 // LLVM-inferred type; it will also retry with isFailable:null to find $add! etc.
-                string callName = resolvedMethod != null
-                    ? (resolvedMethod.IsFailable ? methodName + "!" : methodName)
-                    : methodName;   // no suffix when method unknown -> EmitMethodCall will find it
+                // Failability is structural on the callee — no `!` in the name. When the method is
+                // unknown, IsFailable stays false and codegen's EmitMethodCall retries either form.
+                bool binFailable = resolvedMethod?.IsFailable ?? false;
                 string paramName = resolvedMethod?.Parameters.Count > 0
                     ? resolvedMethod.Parameters[0].Name
                     : "you";
 
                 var binCallee = new MemberExpression(
                     Object: receiver,
-                    PropertyName: callName,
-                    Location: bin.Location);
+                    MemberName: methodName,
+                    Location: bin.Location) { IsFailable = binFailable };
 
                 CallLoweringKind lk = resolvedMethod != null
                     ? ClassifyMethod(resolvedMethod)
@@ -667,7 +667,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 { ResolvedType = bin.ResolvedType, ResolvedRoutine = resolvedMethod, LoweringKind = lk };
             }
 
-            //  ForceUnwrap (!!) -> operand.$unwrap()
+            //  ForceUnwrap (!!) -> operand.unwrap()
             // Always lower to a CallExpression -> never fall back to UnaryExpression.
             // This runs for both user code (where ExpressionLoweringPass has already
             // run but no longer handles ForceUnwrap) and stdlib bodies (which bypass
@@ -679,7 +679,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression operand = LowerExpression(forceUnwrap.Operand);
                 TypeInfo? operandType = operand.ResolvedType;
                 RoutineInfo? unwrapMethod = operandType != null
-                    ? ctx.Registry.LookupMethod(type: operandType, methodName: "$unwrap")
+                    ? ctx.Registry.LookupMethod(type: operandType, methodName: "unwrap")
                     : null;
                 CallLoweringKind unwrapKind = unwrapMethod != null
                     ? ClassifyMethod(unwrapMethod)
@@ -689,7 +689,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return new CallExpression(
                     Callee: new MemberExpression(
                         Object: operand,
-                        PropertyName: "$unwrap",
+                        MemberName: "unwrap",
                         Location: forceUnwrap.Location),
                     Arguments: [],
                     Location: forceUnwrap.Location)
@@ -700,7 +700,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 };
             }
 
-            //  UnaryExpression -> operand.$method()
+            //  UnaryExpression -> operand.method()
             // Not, Steal -> no wired method, stay as UnaryExpression.
 
             case UnaryExpression unary:
@@ -720,7 +720,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // Flags types have no $bitnot method body -> codegen handles it via EmitBitwiseNot.
                 // Skip method-call lowering so the UnaryExpression passes through unchanged.
                 if (operandType is FlagsTypeInfo
-                    && methodName == "$bitnot")
+                    && methodName == "bitnot")
                 {
                     return ReferenceEquals(operand, unary.Operand)
                         ? expr
@@ -738,14 +738,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 // Always lower to a method call -> even when method isn't resolved
                 // (e.g., stdlib bodies with no ResolvedType on operands).
-                string callName = resolvedUnaryMethod != null
-                    ? (resolvedUnaryMethod.IsFailable ? methodName + "!" : methodName)
-                    : methodName;
+                // Failability is structural on the callee — no `!` in the name.
+                bool unaryFailable = resolvedUnaryMethod?.IsFailable ?? false;
 
                 var unaryCallee = new MemberExpression(
                     Object: operand,
-                    PropertyName: callName,
-                    Location: unary.Location);
+                    MemberName: methodName,
+                    Location: unary.Location) { IsFailable = unaryFailable };
 
                 CallLoweringKind unaryKind = resolvedUnaryMethod != null
                     ? ClassifyMethod(resolvedUnaryMethod)
@@ -1078,9 +1077,9 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         TypeInfo targetType, SourceLocation location)
     {
         // receiver.count() -> U64
-        RoutineInfo? countRoutine = ctx.Registry.LookupMethod(type: targetType, methodName: "count");
+        RoutineInfo? countRoutine = ctx.Registry.LookupMethod(type: targetType, methodName: Resolution.RuntimeContract.Collection.Count);
         var countCall = new CallExpression(
-            Callee: new MemberExpression(Object: loweredObj, PropertyName: "count",
+            Callee: new MemberExpression(Object: loweredObj, MemberName: Resolution.RuntimeContract.Collection.Count,
                 Location: location),
             Arguments: [],
             Location: location)
@@ -1095,10 +1094,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         // backIndex.resolve!(count) -> U64 (failable: throws IndexOutOfBoundsError on overshoot)
         TypeInfo? backIndexType = backIndex.ResolvedType;
         RoutineInfo? resolveRoutine = backIndexType != null
-            ? ctx.Registry.LookupMethod(type: backIndexType, methodName: "resolve", isFailable: true)
+            ? ctx.Registry.LookupMethod(type: backIndexType, methodName: Resolution.RuntimeContract.Resolve, isFailable: true)
             : null;
         return new CallExpression(
-            Callee: new MemberExpression(Object: backIndex, PropertyName: "resolve",
+            Callee: new MemberExpression(Object: backIndex, MemberName: Resolution.RuntimeContract.Resolve,
                 Location: location),
             Arguments: [countCall],
             Location: location)

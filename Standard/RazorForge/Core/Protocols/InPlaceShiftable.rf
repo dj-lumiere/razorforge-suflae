@@ -9,23 +9,23 @@ protocol InPlaceShiftable
   ### :note: Arithmetic shift semantics follow the conforming type's signed
   ### behavior.
   @writable
-  routine Me.$iashl(amount: Integral)
+  routine Me.iashl(amount: Integral)
 
   ### Applies arithmetic right shift in place.
   ### :param amount: The shift amount.
   ### :note: Arithmetic right shift preserves sign semantics where applicable.
   @writable
-  routine Me.$iashr(amount: Integral)
+  routine Me.iashr(amount: Integral)
 
   ### Applies logical left shift in place.
   ### :param amount: The shift amount.
   ### :note: Logical shifts operate on the raw bit pattern rather than signed
   ### interpretation.
   @writable
-  routine Me.$ilshl(amount: Integral)
+  routine Me.ilshl(amount: Integral)
 
   ### Applies logical right shift in place.
   ### :param amount: The shift amount.
   ### :note: Logical right shift fills vacated high bits with zero.
   @writable
-  routine Me.$ilshr(amount: Integral)
+  routine Me.ilshr(amount: Integral)

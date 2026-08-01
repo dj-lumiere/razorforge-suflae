@@ -407,8 +407,12 @@ public enum TokenType
     /// <summary>Return statement keyword</summary>
     Return,
 
-    /// <summary>Throw statement keyword - crashes with error</summary>
+    /// <summary>Throw statement keyword - recoverable failure (generates try_/check_/lookup_ variants)</summary>
     Throw,
+
+    /// <summary>Pierce statement keyword - fatal, uncatchable crash (no variants, no `!`); pierces
+    /// through every handler. The crash counterpart to the recoverable `throw`.</summary>
+    Pierce,
 
     /// <summary>Absent statement keyword - indicates value not found (triggers Lookup generation)</summary>
     Absent,
@@ -442,7 +446,7 @@ public enum TokenType
     /// <summary>No-operation pass keyword - placeholder for empty blocks</summary>
     Pass,
 
-    /// <summary>Danger mode keyword for unsafe operations (danger! { ... })</summary>
+    /// <summary>Danger mode keyword for unsafe operations (danger { ... })</summary>
     Danger,
 
     /// <summary>With clause keyword for record copying with modifications (a with .x: 42)</summary>
@@ -500,14 +504,6 @@ public enum TokenType
 
     /// <summary>Logical NOT operator keyword</summary>
     Not,
-
-    /// <summary>
-    /// Flags exact match keyword.
-    /// Tests that only the specified flags are set — no more, no less.
-    /// 'isonly A and B' builds to equality check (value == mask) vs
-    /// 'is A and B' which is a superset check ((value &amp; mask) == mask).
-    /// </summary>
-    IsOnly,
 
     /// <summary>
     /// Flags removal / exclusion keyword.
@@ -752,6 +748,10 @@ public enum TokenType
 
     /// <summary>Crashable routine suffix (!)</summary>
     Bang,
+
+    /// <summary>Wired member-routine marker prefix ($) — e.g. $create, $store. Structural: the
+    /// parser records it as RoutineInfo.IsWiredMemberRoutine and keeps the name bare.</summary>
+    Dollar,
 
     /// <summary>Force unwrap operator (!!)</summary>
     BangBang,

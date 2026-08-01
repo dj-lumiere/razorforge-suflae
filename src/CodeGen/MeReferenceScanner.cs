@@ -79,6 +79,9 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
         node.Object.Accept(visitor: this) || Any(xs: node.Arguments);
     public bool VisitGenericMemberExpression(GenericMemberExpression node) =>
         node.Object.Accept(visitor: this);
+    public bool VisitBracketAccessExpression(BracketAccessExpression node) =>
+        throw new System.InvalidOperationException(
+            "BracketAccessExpression must be lowered by BracketReclassifyPass before analysis.");
     public bool VisitCarrierPayloadExpression(CarrierPayloadExpression node) =>
         node.Carrier.Accept(visitor: this);
     public bool VisitIsPatternExpression(IsPatternExpression node) =>
@@ -137,7 +140,8 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
             ScanPattern(pattern: c.Pattern) || c.Body.Accept(visitor: this));
     public bool VisitDangerStatement(DangerStatement node) => node.Body.Accept(visitor: this);
     public bool VisitUsingStatement(UsingStatement node) =>
-        node.Resource.Accept(visitor: this) || node.Body.Accept(visitor: this);
+        node.Resource.Accept(visitor: this) || node.Body.Accept(visitor: this) ||
+        node.FallbackBody?.Accept(visitor: this) == true;
     public bool VisitDiscardStatement(DiscardStatement node) =>
         node.Expression.Accept(visitor: this);
 

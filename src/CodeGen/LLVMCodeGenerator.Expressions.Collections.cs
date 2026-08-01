@@ -20,7 +20,7 @@ public partial class LlvmCodeGenerator
     private static TypeInfo UnwrapCollectionStorageType(TypeInfo type)
     {
         TypeInfo current = type;
-        while (current is WrapperTypeInfo { Name: "Owned" } wrapper)
+        while (current is WrapperTypeInfo { Name: Resolution.RuntimeContract.Owned } wrapper)
         {
             current = wrapper.InnerType;
         }
@@ -73,7 +73,7 @@ public partial class LlvmCodeGenerator
         TypeInfo t = paramType;
         while (t is WrapperTypeInfo wrapper)
         {
-            if (wrapper.Name == "Owned") { t = wrapper.InnerType; continue; }
+            if (wrapper.Name == Resolution.RuntimeContract.Owned) { t = wrapper.InnerType; continue; }
             return false;
         }
         string baseName = GetGenericBaseName(type: t) ?? t.Name;
@@ -187,7 +187,9 @@ public partial class LlvmCodeGenerator
         string addMemberRoutineName;
         bool isMapType = baseName is "Dict" or "SortedDict" or "SecureDict";
         bool isSequenceType = baseName is "List" or "Deque" or "BitList";
-        addMemberRoutineName = isSequenceType ? "add_last" : "add";
+        addMemberRoutineName = isSequenceType
+            ? Resolution.RuntimeContract.Collection.AddLast
+            : Resolution.RuntimeContract.Collection.Add;
 
         ResolvedMemberRoutine? resolvedAdd = ResolveMemberRoutine(receiverType: resolvedType, methodName: addMemberRoutineName);
         if (resolvedAdd == null) return collectionPtr;
@@ -308,14 +310,14 @@ public partial class LlvmCodeGenerator
 
         ResolvedMemberRoutine? resolved = resolvedType.IsGenericResolution
             ? null
-            : ResolveMemberRoutine(receiverType: resolvedType, methodName: "$create");
+            : ResolveMemberRoutine(receiverType: resolvedType, methodName: "create");
 
         if (resolved is { Routine.Parameters.Count: > 0 })
             resolved = null;
 
         if (resolved == null)
         {
-            string createName = $"{resolvedType.FullName}.$create";
+            string createName = $"{resolvedType.FullName}.create";
             RoutineInfo? creator =
                 _registry.LookupRoutineOverload(baseName: createName, argTypes: new List<TypeInfo>());
             if (creator is { Parameters.Count: > 0 })
@@ -331,7 +333,7 @@ public partial class LlvmCodeGenerator
                 };
                 if (genericDef != null)
                 {
-                    string genCreateName = $"{RoutineInfo.GetTypeIdentity(type: genericDef)}.$create";
+                    string genCreateName = $"{RoutineInfo.GetTypeIdentity(type: genericDef)}.create";
                     creator = _registry.LookupRoutineOverload(baseName: genCreateName,
                         argTypes: new List<TypeInfo>());
                     creator ??= _registry.LookupRoutine(fullName: genCreateName);
@@ -342,11 +344,14 @@ public partial class LlvmCodeGenerator
 
             if (creator != null)
             {
-                string funcName;
-                if (resolvedType.IsGenericResolution)
-                    funcName = Q(name: $"{resolvedType.FullName}.$create");
-                else
-                    funcName = MangleRoutineName(routine: creator);
+                // Mangle through MangleRoutineName so the call symbol matches the decorated define
+                // ([member, wired] Module.Type.create(...)). For a generic resolution the looked-up
+                // `creator` is keyed on the generic-def owner (List[T]); substitute the concrete owner
+                // (List[S64]) first so the symbol is the concrete one the GMP define emits.
+                RoutineInfo mangleCreator = resolvedType.IsGenericResolution
+                    ? _registry.SubstituteMethodForOwner(method: creator, resolvedOwner: resolvedType) ?? creator
+                    : creator;
+                string funcName = MangleRoutineName(routine: mangleCreator);
 
                 if (!_generatedRoutines.Contains(item: funcName))
                     GenerateRoutineDeclaration(routine: creator, nameOverride: funcName);

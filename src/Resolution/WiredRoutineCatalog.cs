@@ -7,7 +7,7 @@ namespace Compiler.Resolution;
 /// The views (consumer lists) a wired-routine concept can participate in. Each historical
 /// hard-coded list becomes a projection of <see cref="WiredRoutineCatalog"/> filtered by one flag.
 /// </summary>
-[System.Flags]
+[Flags]
 public enum WiredView
 {
     /// <summary>The zero value; no views selected.</summary>
@@ -55,7 +55,7 @@ public enum WiredKind
     Unwrap,
     /// <summary>Container membership ($contains, $notcontains).</summary>
     Container,
-    /// <summary>Iteration protocol ($iter, $next).</summary>
+    /// <summary>Iteration protocol ($iter, $emit).</summary>
     Iteration,
     /// <summary>Indexing protocol ($getitem, $setitem).</summary>
     Indexing,
@@ -67,7 +67,7 @@ public enum WiredKind
     Display,
     /// <summary>Hash computation ($hash, $fast_hash).</summary>
     Hash,
-    /// <summary>Value copy ($copy).</summary>
+    /// <summary>Value copy ($store).</summary>
     Copy,
     /// <summary>In-place arithmetic assignment ($iadd, $isub, etc.).</summary>
     InPlaceArithmetic,
@@ -89,7 +89,7 @@ public sealed class WiredEntry
 
     /// <summary>The protocols that materialise this routine. <c>[0]</c> is the primary/canonical
     /// protocol used by capability gating; the full list is the <see cref="WiredView.ProtocolDecl"/>
-    /// requirement set. Empty when the routine is not protocol-bound (e.g. <c>$copy</c> is keyed on
+    /// requirement set. Empty when the routine is not protocol-bound (e.g. <c>$store</c> is keyed on
     /// Assignable for capability but not declared via a protocol-operator).</summary>
     public IReadOnlyList<string> Protocols { get; init; } = [];
 
@@ -99,11 +99,11 @@ public sealed class WiredEntry
     public string? CapabilityWiredOverride { get; init; }
 
     /// <summary>True for routines that must be emitted for every live owner regardless of call-site
-    /// reachability — the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$copy</c>).</summary>
+    /// reachability — the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$store</c>).</summary>
     public bool AlwaysLive { get; init; }
 
     /// <summary>True when this routine carries the failable `!` marker. Failability is a PROPERTY —
-    /// the `!` is never part of the name, key, or symbol (see <c>$getitem</c>/<c>$setitem</c>/<c>$next</c>).
+    /// the `!` is never part of the name, key, or symbol (see <c>$getitem</c>/<c>$setitem</c>/<c>$emit</c>).
     /// Lookups resolve by the bare name and compare this property; they never key on a banged string.</summary>
     public bool Failable { get; init; }
 
@@ -132,108 +132,116 @@ public static class WiredRoutineCatalog
     private static WiredEntry[] BuildAll() =>
     [
         // ---- Creator / context / lifecycle (declarable, not protocol-bound) ----
-        new() { Name = "$create",  Kind = WiredKind.Creator, Views = Known },
+        new() { Name = "create",  Kind = WiredKind.Creator, Views = Known },
         // Infallible literal constructor synthesized by LiteralLoweringPass for `n`/`dn`
-        // arbitrary-precision literals (Integer/Decimal.$from_literal(text:)). Declarable in
+        // arbitrary-precision literals (Integer/Decimal.from_literal(text:)). Declarable in
         // stdlib (Known) and seeded live so the synthesized calls keep their link symbols (Seed).
-        new() { Name = "$from_literal", Kind = WiredKind.Creator, Views = Known | Seed },
-        new() { Name = "$enter",   Kind = WiredKind.Context, Views = Known },
-        new() { Name = "$exit",    Kind = WiredKind.Context, Views = Known },
-        new() { Name = "$destroy", Kind = WiredKind.Lifecycle, Views = Known, AlwaysLive = true },
-        new() { Name = "$copy",    Kind = WiredKind.Copy, Views = Cap | Seed,
-                Protocols = ["Assignable"], AlwaysLive = true },
+        new() { Name = "from_literal", Kind = WiredKind.Creator, Views = Known | Seed },
+        new() { Name = "enter",   Kind = WiredKind.Context, Views = Known },
+        new() { Name = "exit",    Kind = WiredKind.Context, Views = Known },
+        new() { Name = "destroy", Kind = WiredKind.Lifecycle, Views = Known, AlwaysLive = true },
+        new() { Name = "store",    Kind = WiredKind.Copy, Views = Cap | Seed,
+                Protocols = ["Storable"], AlwaysLive = true },
+        // Deep `copy` (Copyable). Like `$store`, it is INJECTED during postprocessing (the record/
+        // collection/variant deep-copy point in RecordCopyLoweringPass) — after reachability has run —
+        // so it must be AlwaysLive to bypass the GMP reachability gate and Seed to be marked live per
+        // concrete owner. Cap gates it on `Copyable`: only owners whose element/arm types are copyable
+        // emit a body (e.g. Dict[Text, SerialValue].copy needs SerialValue copyable), so a
+        // Dict[Text, NonCopyable] correctly carries no `copy` symbol.
+        new() { Name = "copy",      Kind = WiredKind.Copy, Views = Cap | Seed,
+                Protocols = ["Copyable"], AlwaysLive = true },
 
         // ---- Display / hash ----
-        new() { Name = "$represent", Kind = WiredKind.Display, Views = Cap | Known | Seed, Protocols = ["Representable"] },
-        new() { Name = "$diagnose",  Kind = WiredKind.Display, Views = Cap | Known | Seed, Protocols = ["Diagnosable"] },
-        new() { Name = "$hash",      Kind = WiredKind.Hash,    Views = Cap | Known | Seed, Protocols = ["Hashable"] },
-        new() { Name = "$fast_hash", Kind = WiredKind.Hash,    Views = Cap,                Protocols = ["FastHashable"] },
+        new() { Name = "represent", Kind = WiredKind.Display, Views = Cap | Known | Seed, Protocols = ["Representable"] },
+        new() { Name = "diagnose",  Kind = WiredKind.Display, Views = Cap | Known | Seed, Protocols = ["Diagnosable"] },
+        new() { Name = "hash",      Kind = WiredKind.Hash,    Views = Cap | Known | Seed, Protocols = ["Hashable"] },
+        new() { Name = "fast_hash", Kind = WiredKind.Hash,    Views = Cap,                Protocols = ["FastHashable"] },
 
         // ---- Comparison ($cmp family shares the $cmp body; $ne shares $eq) ----
-        new() { Name = "$eq",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Equatable"] },
-        new() { Name = "$ne",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Equatable"], CapabilityWiredOverride = "$eq" },
-        new() { Name = "$cmp", Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"] },
-        new() { Name = "$lt",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"], CapabilityWiredOverride = "$cmp" },
-        new() { Name = "$le",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"], CapabilityWiredOverride = "$cmp" },
-        new() { Name = "$gt",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"], CapabilityWiredOverride = "$cmp" },
-        new() { Name = "$ge",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"], CapabilityWiredOverride = "$cmp" },
+        new() { Name = "eq",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Equatable"] },
+        new() { Name = "ne",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Equatable"], CapabilityWiredOverride = "eq" },
+        new() { Name = "cmp", Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"] },
+        new() { Name = "lt",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"], CapabilityWiredOverride = "cmp" },
+        new() { Name = "le",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"], CapabilityWiredOverride = "cmp" },
+        new() { Name = "gt",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"], CapabilityWiredOverride = "cmp" },
+        new() { Name = "ge",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"], CapabilityWiredOverride = "cmp" },
 
         // ---- Container / iteration / indexing ----
-        new() { Name = "$contains",    Kind = WiredKind.Container, Views = Cap | Known | Proto | Seed, Protocols = ["Container"], CapabilityWiredOverride = "$contains" },
-        new() { Name = "$notcontains", Kind = WiredKind.Container, Views = Cap | Known | Proto | Seed, Protocols = ["Container"], CapabilityWiredOverride = "$contains" },
-        new() { Name = "$iter",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterable"] },
-        new() { Name = "$next",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterator"], Failable = true },
-        new() { Name = "try_next",     Kind = WiredKind.Iteration, Views = Seed },
-        new() { Name = "$getitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], Failable = true },
-        new() { Name = "$setitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["MutableIndexable"], Failable = true },
+        new() { Name = "contains",    Kind = WiredKind.Container, Views = Cap | Known | Proto | Seed, Protocols = ["Container"], CapabilityWiredOverride = "contains" },
+        new() { Name = "notcontains", Kind = WiredKind.Container, Views = Cap | Known | Proto | Seed, Protocols = ["Container"], CapabilityWiredOverride = "contains" },
+        new() { Name = "iter",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterable"] },
+        new() { Name = "emit",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Emittable"], Failable = true },
+        new() { Name = "try_emit",     Kind = WiredKind.Iteration, Views = Seed },
+        new() { Name = "getitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], Failable = true },
+        new() { Name = "setitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["MutableIndexable"], Failable = true },
 
         // ---- Unwrap (Maybe / Result / Lookup) ----
-        new() { Name = "$unwrap",    Kind = WiredKind.Unwrap, Views = Known | Seed, Failable = true },
-        new() { Name = "$unwrap_or", Kind = WiredKind.Unwrap, Views = Known | Seed },
+        new() { Name = "unwrap",    Kind = WiredKind.Unwrap, Views = Known | Seed, Failable = true },
+        new() { Name = "unwrap_or", Kind = WiredKind.Unwrap, Views = Known | Seed },
 
         // ---- Arithmetic (standard) ----
-        new() { Name = "$add",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Addable", "DurationAddable"] },
-        new() { Name = "$sub",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Subtractable", "DurationSubtractable"] },
-        new() { Name = "$mul",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Multiplicable", "TextRepeatable", "Scalable"] },
-        new() { Name = "$truediv",  Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Divisible", "ScalarDivisible"] },
-        new() { Name = "$floordiv", Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["FloorDivisible", "ScalarFloorDivisible"] },
-        new() { Name = "$mod",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["FloorDivisible"], CapabilityWiredOverride = "$floordiv" },
-        new() { Name = "$pow",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Exponentiable"] },
-        new() { Name = "$neg",      Kind = WiredKind.Unary,      Views = Cap | Known | Proto | Seed, Protocols = ["Negatable"] },
+        new() { Name = "add",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Addable", "DurationAddable"] },
+        new() { Name = "sub",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Subtractable", "DurationSubtractable"] },
+        new() { Name = "mul",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Multiplicable", "TextRepeatable", "Scalable"] },
+        new() { Name = "truediv",  Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Divisible", "ScalarDivisible"] },
+        new() { Name = "floordiv", Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["FloorDivisible", "ScalarFloorDivisible"] },
+        new() { Name = "mod",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["FloorDivisible"], CapabilityWiredOverride = "floordiv" },
+        new() { Name = "pow",      Kind = WiredKind.Arithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["Exponentiable"] },
+        new() { Name = "neg",      Kind = WiredKind.Unary,      Views = Cap | Known | Proto | Seed, Protocols = ["Negatable"] },
 
         // ---- Arithmetic (wrapping) ----
-        new() { Name = "$add_wrap", Kind = WiredKind.ArithmeticWrap, Views = Cap | Known | Proto | Seed, Protocols = ["WrappingAddable"] },
-        new() { Name = "$sub_wrap", Kind = WiredKind.ArithmeticWrap, Views = Cap | Known | Proto | Seed, Protocols = ["WrappingSubtractable"] },
-        new() { Name = "$mul_wrap", Kind = WiredKind.ArithmeticWrap, Views = Cap | Known | Proto | Seed, Protocols = ["WrappingMultiplicable"] },
-        new() { Name = "$pow_wrap", Kind = WiredKind.ArithmeticWrap, Views = Cap | Known | Proto | Seed, Protocols = ["WrappingExponentiable"] },
+        new() { Name = "add_wrap", Kind = WiredKind.ArithmeticWrap, Views = Cap | Known | Proto | Seed, Protocols = ["WrappingAddable"] },
+        new() { Name = "sub_wrap", Kind = WiredKind.ArithmeticWrap, Views = Cap | Known | Proto | Seed, Protocols = ["WrappingSubtractable"] },
+        new() { Name = "mul_wrap", Kind = WiredKind.ArithmeticWrap, Views = Cap | Known | Proto | Seed, Protocols = ["WrappingMultiplicable"] },
+        new() { Name = "pow_wrap", Kind = WiredKind.ArithmeticWrap, Views = Cap | Known | Proto | Seed, Protocols = ["WrappingExponentiable"] },
 
         // ---- Arithmetic (clamping) ----
-        new() { Name = "$add_clamp",     Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingAddable"] },
-        new() { Name = "$sub_clamp",     Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingSubtractable"] },
-        new() { Name = "$mul_clamp",     Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingMultiplicable"] },
-        new() { Name = "$truediv_clamp", Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingDivisible"] },
-        new() { Name = "$pow_clamp",     Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingExponentiable"] },
+        new() { Name = "add_clamp",     Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingAddable"] },
+        new() { Name = "sub_clamp",     Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingSubtractable"] },
+        new() { Name = "mul_clamp",     Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingMultiplicable"] },
+        new() { Name = "truediv_clamp", Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingDivisible"] },
+        new() { Name = "pow_clamp",     Kind = WiredKind.ArithmeticClamp, Views = Cap | Known | Proto | Seed, Protocols = ["ClampingExponentiable"] },
 
         // ---- Arithmetic (unchecked) ----
-        new() { Name = "$add_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedAddable"] },
-        new() { Name = "$sub_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedSubtractable"] },
-        new() { Name = "$mul_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedMultiplicable"] },
-        new() { Name = "$truediv_unchecked",  Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedTrueDivisible"] },
-        new() { Name = "$floordiv_unchecked", Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedFloorDivisible"] },
-        new() { Name = "$mod_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedFloorDivisible"], CapabilityWiredOverride = "$floordiv_unchecked" },
-        new() { Name = "$pow_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedExponentiable"] },
+        new() { Name = "add_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedAddable"] },
+        new() { Name = "sub_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedSubtractable"] },
+        new() { Name = "mul_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedMultiplicable"] },
+        new() { Name = "truediv_unchecked",  Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedTrueDivisible"] },
+        new() { Name = "floordiv_unchecked", Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedFloorDivisible"] },
+        new() { Name = "mod_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedFloorDivisible"], CapabilityWiredOverride = "floordiv_unchecked" },
+        new() { Name = "pow_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedExponentiable"] },
 
         // ---- Bitwise (the $bitand body covers and/or/xor) ----
-        new() { Name = "$bitand", Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "$bitand" },
-        new() { Name = "$bitor",  Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "$bitand" },
-        new() { Name = "$bitxor", Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "$bitand" },
-        new() { Name = "$bitnot", Kind = WiredKind.Unary,   Views = Cap | Known | Proto | Seed, Protocols = ["Invertible"] },
+        new() { Name = "bitand", Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "bitand" },
+        new() { Name = "bitor",  Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "bitand" },
+        new() { Name = "bitxor", Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "bitand" },
+        new() { Name = "bitnot", Kind = WiredKind.Unary,   Views = Cap | Known | Proto | Seed, Protocols = ["Invertible"] },
 
         // ---- Shift (the $ashl body covers all four) ----
-        new() { Name = "$ashl", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "$ashl" },
-        new() { Name = "$ashr", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "$ashl" },
-        new() { Name = "$lshl", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "$ashl" },
-        new() { Name = "$lshr", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "$ashl" },
+        new() { Name = "ashl", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "ashl" },
+        new() { Name = "ashr", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "ashl" },
+        new() { Name = "lshl", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "ashl" },
+        new() { Name = "lshr", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "ashl" },
 
         // ---- In-place arithmetic ($imod shares $ifloordiv) ----
-        new() { Name = "$iadd",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceAddable"] },
-        new() { Name = "$isub",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceSubtractable"] },
-        new() { Name = "$imul",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceMultiplicable"] },
-        new() { Name = "$itruediv",  Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceDivisible"] },
-        new() { Name = "$ifloordiv", Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceFloorDivisible"] },
-        new() { Name = "$imod",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceFloorDivisible"], CapabilityWiredOverride = "$ifloordiv" },
-        new() { Name = "$ipow",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceExponentiable"] },
+        new() { Name = "iadd",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceAddable"] },
+        new() { Name = "isub",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceSubtractable"] },
+        new() { Name = "imul",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceMultiplicable"] },
+        new() { Name = "itruediv",  Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceDivisible"] },
+        new() { Name = "ifloordiv", Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceFloorDivisible"] },
+        new() { Name = "imod",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceFloorDivisible"], CapabilityWiredOverride = "ifloordiv" },
+        new() { Name = "ipow",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceExponentiable"] },
 
         // ---- In-place bitwise ($ibitor/$ibitxor share $ibitand) ----
-        new() { Name = "$ibitand", Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "$ibitand" },
-        new() { Name = "$ibitor",  Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "$ibitand" },
-        new() { Name = "$ibitxor", Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "$ibitand" },
+        new() { Name = "ibitand", Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "ibitand" },
+        new() { Name = "ibitor",  Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "ibitand" },
+        new() { Name = "ibitxor", Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "ibitand" },
 
         // ---- In-place shift ($iashr/$ilshl/$ilshr share $iashl) ----
-        new() { Name = "$iashl", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "$iashl" },
-        new() { Name = "$iashr", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "$iashl" },
-        new() { Name = "$ilshl", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "$iashl" },
-        new() { Name = "$ilshr", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "$iashl" },
+        new() { Name = "iashl", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "iashl" },
+        new() { Name = "iashr", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "iashl" },
+        new() { Name = "ilshl", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "iashl" },
+        new() { Name = "ilshr", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "iashl" },
     ];
 
     // ---------------------------------------------------------------------------
@@ -244,7 +252,7 @@ public static class WiredRoutineCatalog
     /// Reproduces <c>TypeRegistry.Capabilities._wiredRoutineMap</c>.</summary>
     public static Dictionary<string, (string Protocol, string WiredName)> BuildCapabilityMap()
     {
-        var map = new Dictionary<string, (string, string)>(comparer: System.StringComparer.Ordinal);
+        var map = new Dictionary<string, (string, string)>(comparer: StringComparer.Ordinal);
         foreach (WiredEntry e in All.Where(predicate: e => e.Views.HasFlag(flag: Cap)))
             map[key: e.Name] = (e.Protocols[index: 0], e.CapabilityWired);
         return map;
@@ -253,7 +261,7 @@ public static class WiredRoutineCatalog
     /// <summary>Valid declarable <c>$</c>-names. Reproduces <c>SemanticVerifier.KnownWiredMethods</c>.</summary>
     public static HashSet<string> BuildKnownWiredMethods() =>
         new(collection: All.Where(predicate: e => e.Views.HasFlag(flag: Known)).Select(selector: e => e.Name),
-            comparer: System.StringComparer.Ordinal);
+            comparer: StringComparer.Ordinal);
 
     /// <summary>Operator → permitting protocols. Reproduces <c>SemanticVerifier.WiredToProtocols</c>.</summary>
     public static Dictionary<string, List<string>> BuildWiredToProtocols() =>
@@ -272,18 +280,18 @@ public static class WiredRoutineCatalog
     // ---------------------------------------------------------------------------
 
     private static readonly Dictionary<string, WiredEntry> _byName =
-        All.ToDictionary(keySelector: e => e.Name, comparer: System.StringComparer.Ordinal);
+        All.ToDictionary(keySelector: e => e.Name, comparer: StringComparer.Ordinal);
 
     /// <summary>Names that must be emitted for every live owner (the unified-teardown lifecycle
     /// routines). Used by the GMP gate-bypass and codegen always-live policy in S3.</summary>
     public static readonly IReadOnlySet<string> AlwaysLiveNames =
         All.Where(predicate: e => e.AlwaysLive).Select(selector: e => e.Name)
-           .ToHashSet(comparer: System.StringComparer.Ordinal);
+           .ToHashSet(comparer: StringComparer.Ordinal);
 
     /// <summary>Looks up a wired entry by its bare canonical name. Returns false when the name is not wired.</summary>
     public static bool TryGet(string name, out WiredEntry entry) => _byName.TryGetValue(key: name, value: out entry!);
 
-    /// <summary>Returns true when <paramref name="name"/> is a lifecycle-category wired routine (<c>$destroy</c> or <c>$copy</c>).</summary>
+    /// <summary>Returns true when <paramref name="name"/> is a lifecycle-category wired routine (<c>$destroy</c> or <c>$store</c>).</summary>
     public static bool IsLifecycle(string name) =>
         _byName.TryGetValue(key: name, value: out WiredEntry? e) &&
         e.Kind is WiredKind.Lifecycle or WiredKind.Copy;
@@ -307,8 +315,8 @@ public static class WiredRoutineCatalog
             if (got.Protocol != v.Protocol || got.WiredName != v.WiredName)
             {
                 string m = $"capability '{k}' = ({got.Protocol},{got.WiredName}) but legacy ({v.Protocol},{v.WiredName})";
-                System.Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + m);
-                throw new System.InvalidOperationException(message: m);
+                Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + m);
+                throw new InvalidOperationException(message: m);
             }
         }
         AssertSetEquals(label: "KnownWired", expected: _legacyKnownWired, actual: BuildKnownWiredMethods());
@@ -320,8 +328,8 @@ public static class WiredRoutineCatalog
             if (!got.SequenceEqual(second: v))
             {
                 string m = $"WiredToProtocols['{k}'] = [{string.Join(",", got)}] but legacy [{string.Join(",", v)}]";
-                System.Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + m);
-                throw new System.InvalidOperationException(message: m);
+                Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + m);
+                throw new InvalidOperationException(message: m);
             }
         }
         AssertSetEquals(label: "ReachabilitySeed", expected: _legacyReachabilitySeed,
@@ -331,105 +339,106 @@ public static class WiredRoutineCatalog
 
     private static void AssertSetEquals(string label, IEnumerable<string> expected, IEnumerable<string> actual)
     {
-        var e = new HashSet<string>(collection: expected, comparer: System.StringComparer.Ordinal);
-        var a = new HashSet<string>(collection: actual, comparer: System.StringComparer.Ordinal);
+        var e = new HashSet<string>(collection: expected, comparer: StringComparer.Ordinal);
+        var a = new HashSet<string>(collection: actual, comparer: StringComparer.Ordinal);
         if (e.SetEquals(other: a)) return;
         var missing = e.Except(second: a).OrderBy(keySelector: x => x);
         var extra = a.Except(second: e).OrderBy(keySelector: x => x);
         string msg =
             $"WiredRoutineCatalog '{label}' diverged. Missing from catalog: [{string.Join(",", missing)}]. " +
             $"Extra in catalog: [{string.Join(",", extra)}].";
-        System.Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + msg);
-        throw new System.InvalidOperationException(message: msg);
+        Console.Error.WriteLine(value: "CATALOG-SELFCHECK: " + msg);
+        throw new InvalidOperationException(message: msg);
     }
 
     private static readonly Dictionary<string, (string Protocol, string WiredName)> _legacyCapabilityMap =
-        new(comparer: System.StringComparer.Ordinal)
+        new(comparer: StringComparer.Ordinal)
         {
-            ["$eq"] = ("Equatable", "$eq"), ["$ne"] = ("Equatable", "$eq"), ["$hash"] = ("Hashable", "$hash"),
-            ["$fast_hash"] = ("FastHashable", "$fast_hash"), ["$cmp"] = ("Comparable", "$cmp"),
-            ["$lt"] = ("Comparable", "$cmp"), ["$le"] = ("Comparable", "$cmp"), ["$gt"] = ("Comparable", "$cmp"),
-            ["$ge"] = ("Comparable", "$cmp"), ["$contains"] = ("Container", "$contains"),
-            ["$notcontains"] = ("Container", "$contains"), ["$getitem"] = ("Indexable", "$getitem"),
-            ["$setitem"] = ("MutableIndexable", "$setitem"), ["$iter"] = ("Iterable", "$iter"),
-            ["$next"] = ("Iterator", "$next"), ["$represent"] = ("Representable", "$represent"),
-            ["$diagnose"] = ("Diagnosable", "$diagnose"), ["$add"] = ("Addable", "$add"),
-            ["$sub"] = ("Subtractable", "$sub"), ["$mul"] = ("Multiplicable", "$mul"),
-            ["$truediv"] = ("Divisible", "$truediv"), ["$floordiv"] = ("FloorDivisible", "$floordiv"),
-            ["$mod"] = ("FloorDivisible", "$floordiv"), ["$pow"] = ("Exponentiable", "$pow"),
-            ["$neg"] = ("Negatable", "$neg"), ["$bitand"] = ("Bitwiseable", "$bitand"),
-            ["$bitor"] = ("Bitwiseable", "$bitand"), ["$bitxor"] = ("Bitwiseable", "$bitand"),
-            ["$bitnot"] = ("Invertible", "$bitnot"), ["$ashl"] = ("Shiftable", "$ashl"),
-            ["$ashr"] = ("Shiftable", "$ashl"), ["$lshl"] = ("Shiftable", "$ashl"),
-            ["$lshr"] = ("Shiftable", "$ashl"), ["$iadd"] = ("InPlaceAddable", "$iadd"),
-            ["$isub"] = ("InPlaceSubtractable", "$isub"), ["$imul"] = ("InPlaceMultiplicable", "$imul"),
-            ["$itruediv"] = ("InPlaceDivisible", "$itruediv"), ["$ifloordiv"] = ("InPlaceFloorDivisible", "$ifloordiv"),
-            ["$imod"] = ("InPlaceFloorDivisible", "$ifloordiv"), ["$ipow"] = ("InPlaceExponentiable", "$ipow"),
-            ["$ibitand"] = ("InPlaceBitwiseable", "$ibitand"), ["$ibitor"] = ("InPlaceBitwiseable", "$ibitand"),
-            ["$ibitxor"] = ("InPlaceBitwiseable", "$ibitand"), ["$iashl"] = ("InPlaceShiftable", "$iashl"),
-            ["$iashr"] = ("InPlaceShiftable", "$iashl"), ["$ilshl"] = ("InPlaceShiftable", "$iashl"),
-            ["$ilshr"] = ("InPlaceShiftable", "$iashl"), ["$add_clamp"] = ("ClampingAddable", "$add_clamp"),
-            ["$sub_clamp"] = ("ClampingSubtractable", "$sub_clamp"), ["$mul_clamp"] = ("ClampingMultiplicable", "$mul_clamp"),
-            ["$truediv_clamp"] = ("ClampingDivisible", "$truediv_clamp"), ["$pow_clamp"] = ("ClampingExponentiable", "$pow_clamp"),
-            ["$add_wrap"] = ("WrappingAddable", "$add_wrap"), ["$sub_wrap"] = ("WrappingSubtractable", "$sub_wrap"),
-            ["$mul_wrap"] = ("WrappingMultiplicable", "$mul_wrap"), ["$pow_wrap"] = ("WrappingExponentiable", "$pow_wrap"),
-            ["$add_unchecked"] = ("UncheckedAddable", "$add_unchecked"), ["$sub_unchecked"] = ("UncheckedSubtractable", "$sub_unchecked"),
-            ["$mul_unchecked"] = ("UncheckedMultiplicable", "$mul_unchecked"), ["$truediv_unchecked"] = ("UncheckedTrueDivisible", "$truediv_unchecked"),
-            ["$floordiv_unchecked"] = ("UncheckedFloorDivisible", "$floordiv_unchecked"), ["$mod_unchecked"] = ("UncheckedFloorDivisible", "$floordiv_unchecked"),
-            ["$pow_unchecked"] = ("UncheckedExponentiable", "$pow_unchecked"), ["$copy"] = ("Assignable", "$copy"),
+            ["eq"] = ("Equatable", "eq"), ["ne"] = ("Equatable", "eq"), ["hash"] = ("Hashable", "hash"),
+            ["fast_hash"] = ("FastHashable", "fast_hash"), ["cmp"] = ("Comparable", "cmp"),
+            ["lt"] = ("Comparable", "cmp"), ["le"] = ("Comparable", "cmp"), ["gt"] = ("Comparable", "cmp"),
+            ["ge"] = ("Comparable", "cmp"), ["contains"] = ("Container", "contains"),
+            ["notcontains"] = ("Container", "contains"), ["getitem"] = ("Indexable", "getitem"),
+            ["setitem"] = ("MutableIndexable", "setitem"), ["iter"] = ("Iterable", "iter"),
+            ["emit"] = ("Emittable", "emit"), ["represent"] = ("Representable", "represent"),
+            ["diagnose"] = ("Diagnosable", "diagnose"), ["add"] = ("Addable", "add"),
+            ["sub"] = ("Subtractable", "sub"), ["mul"] = ("Multiplicable", "mul"),
+            ["truediv"] = ("Divisible", "truediv"), ["floordiv"] = ("FloorDivisible", "floordiv"),
+            ["mod"] = ("FloorDivisible", "floordiv"), ["pow"] = ("Exponentiable", "pow"),
+            ["neg"] = ("Negatable", "neg"), ["bitand"] = ("Bitwiseable", "bitand"),
+            ["bitor"] = ("Bitwiseable", "bitand"), ["bitxor"] = ("Bitwiseable", "bitand"),
+            ["bitnot"] = ("Invertible", "bitnot"), ["ashl"] = ("Shiftable", "ashl"),
+            ["ashr"] = ("Shiftable", "ashl"), ["lshl"] = ("Shiftable", "ashl"),
+            ["lshr"] = ("Shiftable", "ashl"), ["iadd"] = ("InPlaceAddable", "iadd"),
+            ["isub"] = ("InPlaceSubtractable", "isub"), ["imul"] = ("InPlaceMultiplicable", "imul"),
+            ["itruediv"] = ("InPlaceDivisible", "itruediv"), ["ifloordiv"] = ("InPlaceFloorDivisible", "ifloordiv"),
+            ["imod"] = ("InPlaceFloorDivisible", "ifloordiv"), ["ipow"] = ("InPlaceExponentiable", "ipow"),
+            ["ibitand"] = ("InPlaceBitwiseable", "ibitand"), ["ibitor"] = ("InPlaceBitwiseable", "ibitand"),
+            ["ibitxor"] = ("InPlaceBitwiseable", "ibitand"), ["iashl"] = ("InPlaceShiftable", "iashl"),
+            ["iashr"] = ("InPlaceShiftable", "iashl"), ["ilshl"] = ("InPlaceShiftable", "iashl"),
+            ["ilshr"] = ("InPlaceShiftable", "iashl"), ["add_clamp"] = ("ClampingAddable", "add_clamp"),
+            ["sub_clamp"] = ("ClampingSubtractable", "sub_clamp"), ["mul_clamp"] = ("ClampingMultiplicable", "mul_clamp"),
+            ["truediv_clamp"] = ("ClampingDivisible", "truediv_clamp"), ["pow_clamp"] = ("ClampingExponentiable", "pow_clamp"),
+            ["add_wrap"] = ("WrappingAddable", "add_wrap"), ["sub_wrap"] = ("WrappingSubtractable", "sub_wrap"),
+            ["mul_wrap"] = ("WrappingMultiplicable", "mul_wrap"), ["pow_wrap"] = ("WrappingExponentiable", "pow_wrap"),
+            ["add_unchecked"] = ("UncheckedAddable", "add_unchecked"), ["sub_unchecked"] = ("UncheckedSubtractable", "sub_unchecked"),
+            ["mul_unchecked"] = ("UncheckedMultiplicable", "mul_unchecked"), ["truediv_unchecked"] = ("UncheckedTrueDivisible", "truediv_unchecked"),
+            ["floordiv_unchecked"] = ("UncheckedFloorDivisible", "floordiv_unchecked"), ["mod_unchecked"] = ("UncheckedFloorDivisible", "floordiv_unchecked"),
+            ["pow_unchecked"] = ("UncheckedExponentiable", "pow_unchecked"), ["store"] = ("Storable", "store"),
+            ["copy"] = ("Copyable", "copy"),
         };
 
     private static readonly string[] _legacyKnownWired =
     [
-        "$create", "$from_literal", "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
-        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
-        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
-        "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
-        "$bitand", "$bitor", "$bitxor", "$ashl", "$ashr", "$lshl", "$lshr",
-        "$neg", "$bitnot", "$unwrap", "$unwrap_or", "$contains", "$notcontains",
-        "$iter", "$next", "$getitem", "$setitem", "$enter", "$exit", "$destroy",
-        "$represent", "$diagnose", "$hash",
-        "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod", "$ipow",
-        "$ibitand", "$ibitor", "$ibitxor", "$iashl", "$iashr", "$ilshl", "$ilshr",
+        "create", "from_literal", "add", "sub", "mul", "truediv", "floordiv", "mod", "pow",
+        "add_wrap", "sub_wrap", "mul_wrap", "pow_wrap",
+        "add_clamp", "sub_clamp", "mul_clamp", "truediv_clamp", "pow_clamp",
+        "eq", "ne", "lt", "le", "gt", "ge", "cmp",
+        "bitand", "bitor", "bitxor", "ashl", "ashr", "lshl", "lshr",
+        "neg", "bitnot", "unwrap", "unwrap_or", "contains", "notcontains",
+        "iter", "emit", "getitem", "setitem", "enter", "exit", "destroy",
+        "represent", "diagnose", "hash",
+        "iadd", "isub", "imul", "itruediv", "ifloordiv", "imod", "ipow",
+        "ibitand", "ibitor", "ibitxor", "iashl", "iashr", "ilshl", "ilshr",
     ];
 
     private static readonly Dictionary<string, List<string>> _legacyWiredToProtocols = new()
     {
-        ["$add"] = ["Addable", "DurationAddable"], ["$sub"] = ["Subtractable", "DurationSubtractable"],
-        ["$mul"] = ["Multiplicable", "TextRepeatable", "Scalable"], ["$truediv"] = ["Divisible", "ScalarDivisible"],
-        ["$floordiv"] = ["FloorDivisible", "ScalarFloorDivisible"], ["$mod"] = ["FloorDivisible"],
-        ["$pow"] = ["Exponentiable"], ["$add_wrap"] = ["WrappingAddable"], ["$sub_wrap"] = ["WrappingSubtractable"],
-        ["$mul_wrap"] = ["WrappingMultiplicable"], ["$pow_wrap"] = ["WrappingExponentiable"],
-        ["$add_clamp"] = ["ClampingAddable"], ["$sub_clamp"] = ["ClampingSubtractable"],
-        ["$mul_clamp"] = ["ClampingMultiplicable"], ["$truediv_clamp"] = ["ClampingDivisible"],
-        ["$pow_clamp"] = ["ClampingExponentiable"], ["$eq"] = ["Equatable"], ["$ne"] = ["Equatable"],
-        ["$cmp"] = ["Comparable"], ["$lt"] = ["Comparable"], ["$le"] = ["Comparable"], ["$gt"] = ["Comparable"],
-        ["$ge"] = ["Comparable"], ["$bitand"] = ["Bitwiseable"], ["$bitor"] = ["Bitwiseable"],
-        ["$bitxor"] = ["Bitwiseable"], ["$ashl"] = ["Shiftable"], ["$ashr"] = ["Shiftable"],
-        ["$lshl"] = ["Shiftable"], ["$lshr"] = ["Shiftable"], ["$neg"] = ["Negatable"], ["$bitnot"] = ["Invertible"],
-        ["$contains"] = ["Container"], ["$notcontains"] = ["Container"], ["$getitem"] = ["Indexable"],
-        ["$setitem"] = ["MutableIndexable"], ["$iter"] = ["Iterable"], ["$next"] = ["Iterator"],
-        ["$iadd"] = ["InPlaceAddable"], ["$isub"] = ["InPlaceSubtractable"], ["$imul"] = ["InPlaceMultiplicable"],
-        ["$itruediv"] = ["InPlaceDivisible"], ["$ifloordiv"] = ["InPlaceFloorDivisible"], ["$imod"] = ["InPlaceFloorDivisible"],
-        ["$ipow"] = ["InPlaceExponentiable"], ["$ibitand"] = ["InPlaceBitwiseable"], ["$ibitor"] = ["InPlaceBitwiseable"],
-        ["$ibitxor"] = ["InPlaceBitwiseable"], ["$iashl"] = ["InPlaceShiftable"], ["$iashr"] = ["InPlaceShiftable"],
-        ["$ilshl"] = ["InPlaceShiftable"], ["$ilshr"] = ["InPlaceShiftable"],
+        ["add"] = ["Addable", "DurationAddable"], ["sub"] = ["Subtractable", "DurationSubtractable"],
+        ["mul"] = ["Multiplicable", "TextRepeatable", "Scalable"], ["truediv"] = ["Divisible", "ScalarDivisible"],
+        ["floordiv"] = ["FloorDivisible", "ScalarFloorDivisible"], ["mod"] = ["FloorDivisible"],
+        ["pow"] = ["Exponentiable"], ["add_wrap"] = ["WrappingAddable"], ["sub_wrap"] = ["WrappingSubtractable"],
+        ["mul_wrap"] = ["WrappingMultiplicable"], ["pow_wrap"] = ["WrappingExponentiable"],
+        ["add_clamp"] = ["ClampingAddable"], ["sub_clamp"] = ["ClampingSubtractable"],
+        ["mul_clamp"] = ["ClampingMultiplicable"], ["truediv_clamp"] = ["ClampingDivisible"],
+        ["pow_clamp"] = ["ClampingExponentiable"], ["eq"] = ["Equatable"], ["ne"] = ["Equatable"],
+        ["cmp"] = ["Comparable"], ["lt"] = ["Comparable"], ["le"] = ["Comparable"], ["gt"] = ["Comparable"],
+        ["ge"] = ["Comparable"], ["bitand"] = ["Bitwiseable"], ["bitor"] = ["Bitwiseable"],
+        ["bitxor"] = ["Bitwiseable"], ["ashl"] = ["Shiftable"], ["ashr"] = ["Shiftable"],
+        ["lshl"] = ["Shiftable"], ["lshr"] = ["Shiftable"], ["neg"] = ["Negatable"], ["bitnot"] = ["Invertible"],
+        ["contains"] = ["Container"], ["notcontains"] = ["Container"], ["getitem"] = ["Indexable"],
+        ["setitem"] = ["MutableIndexable"], ["iter"] = ["Iterable"], ["emit"] = ["Emittable"],
+        ["iadd"] = ["InPlaceAddable"], ["isub"] = ["InPlaceSubtractable"], ["imul"] = ["InPlaceMultiplicable"],
+        ["itruediv"] = ["InPlaceDivisible"], ["ifloordiv"] = ["InPlaceFloorDivisible"], ["imod"] = ["InPlaceFloorDivisible"],
+        ["ipow"] = ["InPlaceExponentiable"], ["ibitand"] = ["InPlaceBitwiseable"], ["ibitor"] = ["InPlaceBitwiseable"],
+        ["ibitxor"] = ["InPlaceBitwiseable"], ["iashl"] = ["InPlaceShiftable"], ["iashr"] = ["InPlaceShiftable"],
+        ["ilshl"] = ["InPlaceShiftable"], ["ilshr"] = ["InPlaceShiftable"],
     };
 
     private static readonly string[] _legacyReachabilitySeed =
     [
-        "$from_literal",
-        "$represent", "$diagnose", "$hash", "$copy", "$eq", "$ne", "$cmp", "$lt", "$le", "$gt", "$ge",
-        "$contains", "$notcontains", "$iter", "$next", "try_next",
-        "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow", "$neg",
-        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
-        "$add_unchecked", "$sub_unchecked", "$mul_unchecked", "$truediv_unchecked", "$floordiv_unchecked",
-        "$mod_unchecked", "$pow_unchecked",
-        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
-        "$bitand", "$bitor", "$bitxor", "$bitnot", "$ashl", "$ashr", "$lshl", "$lshr",
-        "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod", "$ipow",
-        "$ibitand", "$ibitor", "$ibitxor", "$iashl", "$iashr", "$ilshl", "$ilshr",
-        "$unwrap", "$unwrap_or", "$getitem", "$setitem",
+        "from_literal",
+        "represent", "diagnose", "hash", "store", "copy", "eq", "ne", "cmp", "lt", "le", "gt", "ge",
+        "contains", "notcontains", "iter", "emit", "try_emit",
+        "add", "sub", "mul", "truediv", "floordiv", "mod", "pow", "neg",
+        "add_wrap", "sub_wrap", "mul_wrap", "pow_wrap",
+        "add_unchecked", "sub_unchecked", "mul_unchecked", "truediv_unchecked", "floordiv_unchecked",
+        "mod_unchecked", "pow_unchecked",
+        "add_clamp", "sub_clamp", "mul_clamp", "truediv_clamp", "pow_clamp",
+        "bitand", "bitor", "bitxor", "bitnot", "ashl", "ashr", "lshl", "lshr",
+        "iadd", "isub", "imul", "itruediv", "ifloordiv", "imod", "ipow",
+        "ibitand", "ibitor", "ibitxor", "iashl", "iashr", "ilshl", "ilshr",
+        "unwrap", "unwrap_or", "getitem", "setitem",
     ];
 
     // Declared LAST so its initializer runs after every _legacy* field above (textual order).

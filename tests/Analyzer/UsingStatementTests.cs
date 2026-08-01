@@ -49,10 +49,10 @@ public class UsingStatementTests
                         record Lock obeys Enterable
                           id: S32
 
-                        routine Lock.$enter() -> Lock
+                        routine Lock.enter() -> Lock
                           return me
 
-                        routine Lock.$exit()
+                        routine Lock.exit()
                           return
 
                         routine test()
@@ -82,10 +82,10 @@ public class UsingStatementTests
                         entity Connection obeys Enterable
                           tag: S32
 
-                        routine Connection.$enter() -> ?Connection
+                        routine Connection.enter() -> Connection
                           return me
 
-                        routine Connection.$exit()
+                        routine Connection.exit()
                           return
 
                         routine test()
@@ -137,7 +137,7 @@ public class UsingStatementTests
                         record HalfResource
                           value: S32
 
-                        routine HalfResource.$enter()
+                        routine HalfResource.enter()
                           return
 
                         routine test()
@@ -166,7 +166,7 @@ public class UsingStatementTests
                         record HalfResource
                           value: S32
 
-                        routine HalfResource.$exit()
+                        routine HalfResource.exit()
                           return
 
                         routine test()
@@ -195,9 +195,9 @@ public class UsingStatementTests
                         record Token obeys Enterable
                           id: S32
 
-                        routine Token.$enter() -> Token
+                        routine Token.enter() -> Token
                           return me
-                        routine Token.$exit()
+                        routine Token.exit()
                           return
 
                         routine test()
@@ -258,10 +258,10 @@ public class UsingStatementTests
                         entity Container[T] obeys Enterable
                           item: T
 
-                        routine Container[T].$enter() -> ?Container[T]
+                        routine Container[T].enter() -> Container[T]
                           return me
 
-                        routine Container[T].$exit()
+                        routine Container[T].exit()
                           return
 
                         routine test()

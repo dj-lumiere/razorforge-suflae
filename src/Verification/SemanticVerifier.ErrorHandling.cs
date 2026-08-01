@@ -85,16 +85,51 @@ public sealed partial class SemanticVerifier
 
             foreach (GeneratedVariant variant in result.Variants)
             {
+                CheckReservedVariantCollision(baseRoutine: routineInfo, variant: variant.Routine);
                 _registry.RegisterRoutine(routine: variant.Routine);
             }
         }
     }
 
+    /// <summary>Variant RegistryKeys already reported as collisions, to avoid duplicate RF-S409s
+    /// when a pre-register pass runs over the same routine set more than once.</summary>
+    private readonly HashSet<string> _reportedVariantCollisions = new();
+
+    /// <summary>
+    /// Reports RF-S409 when a hand-declared routine already occupies the exact slot
+    /// (owner + name + signature) the compiler synthesizes for a failable variant
+    /// (<c>try_</c>/<c>check_</c>/<c>lookup_</c>). The <see cref="RoutineInfo.RegistryKey"/>
+    /// match is uniform across member and free routines. Only a genuine collision counts: a
+    /// hand-written <c>try_lock</c> with no failable <c>lock!</c> base generates no variant, so
+    /// it never reaches here — the reserved prefixes cost nothing until a colliding failable
+    /// routine actually exists.
+    /// </summary>
+    private void CheckReservedVariantCollision(RoutineInfo baseRoutine, RoutineInfo variant)
+    {
+        // The variant hasn't been registered yet, so any occupant of its key is pre-existing.
+        // Synthesized occupants (e.g. a stub from another pre-register pass) aren't collisions —
+        // RegisterRoutine never lets a synthesized routine overwrite a user-written one, so a
+        // non-synthesized occupant means a real hand-declared clash.
+        string key = variant.RegistryKey;
+        if (_registry.GetRoutineByExactKey(registryKey: key) is not { IsSynthesized: false } handWritten)
+            return;
+
+        SourceLocation? location = handWritten.Location ?? baseRoutine.Location;
+        if (location == null || !_reportedVariantCollisions.Add(item: key)) return;
+
+        ReportError(code: SemanticDiagnosticCode.ReservedRoutinePrefix,
+            message:
+            $"'{variant.Name}' collides with the variant the compiler generates for failable " +
+            $"'{baseRoutine.Name}!'; the try_/check_/lookup_ prefixes are reserved for " +
+            "compiler-generated failable variants — rename this routine",
+            location: location);
+    }
+
     /// <summary>
     /// Phase 3 global: pre-registers try_/check_/lookup_ stub variants for all failable stdlib
-    /// member routines (e.g., Tracked[T].recover!, ListEmitter[T].$next!).
+    /// member routines (e.g., Tracked[T].recover!, ListEmitter[T].emit!).
     /// Must run before Phase 5 user-body analysis so that user code calling these variants
-    /// (e.g., <c>rt.try_recover()</c> or desugared for-loop <c>iter.try_next()</c>) resolves
+    /// (e.g., <c>rt.try_recover()</c> or desugared for-loop <c>iter.try_emit()</c>) resolves
     /// without S450. Mirrors <see cref="PreRegisterUserVariants"/> but for stdlib programs.
     /// </summary>
     private void PreRegisterStdlibVariants()
@@ -120,6 +155,7 @@ public sealed partial class SemanticVerifier
 
                 foreach (GeneratedVariant variant in result.Variants)
                 {
+                    CheckReservedVariantCollision(baseRoutine: routineInfo, variant: variant.Routine);
                     _registry.RegisterRoutine(routine: variant.Routine);
                 }
             }
@@ -133,7 +169,7 @@ public sealed partial class SemanticVerifier
     /// (only registered), so <c>_routineBodies</c> would otherwise contain only user-side
     /// failable routines. Downstream passes need stdlib bodies too:
     /// <see cref="ErrorHandlingVariantPass"/> for failable iterators (e.g.
-    /// <c>ListEmitter[T].$next!</c>) and <see cref="Compiler.Instantiation.Passes.ProtocolDefaultImplLoweringPass"/>
+    /// <c>ListEmitter[T].emit!</c>) and <see cref="Compiler.Instantiation.Passes.ProtocolDefaultImplLoweringPass"/>
     /// for protocol-extension routines (e.g. <c>Iterable[Text].join</c>).
     /// Called before RunPhase4GlobalDesugaring() so the bodies are visible to both phases.
     /// </summary>

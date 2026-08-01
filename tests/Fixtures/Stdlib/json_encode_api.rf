@@ -1,0 +1,60 @@
+module Tests/Stdlib/JsonEncodeApi
+import IO/Console
+import Collections
+
+# JSON encoding over the `SerialValue` tree: `value.serialize().to_json_text()` / `.to_json_bytes()`.
+# Record fields serialize to a Dict in declaration order and the encoder walks keys() in insertion
+# order, so the object output is deterministic. Exercises scalars, strings (with escapes), a nested
+# object, an array, and a Bytes-as-number-array.
+
+record Point
+  x: S32
+  y: S32
+
+record Doc
+  title: Text
+  origin: Point
+  tags: List[Text]
+  ok: Bool
+
+routine start()
+  # Scalars
+  show(SerialValue(42s32).to_json_text())
+  show(SerialValue(true).to_json_text())
+  show(SerialValue(3.5f64).to_json_text())
+
+  # String escaping: quote, backslash, newline, tab, and a control char (U+0001).
+  var messy = List[Character]()
+  messy.add_last(value: Character(0x71u32))
+  messy.add_last(value: Character(0x22u32))
+  messy.add_last(value: Character(0x5Cu32))
+  messy.add_last(value: Character(0x0Au32))
+  messy.add_last(value: Character(0x09u32))
+  messy.add_last(value: Character(0x01u32))
+  show(SerialValue(Text(from_list: steal messy)).to_json_text())
+
+  # Array
+  var nums = List[SerialValue]()
+  nums.add_last(value: SerialValue(1s32))
+  nums.add_last(value: SerialValue(2s32))
+  nums.add_last(value: SerialValue(3s32))
+  show(SerialValue(steal nums).to_json_text())
+
+  # Bytes -> array of byte values
+  var raw = List[Byte]()
+  raw.add_last(value: Byte(from: 0xDEu8))
+  raw.add_last(value: Byte(from: 0x00u8))
+  raw.add_last(value: Byte(from: 0x41u8))
+  show(SerialValue(Bytes(from_list: steal raw)).to_json_text())
+
+  # Nested aggregate through serialize()
+  var tags = List[Text]()
+  tags.add_last(value: "a")
+  tags.add_last(value: "b")
+  var doc = Doc(title: "hi", origin: Point(x: 1s32, y: 2s32), tags: steal tags, ok: false)
+  var sv = doc.serialize()
+  show(sv.to_json_text())
+  show(f"bytes: {sv.to_json_bytes().count()}")
+
+  show("DONE")
+  return

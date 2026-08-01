@@ -26,6 +26,9 @@ public partial class LlvmCodeGenerator
     /// <returns>True if the statement terminates the current block.</returns>
     private bool EmitStatement(StringBuilder sb, Statement stmt)
     {
+        SourceLocation? savedLoc = PushDebugLoc(sb: sb, loc: stmt.Location);
+        try
+        {
         switch (stmt)
         {
             case BlockStatement block:
@@ -67,7 +70,7 @@ public partial class LlvmCodeGenerator
                 return false;
 
             case DangerStatement danger:
-                // danger! block - just emit the body
+                // danger block - just emit the body
                 return EmitBlock(sb: sb, block: danger.Body);
 
             case WhenStatement whenStmt:
@@ -98,6 +101,11 @@ public partial class LlvmCodeGenerator
             default:
                 throw new NotImplementedException(
                     message: $"Statement type not implemented: {stmt.GetType().Name}");
+        }
+        }
+        finally
+        {
+            PopDebugLoc(sb: sb, prev: savedLoc);
         }
     }
 
@@ -230,10 +238,12 @@ public partial class LlvmCodeGenerator
                 {
                     Callee: MemberExpression
                     {
-                        PropertyName: "retain",
+                        MemberName: var rcMoveVerb,
                         Object: IdentifierExpression { Name: var srcEntityName }
                     }
-                })
+                }
+                && rcMoveVerb is Resolution.RuntimeContract.RefCount.Retain
+                    or Resolution.RuntimeContract.RefCount.Roam)
             {
                 _localEntityVars.RemoveAll(match: e => e.Name == srcEntityName);
             }
@@ -374,7 +384,7 @@ public partial class LlvmCodeGenerator
         {
             IdentifierExpression idc => idc.Name,
             GenericMemberExpression gmc => gmc.MemberName,
-            MemberExpression mc => mc.PropertyName,
+            MemberExpression mc => mc.MemberName,
             _ => null
         };
         if (typeName != null)
@@ -462,7 +472,15 @@ public partial class LlvmCodeGenerator
                     member: member,
                     value: value,
                     valueType: GetExpressionType(expr: assign.Value));
-                ConsumeTransferredLocalOwnership(expr: assign.Value);
+                // A Roamed[T] field write uses COPY semantics (retain-new + release-old, emitted in
+                // EmitEntityMemberVariableWrite), so the RHS is NOT moved into the field — it keeps its
+                // own reference and tears down normally. Consuming it here (move semantics, for the
+                // strict Retained/Tracked wrappers) would drop a ref the field just retained → underflow.
+                if (GetGenericBaseName(type: GetExpressionType(expr: member)) is not { } targetBase
+                    || targetBase != Resolution.RuntimeContract.Roamed)
+                {
+                    ConsumeTransferredLocalOwnership(expr: assign.Value);
+                }
                 break;
 
             case IndexExpression index:
@@ -480,7 +498,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void ConsumeTransferredLocalOwnership(Expression expr)
     {
-        // `$copy` synthesis is gone — borrowed-reference values reach here as bare
+        // `$store` synthesis is gone — borrowed-reference values reach here as bare
         // identifiers / member accesses or wrapped in `steal`. Both are handled below.
         // Named arguments wrap their value (`value: steal new_node` → NamedArgumentExpression);
         // peek through the wrapper to reach the underlying identifier.
@@ -578,7 +596,7 @@ public partial class LlvmCodeGenerator
             MemberVariableInfo? sfInfo = null;
             for (int i = 0; i < structRecord.MemberVariables.Count; i++)
             {
-                if (structRecord.MemberVariables[index: i].Name == member.PropertyName)
+                if (structRecord.MemberVariables[index: i].Name == member.MemberName)
                 {
                     sfIndex = i;
                     sfInfo = structRecord.MemberVariables[index: i];
@@ -590,7 +608,7 @@ public partial class LlvmCodeGenerator
             {
                 throw new InvalidOperationException(
                     message:
-                    $"Member variable '{member.PropertyName}' not found on record '{structRecord.Name}'");
+                    $"Member variable '{member.MemberName}' not found on record '{structRecord.Name}'");
             }
 
             string structAddr = EmitLvalueAddress(sb: sb, expr: member.Object);
@@ -612,7 +630,7 @@ public partial class LlvmCodeGenerator
             EmitEntityMemberVariableWrite(sb: sb,
                 entityPtr: target,
                 entity: entity,
-                memberVariableName: member.PropertyName,
+                memberVariableName: member.MemberName,
                 value: value,
                 valueType: valueType);
         }
@@ -625,13 +643,13 @@ public partial class LlvmCodeGenerator
                  WrapperTypeNames.Contains(item: wrapRecBaseName) &&
                  wrapperRecOfRec is { HasDirectBackendType: true, TypeArguments.Count: > 0 } &&
                  wrapperRecOfRec.TypeArguments[index: 0] is RecordTypeInfo innerRecord &&
-                 !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == member.PropertyName))
+                 !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == member.MemberName))
         {
             int fieldIndex = -1;
             MemberVariableInfo? fieldInfo = null;
             for (int i = 0; i < innerRecord.MemberVariables.Count; i++)
             {
-                if (innerRecord.MemberVariables[index: i].Name == member.PropertyName)
+                if (innerRecord.MemberVariables[index: i].Name == member.MemberName)
                 {
                     fieldIndex = i;
                     fieldInfo = innerRecord.MemberVariables[index: i];
@@ -643,7 +661,7 @@ public partial class LlvmCodeGenerator
             {
                 throw new InvalidOperationException(
                     message:
-                    $"Member '{member.PropertyName}' not found on inner record '{innerRecord.Name}'");
+                    $"Member '{member.MemberName}' not found on inner record '{innerRecord.Name}'");
             }
 
             string innerRecordTypeName = GetRecordTypeName(record: innerRecord);
@@ -670,7 +688,7 @@ public partial class LlvmCodeGenerator
             // to `me.head!!.prev = ...` etc. on Retained/Tracked would store into the
             // controller's strong_count slot instead of the wrapped entity's field.
             if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == "Retained" || wrapBaseName == "Tracked"))
+                (wrapBaseName == Resolution.RuntimeContract.Retained || wrapBaseName == Resolution.RuntimeContract.Tracked))
             {
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RetainController[{innerEntity.FullName}]")
@@ -687,6 +705,34 @@ public partial class LlvmCodeGenerator
                     innerPtr = target;
                 }
             }
+            else if (wrapperRecord.HasDirectBackendType &&
+                wrapBaseName == Resolution.RuntimeContract.Roamed)
+            {
+                // Roamed[T] handle: project the WRITE through RoamController.data AND bracket it with
+                // the mode-checked lock so an ESCAPED object's field store is serialized (no-op LOCAL).
+                // Does the full write + early-returns.
+                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_enter");
+                if (enterM != null)
+                {
+                    GenerateRoutineDeclaration(routine: enterM);
+                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: enterM)}(ptr {target})");
+                }
+                TypeInfo? controllerType = _registry.LookupType(
+                    name: $"RoamController[{innerEntity.FullName}]")
+                    ?? _registry.LookupType(name: $"Core.RoamController[{innerEntity.FullName}]");
+                string roamEntPtr = controllerType is EntityTypeInfo controllerEntity
+                    ? EmitEntityMemberVariableRead(sb: sb, entityPtr: target, entity: controllerEntity, memberVariableName: "data")
+                    : target;
+                EmitEntityMemberVariableWrite(sb: sb, entityPtr: roamEntPtr, entity: innerEntity,
+                    memberVariableName: member.MemberName, value: value, valueType: valueType);
+                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_exit");
+                if (exitM != null)
+                {
+                    GenerateRoutineDeclaration(routine: exitM);
+                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: exitM)}(ptr {target})");
+                }
+                return;
+            }
             else if (wrapperRecord.HasDirectBackendType)
             {
                 innerPtr = target;
@@ -702,7 +748,7 @@ public partial class LlvmCodeGenerator
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
                         {
-                            Name: "Hijacked", TypeArguments.Count: > 0
+                            Name: Resolution.RuntimeContract.Hijacked, TypeArguments.Count: > 0
                         } hijacked &&
                         hijacked.TypeArguments![index: 0] is EntityTypeInfo fieldInner &&
                         fieldInner.FullName == innerEntity.FullName)
@@ -720,7 +766,7 @@ public partial class LlvmCodeGenerator
             EmitEntityMemberVariableWrite(sb: sb,
                 entityPtr: innerPtr,
                 entity: innerEntity,
-                memberVariableName: member.PropertyName,
+                memberVariableName: member.MemberName,
                 value: value,
                 valueType: valueType);
         }
@@ -746,7 +792,7 @@ public partial class LlvmCodeGenerator
 
         // Wrapper-record detection: if the resolved $setitem's value-param type doesn't match
         // the target's last type-argument, the lookup unwrapped through a wrapper (e.g.
-        // Owned[List[S64]] -> inner List[S64].$setitem!(i64)). The inline mangled-name path
+        // Owned[List[S64]] -> inner List[S64].setitem!(i64)). The inline mangled-name path
         // would emit a call to the wrapper's symbol which doesn't exist, so escape to the
         // standard method-dispatch path that handles wrapper forwarding correctly.
         // Skip when the last type-arg is a const-generic value (e.g. BitArray[N] where N=8),
@@ -760,7 +806,7 @@ public partial class LlvmCodeGenerator
         // caller's frame. EmitMemberRoutineCall evaluates the receiver as a loaded value, which would
         // discard writes -> so keep the pointer-based dispatch inline for this case.
         if (setItem != null && targetType is RecordTypeInfo &&
-            setItem.Name.Contains(value: "$setitem") &&
+            setItem.Name.Contains(value: "setitem") &&
             !isWrapperForwardingSetItem &&
             (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
         {
@@ -804,9 +850,9 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        // Entity/generic dispatch: synthesize `obj.$setitem[!](index, rhs)` and delegate to
+        // Entity/generic dispatch: synthesize `obj.setitem[!](index, rhs)` and delegate to
         // EmitMemberRoutineCall. This reuses the full owner-level + method-level generic monomorphization
-        // machinery (e.g. BitList.$setitem![I] -> BitList.$setitem![S64]) without duplicating it.
+        // machinery (e.g. BitList.setitem![I] -> BitList.setitem![S64]) without duplicating it.
         // OperatorLoweringPass annotates `index.ResolvedSetItem` with the method-generic-resolved
         // routine; prefer it over a fresh lookup so codegen bypasses the generic-definition guard.
         RoutineInfo? dispatchSetItem = index.ResolvedSetItem ?? setItem;
@@ -815,7 +861,7 @@ public partial class LlvmCodeGenerator
             // Failability is a property, not part of the name — use the bare `$setitem`. Codegen
             // dispatches via ResolvedRoutine (dispatchSetItem), which carries IsFailable.
             var member = new MemberExpression(Object: index.Object,
-                PropertyName: "$setitem",
+                MemberName: "setitem",
                 Location: index.Location);
             var call = new CallExpression(Callee: member,
                 Arguments: [index.Index, rhs],
@@ -861,7 +907,7 @@ public partial class LlvmCodeGenerator
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
-        return _registry.LookupMethod(type: targetType, methodName: "$setitem");
+        return _registry.LookupMethod(type: targetType, methodName: "setitem");
     }
 
     #endregion
@@ -870,7 +916,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>RC wrapper base names that require copy/release on var binding.</summary>
     private static readonly HashSet<string> RcWrapperBaseNames =
-        ["Retained", "Tracked", "Shared", "Watched"];
+        [Resolution.RuntimeContract.Retained, Resolution.RuntimeContract.Tracked, Resolution.RuntimeContract.Shared, Resolution.RuntimeContract.Watched, Resolution.RuntimeContract.Roamed];
 
     /// <summary>
     /// Emits retain calls for all RC wrapper fields in a record.
@@ -893,7 +939,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
 
-            RoutineInfo? retainMethod = _registry.LookupMethod(type: w, methodName: "retain");
+            RoutineInfo? retainMethod = _registry.LookupMethod(type: w, methodName: Resolution.RuntimeContract.RefCount.Retain);
             if (retainMethod == null)
             {
                 continue;
@@ -924,7 +970,7 @@ public partial class LlvmCodeGenerator
         if (IsMaybeType(type: recordType))
         {
             MemberVariableInfo? presentField = recordType.MemberVariables
-                .FirstOrDefault(f => f.Name == "present");
+                .FirstOrDefault(f => f.Name == Resolution.RuntimeContract.Carrier.PresentField);
             if (presentField != null)
             {
                 // Maybe `present` is a Bool stored as i8 — trunc to i1 for the branch.
@@ -954,7 +1000,7 @@ public partial class LlvmCodeGenerator
 
             // Unified teardown: tear the RC-wrapper field down via its `$destroy` (which forwards
             // to `release`→controller), not `release` directly — keeps every teardown on one verb.
-            RoutineInfo? destroyMethod = _registry.LookupMethod(type: w, methodName: "$destroy");
+            RoutineInfo? destroyMethod = _registry.LookupMethod(type: w, methodName: "destroy");
             if (destroyMethod == null)
             {
                 continue;
@@ -979,21 +1025,17 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EmitRcRecordCleanup(StringBuilder sb)
     {
-        // Teardown is now lowered into the AST as explicit `local.$destroy()` calls by
+        // Teardown is now lowered into the AST as explicit `local.destroy()` calls by
         // ScopeTeardownLoweringPass (Phase 7) — RC wrapper vars and RC-field records get their
         // `$destroy` (which forwards to `release`) inserted there. Codegen emits no teardown.
         _ = sb;
     }
 
     /// <summary>Copy verb per RC wrapper (the method that bumps the appropriate count).</summary>
-    private static string? RcCopyVerb(string wrapperBase) => wrapperBase switch
-    {
-        "Retained" => "retain",
-        "Tracked" => "track",
-        "Shared" => "share",
-        "Watched" => "watch",
-        _ => null
-    };
+    private static string? RcCopyVerb(string wrapperBase) =>
+        Resolution.RuntimeContract.RcCopyVerb.TryGetValue(key: wrapperBase, value: out string? verb)
+            ? verb
+            : null;
 
     /// <summary>
     /// Bumps the count for an RC wrapper variable by calling its copy verb.
@@ -1038,7 +1080,7 @@ public partial class LlvmCodeGenerator
         }
 
         RoutineInfo? releaseMethod =
-            _registry.LookupMethod(type: recordType, methodName: "$destroy");
+            _registry.LookupMethod(type: recordType, methodName: "destroy");
         if (releaseMethod == null)
         {
             return;

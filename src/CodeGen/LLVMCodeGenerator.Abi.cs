@@ -15,7 +15,7 @@ namespace Compiler.CodeGen;
 /// their ABI representation at each call boundary. This file is the single place that ABI knowledge
 /// lives; field access elsewhere keeps the natural struct layout untouched.
 ///
-/// See internal-wiki/v0.1.x-struct-abi-boundary-coercion.md for the full 3-ABI matrix and phasing.
+/// The struct-ABI boundary-coercion design covers the full 3-ABI matrix and phasing.
 /// Phase 1 implements only <see cref="AbiKind.Direct"/> vs <see cref="AbiKind.Indirect"/>; register
 /// coercion (CoerceToInt / CoercePair / HFA) for small/medium structs is deferred to later phases —
 /// until then anything not Indirect stays Direct (LLVM's natural lowering, which already happens to
@@ -242,7 +242,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// A type whose copy is trivial — a plain bitwise duplicate is sound, with no managed
-    /// <c>$copy</c> to bump a refcount and no managed <c>$destroy</c> to balance. Decided by the
+    /// <c>$store</c> to bump a refcount and no managed <c>$destroy</c> to balance. Decided by the
     /// SAME oracle the copy-lowering and teardown passes use: <see cref="TypeRegistry.GetLifecycle"/>
     /// returns a non-null <c>Copy</c> exactly when the type (or, recursively, a field of it) is a
     /// managed leaf like <c>Text</c>/<c>Decimal</c>; a null <c>Copy</c> means trivially copyable.
@@ -250,9 +250,9 @@ public partial class LlvmCodeGenerator
     ///
     /// This gates <c>byval</c>: byval is a bitwise memcpy that bypasses the managed protocol, so for
     /// a managed record the callee's <c>$destroy</c> of its byval copy would free state the caller
-    /// still owns — a double-free. Because the copy-lowering pass injects a retaining <c>$copy</c>
+    /// still owns — a double-free. Because the copy-lowering pass injects a retaining <c>$store</c>
     /// for EXACTLY the same (non-trivial) types, gating on this oracle also guarantees byval never
-    /// races that injected copy: trivially-copyable args get no <c>$copy</c>, so byval is the only
+    /// races that injected copy: trivially-copyable args get no <c>$store</c>, so byval is the only
     /// duplication and it is sound.
     /// </summary>
     private bool IsTriviallyCopyableRecord(TypeInfo type) =>
@@ -264,7 +264,7 @@ public partial class LlvmCodeGenerator
     /// <see cref="AbiKind.Indirect"/> argument form). Requires the type to be trivially copyable (see
     /// <see cref="IsTriviallyCopyableRecord"/>) — byval is a bitwise copy and is unsound for managed
     /// records (which keep the existing by-value path that the copy-lowering pass balances with an
-    /// explicit <c>$copy</c>). EXCLUDES async routines: suspended/threaded workers receive their args
+    /// explicit <c>$store</c>). EXCLUDES async routines: suspended/threaded workers receive their args
     /// through their own handoff (the thread cell / closure), not the C calling convention, so byval
     /// at that boundary mismatches the worker's value-typed parameter. Callers consult this only AFTER
     /// excluding by-ref receivers (<c>me</c>) and thread-shareable args.
@@ -279,7 +279,7 @@ public partial class LlvmCodeGenerator
     /// or null when the parameter is not register-coerced. Unlike byval, coercion needs NO trivial-
     /// copyability gate: it passes the struct's VALUE (reinterpreted as integers) and the callee
     /// reconstructs the same value, so ownership is identical to the existing by-value path (the
-    /// copy-lowering pass already balances any managed <c>$copy</c>/<c>$destroy</c>). Excludes async
+    /// copy-lowering pass already balances any managed <c>$store</c>/<c>$destroy</c>). Excludes async
     /// routines, whose workers receive args through their own cell/closure handoff.
     /// </summary>
     private string? ParameterCoerceType(RoutineInfo routine, TypeInfo paramType)

@@ -16,7 +16,7 @@ record MultiRead obeys LockPolicy
 
 ### Creates an unlocked reader-writer policy.
 ### :returns: The resulting `MultiRead` value.
-routine MultiRead.$create() -> MultiRead
+routine MultiRead() -> MultiRead
   return MultiRead(
     readers: Atomic[S32](initial: 0_s32),
     writer: Atomic[U8](initial: 0_u8),
@@ -36,7 +36,7 @@ routine MultiRead.acquire_read()
       # A writer slipped in between the check and the bump — back out and retry.
       discard me.readers.fetch_sub(delta: 1_s32)
     if me.writer_owner.load() == tid
-      crash_reentrant_lock!()
+      crash_reentrant_lock()
   return
 
 ### Releases a shared read lock.
@@ -54,7 +54,7 @@ routine MultiRead.acquire_write()
       me.writer_owner.store(desired: tid)
       break
     if me.writer_owner.load() == tid
-      crash_reentrant_lock!()
+      crash_reentrant_lock()
   loop
     if me.readers.load() == 0_s32
       break
@@ -101,3 +101,26 @@ routine MultiRead.add_claimer()
 routine MultiRead.remove_claimer()
   me.release_write()
   return
+
+### Tries a shared read lock with one non-blocking attempt: `true` if no writer was active (count
+### bumped), `false` if a writer holds it. Backs out the bump if a writer slipped in mid-attempt.
+### :returns: `true` if a read hold was taken.
+routine MultiRead.try_add_inspector() -> Bool
+  if me.writer.load() == 0_u8
+    discard me.readers.fetch_add(delta: 1_s32)
+    if me.writer.load() == 0_u8
+      return true
+    discard me.readers.fetch_sub(delta: 1_s32)
+  return false
+
+### Tries the exclusive write lock with one non-blocking attempt: claims the writer flag only if it
+### is free AND no readers are active right now; otherwise fails (backing out the flag if it was taken
+### but readers were present). An immediate try cannot wait for readers to drain.
+### :returns: `true` if the exclusive hold was taken.
+routine MultiRead.try_add_claimer() -> Bool
+  if me.writer.compare_exchange(expected: 0_u8, desired: 1_u8)
+    if me.readers.load() == 0_s32
+      me.writer_owner.store(desired: rf_current_thread_id())
+      return true
+    me.writer.store(desired: 0_u8)
+  return false

@@ -177,6 +177,10 @@ public partial class LlvmCodeGenerator
                 HasDirectBackendType: true
             } llvmRecord => llvmRecord.LlvmType,
 
+            // Variants -> struct { tag, payload }. Variant is a RecordTypeInfo subclass, so this
+            // MUST precede the RecordTypeInfo arms below or a variant would be treated as a record.
+            VariantTypeInfo variant => GetVariantTypeName(variant: variant),
+
             // Records with no fields and generic base type has @llvm annotation
             RecordTypeInfo
             {
@@ -189,17 +193,11 @@ public partial class LlvmCodeGenerator
             // may be created on-demand without being registered, so the type loop never sees them.
             RecordTypeInfo record => EnsureRecordTypeDeclared(record: record),
 
-            // Entities -> pointer to LLVM struct
+            // Entities (and Crashable, an entity subclass) -> pointer to LLVM struct
             EntityTypeInfo => "ptr",
-
-            // Crashable types -> pointer to LLVM struct (always entity semantics)
-            CrashableTypeInfo => "ptr",
 
             // Wrappers (Viewing, Modifying, Hijacked, etc.) -> all pointers at LLVM level
             WrapperTypeInfo => "ptr",
-
-            // Variants -> struct { tag, payload }
-            VariantTypeInfo variant => GetVariantTypeName(variant: variant),
 
             // Protocols -> type-erased pointer (protocol-typed fields/params hold a handle to a concrete object)
             ProtocolTypeInfo => "ptr",
@@ -248,17 +246,22 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string GetRecordTypeName(RecordTypeInfo record)
     {
-        return $"%{Q(name: $"Record.{record.Name}")}";
+        // Module-qualified (TypeInfo.FullName) so same-named records in different modules never
+        // collide into one LLVM struct name (which LLVM would silently rename to `.0`).
+        return $"%{Q(name: $"Record.{record.FullName}")}";
     }
 
-    /// <summary>The bare LLVM struct name for an entity — no generation side effect. Used INSIDE
-    /// GenerateEntityType (where ensuring would re-enter) and other name-only contexts.</summary>
+    /// <summary>The LLVM struct name for an entity — no generation side effect. Used INSIDE
+    /// GenerateEntityType (where ensuring would re-enter) and other name-only contexts. Uses the
+    /// module-qualified <see cref="TypeInfo.FullName"/> (e.g. <c>Entity.Random.Random</c>,
+    /// <c>Entity.Core.List[Core.S64]</c>) so same-named entities in different modules never collide
+    /// into one LLVM struct name (which LLVM would silently rename to <c>.0</c> and miscompile).</summary>
     private static string RawEntityTypeName(EntityTypeInfo entity)
-        => $"%{Q(name: $"Entity.{entity.Name}")}";
+        => $"%{Q(name: $"Entity.{entity.FullName}")}";
 
     /// <summary>The bare LLVM struct name for a crashable — no generation side effect.</summary>
     private static string RawCrashableTypeName(CrashableTypeInfo crashable)
-        => $"%{Q(name: $"Crashable.{crashable.Name}")}";
+        => $"%{Q(name: $"Crashable.{crashable.FullName}")}";
 
     /// <summary>
     /// Gets the LLVM struct type name for an entity, ensuring its struct definition is emitted on
@@ -296,7 +299,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>The bare LLVM struct name for a variant — no generation side effect.</summary>
     private static string RawVariantTypeName(VariantTypeInfo variant)
-        => $"%{Q(name: $"Variant.{variant.Name}")}";
+        => $"%{Q(name: $"Variant.{variant.FullName}")}";
 
     /// <summary>
     /// Gets the LLVM struct type name for a variant, ensuring its struct (tag + payload) is emitted
@@ -333,7 +336,8 @@ public partial class LlvmCodeGenerator
             if (resolved != null)
                 return GetLlvmType(type: resolved);
         }
-        return $"%{Q(name: $"Record.Maybe[{valueType.FullName}]")}";
+        // Carriers live in `module Core`; match the module-qualified canonical name (GetRecordTypeName).
+        return $"%{Q(name: $"Record.Core.Maybe[{valueType.FullName}]")}";
     }
 
     /// <summary>
@@ -348,7 +352,8 @@ public partial class LlvmCodeGenerator
             if (resolved != null)
                 return GetLlvmType(type: resolved);
         }
-        return $"%{Q(name: $"Record.Lookup[{valueType.FullName}]")}";
+        // Carriers live in `module Core`; match the module-qualified canonical name (GetRecordTypeName).
+        return $"%{Q(name: $"Record.Core.Lookup[{valueType.FullName}]")}";
     }
 
     /// <summary>
@@ -363,7 +368,8 @@ public partial class LlvmCodeGenerator
             if (resolved != null)
                 return GetLlvmType(type: resolved);
         }
-        return $"%{Q(name: $"Record.Result[{valueType.FullName}]")}";
+        // Carriers live in `module Core`; match the module-qualified canonical name (GetRecordTypeName).
+        return $"%{Q(name: $"Record.Core.Result[{valueType.FullName}]")}";
     }
 
     /// <summary>Returns true if <paramref name="type"/> is a Maybe[T], Result[T], or Lookup[T] carrier.</summary>
@@ -376,7 +382,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Quotes an LLVM identifier if it contains characters that require quoting.
-    /// LLVM allows any characters in quoted identifiers: @"Hijacked[Point].$eq", %"Record.Hijacked[Point]".
+    /// LLVM allows any characters in quoted identifiers: @"Hijacked[Point].eq", %"Record.Hijacked[Point]".
     /// Unquoted identifiers only allow [a-zA-Z$._0-9-].
     /// </summary>
     private static string Q(string name)
@@ -402,9 +408,8 @@ public partial class LlvmCodeGenerator
         type = ResolveTypeSubstitution(type: type);
         return type switch
         {
-            // Entities and crashable types are always passed as pointers
+            // Entities (and Crashable, an entity subclass) are always passed as pointers
             EntityTypeInfo => "ptr",
-            CrashableTypeInfo => "ptr",
 
             // Other types use normal mapping
             _ => GetLlvmType(type: type)
@@ -782,13 +787,13 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        if (returnType != null && routine.Name == "$create")
+        if (returnType != null && routine.Name == "create")
         {
             RoutineInfo? reboundCreator = _registry.LookupMethodOverload(type: returnType,
-                methodName: "$create",
+                methodName: "create",
                 argTypes: argTypes);
             reboundCreator ??= _registry.LookupRoutineOverload(
-                baseName: $"{returnType.Name}.$create",
+                baseName: $"{returnType.Name}.create",
                 argTypes: argTypes);
             // Only accept the rebound when its arity matches the call. The fallback path inside
             // LookupRoutineOverload returns the first-registered overload (often the zero-arg
@@ -808,13 +813,9 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string GetMemberRoutineLookupName(RoutineInfo routine)
     {
-        string name = !string.IsNullOrEmpty(routine.BaseName)
-            ? routine.BaseName
-            : routine.Name;
-        int dotIndex = name.LastIndexOf('.');
-        return dotIndex >= 0 && dotIndex + 1 < name.Length
-            ? name[(dotIndex + 1)..]
-            : name;
+        // The bare method name is already the structured RoutineInfo.Name; BaseName is
+        // "Owner.name" (or "Module.name"), so its last dot-segment is exactly Name.
+        return routine.Name;
     }
 
     /// <summary>

@@ -52,7 +52,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
 
         // PDIL → GMP fixed point. PDIL runs before GMP, so a protocol-default-impl call that appears
         // ONLY inside a GMP-monomorphized body — e.g. `me.source.as_entity().List()` inside
-        // `ReverseIterator[T,S].$iter`, or `.Set()` inside `IntersectIterator.$iter` — was never seen
+        // `ReverseIterator[T,S].iter`, or `.Set()` inside `IntersectIterator.iter` — was never seen
         // by PDIL and its per-implementer body (`List[S64].List`/`.Set`) was never synthesized,
         // leaving an undefined symbol at link. Re-run PDIL over the now-larger body set; if it
         // synthesizes anything new, fold it in with a cheap incremental GMP pass and repeat. Most
@@ -73,7 +73,13 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // ControlFlowLowering for instantiated bodies: protocol-default-impl clones (from
         // ProtocolDefaultImplLoweringPass above) carry raw `for` loops from the stdlib AST
         // that never went through Phase 4 desugaring. Lower them before subsequent passes.
-        new Compiler.Desugaring.Passes.ControlFlowLoweringPass(ctx: adapter)
+        new ControlFlowLoweringPass(ctx: adapter)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
+        // Inline simple iterator `$emit!` bodies into their for-loops, replacing the `try_emit`
+        // call with the spliced advance. Runs AFTER ControlFlowLowering (which produced the flagged
+        // iterator loops) and AFTER monomorphization (so the concrete `$emit!` bodies exist in
+        // InstantiatedGenericBodies for lookup). Composed/filtering iterators fall back to try_emit.
+        new IteratorInlineLoweringPass(registry: ctx.Registry, monoBodies: adapter.InstantiatedGenericBodies)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
         new BuilderServiceInliningPass(ctx: adapter).RunOnInstantiatedGenericBodies();
@@ -82,15 +88,15 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // RunGlobal sweep finished before GMP populated the InstantiatedGenericBodies
         // map). Without this, `me.size = me.size + 1_u64` in a monomorphized routine
         // reaches codegen as a raw `BinaryExpression(Add)` and trips the codegen guard.
-        var postCtx = new Compiler.Postprocessing.PostprocessingContext(
+        var postCtx = new Postprocessing.PostprocessingContext(
             registry: ctx.Registry,
             variantBodies: ctx.VariantBodies,
             target: ctx.Target,
             buildMode: ctx.BuildMode);
         // FStringLoweringPass runs BEFORE OperatorLoweringPass (per the per-file pipeline order);
         // monomorphized $represent/$diagnose bodies need f-strings lowered to $represent/$diagnose
-        // method calls + Text.$add before operator lowering can fold the `+` chain.
-        new Compiler.Postprocessing.Passes.FStringLoweringPass(ctx: postCtx)
+        // method calls + Text.add before operator lowering can fold the `+` chain.
+        new FStringLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         // ExpressionLoweringPass: handles RangeExpression, UnaryExpression(Not), pattern lowering
         // etc. Must run before OperatorLoweringPass — operator lowering folds the BinaryExpressions
@@ -101,22 +107,22 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // any Not nodes the second PLP added. Without PLP here, `when subj is None => … else x =>`
         // over `Maybe[Wrapper[T]]` reaches codegen as raw TypePattern/ElsePattern; the codegen
         // TypePattern path falls through to an unconditional match → the first arm always wins.
-        new Compiler.Postprocessing.Passes.PatternLoweringPass(ctx: postCtx)
+        new PatternLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
-        new Compiler.Postprocessing.Passes.ExpressionLoweringPass(ctx: postCtx)
+        new ExpressionLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
-        new Compiler.Postprocessing.Passes.PatternLoweringPass(ctx: postCtx)
+        new PatternLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
-        new Compiler.Postprocessing.Passes.ExpressionLoweringPass(ctx: postCtx)
+        new ExpressionLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
-        new Compiler.Postprocessing.Passes.OperatorLoweringPass(ctx: postCtx)
+        new OperatorLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         // Copy lowering for instantiated bodies: at generic-def time a field of generic type T looks
-        // borrow-tier (no retaining $copy), so a monomorphized body that returns/stores a value with
+        // borrow-tier (no retaining $store), so a monomorphized body that returns/stores a value with
         // a now-concrete refcounted field (e.g. DictEntry[Text, S64] from entry_get) never retained
         // it — torn down per use then freed again at container teardown. Re-run here, post-mono, so
-        // GetLifecycle sees the concrete field types and injects the balancing $copy.
-        new Compiler.Postprocessing.Passes.RecordCopyLoweringPass(ctx: postCtx)
+        // GetLifecycle sees the concrete field types and injects the balancing $store.
+        new RecordCopyLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
 
         ctx.VariantBodies.Clear();
@@ -136,7 +142,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // only became reachable through the synthesized iterator-adapter chain (which post-dates
         // RoutineReachabilityPass). Codegen reads these sets from the outer InstantiationContext
         // (result.LiveRoutineKeys) to gate Phase-B emission, so without copying the adapter's
-        // additions back, the freshly-emitted bodies (e.g. chained-emitter try_next) would be
+        // additions back, the freshly-emitted bodies (e.g. chained-emitter try_emit) would be
         // silently dropped at codegen, leaving undefined symbols at link.
         foreach (string key in adapter.LiveRoutineKeys)
             ctx.LiveRoutineKeys.Add(item: key);

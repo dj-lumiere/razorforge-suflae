@@ -17,7 +17,7 @@ entity ImmutableSharedController
 
 ### Creates a new controller with one strong reference.
 ### :returns: The resulting `ImmutableSharedController` value.
-dangerous routine ImmutableSharedController.$create() -> ?ImmutableSharedController
+dangerous routine ImmutableSharedController() -> ImmutableSharedController
   return ImmutableSharedController(
     strong_count: 1_u64
   )
@@ -48,7 +48,7 @@ dangerous routine ImmutableSharedController.decrease_strong_count() -> U64
 dangerous routine ImmutableSharedController.strong_count() -> U64
   return atomic_load[U64](ptr: me.strong_count.hijack())
 
-dangerous routine ImmutableSharedController.$destroy()
+dangerous routine ImmutableSharedController.destroy()
   if me.strong_count() == 0
     me.hijack().invalidate()
     return

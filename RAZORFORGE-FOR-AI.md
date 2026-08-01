@@ -45,11 +45,9 @@ When unsure, consult ground truth in the repo/package:
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
 9. **Ignored Bool returns need `discard`**: `discard seen.add(value: v)` (RF-W007).
 10. **Indentation is 2 spaces and blocks are indentation-delimited.** No braces.
-11. **`?T` (prefix) is an in-flight type** (entity being constructed/transferred);
-    **`T?` (postfix) is Maybe**. They are different things — never conflate.
-12. **Chained comparisons are one expression**: `0 <= x <= 10` works.
-13. **Printing is `show(...)`** (after `import IO/Console`), not print/println.
-14. **The entry point is `routine start()`**, not `main`.
+11. **Chained comparisons are one expression**: `0 <= x <= 10` works.
+12. **Printing is `show(...)`** (after `import IO/Console`), not print/println.
+13. **The entry point is `routine start()`**, not `main`.
 
 ## 2. Program skeleton
 
@@ -152,7 +150,7 @@ routine get_text!(n: S64) -> Text      # `!` = failable
     == 0 => throw DivisionByZeroError()
     else => return "ok"
 
-dangerous routine raw_poke(p: Address)  # callable only inside danger! blocks
+dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   ...
   return
 ```
@@ -201,7 +199,7 @@ consume(r: steal b)   # ownership moves; using b afterwards = compile error
   `r.method(...)`). Copying/sharing a retained handle must be explicit via
   `.retain()`; weak handles use `.track()`.
 - Records never use `view`/`modify`/`as_entity` — those are entity concepts.
-- Unsafe operations live in `danger!` blocks; `dangerous` routines can only be
+- Unsafe operations live in `danger` blocks; `dangerous` routines can only be
   called inside them.
 - There is **no borrow checker** and no lifetime syntax; safety comes from
   single ownership + marked transfers.
@@ -359,7 +357,7 @@ suspended routine fetch(id: S64) -> S64
 
 routine start()
   var a = fetch(id: 1)           # call = start NOW + get an Agent[S64]
-  danger!
+  danger
     show(f"result => {a.retrieve!()}")   # drive to completion, get the value
   return
 ```
@@ -372,7 +370,7 @@ Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
   `Duration.from_milliseconds(ms: n)`.
 - `agent.waitfor(d).retrieve!()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
   `agent.waitfor(d).try_retrieve()` returns `None` on timeout instead of throwing.
-- `race![T](of: ?List[Agent[T]]) -> ?T` — drive all, return the FIRST finisher; losers abandoned.
+- `race![T](of: ?List[Agent[T]]) -> T` — drive all, return the FIRST finisher; losers abandoned.
 - `gather![T](of: ?List[Agent[T]]) -> ?List[T]` — drive all, wait for ALL; results in input order.
 - `race!`/`gather!` **consume** the list — pass it with `steal`: `gather!(of: steal agents)`.
 - A `List[Agent[T]]` may mix coroutine- and thread-backed agents (one `Agent[T]` type backs both).
@@ -383,7 +381,7 @@ Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
 var jobs = List[Agent[S64]]()
 jobs.add_last(value: fetch(id: 1))
 jobs.add_last(value: fetch(id: 2))
-danger!
+danger
   var results = gather!(of: steal jobs)   # both run concurrently; wait for all
   show(f"{results[0]} {results[1]}")
 ```

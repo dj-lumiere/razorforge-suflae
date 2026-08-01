@@ -22,8 +22,8 @@ namespace Compiler.Desugaring.Passes;
 /// <para><b>for v in iterable</b> -> loop+when:</para>
 /// <code>
 ///  {
-/// var _lf_iter_N = iterable.$iter()
-/// loop { when _lf_iter_N.try_next() { is None -> break; else var v -> body } }
+/// var _lf_iter_N = iterable.iter()
+/// loop { when _lf_iter_N.try_emit() { is None -> break; else var v -> body } }
 /// }
 /// </code>
 ///
@@ -31,9 +31,9 @@ namespace Compiler.Desugaring.Passes;
 /// body prepends positional member-access bindings:</para>
 /// <code>
 ///  {
-/// var _lf_iter_N = pairs.$iter()
+/// var _lf_iter_N = pairs.iter()
 /// loop {
-/// when _lf_iter_N.try_next() {
+/// when _lf_iter_N.try_emit() {
 /// is None -> break
 /// else var _lf_elem_M -> { var a = _lf_elem_M.item0; var b = _lf_elem_M.item1; body }
 ///  }
@@ -45,9 +45,9 @@ namespace Compiler.Desugaring.Passes;
 /// <code>
 ///  {
 /// var _lf_exhausted_N: Bool = false
-/// var _lf_iter_N = iterable.$iter()
+/// var _lf_iter_N = iterable.iter()
 /// loop {
-/// when _lf_iter_N.try_next() {
+/// when _lf_iter_N.try_emit() {
 /// is None -> { _lf_exhausted_N = true; break }
 /// else var x -> body
 ///  }
@@ -188,7 +188,10 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             case UsingStatement u:
             {
                 Statement body = LowerStatement(stmt: u.Body);
-                return !ReferenceEquals(body, u.Body) ? u with { Body = body } : u;
+                Statement? fb = u.FallbackBody != null ? LowerStatement(stmt: u.FallbackBody) : null;
+                return !ReferenceEquals(body, u.Body) || !ReferenceEquals(fb, u.FallbackBody)
+                    ? u with { Body = body, FallbackBody = fb }
+                    : u;
             }
 
             case DangerStatement d:
@@ -276,7 +279,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                     Type: null,
                     Initializer: new MemberExpression(
                         Object: new IdentifierExpression(Name: tmpName, Location: loc),
-                        PropertyName: $"item{i}",
+                        MemberName: $"item{i}",
                         Location: loc),
                     Visibility: VisibilityModifier.Secret,
                     Location: loc),
@@ -299,7 +302,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         var iterCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: forStmt.Iterable,
-                PropertyName: "$iter",
+                MemberName: "iter",
                 Location: loc),
             Arguments: [],
             Location: loc) { IsSynthesizedLowering = true };
@@ -308,26 +311,26 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         CallExpression tryNextCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: tryNextReceiver,
-                PropertyName: "try_next",
+                MemberName: Resolution.RuntimeContract.TryEmit,
                 Location: loc),
             Arguments: [],
             Location: loc) { IsSynthesizedLowering = true };
 
         // When running after SA (stdlib/variant bodies), annotate ResolvedType, ResolvedRoutine,
-        // and LoweringKind on the $iter and try_next calls so CallOverloadResolutionPass doesn't
+        // and LoweringKind on the $iter and try_emit calls so CallOverloadResolutionPass doesn't
         // need to re-classify them (which fails for instantiated bodies where the receiver variable
-        // has no SA-annotated type), and so reachability marks the CONCRETE emitter's try_next.
+        // has no SA-annotated type), and so reachability marks the CONCRETE emitter's try_emit.
         // Skip ErrorTypeInfo: SA suppresses stdlib errors.
         if (forStmt.Iterable.ResolvedType is { } iterType and not ErrorTypeInfo)
         {
-            RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "$iter");
+            RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "iter");
             if (iterMethod?.ReturnType is { } rawIteratorType)
             {
                 // LookupMethod returns the generic-def `$iter`, whose ReturnType still carries the
                 // owner's params (e.g. `?EnumerateEmitter[T, S/Iter]`). Substitute the concrete
-                // owner's type args so `try_next` resolves on the CONCRETE emitter
+                // owner's type args so `try_emit` resolves on the CONCRETE emitter
                 // (`EnumerateEmitter[Text, ListEmitter[Text]]`); otherwise reachability marks the
-                // unresolved-projection emitter's try_next and the concrete one never generates.
+                // unresolved-projection emitter's try_emit and the concrete one never generates.
                 TypeInfo iteratorType = SubstituteForConcreteOwner(type: rawIteratorType,
                     owner: iterType);
                 iterCallExpr.ResolvedRoutine = iterMethod;
@@ -335,7 +338,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 // Carry the concrete emitter type onto the receiver so reachability/codegen see it.
                 tryNextReceiver.ResolvedType = iteratorType;
                 RoutineInfo? tryNextMethod =
-                    ctx.Registry.LookupMethod(type: iteratorType, methodName: "try_next");
+                    ctx.Registry.LookupMethod(type: iteratorType, methodName: Resolution.RuntimeContract.TryEmit);
                 if (tryNextMethod != null)
                     tryNextCallExpr = tryNextCallExpr with
                     {
@@ -383,7 +386,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                         Type: null,
                         Initializer: new MemberExpression(
                             Object: new IdentifierExpression(Name: elemName, Location: loc),
-                            PropertyName: $"item{i}",
+                            MemberName: $"item{i}",
                             Location: loc),
                         Visibility: VisibilityModifier.Secret,
                         Location: loc),
@@ -439,7 +442,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             var whenStmt = new WhenStatement(Expression: tryNextCall,
                 Clauses: [noneClause, elseClause], Location: loc);
             var loopStmt = new LoopStatement(
-                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc);
+                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc)
+                { IsIteratorForLoop = true };
 
             // var _lf_exhausted_N: Bool = false
             Statement exhaustedVarStmt = new DeclarationStatement(
@@ -478,7 +482,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             var whenStmt = new WhenStatement(Expression: tryNextCall,
                 Clauses: [noneClause, elseClause], Location: loc);
             var loopStmt = new LoopStatement(
-                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc);
+                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc)
+                { IsIteratorForLoop = true };
 
             return new BlockStatement(Statements: [iterVarStmt, loopStmt], Location: loc);
         }
@@ -537,11 +542,11 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     /// per-implementer routines; those clones contain raw `for` loops that codegen rejects.
     /// </summary>
     public void RunOnInstantiatedGenericBodies(
-        IDictionary<string, Compiler.Instantiation.MonomorphizedBody> bodies)
+        IDictionary<string, Instantiation.MonomorphizedBody> bodies)
     {
         foreach (string key in bodies.Keys.ToList())
         {
-            Compiler.Instantiation.MonomorphizedBody mb = bodies[key];
+            Instantiation.MonomorphizedBody mb = bodies[key];
             Statement lowered = LowerStatement(stmt: mb.Ast.Body);
             if (!ReferenceEquals(lowered, mb.Ast.Body))
                 bodies[key] = mb with { Ast = mb.Ast with { Body = lowered } };

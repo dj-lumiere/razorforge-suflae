@@ -8,4 +8,4 @@ protocol InPlaceMultiplicable
   ### :param you: The other factor.
   ### :note: The right-hand operand should remain unchanged.
   @writable
-  routine Me.$imul(you: Me)
+  routine Me.imul(you: Me)

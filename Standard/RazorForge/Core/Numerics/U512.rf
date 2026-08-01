@@ -9,7 +9,7 @@ import Collections
 # ============================================================================
 
 @llvm("i512")
-record U512 obeys FloorDivisible
+secret record U512 obeys FloorDivisible
   pass
 
 ### Assemble 8 U64 limbs (little-endian) into a U512.
@@ -52,16 +52,16 @@ routine udiv512_by_u256_sticky(num: U512, den: U512) -> U512
 
 ### Returns me // you via the generic base-2⁶⁴ Knuth-D kernel (`knuth_divide[8]`,
 ### hardware `DIV r64` per step) instead of the slow inline-expanded `udiv i512`.
-routine U512.$floordiv(you: U512) -> U512
+routine U512.floordiv(you: U512) -> U512
   var av = me
   var bv = you
   var rem = Array[U64, 8]()
-  danger!
+  danger
     var q = knuth_divide[8](
       a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
       rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](q.hijack()).extract()
+    return reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](q.hijack()).peek()
 
 ### Quotient of `num // den` with the round-sticky baked into bit 0 (set iff the
 ### division left a nonzero remainder). One Knuth-D call — no separate %/mul-back.
@@ -69,33 +69,33 @@ routine udiv512_sticky(num: U512, den: U512) -> U512
   var av = num
   var bv = den
   var rem = Array[U64, 8]()
-  danger!
+  danger
     var qa = knuth_divide[8](
       a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
       rem: rem.hijack())
-    var q = reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](qa.hijack()).extract()
-    var r = reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).extract()
+    var q = reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](qa.hijack()).peek()
+    var r = reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
     if int_ne[U512](a: r, b: 0)
       return bit_or[U512](a: q, b: zero_extend[U64, U512](1_u64))
     return q
 
 ### Returns me % you (remainder from the same Knuth-D kernel).
-routine U512.$mod(you: U512) -> U512
+routine U512.mod(you: U512) -> U512
   var av = me
   var bv = you
   var rem = Array[U64, 8]()
-  danger!
+  danger
     var q = knuth_divide[8](
       a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
       rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).extract()
+    return reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
-routine U512.$represent() -> Text
+routine U512.represent() -> Text
   return wide_dec[U512](me)
 
 ### Diagnostic representation tagged with the type name.
-routine U512.$diagnose() -> Text
+routine U512.diagnose() -> Text
   return "U512"

@@ -27,7 +27,7 @@ routine start()
   show(f"contents after remove: {s}")
   show(f"contains 10: {10 in s}")
 
-  show(f"diagnose: {s.$diagnose()}")
+  show(f"diagnose: {s.diagnose()}")
 
   show("DONE")
   return

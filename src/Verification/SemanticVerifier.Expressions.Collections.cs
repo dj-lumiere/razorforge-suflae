@@ -31,7 +31,7 @@ public sealed partial class SemanticVerifier
             // `Owned[SortedSet[S64]]` etc. Use base-name extraction since instantiated record
             // types have Name like "Foo", not bare "Owned".
             if (current is RecordTypeInfo { TypeArguments: { Count: 1 } recArgs } recRT
-                && GetTypeBaseName(recRT) is "Owned" or "Retained" or "Tracked")
+                && GetTypeBaseName(recRT) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
             {
                 current = recArgs[0];
                 continue;
@@ -54,7 +54,7 @@ public sealed partial class SemanticVerifier
     /// (default — rvalue context) get the bare entity; var-decl / field-init sites pass
     /// `true` so the result is Owned-wrapped and can satisfy the entity-ownership rule
     /// (S413). Switching between contexts is purely a type-annotation thing — codegen
-    /// emits the same `List.$create + add_last` sequence either way; the Owned wrapper is
+    /// emits the same `List.create + add_last` sequence either way; the Owned wrapper is
     /// `@llvm("ptr")` and shares the entity's pointer.
     /// </summary>
     private TypeSymbol WrapOwnedCollectionLiteralType(TypeSymbol type,
@@ -62,7 +62,7 @@ public sealed partial class SemanticVerifier
     {
         if (!wrapForBinding) return type;
         return type is EntityTypeInfo
-            ? _registry.GetOrCreateWrapperType(wrapperName: "Owned",
+            ? _registry.GetOrCreateWrapperType(wrapperName: Compiler.Resolution.RuntimeContract.Owned,
                 innerType: type,
                 isReadOnly: false)
             : type;
@@ -87,7 +87,7 @@ public sealed partial class SemanticVerifier
         TypeSymbol? expectedType = null)
     {
         // Collection literals are entity rvalues — value-in-flight produced by a fresh
-        // `$create + add_last` sequence. Mark for the auto-bind rule (rvalue ?T → bound T).
+        // `$create + add_last` sequence. Mark for the auto-bind rule (rvalue T → bound T).
         list.IsInFlight = true;
         // Extract expected element type from list-shaped expected types.
         TypeSymbol? expectedElementType = null;
@@ -462,12 +462,12 @@ public sealed partial class SemanticVerifier
         }
         else if (!IsTriviallyCopyable(type: baseType))
         {
-            // `with` lowers to `tmp = base.$copy(); tmp.field = v` — so the base must obey
+            // `with` lowers to `tmp = base.store(); tmp.field = v` — so the base must obey
             // Assignable. Records with ownership-bearing fields that don't opt in are rejected
             // here rather than producing a broken lowered AST.
             ReportError(code: SemanticDiagnosticCode.WithBaseNotAssignable,
-                message: $"'with' expression base of type '{baseType.Name}' must obey 'Assignable'. " +
-                         "Add 'obeys Assignable' and define '$copy() -> Me', or reconstruct the value explicitly.",
+                message: $"'with' expression base of type '{baseType.Name}' must obey 'Storable'. " +
+                         "Add 'obeys Storable' and define '$store() -> Me', or reconstruct the value explicitly.",
                 location: with.Location);
         }
 
@@ -482,12 +482,20 @@ public sealed partial class SemanticVerifier
 
             AnalyzeExpression(expression: value);
 
-            // #45: Cannot modify secret member variables in 'with' expression
             if (fieldPath is { Count: > 0 } && baseType is RecordTypeInfo recordType)
             {
                 MemberVariableInfo? memberInfo =
                     recordType.LookupMemberVariable(memberVariableName: fieldPath[index: 0]);
-                if (memberInfo is { Visibility: VisibilityModifier.Secret })
+                if (memberInfo == null)
+                {
+                    // The field named in the update doesn't exist on the record.
+                    ReportError(code: SemanticDiagnosticCode.MemberVariableNotFound,
+                        message:
+                        $"'{baseType.Name}' has no member variable '{fieldPath[index: 0]}'.",
+                        location: with.Location);
+                }
+                // #45: Cannot modify secret member variables in 'with' expression
+                else if (memberInfo is { Visibility: VisibilityModifier.Secret })
                 {
                     ReportError(code: SemanticDiagnosticCode.WithSecretMemberProhibited,
                         message:
@@ -681,7 +689,7 @@ public sealed partial class SemanticVerifier
     /// Returns the inferred type arguments, or null if inference fails.
     /// </summary>
     private List<TypeInfo>? InferGenericTypeArguments(RoutineInfo genericRoutine,
-        List<Expression> arguments)
+        List<Expression> arguments, TypeSymbol? expectedType = null)
     {
         if (genericRoutine.GenericParameters == null ||
             genericRoutine.GenericParameters.Count == 0)
@@ -724,6 +732,20 @@ public sealed partial class SemanticVerifier
         // param is now known (e.g. `zip[U, S2](other: Referring[S2]) needs S2 obeys Iterable[U]` —
         // S2 binds from the argument, then U binds from S2's Iterable conformance).
         InferGenericsFromConstraints(routine: genericRoutine, inferred: typeArgs);
+
+        // Third pass: return-type-directed inference. A type parameter that appears ONLY in the return
+        // type (e.g. `roamed_none[T]() -> Roamed[T]`, `default[T]() -> T`) can never bind from the
+        // arguments; unify the routine's return type against the call's expected type — the field /
+        // parameter / assignment target the result flows into — to fill it. Only used to fill gaps
+        // (already-inferred params from the argument pass win).
+        if (expectedType is not null && expectedType != ErrorTypeInfo.Instance &&
+            genericRoutine.ReturnType is { } returnType)
+        {
+            InferMethodTypeArgumentsFromTypes(paramType: returnType,
+                argType: expectedType,
+                genericParameters: genericRoutine.GenericParameters,
+                inferred: typeArgs);
+        }
 
         // All type args must be inferred
         for (int i = 0; i < typeArgs.Length; i++)
@@ -789,7 +811,6 @@ public sealed partial class SemanticVerifier
         {
             RecordTypeInfo r => r.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
             EntityTypeInfo e => e.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
-            CrashableTypeInfo cr => cr.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
             _ => []
         };
 
@@ -877,8 +898,8 @@ public sealed partial class SemanticVerifier
         // bare-generic inner so wrappers around constructed types (e.g. `Referring[List[T]]`) keep
         // the normal element-wise unification that binds their inner params (T) correctly.
         if (paramType is { TypeArguments: [GenericParameterTypeInfo markerParam] } &&
-            ProtocolBaseName(type: paramType) is "Referring" or "Controlling" &&
-            ProtocolBaseName(type: argType) is not ("Referring" or "Controlling"))
+            ProtocolBaseName(type: paramType) is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling &&
+            ProtocolBaseName(type: argType) is not (Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling))
         {
             int markerIdx = genericParameters.ToList().IndexOf(item: markerParam.Name);
             if (markerIdx >= 0 && inferred[markerIdx] == null)

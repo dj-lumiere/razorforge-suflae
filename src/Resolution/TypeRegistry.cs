@@ -33,8 +33,9 @@ public sealed partial class TypeRegistry
     /// <summary>Thread-local ambient registry; set by the constructor so test isolation works without injection.</summary>
     public static TypeRegistry? Ambient => _ambient;
 
-    /// <summary>The language being built.</summary>
-    public Language Language { get; }
+    /// <summary>The language being built. Settable so the stdlib (always RazorForge source) can be
+    /// analyzed in RazorForge mode during a Suflae compile — see SemanticVerifier.AnalyzeStdlibBodies.</summary>
+    public Language Language { get; set; }
 
     #region Type Storage
 
@@ -303,7 +304,7 @@ public sealed partial class TypeRegistry
         _stdlibPath = stdlibPath ?? StdlibLoader.GetDefaultStdlibPath();
 
         // Register well-known error handling types BEFORE loading the Core module.
-        // This ensures that when Core stdlib routines (e.g. Maybe[T].$unwrap) are registered
+        // This ensures that when Core stdlib routines (e.g. Maybe[T].unwrap) are registered
         // during LoadCoreModule, LookupType("Maybe") returns the initial Maybe definition
         // (FullName="Maybe", no module prefix), so methods are keyed under "Maybe" in
         // _routinesByOwner and are reachable via LookupMethod on Maybe[T] resolutions.
@@ -379,6 +380,14 @@ public sealed partial class TypeRegistry
     /// <param name="location">Source location for error reporting.</param>
     /// <param name="effectiveModule">The effective module name of the loaded module, or null on failure.</param>
     /// <returns>True if the module was loaded successfully or was already loaded, false on error.</returns>
+    /// <summary>
+    /// Every MODULE registered under the namespace <paramref name="prefix"/> (strict descendants:
+    /// `prefix/Sub`, `prefix/Sub/Deep`, …), for the prefix/package import `import A/B`. Empty when the
+    /// resolver isn't injected or the prefix is a leaf module with no submodules.
+    /// </summary>
+    public IReadOnlyList<string> EnumerateSubmodules(string prefix)
+        => _moduleResolver?.EnumerateSubmodulePaths(prefix: prefix) ?? [];
+
     public bool LoadModule(string importPath, string currentFile, SourceLocation location,
         out string? effectiveModule)
     {
@@ -501,7 +510,7 @@ public sealed partial class TypeRegistry
         // because LoadCoreModule hasn't run.  ResolveProgramMemberVariables (pass 1c inside
         // LoadCoreModule) fills in the members from the stdlib source once all Core types exist.
         // We must register the shells HERE (before LoadCoreModule) so that when
-        // LoadCoreModule's RegisterProgramRoutines processes Maybe[T].$unwrap etc., it calls
+        // LoadCoreModule's RegisterProgramRoutines processes Maybe[T].unwrap etc., it calls
         // LookupType("Maybe") and gets this shell (FullName="Maybe"), causing those methods to
         // be keyed under "Maybe" in _routinesByOwner rather than "Core.Maybe".
         RegisterType(
@@ -590,22 +599,10 @@ public sealed partial class TypeRegistry
             return;
         }
 
-        // Create updated record with protocols
-        var updatedRecord = new RecordTypeInfo(name: record.Name)
-        {
-            MemberVariables = record.MemberVariables,
-            ImplementedProtocols = protocols,
-            GenericParameters = record.GenericParameters,
-            GenericConstraints = record.GenericConstraints,
-            TypeArguments = record.TypeArguments,
-            GenericDefinition = record.GenericDefinition,
-            Visibility = record.Visibility,
-            Location = record.Location,
-            Module = record.Module,
-            BackendType = record.BackendType
-        };
-
-        _types[key: recordName] = updatedRecord;
+        // Mutate the protocol list in place to preserve the concrete subclass (Choice/Flags — and
+        // Variant while it was a RecordTypeInfo subclass). ImplementedProtocols is settable, so this
+        // is visible to any holder of the existing instance.
+        record.ImplementedProtocols = protocols;
         _typesByShortName.Remove(key: record.Name);
     }
 
@@ -1002,7 +999,13 @@ public sealed partial class TypeRegistry
             if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
         }
-        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing))
+        // The shortKey is a bare-type-arg alias (e.g. "Modifying[Counter]") shared by callers that
+        // look up by short arg name. It COLLIDES when two modules declare a same-named type
+        // (Modifying[A/Counter] vs Modifying[B/Counter]): a first-wins short alias would return the
+        // wrong module's inner type, contaminating wrapper forwarding / method dispatch. Only accept a
+        // short-alias hit whose type arguments actually match the request by FullName.
+        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing)
+            && ResolutionTypeArgsMatch(resolved: existing, typeArguments: typeArguments))
         {
             if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
@@ -1065,6 +1068,23 @@ public sealed partial class TypeRegistry
         }
 
         return resolved;
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="resolved"/>'s type arguments match <paramref name="typeArguments"/>
+    /// by fully-qualified name. Guards the bare short-alias cache hit in <see cref="GetOrCreateResolution"/>
+    /// so a same-short-name type from a DIFFERENT module (e.g. two modules' <c>Counter</c>) is not
+    /// mistaken for the requested one.
+    /// </summary>
+    private static bool ResolutionTypeArgsMatch(TypeInfo resolved, List<TypeInfo> typeArguments)
+    {
+        List<TypeInfo>? actual = resolved.TypeArguments;
+        if (actual == null || actual.Count != typeArguments.Count) return false;
+        for (int i = 0; i < actual.Count; i++)
+        {
+            if (actual[index: i].FullName != typeArguments[index: i].FullName) return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -1260,11 +1280,11 @@ public sealed partial class TypeRegistry
         var newType = new TupleTypeInfo(elementTypes: elementTypes);
         _resolutions[key: key] = newType;
 
-        // Auto-register TupleType.$represent()
+        // Auto-register TupleType.represent()
         TypeInfo? textType = LookupType(name: "Text");
         if (textType != null)
         {
-            RegisterRoutine(routine: new RoutineInfo(name: "$represent")
+            RegisterRoutine(routine: new RoutineInfo(name: "represent")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1277,7 +1297,7 @@ public sealed partial class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(routine: new RoutineInfo(name: "$diagnose")
+            RegisterRoutine(routine: new RoutineInfo(name: "diagnose")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1297,11 +1317,11 @@ public sealed partial class TypeRegistry
         // tuple won't either — keeping derivation in lockstep with the underlying types.
         TypeInfo? boolType = LookupType(name: "Bool");
         if (boolType != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$eq") != null))
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "eq") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
-            RegisterRoutine(routine: new RoutineInfo(name: "$eq")
+            RegisterRoutine(routine: new RoutineInfo(name: "eq")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1314,7 +1334,7 @@ public sealed partial class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(routine: new RoutineInfo(name: "$ne")
+            RegisterRoutine(routine: new RoutineInfo(name: "ne")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1331,9 +1351,9 @@ public sealed partial class TypeRegistry
         // Auto-register $hash if ALL element types support $hash
         TypeInfo? u64Type = LookupType(name: "U64");
         if (u64Type != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$hash") != null))
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "hash") != null))
         {
-            RegisterRoutine(routine: new RoutineInfo(name: "$hash")
+            RegisterRoutine(routine: new RoutineInfo(name: "hash")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1350,11 +1370,11 @@ public sealed partial class TypeRegistry
         // Auto-register $cmp + derived operators if ALL element types support $cmp
         TypeInfo? comparisonSignType = LookupType(name: "ComparisonSign");
         if (boolType != null && comparisonSignType != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$cmp") != null))
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "cmp") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
-            RegisterRoutine(routine: new RoutineInfo(name: "$cmp")
+            RegisterRoutine(routine: new RoutineInfo(name: "cmp")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1370,10 +1390,10 @@ public sealed partial class TypeRegistry
             // Derived: $lt, $le, $gt, $ge
             foreach (string opName in new[]
                      {
-                         "$lt",
-                         "$le",
-                         "$gt",
-                         "$ge"
+                         "lt",
+                         "le",
+                         "gt",
+                         "ge"
                      })
             {
                 RegisterRoutine(routine: new RoutineInfo(name: opName)
@@ -1475,7 +1495,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// All concrete generic instances, bypassing the liveness filter.
     /// Used by GMP's fixed-point loop to discover types that were registered during
-    /// monomorphization itself (e.g. ListEmitter[Byte] discovered while rewriting List[Byte].$iter).
+    /// monomorphization itself (e.g. ListEmitter[Byte] discovered while rewriting List[Byte].iter).
     /// Wrapper types are excluded to prevent runaway growth for self-wrapping families.
     /// </summary>
     public IEnumerable<TypeInfo> AllConcreteGenericInstancesUnfiltered =>
@@ -1591,7 +1611,6 @@ public sealed partial class TypeRegistry
             {
                 EntityTypeInfo e => e.ImplementedProtocols,
                 RecordTypeInfo r => r.ImplementedProtocols,
-                CrashableTypeInfo c => c.ImplementedProtocols,
                 _ => null
             };
             if (implemented == null)
@@ -1734,11 +1753,12 @@ public sealed partial class TypeRegistry
     /// <returns>True if successful, false if already declared in this scope.</returns>
     /// <param name="presetValue">The preset value.</param>
     public bool DeclareVariable(string name, TypeInfo type, bool isPreset = false,
-        Expression? presetValue = null)
+        Expression? presetValue = null, bool isNullable = false)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
-            IsModifiable = !isPreset, IsPreset = isPreset, PresetValue = presetValue
+            IsModifiable = !isPreset, IsPreset = isPreset, PresetValue = presetValue,
+            IsNullable = isNullable
         };
 
         return _currentScope.DeclareVariable(variable: variable);
@@ -1753,11 +1773,12 @@ public sealed partial class TypeRegistry
     /// <param name="module">The module this preset belongs to.</param>
     /// <param name="value">The value.</param>
     public void RegisterPreset(string name, TypeInfo type, string? module = null,
-        Expression? value = null)
+        Expression? value = null, bool isSecret = false)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
-            IsModifiable = false, IsPreset = true, Module = module, PresetValue = value
+            IsModifiable = false, IsPreset = true, IsSecret = isSecret, Module = module,
+            PresetValue = value
         };
 
         _presets[key: name] = variable;
@@ -1809,6 +1830,25 @@ public sealed partial class TypeRegistry
     public TypeInfo? GetNarrowedType(string name)
     {
         return _currentScope.GetNarrowedType(name: name);
+    }
+
+    /// <summary>Suflae flow typing: marks a nullable entity reference proven non-none in the current scope.</summary>
+    public void MarkVariableNonNull(string name)
+    {
+        _currentScope.MarkNonNull(name: name);
+    }
+
+    /// <summary>Suflae flow typing: records a variable as known-nullable-again in the current scope
+    /// (shadows an outer proven-non-none fact — e.g. after reassigning a possibly-none value).</summary>
+    public void MarkVariableNullableAgain(string name)
+    {
+        _currentScope.MarkNullableAgain(name: name);
+    }
+
+    /// <summary>Suflae flow typing: true if the variable was proven non-none in the current scope chain.</summary>
+    public bool IsVariableProvenNonNull(string name)
+    {
+        return _currentScope.IsProvenNonNull(name: name);
     }
 
     /// <summary>

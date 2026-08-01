@@ -22,7 +22,7 @@ preset U8_ONE: U8 = 1_u8
 ### :param from: The `S8` value to convert.
 ### :returns: A `U8` with the same bit pattern as `from`.
 ### :throws: {IntegerOverflowError} if `from < 0`.
-routine U8.$create!(from: S8) -> U8
+routine U8!(from: S8) -> U8
   if from < 0_s8
     throw IntegerOverflowError()
   return reinterpret_bits[S8, U8](from)
@@ -31,7 +31,7 @@ routine U8.$create!(from: S8) -> U8
 ### :param from: The `S16` value to convert.
 ### :returns: The `U8` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=255`.
-routine U8.$create!(from: S16) -> U8
+routine U8!(from: S16) -> U8
   if not (0_s16 <= from <= 255_s16)
     throw IntegerOverflowError()
   return int_truncate[S16, U8](from)
@@ -40,7 +40,7 @@ routine U8.$create!(from: S16) -> U8
 ### :param from: The `S32` value to convert.
 ### :returns: The `U8` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=255`.
-routine U8.$create!(from: S32) -> U8
+routine U8!(from: S32) -> U8
   if not (0_s32 <= from <= 255_s32)
     throw IntegerOverflowError()
   return int_truncate[S32, U8](from)
@@ -49,7 +49,7 @@ routine U8.$create!(from: S32) -> U8
 ### :param from: The `S64` value to convert.
 ### :returns: The `U8` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=255`.
-routine U8.$create!(from: S64) -> U8
+routine U8!(from: S64) -> U8
   if not (0_s64 <= from <= 255_s64)
     throw IntegerOverflowError()
   return int_truncate[S64, U8](from)
@@ -58,7 +58,7 @@ routine U8.$create!(from: S64) -> U8
 ### :param from: The `S128` value to convert.
 ### :returns: The `U8` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is not in `0..=255`.
-routine U8.$create!(from: S128) -> U8
+routine U8!(from: S128) -> U8
   if not (0_s128 <= from <= 255_s128)
     throw IntegerOverflowError()
   return int_truncate[S128, U8](from)
@@ -66,14 +66,14 @@ routine U8.$create!(from: S128) -> U8
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `U8` value to return.
 ### :returns: `from` unchanged.
-routine U8.$create(from: U8) -> U8
+routine U8(from: U8) -> U8
   return from
 
 ### Converts a `U16` to `U8`, throwing if the value exceeds 255.
 ### :param from: The `U16` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.$create!(from: U16) -> U8
+routine U8!(from: U16) -> U8
   if from > 255_u16
     throw IntegerOverflowError()
   return int_truncate[U16, U8](from)
@@ -82,7 +82,7 @@ routine U8.$create!(from: U16) -> U8
 ### :param from: The `U32` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.$create!(from: U32) -> U8
+routine U8!(from: U32) -> U8
   if from > 255_u32
     throw IntegerOverflowError()
   return int_truncate[U32, U8](from)
@@ -91,7 +91,7 @@ routine U8.$create!(from: U32) -> U8
 ### :param from: The `U64` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.$create!(from: U64) -> U8
+routine U8!(from: U64) -> U8
   if from > 255_u64
     throw IntegerOverflowError()
   return int_truncate[U64, U8](from)
@@ -100,7 +100,7 @@ routine U8.$create!(from: U64) -> U8
 ### :param from: The `U128` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.$create!(from: U128) -> U8
+routine U8!(from: U128) -> U8
   if from > 255_u128
     throw IntegerOverflowError()
   return int_truncate[U128, U8](from)
@@ -109,7 +109,7 @@ routine U8.$create!(from: U128) -> U8
 ### :param from: The `S256` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside 0..255.
-routine U8.$create!(from: S256) -> U8
+routine U8!(from: S256) -> U8
   if not (0_s256 <= from <= 255_s256)
     throw IntegerOverflowError()
   return int_truncate[S256, U8](from)
@@ -118,7 +118,7 @@ routine U8.$create!(from: S256) -> U8
 ### :param from: The `U256` value to convert.
 ### :returns: The lower 8 bits of `from`.
 ### :throws: {IntegerOverflowError} if `from > 255`.
-routine U8.$create!(from: U256) -> U8
+routine U8!(from: U256) -> U8
   if from > 255_u256
     throw IntegerOverflowError()
   return int_truncate[U256, U8](from)
@@ -127,49 +127,49 @@ routine U8.$create!(from: U256) -> U8
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.$create!(from: F16) -> U8
+routine U8!(from: F16) -> U8
   return from.U32!().U8!()
 
 ### Converts an `F32` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.$create!(from: F32) -> U8
+routine U8!(from: F32) -> U8
   return from.U32!().U8!()
 
 ### Converts an `F64` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.$create!(from: F64) -> U8
+routine U8!(from: F64) -> U8
   return from.U32!().U8!()
 
 ### Converts an `F128` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.$create!(from: F128) -> U8
+routine U8!(from: F128) -> U8
   return from.U32!().U8!()
 
 ### Converts a `D32` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.$create!(from: D32) -> U8
+routine U8!(from: D32) -> U8
   return from.U32!().U8!()
 
 ### Converts a `D64` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.$create!(from: D64) -> U8
+routine U8!(from: D64) -> U8
   return from.U32!().U8!()
 
 ### Converts a `D128` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `D128` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8.$create!(from: D128) -> U8
+routine U8!(from: D128) -> U8
   return from.U32!().U8!()
 
 # ============================================================================
@@ -198,7 +198,7 @@ routine U8.mul_with_overflow(you: U8) -> (U8, Bool)
 ### :param you: The right operand.
 ### :returns: The sum `me + you`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U8_MAX`.
-routine U8.$add!(you: U8) -> U8
+routine U8.add!(you: U8) -> U8
   var result = me.add_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -208,7 +208,7 @@ routine U8.$add!(you: U8) -> U8
 ### :param you: The value to subtract.
 ### :returns: The difference `me - you`.
 ### :throws: {IntegerOverflowError} if the result is less than `U8_MIN` (0).
-routine U8.$sub!(you: U8) -> U8
+routine U8.sub!(you: U8) -> U8
   var result = me.sub_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -218,7 +218,7 @@ routine U8.$sub!(you: U8) -> U8
 ### :param you: The right operand.
 ### :returns: The product `me * you`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U8_MAX`.
-routine U8.$mul!(you: U8) -> U8
+routine U8.mul!(you: U8) -> U8
   var result = me.mul_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -228,7 +228,7 @@ routine U8.$mul!(you: U8) -> U8
 ### :param you: The divisor.
 ### :returns: The quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
-routine U8.$floordiv!(you: U8) -> U8
+routine U8.floordiv!(you: U8) -> U8
   if you == 0
     throw DivisionByZeroError()
   return unsigned_div[U8](a: me, b: you)
@@ -236,7 +236,7 @@ routine U8.$floordiv!(you: U8) -> U8
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
 ### :returns: The remainder `me % you`. Behavior is undefined if `you == 0`.
-routine U8.$mod!(you: U8) -> U8
+routine U8.mod!(you: U8) -> U8
   if you == 0_u8
     throw DivisionByZeroError()
   return unsigned_rem[U8](a: me, b: you)
@@ -248,19 +248,19 @@ routine U8.$mod!(you: U8) -> U8
 ### Returns `(me + you) mod 256` without overflow check.
 ### :param you: The right operand.
 ### :returns: The sum modulo 256.
-routine U8.$add_wrap(you: U8) -> U8
+routine U8.add_wrap(you: U8) -> U8
   return add[U8](a: me, b: you)
 
 ### Returns `(me - you) mod 256` without underflow check.
 ### :param you: The value to subtract.
 ### :returns: The difference modulo 256.
-routine U8.$sub_wrap(you: U8) -> U8
+routine U8.sub_wrap(you: U8) -> U8
   return sub[U8](a: me, b: you)
 
 ### Returns `(me * you) mod 256` without overflow check.
 ### :param you: The right operand.
 ### :returns: The product modulo 256.
-routine U8.$mul_wrap(you: U8) -> U8
+routine U8.mul_wrap(you: U8) -> U8
   return mul[U8](a: me, b: you)
 
 # ============================================================================
@@ -270,31 +270,31 @@ routine U8.$mul_wrap(you: U8) -> U8
 ### Returns `me + you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
-dangerous routine U8.$add_unchecked(you: U8) -> U8
+dangerous routine U8.add_unchecked(you: U8) -> U8
   return unsigned_add_exact[U8](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no underflow.
-dangerous routine U8.$sub_unchecked(you: U8) -> U8
+dangerous routine U8.sub_unchecked(you: U8) -> U8
   return unsigned_sub_exact[U8](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
-dangerous routine U8.$mul_unchecked(you: U8) -> U8
+dangerous routine U8.mul_unchecked(you: U8) -> U8
   return unsigned_mul_exact[U8](a: me, b: you)
 
 ### Returns `me // you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
-dangerous routine U8.$floordiv_unchecked(you: U8) -> U8
+dangerous routine U8.floordiv_unchecked(you: U8) -> U8
   return unsigned_div[U8](a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
-dangerous routine U8.$mod_unchecked(you: U8) -> U8
+dangerous routine U8.mod_unchecked(you: U8) -> U8
   return unsigned_rem[U8](a: me, b: you)
 
 # ============================================================================
@@ -304,19 +304,19 @@ dangerous routine U8.$mod_unchecked(you: U8) -> U8
 ### Returns `me + you`, clamped to `U8_MAX` on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, or `255` if it would exceed `U8_MAX`.
-routine U8.$add_clamp(you: U8) -> U8
+routine U8.add_clamp(you: U8) -> U8
   return unsigned_add_sat[U8](a: me, b: you)
 
 ### Returns `me - you`, clamped to `U8_MIN` on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `0` if it would go below `U8_MIN`.
-routine U8.$sub_clamp(you: U8) -> U8
+routine U8.sub_clamp(you: U8) -> U8
   return unsigned_sub_sat[U8](a: me, b: you)
 
 ### Returns `me * you`, clamped to `U8_MAX` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `255` if it would exceed `U8_MAX`.
-routine U8.$mul_clamp(you: U8) -> U8
+routine U8.mul_clamp(you: U8) -> U8
   var wide = mul[U16](zero_extend[U8, U16](me), zero_extend[U8, U16](you))
   if unsigned_gt[U16](wide, 255_u16)
     return U8_MAX
@@ -350,7 +350,7 @@ routine U8.pow_with_overflow(exp: U8) -> (U8, Bool)
 ### :param exp: The exponent.
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result exceeds `U8_MAX`.
-routine U8.$pow!(exp: U8) -> U8
+routine U8.pow!(exp: U8) -> U8
   var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
@@ -359,29 +359,29 @@ routine U8.$pow!(exp: U8) -> U8
 ### Returns `me ** exp` with wrapping arithmetic (mod 256).
 ### :param exp: The exponent.
 ### :returns: The result modulo 256.
-routine U8.$pow_wrap(exp: U8) -> U8
+routine U8.pow_wrap(exp: U8) -> U8
   var result: U8 = 1
   var base: U8 = me
   var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.$mul_wrap(base)
+      result = result.mul_wrap(base)
     e = e >> 1_u32
     if e > 0
-      base = base.$mul_wrap(base)
+      base = base.mul_wrap(base)
   return result
 
 ### Returns `me ** exp`, clamped to `U8_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `255` if it would overflow.
-routine U8.$pow_clamp(exp: U8) -> U8
+routine U8.pow_clamp(exp: U8) -> U8
   var result: U8 = 1
   var base: U8 = me
   var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.$mul_clamp(base)
-    base = base.$mul_clamp(base)
+      result = result.mul_clamp(base)
+    base = base.mul_clamp(base)
     e = e >> 1_u32
   return result
 
@@ -392,24 +392,24 @@ routine U8.$pow_clamp(exp: U8) -> U8
 ### Returns the bitwise AND of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me & you`.
-routine U8.$bitand(you: U8) -> U8
+routine U8.bitand(you: U8) -> U8
   return bit_and[U8](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
-routine U8.$bitor(you: U8) -> U8
+routine U8.bitor(you: U8) -> U8
   return bit_or[U8](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
-routine U8.$bitxor(you: U8) -> U8
+routine U8.bitxor(you: U8) -> U8
   return bit_xor[U8](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
-routine U8.$bitnot() -> U8
+routine U8.bitnot() -> U8
   return bit_xor[U8](a: me, b: U8_MAX)
 
 # ============================================================================
@@ -420,25 +420,25 @@ routine U8.$bitnot() -> U8
 ### Left-shifts this value by `bits` positions, filling vacated bits with zero.
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
-routine U8.$ashl(bits: U32) -> U8
+routine U8.ashl(bits: U32) -> U8
   return shift_left[U8](me, U8(bits))
 
 ### Right-shifts this value by `bits` positions, filling vacated bits with zero.
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits` (logical, zero-filling).
-routine U8.$ashr(bits: U32) -> U8
+routine U8.ashr(bits: U32) -> U8
   return shift_right_unsigned[U8](me, U8(bits))
 
-### Left-shifts this value by `bits` positions (logical shift, same as `$ashl` for unsigned).
+### Left-shifts this value by `bits` positions (logical shift, same as `ashl` for unsigned).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
-routine U8.$lshl(bits: U32) -> U8
+routine U8.lshl(bits: U32) -> U8
   return shift_left[U8](me, U8(bits))
 
-### Right-shifts this value by `bits` positions (logical shift, same as `$ashr` for unsigned).
+### Right-shifts this value by `bits` positions (logical shift, same as `ashr` for unsigned).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits` (zero-filling).
-routine U8.$lshr(bits: U32) -> U8
+routine U8.lshr(bits: U32) -> U8
   return shift_right_unsigned[U8](me, U8(bits))
 
 # ============================================================================
@@ -448,13 +448,13 @@ routine U8.$lshr(bits: U32) -> U8
 ### Returns `true` when both values are equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
-routine U8.$eq(you: U8) -> Bool
+routine U8.eq(you: U8) -> Bool
   return int_eq[U8](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
-routine U8.$cmp(you: U8) -> ComparisonSign
+routine U8.cmp(you: U8) -> ComparisonSign
   if unsigned_lt[U8](me, you)
     return ME_SMALL
   if unsigned_gt[U8](me, you)
@@ -512,12 +512,12 @@ routine U8.trailing_zeros() -> U8
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `8` if the value is `255`.
 routine U8.leading_ones() -> U8
-  return me.$bitnot().leading_zeros()
+  return me.bitnot().leading_zeros()
 
 ### Returns the number of trailing one bits, starting from the least-significant bit.
 ### :returns: The trailing one count; `8` if the value is `255`.
 routine U8.trailing_ones() -> U8
-  return me.$bitnot().trailing_zeros()
+  return me.bitnot().trailing_zeros()
 
 ### Returns this value with its bits reversed (bit 7 ↔ bit 0, etc.).
 ### :returns: The bit-reversed `U8`.
@@ -645,19 +645,19 @@ routine U8.is_odd() -> Bool
 
 ### Returns the human-readable text of this value.
 ### :returns: The value rendered as `Text`.
-routine U8.$represent() -> Text
-  return U32(me).$represent()
+routine U8.represent() -> Text
+  return U32(me).represent()
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
-routine U8.$diagnose() -> Text
-  return "U8(" + me.$represent() + ")"
+routine U8.diagnose() -> Text
+  return "U8(" + me.represent() + ")"
 
 ### Parses a decimal string into a `U8`.
 ### :param from_text: The decimal string to parse (no sign, no prefix).
 ### :returns: The parsed `U8` value.
 ### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
-routine U8.$create!(from_text: Text) -> U8
+routine U8!(from_text: Text) -> U8
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "U8")
   var result = 0u32
@@ -677,12 +677,12 @@ routine U8.$create!(from_text: Text) -> U8
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the 8-bit value.
-routine U8.$fast_hash() -> U64
+routine U8.fast_hash() -> U64
   return __hash_leaf(v: zero_extend[U8, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine U8.$hash(k0: U64, k1: U64) -> U64
+routine U8.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[U8, U64](me), k0: k0, k1: k1)

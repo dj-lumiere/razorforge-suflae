@@ -73,15 +73,10 @@ public sealed partial class StdlibLoader
     public StdlibLoader(string stdlibRoot, Language language)
     {
         _language = language;
-        _fileExtension = language == Language.Suflae
-            ? "*.sf"
-            : "*.rf";
-
-        // Use language-specific subdirectory
-        string subdir = language == Language.Suflae
-            ? "Suflae"
-            : "RazorForge";
-        _stdlibPath = Path.Combine(path1: stdlibRoot, path2: subdir);
+        // EXPERIMENT: Suflae has no authored Standard/Suflae/ Core yet, and SF's Core IS RF's Core
+        // (SF ≡ RF grammar / semantic-lowering-only difference). So SF borrows the RazorForge stdlib.
+        _fileExtension = "*.rf";
+        _stdlibPath = Path.Combine(path1: stdlibRoot, path2: "RazorForge");
     }
 
     /// <summary>
@@ -235,7 +230,10 @@ public sealed partial class StdlibLoader
             try
             {
                 string code = File.ReadAllText(path: filePath);
-                Program ast = ParseFile(code: code, filePath: filePath);
+                // Parse stdlib files by their own extension, not the user language: the stdlib is
+                // RazorForge source (`.rf`, uses `danger`/`extern`), so a Suflae compile must still
+                // parse it with the RazorForge grammar (else SF-G112 on the `danger` bang).
+                Program ast = ParseFileByExtension(code: code, filePath: filePath);
 
                 // Find module declaration, or derive from directory
                 string? fileModule = GetDeclaredModule(program: ast);
@@ -641,8 +639,8 @@ public sealed partial class StdlibLoader
         {
             // Wrapper types (Hijacked, Viewing, Modifying, etc.) are not in _types — create directly
             if (typeExpr.GenericArguments.Count == 1 &&
-                typeName is "Hijacked" or "Viewing" or "Modifying"
-                    or "Retained" or "Tracked" or "Shared" or "Watched")
+                typeName is RuntimeContract.Hijacked or RuntimeContract.Viewing or RuntimeContract.Modifying
+                    or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Shared or RuntimeContract.Watched)
             {
                 TypeInfo? wrapperInner = ResolveSimpleType(registry: registry,
                     typeExpr: typeExpr.GenericArguments[index: 0],
@@ -650,7 +648,7 @@ public sealed partial class StdlibLoader
                     moduleName: moduleName);
                 if (wrapperInner != null)
                 {
-                    bool isReadOnly = typeName is "Viewing";
+                    bool isReadOnly = typeName is RuntimeContract.Viewing;
                     return registry.GetOrCreateWrapperType(wrapperName: typeName,
                         innerType: wrapperInner,
                         isReadOnly: isReadOnly);

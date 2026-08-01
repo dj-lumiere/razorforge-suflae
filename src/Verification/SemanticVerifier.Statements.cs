@@ -79,8 +79,8 @@ public sealed partial class SemanticVerifier
         // A user-defined `$destroy` replaces the compiler-generated memory teardown (field
         // recursion + invalidate `me`), so the author owns freeing `me` and its fields. Require
         // `dangerous` so this opt-in to manual memory management is explicit at the declaration.
-        bool isDestroyDecl = routine.Name == "$destroy"
-            || routine.Name.EndsWith(value: ".$destroy", comparisonType: StringComparison.Ordinal);
+        bool isDestroyDecl = routine.Name == "destroy"
+            || routine.Name.EndsWith(value: ".destroy", comparisonType: StringComparison.Ordinal);
         if (isDestroyDecl && !routine.IsDangerous)
         {
             ReportError(code: SemanticDiagnosticCode.DestroyMustBeDangerous,
@@ -114,7 +114,7 @@ public sealed partial class SemanticVerifier
             TypeSymbol? ownerType = LookupTypeWithImports(name: lookupName);
             // Protocol-extension decls like `Iterable[Text].join` should have `me` typed as the
             // bracketed owner so the body's `for part in me` resolves `part` from
-            // Iterable[Text]'s try_next() return. Without this, `me` is the bare gen-def
+            // Iterable[Text]'s try_emit() return. Without this, `me` is the bare gen-def
             // `Iterable` and body identifiers (parameters, loop vars) get ErrorTypeInfo.
             // Only override for ProtocolTypeInfo: for records/entities like
             // `List[PQEntry[TPriority, TElement]]` the gen-param resolution must happen through
@@ -139,6 +139,19 @@ public sealed partial class SemanticVerifier
                 : $"{module}.{routine.Name}";
         }
 
+        // CONSTRUCTORS (`routine T(...)`) are the one case the dot-based name-string logic above
+        // can't bind: their AST name is the bare type ("U64", "List") with no ".create" to key on,
+        // so the registry lookup misses and the body would analyze against a stub. Use the structured
+        // binding attached at registration (ResolvedInfo) for THAT case only — every other routine
+        // (dotted members, protocol extensions like `MutableIndexable[T].pick`) keeps the existing
+        // path, whose `me`-typing special-casing must not be bypassed.
+        bool isConstructorDecl = !routine.Name.Contains(value: '.')
+            && routine.ResolvedInfo is { Name: "create", OwnerType: not null };
+        if (isConstructorDecl && routine.ResolvedInfo!.OwnerType is { } resolvedInfoOwner)
+        {
+            routineOwnerType = resolvedInfoOwner;
+        }
+
         // Look up by RegistryKey (BaseName + param types) for overload disambiguation,
         // then fall back to BaseName for the first-overload-wins entry.
         // Set up generic parameter context so ResolveType recognizes T, U, etc.
@@ -153,8 +166,8 @@ public sealed partial class SemanticVerifier
             OwnerType = routineOwnerType
         };
 
-        RoutineInfo? routineInfo = null;
-        if (routine.Parameters.Count > 0)
+        RoutineInfo? routineInfo = isConstructorDecl ? routine.ResolvedInfo : null;
+        if (routineInfo == null && routine.Parameters.Count > 0)
         {
             IEnumerable<string> paramTypeNames = routine.Parameters
                                                         .Select(selector: p =>
@@ -202,10 +215,10 @@ public sealed partial class SemanticVerifier
                 isFailable: routine.IsFailable);
 
             // Fallback: extension methods on concrete generic specializations
-            // (e.g., `List[Byte].$create`) register under the concrete owner type,
-            // producing a RegistryKey like `Core.List[Core.Byte].$create#Core.Bytes`.
+            // (e.g., `List[Byte].create`) register under the concrete owner type,
+            // producing a RegistryKey like `Core.List[Core.Byte].create#Core.Bytes`.
             // The first lookup above used the generic-def-normalized owner
-            // (`Core.List[T].$create`), so it missed. Resolve the concrete owner
+            // (`Core.List[T].create`), so it missed. Resolve the concrete owner
             // type from the routine name and rebuild the canonical key.
             if (routineInfo == null && routine.Name.Contains(value: '.'))
             {
@@ -554,10 +567,21 @@ public sealed partial class SemanticVerifier
     {
         TypeSymbol varType;
 
+        // Suflae: an entity-reference annotation (`x: E` / `x: E?`) stores a `Roamed[E]` handle. Track
+        // whether the annotation made this a nullable slot and whether it is a non-null entity slot.
+        bool annotatedNullable = false;
+        bool annotatedNonNullEntity = false;
+
         if (varDecl.Type != null)
         {
             // Explicit type annotation
             varType = ResolveType(typeExpr: varDecl.Type);
+
+            (TypeSymbol resolved, bool isNullable, bool isEntitySlot) =
+                ResolveSuflaeEntityAnnotation(annotated: varType);
+            varType = resolved;
+            annotatedNullable = isNullable;
+            annotatedNonNullEntity = isEntitySlot && !isNullable;
         }
         else if (varDecl.Initializer != null)
         {
@@ -665,7 +689,7 @@ public sealed partial class SemanticVerifier
         if (_registry.Language == Language.RazorForge &&
             IsInlineOnlyTokenType(type: varType))
         {
-            string wrapperName = GetBaseTypeName(typeName: varType.Name);
+            string wrapperName = varType.BareName;
             ReportError(code: SemanticDiagnosticCode.ImplicitWrapperCopy,
                 message:
                 $"'{wrapperName}[…]' is a scoped access token and cannot be stored in '{varDecl.Name}'. " +
@@ -700,7 +724,24 @@ public sealed partial class SemanticVerifier
         // A new declaration shadows any prior steal of the same name in this scope.
         _deadrefVariables.Remove(item: varDecl.Name);
 
-        bool declared = _registry.DeclareVariable(name: varDecl.Name, type: varType);
+        // Suflae flow typing: a local is nullable when it was annotated `E?`, or (with no annotation)
+        // inferred from a nullable entity read (`var n = a.optField`) or a `none` literal — so member
+        // access on it is gated until a null-check.
+        bool varIsNullable = annotatedNullable ||
+            (varDecl.Type == null && varDecl.Initializer != null &&
+             IsNullableEntityRead(expr: varDecl.Initializer));
+
+        // Suflae: assigning a possibly-none value into a NON-NULL entity variable (`var x: E = <nullable>`
+        // or `var x: E = none`) is rejected — declare the variable optional (`x: E?`) to allow none.
+        if (annotatedNonNullEntity && varDecl.Initializer != null &&
+            IsNullableEntityRead(expr: varDecl.Initializer))
+        {
+            ReportNullableIntoNonNull(target: $"variable '{varDecl.Name}'",
+                value: varDecl.Initializer, optionalHint: $"{varDecl.Name}: <Type>?");
+        }
+
+        bool declared = _registry.DeclareVariable(name: varDecl.Name, type: varType,
+            isNullable: varIsNullable);
 
         if (!declared)
         {
@@ -723,7 +764,7 @@ public sealed partial class SemanticVerifier
         // readers-XOR-writer check keys on the shared DATA, not the variable name — a clone
         // (`var s2 = s.share()`) inherits `s`'s identity and so conflicts with it.
         if (_registry.Language == Language.RazorForge &&
-            GetBaseTypeName(typeName: varType.Name) is "Shared" or "Watched")
+            varType.BareName is Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched)
         {
             RecordSharedHandleIdentity(name: varDecl.Name, initializer: varDecl.Initializer);
         }
@@ -752,7 +793,7 @@ public sealed partial class SemanticVerifier
             string routineName = call.Callee switch
             {
                 IdentifierExpression id => id.Name,
-                MemberExpression member => member.PropertyName,
+                MemberExpression member => member.MemberName,
                 _ => "routine"
             };
 
@@ -850,13 +891,13 @@ public sealed partial class SemanticVerifier
             {
                 ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                     message:
-                    $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
+                    $"Cannot write to member '{member.MemberName}' through read-only wrapper '{objectType.Name}'. " +
                     "Use Modifying[T] for exclusive write access or Claiming[T] for locked write access.",
                     location: assign.Location);
             }
 
             ValidateMemberVariableWriteAccess(objectType: objectType,
-                memberVariableName: member.PropertyName,
+                memberVariableName: member.MemberName,
                 location: assign.Location);
 
             // Preset enforcement: cannot assign to member variables of preset variables
@@ -868,7 +909,7 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.MemberVariableAssignmentOnImmutable,
                         message:
-                        $"Cannot assign to member variable '{member.PropertyName}' of preset variable '{memberVariableTarget.Name}'.",
+                        $"Cannot assign to member variable '{member.MemberName}' of preset variable '{memberVariableTarget.Name}'.",
                         location: assign.Location);
                 }
             }
@@ -879,7 +920,7 @@ public sealed partial class SemanticVerifier
             {
                 ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                     message:
-                    $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                    $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
                     "Use @migratable to allow mutations.",
                     location: assign.Location);
             }

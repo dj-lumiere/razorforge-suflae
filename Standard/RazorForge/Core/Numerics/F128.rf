@@ -276,7 +276,7 @@ routine F128.frac() -> F128
 
 ### Returns the arithmetic negation (sign bit flipped).
 ### :returns: The negated value.
-routine F128.$neg() -> F128
+routine F128.neg() -> F128
   return F128.from_bits(bits: bit_xor[U128](a: me.to_bits(), b: f128_sign_mask()))
 
 ### Returns the absolute value (sign bit cleared).
@@ -299,7 +299,7 @@ routine F128.copysign(sign: F128) -> F128
 ### Returns whether two values compare equal (NaN compares unequal; +0 == -0).
 ### :param you: The value to compare against.
 ### :returns: Whether the values are ordered-equal.
-routine F128.$eq(you: F128) -> Bool
+routine F128.eq(you: F128) -> Bool
   if me.is_nan() or you.is_nan()
     return false
   if me.is_zero() and you.is_zero()
@@ -309,7 +309,7 @@ routine F128.$eq(you: F128) -> Bool
 ### Compares this value with `you` under IEEE ordered semantics (pure bit logic).
 ### :param you: The value to compare against.
 ### :returns: The comparison sign (SAME for unordered/NaN).
-routine F128.$cmp(you: F128) -> ComparisonSign
+routine F128.cmp(you: F128) -> ComparisonSign
   if me.is_nan() or you.is_nan()
     return SAME
   if me.is_zero() and you.is_zero()
@@ -328,13 +328,13 @@ routine F128.$cmp(you: F128) -> ComparisonSign
 
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
-# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+# keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
 
 ### Returns `me + you` (software IEEE 754, round-to-nearest-even). Checked: crashes if the result is
-### non-finite. Use `$add_unchecked` for raw IEEE 754 propagation.
+### non-finite. Use `add_unchecked` for raw IEEE 754 propagation.
 ### :param you: The addend.
 ### :returns: The sum (always finite).
-routine F128.$add!(you: F128) -> F128
+routine F128.add!(you: F128) -> F128
   var r = F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: you.to_bits()))
   if r.is_finite()
     return r
@@ -343,10 +343,10 @@ routine F128.$add!(you: F128) -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me - you` (software IEEE 754). Checked: crashes if the result is non-finite.
-### Use `$sub_unchecked` for raw IEEE 754 propagation.
+### Use `sub_unchecked` for raw IEEE 754 propagation.
 ### :param you: The value to subtract.
 ### :returns: The difference (always finite).
-routine F128.$sub!(you: F128) -> F128
+routine F128.sub!(you: F128) -> F128
   var yb = bit_xor[U128](a: you.to_bits(), b: f128_sign_mask())
   var r = F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: yb))
   if r.is_finite()
@@ -356,10 +356,10 @@ routine F128.$sub!(you: F128) -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me * you` (software IEEE 754). Checked: crashes if the result is non-finite.
-### Use `$mul_unchecked` for raw IEEE 754 propagation.
+### Use `mul_unchecked` for raw IEEE 754 propagation.
 ### :param you: The multiplier.
 ### :returns: The product (always finite).
-routine F128.$mul!(you: F128) -> F128
+routine F128.mul!(you: F128) -> F128
   var r = F128.from_bits(bits: f128_mul_bits(a: me.to_bits(), b: you.to_bits()))
   if r.is_finite()
     return r
@@ -368,10 +368,10 @@ routine F128.$mul!(you: F128) -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me / you` (software IEEE 754). Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain,
-### overflow -> overflow. Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+### overflow -> overflow. Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 ### :param you: The divisor.
 ### :returns: The quotient (always finite).
-routine F128.$truediv!(you: F128) -> F128
+routine F128.truediv!(you: F128) -> F128
   var r = F128.from_bits(bits: f128_div_bits(a: me.to_bits(), b: you.to_bits()))
   if r.is_finite()
     return r
@@ -410,7 +410,7 @@ routine F128.floor() -> F128
   if not me.is_finite()
     return me
   var t = me.trunc()
-  if me.is_negative() and not t.$eq(me)
+  if me.is_negative() and not t.eq(me)
     return t - f128_from_int(1_u64)
   return t
 
@@ -420,7 +420,7 @@ routine F128.ceil() -> F128
   if not me.is_finite()
     return me
   var t = me.trunc()
-  if me.is_positive() and not t.$eq(me)
+  if me.is_positive() and not t.eq(me)
     return t + f128_from_int(1_u64)
   return t
 
@@ -1180,7 +1180,7 @@ routine F128.remainder(you: F128) -> F128
   if sub_b
     r = r - b
   if me.is_negative()
-    r = r.$neg()
+    r = r.neg()
   return r
 
 # ============================================================================
@@ -1190,14 +1190,14 @@ routine F128.remainder(you: F128) -> F128
 
 ### Returns the decimal text of this value (%g with 6 significant digits).
 ### :returns: The formatted representation.
-routine F128.$represent() -> Text
+routine F128.represent() -> Text
   if me.is_signaling()
     return "snan"
   return f128_represent(bits: me.to_bits())
 
 ### Returns a diagnostic representation tagged with the type name.
 ### :returns: The formatted representation.
-routine F128.$diagnose() -> Text
+routine F128.diagnose() -> Text
   return "F128(" + f128_represent(bits: me.to_bits()) + ")"
 
 ### Builds the `F128` value of a small non-negative integer (castFromInt).
@@ -1322,7 +1322,7 @@ routine f128_strip(s: Text) -> Text
 ### F128 carries reliably. Extraction runs in F128 arithmetic, so it CANNOT exceed ~34
 ### digits (the residual drifts past [0,10) and emits garbage); a bit-exact 36-digit
 ### round-trip would need F256-precision digit extraction here AND a 36-digit parser
-### (the current `$create!` narrows through 34-digit D128). Trailing zeros are stripped.
+### (the current `create!` narrows through 34-digit D128). Trailing zeros are stripped.
 ### :param bits: The raw `F128` encoding.
 ### :returns: The decimal text.
 routine f128_represent(bits: U128) -> Text
@@ -1531,73 +1531,73 @@ preset F128_LN_10: F128 = 2.302585092994045684017991454684364208_f128
 ### Converts an `S8` into quadruple-precision floating-point form.
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F128` value.
-routine F128.$create(from: S8) -> F128
+routine F128(from: S8) -> F128
   return F128(from: sign_extend[S8, S64](from))
 
 ### Converts an `S16` into quadruple-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F128` value.
-routine F128.$create(from: S16) -> F128
+routine F128(from: S16) -> F128
   return F128(from: sign_extend[S16, S64](from))
 
 ### Converts an `S32` into quadruple-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The corresponding `F128` value.
-routine F128.$create(from: S32) -> F128
+routine F128(from: S32) -> F128
   return F128(from: sign_extend[S32, S64](from))
 
 ### Converts an `S64` into quadruple-precision floating-point form.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: S64) -> F128
+routine F128(from: S64) -> F128
   return UnpackedFloat[U128, U256, 128].from_s64(src: from).to_f128()
 
 ### Converts an `S128` into quadruple-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: S128) -> F128
+routine F128(from: S128) -> F128
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](0_s128 - from) else reinterpret_bits[S128, U128](from)
   var r = F128(from: mag)
-  return if neg then r.$neg() else r
+  return if neg then r.neg() else r
 
 ### Converts an `S256` into quadruple-precision floating-point form.
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: S256) -> F128
+routine F128(from: S256) -> F128
   var neg = signed_lt[S256](a: from, b: 0_s256)
   var mag = if neg then reinterpret_bits[S256, U256](0_s256 - from) else reinterpret_bits[S256, U256](from)
   var r = F128(from: mag)
-  return if neg then r.$neg() else r
+  return if neg then r.neg() else r
 
 ### Converts a `U8` into quadruple-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F128` value.
-routine F128.$create(from: U8) -> F128
+routine F128(from: U8) -> F128
   return F128(from: zero_extend[U8, U64](from))
 
 ### Converts a `U16` into quadruple-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F128` value.
-routine F128.$create(from: U16) -> F128
+routine F128(from: U16) -> F128
   return F128(from: zero_extend[U16, U64](from))
 
 ### Converts a `U32` into quadruple-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The corresponding `F128` value.
-routine F128.$create(from: U32) -> F128
+routine F128(from: U32) -> F128
   return F128(from: zero_extend[U32, U64](from))
 
 ### Converts a `U64` into quadruple-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: U64) -> F128
+routine F128(from: U64) -> F128
   return UnpackedFloat[U128, U256, 128].from_u64(v: from).to_f128()
 
 ### Converts a `U128` into quadruple-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: U128) -> F128
+routine F128(from: U128) -> F128
   # value = hi * 2^64 + lo, evaluated in correctly-rounded F128 arithmetic
   # (2^64 = 2^63 * 2, since 2^64 itself does not fit a U64 literal).
   var hi = int_truncate[U128, U64](from >>> 64u32)
@@ -1616,7 +1616,7 @@ routine F128.$create(from: U128) -> F128
 ### far inside F128's range, so the checked `*`/`+` never overflow).
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: U256) -> F128
+routine F128(from: U256) -> F128
   var hi = int_truncate[U256, U128](from >>> 128u32)
   var lo = int_truncate[U256, U128](from)
   var two63 = F128(from: 9223372036854775808_u64)
@@ -1628,13 +1628,13 @@ routine F128.$create(from: U256) -> F128
 ### Widens a half-precision float to quadruple precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F128` carrying the same numeric value when representable.
-routine F128.$create(from: F16) -> F128
+routine F128(from: F16) -> F128
   return F128(from: float_extend[F32, F64](float_extend[F16, F32](from)))
 
 ### Widens a single-precision float to quadruple precision.
 ### :param from: The `F32` value to widen.
 ### :returns: An `F128` carrying the same numeric value when representable.
-routine F128.$create(from: F32) -> F128
+routine F128(from: F32) -> F128
   return F128(from: float_extend[F32, F64](from))
 
 ### Widens a double-precision float to quadruple precision (exact, pure bit surgery).
@@ -1642,7 +1642,7 @@ routine F128.$create(from: F32) -> F128
 ### always exact; F64 subnormals normalize into the vast F128 normal range.
 ### :param from: The `F64` value to widen.
 ### :returns: An `F128` carrying the same numeric value.
-routine F128.$create(from: F64) -> F128
+routine F128(from: F64) -> F128
   var bits = reinterpret_bits[F64, U64](from)
   var sign = shift_right_unsigned[U64](bits, 63_u64)
   var e = bit_and[U64](a: shift_right_unsigned[U64](bits, 52_u64), b: 0x7FF_u64)
@@ -1674,25 +1674,25 @@ routine F128.$create(from: F64) -> F128
 ### Returns an existing `F128` unchanged.
 ### :param from: The quadruple-precision value to forward.
 ### :returns: `from`.
-routine F128.$create(from: F128) -> F128
+routine F128(from: F128) -> F128
   return from
 
 ### Converts a decimal32 value to quadruple-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: D32) -> F128
+routine F128(from: D32) -> F128
   return F128(from: F64(from))
 
 ### Converts a decimal64 value to quadruple-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: D64) -> F128
+routine F128(from: D64) -> F128
   return d64_to_f128(x: from)
 
 ### Converts a decimal128 value to quadruple-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
-routine F128.$create(from: D128) -> F128
+routine F128(from: D128) -> F128
   return d128_to_f256(x: from).to_f128()
 
 # ============================================================================
@@ -1700,7 +1700,7 @@ routine F128.$create(from: D128) -> F128
 # ============================================================================
 
 ### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
-### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite!()`.
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite()`.
 ### :returns: `me`, when finite.
 ### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
 routine F128.finite!() -> F128
@@ -1714,19 +1714,19 @@ routine F128.finite!() -> F128
 # marker.
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
-routine F128.$truediv_unchecked(you: F128) -> F128
+routine F128.truediv_unchecked(you: F128) -> F128
   return F128.from_bits(bits: f128_div_bits(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F128.$add_unchecked(you: F128) -> F128
+routine F128.add_unchecked(you: F128) -> F128
   return F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F128.$sub_unchecked(you: F128) -> F128
+routine F128.sub_unchecked(you: F128) -> F128
   return F128.from_bits(bits: f128_add_bits(a: me.to_bits(), b: bit_xor[U128](a: you.to_bits(), b: f128_sign_mask())))
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F128.$mul_unchecked(you: F128) -> F128
+routine F128.mul_unchecked(you: F128) -> F128
   return F128.from_bits(bits: f128_mul_bits(a: me.to_bits(), b: you.to_bits()))
 
 # ============================================================================
@@ -1799,7 +1799,7 @@ routine F128.high_bits() -> U64
 ### Returns `me + you`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param you: The addend.
 ### :returns: The sum, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
-routine F128.$add_clamp(you: F128) -> F128
+routine F128.add_clamp(you: F128) -> F128
   var result = me + you
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
@@ -1808,7 +1808,7 @@ routine F128.$add_clamp(you: F128) -> F128
 ### Returns `me - you`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
-routine F128.$sub_clamp(you: F128) -> F128
+routine F128.sub_clamp(you: F128) -> F128
   var result = me - you
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
@@ -1817,7 +1817,7 @@ routine F128.$sub_clamp(you: F128) -> F128
 ### Returns `me * you`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param you: The multiplier.
 ### :returns: The product, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
-routine F128.$mul_clamp(you: F128) -> F128
+routine F128.mul_clamp(you: F128) -> F128
   var result = me * you
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
@@ -1826,7 +1826,7 @@ routine F128.$mul_clamp(you: F128) -> F128
 ### Returns `me / you`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param you: The divisor.
 ### :returns: The quotient, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
-routine F128.$truediv_clamp(you: F128) -> F128
+routine F128.truediv_clamp(you: F128) -> F128
   var result = me / you
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
@@ -1835,7 +1835,7 @@ routine F128.$truediv_clamp(you: F128) -> F128
 ### Returns `me ** exp`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param exp: The exponent applied to `me`.
 ### :returns: The power, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
-routine F128.$pow_clamp(exp: F128) -> F128
+routine F128.pow_clamp(exp: F128) -> F128
   var result = me ** exp
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else F128_MIN
@@ -1882,7 +1882,7 @@ routine f128_rshift_rne(sig: U128, drop: U64) -> U64
 
 ### Narrows this quadruple-precision value to single precision.
 ### :returns: The nearest representable `F32` value.
-routine F32.$create(from: F128) -> F32
+routine F32(from: F128) -> F32
   # F128 -> F64 (correctly rounded) -> F32 (native fptrunc). The wide F64 slack
   # makes the second rounding faithful for all but pathological double-round ties.
   return float_narrow[F64, F32](F64(from: from))
@@ -1891,7 +1891,7 @@ routine F32.$create(from: F128) -> F32
 ### pure bit surgery — F128 is an i128 carrier, so no LLVM `fptrunc` is available).
 ### Handles inf/NaN, overflow to ±inf, the F64 subnormal range, and underflow to ±0.
 ### :returns: The nearest representable `F64` value (round-to-nearest-ties-to-even).
-routine F64.$create(from: F128) -> F64
+routine F64(from: F128) -> F64
   var raw = from.to_bits()
   var sign = int_truncate[U128, U64](shift_right_unsigned[U128](raw, 127_u128))
   var E = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](raw, 112_u128), b: 32767_u128))
@@ -1974,7 +1974,7 @@ routine f128_pow5(k: S64) -> U256
 ### :param from_text: The decimal literal.
 ### :returns: The correctly-rounded `F128` value.
 ### :throws: {InvalidValueError} on malformed input.
-routine F128.$create!(from_text: Text) -> F128
+routine F128!(from_text: Text) -> F128
   # PROVABLY-CORRECT decimal->binary128. FAST PATH: `coeff x 10^exp` in F512 (489-bit
   # significand) is correctly-rounded for EVERY non-tie input — its ~2^-475 error is far
   # below the ~2^-239 worst-case decimal->F128 separation. EXACT TIES (the round-half-even
@@ -1982,14 +1982,14 @@ routine F128.$create!(from_text: Text) -> F128
   # is exact anyway, and for exp<0 a tie requires 5^|exp| | coeff, in which case
   # V = (coeff / 5^|exp|) x 2^exp is EXACT in F512 via ldexp and resolved with bounded U256.
   # No bignum, no module-Numerics dependency, no table beyond the existing f512_pow10.
-  var p = scan_decimal_parts!(from_text: from_text)
+  var p = scan_decimal_parts(from_text: from_text)
   if int_eq[U64](a: p.special, b: 0_u64) and int_ne[U128](a: p.coeff, b: 0_u128) and signed_lt[S64](a: p.exp, b: 0_s64) and signed_ge[S64](a: p.exp, b: -56_s64)
     var p5 = f128_pow5(k: sub[S64](a: 0_s64, b: p.exp))
     var cw = zero_extend[U128, U256](p.coeff)
     if int_eq[U256](a: unsigned_rem[U256](a: cw, b: p5), b: zero_extend[U64, U256](0_u64))
       var m = unsigned_div[U256](a: cw, b: p5)
       var r = uf512_from_u256(c: m).ldexp(e: p.exp).to_f128()
-      return if p.sign then r.$neg() else r
+      return if p.sign then r.neg() else r
   return d128parts_to_f512(p: p).to_uf().to_f128()
 
 # ============================================================================
@@ -1998,7 +1998,7 @@ routine F128.$create!(from_text: Text) -> F128
 
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
-routine F128.$fast_hash() -> U64
+routine F128.fast_hash() -> U64
   return __hash_u128(v: reinterpret_bits[F128, U128](me))
 
 # ============================================================================
@@ -2061,5 +2061,5 @@ routine F128.to_bytes_be() -> Array[Byte, 16]
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
-routine F128.$hash(k0: U64, k1: U64) -> U64
+routine F128.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u128(v: reinterpret_bits[F128, U128](me), k0: k0, k1: k1)

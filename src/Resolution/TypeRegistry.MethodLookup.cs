@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using SyntaxTree;
@@ -18,6 +19,29 @@ public sealed partial class TypeRegistry
     /// and BaseName for first-overload-wins unqualified lookup.
     /// </summary>
     /// <param name="routine">The routine to register.</param>
+    /// <summary>
+    /// Divergent cross-file duplicate constructors found during registration: two creators sharing a
+    /// signature but with DIFFERENT bodies, defined in DIFFERENT files. Registration is last-wins, so
+    /// one silently shadows the other — the hazard class that made <c>F64(from: F128)</c> resolve to a
+    /// recursive-forwarder stub instead of the real engine impl (infinite recursion). Surfaced as a
+    /// build error by <see cref="Verification.SemanticVerifier"/>. Benign identical duplicates (same
+    /// body, e.g. <c>U16(from: U8)</c> in both U8.rf and U16.rf) are NOT recorded (equal BodyHash).
+    /// </summary>
+    public List<(RoutineInfo First, RoutineInfo Second)> DivergentDuplicateCreators { get; } = [];
+
+    /// <summary>
+    /// Location-free structural hash of a constructor body for the divergent-duplicate guard (source
+    /// text, not record ToString which embeds SourceLocation — so identical logic in two files hashes
+    /// equal). Null for empty / extern (PassStatement) bodies. Computed only for creators by the two
+    /// registration paths (StdlibLoader, SignatureResolver).
+    /// </summary>
+    public static int? ComputeCreatorBodyHash(Statement? body)
+    {
+        if (body is null or PassStatement) return null;
+        return body.Accept(visitor: new Builder.RfSyntaxTreePrinter())
+                   .GetHashCode(comparisonType: StringComparison.Ordinal);
+    }
+
     public void RegisterRoutine(RoutineInfo routine) // NOSONAR S3776
     {
         string registryKey = routine.RegistryKey;
@@ -26,11 +50,27 @@ public sealed partial class TypeRegistry
         // Register under RegistryKey for exact overload matching.
         // Never let a synthesized (builder-generated) routine overwrite a user-written one:
         // explicit user routines override synthetic same-signature defaults (e.g., a user
-        // `T.$create(field: Foo)` overrides the auto-generated record field constructor).
+        // `T.create(field: Foo)` overrides the auto-generated record field constructor).
         bool keyExisted =
             _routines.TryGetValue(key: registryKey, value: out RoutineInfo? existingByKey);
         if (keyExisted)
         {
+            // Divergent cross-file duplicate constructor guard (see DivergentDuplicateCreators):
+            // same signature + SAME failability, both real (non-synthetic), different files, DIFFERENT
+            // bodies. Failability must match: a checked `T!(from: X)` and a reinterpret `T(from: X)`
+            // legitimately share a signature (they coexist via the owner+IsFailable index) and are NOT a
+            // divergent duplicate — only same-failability same-signature different-body pairs are the bug.
+            if (existingByKey is { IsSynthesized: false, BodyHash: { } h1 }
+                && routine is { IsSynthesized: false, BodyHash: { } h2 }
+                && existingByKey.IsFailable == routine.IsFailable
+                && h1 != h2
+                && existingByKey.Location?.FileName is { } f1
+                && routine.Location?.FileName is { } f2
+                && !string.Equals(a: f1, b: f2, comparisonType: StringComparison.OrdinalIgnoreCase))
+            {
+                DivergentDuplicateCreators.Add(item: (existingByKey, routine));
+            }
+
             bool existingIsUser = !existingByKey!.IsSynthesized;
             bool incomingIsSynthetic = routine.IsSynthesized;
             if (!(existingIsUser && incomingIsSynthetic))
@@ -171,7 +211,7 @@ public sealed partial class TypeRegistry
 
         // Try matching generic overloads by reconstructing the generic parameter pattern.
         // e.g., arg SortedSet[S64] -> its generic def is SortedSet with GenericParameters ["T"]
-        //        -> try key "List.$create#SortedSet[T]" which matches the registered generic overload.
+        //        -> try key "List.create#SortedSet[T]" which matches the registered generic overload.
         foreach (TypeInfo argType in argTypes)
         {
             if (!argType.IsGenericResolution)
@@ -239,6 +279,16 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// Looks up the routine registered under an exact <see cref="RoutineInfo.RegistryKey"/>.
+    /// Unlike <see cref="LookupRoutineOverload"/> this applies no Core-prefix or generic
+    /// fallbacks — it answers "is this precise owner+name+signature slot occupied?", which
+    /// reserved-variant collision detection needs to compare a generated variant against any
+    /// hand-written routine sharing its key.
+    /// </summary>
+    public RoutineInfo? GetRoutineByExactKey(string registryKey) =>
+        _routines.TryGetValue(key: registryKey, value: out RoutineInfo? routine) ? routine : null;
+
+    /// <summary>
     /// Looks up a routine by its full name.
     /// </summary>
     /// <param name="fullName">The fully qualified name of the routine.</param>
@@ -259,7 +309,7 @@ public sealed partial class TypeRegistry
 
         // isFailable != null: SA is disambiguating between failable and non-failable variants of
         // the same logical name. The parser strips '!' from routine names and tracks failability
-        // separately, so fullName is always without '!' here (e.g., "parse", "List.$getitem").
+        // separately, so fullName is always without '!' here (e.g., "parse", "List.getitem").
         // Use the (BaseName, IsFailable) secondary index for O(1) lookup.
         bool wantsFailable = isFailable.Value;
         var nameFailKey = (fullName, wantsFailable);
@@ -288,7 +338,7 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Looks up a routine by its module-qualified name (e.g., "Core.S8.$add").
+    /// Looks up a routine by its module-qualified name (e.g., "Core.S8.add").
     /// </summary>
     public RoutineInfo? LookupRoutineByQualifiedName(string qualifiedName)
     {
@@ -522,6 +572,19 @@ public sealed partial class TypeRegistry
     /// <param name="isFailable">Whether this is failable.</param>
     public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null)
     {
+        // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) obey `Storable` but define no concrete
+        // `$store` — their store-hook IS the refcount copy verb (retain/track/share/watch/roam). Redirect
+        // `$store` to that verb so a generic `T obeys Storable` call resolves to a real, defined method
+        // rather than an undefined `<Wrapper>.store` symbol (which would fail to link). A hand-written
+        // `$store` would recurse (its own `return me.retain()` re-enters `$store`), so the redirect lives
+        // here in lookup instead of as a stdlib method.
+        if (methodName == "store" && GetRcWrapperBaseName(type: type) is { } rcBase
+            && RuntimeContract.RcCopyVerb.TryGetValue(
+                key: rcBase, value: out string? rcVerb))
+        {
+            return LookupMethod(type: type, methodName: rcVerb, isFailable: isFailable);
+        }
+
         // Transparent-protocol unwrap: Referring[X] / Controlling[X] are markers that
         // dispatch every method to X. If the receiver is one of these wrappers with a
         // single type argument, recurse on the inner type. Without this, for-loops over
@@ -532,7 +595,7 @@ public sealed partial class TypeRegistry
             string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
             int markerBracket = markerBase.IndexOf(value: '[');
             if (markerBracket >= 0) markerBase = markerBase[..markerBracket];
-            if (markerBase is "Referring" or "Controlling")
+            if (markerBase is RuntimeContract.Referring or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMethod(type: markerArgs[index: 0],
                     methodName: methodName, isFailable: isFailable);
@@ -652,7 +715,7 @@ public sealed partial class TypeRegistry
             };
             int recBracket = recBaseName.IndexOf(value: '[');
             if (recBracket >= 0) recBaseName = recBaseName[..recBracket];
-            bool skipProtocols = recBaseName is "Retained" or "Tracked";
+            bool skipProtocols = recBaseName is RuntimeContract.Retained or RuntimeContract.Tracked;
             if (!skipProtocols)
             {
                 foreach (var protocol in protocols)
@@ -678,8 +741,8 @@ public sealed partial class TypeRegistry
         // controller pointer, reading controller's strong+weak counts as if they were T's first
         // fields. The forwarder-synthesis path emits the correct double-indirection body
         // (Hijacked[RetainController[T]](me).as_entity().borrow_data().as_entity().method(...)).
-        if (type is WrapperTypeInfo { Name: "Viewing"
-                or "Modifying" or "Inspecting" or "Claiming" or "Shared" or "Watched"
+        if (type is WrapperTypeInfo { Name: RuntimeContract.Viewing
+                or RuntimeContract.Modifying or RuntimeContract.Inspecting or RuntimeContract.Claiming or RuntimeContract.Shared or RuntimeContract.Watched
             } forwardingWrapper)
         {
             return LookupMethod(type: forwardingWrapper.InnerType,
@@ -745,7 +808,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// Looks up a method overload on a type using the argument types for disambiguation.
     /// This is used for operator/member dispatch where multiple wired overloads may exist
-    /// on the same owner type (for example Moment.$sub(Duration) and Moment.$sub(Moment)).
+    /// on the same owner type (for example Moment.sub(Duration) and Moment.sub(Moment)).
     /// </summary>
     public RoutineInfo? LookupMethodOverload(TypeInfo type, string methodName,
         List<TypeInfo> argTypes)
@@ -760,7 +823,7 @@ public sealed partial class TypeRegistry
             string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
             int markerBracket = markerBase.IndexOf(value: '[');
             if (markerBracket >= 0) markerBase = markerBase[..markerBracket];
-            if (markerBase is "Referring" or "Controlling")
+            if (markerBase is RuntimeContract.Referring or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMethodOverload(type: markerArgs[index: 0],
                     methodName: methodName, argTypes: argTypes);
@@ -773,8 +836,8 @@ public sealed partial class TypeRegistry
 
         // Protocol abstract methods are never a valid dispatch target on a concrete receiver —
         // RF protocols are abstract-only (no default impls). Including them would let lookup
-        // pick `Equatable.$eq(Self)` for `S128 == S64`, masking the integer-promotion fallback
-        // and emitting an unresolved `Core.Equatable.$eq` symbol at link time.
+        // pick `Equatable.eq(Self)` for `S128 == S64`, masking the integer-promotion fallback
+        // and emitting an unresolved `Core.Equatable.eq` symbol at link time.
         if (type is not ProtocolTypeInfo)
         {
             candidates.RemoveAll(match: c => c.OwnerType is ProtocolTypeInfo);
@@ -928,7 +991,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Substitutes the owner type's generic type parameters into a method's signature.
-    /// For example, List[S32].$add(item: T) -> List[S32].$add(item: S32).
+    /// For example, List[S32].add(item: T) -> List[S32].add(item: S32).
     /// </summary>
     internal RoutineInfo? SubstituteMethodForOwner(RoutineInfo method, TypeInfo resolvedOwner)
     {
@@ -1043,7 +1106,7 @@ public sealed partial class TypeRegistry
 
         // Wrapper-forwarder: re-resolve signature against the concrete inner method instead of
         // naive name substitution (inner-T vs wrapper-T collision: both T and List[T] use T,
-        // so {T: List[Character]} would map List[T].$getitem!'s T to List[Character], not Character).
+        // so {T: List[Character]} would map List[T].getitem!'s T to List[Character], not Character).
         // Note: wrapper types like T may be RecordTypeInfo (declared as `record` in RF),
         // not WrapperTypeInfo, so check TypeArguments.Count rather than the runtime type.
         if (method is { IsSynthesized: true, WrapperForwarderInnerMethod: { } innerGenMethod } &&
@@ -1088,7 +1151,7 @@ public sealed partial class TypeRegistry
                     FailableVariant = method.FailableVariant,
                     OriginalName = method.OriginalName,
                     // Propagate method-level generic parameters from the concrete inner method so
-                    // OperatorLoweringPass can monomorphize (e.g. Text.$getitem![I] -> [U64]).
+                    // OperatorLoweringPass can monomorphize (e.g. Text.getitem![I] -> [U64]).
                     GenericParameters = concreteInnerMethod.GenericParameters ?? method.GenericParameters,
                     GenericConstraints = concreteInnerMethod.GenericConstraints ?? method.GenericConstraints,
                 };
@@ -1106,7 +1169,7 @@ public sealed partial class TypeRegistry
                                       .ToList();
 
         // Substitute return type
-        // Special case: if return type IS the owner's generic def (e.g. Maybe.$copy returns Maybe_def),
+        // Special case: if return type IS the owner's generic def (e.g. Maybe.store returns Maybe_def),
         // the concrete return type is resolvedOwner itself (Maybe[ListNode[S64]], not Maybe_def).
         TypeInfo? substitutedReturn2;
         if (method.ReturnType != null && genericDef != null &&
@@ -1312,8 +1375,8 @@ public sealed partial class TypeRegistry
         {
             // For generic-protocol targets (e.g. Referring[Bytes]), require the type-argument
             // to match the source. Without this check, ANY type matches ANY generic protocol —
-            // CStr.$create(Referring[Bytes]) "accepts" a Text arg, beating
-            // CStr.$create(Referring[Text]) by source order and producing garbled output
+            // CStr.create(Referring[Bytes]) "accepts" a Text arg, beating
+            // CStr.create(Referring[Text]) by source order and producing garbled output
             // when SA emits a call to the wrong overload.
             if (targetProto.TypeArguments is { Count: 1 } pTypeArgs)
             {
@@ -1450,7 +1513,7 @@ public sealed partial class TypeRegistry
     ///
     /// <para>Plain OWN-method enumeration only — no protocol-method synthesis, no universal-method
     /// stub, no marker/wrapper unwrap (those are dispatch concerns). That keeps it from surfacing the
-    /// no-owner universal <c>T.$destroy</c> stub for a borrowed referent. Results are cached per
+    /// no-owner universal <c>T.destroy</c> stub for a borrowed referent. Results are cached per
     /// <c>FullName</c>; only fully-concrete resolutions are admitted to the cache.</para>
     /// </summary>
     public IEnumerable<RoutineInfo> GetOwnMethodsResolved(TypeInfo type)
@@ -1481,7 +1544,7 @@ public sealed partial class TypeRegistry
             foreach (RoutineInfo m in defMethods)
             {
                 // Universal (T-owned) methods are not the type's OWN methods — skip them so the
-                // no-owner T.$destroy stub never leaks in for a borrowed referent.
+                // no-owner T.destroy stub never leaks in for a borrowed referent.
                 if (m.OwnerType is GenericParameterTypeInfo) continue;
                 RoutineInfo? sub = SubstituteMethodForOwner(method: m, resolvedOwner: type);
                 if (sub != null) result.Add(item: sub);
@@ -1505,7 +1568,7 @@ public sealed partial class TypeRegistry
     /// access/borrow wrappers, so firing it is always safe by construction. The only thing this gate
     /// excludes is the ABSTRACT tier — generic parameters and protocols (the latter also covering the
     /// <c>Referring</c>/<c>Controlling</c> access markers) — which have no concrete <c>$destroy</c> to
-    /// resolve. The one remaining hazard, a <c>?T</c> reference bound to the bare referent type via the
+    /// resolve. The one remaining hazard, a <c>T</c> reference bound to the bare referent type via the
     /// reference primitives <c>$refer</c>/<c>$control</c>/<c>as_entity</c>, is excluded at the binding
     /// site by <c>ScopeTeardownLoweringPass.IsViewBinding</c> (keyed on the producing verb, since the
     /// binding's static type is the referent itself, not a borrow wrapper).
@@ -1514,8 +1577,39 @@ public sealed partial class TypeRegistry
         type is GenericParameterTypeInfo or ProtocolTypeInfo;
 
     /// <summary>
-    /// Resolves a type's owned-value lifecycle: its retaining <c>$copy</c> (a hand-written, i.e.
-    /// non-synthesized, zero-arg <c>$copy</c> on a record — the managed-leaf retain hook), its
+    /// If <paramref name="type"/> is an RC wrapper (Retained/Tracked/Shared/Watched/Roamed) — matched
+    /// by its generic base name — returns that base name, else null. Used to redirect the abstract
+    /// <c>$store</c> hook to the wrapper's concrete refcount copy verb (see
+    /// <see cref="RuntimeContract.RcCopyVerb"/>).
+    /// </summary>
+    private static string? GetRcWrapperBaseName(TypeInfo type)
+    {
+        string? name = type switch
+        {
+            RecordTypeInfo { GenericDefinition: { } gd } => gd.Name,
+            WrapperTypeInfo wt => wt.Name,
+            RecordTypeInfo r => r.Name,
+            _ => null
+        };
+        if (name is null)
+        {
+            return null;
+        }
+
+        int bracket = name.IndexOf(value: '[');
+        if (bracket >= 0)
+        {
+            name = name[..bracket];
+        }
+
+        return RuntimeContract.RcWrapperBaseNames.Contains(item: name)
+            ? name
+            : null;
+    }
+
+    /// <summary>
+    /// Resolves a type's owned-value lifecycle: its retaining <c>$store</c> (a hand-written, i.e.
+    /// non-synthesized, zero-arg <c>$store</c> on a record — the managed-leaf retain hook), its
     /// <c>$destroy</c> (preferring the user-written one), and whether it is a borrow-tier type. The
     /// teardown and copy lowering passes both drive off THIS one decision, so a value is either both
     /// retaining-copied and balanced-destroyed, or neither — never the asymmetry that double-freed
@@ -1528,33 +1622,81 @@ public sealed partial class TypeRegistry
 
         List<RoutineInfo> own = GetOwnMethodsResolved(type: type).ToList();
         RoutineInfo? destroy = own
-            .Where(predicate: m => m.Name == "$destroy" && m.Parameters.Count == 0)
+            .Where(predicate: m => m.Name == "destroy" && m.Parameters.Count == 0)
             .OrderBy(keySelector: m => m.IsSynthesized ? 1 : 0)
             .FirstOrDefault();
         RoutineInfo? copy = null;
-        if (type is RecordTypeInfo rec)
+        // Variant MUST be checked before RecordTypeInfo: VariantTypeInfo is a RecordTypeInfo subclass,
+        // so `type is RecordTypeInfo` would otherwise capture variants and give them the record
+        // field-walk copy — but a variant is a { tag, payload } union whose deep copy needs tag
+        // dispatch (BuildVariantCopyBody). Using the record copy on a variant double-frees / corrupts
+        // its heap arm (the nested_serialize regression).
+        if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
         {
-            // A hand-written $copy is always a retaining copy (the managed-leaf retain hook,
+            // A variant with a destructible arm (an arm whose own $destroy does real work — a heap
+            // entity like a collection, a managed leaf like Text, or a record that transitively owns
+            // one) would DOUBLE-FREE if bitwise-aliased: two copies of the variant both tear down the
+            // same heap arm. Its synthesized deep `copy` (WiredRoutinePass.BuildVariantCopyBody,
+            // tag-dispatch → reconstruct each destructible arm with `arm.copy()`) makes an independent
+            // value. Return it as Copy so the copy-lowering pass injects it at every copy point
+            // (record-ctor field-store, call-arg, assignment) — exactly where a bare alias would
+            // otherwise be torn down by both owners.
+            copy = own.FirstOrDefault(predicate: m =>
+                m.Name == "copy" && m.Parameters.Count == 0);
+        }
+        else if (type is RecordTypeInfo rec)
+        {
+            // A hand-written $store is always a retaining copy (the managed-leaf retain hook,
             // e.g. Text/Decimal bumping a shared controller).
             copy = own.FirstOrDefault(predicate: m =>
-                m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized);
+                m.Name == "store" && m.Parameters.Count == 0 && !m.IsSynthesized);
 
-            // The synthesized record $copy is field-delegating (WiredRoutinePass.
+            // The synthesized record $store is field-delegating (WiredRoutinePass.
             // BuildRecordCopyBody) — symmetric with the field-delegating synthesized $destroy.
             // Treat it as a retaining copy iff some field itself needs one, so it gets injected
             // at copy sites and balances the per-field $destroy at teardown (else: double-free).
             if (copy is null && RecordHasRetainingField(record: rec))
                 copy = own.FirstOrDefault(predicate: m =>
-                    m.Name == "$copy" && m.Parameters.Count == 0);
+                    m.Name == "store" && m.Parameters.Count == 0);
         }
         return new Lifecycle(Copy: copy, Destroy: destroy, IsBorrow: false);
     }
 
     /// <summary>
+    /// Whether a variant has at least one arm whose payload owns a real destructor — i.e. an arm type
+    /// with a non-borrow <c>$destroy</c> (a heap entity/collection, a managed leaf like <c>Text</c>, or
+    /// a record that transitively owns one). Such an arm double-frees on bitwise alias, so the variant
+    /// needs a synthesized deep <c>copy</c>. None/Blank/scalar arms are safe to bitwise-copy and are
+    /// ignored. Drives the variant branch of <see cref="GetLifecycle"/> and the copy/Copyable synthesis.
+    /// </summary>
+    public bool VariantHasDestructibleArm(VariantTypeInfo variant)
+    {
+        if (variant.IsGenericDefinition)
+            return false;
+
+        foreach (VariantMemberInfo member in variant.Members)
+        {
+            if (member.IsNone || member.Type is null)
+                continue;
+
+            Lifecycle armLc = GetLifecycle(type: member.Type);
+            if (!armLc.IsBorrow && armLc.Destroy is not null)
+                return true;
+            // An ENTITY arm is a heap reference with a destructor and double-frees on bitwise alias,
+            // even when its (generic-instance) destructor isn't materialized yet at this phase — so
+            // GetLifecycle reports a null Destroy. Recognize it directly by kind (mirrors the copy
+            // body in WiredRoutinePass.BuildVariantCopyBody, which copies every non-borrow arm).
+            if (member.Type is EntityTypeInfo)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Whether a record transitively contains a field that needs a retaining copy — i.e. a
-    /// field whose type has a hand-written <c>$copy</c> (a managed leaf such as <c>Text</c> or
+    /// field whose type has a hand-written <c>$store</c> (a managed leaf such as <c>Text</c> or
     /// <c>Decimal</c>), or a composite record that itself contains one. Drives whether the
-    /// synthesized field-delegating <c>$copy</c> counts as retaining in <see cref="GetLifecycle"/>.
+    /// synthesized field-delegating <c>$store</c> counts as retaining in <see cref="GetLifecycle"/>.
     /// </summary>
     private bool RecordHasRetainingField(RecordTypeInfo record,
         HashSet<string>? visited = null)
@@ -1571,7 +1713,7 @@ public sealed partial class TypeRegistry
                 continue;
             List<RoutineInfo> fieldOwn = GetOwnMethodsResolved(type: fieldRec).ToList();
             if (fieldOwn.Any(predicate: m =>
-                    m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized))
+                    m.Name == "store" && m.Parameters.Count == 0 && !m.IsSynthesized))
                 return true;
             if (RecordHasRetainingField(record: fieldRec, visited: visited))
                 return true;
@@ -1668,6 +1810,21 @@ public sealed partial class TypeRegistry
         if (_routinesByOwner.TryGetValue(key: ownerType.FullName, value: out List<RoutineInfo>? list))
             return list;
         return [];
+    }
+
+    /// <summary>
+    /// Enumerates every registered member routine object exactly once. <c>_routinesByOwner</c> holds
+    /// the full per-owner method lists (including all overloads), which is the comprehensive set the
+    /// wired-ness inference pass must iterate. Deduped by reference because the same routine object can
+    /// appear under multiple owner keys (e.g. a shell/canonical duplicate of a generic definition).
+    /// </summary>
+    public IEnumerable<RoutineInfo> EnumerateMemberRoutines()
+    {
+        var seen = new HashSet<RoutineInfo>(comparer: ReferenceEqualityComparer.Instance);
+        foreach (List<RoutineInfo> list in _routinesByOwner.Values)
+            foreach (RoutineInfo r in list)
+                if (seen.Add(item: r))
+                    yield return r;
     }
 
     #endregion

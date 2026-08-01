@@ -26,6 +26,9 @@ public partial class LlvmCodeGenerator
     /// <returns>The temporary value name produced for the expression.</returns>
     private string EmitExpression(StringBuilder sb, Expression expr)
     {
+        SourceLocation? savedLoc = PushDebugLoc(sb: sb, loc: expr.Location);
+        try
+        {
         return expr switch
         {
             // TODO: This should be eliminated by lowering pass
@@ -47,12 +50,17 @@ public partial class LlvmCodeGenerator
             // TODO: This should be eliminated by lowering pass
             CarrierPayloadExpression payload => EmitCarrierPayloadExpression(sb: sb,
                 payload: payload),
-            // Named arguments appear inside synthesized AST bodies (e.g., me.$eq(you: you)).
+            // Named arguments appear inside synthesized AST bodies (e.g., me.eq(you: you)).
             // The name is irrelevant to codegen -> just emit the inner value positionally.
             NamedArgumentExpression named => EmitExpression(sb: sb, expr: named.Value),
             _ => throw new NotImplementedException(
                 message: $"Expression type not implemented: {expr.GetType().Name}")
         };
+        }
+        finally
+        {
+            PopDebugLoc(sb: sb, prev: savedLoc);
+        }
     }
 
     /// <summary>
@@ -108,6 +116,12 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitRoutineValueClosure(StringBuilder sb, RoutineInfo routine)
     {
+        // Taking a routine as a value references it as a real callee (the adapter thunk calls it), so
+        // its body must be emitted. The thunk is written straight to the aux buffer and never routes
+        // through GenerateRoutineDeclaration, so record the reference here — otherwise a routine used
+        // ONLY as a value (e.g. a synthesized `$roam_*_impl` cycle-collector hook) fails the Phase-C
+        // `_referencedKeys` emission gate and links against an undefined symbol.
+        _referencedKeys.Add(item: routine.RegistryKey);
         string thunkSym = EnsureRoutineValueThunk(routine: routine);
 
         // Closure is just { ptr } — no captures. Allocate 8 bytes and store the thunk pointer.
@@ -122,11 +136,17 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Ensures a closure-ABI adapter thunk exists for a plain free routine used as a value, and
-    /// returns its symbol. The thunk has the routine's signature with a hidden leading
-    /// <c>ptr %__cl</c> (ignored); it forwards the remaining arguments to the real routine. One
-    /// thunk per routine (deduped). Restricted to free routines — a bare method name carries no
-    /// receiver, so method-as-value is not supported here.
+    /// Ensures a closure-ABI adapter thunk exists for a routine used as a value, and returns its
+    /// symbol. The thunk has the routine's signature with a hidden leading <c>ptr %__cl</c>
+    /// (ignored); it forwards the remaining arguments to the real routine. One thunk per routine
+    /// (deduped).
+    ///
+    /// <para>Free routines forward their declared parameters. An <b>unbound entity-method</b>
+    /// reference additionally forwards the receiver as a leading <c>ptr %me</c> — the real method
+    /// symbol takes <c>me</c> first, and the caller (e.g. the cycle collector invoking a per-type
+    /// <c>$roam_trace_impl</c> hook) supplies the entity pointer as that first logical argument.
+    /// Only entity receivers (always <c>ptr</c>) are handled; record-value receivers would need
+    /// their by-value receiver ABI and are not used as values.</para>
     /// </summary>
     private string EnsureRoutineValueThunk(RoutineInfo routine)
     {
@@ -154,6 +174,18 @@ public partial class LlvmCodeGenerator
         var paramDecls = new List<string> { "ptr %__cl" };
         var fwdTypes = new List<string>();
         var fwdValues = new List<string>();
+
+        // Unbound entity-method reference: the real method symbol takes `me` (a `ptr`) first, so the
+        // thunk forwards it as its first logical argument (after the ignored closure slot). The caller
+        // supplies the receiver at call time — e.g. the collector passes the entity address to a
+        // `$roam_trace_impl` / `$roam_free_impl` hook.
+        if (routine.OwnerType is { Category: TypeCategory.Entity })
+        {
+            paramDecls.Add(item: "ptr %me");
+            fwdTypes.Add(item: "ptr");
+            fwdValues.Add(item: "%me");
+        }
+
         for (int i = 0; i < routine.Parameters.Count; i++)
         {
             string pType = GetParameterLlvmType(type: routine.Parameters[index: i].Type);
@@ -365,6 +397,34 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Stage 2b: a <c>Roamed[T]</c> argument crossing a spawn boundary IS the escape event. Emits a
+    /// <c>promote()</c> on the handle BEFORE the task/coroutine is spawned — on the owner thread, so
+    /// the flip to ESCAPED (atomic refcount + armed reentrant lock) happens-before the callee (which
+    /// may run on another worker) ever touches it. Idempotent and value-preserving: <c>promote</c>
+    /// mutates the shared controller in place, so the handle pointer <paramref name="argValue"/> is
+    /// unchanged and the caller's sibling handles observe the flip too. No-op for non-<c>Roamed</c>.
+    /// </summary>
+    private void MaybePromoteRoamedSpawnArg(StringBuilder sb, string argValue, TypeInfo? paramType)
+    {
+        if (paramType is not RecordTypeInfo rec ||
+            GetGenericBaseName(type: rec) != Resolution.RuntimeContract.Roamed)
+        {
+            return;
+        }
+
+        RoutineInfo? promote = _registry.LookupMethod(type: rec, methodName: "promote");
+        if (promote == null)
+        {
+            return;
+        }
+
+        GenerateRoutineDeclaration(routine: promote);
+        string mangled = MangleRoutineName(routine: promote);
+        string rcLlvm = GetParameterLlvmType(type: rec);
+        EmitLine(sb: sb, line: $"  call void @{mangled}({rcLlvm} {argValue})");
+    }
+
+    /// <summary>
     /// Lowers a <c>threaded routine foo(args)</c> call: boxes the arguments, creates an OS-thread
     /// task, and spawns it on the generated entry thunk. The expression value is the
     /// <c>rf_task*</c> handle (<c>Task[T]</c> lowers to <c>ptr</c>).
@@ -400,6 +460,8 @@ public partial class LlvmCodeGenerator
                 actualType: actual,
                 parameterType: routine.Parameters[index: i].Type,
                 callee: routine);
+            MaybePromoteRoamedSpawnArg(sb: sb, argValue: cv,
+                paramType: routine.Parameters[index: i].Type);
             values.Add(item: cv);
             types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
         }
@@ -490,6 +552,8 @@ public partial class LlvmCodeGenerator
                               ?? routine.Parameters[index: i].Type!;
             (string cv, string _) = CoerceCallArgumentToParameter(sb: sb, argValue: v,
                 actualType: actual, parameterType: routine.Parameters[index: i].Type, callee: routine);
+            MaybePromoteRoamedSpawnArg(sb: sb, argValue: cv,
+                paramType: routine.Parameters[index: i].Type);
             values.Add(item: cv);
             types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
         }
@@ -650,6 +714,19 @@ public partial class LlvmCodeGenerator
                 $"Preset identifier '{identifier.Name}' reached LLVM codegen. PresetInliningPass must inline presets before backend entry.");
         }
 
+        // A pre-resolved routine-VALUE reference (set by a lowering pass, e.g. an unbound member-
+        // routine hook). The routine is already known, so skip name-based lookup — the bare name may
+        // be a method that lookup cannot resolve without the owner type. Falls through the same
+        // closure-materialization path (methods reach EnsureRoutineValueThunk, now method-aware). The
+        // node keeps the surrounding-context type (e.g. CPtr for a hook field), so we gate on the
+        // resolved routine alone rather than its ResolvedType label.
+        if (identifier.ResolvedRoutine is { } preResolved)
+        {
+            return preResolved.IsLambda
+                ? EmitClosureValue(sb: sb, lambda: preResolved)
+                : EmitRoutineValueClosure(sb: sb, routine: preResolved);
+        }
+
         if (identifier.ResolvedType is RoutineTypeInfo routineType && TryResolveRoutineReference(
                 name: identifier.Name,
                 routineType: routineType,
@@ -696,9 +773,8 @@ public partial class LlvmCodeGenerator
         out RoutineInfo? routine)
     {
         routine = null;
-        string bareName = name.EndsWith(value: '!')
-            ? name[..^1]
-            : name;
+        // The identifier name is bare; the failable `!` is a structured flag (routineType.IsFailable).
+        string bareName = name;
         string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
                              _currentEmittingRoutine?.Module;
 
@@ -746,17 +822,32 @@ public partial class LlvmCodeGenerator
         // before any normal resolution and lowered to rf_coro_cf_push / rf_coro_cf_pop. They are
         // void; the empty result is discarded by the enclosing ExpressionStatement.
         if (call.Callee is IdentifierExpression
-            { Name: Compiler.Postprocessing.Passes.CancellationInstrumentationPass.PushMarker })
+            { Name: Postprocessing.Passes.CancellationInstrumentationPass.PushMarker })
         {
             return EmitCancelPush(sb: sb, call: call);
         }
         if (call.Callee is IdentifierExpression
-            { Name: Compiler.Postprocessing.Passes.CancellationInstrumentationPass.PopMarker })
+            { Name: Postprocessing.Passes.CancellationInstrumentationPass.PopMarker })
         {
             return EmitCancelPop(sb: sb, call: call);
         }
 
         EmitTraceLocUpdate(sb: sb, location: call.Location);
+
+        // Module-qualified call `Module.routine(...)`: SA resolved it to a module-level routine
+        // (OwnerType == null) even though the callee is syntactically a member access. There is no
+        // receiver, so emit it as a free call rather than a method call.
+        if (call.Callee is MemberExpression && call.ResolvedRoutine is { OwnerType: null } moduleRoutine)
+        {
+            return EmitRoutineCall(sb: sb,
+                req: new RoutineCallRequest(FunctionName: moduleRoutine.BaseName,
+                    Arguments: call.Arguments,
+                    ResolvedRoutine: moduleRoutine,
+                    ResolvedReturnType: call.ResolvedType,
+                    TypeArguments: call.TypeArguments,
+                    LoweringKind: call.LoweringKind,
+                    ConstructedType: call.ConstructedType) { IsFailable = call.IsFailable });
+        }
 
         return call.Callee switch
         {
@@ -774,7 +865,7 @@ public partial class LlvmCodeGenerator
                     ResolvedReturnType: call.ResolvedType,
                     TypeArguments: call.TypeArguments,
                     LoweringKind: call.LoweringKind,
-                    ConstructedType: call.ConstructedType)),
+                    ConstructedType: call.ConstructedType) { IsFailable = call.IsFailable }),
             _ => throw new NotImplementedException(
                 message: $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
         };
@@ -795,7 +886,7 @@ public partial class LlvmCodeGenerator
             return ""; // not a tracked local (e.g. a param) — leave untracked (first-cut limitation)
         }
 
-        RoutineInfo? destroy = _registry.LookupMethod(type: type, methodName: "$destroy");
+        RoutineInfo? destroy = _registry.LookupMethod(type: type, methodName: "destroy");
         if (destroy == null)
         {
             return "";
@@ -1027,10 +1118,10 @@ public partial class LlvmCodeGenerator
             BinaryOperator.Or => throw new InvalidOperationException(
                 $"BinaryExpression(Or) must be lowered to ConditionalExpression by ExpressionLoweringPass before codegen. In routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
             BinaryOperator.Assign => EmitBinaryAssign(sb: sb, binary: binary),
-            BinaryOperator.In => EmitContainsCall(sb: sb, binary: binary, methodName: "$contains"),
+            BinaryOperator.In => EmitContainsCall(sb: sb, binary: binary, methodName: "contains"),
             BinaryOperator.NotIn => EmitContainsCall(sb: sb,
                 binary: binary,
-                methodName: "$notcontains"),
+                methodName: "notcontains"),
             BinaryOperator.Is => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "eq"),
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),

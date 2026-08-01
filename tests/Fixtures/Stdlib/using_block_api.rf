@@ -1,27 +1,27 @@
 module Tests/Stdlib/UsingBlockApi
 import IO/Console
 
-# `using` invokes $enter on entry and $exit on every exit path (normal end, early
+# `using` invokes enter on entry and exit on every exit path (normal end, early
 # return, throw/absent propagation, break). Side-effecting hooks print markers
 # so the snapshot proves the order.
 
 entity Resource obeys Enterable
   tag: S64
 
-routine Resource.$create(tag: S32) -> ?Resource
+routine Resource.create(tag: S32) -> Resource
   show(f"  create({tag})")
   return Resource(tag: S64(tag))
 
-dangerous routine Resource.$destroy()
+dangerous routine Resource.destroy()
   show(f"  destroy({me.tag})")
   return
 
-routine Resource.$enter() -> ?Resource
-  show(f"  $enter({me.tag})")
+routine Resource.enter() -> Resource
+  show(f"  enter({me.tag})")
   return me
 
-routine Resource.$exit()
-  show(f"  $exit({me.tag})")
+routine Resource.exit()
+  show(f"  exit({me.tag})")
   return
 
 routine Resource.touch()

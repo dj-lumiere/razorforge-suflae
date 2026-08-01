@@ -27,7 +27,7 @@ routine knuth_divide[N](
 needs N is U64
   var nl = reinterpret_bits[U64, S64](N)
   var q = Array[U64, N]()
-  danger!
+  danger
     var qp = q.hijack()
     var rscratch = 0_u64
 

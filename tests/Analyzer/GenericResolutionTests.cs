@@ -104,7 +104,7 @@ public class GenericResolutionTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].extract[U](val: U) -> ?U
+                        routine Box[T].extract[U](val: U) -> U
                           return val
 
                         routine test()
@@ -133,7 +133,7 @@ public class GenericResolutionTests
                         record Wrapper[T]
                           value: T
 
-                        routine Wrapper[T].unwrap() -> ?T
+                        routine Wrapper[T].unwrap() -> T
                           return me.value
 
                         routine test()
@@ -163,7 +163,7 @@ public class GenericResolutionTests
                           first: T
                           second: T
 
-                        routine Pair[T].swap_first(value: T) -> ?T
+                        routine Pair[T].swap_first(value: T) -> T
                           return me.first
 
                         routine test()
@@ -187,7 +187,7 @@ public class GenericResolutionTests
                         record Container[T]
                           item: T
 
-                        routine Container[T].get() -> ?T
+                        routine Container[T].get() -> T
                           return me.item
 
                         routine test()
@@ -212,7 +212,7 @@ public class GenericResolutionTests
                           key: K
                           val: V
 
-                        routine Mapping[K, V].get_val() -> ?V
+                        routine Mapping[K, V].get_val() -> V
                           return me.val
 
                         routine test()
@@ -242,7 +242,7 @@ public class GenericResolutionTests
                           first: T
                           second: T
 
-                        routine Pair[T].swap_first(value: T) -> ?T
+                        routine Pair[T].swap_first(value: T) -> T
                           return me.first
 
                         routine test()
@@ -367,7 +367,7 @@ public class GenericResolutionTests
                         record Cell[T]
                           data: T
 
-                        routine Cell[T].extract() -> ?T
+                        routine Cell[T].extract() -> T
                           return me.data
 
                         routine test()
@@ -391,7 +391,7 @@ public class GenericResolutionTests
                         entity Node[T]
                           value: T
 
-                        routine Node[T].get_value() -> ?T
+                        routine Node[T].get_value() -> T
                           return me.value
 
                         routine test()
@@ -419,7 +419,7 @@ public class GenericResolutionTests
         string source = """
                         protocol Supplier[T]
                           @readonly
-                          routine Me.supply() -> ?T
+                          routine Me.supply() -> T
 
                         record IntSupplier obeys Supplier[S32]
                           value: S32
@@ -476,7 +476,7 @@ public class GenericResolutionTests
         string source = """
                         protocol Mapper[K, V]
                           @readonly
-                          routine Me.map_value(key: K) -> ?V
+                          routine Me.map_value(key: K) -> V
 
                         record IntToBoMapper obeys Mapper[S32, Bool]
                           flag: Bool
@@ -540,7 +540,7 @@ public class GenericResolutionTests
                         record Wrapper[T]
                           inner: T
 
-                        routine Wrapper[T].get_inner() -> ?T
+                        routine Wrapper[T].get_inner() -> T
                           return me.inner
 
                         routine test()

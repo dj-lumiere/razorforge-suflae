@@ -3,7 +3,7 @@ module Tests/Stdlib/AgentApi
 # v0.2.0 Agent[T] — the single owned handle that backs BOTH async substrates. A `suspended routine`
 # call yields a coroutine-backed Agent (kind CORO, runs on this thread's implicit scheduler); a
 # `threaded routine` call yields a thread-backed Agent (kind THREAD, runs on its own OS thread). The
-# SAME `retrieve!()` drives either one to its value (UNCOLORED), so a single `Agent[T]` variable can
+# SAME `retrieve()` drives either one to its value (UNCOLORED), so a single `Agent[T]` variable can
 # hold either kind. Bound to a name, an Agent is torn down at scope exit: completed -> freed,
 # in-flight -> abandoned. Here every Agent is retrieved, so all complete cleanly. The set operations
 # (race!/gather!/cancel_all!) have their own fixtures; this one pins the bare single-handle contract.
@@ -20,14 +20,14 @@ threaded routine tripler(x: S64) -> S64
 
 routine start()
   # Two different substrates, one handle type. `a` is coroutine-backed, `b` is thread-backed, yet
-  # both are `Agent[S64]` and both yield their value through the same `retrieve!()` call.
+  # both are `Agent[S64]` and both yield their value through the same `retrieve()` call.
   var a = doubler(x: 21)          # Agent[S64], kind CORO
   var b = tripler(x: 14)          # Agent[S64], kind THREAD
-  show(f"coro={a.retrieve!()}")     # drives the implicit scheduler to completion -> 42
-  show(f"thread={b.retrieve!()}")   # blocks on the worker at top level -> 42
+  show(f"coro={a.retrieve()}")     # drives the implicit scheduler to completion -> 42
+  show(f"thread={b.retrieve()}")   # blocks on the worker at top level -> 42
 
   # The unifying point made explicit: an `Agent[S64]` binding refers to either kind, retrieved the
   # same way. A fresh coroutine-backed handle here -> 100.
   var h = doubler(x: 50)
-  show(f"again={h.retrieve!()}")
+  show(f"again={h.retrieve()}")
   return

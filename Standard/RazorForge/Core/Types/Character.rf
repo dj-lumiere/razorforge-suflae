@@ -4,7 +4,7 @@ module Core
 ### `Character` stores a code point-sized payload and models text characters
 ### rather than arbitrary binary bytes.
 @llvm("i32")
-record Character obeys ConstCompatible
+record Character obeys ConstCompatible, Comparable
   pass
 
 # Creators
@@ -14,13 +14,13 @@ record Character obeys ConstCompatible
 ### standard construction surface.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Character` value.
-routine Character.$create(from: Character) -> Character
+routine Character(from: Character) -> Character
   return from
 
 ### Reinterprets a Unicode code point value as `Character`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Character` value.
-routine Character.$create(from: U32) -> Character
+routine Character(from: U32) -> Character
   return reinterpret_bits[U32, Character](value: from)
 
 # Unicode constants
@@ -151,14 +151,14 @@ routine Character.to_lowercase() -> Character
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Character.$eq(other: Character) -> Bool
+routine Character.eq(other: Character) -> Bool
   return U32(me) == U32(other)
 
 ### Compares this value with the other value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Character.$cmp(other: Character) -> ComparisonSign
+routine Character.cmp(other: Character) -> ComparisonSign
   return U32(me) <=> U32(other)
 
 # ============================================================================
@@ -182,7 +182,7 @@ routine Character.to_byte() -> Byte
 ### The display form emits the character itself rather than its numeric code.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Character.$represent() -> Text
+routine Character.represent() -> Text
   var list = List[Character]()
   list.add_last(me)
   return Text(from_list: steal list)
@@ -192,8 +192,8 @@ routine Character.$represent() -> Text
 ### code point.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Character.$diagnose() -> Text
-  return "Character(" + me.$represent() + ", " + U32(me).$represent() + ")"
+routine Character.diagnose() -> Text
+  return "Character(" + me.represent() + ", " + U32(me).represent() + ")"
 
 # ============================================================================
 # Utility methods

@@ -149,17 +149,14 @@ public record IsPatternExpression(
     }
 }
 
-/// <summary>Flags test kind: is, isnot, or isonly.</summary>
+/// <summary>Flags test kind: is or isnot.</summary>
 public enum FlagsTestKind
 {
     /// <summary>Tests whether the subject has the specified flags.</summary>
     Is,
 
     /// <summary>Tests whether the subject does not have the specified flags.</summary>
-    IsNot,
-
-    /// <summary>Tests whether the subject matches only the specified flags.</summary>
-    IsOnly
+    IsNot
 }
 
 /// <summary>Connective for combining flag names in a flags test.</summary>
@@ -176,7 +173,7 @@ public enum FlagsTestConnective
 /// Expression that tests whether a flags value has, lacks, or exactly matches specific flags.
 /// </summary>
 /// <param name="Subject">The expression being tested (must be a flags type)</param>
-/// <param name="Kind">The kind of test: is, isnot, or isonly</param>
+/// <param name="Kind">The kind of test: is or isnot</param>
 /// <param name="TestFlags">The flag names being tested for</param>
 /// <param name="Connective">How the flags are combined: and (all required) or or (any required)</param>
 /// <param name="ExcludedFlags">Optional flags to exclude with 'but' (only valid with And connective)</param>

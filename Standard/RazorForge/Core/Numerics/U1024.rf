@@ -9,38 +9,38 @@ import Collections
 # ============================================================================
 
 @llvm("i1024")
-record U1024 obeys FloorDivisible
+secret record U1024 obeys FloorDivisible
   pass
 
 ### Returns me // you via the generic base-2⁶⁴ Knuth-D kernel (`knuth_divide[16]`,
 ### hardware `DIV r64` per step) instead of the slow inline-expanded `udiv i1024`.
-routine U1024.$floordiv(you: U1024) -> U1024
+routine U1024.floordiv(you: U1024) -> U1024
   var av = me
   var bv = you
   var rem = Array[U64, 16]()
-  danger!
+  danger
     var q = knuth_divide[16](
       a: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
       rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](q.hijack()).extract()
+    return reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](q.hijack()).peek()
 
 ### Returns me % you (remainder from the same Knuth-D kernel).
-routine U1024.$mod(you: U1024) -> U1024
+routine U1024.mod(you: U1024) -> U1024
   var av = me
   var bv = you
   var rem = Array[U64, 16]()
-  danger!
+  danger
     var q = knuth_divide[16](
       a: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
       b: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
       rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](rem.hijack()).extract()
+    return reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](rem.hijack()).peek()
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
-routine U1024.$represent() -> Text
+routine U1024.represent() -> Text
   return wide_dec[U1024](me)
 
 ### Diagnostic representation tagged with the type name.
-routine U1024.$diagnose() -> Text
+routine U1024.diagnose() -> Text
   return "U1024"

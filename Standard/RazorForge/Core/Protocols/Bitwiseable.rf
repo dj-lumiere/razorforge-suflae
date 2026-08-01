@@ -10,14 +10,14 @@ protocol Bitwiseable
   ### :param you: The other value to combine with.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$bitand(you: Me) -> ?Me
+  routine Me.bitand(you: Me) -> Me
 
   ### Returns the bitwise OR of this value and `you`.
   ### This produces a value whose set bits are the union of both operands.
   ### :param you: The other value to combine with.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$bitor(you: Me) -> ?Me
+  routine Me.bitor(you: Me) -> Me
 
   ### Returns the bitwise XOR of this value and `you`.
   ### This produces a value whose set bits are those present in exactly one
@@ -25,4 +25,4 @@ protocol Bitwiseable
   ### :param you: The other value to combine with.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$bitxor(you: Me) -> ?Me
+  routine Me.bitxor(you: Me) -> Me

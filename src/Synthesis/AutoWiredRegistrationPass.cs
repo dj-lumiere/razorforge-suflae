@@ -21,7 +21,7 @@ namespace Compiler.Synthesis;
 internal sealed class AutoWiredRegistrationPass
 {
     private const string EquatableProtocolName = "Equatable";
-    private const string CreateMethodName = "$create";
+    private const string CreateMethodName = "create";
 
     private readonly TypeRegistry _registry;
 
@@ -39,6 +39,10 @@ internal sealed class AutoWiredRegistrationPass
         TypeSymbol? s64Type = _registry.LookupType(name: "S64");
         TypeSymbol? byteSizeType = _registry.LookupType(name: "ByteSize");
         TypeSymbol? blankType = _registry.LookupType(name: "Blank");
+        // SerialValue backs the auto-derived `serialize()` (Serializable). Registered only on the
+        // aggregate categories that `obey Serializable` (Record/Entity/Variant), mirroring how their
+        // WiredRoutinePass bodies are synthesized — promise==body (see [[serializable-serialvalue-impl]]).
+        TypeSymbol? serialValueType = _registry.LookupType(name: "SerialValue");
 
         // Look up List[T] for list-returning synthesized routines
         TypeSymbol? listDef = _registry.LookupType(name: "List");
@@ -82,12 +86,23 @@ internal sealed class AutoWiredRegistrationPass
             if (textType != null)
             {
                 MaybeRegisterWired(owner: type,
-                    name: "$represent",
+                    name: "represent",
                     returnType: textType,
                     existingMethods: existingMethods);
                 MaybeRegisterWired(owner: type,
-                    name: "$diagnose",
+                    name: "diagnose",
                     returnType: textType,
+                    existingMethods: existingMethods);
+            }
+
+            // Serializable: serialize() -> SerialValue, auto-derived (overridable) for the aggregate
+            // categories that obey Serializable. Body synthesized in WiredRoutinePass (field walk).
+            if (serialValueType != null &&
+                type.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Variant)
+            {
+                MaybeRegisterWired(owner: type,
+                    name: "serialize",
+                    returnType: serialValueType,
                     existingMethods: existingMethods);
             }
 
@@ -95,10 +110,22 @@ internal sealed class AutoWiredRegistrationPass
             // RC wrappers (Owned/Retained/Tracked/...) supply their own custom `$destroy` that
             // delegates to the controller, so they're excluded here. The generated body is a
             // no-op for now (full field-recursion + invalidate-me lands with the codegen
-            // unification); registering it lets explicit `me.field.$destroy()` calls resolve.
+            // unification); registering it lets explicit `me.field.destroy()` calls resolve.
             if (blankType != null && !IsWrapperType(type: type))
             {
                 MaybeRegisterDestroy(owner: type, blankType: blankType,
+                    existingMethods: existingMethods);
+            }
+
+            // Cycle-collector per-type hooks: every non-wrapper entity gets `$roam_trace_impl()`
+            // (visits its Roamed fields) and `$roam_free_impl()` (tears down non-Roamed fields + frees
+            // the entity). Only entities can be Roamed[T] (RoamController needs `T is EntityType`).
+            // Bodies are synthesized by WiredRoutinePass; unused ones are dead-code-eliminated.
+            if (blankType != null && type.Category == TypeCategory.Entity && !IsWrapperType(type: type))
+            {
+                MaybeRegisterRoamHook(owner: type, name: "roam_trace_impl", blankType: blankType,
+                    existingMethods: existingMethods);
+                MaybeRegisterRoamHook(owner: type, name: "roam_free_impl", blankType: blankType,
                     existingMethods: existingMethods);
             }
 
@@ -136,21 +163,27 @@ internal sealed class AutoWiredRegistrationPass
                     // container types whose logical value is not their field tuple. Auto $eq / $hash is
                     // reserved for tuple / choice / flags (simple, unambiguous tag/element compare). The
                     // stdlib's equatable/hashable struct records (Complex, Integer, Decimal, C32/64/128)
-                    // already hand-write these. $copy (below) + $represent / $diagnose stay auto-derived.
+                    // already hand-write these. $store (below) + $represent / $diagnose stay auto-derived.
 
-                    // `$copy` / `clone` (Assignable): their bodies are `return me` /
-                    // `return me.$copy()` — NOT field-based — so they are safe even for @llvm-backed
+                    // `$store` / `clone` (Assignable): their bodies are `return me` /
+                    // `return me.store()` — NOT field-based — so they are safe even for @llvm-backed
                     // opaque primitives (S64, Bool, F64, …), unlike the field-based $hash/$eq above.
-                    // Registering them for primitives lets explicit `clone()`/`$copy()` calls (e.g.
+                    // Registering them for primitives lets explicit `clone()`/`$store()` calls (e.g.
                     // from `List.add_range`) link; the trivial body is inlined away by LLVM. Wrapper
                     // types (Retained/Tracked/…) keep their own custom retain-aware copy, so excluded.
+                    // `$store` is registered for any Storable-obeyer (incl. Copyable types, which obey
+                    // Storable transitively). Deep `copy` is Copyable-ONLY — Storable-only raw-pointer
+                    // types (Hijacked/CPtr) can bitwise-`$store` but have no meaningful deep copy.
                     if (!type.IsBlank && !isWrapper &&
-                        ObeysProtocol(type: type, protocolName: "Assignable"))
+                        ObeysProtocol(type: type, protocolName: "Storable"))
                     {
-                        MaybeRegisterWired(owner: type, name: "$copy",
+                        MaybeRegisterWired(owner: type, name: "store",
                             returnType: type, existingMethods: existingMethods);
-                        // Assignable obeys Cloneable: auto-derive `clone() -> ?Me` (delegates to $copy).
-                        MaybeRegisterWired(owner: type, name: "clone",
+                    }
+                    if (!type.IsBlank && !isWrapper &&
+                        ObeysProtocol(type: type, protocolName: "Copyable"))
+                    {
+                        MaybeRegisterWired(owner: type, name: "copy",
                             returnType: type, existingMethods: existingMethods);
                     }
 
@@ -203,7 +236,7 @@ internal sealed class AutoWiredRegistrationPass
                     if (u64Type != null)
                     {
                         MaybeRegisterWired(owner: type,
-                            name: "$hash",
+                            name: "hash",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                         MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
@@ -213,7 +246,7 @@ internal sealed class AutoWiredRegistrationPass
                     if (boolType != null)
                     {
                         MaybeRegisterWiredWithParam(owner: type,
-                            name: "$eq",
+                            name: "eq",
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
@@ -222,17 +255,17 @@ internal sealed class AutoWiredRegistrationPass
 
                     // Choices auto-derive Assignable (scalar tag layout).
                     MaybeRegisterWired(owner: type,
-                        name: "$copy",
+                        name: "store",
                         returnType: type,
                         existingMethods: existingMethods);
                     MaybeRegisterWired(owner: type,
-                        name: "clone",
+                        name: "copy",
                         returnType: type,
                         existingMethods: existingMethods);
 
-                    // S64.$create(from: ChoiceType) — choice_val.S64() desugars to S64.$create(from: choice_val)
+                    // S64.create(from: ChoiceType) — choice_val.S64() desugars to S64.create(from: choice_val)
                     if (s64Type != null && !type.IsGenericDefinition &&
-                        _registry.LookupRoutineOverload(baseName: "S64.$create",
+                        _registry.LookupRoutineOverload(baseName: "S64.create",
                             argTypes: [type]) == null)
                     {
                         _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
@@ -252,7 +285,7 @@ internal sealed class AutoWiredRegistrationPass
                     if (textType != null)
                     {
                         MaybeRegisterWiredFailable(owner: type,
-                            name: "$create!",
+                            name: "create!",
                             returnType: type,
                             existingMethods: existingMethods,
                             param: ("from", textType),
@@ -323,7 +356,7 @@ internal sealed class AutoWiredRegistrationPass
                     if (u64Type != null)
                     {
                         MaybeRegisterWired(owner: type,
-                            name: "$hash",
+                            name: "hash",
                             returnType: u64Type,
                             existingMethods: existingMethods);
                         MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
@@ -333,7 +366,7 @@ internal sealed class AutoWiredRegistrationPass
                     if (boolType != null)
                     {
                         MaybeRegisterWiredWithParam(owner: type,
-                            name: "$eq",
+                            name: "eq",
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
@@ -342,17 +375,17 @@ internal sealed class AutoWiredRegistrationPass
 
                     // Flags auto-derive Assignable (scalar bitset layout).
                     MaybeRegisterWired(owner: type,
-                        name: "$copy",
+                        name: "store",
                         returnType: type,
                         existingMethods: existingMethods);
                     MaybeRegisterWired(owner: type,
-                        name: "clone",
+                        name: "copy",
                         returnType: type,
                         existingMethods: existingMethods);
 
-                    // U64.$create(from: FlagsType) — flags_val.U64() desugars to U64.$create(from: flags_val)
+                    // U64.create(from: FlagsType) — flags_val.U64() desugars to U64.create(from: flags_val)
                     if (u64Type != null && !type.IsGenericDefinition &&
-                        _registry.LookupRoutineOverload(baseName: "U64.$create",
+                        _registry.LookupRoutineOverload(baseName: "U64.create",
                             argTypes: [type]) == null)
                     {
                         _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
@@ -399,13 +432,38 @@ internal sealed class AutoWiredRegistrationPass
                     if (textType != null && !type.IsGenericDefinition)
                     {
                         MaybeRegisterWired(owner: type,
-                            name: "$represent",
+                            name: "represent",
                             returnType: textType,
                             existingMethods: existingMethods);
                         MaybeRegisterWired(owner: type,
-                            name: "$diagnose",
+                            name: "diagnose",
                             returnType: textType,
                             existingMethods: existingMethods);
+                    }
+
+                    // A variant with a destructible arm (a heap/managed payload that double-frees on
+                    // bitwise alias) gets a synthesized deep `copy` — WiredRoutinePass.BuildVariantCopyBody
+                    // reconstructs each such arm with `arm.copy()`. Registering it here makes the symbol
+                    // visible to overload resolution + the reachability sweep, and lets GetLifecycle return
+                    // it as the variant's retaining Copy so copy-lowering injects it at every copy point.
+                    if (!type.IsGenericDefinition && type is VariantTypeInfo variantForCopy &&
+                        _registry.VariantHasDestructibleArm(variant: variantForCopy))
+                    {
+                        MaybeRegisterWired(owner: type,
+                            name: "copy",
+                            returnType: type,
+                            existingMethods: existingMethods);
+                    }
+
+                    // Bidirectional per-arm constructors, auto-generated for every variant:
+                    //   V.create(from: Arm)  -> V    — box a branch value into the variant.
+                    //   Arm.create!(from: V) -> Arm  — failable extraction (absent when the active arm
+                    //                                   is not this one). The `from:` param type (not the
+                    //                                   arm name) carries the overload, so no RF-S770 clash
+                    //                                   with a same-named type (e.g. the `List` arm).
+                    if (!type.IsGenericDefinition && type is VariantTypeInfo variantForCtor)
+                    {
+                        RegisterVariantArmConstructors(variant: variantForCtor);
                     }
                     break;
             }
@@ -422,7 +480,7 @@ internal sealed class AutoWiredRegistrationPass
             u64Type: u64Type,
             s64Type: s64Type);
 
-        // Auto-register Text.$create(from: T) for all concrete user types
+        // Auto-register Text.create(from: T) for all concrete user types
         // This makes every type structurally satisfy Representable[T]
         if (textType != null)
         {
@@ -440,7 +498,7 @@ internal sealed class AutoWiredRegistrationPass
 
                 // Skip generic-definition types (T, Retained[T], List[T], etc. without
                 // concrete arg) and WrapperTypeInfo definitions — registering a $create(from: T)
-                // for the bare wrapper produces a phantom Text.$create(Core.Owned) symbol that
+                // for the bare wrapper produces a phantom Text.create(Core.Owned) symbol that
                 // overload-resolution can drift onto, then linker fails (no definition emitted).
                 if (type.IsGenericDefinition || type is WrapperTypeInfo)
                 {
@@ -471,7 +529,7 @@ internal sealed class AutoWiredRegistrationPass
         }
 
         // Register BS per-type routines + $represent/$diagnose as universal methods.
-        // This allows T.data_size(), K.type_id(), T.$represent(), etc. to resolve in
+        // This allows T.data_size(), K.type_id(), T.represent(), etc. to resolve in
         // generic function bodies where the receiver is a GenericParameterTypeInfo.
         var tParam = new GenericParameterTypeInfo(name: "T");
         var universalExisting = new List<RoutineInfo>();
@@ -490,17 +548,17 @@ internal sealed class AutoWiredRegistrationPass
         if (textType != null)
         {
             MaybeRegisterWired(owner: tParam,
-                name: "$represent",
+                name: "represent",
                 returnType: textType,
                 existingMethods: universalExisting);
             MaybeRegisterWired(owner: tParam,
-                name: "$diagnose",
+                name: "diagnose",
                 returnType: textType,
                 existingMethods: universalExisting);
         }
 
-        // `$destroy` as a universal method too — so `v.$destroy()` resolves on a generic `T`
-        // (e.g. element teardown loops in `List[T].$destroy`).
+        // `$destroy` as a universal method too — so `v.destroy()` resolves on a generic `T`
+        // (e.g. element teardown loops in `List[T].destroy`).
         if (blankType != null)
         {
             MaybeRegisterDestroy(owner: tParam, blankType: blankType,
@@ -541,12 +599,40 @@ internal sealed class AutoWiredRegistrationPass
     private void MaybeRegisterDestroy(TypeSymbol owner, TypeSymbol blankType,
         List<RoutineInfo> existingMethods)
     {
-        if (existingMethods.Any(predicate: m => m.Name == "$destroy"))
+        if (existingMethods.Any(predicate: m => m.Name == "destroy"))
         {
             return;
         }
 
-        _registry.RegisterRoutine(routine: new RoutineInfo(name: "$destroy")
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: "destroy")
+        {
+            Kind = RoutineKind.MemberRoutine,
+            OwnerType = owner,
+            Parameters = [],
+            ReturnType = blankType,
+            IsFailable = false,
+            IsDangerous = true,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
+            Visibility = VisibilityModifier.Open,
+            IsSynthesized = true
+        });
+    }
+
+    /// <summary>
+    /// Registers a cycle-collector hook method (<c>$roam_trace_impl</c> / <c>$roam_free_impl</c>) if
+    /// not already user-defined. Marked <c>dangerous</c> (raw controller/pointer work). No params,
+    /// void return; the body is synthesized by <see cref="WiredRoutinePass"/>.
+    /// </summary>
+    private void MaybeRegisterRoamHook(TypeSymbol owner, string name, TypeSymbol blankType,
+        List<RoutineInfo> existingMethods)
+    {
+        if (existingMethods.Any(predicate: m => m.Name == name))
+        {
+            return;
+        }
+
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: name)
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = owner,
@@ -583,12 +669,12 @@ internal sealed class AutoWiredRegistrationPass
     private void MaybeRegisterKeyedHash(TypeSymbol owner, TypeSymbol u64Type,
         List<RoutineInfo> existingMethods)
     {
-        if (existingMethods.Any(predicate: m => m is { Name: "$hash", Parameters.Count: 2 }))
+        if (existingMethods.Any(predicate: m => m is { Name: "hash", Parameters.Count: 2 }))
         {
             return;
         }
 
-        _registry.RegisterRoutine(routine: new RoutineInfo(name: "$hash")
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: "hash")
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = owner,
@@ -634,6 +720,66 @@ internal sealed class AutoWiredRegistrationPass
     /// <summary>
     /// Registers a failable wired routine if not already defined (for clone, $create!).
     /// </summary>
+    /// <summary>
+    /// Registers the two auto-generated constructors for each non-<c>None</c> arm of a variant:
+    /// <c>V.create(from: Arm) -> V</c> (box) and <c>Arm.create!(from: V) -> Arm</c> (failable extract).
+    /// Each is overloaded by the <c>from:</c> parameter type, so an arm type shared across variants gets a
+    /// distinct constructor per variant, and no arm-name/type-name collision (RF-S770) arises.
+    /// </summary>
+    private void RegisterVariantArmConstructors(VariantTypeInfo variant)
+    {
+        foreach (VariantMemberInfo arm in variant.Members)
+        {
+            if (arm.IsNone || arm.Type is null || arm.Type is ErrorTypeInfo)
+            {
+                continue;
+            }
+
+            TypeSymbol armType = arm.Type;
+
+            // V.create(from: Arm) -> V
+            bool ctorExists = _registry.GetMethodsForType(type: variant).Any(predicate: m =>
+                m is { Name: CreateMethodName, Parameters.Count: 1 } &&
+                m.Parameters[index: 0].Type?.FullName == armType.FullName);
+            if (!ctorExists)
+            {
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                {
+                    Kind = RoutineKind.Creator,
+                    OwnerType = variant,
+                    Parameters = [new ParameterInfo(name: "from", type: armType)],
+                    ReturnType = variant,
+                    IsFailable = false,
+                    DeclaredMutation = MutationCategory.Readonly,
+                    MutationCategory = MutationCategory.Readonly,
+                    Visibility = VisibilityModifier.Open,
+                    IsSynthesized = true
+                });
+            }
+
+            // Arm.create!(from: V) -> Arm  (name "create" + IsFailable; a `.create!(…)` call resolves
+            // against "create" and the `from: V` param type disambiguates from numeric conversions).
+            bool extractExists = _registry.GetMethodsForType(type: armType).Any(predicate: m =>
+                m is { Name: CreateMethodName, Parameters.Count: 1, IsFailable: true } &&
+                m.Parameters[index: 0].Type?.FullName == variant.FullName);
+            if (!extractExists)
+            {
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                {
+                    Kind = RoutineKind.Creator,
+                    OwnerType = armType,
+                    Parameters = [new ParameterInfo(name: "from", type: variant)],
+                    ReturnType = armType,
+                    IsFailable = true,
+                    DeclaredMutation = MutationCategory.Readonly,
+                    MutationCategory = MutationCategory.Readonly,
+                    Visibility = VisibilityModifier.Open,
+                    IsSynthesized = true
+                });
+            }
+        }
+    }
+
     private void MaybeRegisterWiredFailable(TypeSymbol owner, string name, TypeSymbol returnType,
         List<RoutineInfo> existingMethods, (string name, TypeSymbol type)? param = null,
         RoutineKind kind = RoutineKind.MemberRoutine)
@@ -696,8 +842,8 @@ internal sealed class AutoWiredRegistrationPass
     /// (2) explicit `$eq` method or obeys `Equatable` — registered conformance;
     /// (3) generic resolution like `Array[T, N]` — looks up the generic def's `$eq` method
     /// and recursively verifies every `T obeys Equatable` constraint against the substituted
-    /// type args. Without (3), `Array[X, 64]` passes the check (because `Array.$eq` exists
-    /// on the generic def) even though the body's recursion into `X.$ne` link-errors.
+    /// type args. Without (3), `Array[X, 64]` passes the check (because `Array.eq` exists
+    /// on the generic def) even though the body's recursion into `X.ne` link-errors.
     /// </summary>
     private bool TypeHasEquality(TypeSymbol type, HashSet<string> seen)
     {
@@ -725,7 +871,7 @@ internal sealed class AutoWiredRegistrationPass
             genericDef.GenericParameters is { Count: > 0 } gParams &&
             gParams.Count == typeArgs.Count)
         {
-            RoutineInfo? defEq = _registry.LookupMethod(type: genericDef, methodName: "$eq");
+            RoutineInfo? defEq = _registry.LookupMethod(type: genericDef, methodName: "eq");
             if (defEq is { GenericConstraints: { } constraints })
             {
                 foreach (GenericConstraintDeclaration c in constraints)
@@ -749,7 +895,7 @@ internal sealed class AutoWiredRegistrationPass
         }
 
         // Explicit `$eq` method on the type (either user-defined or already auto-derived).
-        if (_registry.LookupMethod(type: type, methodName: "$eq") != null) return true;
+        if (_registry.LookupMethod(type: type, methodName: "eq") != null) return true;
 
         // Type declares obeys Equatable — we expect a `$eq` will eventually be synthesised.
         if (ObeysProtocol(type: type, protocolName: EquatableProtocolName)) return true;

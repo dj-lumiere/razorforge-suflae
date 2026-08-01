@@ -17,7 +17,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <list type="bullet">
 ///   <item>1a. Chained comparisons: <c>a &lt; b &lt; c</c> -> <c>(a &lt; b) and (b &lt; c)</c></item>
 ///   <item>1b. None-coalescing: <c>a ?? b</c> -> temp vars + WhenStatement (preserves lazy eval)</item>
-///   <item>1c. Force-unwrap: <c>a!!</c> -> <c>a.$unwrap()</c> -- handled by <see cref="OperatorLoweringPass"/>
+///   <item>1c. Force-unwrap: <c>a!!</c> -> <c>a.unwrap()</c> -- handled by <see cref="OperatorLoweringPass"/>
 ///         so that stdlib bodies (which bypass this pass) are also covered.</item>
 ///   <item>1d. Optional member access: <c>a?.prop</c> -> temp vars + WhenStatement</item>
 /// </list>
@@ -171,10 +171,12 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 var (hoisted, loweredRes) = LowerExpr(u.Resource);
                 Statement body = LowerStatementFull(u.Body);
+                Statement? fb = u.FallbackBody != null ? LowerStatementFull(u.FallbackBody) : null;
                 bool changed = !ReferenceEquals(loweredRes, u.Resource)
-                               || !ReferenceEquals(body, u.Body);
+                               || !ReferenceEquals(body, u.Body)
+                               || !ReferenceEquals(fb, u.FallbackBody);
                 if (!changed && hoisted.Count == 0) return ([], stmt);
-                return (hoisted, u with { Resource = loweredRes, Body = body });
+                return (hoisted, u with { Resource = loweredRes, Body = body, FallbackBody = fb });
             }
 
             case DangerStatement d:
@@ -315,22 +317,12 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return LowerNoneCoalesce(binary);
 
             // -- Step 1c: force-unwrap (!!) -- handled by OperatorLoweringPass --------
-            // !! is desugared to operand.$unwrap() in OperatorLoweringPass so that
+            // !! is desugared to operand.unwrap() in OperatorLoweringPass so that
             // stdlib bodies (which bypass ExpressionLoweringPass) are also covered.
 
             // -- Step 1d: optional member access (?.) -----------------------------
             case OptionalMemberExpression optMember:
                 return LowerOptionalMember(optMember);
-
-            // -- Step 1d-2: isonly -> equality on flags ----------------------------
-            // `p isonly RHS` parsed/typed as IsOnly. Rewrite to Equal so downstream
-            // (codegen icmp eq, flag-context bare-name lowering) treats it normally.
-            case BinaryExpression { Operator: BinaryOperator.IsOnly } isOnlyBin:
-            {
-                var rewritten = isOnlyBin with { Operator = BinaryOperator.Equal };
-                rewritten.ResolvedType = isOnlyBin.ResolvedType;
-                return LowerExpr(rewritten);
-            }
 
             // -- Step 1e: flags combination (and/but on FlagsTypeInfo) -------------
             case BinaryExpression { Operator: BinaryOperator.And or BinaryOperator.But, Left.ResolvedType: FlagsTypeInfo } flagsBin:
@@ -462,7 +454,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 if (mem.Object.ResolvedType is ChoiceTypeInfo choiceType)
                 {
                     ChoiceCaseInfo? caseInfo = choiceType.Cases
-                        .FirstOrDefault(c => c.Name == mem.PropertyName);
+                        .FirstOrDefault(c => c.Name == mem.MemberName);
                     if (caseInfo != null)
                         return ([], new LiteralExpression(
                             Value: caseInfo.ComputedValue,
@@ -475,7 +467,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 if (mem.Object.ResolvedType is FlagsTypeInfo flagsType)
                 {
                     FlagsMemberInfo? memberInfo = flagsType.Members
-                        .FirstOrDefault(m => m.Name == mem.PropertyName);
+                        .FirstOrDefault(m => m.Name == mem.MemberName);
                     if (memberInfo != null)
                         return ([], new LiteralExpression(
                             Value: 1UL << memberInfo.BitPosition,
@@ -567,7 +559,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     var inPlaceCall = new CallExpression(
                         Callee: new MemberExpression(
                             Object: loweredTarget,
-                            PropertyName: inPlaceName,
+                            MemberName: inPlaceName,
                             Location: loc),
                         Arguments: [new NamedArgumentExpression(Name: "you", Value: loweredValue, Location: loc)],
                         Location: loc) { ResolvedType = compound.ResolvedType };
@@ -765,10 +757,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                                 Right: maskLit, Location: loc) { ResolvedType = u64Type },
                             Operator: BinaryOperator.NotEqual, Right: maskLit, Location: loc)
                             { ResolvedType = boolType },
-                    FlagsTestKind.IsOnly =>
-                        new BinaryExpression(
-                            Left: loweredSubj, Operator: BinaryOperator.Equal,
-                            Right: maskLit, Location: loc) { ResolvedType = boolType },
                     _ =>
                         new BinaryExpression(
                             Left: new BinaryExpression(
@@ -924,7 +912,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
             case IdentifierExpression id:
             {
-                // Fold bare flag-context identifiers (e.g. `READ` inside `p isonly READ`)
+                // Fold bare flag-context identifiers (e.g. a bare `READ` in a flags test)
                 // -> bitmask literal. SA stamps ResolvedFlagsBit when it resolves a bare
                 // identifier against a flag context.
                 if (id.ResolvedFlagsBit is int bit && id.ResolvedType is FlagsTypeInfo)
@@ -1050,7 +1038,9 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         Expression colRef = MakeRef(tempName, listType, loc);
 
         // List, Deque, BitList append at the end; everything else uses add().
-        string addMethod = baseName is "List" or "Deque" or "BitList" ? "add_last" : "add";
+        string addMethod = baseName is "List" or "Deque" or "BitList"
+            ? Resolution.RuntimeContract.Collection.AddLast
+            : Resolution.RuntimeContract.Collection.Add;
 
         foreach (Expression elem in list.Elements)
         {
@@ -1091,7 +1081,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         {
             var (h, lowered) = LowerExpr(elem);
             hoisted.AddRange(h);
-            hoisted.Add(MakeCollectionAddCall(colRef, setType, "add", [lowered], loc));
+            hoisted.Add(MakeCollectionAddCall(colRef, setType, Resolution.RuntimeContract.Collection.Add, [lowered], loc));
         }
 
         Expression result = !ReferenceEquals(resolvedType, setType)
@@ -1132,7 +1122,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             List<Expression> args = isPriorityQueue
                 ? [loweredVal, loweredKey]
                 : [loweredKey, loweredVal];
-            hoisted.Add(MakeCollectionAddCall(colRef, dictType, "add", args, loc));
+            hoisted.Add(MakeCollectionAddCall(colRef, dictType, Resolution.RuntimeContract.Collection.Add, args, loc));
         }
 
         Expression result = !ReferenceEquals(resolvedType, dictType)
@@ -1251,7 +1241,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         var maybeCreator = new CreatorExpression(
             TypeName: "Maybe",
             TypeArguments: typeArgs,
-            MemberVariables: [("present", trueLit), ("value", init)],
+            MemberVariables: [(Resolution.RuntimeContract.Carrier.PresentField, trueLit), (Resolution.RuntimeContract.Carrier.ValueField, init)],
             Location: init.Location)
         {
             ResolvedType = targetType,
@@ -1293,15 +1283,15 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
     private static TypeInfo? UnwrapOwnershipWrapper(TypeInfo? type)
     {
-        if (type is WrapperTypeInfo { Name: "Owned" or "Retained" or "Tracked" } w)
+        if (type is WrapperTypeInfo { Name: Resolution.RuntimeContract.Owned or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Tracked } w)
             return w.InnerType;
         // T / Retained[T] / Tracked[T] are declared as `record T` in stdlib, so
         // they surface as RecordTypeInfo, not WrapperTypeInfo. Match by base name + single
         // TypeArgument and return the inner collection so downstream lowering sees the actual
         // base (BitList, SortedSet, …) instead of the Owned envelope.
         if (type is RecordTypeInfo { TypeArguments: { Count: 1 } recArgs } rec
-            && (rec.GenericDefinition?.Name is "Owned" or "Retained" or "Tracked"
-                || GetCollectionBaseName(rec) is "Owned" or "Retained" or "Tracked"))
+            && (rec.GenericDefinition?.Name is Resolution.RuntimeContract.Owned or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Tracked
+                || GetCollectionBaseName(rec) is Resolution.RuntimeContract.Owned or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Tracked))
         {
             return recArgs[0];
         }
@@ -1342,7 +1332,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         RoutineInfo? method = ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
 
-        var callee = new MemberExpression(Object: receiver, PropertyName: methodName,
+        var callee = new MemberExpression(Object: receiver, MemberName: methodName,
             Location: loc);
         var call = new CallExpression(
             Callee: callee,
@@ -1399,7 +1389,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         }
 
         var typeIdAccess = new MemberExpression(
-            Object: loweredLeft, PropertyName: TypeIdFieldName, Location: loc) { ResolvedType = u64Type };
+            Object: loweredLeft, MemberName: TypeIdFieldName, Location: loc) { ResolvedType = u64Type };
         var constant = new LiteralExpression(
             Value: typeId, LiteralType: TokenType.U64Literal, Location: loc)
             { ResolvedType = u64Type };
@@ -1555,8 +1545,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// </summary>
     /// <summary>
     /// Lowers <c>base with .field1 = v1, .field2 = v2</c> into
-    /// <c>var tmp = base.$copy(); tmp.field1 = v1; tmp.field2 = v2; tmp</c>. The
-    /// <c>$copy</c> dispatch carries any per-field semantics (e.g. retains on
+    /// <c>var tmp = base.store(); tmp.field1 = v1; tmp.field2 = v2; tmp</c>. The
+    /// <c>$store</c> dispatch carries any per-field semantics (e.g. retains on
     /// <c>Retained[T]</c> fields) that a field-by-field constructor rebuild would skip.
     /// SA gates this in <c>AnalyzeWithExpression</c> (base type must obey Assignable).
     /// Only handles simple (non-nested, non-index) updates on RecordTypeInfo.
@@ -1611,10 +1601,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             return (hoisted, withExpr with { Base = baseRef });
         }
 
-        // var with_copy = baseRef.$copy()
+        // var with_copy = baseRef.store()
         var copyCall = new CallExpression(
             Callee: new MemberExpression(
-                Object: baseRef, PropertyName: "$copy", Location: loc)
+                Object: baseRef, MemberName: "store", Location: loc)
                 { ResolvedType = baseType },
             Arguments: [],
             Location: loc) { ResolvedType = baseType };
@@ -1631,7 +1621,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             MemberVariableInfo? memberInfo =
                 recordType.LookupMemberVariable(memberVariableName: fieldName);
             var target = new MemberExpression(
-                Object: copyRef, PropertyName: fieldName, Location: loc)
+                Object: copyRef, MemberName: fieldName, Location: loc)
                 { ResolvedType = memberInfo?.Type };
             hoisted.Add(item: new AssignmentStatement(
                 Target: target, Value: value, Location: loc));
@@ -1657,7 +1647,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (isNoneCheck && IsMaybeRecord(operandType))
         {
             var presentAccess = new MemberExpression(
-                Object: loweredExpr, PropertyName: "present", Location: ipe.Location)
+                Object: loweredExpr, MemberName: Resolution.RuntimeContract.Carrier.PresentField, Location: ipe.Location)
             {
                 ResolvedType = boolType
             };
@@ -1676,7 +1666,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (isBlankCheck && IsResultOrLookup(operandType))
         {
             var typeIdAccess = new MemberExpression(
-                Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
+                Object: loweredExpr, MemberName: TypeIdFieldName, Location: ipe.Location)
             {
                 ResolvedType = u64Type
             };
@@ -1701,7 +1691,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             if (tp.Type.Name == BlankMemberName || targetType?.Name == BlankMemberName)
             {
                 var typeIdAccess = new MemberExpression(
-                    Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
+                    Object: loweredExpr, MemberName: TypeIdFieldName, Location: ipe.Location)
                 { ResolvedType = u64Type };
                 var zero = new LiteralExpression(
                     Value: 0UL,
@@ -1720,7 +1710,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 ulong typeId = TypeIdHelper.ComputeTypeId(fullName: targetType.FullName);
                 var typeIdAccess = new MemberExpression(
-                    Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
+                    Object: loweredExpr, MemberName: TypeIdFieldName, Location: ipe.Location)
                 { ResolvedType = u64Type };
                 var constant = new LiteralExpression(
                     Value: typeId,
@@ -2009,7 +1999,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         TypeInfo? propType = resultType?.TypeArguments?[0];
         var memberAccess = new MemberExpression(
             Object: valRef,
-            PropertyName: optMember.PropertyName,
+            MemberName: optMember.MemberName,
             Location: loc)
         {
             ResolvedType = propType
@@ -2220,11 +2210,11 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// Mirror of <c>OperatorLoweringPass.RunOnInstantiatedGenericBodies</c>.
     /// </summary>
     public void RunOnInstantiatedGenericBodies(
-        Dictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedGenericBodies)
+        Dictionary<string, Instantiation.MonomorphizedBody> instantiatedGenericBodies)
     {
         foreach (string key in instantiatedGenericBodies.Keys.ToList())
         {
-            Compiler.Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
+            Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue;
             Statement lowered = LowerStatementFull(stmt: entry.Ast.Body);
             if (!ReferenceEquals(lowered, entry.Ast.Body))

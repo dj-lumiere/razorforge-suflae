@@ -3,7 +3,7 @@ import IO/Console
 import IterTools
 
 # Multi-adapter chaining: each adapter feeds the next, so a nested emitter
-# (e.g. WhereEmitter wrapping SelectEmitter wrapping ListEmitter) must resolve
+# (e.g. WhereEmittable wrapping SelectEmittable wrapping ListEmittable) must resolve
 # through the associated-type projection. Single-adapter coverage lives in
 # itertools_api.rf; this fixture stresses adapter-over-adapter composition.
 routine start()
@@ -29,8 +29,8 @@ routine start()
   show(f"distinct*10: {dupes.distinct().select(transform: x => x * 10).List()}")
 
   # chain -> terminal aggregations
-  show(f"sum even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).sum!()}")
-  show(f"max even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).max!()}")
+  show(f"sum even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).sum()}")
+  show(f"max even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).max()}")
   show(f"count even*2: {src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2).get_count()}")
 
   # chain -> boolean terminals

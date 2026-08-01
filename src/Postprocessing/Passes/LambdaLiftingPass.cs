@@ -189,7 +189,15 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                     scope: [..scope, usingStmt.Name],
                     inheritedGenericParameters: inheritedGenericParameters,
                     inheritedGenericConstraints: inheritedGenericConstraints,
-                    includeMe: includeMe)
+                    includeMe: includeMe),
+                // The fallback branch runs when acquisition fails — the bound name is NOT in scope.
+                FallbackBody = usingStmt.FallbackBody != null
+                    ? RewriteStatement(usingStmt.FallbackBody,
+                        scope: scope,
+                        inheritedGenericParameters: inheritedGenericParameters,
+                        inheritedGenericConstraints: inheritedGenericConstraints,
+                        includeMe: includeMe)
+                    : null
             },
             DangerStatement danger => danger with
             {
@@ -1666,6 +1674,8 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             case UsingStatement usingStmt:
                 CollectLocalCapturesRecursive(usingStmt.Resource, outerScope, parameterNames, captures);
                 CollectLocalCapturesInStatement(usingStmt.Body, outerScope, parameterNames, captures);
+                if (usingStmt.FallbackBody != null)
+                    CollectLocalCapturesInStatement(usingStmt.FallbackBody, outerScope, parameterNames, captures);
                 break;
             case DangerStatement danger:
                 CollectLocalCapturesInStatement(danger.Body, outerScope, parameterNames, captures);

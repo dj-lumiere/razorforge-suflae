@@ -15,31 +15,33 @@ public sealed partial class StdlibLoader
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
-            if (node is ProtocolDeclaration { ParentProtocols.Count: > 0 } protocol)
+            if (node is not ProtocolDeclaration { ParentProtocols.Count: > 0 } protocol)
             {
-                // Look up the registered protocol to get its FullName
-                TypeInfo? registeredProto = registry.LookupType(name: protocol.Name);
-                if (registeredProto is not ProtocolTypeInfo)
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                var parentProtocols = new List<ProtocolTypeInfo>();
-                foreach (TypeExpression parentExpr in protocol.ParentProtocols)
-                {
-                    TypeInfo? parentType =
-                        ResolveSimpleType(registry: registry, typeExpr: parentExpr);
-                    if (parentType is ProtocolTypeInfo parentProto)
-                    {
-                        parentProtocols.Add(item: parentProto);
-                    }
-                }
+            // Look up the registered protocol to get its FullName
+            TypeInfo? registeredProto = registry.LookupType(name: protocol.Name);
+            if (registeredProto is not ProtocolTypeInfo)
+            {
+                continue;
+            }
 
-                if (parentProtocols.Count > 0)
+            var parentProtocols = new List<ProtocolTypeInfo>();
+            foreach (TypeExpression parentExpr in protocol.ParentProtocols)
+            {
+                TypeInfo? parentType =
+                    ResolveSimpleType(registry: registry, typeExpr: parentExpr);
+                if (parentType is ProtocolTypeInfo parentProto)
                 {
-                    registry.UpdateProtocolParents(protocolName: registeredProto.FullName,
-                        parentProtocols: parentProtocols);
+                    parentProtocols.Add(item: parentProto);
                 }
+            }
+
+            if (parentProtocols.Count > 0)
+            {
+                registry.UpdateProtocolParents(protocolName: registeredProto.FullName,
+                    parentProtocols: parentProtocols);
             }
         }
     }
@@ -49,7 +51,7 @@ public sealed partial class StdlibLoader
     /// This is pass 1a — protocols must be registered before other types so 'obeys' clauses can resolve.
     /// Uses two passes: first registers protocol type shells (names + generic params), then fills in
     /// method signatures. This ensures forward references between protocols resolve correctly
-    /// (e.g., Iterable[T].$iter() -> Iterator[T] where Iterator is another protocol).
+    /// (e.g., Iterable[T].iter() -> Iterator[T] where Iterator is another protocol).
     /// </summary>
     /// <summary>
     /// Registers type declarations (record, entity, choice, variant, protocol) from a program.
@@ -151,6 +153,26 @@ public sealed partial class StdlibLoader
 
                     break;
                 }
+                case VariantDeclaration variant:
+                {
+                    var existing = registry.LookupType(name: variant.Name) as VariantTypeInfo;
+                    // Total declared arms (incl. None). If fewer resolved, some arm was a forward or
+                    // self reference (e.g. List[SerialValue]) unresolvable on the first pass — retry now.
+                    int expectedCount = variant.Members.Count;
+                    if (existing == null || existing.Members.Count >= expectedCount)
+                    {
+                        continue;
+                    }
+
+                    List<VariantMemberInfo> reMembers = BuildVariantMembers(registry: registry,
+                        variant: variant, moduleName: existing.Module);
+                    if (reMembers.Count > existing.Members.Count)
+                    {
+                        existing.Members = reMembers;
+                    }
+
+                    break;
+                }
                 case CrashableDeclaration crashable:
                 {
                     var existing =
@@ -187,13 +209,23 @@ public sealed partial class StdlibLoader
     /// </summary>
     internal static void ResolveProgramProtocolConformances(TypeRegistry registry, Program program) // NOSONAR S3776
     {
+        // Resolve type lookups MODULE-QUALIFIED. `LookupType(bareName)` resolves via the first-wins
+        // short-name index, so with two modules each declaring `record Point` it would attach one
+        // module's `obeys` to the OTHER module's type (cross-module protocol contamination →
+        // spurious RF-S702). The program's own module scopes the lookup to its own declaration.
+        string? module = program.Declarations.OfType<ModuleDeclaration>().FirstOrDefault()?.Path;
+        TypeInfo? LookupInModule(string name) =>
+            (!string.IsNullOrEmpty(value: module)
+                ? registry.LookupType(name: $"{module}.{name}")
+                : null) ?? registry.LookupType(name: name);
+
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
             switch (node)
             {
                 case EntityDeclaration { Protocols.Count: > 0 } entity:
                 {
-                    var existing = registry.LookupType(name: entity.Name) as EntityTypeInfo;
+                    var existing = LookupInModule(name: entity.Name) as EntityTypeInfo;
                     if (existing == null ||
                         existing.ImplementedProtocols.Count >= entity.Protocols.Count)
                     {
@@ -212,7 +244,7 @@ public sealed partial class StdlibLoader
                 }
                 case RecordDeclaration { Protocols.Count: > 0 } record:
                 {
-                    var existing = registry.LookupType(name: record.Name) as RecordTypeInfo;
+                    var existing = LookupInModule(name: record.Name) as RecordTypeInfo;
                     if (existing == null ||
                         existing.ImplementedProtocols.Count >= record.Protocols.Count)
                     {
@@ -418,6 +450,7 @@ public sealed partial class StdlibLoader
         var routineInfo = new RoutineInfo(name: external.Name)
         {
             Kind = RoutineKind.External,
+            IsFailable = external.IsFailable,
             CallingConvention = external.CallingConvention ?? "C",
             IsVariadic = external.IsVariadic,
             Parameters = parameters,
@@ -459,7 +492,8 @@ public sealed partial class StdlibLoader
                     registry.RegisterPreset(name: preset.Name,
                         type: presetType,
                         module: moduleName,
-                        value: preset.Value);
+                        value: preset.Value,
+                        isSecret: preset.IsSecret);
                 }
             }
         }
@@ -496,12 +530,12 @@ public sealed partial class StdlibLoader
     }
 
     /// <summary>
-    /// Registers a routine from stdlib (including type methods like S32.$add).
+    /// Registers a routine from stdlib (including type methods like S32.add).
     /// </summary>
     private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine,
         string moduleName)
     {
-        // Parse method names like "S32.$add" or "Type.method"
+        // Parse method names like "S32.add" or "Type.method"
         string routineName = routine.Name;
         TypeInfo? ownerType = null;
         string methodName = routineName;
@@ -513,7 +547,7 @@ public sealed partial class StdlibLoader
         if (dotIndex > 0)
         {
             string typeName = routineName[..dotIndex];
-            methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "$add")
+            methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "add")
 
             int bracketIndex = typeName.IndexOf(value: '[');
             if (bracketIndex > 0)
@@ -559,7 +593,7 @@ public sealed partial class StdlibLoader
                         // text so `me` is typed as the specialized receiver (MeType) below — making
                         // member access like `me[i]` yield Agent[V] instead of List's raw element.
                         ownerType = baseDef;
-                        meTypeName = methodName is "$create" or "$create!" ? null : typeName;
+                        meTypeName = methodName is "create" or "create!" ? null : typeName;
                     }
                     else
                     {
@@ -578,6 +612,24 @@ public sealed partial class StdlibLoader
                 {
                     ownerType = new GenericParameterTypeInfo(name: typeName);
                 }
+            }
+        }
+        else
+        {
+            // No dot: a top-level free function, OR a CONSTRUCTOR `routine T(...)` /
+            // `routine T[params](...)` (renamed from `routine T.create(...)`). Detect the
+            // constructor by matching the bare name against a known type and route it to the
+            // reserved creator name "create" with that type as owner — mirroring the old
+            // `T.create` registration so call-site construction resolves the creator. The
+            // trailing `!` (failable) is carried structurally on routine.IsFailable.
+            int bracketIndex = routineName.IndexOf(value: '[');
+            string bareName = bracketIndex > 0 ? routineName[..bracketIndex] : routineName;
+            TypeInfo? ctorOwner = registry.LookupType(name: bareName) ??
+                                  registry.LookupType(name: $"{moduleName}.{bareName}");
+            if (ctorOwner != null)
+            {
+                ownerType = ctorOwner;
+                methodName = "create";
             }
         }
 
@@ -671,7 +723,7 @@ public sealed partial class StdlibLoader
             }
         }
 
-        // Use just the method name (not "S32.$add", just "$add")
+        // Use just the method name (not "S32.add", just "add")
         var routineInfo = new RoutineInfo(name: methodName)
         {
             OwnerType = ownerType,
@@ -682,6 +734,7 @@ public sealed partial class StdlibLoader
             ModulePath = moduleName?.Split('/').ToList(),
             Location = routine.Location,
             IsFailable = routine.IsFailable,
+            IsWiredMemberRoutine = routine.IsWiredMemberRoutine,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
             GenericParameters = routine.GenericParameters,
             GenericConstraints = routine.GenericConstraints,
@@ -690,6 +743,16 @@ public sealed partial class StdlibLoader
             IsDangerous = routine.IsDangerous,
             Storage = routine.Storage
         };
+
+        // Pin the decl → info binding (see RoutineDeclaration.ResolvedInfo) so codegen reads it
+        // directly rather than re-deriving the routine by module-blind name lookup.
+        routine.ResolvedInfo = routineInfo;
+
+        // Constructor divergent-duplicate guard: hash the body so RegisterRoutine can distinguish a
+        // benign identical cross-file duplicate creator from a divergent one (see
+        // TypeRegistry.DivergentDuplicateCreators).
+        if (methodName == "create")
+            routineInfo.BodyHash = TypeRegistry.ComputeCreatorBodyHash(body: routine.Body);
 
         try
         {
@@ -744,8 +807,8 @@ public sealed partial class StdlibLoader
                     string baseName = m.Type!.Name.Contains('[')
                         ? m.Type.Name[..m.Type.Name.IndexOf('[')]
                         : m.Type.Name;
-                    return baseName is "Hijacked" or "Viewing" or "Modifying"
-                        or "Retained" or "Tracked" or "Shared" or "Watched";
+                    return baseName is RuntimeContract.Hijacked or RuntimeContract.Viewing or RuntimeContract.Modifying
+                        or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Shared or RuntimeContract.Watched;
                 });
             if (allMembersPtrWrapper)
             {
@@ -1163,36 +1226,8 @@ public sealed partial class StdlibLoader
             return;
         }
 
-        // Build members list: None = tag 0, others sequential from 1
-        var members = new List<VariantMemberInfo>();
-        int tag = 0;
-
-        // First pass: find None
-        foreach (VariantMember memberDecl in variant.Members)
-        {
-            if (memberDecl.Type.Name == "None")
-            {
-                members.Add(item: VariantMemberInfo.CreateNone(tagValue: 0, location: null));
-                tag = 1;
-                break;
-            }
-        }
-
-        // Second pass: all non-None members
-        foreach (VariantMember memberDecl in variant.Members)
-        {
-            if (memberDecl.Type.Name == "None")
-            {
-                continue;
-            }
-
-            TypeInfo? memberType =
-                ResolveSimpleType(registry: registry, typeExpr: memberDecl.Type);
-            if (memberType != null)
-            {
-                members.Add(item: new VariantMemberInfo(type: memberType) { TagValue = tag++ });
-            }
-        }
+        List<VariantMemberInfo> members =
+            BuildVariantMembers(registry: registry, variant: variant, moduleName: moduleName);
 
         var typeInfo = new VariantTypeInfo(name: variant.Name)
         {
@@ -1203,6 +1238,46 @@ public sealed partial class StdlibLoader
         };
 
         registry.RegisterType(type: typeInfo);
+    }
+
+    /// <summary>
+    /// Builds a variant's member list: None = tag 0, other arms sequential. An arm whose type does
+    /// not resolve yet (a forward or self reference like <c>List[SerialValue]</c> inside SerialValue,
+    /// or a not-yet-registered type) is skipped here and picked up when <see
+    /// cref="ResolveProgramMemberVariables"/> re-runs after every type shell exists.
+    /// </summary>
+    private static List<VariantMemberInfo> BuildVariantMembers(TypeRegistry registry,
+        VariantDeclaration variant, string? moduleName)
+    {
+        var members = new List<VariantMemberInfo>();
+        int tag = 0;
+
+        foreach (VariantMember memberDecl in variant.Members)
+        {
+            if (memberDecl.Type.Name == "None")
+            {
+                members.Add(item: VariantMemberInfo.CreateNone(tagValue: 0, location: null));
+                tag = 1;
+                break;
+            }
+        }
+
+        foreach (VariantMember memberDecl in variant.Members)
+        {
+            if (memberDecl.Type.Name == "None")
+            {
+                continue;
+            }
+
+            TypeInfo? memberType = ResolveSimpleType(registry: registry, typeExpr: memberDecl.Type,
+                genericParams: variant.GenericParameters, moduleName: moduleName);
+            if (memberType != null)
+            {
+                members.Add(item: new VariantMemberInfo(type: memberType) { TagValue = tag++ });
+            }
+        }
+
+        return members;
     }
 
     /// <summary>
@@ -1285,9 +1360,8 @@ public sealed partial class StdlibLoader
             bool needsRefresh = false;
             foreach (RoutineSignature method in protocolDecl.Methods)
             {
-                string rawName = method.Name;
-                bool isFailable = rawName.EndsWith(value: '!');
-                string fullName = isFailable ? rawName[..^1] : rawName;
+                bool isFailable = method.IsFailable;
+                string fullName = method.Name;
                 bool isInstance = fullName.StartsWith(value: "Me.");
                 string methodName = isInstance ? fullName[3..] : fullName;
 
@@ -1481,11 +1555,8 @@ public sealed partial class StdlibLoader
         var methods = new List<ProtocolMethodInfo>();
         foreach (RoutineSignature method in protocol.Methods)
         {
-            string rawName = method.Name;
-            bool isFailable = rawName.EndsWith(value: '!');
-            string fullName = isFailable
-                ? rawName[..^1]
-                : rawName;
+            bool isFailable = method.IsFailable;
+            string fullName = method.Name;
             bool isInstance = fullName.StartsWith(value: "Me.");
             string methodName = isInstance
                 ? fullName[3..]
@@ -1534,7 +1605,7 @@ public sealed partial class StdlibLoader
 
             // For failable methods, also expose a `try_X` non-failable variant returning
             // Maybe[T] (or Bool when T is Blank), so call sites typed against the bare
-            // protocol (e.g. for-loop desugaring's `iter.try_next()` where `iter: Iterator[T]`)
+            // protocol (e.g. for-loop desugaring's `iter.try_emit()` where `iter: Iterator[T]`)
             // can resolve. Mirrors ErrorHandlingGenerator.GenerateTryVariant's shape.
             if (isFailable)
             {

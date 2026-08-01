@@ -11,11 +11,6 @@ It is not just a math library folder. It is the runtime substrate for:
 - task runtime, `threaded routine`, `suspended routine`, `waitfor`, `within`, and `after`
 - future actor and GC runtime work for Suflae
 
-The current design direction is reflected in:
-
-- [internal-wiki/FUTURE-STDLIB-TODO.md](../internal-wiki/FUTURE-STDLIB-TODO.md)
-- [internal-wiki/FUTURE-STDLIB-API.md](../internal-wiki/FUTURE-STDLIB-API.md)
-
 ## Purpose
 
 The native layer exists for three different reasons.

@@ -296,12 +296,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
     /// <inheritdoc/>
     public string VisitMemberExpression(MemberExpression node) =>
-        $"{node.Object.Accept(this)}.{node.PropertyName}";
+        $"{node.Object.Accept(this)}.{node.MemberName}";
 
 
     /// <inheritdoc/>
     public string VisitOptionalMemberExpression(OptionalMemberExpression node) =>
-        $"{node.Object.Accept(this)}?.{node.PropertyName}";
+        $"{node.Object.Accept(this)}?.{node.MemberName}";
 
 
     /// <inheritdoc/>
@@ -495,6 +495,17 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         return $"{node.Object.Accept(this)}.{node.MemberName}{typeArgs}";
     }
 
+    /// <inheritdoc/>
+    public string VisitBracketAccessExpression(BracketAccessExpression node)
+    {
+        string bang = node.IsFailable ? "!" : "";
+        string args = string.Join(", ", node.Args.Select(a => a.Accept(this)));
+        string call = node.CallArgs is null
+            ? ""
+            : $"({string.Join(", ", node.CallArgs.Select(a => a.Accept(this)))})";
+        return $"{node.Object.Accept(this)}{bang}[{args}]{call}";
+    }
+
 
     /// <inheritdoc/>
     public string VisitFlagsTestExpression(FlagsTestExpression node)
@@ -505,7 +516,6 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         {
             FlagsTestKind.Is => "is",
             FlagsTestKind.IsNot => "isnot",
-            FlagsTestKind.IsOnly => "isonly",
             _ => node.Kind.ToString().ToLower()
         };
         string excluded = node.ExcludedFlags is { Count: > 0 }
@@ -739,6 +749,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         var sb = new StringBuilder();
         sb.AppendLine($"{I}using {node.Resource.Accept(this)} as {node.Name}");
         sb.Append(PrintBodyOf(node.Body));
+        if (node.FallbackBody != null)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"{I}fallback");
+            sb.Append(PrintBodyOf(node.FallbackBody));
+        }
         return sb.ToString().TrimEnd();
     }
 

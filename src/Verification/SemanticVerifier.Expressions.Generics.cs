@@ -36,11 +36,18 @@ public sealed partial class SemanticVerifier
             generic.LoweringKind = CallLoweringKind.CollectionConstruction;
 
         // Check if this is a generic type constructor call (e.g., Hijacked[U8](addr))
-        // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args)
+        // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args).
+        // A FAILABLE construction `Type![Args](args)` parses with a BARE MethodName equal to the
+        // type name plus the structured `IsMemoryOperation` failable flag — recognize it here and
+        // route to the type's failable `$create` overload (e.g. the auto-generated variant arm
+        // extractor `Dict[Text, SerialValue].create!(from: sv)`).
+        bool isFailableCtor = generic.IsMemoryOperation &&
+                              generic.Object is IdentifierExpression fctorId &&
+                              generic.MethodName == fctorId.Name;
         if (generic.Object is IdentifierExpression typeId && objectType is TypeInfo
             {
                 IsGenericDefinition: true
-            } typeInfo && typeId.Name == generic.MethodName)
+            } typeInfo && (typeId.Name == generic.MethodName || isFailableCtor))
         {
             // Resolve the generic type with the provided type arguments
             TypeInfo resolvedType = _registry.GetOrCreateResolution(genericDef: typeInfo,
@@ -88,10 +95,10 @@ public sealed partial class SemanticVerifier
 
             {
                 RoutineInfo? creator = _registry.LookupMethodOverload(type: resolvedType,
-                    methodName: "$create",
+                    methodName: "create",
                     argTypes: argTypes);
                 creator ??= _registry.LookupRoutineOverload(
-                    baseName: $"{resolvedType.Name}.$create",
+                    baseName: $"{resolvedType.Name}.create",
                     argTypes: argTypes);
 
                 if (creator != null && creator.Parameters.Count == argTypes.Count &&
@@ -102,7 +109,7 @@ public sealed partial class SemanticVerifier
                         location: generic.Location);
                     // Prefer the concrete resolvedType (e.g. Hijacked[Byte]) over the creator's
                     // return type when that return type is still generic (e.g. Hijacked[T]).
-                    // creator.ReturnType for Hijacked[T].$create is "Hijacked[T]" — a resolution
+                    // creator.ReturnType for Hijacked[T].create is "Hijacked[T]" — a resolution
                     // whose TypeArguments contain GenericParameterTypeInfo placeholders.  Returning
                     // that causes downstream callers (.extract(), etc.) to see an unresolved type and
                     // mangle method names as "Core.Hijacked[T].extract" instead of the correct
@@ -496,7 +503,7 @@ public sealed partial class SemanticVerifier
 
             // If the member type has a $getitem method, use its return type
             RoutineInfo? getItem =
-                _registry.LookupMethod(type: memberType, methodName: "$getitem");
+                _registry.LookupMethod(type: memberType, methodName: "getitem");
             if (getItem?.ReturnType != null)
             {
                 return getItem.ReturnType;
@@ -532,29 +539,9 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
                 message:
-                $"Flags test operators (is/isnot/isonly) require a flags type, but got '{subjectType.Name}'.",
+                $"Flags test operators (is/isnot) require a flags type, but got '{subjectType.Name}'.",
                 location: flagsTest.Location);
             return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
-        }
-
-        // #133: isonly rejects 'or' and 'but'
-        if (flagsTest.Kind == FlagsTestKind.IsOnly)
-        {
-            if (flagsTest.Connective == FlagsTestConnective.Or)
-            {
-                ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
-                    message:
-                    "'isonly' cannot be used with 'or'. Use 'and' to specify the exact set of flags.",
-                    location: flagsTest.Location);
-            }
-
-            if (flagsTest.ExcludedFlags is { Count: > 0 })
-            {
-                ReportError(code: SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut,
-                    message:
-                    "'isonly' cannot be used with 'but'. Specify the exact set of flags directly.",
-                    location: flagsTest.Location);
-            }
         }
 
         // Validate each flag name exists in the type

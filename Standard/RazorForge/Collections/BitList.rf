@@ -11,7 +11,7 @@ import BuilderService
 ### **When to use**
 ### - You need a dynamic set of boolean flags whose count is not known at compile time.
 ### - Memory compactness matters (e.g., processing large data sets or bitmap masks).
-### - You need bitwise bulk operations (`$bitand`, `$bitor`, `$bitxor`, `$bitnot`).
+### - You need bitwise bulk operations (`bitand`, `bitor`, `bitxor`, `bitnot`).
 ### - Use {BitArray[N]} instead when the bit count is a compile-time constant.
 ### - Use {List[Bool]} instead when you need reference semantics or very fast single-bit mutation
 ###   without the read-modify-write overhead.
@@ -21,17 +21,17 @@ import BuilderService
 ### |---|---|
 ### | `add_last` | O(1) amortized |
 ### | `remove_last!` | O(1) |
-### | `$getitem!` / `$setitem!` | O(1) |
+### | `getitem!` / `setitem!` | O(1) |
 ### | `flip!` | O(1) |
 ### | `set_all` / `flip_all` | O(capacity / 64) |
 ### | `count_ones` / `count_zeros` | O(N) |
 ### | `any` / `all` / `none` | O(N) best/worst |
-### | `$bitand` / `$bitor` / `$bitxor` / `$bitnot` | O(N) |
+### | `bitand` / `bitor` / `bitxor` / `bitnot` | O(N) |
 ### | Iteration | O(N) |
 ###
 ### :see: {BitArray[N]} for a compile-time-sized, value-semantic alternative.
-entity BitList obeys Iterable[Bool], MutableIndexable[Bool]
-relates BitListIterator as Iter
+entity BitList obeys Iterable[Bool], MutableIndexable[Bool], Sized
+relates BitListEmittable as Iter
   ### Stores the heap-allocated word buffer that packs the bits.
   secret data: Hijacked[U64]      # Heap-allocated word array (64 bits per U64)
   ### Stores the number of logical bits currently present in the list.
@@ -47,7 +47,7 @@ relates BitListIterator as Iter
 ### Creates an empty bit list with no allocated storage.
 ### The first append allocates the initial packed word buffer.
 ### :returns: An empty `BitList`.
-routine BitList.$create() -> ?BitList
+routine BitList() -> BitList
   # Create empty bit list with default capacity
   return BitList(
     data: hijacked_none[U64](),
@@ -60,10 +60,10 @@ routine BitList.$create() -> ?BitList
 ### bit sets incrementally.
 ### :param capacity: The minimum number of bits to reserve.
 ### :returns: An empty `BitList` with preallocated storage.
-routine BitList.$create(capacity: U64) -> ?BitList
+routine BitList(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var word_size = (capacity +% 63u64) >> 6u32
-  danger!
+  danger
     var data_ptr = Hijacked[U64](rf_allocate_dynamic_uninit(word_size *% 8u64))
     # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
     # and mid-word appends only read bits we've already written ourselves.
@@ -104,9 +104,9 @@ routine BitList.get_bit_internal(index: U64) -> Bool
   var word_idx = index >> 6u32
   var bit_off = U8(index & 63u64)
   lateinit var word_val: U64
-  danger!
+  danger
     var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-    word_val = ptr.extract()
+    word_val = ptr.peek()
   return (word_val & (1u64 << bit_off)) != 0u64
 
 ### Writes a stored bit without performing bounds checks.
@@ -120,9 +120,9 @@ routine BitList.set_bit_internal(index: U64, value: Bool)
   var set_mask = 0u64
   if value
     set_mask = mask
-  danger!
+  danger
     var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-    word_ptr.inject((word_ptr.extract() & ~mask) | set_mask)
+    word_ptr.poke((word_ptr.peek() & ~mask) | set_mask)
   return
 
 # ============================================================================
@@ -169,12 +169,12 @@ routine BitList.add_last(value: Bool)
   var set_mask = 0u64
   if value
     set_mask = mask
-  danger!
+  danger
     var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
     if bit_off == 0u8
-      word_ptr.inject(set_mask)
+      word_ptr.poke(set_mask)
     else
-      word_ptr.inject((word_ptr.extract() & ~mask) | set_mask)
+      word_ptr.poke((word_ptr.peek() & ~mask) | set_mask)
   me.count = me.count +% 1u64
   return
 
@@ -197,7 +197,7 @@ routine BitList.reserve(new_capacity: U64)
   # Ensure capacity is at least new_capacity (in bits)
   if new_capacity > me.capacity
     var new_word_size = (new_capacity +% 63u64) >> 6u32
-    danger!
+    danger
       var new_data = Hijacked[U64](rf_allocate_dynamic_uninit(new_word_size *% 8u64))
 
       # Copy existing words; remainder stays uninitialized — add_last overwrites
@@ -225,7 +225,7 @@ routine BitList.clear()
 ### :returns: The resulting `Bool` value.
 ### :throws: May throw {IndexOutOfBoundsError}.
 @readonly
-routine BitList.$getitem!(index: U64) -> Bool
+routine BitList.getitem!(index: U64) -> Bool
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   return me.get_bit_internal(index)
@@ -234,7 +234,7 @@ routine BitList.$getitem!(index: U64) -> Bool
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement bit value.
 ### :throws: May throw {IndexOutOfBoundsError}.
-routine BitList.$setitem!(index: U64, value: ?Bool)
+routine BitList.setitem!(index: U64, value: Bool)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   me.set_bit_internal(index: index, value: value)
@@ -252,7 +252,7 @@ routine BitList.set_all(value: Bool)
   # Set all bits to the same value
   var byte_count = (me.count +% 7u64) >> 3u32
   var fill_byte = if value then 0xFFu8 else 0x00u8
-  danger!
+  danger
     rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
   return
 
@@ -275,10 +275,10 @@ routine BitList.flip_all()
   var word_count = (me.count +% 63u64) >> 6u32
   var i = 0u64
   while i < word_count
-    danger!
+    danger
       var word_ptr = Hijacked[U64](me.data.get_address() +% Address(i *% 8u64))
-      var word_val = word_ptr.extract()
-      word_ptr.inject(~word_val)
+      var word_val = word_ptr.peek()
+      word_ptr.poke(~word_val)
     i = i +% 1u64
   return
 
@@ -344,7 +344,7 @@ routine BitList.none() -> Bool
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are `me[i] and other[i]`.
 @readonly
-routine BitList.$bitand(other: Referring[BitList]) -> ?BitList
+routine BitList.bitand(other: Referring[BitList]) -> BitList
   # Bitwise AND - returns new BitList with shorter length
   var min_count = if me.count < other.count then me.count else other.count
   var result = BitList(min_count)
@@ -361,7 +361,7 @@ routine BitList.$bitand(other: Referring[BitList]) -> ?BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose length matches the longer input.
 @readonly
-routine BitList.$bitor(other: Referring[BitList]) -> ?BitList
+routine BitList.bitor(other: Referring[BitList]) -> BitList
   # Bitwise OR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -379,7 +379,7 @@ routine BitList.$bitor(other: Referring[BitList]) -> ?BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are set where exactly one input bit is set.
 @readonly
-routine BitList.$bitxor(other: Referring[BitList]) -> ?BitList
+routine BitList.bitxor(other: Referring[BitList]) -> BitList
   # Bitwise XOR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -395,7 +395,7 @@ routine BitList.$bitxor(other: Referring[BitList]) -> ?BitList
 ### Returns a new bit list with every stored bit inverted.
 ### :returns: A copy of this list with `true` and `false` swapped at each position.
 @readonly
-routine BitList.$bitnot() -> ?BitList
+routine BitList.bitnot() -> BitList
   # Bitwise NOT - returns new BitList with flipped bits
   var result = BitList(me.count)
 
@@ -411,15 +411,15 @@ routine BitList.$bitnot() -> ?BitList
 
 ### Returns an iterator over the logical bits stored in the list.
 ### Bits are yielded from index `0` to `count - 1`.
-### :returns: The resulting `BitListIterator` value.
+### :returns: The resulting `BitListEmittable` value.
 @readonly
-routine BitList.$iter() -> ?BitListIterator
-  danger!
-    return BitListIterator(data: me.data, count: me.count(), index: 0u64)
+routine BitList.iter() -> BitListEmittable
+  danger
+    return BitListEmittable(data: me.data, count: me.count(), index: 0u64)
 
 ### Represents an iterator over the logical bits stored in a `BitList`.
 ### The iterator walks the packed word buffer in ascending logical index order.
-entity BitListIterator obeys Iterator[Bool]
+entity BitListEmittable obeys Emittable[Bool]
   ### Raw pointer into the source bit list's packed word buffer.
   secret data: Hijacked[U64]
   ### Bit count captured at iterator creation.
@@ -430,15 +430,15 @@ entity BitListIterator obeys Iterator[Bool]
 ### Returns the next bit from the iterator.
 ### :returns: The resulting `Bool` value.
 ### :absent: Returns absent when the iterator reaches the captured bit count.
-routine BitListIterator.$next!() -> Bool
+routine BitListEmittable.emit!() -> Bool
   if me.index >= me.count
     absent
   var word_idx = me.index >> 6u32
   var bit_idx = U8(me.index & 63u64)
   lateinit var word_val: U64
-  danger!
+  danger
     var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-    word_val = ptr.extract()
+    word_val = ptr.peek()
   var _result = (word_val >> bit_idx) & 1u64 != 0u64
   me.index = me.index + 1u64
   return _result
@@ -470,7 +470,7 @@ routine BitList.last!() -> Bool
 ### Returns a copy with the value order reversed.
 ### :returns: The resulting `BitList` value.
 @readonly
-routine BitList.reverse() -> ?BitList
+routine BitList.reverse() -> BitList
   # Return a reversed copy
   var result = BitList(me.count)
   var i = me.count
@@ -487,7 +487,7 @@ routine BitList.reverse() -> ?BitList
 ### :param other: The other bit list to compare against.
 ### :returns: `true` if both have the same count and all corresponding bits match.
 @readonly
-routine BitList.$eq(other: Referring[BitList]) -> Bool
+routine BitList.eq(other: Referring[BitList]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64
@@ -511,8 +511,8 @@ routine BitList.to_u8!() -> U8
   if me.count < 8u64
     absent
   lateinit var word: U64
-  danger!
-    word = Hijacked[U64](me.data.get_address()).extract()
+  danger
+    word = Hijacked[U64](me.data.get_address()).peek()
   var _result = U8(word & 0xFFu64)
   return _result
 
@@ -526,8 +526,8 @@ routine BitList.to_u16!() -> U16
   if me.count < 16u64
     absent
   lateinit var word: U64
-  danger!
-    word = Hijacked[U64](me.data.get_address()).extract()
+  danger
+    word = Hijacked[U64](me.data.get_address()).peek()
   var _result = U16(word & 0xFFFFu64)
   return _result
 
@@ -541,8 +541,8 @@ routine BitList.to_u32!() -> U32
   if me.count < 32u64
     absent
   lateinit var word: U64
-  danger!
-    word = Hijacked[U64](me.data.get_address()).extract()
+  danger
+    word = Hijacked[U64](me.data.get_address()).peek()
   var _result = U32(word & 0xFFFFFFFFu64)
   return _result
 
@@ -556,15 +556,15 @@ routine BitList.to_u64!() -> U64
   if me.count < 64u64
     absent
   lateinit var _result: U64
-  danger!
-    _result = Hijacked[U64](me.data.get_address()).extract()
+  danger
+    _result = Hijacked[U64](me.data.get_address()).peek()
   return _result
 
 ### Expands a `U8` into a bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed byte to unpack.
 ### :returns: An eight-bit `BitList` representing `value`.
-common routine BitList.from_u8(value: U8) -> ?BitList
+common routine BitList.from_u8(value: U8) -> BitList
   # Create BitList from U8 (8 bits)
   var result = BitList(8u64)
   var i = 0u8
@@ -577,7 +577,7 @@ common routine BitList.from_u8(value: U8) -> ?BitList
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 16-bit value to unpack.
 ### :returns: A sixteen-bit `BitList` representing `value`.
-common routine BitList.from_u16(value: U16) -> ?BitList
+common routine BitList.from_u16(value: U16) -> BitList
   # Create BitList from U16 (16 bits)
   var result = BitList(16u64)
   var i = 0u16
@@ -590,7 +590,7 @@ common routine BitList.from_u16(value: U16) -> ?BitList
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 32-bit value to unpack.
 ### :returns: A thirty-two-bit `BitList` representing `value`.
-common routine BitList.from_u32(value: U32) -> ?BitList
+common routine BitList.from_u32(value: U32) -> BitList
   # Create BitList from U32 (32 bits)
   var result = BitList(32u64)
   var i = 0u32
@@ -602,13 +602,13 @@ common routine BitList.from_u32(value: U32) -> ?BitList
 ### Returns a compact display form of the logical bit sequence.
 ### :returns: The resulting `Text` value.
 @readonly
-routine BitList.$represent() -> Text
+routine BitList.represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$represent()
+    result = result + v.represent()
     i = i +% 1u64
   result = result + "])"
   return result
@@ -616,13 +616,13 @@ routine BitList.$represent() -> Text
 ### Returns a diagnostic form that includes the bit count, one-bit count, and contents.
 ### :returns: The resulting `Text` value.
 @readonly
-routine BitList.$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
+routine BitList.diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.$represent()
+    result = result + v.represent()
     i = i +% 1u64
   result = result + "])"
   return result
@@ -631,7 +631,7 @@ routine BitList.$diagnose() -> Text
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 64-bit value to unpack.
 ### :returns: A sixty-four-bit `BitList` representing `value`.
-common routine BitList.from_u64(value: U64) -> ?BitList
+common routine BitList.from_u64(value: U64) -> BitList
   # Create BitList from U64 (64 bits)
   var result = BitList(64u64)
   var i = 0u64
@@ -640,7 +640,7 @@ common routine BitList.from_u64(value: U64) -> ?BitList
     i = i +% 1u64
   return steal result
 
-dangerous routine BitList.$destroy()
+dangerous routine BitList.destroy()
   me.data.invalidate()
   me.hijack().invalidate()
   return

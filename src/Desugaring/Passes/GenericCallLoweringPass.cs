@@ -15,7 +15,7 @@ namespace Compiler.Desugaring.Passes;
 /// <para>Lowered cases (require <c>ResolvedRoutine != null</c> from Phase 5):</para>
 /// <list type="bullet">
 /// <item><b>Type constructor with resolved <c>$create</c></b>:
-/// <c>Maybe[S64](value: x)</c> -> <c>CallExpression(IdentifierExpression("$create"), args)</c></item>
+/// <c>Maybe[S64](value: x)</c> -> <c>CallExpression(IdentifierExpression("create"), args)</c></item>
 /// <item><b>Generic method call on receiver</b>:
 /// <c>buf.read![U8](offset)</c> ??
 /// <c>CallExpression(MemberExpression(buf, "read!"), args, TypeArguments=[U8])</c></item>
@@ -454,7 +454,13 @@ internal sealed class GenericCallLoweringPass
         // here — the type relies on a real $create() overload that SA failed to bind, and
         // forging an empty CreatorExpression would just re-issue the bug as S455
         // (missing field). Leave that case to the SA fix path.
+        // A FAILABLE construction `Type![Args](args)` (IsMemoryOperation) must NOT be lowered to a
+        // field-init CreatorExpression here — it routes to the type's failable `create!` overload
+        // (e.g. the variant-arm extractor `Dict[Text, SerialValue].create!(from: sv)`). Leave it as a
+        // GMC so SA resolves the creator; SA-time lowering (below, once ResolvedRoutine is set) or the
+        // creator-routing path handles it.
         if (gmc.Object is IdentifierExpression literalId && literalId.Name == gmc.MethodName
+            && !gmc.IsMemoryOperation
             && gmc.ResolvedRoutine == null
             && _registry.LookupType(name: gmc.MethodName) != null
             && (gmc.Arguments.Count > 0
@@ -500,6 +506,11 @@ internal sealed class GenericCallLoweringPass
         // e.g., Maybe[S64](present: true, value: x) -> SA resolved $create and set ResolvedRoutine.
         // Also handles standalone generic free routines and LLVM intrinsic free functions where
         // Object.Name == MethodName but there is no constructable type.
+        // A failable generic construction `Type![Args](args)` parses with a BARE MethodName equal to
+        // the type name plus the structured IsMemoryOperation failable flag; treat it like the
+        // construction case (same as `Type[Args](args)`) so its arguments are passed straight to the
+        // resolved `$create!` instead of being mis-lowered into a member call whose receiver (the type
+        // name) becomes a null first argument.
         if (gmc.Object is IdentifierExpression id && id.Name == gmc.MethodName)
         {
             bool isTypeConstruction = gmc.ConstructedType != null ||
@@ -508,12 +519,15 @@ internal sealed class GenericCallLoweringPass
                                           or CallLoweringKind.ValueConversion
                                           or CallLoweringKind.CollectionConstruction;
             return new CallExpression(
+                // Callee is the type name (without the failable `!`); codegen constructs via
+                // ConstructedType/ResolvedRoutine, so the name only identifies the type.
                 Callee: new IdentifierExpression(
-                    Name: isTypeConstruction ? gmc.MethodName : gmc.ResolvedRoutine.Name,
+                    Name: isTypeConstruction ? id.Name : gmc.ResolvedRoutine.Name,
                     Location: gmc.Location),
                 Arguments: loweredArgs,
                 Location: gmc.Location)
             {
+                IsFailable = gmc.IsMemoryOperation,
                 LoweringKind = gmc.LoweringKind,
                 ConstructedType = gmc.ConstructedType,
                 ResolvedRoutine = gmc.ResolvedRoutine,
@@ -530,14 +544,16 @@ internal sealed class GenericCallLoweringPass
         return new CallExpression(
             Callee: new MemberExpression(
                 Object: loweredObj,
-                PropertyName: gmc.MethodName,
+                MemberName: gmc.MethodName,
                 Location: gmc.Location)
             {
-                ResolvedType = gmc.Object.ResolvedType
+                ResolvedType = gmc.Object.ResolvedType,
+                IsFailable = gmc.IsMemoryOperation
             },
             Arguments: loweredArgs,
             Location: gmc.Location)
         {
+            IsFailable = gmc.IsMemoryOperation,
             LoweringKind = gmc.LoweringKind,
             ConstructedType = gmc.ConstructedType,
             ResolvedRoutine = gmc.ResolvedRoutine,

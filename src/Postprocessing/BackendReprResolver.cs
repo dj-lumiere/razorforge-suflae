@@ -26,6 +26,13 @@ public static class BackendReprResolver
                         Resolve(type: selector, registry: registry, target: target).LlvmAbiType))} }}",
                 AggregateLayoutKey: type.FullName),
 
+            // Variant is a RecordTypeInfo subclass — must precede the Record arms.
+            VariantTypeInfo => new BackendRepr(
+                Kind: BackendReprKind.Aggregate,
+                SourceType: type,
+                LlvmAbiType: type.FullName,
+                AggregateLayoutKey: type.FullName),
+
             RecordTypeInfo
             {
                 HasDirectBackendType: true, IsGenericDefinition: false
@@ -38,14 +45,8 @@ public static class BackendReprResolver
                 AggregateLayoutKey: type.FullName,
                 IsPassedIndirectly: false),
 
+            // Entity (and Crashable, an entity subclass) -> entity ref pointer.
             EntityTypeInfo => new BackendRepr(
-                Kind: BackendReprKind.EntityRef,
-                SourceType: type,
-                LlvmAbiType: "ptr",
-                PointerFlavor: PointerFlavor.Entity,
-                PointeeType: type),
-
-            CrashableTypeInfo => new BackendRepr(
                 Kind: BackendReprKind.EntityRef,
                 SourceType: type,
                 LlvmAbiType: "ptr",
@@ -66,12 +67,6 @@ public static class BackendReprResolver
                 PointerFlavor: ClassifyPointerFlavor(typeName: wrapper.Name),
                 PointeeType: wrapper.InnerType,
                 IsTransparent: true),
-
-            VariantTypeInfo => new BackendRepr(
-                Kind: BackendReprKind.Aggregate,
-                SourceType: type,
-                LlvmAbiType: type.FullName,
-                AggregateLayoutKey: type.FullName),
 
             RoutineTypeInfo => new BackendRepr(
                 Kind: BackendReprKind.RoutineRef,
@@ -152,15 +147,15 @@ public static class BackendReprResolver
         string baseName = typeName.Split(separator: '[', count: 2)[0];
         return baseName switch
         {
-            "Viewing" => PointerFlavor.Viewing,
-            "Modifying" => PointerFlavor.Modifying,
-            "Inspecting" => PointerFlavor.Inspecting,
-            "Claiming" => PointerFlavor.Claiming,
-            "Retained" => PointerFlavor.Retained,
-            "Tracked" => PointerFlavor.Tracked,
-            "Shared" => PointerFlavor.Shared,
-            "Watched" => PointerFlavor.Watched,
-            "Hijacked" => PointerFlavor.Hijacked,
+            RuntimeContract.Viewing => PointerFlavor.Viewing,
+            RuntimeContract.Modifying => PointerFlavor.Modifying,
+            RuntimeContract.Inspecting => PointerFlavor.Inspecting,
+            RuntimeContract.Claiming => PointerFlavor.Claiming,
+            RuntimeContract.Retained => PointerFlavor.Retained,
+            RuntimeContract.Tracked => PointerFlavor.Tracked,
+            RuntimeContract.Shared => PointerFlavor.Shared,
+            RuntimeContract.Watched => PointerFlavor.Watched,
+            RuntimeContract.Hijacked => PointerFlavor.Hijacked,
             _ => PointerFlavor.Raw
         };
     }

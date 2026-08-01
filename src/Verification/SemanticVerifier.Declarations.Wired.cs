@@ -26,16 +26,19 @@ public sealed partial class SemanticVerifier
         Compiler.Resolution.WiredRoutineCatalog.BuildKnownWiredMethods();
 
     /// <summary>
-    /// Checks if a routine name uses the $ prefix but is not a known built-in method.
+    /// Checks whether a routine declared with the wired '$' sigil names something that is NOT a known
+    /// built-in wired method. The canonical name is bare ('$' is a structured attribute, not part of
+    /// the name), so wired-ness is passed via <paramref name="isWired"/> rather than sniffed from the
+    /// string. A non-wired routine can be named anything and is never flagged.
     /// </summary>
-    private static bool IsUnknownWiredMethod(string name)
+    private static bool IsUnknownWiredMethod(string bareName, bool isWired)
     {
-        if (!name.StartsWith('$') || name.Length <= 1)
+        if (!isWired || bareName.Length == 0)
         {
             return false;
         }
 
-        return !KnownWiredMethods.Contains(value: name);
+        return !KnownWiredMethods.Contains(value: bareName);
     }
 
     /// <summary>
@@ -55,6 +58,87 @@ public sealed partial class SemanticVerifier
         return WiredToProtocols.GetValueOrDefault(key: wiredName);
     }
 
+    /// <summary>
+    /// Re-derives <see cref="RoutineInfo.IsWiredMemberRoutine"/> for every registered member routine.
+    ///
+    /// <para>The wired sigil (<c>$</c>) was removed from the surface syntax, so the parser no longer
+    /// sets this flag (it is uniformly false at registration). This pass restores meaningful wired-ness
+    /// by INFERRING it from the wired-routine catalog plus explicit protocol conformance.</para>
+    ///
+    /// <para>A member routine <c>R</c> is wired iff its bare name is a known wired method AND either the
+    /// name is not protocol-gated (creator/context/lifecycle names like <c>create</c>/<c>destroy</c> —
+    /// wired by catalog name alone) or the owner EXPLICITLY <c>obeys</c> one of the name's required
+    /// protocols. This reproduces the pre-removal <c>$</c> set: a numeric <c>add</c> (obeys Addable) is
+    /// wired, while <c>Set.add</c> (Set does not obey Addable) stays non-wired.</para>
+    ///
+    /// <para>Runs AFTER conformance is applied (<c>ApplyImplicitMarkerConformance</c> + user <c>obeys</c>)
+    /// and AFTER all member routines are registered, so the explicit-conformance query is authoritative.
+    /// It OVERWRITES the all-false value the parser left behind.</para>
+    /// </summary>
+    private void InferWiredMemberRoutines()
+    {
+        foreach (RoutineInfo r in _registry.EnumerateMemberRoutines())
+        {
+            r.IsWiredMemberRoutine = InferWired(r);
+        }
+    }
+
+    /// <summary>Computes wired-ness for a single member routine (see <see cref="InferWiredMemberRoutines"/>).</summary>
+    private bool InferWired(RoutineInfo r)
+    {
+        if (r.OwnerType == null || !KnownWiredMethods.Contains(value: r.Name))
+        {
+            return false;
+        }
+
+        List<string>? protos = GetRequiredProtocols(wiredName: r.Name);
+        if (protos == null || protos.Count == 0)
+        {
+            // create/destroy/enter/exit/from_literal/unwrap/… — wired by catalog name alone.
+            return true;
+        }
+
+        // Re-lookup the owner to get the version whose ImplementedProtocols are populated by conformance.
+        TypeSymbol? owner = _registry.LookupType(name: r.OwnerType.FullName) ?? r.OwnerType;
+        return protos.Any(predicate: p => ExplicitlyImplementsProtocol(type: owner, protocolName: p));
+    }
+
+    /// <summary>
+    /// Re-derives <see cref="RoutineInfo.IsFailable"/> for every registered routine from INFERENCE,
+    /// after Phase-5 body analysis has populated <see cref="RoutineInfo.HasThrow"/> /
+    /// <see cref="RoutineInfo.HasAbsent"/> / <see cref="RoutineInfo.FailableCallees"/>.
+    ///
+    /// <para>A routine is failable iff it was DECLARED <c>!</c> (kept — the annotation is now OPTIONAL
+    /// but honest) OR its body directly <c>throw</c>s / <c>absent</c>s. The declaration <c>!</c> is
+    /// never REMOVED by inference; inference only ADDS failability to a routine that throws/absents
+    /// without a declared <c>!</c> (the newly-allowed un-declared-failable case).</para>
+    ///
+    /// <para>Failability is NOT propagated through the call graph here: a non-failable routine calling
+    /// a failable one is the language's established CRASH-ONLY path (the call fails ⇒ the program
+    /// crashes), and that caller keeps its non-failable ABI. Making every such caller failable would
+    /// rewrite the failable-carrier ABI of a large fraction of the stdlib for no behavioural gain.
+    /// (Purely-PROPAGATED failability of a routine that IS declared <c>!</c> — e.g. a <c>!</c> wrapper
+    /// whose body only returns an inner <c>!</c> call — is preserved because its declared <c>!</c>
+    /// seeds it here; <c>ErrorHandlingVariantPass</c> still fans throw/absent through
+    /// <see cref="RoutineInfo.FailableCallees"/> for variant generation.)</para>
+    ///
+    /// <para>Runs after ALL bodies are analyzed and BEFORE codegen, which keys the failable-carrier ABI
+    /// on <see cref="RoutineInfo.IsFailable"/>. Mirrors <see cref="InferWiredMemberRoutines"/>: a
+    /// post-analysis pass that overwrites a declared flag with the derived value. On a codebase where
+    /// every throwing routine is already declared <c>!</c> this is a no-op (inference AGREES with the
+    /// declarations), so it stays ABI-consistent — verified by the stdlib harness.</para>
+    /// </summary>
+    private void InferFailableRoutines()
+    {
+        foreach (RoutineInfo r in _registry.GetAllRoutines())
+        {
+            if (r.HasThrow || r.HasAbsent)
+            {
+                r.IsFailable = true;
+            }
+        }
+    }
+
     private void CollectExternalDeclaration(ExternalDeclaration external)
     {
         // #123: Suflae cannot use C interop directly
@@ -70,6 +154,7 @@ public sealed partial class SemanticVerifier
         var routineInfo = new RoutineInfo(name: external.Name)
         {
             Kind = RoutineKind.External,
+            IsFailable = external.IsFailable,
             CallingConvention = external.CallingConvention,
             IsVariadic = external.IsVariadic,
             Visibility = VisibilityModifier.Open, // External declarations are always open

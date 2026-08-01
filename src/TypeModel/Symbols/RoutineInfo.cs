@@ -121,14 +121,14 @@ public sealed class RoutineInfo
         return type.FullName;
     }
 
-    /// <summary>The module-qualified name (e.g., "Core/S8.$add", "IO/Console.show").</summary>
+    /// <summary>The module-qualified name (e.g., "Core/S8.add", "IO/Console.show").</summary>
     public string QualifiedName
     {
         get
         {
             if (OwnerType != null)
             {
-                // Member routine: Module/OwnerType.routine (e.g., "Core/S8.$add")
+                // Member routine: Module/OwnerType.routine (e.g., "Core/S8.add")
                 return $"{OwnerType.FullName}.{Name}";
             }
 
@@ -170,14 +170,27 @@ public sealed class RoutineInfo
     /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
     public TypeSymbol? ReturnType { get; set; }
 
-    /// <summary>True if the source wrote the return type with the `?T` rvalue mark
+    /// <summary>True if the source wrote the return type with the `T` rvalue mark
     /// (entity rvalue, in-flight). Carried from <see cref="TypeExpression.IsRvalue"/>.
     /// SA enforces position validity; downstream passes use this to drive auto-bind
-    /// from rvalue `?T` back to lvalue `T` at the binding site.</summary>
+    /// from rvalue `T` back to lvalue `T` at the binding site.</summary>
     public bool IsInFlightReturn { get; init; }
 
-    /// <summary>Whether this routine can fail (has ! suffix).</summary>
-    public bool IsFailable { get; init; }
+    /// <summary>Whether this routine can fail. Set from the declared <c>!</c> suffix at registration,
+    /// then RE-DERIVED by the failability-inference fixpoint (<c>InferFailableRoutines</c>) after Phase-5
+    /// body analysis: a routine is failable iff it was declared <c>!</c> OR its body throws/absents OR it
+    /// propagates an unhandled failable callee. The <c>internal set</c> lets that pass overwrite the
+    /// declared value before codegen keys the failable-carrier ABI on it (mirrors
+    /// <see cref="IsWiredMemberRoutine"/>).</summary>
+    public bool IsFailable { get; internal set; }
+
+    /// <summary>
+    /// Whether this is a WIRED member routine — one the source spells with a leading <c>$</c>
+    /// (<c>$create</c>, <c>$store</c>, <c>$eq</c>, <c>$emit</c>, <c>$destroy</c>, …). The <c>$</c> is
+    /// a STRUCTURED attribute recorded here, NOT part of <see cref="Name"/>: the canonical name is the
+    /// bare identifier (<c>create</c>, <c>store</c>, …). Wired routines are always member routines.
+    /// </summary>
+    public bool IsWiredMemberRoutine { get; internal set; }
 
     /// <summary>Whether this routine contains throw statements.</summary>
     public bool HasThrow { get; set; }
@@ -258,7 +271,7 @@ public sealed class RoutineInfo
         string fullName = proto.GenericDefinition?.Name ?? proto.Name;
         int bracket = fullName.IndexOf(value: '[');
         string baseName = bracket >= 0 ? fullName[..bracket] : fullName;
-        return baseName is "Referring" or "Controlling";
+        return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
     }
 
     /// <summary>Visibility modifier.</summary>
@@ -266,6 +279,16 @@ public sealed class RoutineInfo
 
     /// <summary>Source location where this routine is defined.</summary>
     public SourceLocation? Location { get; init; }
+
+    /// <summary>
+    /// Structural hash of a CONSTRUCTOR body, set at registration for the divergent-duplicate guard.
+    /// Two constructors can share a signature across files (e.g. <c>U16(from: U8)</c> in both U8.rf and
+    /// U16.rf) — benign when the bodies are identical (same hash), but a DIVERGENT one (same signature,
+    /// different body) means one silently shadows the other under last-wins registration, the hazard
+    /// class that made <c>F64(from: F128)</c> resolve to a recursive-forwarder stub. Null for non-creators
+    /// / extern bodies. See <see cref="Compiler.Resolution.TypeRegistry.RegisterRoutine"/>.
+    /// </summary>
+    public int? BodyHash { get; set; }
 
     /// <summary>The module this routine belongs to.</summary>
     public string? Module { get; init; }
@@ -327,7 +350,7 @@ public sealed class RoutineInfo
     /// <summary>For external routines, whether it's variadic.</summary>
     public bool IsVariadic { get; init; }
 
-    /// <summary>Whether this routine is marked dangerous (requires danger! block to call).</summary>
+    /// <summary>Whether this routine is marked dangerous (requires danger block to call).</summary>
     public bool IsDangerous { get; init; }
 
     /// <summary>Storage class: None (instance/module-level), Common (type-level static).</summary>
@@ -382,7 +405,7 @@ public sealed class RoutineInfo
 
     /// <summary>
     /// For generated error-handling variants (try_, check_, lookup_), the original routine name
-    /// they were generated from (e.g., "$next" for "try_next", "parse" for "try_parse").
+    /// they were generated from (e.g., "emit" for "try_emit", "parse" for "try_parse").
     /// </summary>
     public string? OriginalName { get; init; }
 
@@ -442,6 +465,7 @@ public sealed class RoutineInfo
             Parameters = substitutedParams,
             ReturnType = substitutedReturnType,
             IsFailable = IsFailable,
+            IsWiredMemberRoutine = IsWiredMemberRoutine,
             DeclaredMutation = DeclaredMutation,
             MutationCategory = MutationCategory,
             TypeArguments = typeArguments,

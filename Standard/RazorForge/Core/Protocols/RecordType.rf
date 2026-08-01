@@ -4,9 +4,9 @@ module Core
 ### `RecordType` identifies the value-semantics category: copying duplicates the value and the
 ### layout is structural. It does NOT imply `Equatable`/`Hashable` — equality and hashing are
 ### capabilities a record opts into explicitly (`obeys Equatable`/`Hashable` + a hand-written
-### `$eq`/`$hash`, enforced by RF-S702), never an automatic consequence of being a record. Bundling
-### them here promised conformance with no body behind it (a record that never declares `$eq` would
-### still "obey" Equatable), which let constrained generics like `List[T].$eq` instantiate for a
-### non-equatable element and emit a call to the abstract `Equatable.$eq` → linker error.
-protocol RecordType obeys Diagnosable
+### `eq`/`hash`, enforced by RF-S702), never an automatic consequence of being a record. Bundling
+### them here promised conformance with no body behind it (a record that never declares `eq` would
+### still "obey" Equatable), which let constrained generics like `List[T].eq` instantiate for a
+### non-equatable element and emit a call to the abstract `Equatable.eq` → linker error.
+protocol RecordType obeys Diagnosable, Serializable
   pass

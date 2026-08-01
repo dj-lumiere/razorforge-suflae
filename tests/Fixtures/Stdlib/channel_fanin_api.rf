@@ -1,0 +1,43 @@
+module Tests/Stdlib/ChannelFanInApi
+
+# v0.3.0 channels — single-thread cooperative fan-in with backpressure. Two coroutine producers and
+# one coroutine consumer share a capacity-2 Receiver on this thread's scheduler. When the buffer fills,
+# a producer's send! PARKS (cooperative backpressure) and the scheduler runs the consumer, which
+# drains and wakes the producer; when the buffer empties, the consumer's receive parks and the
+# producers run. No thread crossing (so no entity-aliasing barrier) and no deadlock (parking, not
+# blocking). Driving the consumer with retrieve! advances every sibling coroutine concurrently.
+#
+# Each producer owns its Sender (one cloned, one the original), so once both finish and their Feeders
+# drop, the channel auto-closes and the consumer's `for` loop ends.
+
+import IO/Console
+
+# Feeds lo..hi-1, parking cooperatively whenever the buffer is full. `out` drops on return.
+suspended routine produce(out: Sender[S64], lo: S64, hi: S64) -> S64
+  var i = lo
+  danger
+    while i < hi
+      out.send(item: i)
+      i = i + 1
+  return hi - lo
+
+# Drains the channel until it closes, summing the values; parks cooperatively while empty.
+suspended routine consume(inbox: Receiver[S64]) -> S64
+  var total = 0_s64
+  for v in inbox
+    total = total + v
+  return total
+
+routine start()
+  var (feeder, hop) = make_channel[S64](capacity: 2)
+
+  var p1 = produce(out: steal feeder.duplicate(), lo: 1, hi: 6)     # 1+2+3+4+5     = 15
+  var p2 = produce(out: steal feeder, lo: 10, hi: 15)           # 10+11+12+13+14 = 60
+  var c = consume(inbox: steal hop)
+
+  danger
+    var sum = c.retrieve()     # drives the scheduler: producers + consumer ping-pong to completion
+    discard p1.retrieve()      # already finished (the channel could not close otherwise)
+    discard p2.retrieve()
+    show(f"sum={sum}")
+  return

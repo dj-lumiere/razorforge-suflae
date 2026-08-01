@@ -23,24 +23,24 @@ record RoutineRecord
 
 ### Returns an xxHash64-based hash of this routine record.
 ### :returns: A `U64` hash combining all identifier fields.
-routine RoutineRecord.$fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.file_id.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.routine_id.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.module_id.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.type_id.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.line_no.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.column_no.$fast_hash())
+routine RoutineRecord.fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.file_id.fast_hash())
+  acc = __hash_round(acc: acc, h: me.routine_id.fast_hash())
+  acc = __hash_round(acc: acc, h: me.module_id.fast_hash())
+  acc = __hash_round(acc: acc, h: me.type_id.fast_hash())
+  acc = __hash_round(acc: acc, h: me.line_no.fast_hash())
+  acc = __hash_round(acc: acc, h: me.column_no.fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this routine record.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine RoutineRecord.$hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0u64, h: me.file_id.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.routine_id.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.module_id.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.type_id.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.line_no.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.column_no.$hash(k0: k0, k1: k1))
+routine RoutineRecord.hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.file_id.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.routine_id.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.module_id.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.type_id.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.line_no.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.column_no.hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

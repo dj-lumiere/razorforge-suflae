@@ -13,7 +13,16 @@ public sealed partial class SemanticVerifier
     private record NarrowingInfo(
         string VariableName,
         TypeSymbol? ThenBranchType,
-        TypeSymbol? ElseBranchType);
+        TypeSymbol? ElseBranchType)
+    {
+        /// <summary>Suflae flow typing: the then-branch proves <see cref="VariableName"/> non-none
+        /// (e.g. `if x isnot none`). Independent of type narrowing — nullable/non-null share a type.</summary>
+        public bool ThenNonNull { get; init; }
+
+        /// <summary>Suflae flow typing: the else-branch (and guard-clause continuation) proves
+        /// <see cref="VariableName"/> non-none (e.g. `if x is none: return`).</summary>
+        public bool ElseNonNull { get; init; }
+    }
 
     /// <summary>
     /// Attempts to extract type narrowing information from a condition expression.
@@ -40,10 +49,14 @@ public sealed partial class SemanticVerifier
                 return null;
             }
 
-            // Negating the condition swaps then/else narrowing
+            // Negating the condition swaps then/else narrowing (type + nullability facts)
             return new NarrowingInfo(VariableName: inner.VariableName,
                 ThenBranchType: inner.ElseBranchType,
-                ElseBranchType: inner.ThenBranchType);
+                ElseBranchType: inner.ThenBranchType)
+            {
+                ThenNonNull = inner.ElseNonNull,
+                ElseNonNull = inner.ThenNonNull
+            };
         }
 
         return null;
@@ -65,6 +78,20 @@ public sealed partial class SemanticVerifier
         if (varInfo == null)
         {
             return null;
+        }
+
+        // Suflae flow typing: `x is none` / `x isnot none` on a NULLABLE entity reference proves
+        // non-none-ness (not a type change — nullable and non-null share the Roamed[E] type). This
+        // must be checked before the carrier logic below (which returns null for a bare Roamed).
+        if (varInfo is { IsNullable: true } && IsNonePattern(pattern: isPat.Pattern))
+        {
+            return isPat.IsNegated
+                // `x isnot none` -> then-branch proves non-none
+                ? new NarrowingInfo(VariableName: id.Name, ThenBranchType: null, ElseBranchType: null)
+                    { ThenNonNull = true }
+                // `x is none` -> else-branch (and guard continuation) proves non-none
+                : new NarrowingInfo(VariableName: id.Name, ThenBranchType: null, ElseBranchType: null)
+                    { ElseNonNull = true };
         }
 
         // Check for existing narrowing

@@ -1,16 +1,16 @@
 module Tests/Stdlib/ComparisonOpsApi
 import IO/Console
 
-# Compiler-generated $lt/$le/$gt/$ge from $cmp on types that obey Ordered.
+# Compiler-generated lt/le/gt/ge from cmp on types that obey Ordered.
 record Score obeys Comparable
   value: S64
 
-routine Score.$eq(you: Score) -> Bool
+routine Score.eq(you: Score) -> Bool
   return me.value == you.value
 
-# Score auto-derives Equatable/Hashable; we expose $cmp manually so $lt/$le/$gt/$ge
+# Score auto-derives Equatable/Hashable; we expose cmp manually so lt/le/gt/ge
 # can be derived from it.
-routine Score.$cmp(you: Score) -> ComparisonSign
+routine Score.cmp(you: Score) -> ComparisonSign
   if me.value < you.value
     return ComparisonSign.ME_SMALL
   if me.value > you.value

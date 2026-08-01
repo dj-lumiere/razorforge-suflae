@@ -3,7 +3,7 @@ import IO/Console
 import Numerics.[Decimal]
 
 # Arbitrary-precision Decimal comparison — Decimal obeys Comparable, so ==, !=, <,
-# >, <=, >= are all available (the relational family is generated from $cmp/$eq).
+# >, <=, >= are all available (the relational family is generated from cmp/eq).
 # Comparison is by decoded parts (never by subtraction), so it does not crash.
 routine start()
   var a: Decimal = 3.14159dn

@@ -22,7 +22,7 @@ record LocalMoment obeys Ordered, DurationAddable, DurationSubtractable
 ### :param moment: The underlying UTC instant.
 ### :param offset: The UTC offset used for local-time interpretation.
 ### :returns: The resulting `LocalMoment` value.
-routine LocalMoment.$create(moment: Moment, offset: Duration) -> LocalMoment
+routine LocalMoment(moment: Moment, offset: Duration) -> LocalMoment
   return LocalMoment(moment: moment, offset: offset)
 
 ### Creates a `LocalMoment` from local civil date-time components and a UTC offset.
@@ -36,7 +36,7 @@ routine LocalMoment.$create(moment: Moment, offset: Duration) -> LocalMoment
 ### :param offset: The UTC offset associated with the local civil time.
 ### :returns: The resulting `LocalMoment` value.
 common routine LocalMoment.from_local(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64, offset: Duration) -> LocalMoment
-  var local_moment = Moment.$create(year: year, month: month, day: day, hour: hour, minute: minute, second: second)
+  var local_moment = Moment.create(year: year, month: month, day: day, hour: hour, minute: minute, second: second)
   var utc_moment = local_moment.subtract_duration(offset)
   return LocalMoment(moment: utc_moment, offset: offset)
 
@@ -52,7 +52,7 @@ common routine LocalMoment.now_utc() -> LocalMoment
 ### Extracts the underlying UTC `Moment` from a `LocalMoment`.
 ### :param from: The local moment to convert.
 ### :returns: The resulting `Moment` value.
-routine Moment.$create(from: LocalMoment) -> Moment
+routine Moment(from: LocalMoment) -> Moment
   return from.moment
 
 ### Converts this value to moment.
@@ -205,21 +205,21 @@ routine LocalMoment.elapsed_since(earlier: LocalMoment) -> Duration
 ### :param you: The duration to advance by.
 ### :returns: The resulting `LocalMoment`.
 @readonly
-routine LocalMoment.$add(you: Duration) -> LocalMoment
+routine LocalMoment.add(you: Duration) -> LocalMoment
   return me.add_duration(you)
 
 ### Returns the local moment reached by retreating this one by `you`.
 ### :param you: The duration to subtract.
 ### :returns: The resulting `LocalMoment`.
 @readonly
-routine LocalMoment.$sub(you: Duration) -> LocalMoment
+routine LocalMoment.sub(you: Duration) -> LocalMoment
   return me.subtract_duration(you)
 
 ### Returns the elapsed time from `you` to this moment.
 ### :param you: The earlier moment to measure from.
 ### :returns: The `Duration` between the two moments.
 @readonly
-routine LocalMoment.$sub(you: LocalMoment) -> Duration
+routine LocalMoment.sub(you: LocalMoment) -> Duration
   return me.elapsed_since(you)
 
 # ============================================================================
@@ -230,15 +230,15 @@ routine LocalMoment.$sub(you: LocalMoment) -> Duration
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine LocalMoment.$eq(you: LocalMoment) -> Bool
-  return me.moment.$eq(you.moment)
+routine LocalMoment.eq(you: LocalMoment) -> Bool
+  return me.moment.eq(you.moment)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine LocalMoment.$cmp(you: LocalMoment) -> ComparisonSign
-  return me.moment.$cmp(you.moment)
+routine LocalMoment.cmp(you: LocalMoment) -> ComparisonSign
+  return me.moment.cmp(you.moment)
 
 # ============================================================================
 # Text representation
@@ -246,7 +246,7 @@ routine LocalMoment.$cmp(you: LocalMoment) -> ComparisonSign
 
 ### Returns the display form of this local moment including its UTC offset.
 ### :returns: The resulting `Text` value.
-routine LocalMoment.$represent() -> Text
+routine LocalMoment.represent() -> Text
   var local = me.local_moment()
   var y = local.year()
   var mo = local.month()
@@ -271,8 +271,8 @@ routine LocalMoment.$represent() -> Text
 
 ### Returns the diagnostic form of this local moment.
 ### :returns: The resulting `Text` value.
-routine LocalMoment.$diagnose() -> Text
-  return "LocalMoment(moment: " + me.moment.$diagnose() + ", offset: " + me.offset.$diagnose() + ")"
+routine LocalMoment.diagnose() -> Text
+  return "LocalMoment(moment: " + me.moment.diagnose() + ", offset: " + me.offset.diagnose() + ")"
 
 # ============================================================================
 # Hashing
@@ -280,16 +280,16 @@ routine LocalMoment.$diagnose() -> Text
 
 ### Returns an xxHash64-based hash of this local moment.
 ### :returns: A `U64` hash combining the underlying moment and offset.
-routine LocalMoment.$fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.moment.$fast_hash())
-  acc = __hash_round(acc: acc, h: me.offset.$fast_hash())
+routine LocalMoment.fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.moment.fast_hash())
+  acc = __hash_round(acc: acc, h: me.offset.fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this local moment.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine LocalMoment.$hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0u64, h: me.moment.$hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.offset.$hash(k0: k0, k1: k1))
+routine LocalMoment.hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.moment.hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.offset.hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

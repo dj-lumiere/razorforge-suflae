@@ -9,4 +9,4 @@ protocol Invertible
   ### in the input.
   ### :returns: The bitwise inverse of this value.
   @readonly
-  routine Me.$bitnot() -> ?Me
+  routine Me.bitnot() -> Me

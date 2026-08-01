@@ -213,11 +213,11 @@ public class ErrorVariantGenerationTests
 
     #region Error Cases
     /// <summary>
-    /// Verifies semantic analysis behavior for throw in non failable routine and reports the expected warning.
+    /// Failability is now INFERRED: a <c>throw</c> in a routine NOT declared <c>!</c> no longer emits
+    /// ThrowOutsideFailableFunction — the routine is inferred-failable instead.
     /// </summary>
-
     [Fact]
-    public void Analyze_ThrowInNonFailableRoutine_ReportsWarning()
+    public void Analyze_ThrowInNonFailableRoutine_NoLongerErrors()
     {
         string source = """
                         crashable SomeError
@@ -236,15 +236,15 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for absent in non failable routine and reports the expected error.
+    /// Failability is now INFERRED: an <c>absent</c> in a routine NOT declared <c>!</c> no longer emits
+    /// AbsentOutsideFailableFunction — the routine is inferred-failable instead.
     /// </summary>
-
     [Fact]
-    public void Analyze_AbsentInNonFailableRoutine_ReportsWarning()
+    public void Analyze_AbsentInNonFailableRoutine_NoLongerErrors()
     {
         string source = """
                         routine might_fail() -> S32
@@ -253,7 +253,7 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
     /// <summary>

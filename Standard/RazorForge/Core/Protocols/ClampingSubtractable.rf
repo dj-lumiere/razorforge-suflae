@@ -10,4 +10,4 @@ protocol ClampingSubtractable
   ### :note: Implementations should preserve exact subtraction behavior whenever
   ### the mathematical result is representable.
   @readonly
-  routine Me.$sub_clamp(you: Me) -> ?Me
+  routine Me.sub_clamp(you: Me) -> Me

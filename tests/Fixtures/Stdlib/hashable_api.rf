@@ -11,10 +11,10 @@ record Point obeys Equatable, Hashable
   x: S64
   y: S64
 
-routine Point.$eq(you: Point) -> Bool
+routine Point.eq(you: Point) -> Bool
   return me.x == you.x and me.y == you.y
 
-routine Point.$hash(k0: U64, k1: U64) -> U64
+routine Point.hash(k0: U64, k1: U64) -> U64
   return reinterpret_bits[S64, U64](me.x) ^ reinterpret_bits[S64, U64](me.y)
 
 routine start()
@@ -24,8 +24,8 @@ routine start()
 
   show(f"p == q: {p == q}")
   show(f"p == r: {p == r}")
-  show(f"p.$hash() == q.$hash(): {p.$hash(k0: 0_u64, k1: 0_u64) == q.$hash(k0: 0_u64, k1: 0_u64)}")
-  show(f"p.$hash() == r.$hash(): {p.$hash(k0: 0_u64, k1: 0_u64) == r.$hash(k0: 0_u64, k1: 0_u64)}")
+  show(f"p.hash() == q.hash(): {p.hash(k0: 0_u64, k1: 0_u64) == q.hash(k0: 0_u64, k1: 0_u64)}")
+  show(f"p.hash() == r.hash(): {p.hash(k0: 0_u64, k1: 0_u64) == r.hash(k0: 0_u64, k1: 0_u64)}")
 
   # Records can be used as Dict/Set keys
   var s = {p}

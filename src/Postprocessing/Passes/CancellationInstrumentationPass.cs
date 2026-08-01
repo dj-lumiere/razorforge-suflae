@@ -11,8 +11,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <summary>
 /// v0.2.0 Phase 5b-2 (Mechanism C): inserts coroutine cancellation push/pop markers into the
 /// bodies of may-suspend routines, so a coroutine abandoned while parked tears down exactly the
-/// owned values it had constructed (the design's cancellation shadow stack —
-/// <c>internal-wiki/v0.2.0-coroutine-primitive.md</c>).
+/// owned values it had constructed (the design's cancellation shadow stack).
 ///
 /// <para>The markers are sentinel <see cref="CallExpression"/>s (<c>__rf_cf_push(local)</c> /
 /// <c>__rf_cf_pop(local)</c>) — no new AST node and no visitor surface. This pass runs LAST (after
@@ -20,7 +19,7 @@ namespace Compiler.Postprocessing.Passes;
 /// recognises them and emits the <c>rf_coro_cf_push</c>/<c>rf_coro_cf_pop</c> runtime calls.</para>
 ///
 /// <para>Consistency-by-construction: the set of instrumented locals is DERIVED from the inline
-/// <c>local.$destroy()</c> calls <c>ScopeTeardownLoweringPass</c> already inserted. A push goes
+/// <c>local.destroy()</c> calls <c>ScopeTeardownLoweringPass</c> already inserted. A push goes
 /// right after a local's construction (so a value built *after* a suspend point is not on the stack
 /// before it — partial init), and a pop right before each of that local's inline
 /// <c>$destroy</c> (so the node is removed exactly when the inline teardown runs — the value can
@@ -55,7 +54,7 @@ public sealed class CancellationInstrumentationPass
     /// </summary>
     public static void Run(
         IEnumerable<(Program Program, string FilePath, string Module)> programs,
-        IReadOnlyDictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedBodies,
+        IReadOnlyDictionary<string, Instantiation.MonomorphizedBody> instantiatedBodies,
         IReadOnlyCollection<string> maySuspendKeys,
         TypeRegistry registry)
     {
@@ -80,7 +79,7 @@ public sealed class CancellationInstrumentationPass
         // are the SAME objects codegen emits, so mutating their bodies in place takes effect. They
         // inherited the inline $destroy calls from the lowered generic-def, so InstrumentBody derives
         // the teardown set the same way.
-        foreach ((string key, Compiler.Instantiation.MonomorphizedBody mb) in instantiatedBodies)
+        foreach ((string key, Instantiation.MonomorphizedBody mb) in instantiatedBodies)
         {
             if (pass._maySuspend.Contains(item: key) || pass._maySuspend.Contains(item: mb.Info.RegistryKey))
             {
@@ -121,7 +120,7 @@ public sealed class CancellationInstrumentationPass
 
     /// <summary>
     /// Instruments one routine body (whether a source decl or a monomorphized generic body). The
-    /// set of instrumented locals is DERIVED from the inline <c>X.$destroy()</c> calls
+    /// set of instrumented locals is DERIVED from the inline <c>X.destroy()</c> calls
     /// <c>ScopeTeardownLoweringPass</c> already inserted — keeping abandon's set == inline's set.
     /// </summary>
     private void InstrumentBody(Statement body)
@@ -136,7 +135,7 @@ public sealed class CancellationInstrumentationPass
         {
             if (n is CallExpression
                 {
-                    Callee: MemberExpression { PropertyName: "$destroy", Object: IdentifierExpression destroyed }
+                    Callee: MemberExpression { MemberName: "destroy", Object: IdentifierExpression destroyed }
                 })
             {
                 locals.Add(item: destroyed.Name);
@@ -212,6 +211,7 @@ public sealed class CancellationInstrumentationPass
                 break;
             case UsingStatement u:
                 RecurseStmt(stmt: u.Body, locals: locals);
+                if (u.FallbackBody != null) RecurseStmt(stmt: u.FallbackBody, locals: locals);
                 break;
             case WhenStatement whenStmt:
                 foreach (WhenClause clause in whenStmt.Clauses)
@@ -240,7 +240,7 @@ public sealed class CancellationInstrumentationPass
             {
                 Expression: CallExpression
                 {
-                    Callee: MemberExpression { PropertyName: "$destroy", Object: IdentifierExpression id }
+                    Callee: MemberExpression { MemberName: "destroy", Object: IdentifierExpression id }
                 }
             })
         {

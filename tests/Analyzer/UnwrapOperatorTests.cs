@@ -253,7 +253,7 @@ public class UnwrapOperatorTests
                         record Wrapper
                           value: S64
                         @readonly
-                        routine Wrapper.$unwrap() -> S64
+                        routine Wrapper.unwrap() -> S64
                           return me.value
                         routine test()
                           var w = Wrapper(value: 42)
@@ -276,7 +276,7 @@ public class UnwrapOperatorTests
                         entity Box
                           value: S64
                         @readonly
-                        routine Box.$unwrap() -> S64
+                        routine Box.unwrap() -> S64
                           return me.value
                         routine test()
                           var b = Box(value: 99)
@@ -353,7 +353,7 @@ public class UnwrapOperatorTests
                         record Wrapper
                           value: S64
                         @readonly
-                        routine Wrapper.$unwrap() -> S64
+                        routine Wrapper.unwrap() -> S64
                           return me.value
                         @readonly
                         routine Wrapper.$unwrap_or(default: S64) -> S64
@@ -362,25 +362,6 @@ public class UnwrapOperatorTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
-    }
-
-    /// <summary>
-    /// Verifies that the test validates dollar method still and reports the expected error.
-    /// </summary>
-    [Fact]
-    public void UnknownDollarMethod_StillReportsError()
-    {
-        string source = """
-                        record Wrapper
-                          value: S64
-                        @readonly
-                        routine Wrapper.$frobnicate() -> S64
-                          return me.value
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
     }
 
@@ -509,7 +490,7 @@ public class UnwrapOperatorTests
     public void ForceUnwrap_GetMethodName_ReturnsUnwrap()
     {
         UnaryOperator op = UnaryOperator.ForceUnwrap;
-        Assert.Equal(expected: "$unwrap", actual: op.GetMethodName());
+        Assert.Equal(expected: "unwrap", actual: op.GetMethodName());
     }
 
     /// <summary>
@@ -519,7 +500,7 @@ public class UnwrapOperatorTests
     public void NoneCoalesce_GetMethodName_ReturnsUnwrapOr()
     {
         BinaryOperator op = BinaryOperator.NoneCoalesce;
-        Assert.Equal(expected: "$unwrap_or", actual: op.GetMethodName());
+        Assert.Equal(expected: "unwrap_or", actual: op.GetMethodName());
     }
 
     #endregion

@@ -1,0 +1,201 @@
+module Core
+
+import BuilderService
+
+# Channels — `Receiver[T]` (single consumer) / `SharedReceiver[T]` (multi consumer) message passing.
+#
+# A channel is a typed conduit carrying a STREAM of values between concurrent agents (the streaming
+# counterpart to Agent's one-shot result). The sending end is a `Sender[T]` (cloneable for multiple
+# producers); the receiving end is a `Receiver[T]` (one owner) or, for multiple consumers, a `SharedReceiver[T]`
+# (clone one per consumer). Receiving == iterating: both receivers obey `Iterable[T]`, so `for x in`,
+# IterTools, and explicit iteration all work — there is no separate receive verb.
+#
+# `send!` and receive park the calling coroutine when the buffer is full / empty (woken cross-thread
+# by the counterpart op) or block a plain thread — uncolored, like `retrieve!`/`waitfor`. The native
+# refcounted ring buffer (channel_runtime.c) backs all of this; the last `Sender` dropping auto-closes
+# the channel, after which receivers drain the buffer then end.
+
+# ---- Creation -----------------------------------------------------------------------------------
+
+### Creates a single-consumer channel and returns its `(Sender, Receiver)` pair. `capacity` is the
+### buffered depth: 0 = rendezvous (send waits for a taker), N = a bounded buffer (send blocks when
+### full = backpressure). Clone the `Sender` for multiple producers (fan-in).
+### :param capacity: The buffer depth (0 = rendezvous).
+### :returns: A `(Sender[T], Receiver[T])` tuple sharing one channel.
+routine make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])
+  danger
+    var chan = rf_channel_create(capacity: capacity)
+    return (Sender[T](chan: chan), Receiver[T](chan: chan))
+
+### Creates a multi-consumer channel and returns its `(Sender, SharedReceiver)` pair. Clone the
+### `SharedReceiver` (one per consumer) for a worker pool — any free worker takes the next item (consumer
+### fan-out, not broadcast). `capacity` as in `make_channel`.
+### :param capacity: The buffer depth (0 = rendezvous).
+### :returns: A `(Sender[T], SharedReceiver[T])` tuple sharing one channel.
+routine make_shared_channel[T](capacity: U64) -> (Sender[T], SharedReceiver[T])
+  danger
+    var chan = rf_channel_create(capacity: capacity)
+    return (Sender[T](chan: chan), SharedReceiver[T](chan: chan))
+
+# ---- Sending end --------------------------------------------------------------------------------
+
+### The sending end of a channel. Clone it for multiple producers; the last one dropping (or an
+### explicit `close`) closes the channel.
+entity Sender[T]
+  ### The shared native channel handle (rf_channel*).
+  secret chan: CPtr
+
+### Sends one item, moving its ownership into the channel. Blocks/parks while the buffer is full
+### (backpressure); for a rendezvous channel waits until a consumer takes it. FAILABLE: throws
+### {ChannelClosedError} if the channel is already closed or has no consumers left.
+### :param item: The value to send (ownership transfers in).
+routine Sender[T].send!(item: T)
+  danger
+    var box = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size()))
+    box.poke(value: item)
+    var ok = rf_channel_feed(chan: me.chan, payload: box.address())
+    if ok == 0_u32
+      # Undelivered: reclaim the item, then the box, before reporting the closed channel.
+      var orphan = box.peek()
+      box.invalidate()
+      throw ChannelClosedError()
+  return
+
+### Produces another sending handle on the same channel (fan-in: more producers).
+### :returns: A new `Sender[T]` on the same channel.
+routine Sender[T].duplicate() -> Sender[T]
+  danger
+    rf_channel_add_feeder(chan: me.chan)
+    return Sender[T](chan: me.chan)
+
+### Closes the channel early (dropping the last Sender also closes it). Receivers drain the buffer
+### then finish. Not dangerous — closing is the normal end-of-stream signal; double-close is a no-op.
+routine Sender[T].close()
+  danger
+    rf_channel_close(chan: me.chan)
+  return
+
+### Whether the channel has been closed (a subsequent `send!` would throw). Racy: another agent could
+### close it the instant after you check, so prefer handling `send!`'s failure to gating on this.
+### :returns: `true` if the channel is closed.
+routine Sender[T].is_closed() -> Bool
+  danger
+    return rf_channel_is_closed(chan: me.chan) != 0_u32
+
+### Drops this producer reference; the last one closes the channel.
+dangerous routine Sender[T].destroy()
+  rf_channel_drop_feeder(chan: me.chan)
+  return
+
+# ---- Receiving ends -----------------------------------------------------------------------------
+
+### The single-consumer receiving end. Obeys `Iterable[T]`: `for x in hop` drains it until the
+### channel closes and the buffer empties. There is only ever one `Receiver` per channel (it is not
+### cloneable — use a `SharedReceiver` for multiple consumers).
+entity Receiver[T] obeys Iterable[T]
+relates ChannelDrain[T] as Iter
+  ### The shared native channel handle (rf_channel*).
+  secret chan: CPtr
+
+### Returns an iterator that draws items from the channel (receive == iterate).
+### :returns: A `ChannelDrain[T]` over this channel.
+routine Receiver[T].iter() -> ChannelDrain[T]
+  danger
+    return ChannelDrain[T](chan: me.chan)
+
+### The number of buffered items right now. A racy snapshot for diagnostics/heuristics — never a
+### synchronization decision (it can change the instant after you read it).
+### :returns: The current buffered item count.
+routine Receiver[T].count() -> U64
+  danger
+    return rf_channel_count(chan: me.chan)
+
+### Whether the buffer is currently empty. Racy snapshot (see `count`).
+### :returns: `true` if no items are buffered.
+routine Receiver[T].is_empty() -> Bool
+  danger
+    return rf_channel_count(chan: me.chan) == 0_u64
+
+### Whether the channel has been closed (it may still hold buffered items to drain).
+### :returns: `true` if closed.
+routine Receiver[T].is_closed() -> Bool
+  danger
+    return rf_channel_is_closed(chan: me.chan) != 0_u32
+
+### The buffered capacity this channel was created with (0 = rendezvous).
+### :returns: The buffer capacity.
+routine Receiver[T].capacity() -> U64
+  danger
+    return rf_channel_capacity(chan: me.chan)
+
+### Drops this consumer reference; the channel frees once no producers and no consumers remain.
+dangerous routine Receiver[T].destroy()
+  rf_channel_drop_consumer(chan: me.chan)
+  return
+
+### A multi-consumer receiving handle. Clone one per consumer for a worker pool; any free worker
+### takes the next item. Obeys `Iterable[T]` like `Receiver`.
+entity SharedReceiver[T] obeys Iterable[T]
+relates ChannelDrain[T] as Iter
+  ### The shared native channel handle (rf_channel*).
+  secret chan: CPtr
+
+### Produces another consumer handle on the same channel (one more line worker).
+### :returns: A new `SharedReceiver[T]` on the same channel.
+routine SharedReceiver[T].duplicate() -> SharedReceiver[T]
+  danger
+    rf_channel_add_consumer(chan: me.chan)
+    return SharedReceiver[T](chan: me.chan)
+
+### Returns an iterator that draws items from the channel (receive == iterate).
+### :returns: A `ChannelDrain[T]` over this channel.
+routine SharedReceiver[T].iter() -> ChannelDrain[T]
+  danger
+    return ChannelDrain[T](chan: me.chan)
+
+### The number of buffered items right now (racy snapshot — diagnostics only, not synchronization).
+### :returns: The current buffered item count.
+routine SharedReceiver[T].count() -> U64
+  danger
+    return rf_channel_count(chan: me.chan)
+
+### Whether the buffer is currently empty (racy snapshot). :returns: `true` if no items are buffered.
+routine SharedReceiver[T].is_empty() -> Bool
+  danger
+    return rf_channel_count(chan: me.chan) == 0_u64
+
+### Whether the channel has been closed (may still hold buffered items). :returns: `true` if closed.
+routine SharedReceiver[T].is_closed() -> Bool
+  danger
+    return rf_channel_is_closed(chan: me.chan) != 0_u32
+
+### The buffered capacity this channel was created with (0 = rendezvous). :returns: The capacity.
+routine SharedReceiver[T].capacity() -> U64
+  danger
+    return rf_channel_capacity(chan: me.chan)
+
+### Drops this consumer reference; the channel frees once no producers and no consumers remain.
+dangerous routine SharedReceiver[T].destroy()
+  rf_channel_drop_consumer(chan: me.chan)
+  return
+
+# ---- The drain iterator -------------------------------------------------------------------------
+
+### The iterator a receiving end hands to a `for` loop. It references the channel without owning it (the
+### owning `Receiver`/`SharedReceiver` holds the consumer reference); `emit!` receives one item, parking
+### while the buffer is empty, and returns `absent` once the channel is closed and drained — ending the loop.
+entity ChannelDrain[T] obeys Emittable[T]
+  ### The shared native channel handle (rf_channel*), non-owning (this iterator holds no reference).
+  secret chan: CPtr
+
+### Receives the next item, or `absent` when the channel is closed and the buffer is empty.
+### :returns: The next value, or `absent` at end-of-stream.
+@writable
+routine ChannelDrain[T].emit!() -> T
+  danger
+    var box = hijacked_from[T](rf_channel_next(chan: me.chan))
+    if box.is_none()
+      absent
+    var value = box.peek()
+    box.invalidate()
+    return value

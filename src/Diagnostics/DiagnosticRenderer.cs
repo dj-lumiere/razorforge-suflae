@@ -80,7 +80,7 @@ public static class DiagnosticRenderer
     }
 
     /// <summary>Renders up to <see cref="MaxRenderedPerBatch"/> errors, then a suppression note.</summary>
-    public static void PrintAll(System.Collections.Generic.IReadOnlyList<SemanticError> errors,
+    public static void PrintAll(IReadOnlyList<SemanticError> errors,
         string indent = "  ")
     {
         int shown = Math.Min(val1: errors.Count, val2: MaxRenderedPerBatch);
@@ -98,7 +98,7 @@ public static class DiagnosticRenderer
     }
 
     /// <summary>Renders up to <see cref="MaxRenderedPerBatch"/> warnings, then a suppression note.</summary>
-    public static void PrintAll(System.Collections.Generic.IReadOnlyList<SemanticWarning> warnings,
+    public static void PrintAll(IReadOnlyList<SemanticWarning> warnings,
         string indent = "  ")
     {
         int shown = Math.Min(val1: warnings.Count, val2: MaxRenderedPerBatch);

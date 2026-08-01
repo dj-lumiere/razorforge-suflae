@@ -69,14 +69,14 @@ internal sealed class DerivedOperatorPass
         var methodList = methods.ToList();
 
         // Look for $eq method
-        RoutineInfo? eqMethod = methodList.FirstOrDefault(predicate: m => m.Name == "$eq");
+        RoutineInfo? eqMethod = methodList.FirstOrDefault(predicate: m => m.Name == "eq");
         if (eqMethod != null)
         {
             GenerateNeFromEq(type: type, eqMethod: eqMethod, existingMethods: methodList);
         }
 
         // Look for $cmp method
-        RoutineInfo? cmpMethod = methodList.FirstOrDefault(predicate: m => m.Name == "$cmp");
+        RoutineInfo? cmpMethod = methodList.FirstOrDefault(predicate: m => m.Name == "cmp");
         if (cmpMethod != null)
         {
             GenerateComparisonOperatorsFromCmp(type: type,
@@ -86,7 +86,7 @@ internal sealed class DerivedOperatorPass
 
         // Look for $contains method
         RoutineInfo? containsMethod =
-            methodList.FirstOrDefault(predicate: m => m.Name == "$contains");
+            methodList.FirstOrDefault(predicate: m => m.Name == "contains");
         if (containsMethod != null)
         {
             GenerateNotContainsFromContains(type: type,
@@ -98,12 +98,12 @@ internal sealed class DerivedOperatorPass
 
     /// <summary>
     /// Generates $ne from $eq.
-    /// $ne(you) = not me.$eq(you: you)
+    /// $ne(you) = not me.eq(you: you)
     /// </summary>
     private void GenerateNeFromEq(TypeSymbol type, RoutineInfo eqMethod,
         List<RoutineInfo> existingMethods)
     {
-        RoutineInfo? existingNe = existingMethods.FirstOrDefault(predicate: m => m.Name == "$ne");
+        RoutineInfo? existingNe = existingMethods.FirstOrDefault(predicate: m => m.Name == "ne");
 
         if (existingNe != null)
         {
@@ -118,7 +118,7 @@ internal sealed class DerivedOperatorPass
             return;
         }
 
-        var neMethod = new RoutineInfo(name: "$ne")
+        var neMethod = new RoutineInfo(name: "ne")
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = type,
@@ -128,7 +128,7 @@ internal sealed class DerivedOperatorPass
             DeclaredMutation = MutationCategory.Readonly,
             MutationCategory = MutationCategory.Readonly,
             // Inherit `$eq`'s generic-parameter constraints so `$ne` is only available
-            // for the same instantiations as `$eq`. Without this, Array[T,N].$ne is
+            // for the same instantiations as `$eq`. Without this, Array[T,N].ne is
             // unconditionally derivable even when $eq requires `T obeys Equatable`,
             // and the synthesized `$ne` body references a non-existent `$eq` at link
             // time for instantiations that fail the constraint (e.g. Array[X,N]).
@@ -143,7 +143,7 @@ internal sealed class DerivedOperatorPass
 
         _registry.RegisterRoutine(routine: neMethod);
 
-        // Build AST body: return not me.$eq(you: you)
+        // Build AST body: return not me.eq(you: you)
         string paramName = eqMethod.Parameters.Count > 0
             ? eqMethod.Parameters[index: 0].Name
             : "you";
@@ -157,13 +157,13 @@ internal sealed class DerivedOperatorPass
 
     /// <summary>
     /// Generates $notcontains from $contains.
-    /// $notcontains(item) = not me.$contains(item: item)
+    /// $notcontains(item) = not me.contains(item: item)
     /// </summary>
     private void GenerateNotContainsFromContains(TypeSymbol type, RoutineInfo containsMethod,
         List<RoutineInfo> existingMethods)
     {
         RoutineInfo? existingNotContains =
-            existingMethods.FirstOrDefault(predicate: m => m.Name == "$notcontains");
+            existingMethods.FirstOrDefault(predicate: m => m.Name == "notcontains");
 
         if (existingNotContains != null)
         {
@@ -176,7 +176,7 @@ internal sealed class DerivedOperatorPass
             return;
         }
 
-        var notContainsMethod = new RoutineInfo(name: "$notcontains")
+        var notContainsMethod = new RoutineInfo(name: "notcontains")
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = type,
@@ -198,7 +198,7 @@ internal sealed class DerivedOperatorPass
 
         _registry.RegisterRoutine(routine: notContainsMethod);
 
-        // Build AST body: return not me.$contains(item: item)
+        // Build AST body: return not me.contains(item: item)
         string paramName = containsMethod.Parameters.Count > 0
             ? containsMethod.Parameters[index: 0].Name
             : "item";
@@ -212,10 +212,10 @@ internal sealed class DerivedOperatorPass
 
     /// <summary>
     /// Generates $lt, $le, $gt, $ge from $cmp.
-    /// $lt(you) = me.$cmp(you: you) == ComparisonSign.ME_SMALL
-    /// $le(you) = me.$cmp(you: you) != ComparisonSign.ME_LARGE
-    /// $gt(you) = me.$cmp(you: you) == ComparisonSign.ME_LARGE
-    /// $ge(you) = me.$cmp(you: you) != ComparisonSign.ME_SMALL
+    /// $lt(you) = me.cmp(you: you) == ComparisonSign.ME_SMALL
+    /// $le(you) = me.cmp(you: you) != ComparisonSign.ME_LARGE
+    /// $gt(you) = me.cmp(you: you) == ComparisonSign.ME_LARGE
+    /// $ge(you) = me.cmp(you: you) != ComparisonSign.ME_SMALL
     /// </summary>
     private void GenerateComparisonOperatorsFromCmp(TypeSymbol type, RoutineInfo cmpMethod,
         List<RoutineInfo> existingMethods)
@@ -233,10 +233,10 @@ internal sealed class DerivedOperatorPass
         // (opName, caseName, equal-or-notequal)
         (string OpName, string CaseName, bool UseEqual)[] derivedOps =
         [
-            ("$lt", "ME_SMALL", true),
-            ("$le", "ME_LARGE", false),
-            ("$gt", "ME_LARGE", true),
-            ("$ge", "ME_SMALL", false)
+            ("lt", "ME_SMALL", true),
+            ("le", "ME_LARGE", false),
+            ("gt", "ME_LARGE", true),
+            ("ge", "ME_SMALL", false)
         ];
 
         foreach ((string opName, string caseName, bool useEqual) in derivedOps)
@@ -272,7 +272,7 @@ internal sealed class DerivedOperatorPass
 
             _registry.RegisterRoutine(routine: derivedMethod);
 
-            // Build AST body: return me.$cmp(you: you) == ComparisonSign.ME_SMALL  (or != ME_LARGE etc.)
+            // Build AST body: return me.cmp(you: you) == ComparisonSign.ME_SMALL  (or != ME_LARGE etc.)
             var cmpBody = BuildCmpDerivedBody(
                 ownerType: type,
                 cmpMethod: cmpMethod,
@@ -295,7 +295,7 @@ internal sealed class DerivedOperatorPass
         var call = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: delegateMethod.Name,
+                MemberName: delegateMethod.Name,
                 Location: _synthLoc),
             Arguments:
             [
@@ -330,8 +330,8 @@ internal sealed class DerivedOperatorPass
     }
 
     /// <summary>
-    /// Builds: return me.$cmp({paramName}: {paramName}) == ComparisonSign.{caseName}
-    /// or:     return me.$cmp({paramName}: {paramName}) != ComparisonSign.{caseName}
+    /// Builds: return me.cmp({paramName}: {paramName}) == ComparisonSign.{caseName}
+    /// or:     return me.cmp({paramName}: {paramName}) != ComparisonSign.{caseName}
     /// </summary>
     private Statement BuildCmpDerivedBody(TypeSymbol ownerType, RoutineInfo cmpMethod,
         TypeSymbol boolType, string cmpParamName, string caseName, bool useEqual)
@@ -341,7 +341,7 @@ internal sealed class DerivedOperatorPass
         var cmpCall = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                PropertyName: "$cmp",
+                MemberName: "cmp",
                 Location: _synthLoc),
             Arguments:
             [
@@ -369,9 +369,9 @@ internal sealed class DerivedOperatorPass
 
         // Always use $eq (guaranteed registered by AutoWiredRegistrationPass before DerivedOperatorPass).
         // $ne may not yet be registered when this body is built (ordering not guaranteed).
-        RoutineInfo? eqMethod = _registry.LookupMethod(type: cmpResultType, methodName: "$eq");
+        RoutineInfo? eqMethod = _registry.LookupMethod(type: cmpResultType, methodName: "eq");
         var eqCall = new CallExpression(
-            Callee: new MemberExpression(Object: cmpCall, PropertyName: "$eq", Location: _synthLoc),
+            Callee: new MemberExpression(Object: cmpCall, MemberName: "eq", Location: _synthLoc),
             Arguments:
             [
                 new NamedArgumentExpression(Name: "you", Value: caseLiteral, Location: _synthLoc)

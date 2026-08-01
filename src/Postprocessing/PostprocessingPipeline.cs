@@ -75,7 +75,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new UsingLoweringPass(ctx).RunOnVariantBodies();
         // CallOverloadResolutionPass runs last so it sees all CallExpression nodes introduced
         // by FStringLoweringPass ($represent/$diagnose/$add), OperatorLoweringPass (wired ops),
-        // and RecordCopyLoweringPass ($copy). Also classifies synthesized derived-operator bodies
+        // and RecordCopyLoweringPass ($store). Also classifies synthesized derived-operator bodies
         // ($ne/$lt/$le/$gt/$ge/$notcontains) which bypass per-program Run() entirely.
         new CallOverloadResolutionPass(ctx).RunOnVariantBodies();
         new CallOverloadResolutionPass(ctx).RunOnSynthesizedBodies();

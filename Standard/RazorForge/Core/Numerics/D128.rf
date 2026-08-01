@@ -230,21 +230,21 @@ routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
 
 ### Truncates toward zero to an unsigned 128-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U128.
-routine U128.$create!(from: D128) -> U128
+routine U128!(from: D128) -> U128
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   if p.sign and int_ne[U128](a: p.coeff, b: 0)
     throw NumericOverflowError(description: "negative decimal to unsigned integer")
-  return d128_int_magnitude!(coeff: p.coeff, exp: p.exp)
+  return d128_int_magnitude(coeff: p.coeff, exp: p.exp)
 
 ### Truncates toward zero to a signed 128-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^127, 2^127-1].
-routine S128.$create!(from: D128) -> S128
+routine S128!(from: D128) -> S128
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
-  var mag = d128_int_magnitude!(coeff: p.coeff, exp: p.exp)
+  var mag = d128_int_magnitude(coeff: p.coeff, exp: p.exp)
   var lim = shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))
   if p.sign
     if unsigned_gt[U128](a: mag, b: lim)
@@ -276,21 +276,21 @@ routine d128_int_magnitude_u256!(coeff: U128, exp: S64) -> U256
 
 ### Truncates toward zero to an unsigned 256-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U256.
-routine U256.$create!(from: D128) -> U256
+routine U256!(from: D128) -> U256
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   if p.sign and int_ne[U128](a: p.coeff, b: 0)
     throw NumericOverflowError(description: "negative decimal to unsigned integer")
-  return d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
+  return d128_int_magnitude_u256(coeff: p.coeff, exp: p.exp)
 
 ### Truncates toward zero to a signed 256-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^255, 2^255-1].
-routine S256.$create!(from: D128) -> S256
+routine S256!(from: D128) -> S256
   var p = from.decode()
   if int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
-  var mag = d128_int_magnitude_u256!(coeff: p.coeff, exp: p.exp)
+  var mag = d128_int_magnitude_u256(coeff: p.coeff, exp: p.exp)
   var lim = shift_left[U256](value: 1, bits: U256.to_width(s: 255_s64))
   if p.sign
     if unsigned_gt[U256](a: mag, b: lim)
@@ -637,11 +637,11 @@ routine d128_div(a: D128, b: D128) -> D128
 
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
-# keeps the callers non-failable. Use the `$*_unchecked` operators for raw IEEE 754 propagation.
+# keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
 
-### Returns `me + you`. Checked: crashes if the result is non-finite. Use `$add_unchecked` for raw
+### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
-routine D128.$add!(you: D128) -> D128
+routine D128.add!(you: D128) -> D128
   var r = d128_add(a: me, b: you)
   if r.is_finite()
     return r
@@ -649,9 +649,9 @@ routine D128.$add!(you: D128) -> D128
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me - you`. Checked: crashes if the result is non-finite. Use `$sub_unchecked` for raw
+### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
-routine D128.$sub!(you: D128) -> D128
+routine D128.sub!(you: D128) -> D128
   var r = d128_sub(a: me, b: you)
   if r.is_finite()
     return r
@@ -659,9 +659,9 @@ routine D128.$sub!(you: D128) -> D128
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns `me * you`. Checked: crashes if the result is non-finite. Use `$mul_unchecked` for raw
+### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
-routine D128.$mul!(you: D128) -> D128
+routine D128.mul!(you: D128) -> D128
   var r = d128_mul(a: me, b: you)
   if r.is_finite()
     return r
@@ -671,8 +671,8 @@ routine D128.$mul!(you: D128) -> D128
 
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
-### Use `$truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
-routine D128.$truediv!(you: D128) -> D128
+### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+routine D128.truediv!(you: D128) -> D128
   var r = d128_div(a: me, b: you)
   if r.is_finite()
     return r
@@ -683,25 +683,25 @@ routine D128.$truediv!(you: D128) -> D128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D128.$add_unchecked(you: D128) -> D128
+routine D128.add_unchecked(you: D128) -> D128
   return d128_add(a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D128.$sub_unchecked(you: D128) -> D128
+routine D128.sub_unchecked(you: D128) -> D128
   return d128_sub(a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine D128.$mul_unchecked(you: D128) -> D128
+routine D128.mul_unchecked(you: D128) -> D128
   return d128_mul(a: me, b: you)
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
-routine D128.$truediv_unchecked(you: D128) -> D128
+routine D128.truediv_unchecked(you: D128) -> D128
   return d128_div(a: me, b: you)
 
 ### Decimal value equality. NaN is never equal to anything (including itself);
 ### infinities are equal only with the same sign; finite values compare by value
 ### (so different cohorts of the same number — e.g. 1.0 and 1.00 — are equal).
-routine D128.$eq(you: D128) -> Bool
+routine D128.eq(you: D128) -> Bool
   if me.is_nan() or you.is_nan()
     return false
   if me.is_infinite() or you.is_infinite()
@@ -713,7 +713,7 @@ routine D128.$eq(you: D128) -> Bool
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the F128 engine convention). Compares finite values by the
 ### sign of `me - you`; handles infinities explicitly.
-routine D128.$cmp(you: D128) -> ComparisonSign
+routine D128.cmp(you: D128) -> ComparisonSign
   if me.is_nan() or you.is_nan()
     return SAME
   if me.is_infinite() or you.is_infinite()
@@ -731,8 +731,8 @@ routine D128.$cmp(you: D128) -> ComparisonSign
 
 ### Returns `me` raised to the `you` power. Delegates to the transcendental `pow`;
 ### follows IEEE semantics (overflow/domain errors yield inf/NaN, never throw), so the
-### wired `$pow!` is crashable and satisfies `Exponentiable`.
-routine D128.$pow!(you: D128) -> D128
+### wired `pow!` is crashable and satisfies `Exponentiable`.
+routine D128.pow!(you: D128) -> D128
   var r = me.pow_unchecked(you: you)
   if r.is_finite()
     return r
@@ -795,12 +795,12 @@ routine d128_represent(p: D128Parts) -> Text
   return if p.sign then "-" + body else body
 
 ### Returns the decimal text of this value.
-routine D128.$represent() -> Text
+routine D128.represent() -> Text
   return d128_represent(p: me.decode())
 
 ### Returns a diagnostic representation tagged with the type name.
-routine D128.$diagnose() -> Text
-  return "D128(" + me.$represent() + ")"
+routine D128.diagnose() -> Text
+  return "D128(" + me.represent() + ")"
 
 # ============================================================================
 # pow10 tables + Granlund-Montgomery reciprocals (formerly Pow10Recip).
@@ -1011,29 +1011,29 @@ preset D128_EPSILON: D128 = 1e-33_d128
 # ============================================================================
 
 ### Converts a signed integer into decimal128.
-routine D128.$create(from: S8) -> D128
+routine D128(from: S8) -> D128
   return D128.from_int64(value: S64(from))
 
 ### Converts a signed 16-bit integer into decimal128.
-routine D128.$create(from: S16) -> D128
+routine D128(from: S16) -> D128
   return D128.from_int64(value: S64(from))
 
 ### Converts a signed 32-bit integer into decimal128.
-routine D128.$create(from: S32) -> D128
+routine D128(from: S32) -> D128
   return D128.from_int64(value: S64(from))
 
 ### Converts a signed 64-bit integer into decimal128.
-routine D128.$create(from: S64) -> D128
+routine D128(from: S64) -> D128
   return D128.from_int64(value: from)
 
 ### Converts a signed 128-bit integer into decimal128 (exact: <= 34 digits fit the coefficient).
-routine D128.$create(from: S128) -> D128
+routine D128(from: S128) -> D128
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
   return D128.from_components(sign: neg, coeff: mag, exp: 0_s64)
 
 ### Converts a signed 256-bit integer into decimal128 (rounds half-even when > 34 digits).
-routine D128.$create(from: S256) -> D128
+routine D128(from: S256) -> D128
   # The 256-bit magnitude can exceed 34 digits, so round it (half-even) via decfinB
   # rather than D128.from_components (which assumes a <=34-digit U128 coefficient).
   var neg = signed_lt[S256](a: from, b: 0_s256)
@@ -1041,27 +1041,27 @@ routine D128.$create(from: S256) -> D128
   return d128_of_parts(p: decfinB(sign: neg, coeff: mag, exp: 0_s64, pref: 0_s64))
 
 ### Converts an unsigned integer into decimal128.
-routine D128.$create(from: U8) -> D128
+routine D128(from: U8) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
 ### Converts an unsigned 16-bit integer into decimal128.
-routine D128.$create(from: U16) -> D128
+routine D128(from: U16) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
 ### Converts an unsigned 32-bit integer into decimal128.
-routine D128.$create(from: U32) -> D128
+routine D128(from: U32) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
 ### Converts an unsigned 64-bit integer into decimal128.
-routine D128.$create(from: U64) -> D128
+routine D128(from: U64) -> D128
   return D128.from_components(sign: false, coeff: U128(from), exp: 0_s64)
 
 ### Converts an unsigned 128-bit integer into decimal128 (exact: <= 34 digits fit the coefficient).
-routine D128.$create(from: U128) -> D128
+routine D128(from: U128) -> D128
   return D128.from_components(sign: false, coeff: from, exp: 0_s64)
 
 ### Converts an unsigned 256-bit integer into decimal128 (rounds half-even when > 34 digits).
-routine D128.$create(from: U256) -> D128
+routine D128(from: U256) -> D128
   # >34-digit magnitude rounds (half-even) via decfinB, same as the S256 path.
   return d128_of_parts(p: decfinB(sign: false, coeff: from, exp: 0_s64, pref: 0_s64))
 
@@ -1070,19 +1070,19 @@ routine D128.$create(from: U256) -> D128
 # ============================================================================
 
 ### Converts a binary float to decimal128 (correctly rounded via F256 -> D128).
-routine D128.$create(from: F16) -> D128
+routine D128(from: F16) -> D128
   return D128(from: from.F32())
 
 ### Converts an F32 to decimal128 (widen to F64 -> F128 -> F256, correctly rounded).
-routine D128.$create(from: F32) -> D128
+routine D128(from: F32) -> D128
   return D128(from: from.F64())
 
 ### Converts an F64 to decimal128 (widen to F128 -> F256, correctly rounded).
-routine D128.$create(from: F64) -> D128
+routine D128(from: F64) -> D128
   return f256_to_d128(x: F256(from: F128(from: from)))
 
 ### Converts an F128 to decimal128 (widen to F256, correctly rounded).
-routine D128.$create(from: F128) -> D128
+routine D128(from: F128) -> D128
   return f256_to_d128(x: F256(from: from))
 
 # ============================================================================
@@ -1090,15 +1090,15 @@ routine D128.$create(from: F128) -> D128
 # ============================================================================
 
 ### Widens a decimal32 to decimal128 (exact; no rounding needed).
-routine D128.$create(from: D32) -> D128
+routine D128(from: D32) -> D128
   return d128_of_parts(p: d32parts_to_d128(p: from.decode()))
 
 ### Widens a decimal64 to decimal128 (exact; no rounding needed).
-routine D128.$create(from: D64) -> D128
+routine D128(from: D64) -> D128
   return d128_of_parts(p: d64parts_to_d128(p: from.decode()))
 
 ### Identity conversion (decimal128 -> decimal128).
-routine D128.$create(from: D128) -> D128
+routine D128(from: D128) -> D128
   return from
 
 # ============================================================================
@@ -1194,7 +1194,7 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
 ### Parses decimal text into a `D128` (rounds the scanned coefficient to 34 digits).
 ### :throws: {InvalidValueError} on malformed input.
 routine parse_decimal_d128!(from_text: Text) -> D128
-  var p = scan_decimal_parts!(from_text: from_text)
+  var p = scan_decimal_parts(from_text: from_text)
   if int_eq[U64](a: p.special, b: 1_u64)
     return D128.infinity(sign: p.sign)
   if unsigned_ge[U64](a: p.special, b: 2_u64)
@@ -1203,15 +1203,15 @@ routine parse_decimal_d128!(from_text: Text) -> D128
 
 ### Parses a decimal literal into a `D128`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
-routine D128.$create!(from_text: Text) -> D128
-  return parse_decimal_d128!(from_text: from_text)
+routine D128!(from_text: Text) -> D128
+  return parse_decimal_d128(from_text: from_text)
 
 # ============================================================================
 # Hashing
 # ============================================================================
 
 ### Returns an xxHash64-based hash of the raw decimal128 encoding.
-routine D128.$fast_hash() -> U64
+routine D128.fast_hash() -> U64
   return __hash_u128(v: me.to_bits())
 
 # ============================================================================

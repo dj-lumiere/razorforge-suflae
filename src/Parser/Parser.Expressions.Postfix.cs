@@ -19,91 +19,43 @@ public partial class Parser
         while (true)
         {
             // ===============================================================================
-            // CASE 1: Generic function call - func[T]() or func![T]()
+            // CASE 1: Uniform bracket access - expr[...], expr[...](...), expr![...](...)
             // ===============================================================================
-            // The ! must come BEFORE [ if present: func![T]() not func[T]!()
-            // IsLikelyGenericAfterIdentifier() checks bracket content and what follows ]
-            // to distinguish generic args from index/slice (e.g. list[5], list[0 to 5])
-            if (expr is IdentifierExpression expression && IsLikelyGenericAfterIdentifier())
+            // The parser NO LONGER decides whether the brackets are a generic type-argument
+            // list or a value index. It parses the bracket contents uniformly as expressions
+            // and emits a BracketAccessExpression; the BracketReclassifyPass (run before the
+            // main semantic resolve) rewrites this into an IndexExpression /
+            // GenericMethodCallExpression / GenericMemberExpression.
+            //
+            // A failable `!` may precede the brackets (func![T](x)); it is recorded as
+            // BracketAccessExpression.IsFailable, never baked into a name.
+            if (Check(type: TokenType.LeftBracket) ||
+                (Check(type: TokenType.Bang) && PeekToken(offset: 1).Type == TokenType.LeftBracket))
             {
-                // Check for failable marker ! before generic parameters: func![T]
-                bool isMemoryOperation = Match(type: TokenType.Bang);
+                bool isFailable = Match(type: TokenType.Bang);
 
                 Advance(); // consume '['
-                var typeArgs = new List<TypeExpression>();
+                var bracketArgs = new List<Expression>();
                 do
                 {
-                    typeArgs.Add(item: ParseTypeOrConstGeneric());
+                    bracketArgs.Add(item: ParseBracketArg());
                 } while (Match(type: TokenType.Comma));
 
                 Consume(type: TokenType.RightBracket,
-                    errorMessage: "Expected ']' after generic type arguments");
+                    errorMessage: "Expected ']' after bracket contents");
 
+                List<Expression>? callArgs = null;
                 if (Match(type: TokenType.LeftParen))
                 {
-                    List<Expression> args = ParseArgumentList();
+                    callArgs = ParseArgumentList();
                     Consume(type: TokenType.RightParen,
                         errorMessage: ExpectedRightParenAfterArguments);
-
-                    string methodName = expression.Name;
-                    if (isMemoryOperation)
-                    {
-                        methodName += "!";
-                    }
-
-                    expr = new GenericMethodCallExpression(Object: expression,
-                        MethodName: methodName,
-                        TypeArguments: typeArgs,
-                        Arguments: args,
-                        IsMemoryOperation: isMemoryOperation,
-                        Location: expression.Location);
                 }
-                else
-                {
-                    expr = new GenericMemberExpression(Object: expr,
-                        MemberName: ((IdentifierExpression)expr).Name,
-                        TypeArguments: typeArgs,
-                        Location: expr.Location);
-                }
-            }
-            // Throwable function call: identifier!(args) with named arguments
-            else if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
-                        .Type == TokenType.LeftParen)
-            {
-                Advance(); // consume '!'
-                Advance(); // consume '('
 
-                List<Expression> args = ParseArgumentList();
-                Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
-
-                if (expr is IdentifierExpression identExpr)
-                {
-                    expr = new CallExpression(
-                        Callee: new IdentifierExpression(Name: identExpr.Name + "!",
-                            Location: identExpr.Location),
-                        Arguments: args,
-                        Location: expr.Location);
-                }
-                else
-                {
-                    expr = new CallExpression(Callee: expr,
-                        Arguments: args,
-                        Location: expr.Location);
-                }
-            }
-            else if (Match(type: TokenType.LeftParen))
-            {
-                // Function call - supports named arguments (name: value)
-                List<Expression> args = ParseArgumentList();
-                Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
-                expr = new CallExpression(Callee: expr, Arguments: args, Location: expr.Location);
-            }
-            else if (Match(type: TokenType.LeftBracket))
-            {
-                Expression index = ParseExpression();
-                Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after index");
-
-                if (index is RangeExpression)
+                // Slice syntax (xs[a to b]) remains unsupported for the single-arg no-call
+                // subscript form (an index).
+                if (callArgs is null && !isFailable && bracketArgs.Count == 1 &&
+                    bracketArgs[index: 0] is RangeExpression)
                 {
                     throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
                         message: "Slice syntax 'xs[a to b]' is not supported.",
@@ -113,73 +65,112 @@ public partial class Parser
                         language: _language);
                 }
 
-                expr = new IndexExpression(Object: expr,
-                    Index: index,
-                    Location: expr.Location);
+                var bracketNode = new BracketAccessExpression(Object: expr,
+                    Args: bracketArgs,
+                    CallArgs: callArgs,
+                    Location: expr.Location) { IsFailable = isFailable };
+                expr = BracketReclassifyPass.Reclassify(node: bracketNode);
+            }
+            // Throwable function call: identifier!(args) with named arguments
+            else if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
+                        .Type == TokenType.LeftParen)
+            {
+                Advance(); // consume '!'
+                Advance(); // consume '('
+
+                List<Expression> args = ParseArgumentList();
+                Consume(type: TokenType.RightParen,
+                    errorMessage: ExpectedRightParenAfterArguments);
+
+                if (expr is IdentifierExpression identExpr)
+                {
+                    expr = new CallExpression(
+                        Callee: new IdentifierExpression(Name: identExpr.Name,
+                            Location: identExpr.Location),
+                        Arguments: args,
+                        Location: expr.Location) { IsFailable = true };
+                }
+                else
+                {
+                    expr = new CallExpression(Callee: expr,
+                        Arguments: args,
+                        Location: expr.Location) { IsFailable = true };
+                }
+            }
+            else if (Match(type: TokenType.LeftParen))
+            {
+                // Function call - supports named arguments (name: value)
+                List<Expression> args = ParseArgumentList();
+                Consume(type: TokenType.RightParen,
+                    errorMessage: ExpectedRightParenAfterArguments);
+                expr = new CallExpression(Callee: expr, Arguments: args, Location: expr.Location);
             }
             else if (Match(type: TokenType.QuestionDot))
             {
                 // Optional chaining: obj?.member
                 string member = ConsumeMethodName(errorMessage: "Expected member name after '?.'");
                 expr = new OptionalMemberExpression(Object: expr,
-                    PropertyName: member,
+                    MemberName: member,
                     Location: expr.Location);
             }
             else if (Match(type: TokenType.Dot))
             {
-                // Member access - allow failable methods with ! suffix
-                string member = ConsumeMethodName(errorMessage: "Expected member name after '.'");
-
-                // Check for failable marker ! before generic parameters: obj.method![T]
-                bool isGenericMemOp = false;
-                if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
-                       .Type == TokenType.LeftBracket)
+                // Member access. The wired marker `$` (me.store(), me.emit!()) is a separate Dollar
+                // token — consume it here; the resolved routine's own IsWiredMemberRoutine carries the
+                // wired attribute, and lookup keys on the BARE name, so the call name stays bare.
+                Match(type: TokenType.Dollar);
+                // Consume the bare member name WITHOUT folding a trailing `!` into it (unlike
+                // ConsumeMethodName, which the declaration parser still uses): the `!` stays a separate
+                // Bang token so the failable-call / generic-failable handling below records it as a
+                // structured MemberExpression.IsFailable / GenericMethodCallExpression flag.
+                if (!Check(type: TokenType.Identifier) &&
+                    !IsKeywordValidAsMethodName(CurrentToken.Type))
                 {
-                    isGenericMemOp = true;
-                    Match(type: TokenType.Bang);
+                    throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
+                        message: "Expected member name after '.'");
                 }
 
-                // Check for generic method call with type parameters
-                // Disambiguate by checking bracket content (must look like type args)
-                // and what follows ] (must be ( or .)
-                if (Check(type: TokenType.LeftBracket) && (isGenericMemOp || IsLikelyGenericAfterIdentifier()))
+                string member = CurrentToken.Text;
+                Advance();
+
+                // Generic member access / call: obj.method[T](...) or obj.method![T](...).
+                // Parsed uniformly (no generic-vs-index decision): the `.method` folds into a
+                // MemberExpression and the brackets attach as a BracketAccessExpression whose
+                // Object is that MemberExpression. BracketReclassifyPass rewrites this into a
+                // GenericMethodCallExpression / GenericMemberExpression. A `!` before the
+                // brackets is the memory-op marker, recorded as BracketAccessExpression.IsFailable.
+                if ((Check(type: TokenType.Bang) && PeekToken(offset: 1)
+                        .Type == TokenType.LeftBracket) ||
+                    Check(type: TokenType.LeftBracket))
                 {
+                    bool isGenericMemOp = Match(type: TokenType.Bang);
+
                     Advance(); // consume '['
-                    var typeArgs = new List<TypeExpression>();
+                    var bracketArgs = new List<Expression>();
                     do
                     {
-                        typeArgs.Add(item: ParseType());
+                        bracketArgs.Add(item: ParseBracketArg());
                     } while (Match(type: TokenType.Comma));
 
                     Consume(type: TokenType.RightBracket,
-                        errorMessage: "Expected ']' after generic type arguments");
+                        errorMessage: "Expected ']' after bracket contents");
 
+                    List<Expression>? callArgs = null;
                     if (Match(type: TokenType.LeftParen))
                     {
-                        List<Expression> genericArgs = ParseArgumentList();
+                        callArgs = ParseArgumentList();
                         Consume(type: TokenType.RightParen,
                             errorMessage: ExpectedRightParenAfterArguments);
-
-                        string methodName = member;
-                        if (isGenericMemOp)
-                        {
-                            methodName += "!";
-                        }
-
-                        expr = new GenericMethodCallExpression(Object: expr,
-                            MethodName: methodName,
-                            TypeArguments: typeArgs,
-                            Arguments: genericArgs,
-                            IsMemoryOperation: isGenericMemOp,
-                            Location: expr.Location);
                     }
-                    else
-                    {
-                        expr = new GenericMemberExpression(Object: expr,
-                            MemberName: member,
-                            TypeArguments: typeArgs,
-                            Location: expr.Location);
-                    }
+
+                    Expression memberObj = new MemberExpression(Object: expr,
+                        MemberName: member,
+                        Location: expr.Location);
+                    var bracketNode = new BracketAccessExpression(Object: memberObj,
+                        Args: bracketArgs,
+                        CallArgs: callArgs,
+                        Location: expr.Location) { IsFailable = isGenericMemOp };
+                    expr = BracketReclassifyPass.Reclassify(node: bracketNode);
 
                     continue;
                 }
@@ -195,8 +186,8 @@ public partial class Parser
                         errorMessage: ExpectedRightParenAfterArguments);
 
                     Expression memberExpr = new MemberExpression(Object: expr,
-                        PropertyName: member + "!",
-                        Location: expr.Location);
+                        MemberName: member,
+                        Location: expr.Location) { IsFailable = true };
                     expr = new CallExpression(Callee: memberExpr,
                         Arguments: args,
                         Location: expr.Location);
@@ -210,7 +201,7 @@ public partial class Parser
                         errorMessage: ExpectedRightParenAfterArguments);
 
                     Expression memberExpr = new MemberExpression(Object: expr,
-                        PropertyName: member,
+                        MemberName: member,
                         Location: expr.Location);
                     expr = new CallExpression(Callee: memberExpr,
                         Arguments: args,
@@ -219,7 +210,7 @@ public partial class Parser
                 else
                 {
                     expr = new MemberExpression(Object: expr,
-                        PropertyName: member,
+                        MemberName: member,
                         Location: expr.Location);
                 }
             }
@@ -251,7 +242,9 @@ public partial class Parser
                        .Type == TokenType.Dot)
                 {
                     // Consume newlines and let next iteration handle the dot
-                    while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
+                    while (Match(type: TokenType.Newline))
+                    {
+                    } // NOSONAR S108: intentional newline-consuming loop
 
                     continue;
                 }
@@ -266,5 +259,4 @@ public partial class Parser
 
         return expr;
     }
-
 }

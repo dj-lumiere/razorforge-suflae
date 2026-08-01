@@ -21,6 +21,6 @@ suspended routine ticker(n: S64) -> S64
 routine start()
   var r = read_it(path: "tests/Fixtures/Stdlib/coro_async_read_data.txt")
   var t = ticker(n: 3)
-  show(f"read => {r.retrieve!()}")
-  show(f"ticks => {t.retrieve!()}")
+  show(f"read => {r.retrieve()}")
+  show(f"ticks => {t.retrieve()}")
   return

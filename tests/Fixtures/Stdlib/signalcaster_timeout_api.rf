@@ -1,0 +1,41 @@
+module Tests/Stdlib/SignalCasterTimeoutApi
+
+# v0.3.0 SignalCaster.wait_within — a wait that gives up after a deadline. Two scenarios:
+#   A) no caster ever arrives -> wait_within returns false (timed out).
+#   B) a caster casts well within the deadline -> wait_within returns true (woken in time).
+# All-coroutine on one scheduler: the timed wait parks on a deadline timer that a cast can also wake.
+
+import IO/Console
+
+# A: waits 20ms with nobody to cast -> times out -> false -> 0.
+suspended routine wait_alone(sig: SignalCaster) -> S64
+  sig.lock()
+  var woken = sig.wait_within(deadline: Duration.from_milliseconds(ms: 20))
+  sig.unlock()
+  return if woken then 1 else 0
+
+# B: waits up to 10s; a sibling caster wakes it almost immediately -> true -> 1.
+suspended routine wait_for_cast(sig: SignalCaster) -> S64
+  sig.lock()
+  var woken = sig.wait_within(deadline: Duration.from_seconds(s: 10))
+  sig.unlock()
+  return if woken then 1 else 0
+
+suspended routine caster(sig: SignalCaster) -> S64
+  sig.cast_one()
+  return 0
+
+routine start()
+  var sig_a = SignalCaster()
+  var wa = wait_alone(sig: steal sig_a)
+
+  var sig_b = SignalCaster()
+  var wb = wait_for_cast(sig: steal sig_b.duplicate())
+  var cb = caster(sig: steal sig_b)
+
+  danger
+    var timed_out = wa.retrieve()
+    var woken = wb.retrieve()
+    discard cb.retrieve()
+    show(f"timed_out={timed_out} woken={woken}")
+  return

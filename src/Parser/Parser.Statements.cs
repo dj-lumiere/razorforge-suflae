@@ -6,7 +6,7 @@ using SyntaxTree;
 namespace Compiler.Parser;
 
 /// <summary>
-/// Partial class containing statement parsing (if, while, for, when, return, using, release, danger!, etc.).
+/// Partial class containing statement parsing (if, while, for, when, return, using, release, danger, etc.).
 /// Handles both RazorForge and Suflae syntax via <c>_language</c> dispatch.
 /// </summary>
 public partial class Parser
@@ -269,7 +269,6 @@ public partial class Parser
     /// - 'is Type' / 'is Type varName' - type pattern with optional binding
     /// - 'is Type (field1, field2)' - destructuring pattern
     /// - 'isnot Type' - negated type pattern
-    /// - 'isonly FLAG' - exact flags pattern
     /// - comparison operators (==, !=, &lt;, &gt;, &lt;=, &gt;=)
     /// - literal values (42, "hello", true)
     /// - expression patterns (for condition-based when)
@@ -446,26 +445,6 @@ public partial class Parser
 
                 _inWhenPatternContext = false;
             }
-            // Case 5: 'isonly' keyword - exact flags pattern
-            else if (Match(type: TokenType.IsOnly))
-            {
-                _inWhenPatternContext = true;
-                var flagNames = new List<string>();
-                flagNames.Add(
-                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'"));
-                while (Match(type: TokenType.And))
-                {
-                    flagNames.Add(
-                        item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
-                }
-
-                pattern = new FlagsPattern(FlagNames: flagNames,
-                    Connective: FlagsTestConnective.And,
-                    ExcludedFlags: null,
-                    IsExact: true,
-                    Location: clauseLocation);
-                _inWhenPatternContext = false;
-            }
             // Case 6: Comparison patterns (==, !=, <, >, <=, >=)
             else if (IsComparisonOperator(tokenType: CurrentToken.Type))
             {
@@ -595,7 +574,6 @@ public partial class Parser
         return new FlagsPattern(FlagNames: flags,
             Connective: connective,
             ExcludedFlags: excluded,
-            IsExact: false,
             Location: loc);
     }
 
@@ -752,6 +730,23 @@ public partial class Parser
         }
         name = nameSb2.ToString();
 
+        // Generic-instance arm: `is Dict[Text, SerialValue] inner` / `is List[SerialValue] xs`.
+        // Parse the type arguments so the pattern resolves to the concrete instance (and the binding
+        // gets that full type) — mirrors ParseBaseType's `[...]` handling. Without this, a generic
+        // variant arm can't be matched in `when` at all (parser stops at '[').
+        List<TypeExpression>? genericArguments = null;
+        if (Match(type: TokenType.LeftBracket))
+        {
+            genericArguments = new List<TypeExpression>();
+            do
+            {
+                genericArguments.Add(item: ParseTypeOrConstGeneric());
+            } while (Match(type: TokenType.Comma));
+
+            Consume(type: TokenType.RightBracket,
+                errorMessage: "Expected ']' after type arguments in pattern");
+        }
+
         // Check for destructuring: Type.CASE (memberVar1, memberVar2), (memberVar: alias), or ((x, y), z)
         List<DestructuringBinding>? bindings = null;
         if (Match(type: TokenType.LeftParen))
@@ -769,7 +764,7 @@ public partial class Parser
                 ConsumeIdentifier(errorMessage: "Expected variable name for type pattern");
         }
 
-        var type = new TypeExpression(Name: name, GenericArguments: null, Location: location);
+        var type = new TypeExpression(Name: name, GenericArguments: genericArguments, Location: location);
         Pattern typePattern = new TypePattern(Type: type,
             VariableName: variableName,
             Bindings: bindings,
@@ -814,7 +809,7 @@ public partial class Parser
                 string memberName =
                     ConsumeIdentifier(errorMessage: "Expected member name after '.'");
                 value = new MemberExpression(Object: value,
-                    PropertyName: memberName,
+                    MemberName: memberName,
                     Location: GetLocation());
             }
             else if (Match(type: TokenType.LeftParen))
@@ -883,16 +878,18 @@ public partial class Parser
     /// Used with Crashable types for error handling.
     /// </summary>
     /// <returns>A <see cref="ThrowStatement"/> AST node.</returns>
-    private ThrowStatement ParseThrowStatement()
+    private ThrowStatement ParseThrowStatement(bool isFatal)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // throw requires an error expression (Crashable type)
+        // throw/pierce both require an error expression (a crashable-kind type). `pierce` (isFatal)
+        // marks a fatal, uncatchable crash — no `!`, no try_/check_ variants; `throw` is a recoverable
+        // failure that propagates.
         Expression error = ParseExpression();
 
         ConsumeStatementTerminator();
 
-        return new ThrowStatement(Error: error, Location: location);
+        return new ThrowStatement(Error: error, Location: location, IsFatal: isFatal);
     }
 
     /// <summary>
@@ -1003,17 +1000,54 @@ public partial class Parser
         // Parse the indented body
         Statement body = ParseBody();
 
-        // Build nested UsingStatements from inside out (last resource is innermost)
+        // Optional `fallback` block — the contention branch of a fallible `using`
+        // (runs when the resource's non-blocking `$try_enter()` fails to acquire; no
+        // resource is held on that path). Single-resource only.
+        //
+        // `fallback` is a CONTEXTUAL keyword: it stays a normal identifier everywhere else
+        // (it's a common variable name — e.g. `unwrap_or(fallback:)`). It is only the block
+        // keyword here, recognised as an identifier `fallback` immediately followed by an
+        // indented block right after a `using` body.
+        Statement? fallbackBody = null;
+        if (IsContextualFallbackBlock())
+        {
+            Advance(); // consume the `fallback` identifier
+            if (resources.Count > 1)
+                throw ThrowParseError(
+                    message: "'fallback' is only allowed on a single-resource 'using' " +
+                             "(a fallible acquisition binds exactly one resource).");
+            fallbackBody = ParseBody();
+        }
+
+        // Build nested UsingStatements from inside out (last resource is innermost).
+        // `fallback` (single-resource only) attaches to the sole using.
         Statement result = body;
         for (int i = resources.Count - 1; i >= 0; i--)
         {
             result = new UsingStatement(Resource: resources[index: i].Resource,
                 Name: resources[index: i].Name,
                 Body: result,
-                Location: location);
+                Location: location,
+                FallbackBody: i == 0 ? fallbackBody : null);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Recognises the contextual `fallback` block that may follow a `using` body: a bare
+    /// identifier <c>fallback</c> immediately followed by an indented block. Requiring the
+    /// following INDENT keeps a real identifier `fallback` used as an ordinary statement
+    /// (rare, but legal) from being misread as the keyword.
+    /// </summary>
+    private bool IsContextualFallbackBlock()
+    {
+        if (CurrentToken is not { Type: TokenType.Identifier, Text: "fallback" })
+            return false;
+        // After `fallback` comes either INDENT directly, or NEWLINE then INDENT.
+        return PeekToken(offset: 1).Type == TokenType.Indent
+               || (PeekToken(offset: 1).Type == TokenType.Newline
+                   && PeekToken(offset: 2).Type == TokenType.Indent);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1021,16 +1055,16 @@ public partial class Parser
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Parses a danger! statement (unsafe memory operations block).
+    /// Parses a danger statement (unsafe memory operations block).
     /// RF-only construct guarded by <c>_language == Language.RazorForge</c>.
-    /// Syntax: <c>danger!</c> followed by indented body.
+    /// Syntax: <c>danger</c> followed by indented body.
     /// </summary>
     /// <returns>A <see cref="DangerStatement"/> AST node.</returns>
     private DangerStatement ParseDangerStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // 'danger!' is tokenized as a single Danger token (including the '!')
+        // 'danger' is tokenized as a single Danger token (including the '!')
         var body = (BlockStatement)ParseIndentedBlock();
 
         return new DangerStatement(Body: body, Location: location);

@@ -1,0 +1,177 @@
+module Core
+
+import BuilderService
+
+### Biased-reference-counted handle — the auto-promoting hybrid of {Retained[T]} and {Shared[T, P]}.
+### Thin pointer to {RoamController[T]}. Backs Suflae's `entity` (the monitor-flavored actor): behaves
+### like {Retained[T]} (non-atomic, unlocked, fast) while it stays on one thread, and — the moment it
+### escapes across a concurrency boundary — promotes itself to atomic reference counting plus a
+### reentrant, task-keyed exclusive lock that serializes all access (the actor "one at a time"
+### guarantee). Aliasing is free (`.roam()`), so `b = a` maps here, NOT to a bare single-owner entity.
+###
+### **Access is lock-wrapped, NEVER coerced.** `Roamed` deliberately does NOT `obeys Controlling[T]`
+### and has NO `refer`/`control`: those hand out a raw inner reference that would bypass the lock
+### and break escaped-mode serialization. Real access goes through compiler-inserted `lock_enter` /
+### `lock_exit` wrapping (Stage 2). The `borrow()` here is a Stage-1 test hatch only.
+###
+### **Stage 1 (this file): manually driven.** `.roam()` / `.promote()` / `lock_enter()` are called by
+### hand; the compiler does not yet auto-insert them. The cycle collector
+### (`Core/Memory/CycleCollector.rf`) is a COMPLETE Bacon-Rajan trial-deletion recycler — it is just
+### Stage-1 manually driven: hooks are wired by hand and `cc_collect` is called explicitly, so cycles
+### are reclaimed only where the collector is actually run (they are NOT auto-collected yet, but the
+### collector is not a stub). `Roamed` is a plain record, not yet registered as an RC wrapper in
+### RuntimeContract.
+### :typeparam T: The exclusively owned entity type.
+@llvm("ptr")
+record Roamed[T]
+needs T is EntityType
+  pass
+
+# ============================================================================
+# Construction
+# ============================================================================
+
+### Wraps this entity in a {Roamed[T]} (LOCAL mode: non-atomic, unlocked). Named `roam` to match the
+### {Retained} pattern (`T.retain()` constructs, `Retained.retain()` copies): here `T.roam()`
+### constructs and `Roamed.roam()` copies, so the RC machinery's single copy-verb model applies.
+### Ownership transfers to the RC system; the original binding is invalidated.
+### :returns: The resulting `Roamed[T]` value.
+routine T.roam() -> Roamed[T]
+needs T is EntityType
+  danger
+    var ctrl = RoamController[T](data: me.hijack()).hijack()
+    return Roamed[T](ctrl)
+
+### The absent `Roamed[T]` — a null handle owning nothing. Lets an entity with a `Roamed[T]` field be
+### constructed before the field's target exists (e.g. building a cyclic graph): initialize the field
+### with `roamed_none()`, then assign the real handle once it is available. Retaining, releasing, and
+### tracing all no-op on a none handle.
+### :returns: The absent `Roamed[T]`.
+routine roamed_none[T]() -> Roamed[T]
+needs T is EntityType
+  danger
+    return Roamed[T](Hijacked[RoamController[T]](from: 0_addr))
+
+### Whether this is the absent handle (owns nothing). :returns: `true` if none.
+@readonly
+routine Roamed[T].is_none() -> Bool
+  danger
+    return me.controller_address() == 0_addr
+
+### Reinterprets a raw {RoamController[T]} address as a `Roamed[T]` handle WITHOUT retaining — a
+### low-level plumbing / test hatch (Stage-1 cyclic-graph construction). The caller is responsible for
+### the reference count: the returned handle does not add a strong ref.
+### :param addr: The controller address (0 for the absent handle).
+### :returns: The `Roamed[T]` viewing that controller.
+dangerous routine roamed_from_addr[T](addr: Address) -> Roamed[T]
+needs T is EntityType
+  return Roamed[T](Hijacked[RoamController[T]](from: addr))
+
+### Returns a new alias to the same object (biased retain), or the absent handle unchanged. This is
+### what `b = a` lowers to.
+### :returns: A new handle sharing the same underlying entity.
+routine Roamed[T].roam() -> Roamed[T]
+  danger
+    if me.controller_address() != 0_addr
+      var ctrl = Hijacked[RoamController[T]](me).as_entity()
+      ctrl.retain()
+  return me
+
+### Decrements the strong count, destroying the entity at zero. A no-op on the absent handle.
+dangerous routine Roamed[T].release()
+  if me.controller_address() == 0_addr
+    return
+  var ctrl = Hijacked[RoamController[T]](me).as_entity()
+  ctrl.release()
+  return
+
+# ============================================================================
+# Escape + access lock. In Stage 2 the compiler inserts these automatically (promote at the
+# concurrency-boundary site; lock_enter/lock_exit around member-routine entry/return). Manual here.
+# ============================================================================
+
+### Escapes this object to ESCAPED mode (atomic refcount + armed lock). Idempotent.
+dangerous routine Roamed[T].promote()
+  var ctrl = Hijacked[RoamController[T]](me).as_entity()
+  ctrl.promote()
+  return
+
+### Whether this object has escaped.
+### :returns: `true` if ESCAPED.
+routine Roamed[T].is_escaped() -> Bool
+  danger
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    return ctrl.is_escaped()
+
+### Enters the access lock: a no-op in LOCAL mode, a reentrant task-keyed acquire in ESCAPED mode.
+dangerous routine Roamed[T].lock_enter()
+  var ctrl = Hijacked[RoamController[T]](me).as_entity()
+  ctrl.guard_enter()
+  return
+
+### Leaves the access lock: a no-op in LOCAL mode, a reentrant release in ESCAPED mode.
+dangerous routine Roamed[T].lock_exit()
+  var ctrl = Hijacked[RoamController[T]](me).as_entity()
+  ctrl.guard_exit()
+  return
+
+
+# ============================================================================
+# Inspection / Stage-1 test access
+# ============================================================================
+
+### Returns the current strong reference count.
+### :returns: The number of live strong handles.
+routine Roamed[T].strong_count() -> U64
+  danger
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    return ctrl.strong_count()
+
+### Reports this handle's controller to the collector as a traced child. The compiler-synthesized
+### `roam_trace_impl` calls this for each `Roamed` field of an entity, so the collector sees the
+### object graph's strong edges. A none handle owns no edge and is skipped. Runs inside the (dangerous)
+### synthesized trace, so no `danger` here.
+dangerous routine Roamed[T].cc_visit_self()
+  if me.controller_address() != 0_addr
+    rf_cc_visit_child(child_ctrl: me.controller_address())
+  return
+
+### The address of the underlying {RoamController[T]} — the collector's currency and a Stage-1 test
+### hatch. `Roamed[T]` is `@llvm("ptr")` and its bit pattern IS the controller pointer, so this is a
+### pure reinterpretation, no load.
+### :returns: The controller address.
+@readonly
+routine Roamed[T].controller_address() -> Address
+  return Hijacked[RoamController[T]](me).get_address()
+
+### The inner entity as a raw, UNLOCKED reference — STAGE-1/2 TEST HATCH ONLY. Real access is lock-wrapped
+### by the compiler (Stage 2c); this must never become `refer`/`control` (they would hand out a
+### lock-bypassing reference).
+### :returns: The inner entity.
+dangerous routine Roamed[T].raw_inner() -> T
+  var ctrl = Hijacked[RoamController[T]](me).as_entity()
+  return ctrl.data_ptr().as_entity()
+
+# ============================================================================
+# Display (opaque — the inner value is reachable only through the lock in real use)
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Roamed[T].represent() -> Text
+  danger
+    return me.type_name()
+
+### Returns the diagnostic representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Roamed[T].diagnose() -> Text
+  danger
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var rc = ctrl.strong_count()
+    return me.type_name() + "(holding: " + rc.represent() + ", escaped: " + ctrl.is_escaped().represent() + ")"
+
+dangerous routine Roamed[T].destroy()
+  me.release()
+  return

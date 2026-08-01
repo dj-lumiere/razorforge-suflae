@@ -73,7 +73,7 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 {
-    private const string ValueFieldName = "value";
+    private const string ValueFieldName = Resolution.RuntimeContract.Carrier.ValueField;
     private const string TypeIdFieldName = "type_id";
 
     /// <summary>
@@ -127,11 +127,11 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     /// Mirror of <c>ExpressionLoweringPass.RunOnInstantiatedGenericBodies</c>.
     /// </summary>
     public void RunOnInstantiatedGenericBodies(
-        Dictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedGenericBodies)
+        Dictionary<string, Instantiation.MonomorphizedBody> instantiatedGenericBodies)
     {
         foreach (string key in instantiatedGenericBodies.Keys.ToList())
         {
-            Compiler.Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
+            Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue;
             Statement lowered = LowerStatement(stmt: entry.Ast.Body);
             if (!ReferenceEquals(lowered, entry.Ast.Body))
@@ -246,7 +246,10 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             case UsingStatement u:
             {
                 Statement body = LowerStatement(stmt: u.Body);
-                return !ReferenceEquals(body, u.Body) ? u with { Body = body } : u;
+                Statement? fb = u.FallbackBody != null ? LowerStatement(stmt: u.FallbackBody) : null;
+                return !ReferenceEquals(body, u.Body) || !ReferenceEquals(fb, u.FallbackBody)
+                    ? u with { Body = body, FallbackBody = fb }
+                    : u;
             }
 
             case DangerStatement d:
@@ -680,7 +683,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                         u64Type: u64Type), null);
 
                 // Specific type: type_id == FNV-1a(type.FullName).
-                // GENERIC PARAM (e.g. `is T` in Result[T].$represent): a baked FNV("T") literal
+                // GENERIC PARAM (e.g. `is T` in Result[T].represent): a baked FNV("T") literal
                 // would never match after monomorphization (success stores FNV of the concrete type).
                 // The binding already substitutes correctly (CarrierPayloadExpression carries the
                 // type), but a frozen literal does not. Emit `<T>.type_id()` instead — a type-method
@@ -693,7 +696,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                     typeIdRhs = new CallExpression(
                         Callee: new MemberExpression(
                             Object: new IdentifierExpression(Name: tp.Type.Name, Location: loc),
-                            PropertyName: TypeIdFieldName, Location: loc),
+                            MemberName: TypeIdFieldName, Location: loc),
                         Arguments: [],
                         Location: loc) { ResolvedType = u64Type };
                 }
@@ -728,12 +731,9 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
             case FlagsPattern fp:
             {
-                FlagsTestKind kind = fp.IsExact
-                    ? FlagsTestKind.IsOnly
-                    : FlagsTestKind.Is;
                 var cond = new FlagsTestExpression(
                     Subject: subject,
-                    Kind: kind,
+                    Kind: FlagsTestKind.Is,
                     TestFlags: fp.FlagNames,
                     Connective: fp.Connective,
                     ExcludedFlags: fp.ExcludedFlags,
@@ -787,7 +787,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private MemberExpression MakePresentAccess(Expression subject, SourceLocation loc)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
-        return new MemberExpression(Object: subject, PropertyName: "present", Location: loc)
+        return new MemberExpression(Object: subject, MemberName: Resolution.RuntimeContract.Carrier.PresentField, Location: loc)
         {
             ResolvedType = boolType
         };
@@ -797,7 +797,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private static MemberExpression MakeMemberAccess(Expression subject, string field,
         TypeInfo? fieldType, SourceLocation loc)
     {
-        return new MemberExpression(Object: subject, PropertyName: field, Location: loc)
+        return new MemberExpression(Object: subject, MemberName: field, Location: loc)
         {
             ResolvedType = fieldType
         };
@@ -869,11 +869,11 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
         TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
-        var valueAccess = new MemberExpression(Object: subject, PropertyName: ValueFieldName, Location: loc)
+        var valueAccess = new MemberExpression(Object: subject, MemberName: ValueFieldName, Location: loc)
         {
             ResolvedType = hijackedType
         };
-        var isNoneMember = new MemberExpression(Object: valueAccess, PropertyName: "is_none",
+        var isNoneMember = new MemberExpression(Object: valueAccess, MemberName: Resolution.RuntimeContract.RawPointer.IsNone,
             Location: loc)
         {
             ResolvedType = boolType
@@ -884,16 +884,16 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    /// <summary>Builds <c>subject.value.extract()</c> -> extracts the entity from <c>Maybe[T entity]</c>.</summary>
+    /// <summary>Builds <c>subject.value.peek()</c> -> extracts the entity from <c>Maybe[T entity]</c>.</summary>
     private static CallExpression MakeEntityMaybeRead(Expression subject, TypeInfo subjectType,
         TypeInfo entityType, SourceLocation loc)
     {
         TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
-        var valueAccess = new MemberExpression(Object: subject, PropertyName: ValueFieldName, Location: loc)
+        var valueAccess = new MemberExpression(Object: subject, MemberName: ValueFieldName, Location: loc)
         {
             ResolvedType = hijackedType
         };
-        var readMember = new MemberExpression(Object: valueAccess, PropertyName: "extract", Location: loc)
+        var readMember = new MemberExpression(Object: valueAccess, MemberName: Resolution.RuntimeContract.RawPointer.Peek, Location: loc)
         {
             ResolvedType = entityType
         };

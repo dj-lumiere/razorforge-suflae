@@ -29,7 +29,7 @@ routine show(value: Bytes, end: Text = "\n")
 ### :param value: The value to render and write.
 ### :param end: The trailing text to append.
 routine show[T](value: T, end: Text = "\n")
-  var text = value.$represent()
+  var text = value.represent()
   var value_cstr = CStr(from: text)
   rf_console_show(ptr: value_cstr.ptr(), len: value_cstr.count())
   var end_cstr = CStr(from: end)
@@ -64,7 +64,7 @@ routine alert(value: Bytes, end: Text = "\n")
 ### :param value: The value to render and write.
 ### :param end: The trailing text to append.
 routine alert[T](value: T, end: Text = "\n")
-  var text = value.$diagnose()
+  var text = value.diagnose()
   var value_cstr = CStr(from: text)
   rf_console_alert(ptr: value_cstr.ptr(), len: value_cstr.count())
   var end_cstr = CStr(from: end)
@@ -106,14 +106,14 @@ routine ask_all() -> Text
 ### Reads all remaining input and splits it into lines.
 ### Windows line endings are normalized before splitting.
 ### :returns: The resulting `List[Text]` value.
-routine ask_lines() -> ?List[Text]
+routine ask_lines() -> List[Text]
   var all = ask_all()
   var normalized = all.replace(old: "\r\n", new: "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
 ### Reads all remaining input and splits it into whitespace-delimited words.
 ### :returns: The resulting `List[Text]` value.
-routine ask_words() -> ?List[Text]
+routine ask_words() -> List[Text]
   var all = ask_all()
   return all.words()
 

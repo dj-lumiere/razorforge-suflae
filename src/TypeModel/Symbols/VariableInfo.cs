@@ -23,6 +23,10 @@ public sealed class VariableInfo
     /// Presets are always frozen (IsModifiable=false) and must be initialized with constant expressions.</summary>
     public bool IsPreset { get; init; }
 
+    /// <summary>Whether this is a <c>secret preset</c> — file-private: visible (inlinable) only inside
+    /// the file that declares it, unlike a public preset which is part of the global prelude.</summary>
+    public bool IsSecret { get; init; }
+
     /// <summary>The module this variable belongs to.</summary>
     public string? Module { get; init; }
 
@@ -33,6 +37,12 @@ public sealed class VariableInfo
 
     /// <summary>Source location where this variable is defined.</summary>
     public SourceLocation? Location { get; init; }
+
+    /// <summary>Suflae: true when this local holds a NULLABLE entity reference (`E?` — a Roamed[E]
+    /// handle that may be a null/none handle), inferred from its initializer (a `none` literal or a
+    /// read of a nullable field/local). Flow typing gates member access on such a variable until it
+    /// has been null-checked (see Scope proven-non-null tracking).</summary>
+    public bool IsNullable { get; init; }
 
     /// <summary>
     /// For preset declarations: the constant value expression to inline at use sites.

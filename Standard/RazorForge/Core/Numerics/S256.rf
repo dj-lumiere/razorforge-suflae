@@ -24,74 +24,74 @@ preset S256_ONE: S256 = 1_s256
 ### Sign-extends an `S8` to `S256` (always succeeds).
 ### :param from: The `S8` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.$create(from: S8) -> S256
+routine S256(from: S8) -> S256
   return sign_extend[S8, S256](from)
 
 ### Sign-extends an `S16` to `S256` (always succeeds).
 ### :param from: The `S16` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.$create(from: S16) -> S256
+routine S256(from: S16) -> S256
   return sign_extend[S16, S256](from)
 
 ### Sign-extends an `S32` to `S256` (always succeeds).
 ### :param from: The `S32` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.$create(from: S32) -> S256
+routine S256(from: S32) -> S256
   return sign_extend[S32, S256](from)
 
 ### Sign-extends an `S64` to `S256` (always succeeds).
 ### :param from: The `S64` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.$create(from: S64) -> S256
+routine S256(from: S64) -> S256
   return sign_extend[S64, S256](from)
 
 ### Sign-extends an `S128` to `S256` (always succeeds).
 ### :param from: The `S128` value to widen.
 ### :returns: An `S256` with the same signed value as `from`.
-routine S256.$create(from: S128) -> S256
+routine S256(from: S128) -> S256
   return sign_extend[S128, S256](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S256` value to return.
 ### :returns: `from` unchanged.
-routine S256.$create(from: S256) -> S256
+routine S256(from: S256) -> S256
   return from
 
 ### Zero-extends a `U8` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U8` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.$create(from: U8) -> S256
+routine S256(from: U8) -> S256
   return zero_extend[U8, S256](from)
 
 ### Zero-extends a `U16` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U16` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.$create(from: U16) -> S256
+routine S256(from: U16) -> S256
   return zero_extend[U16, S256](from)
 
 ### Zero-extends a `U32` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U32` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.$create(from: U32) -> S256
+routine S256(from: U32) -> S256
   return zero_extend[U32, S256](from)
 
 ### Zero-extends a `U64` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U64` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.$create(from: U64) -> S256
+routine S256(from: U64) -> S256
   return zero_extend[U64, S256](from)
 
 ### Zero-extends a `U128` to `S256` (always succeeds — positive values fit).
 ### :param from: The `U128` value to widen.
 ### :returns: An `S256` equal in value to `from`.
-routine S256.$create(from: U128) -> S256
+routine S256(from: U128) -> S256
   return zero_extend[U128, S256](from)
 
 ### Reinterprets a `U256` as `S256` using two's complement, throwing if the value exceeds S256_MAX.
 ### :param from: The `U256` value to convert.
 ### :returns: The same bit pattern interpreted as `S256`.
 ### :throws: {IntegerOverflowError} if `from > S256_MAX`.
-routine S256.$create!(from: U256) -> S256
+routine S256!(from: U256) -> S256
   if from > 57896044618658097711785492504343953926634992332820282019728792003956564819967_u256
     throw IntegerOverflowError()
   return reinterpret_bits[U256, S256](from)
@@ -100,14 +100,14 @@ routine S256.$create!(from: U256) -> S256
 ### :param from: The `F16` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
-routine S256.$create!(from: F16) -> S256
+routine S256!(from: F16) -> S256
   return from.F32().S256!()
 
 ### Converts an `F32` to `S256`, truncating toward zero.
 ### :param from: The `F32` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
-routine S256.$create!(from: F32) -> S256
+routine S256!(from: F32) -> S256
   if not from.is_finite()
     throw IntegerOverflowError()
   return float_to_signed[F32, S256](from)
@@ -116,7 +116,7 @@ routine S256.$create!(from: F32) -> S256
 ### :param from: The `F64` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^255, 2^255-1].
-routine S256.$create!(from: F64) -> S256
+routine S256!(from: F64) -> S256
   if from.is_nan() or from < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0_f64 or from >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0_f64
     throw IntegerOverflowError()
   return float_to_signed[F64, S256](from)
@@ -125,7 +125,7 @@ routine S256.$create!(from: F64) -> S256
 ### :param from: The `F128` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
-routine S256.$create!(from: F128) -> S256
+routine S256!(from: F128) -> S256
   var bits = from.to_bits()
   var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
   var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
@@ -157,14 +157,14 @@ routine S256.$create!(from: F128) -> S256
 ### :param from: The `D32` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if the integer part overflows S256.
-routine S256.$create!(from: D32) -> S256
+routine S256!(from: D32) -> S256
   return S256(from: D128(from: from))
 
 ### Converts a `D64` to `S256`, truncating toward zero.
 ### :param from: The `D64` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if the integer part overflows S256.
-routine S256.$create!(from: D64) -> S256
+routine S256!(from: D64) -> S256
   return S256(from: D128(from: from))
 
 # ============================================================================
@@ -193,7 +193,7 @@ routine S256.mul_with_overflow(you: S256) -> (S256, Bool)
 ### :param you: The right operand.
 ### :returns: The sum `me + you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
-routine S256.$add!(you: S256) -> S256
+routine S256.add!(you: S256) -> S256
   var result = me.add_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -203,7 +203,7 @@ routine S256.$add!(you: S256) -> S256
 ### :param you: The value to subtract.
 ### :returns: The difference `me - you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
-routine S256.$sub!(you: S256) -> S256
+routine S256.sub!(you: S256) -> S256
   var result = me.sub_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -213,7 +213,7 @@ routine S256.$sub!(you: S256) -> S256
 ### :param you: The right operand.
 ### :returns: The product `me * you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
-routine S256.$mul!(you: S256) -> S256
+routine S256.mul!(you: S256) -> S256
   var result = me.mul_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
@@ -227,13 +227,13 @@ routine s256_abs_u256(x: S256) -> U256
   return reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: x))
 
 ### Returns `me // you` (euclidean division), throwing on errors.
-### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `$mod!`.
+### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `mod!`.
 ### The special case `S256_MIN // -1` would overflow and throws.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S256_MIN` and `you == -1`.
-routine S256.$floordiv!(you: S256) -> S256
+routine S256.floordiv!(you: S256) -> S256
   if you == 0
     throw DivisionByZeroError()
   if me == S256_MIN and you == -1_s256
@@ -259,13 +259,13 @@ routine S256.$floordiv!(you: S256) -> S256
 ### :param you: The divisor.
 ### :returns: The euclidean remainder — always non-negative.
 ### :throws: {DivisionByZeroError} if `you == 0`.
-routine S256.$mod!(you: S256) -> S256
+routine S256.mod!(you: S256) -> S256
   if you == 0
     throw DivisionByZeroError()
   # EUCLIDEAN remainder (always >= 0), consistent with S8..S128. For a negative
   # dividend with a nonzero remainder, reflect the magnitude remainder into [0, |you|).
   var bmag = s256_abs_u256(x: you)
-  var ur = s256_abs_u256(x: me).$mod!(bmag)
+  var ur = s256_abs_u256(x: me).mod(bmag)
   if signed_lt[S256](a: me, b: 0_s256) and int_ne[U256](a: ur, b: 0_u256)
     ur = sub[U256](a: bmag, b: ur)
   return reinterpret_bits[U256, S256](ur)
@@ -273,7 +273,7 @@ routine S256.$mod!(you: S256) -> S256
 ### Returns `-me` (arithmetic negation), throwing on `S256_MIN`.
 ### :returns: The negated value.
 ### :throws: {IntegerOverflowError} if `me == S256_MIN`.
-routine S256.$neg!() -> S256
+routine S256.neg!() -> S256
   if me == S256_MIN
     throw IntegerOverflowError()
   return sub[S256](a: 0_s256, b: me)
@@ -285,19 +285,19 @@ routine S256.$neg!() -> S256
 ### Returns `(me + you)` with wrapping arithmetic (mod 2²⁵⁶, signed).
 ### :param you: The right operand.
 ### :returns: The sum, wrapping on overflow.
-routine S256.$add_wrap(you: S256) -> S256
+routine S256.add_wrap(you: S256) -> S256
   return add[S256](a: me, b: you)
 
 ### Returns `(me - you)` with wrapping arithmetic (mod 2²⁵⁶, signed).
 ### :param you: The value to subtract.
 ### :returns: The difference, wrapping on underflow.
-routine S256.$sub_wrap(you: S256) -> S256
+routine S256.sub_wrap(you: S256) -> S256
   return sub[S256](a: me, b: you)
 
 ### Returns `(me * you)` with wrapping arithmetic (mod 2²⁵⁶, signed).
 ### :param you: The right operand.
 ### :returns: The product, wrapping on overflow.
-routine S256.$mul_wrap(you: S256) -> S256
+routine S256.mul_wrap(you: S256) -> S256
   return mul[S256](a: me, b: you)
 
 # ============================================================================
@@ -307,25 +307,25 @@ routine S256.$mul_wrap(you: S256) -> S256
 ### Returns `me + you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
-dangerous routine S256.$add_unchecked(you: S256) -> S256
+dangerous routine S256.add_unchecked(you: S256) -> S256
   return signed_add_exact[S256](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no overflow.
-dangerous routine S256.$sub_unchecked(you: S256) -> S256
+dangerous routine S256.sub_unchecked(you: S256) -> S256
   return signed_sub_exact[S256](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
-dangerous routine S256.$mul_unchecked(you: S256) -> S256
+dangerous routine S256.mul_unchecked(you: S256) -> S256
   return signed_mul_exact[S256](a: me, b: you)
 
 ### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
-dangerous routine S256.$floordiv_unchecked(you: S256) -> S256
+dangerous routine S256.floordiv_unchecked(you: S256) -> S256
   # Knuth divide on magnitudes (one call → quotient + remainder), euclidean adjust.
   var dr = udivrem256(num: s256_abs_u256(x: me), den: s256_abs_u256(x: you))
   var uq = dr.q
@@ -341,7 +341,7 @@ dangerous routine S256.$floordiv_unchecked(you: S256) -> S256
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The euclidean remainder, assuming `you != 0`.
-dangerous routine S256.$mod_unchecked(you: S256) -> S256
+dangerous routine S256.mod_unchecked(you: S256) -> S256
   # Knuth divide on magnitudes; reflect a negative dividend's remainder into [0, |you|).
   var bmag = s256_abs_u256(x: you)
   var ur = udivrem256(num: s256_abs_u256(x: me), den: bmag).r
@@ -356,13 +356,13 @@ dangerous routine S256.$mod_unchecked(you: S256) -> S256
 ### Returns `me + you`, clamped to `S256_MAX` or `S256_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, or `S256_MAX` / `S256_MIN` if it would overflow.
-routine S256.$add_clamp(you: S256) -> S256
+routine S256.add_clamp(you: S256) -> S256
   return signed_add_sat[S256](a: me, b: you)
 
 ### Returns `me - you`, clamped to `S256_MAX` or `S256_MIN` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `S256_MAX` / `S256_MIN` if it would overflow.
-routine S256.$sub_clamp(you: S256) -> S256
+routine S256.sub_clamp(you: S256) -> S256
   return signed_sub_sat[S256](a: me, b: you)
 
 ### Returns `me * you`, clamped to `S256_MAX` or `S256_MIN` on overflow.
@@ -370,7 +370,7 @@ routine S256.$sub_clamp(you: S256) -> S256
 ### The clamp direction (MAX vs MIN) is determined by whether the operands have the same sign.
 ### :param you: The right operand.
 ### :returns: The product, or `S256_MAX` / `S256_MIN` if it would overflow.
-routine S256.$mul_clamp(you: S256) -> S256
+routine S256.mul_clamp(you: S256) -> S256
   if int_eq[S256](a: me, b: 0_s256) or int_eq[S256](a: you, b: 0_s256)
     return 0_s256
   var result = mul[S256](a: me, b: you)
@@ -418,8 +418,8 @@ routine S256.pow_with_overflow!(exp: S256) -> (S256, Bool)
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S256.$pow!(exp: S256) -> S256
-  var result = me.pow_with_overflow!(exp)
+routine S256.pow!(exp: S256) -> S256
+  var result = me.pow_with_overflow(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
@@ -428,7 +428,7 @@ routine S256.$pow!(exp: S256) -> S256
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result modulo 2²⁵⁶ (signed wrap).
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S256.$pow_wrap!(exp: S256) -> S256
+routine S256.pow_wrap!(exp: S256) -> S256
   if exp < 0_s256
     throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S256 = 1
@@ -436,17 +436,17 @@ routine S256.$pow_wrap!(exp: S256) -> S256
   var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.$mul_wrap(base)
+      result = result.mul_wrap(base)
     e = e >> 1_u32
     if e > 0
-      base = base.$mul_wrap(base)
+      base = base.mul_wrap(base)
   return result
 
 ### Returns `me ** exp`, clamped to `S256_MAX` or `S256_MIN` on overflow.
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result, or `S256_MAX` / `S256_MIN` if it would overflow.
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S256.$pow_clamp!(exp: S256) -> S256
+routine S256.pow_clamp!(exp: S256) -> S256
   if exp < 0
     throw NumericDomainError(description: "negative exponent: no integer result")
   var result: S256 = 1
@@ -454,10 +454,10 @@ routine S256.$pow_clamp!(exp: S256) -> S256
   var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
-      result = result.$mul_clamp(base)
+      result = result.mul_clamp(base)
     e = e >> 1_u32
     if e > 0
-      base = base.$mul_clamp(base)
+      base = base.mul_clamp(base)
   return result
 
 # ============================================================================
@@ -467,24 +467,24 @@ routine S256.$pow_clamp!(exp: S256) -> S256
 ### Returns the bitwise AND of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me & you`.
-routine S256.$bitand(you: S256) -> S256
+routine S256.bitand(you: S256) -> S256
   return bit_and[S256](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
-routine S256.$bitor(you: S256) -> S256
+routine S256.bitor(you: S256) -> S256
   return bit_or[S256](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
-routine S256.$bitxor(you: S256) -> S256
+routine S256.bitxor(you: S256) -> S256
   return bit_xor[S256](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
-routine S256.$bitnot() -> S256
+routine S256.bitnot() -> S256
   return bit_xor[S256](a: me, b: -1)
 
 # ============================================================================
@@ -494,25 +494,25 @@ routine S256.$bitnot() -> S256
 ### Left-shifts this value by `bits` positions, filling vacated bits with zero.
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
-routine S256.$ashl(bits: U32) -> S256
+routine S256.ashl(bits: U32) -> S256
   return shift_left[S256](me, S256(bits))
 
 ### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits`, copying the sign bit into vacated positions.
-routine S256.$ashr(bits: U32) -> S256
+routine S256.ashr(bits: U32) -> S256
   return shift_right_signed[S256](me, S256(bits))
 
-### Left-shifts this value by `bits` positions (same as `$ashl` for signed integers).
+### Left-shifts this value by `bits` positions (same as `ashl` for signed integers).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
-routine S256.$lshl(bits: U32) -> S256
+routine S256.lshl(bits: U32) -> S256
   return shift_left[S256](me, S256(bits))
 
 ### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
-routine S256.$lshr(bits: U32) -> S256
+routine S256.lshr(bits: U32) -> S256
   return shift_right_unsigned[S256](me, S256(bits))
 
 # ============================================================================
@@ -522,13 +522,13 @@ routine S256.$lshr(bits: U32) -> S256
 ### Returns `true` when both values are equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
-routine S256.$eq(you: S256) -> Bool
+routine S256.eq(you: S256) -> Bool
   return int_eq[S256](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
-routine S256.$cmp(you: S256) -> ComparisonSign
+routine S256.cmp(you: S256) -> ComparisonSign
   if signed_lt[S256](me, you)
     return ME_SMALL
   if signed_gt[S256](me, you)
@@ -594,12 +594,12 @@ routine S256.trailing_zeros() -> S256
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `256` if the value is `−1` (all bits set).
 routine S256.leading_ones() -> S256
-  return me.$bitnot().leading_zeros()
+  return me.bitnot().leading_zeros()
 
 ### Returns the number of trailing one bits, starting from the least-significant bit.
 ### :returns: The trailing one count; `256` if the value is `−1` (all bits set).
 routine S256.trailing_ones() -> S256
-  return me.$bitnot().trailing_zeros()
+  return me.bitnot().trailing_zeros()
 
 ### Returns this value with its bits reversed (bit 255 ↔ bit 0, etc.).
 ### :returns: The bit-reversed `S256`.
@@ -684,26 +684,26 @@ routine S256.signum() -> S256
 
 ### Returns the human-readable text of this value.
 ### :returns: The value rendered as `Text`.
-routine S256.$represent() -> Text
+routine S256.represent() -> Text
   if me == 0s256
     return "0"
   if me > 0s256
-    return U256(me).$represent()
-  # Use reinterpret_bits (not U256(me)) — U256.$create!(S256) throws on negative inputs,
+    return U256(me).represent()
+  # Use reinterpret_bits (not U256(me)) — U256.create(S256) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u256 -% bits`
   # yields |me| (works correctly even for S256.MIN, whose absolute value overflows S256).
-  return "-" + (0u256 -% reinterpret_bits[S256, U256](me)).$represent()
+  return "-" + (0u256 -% reinterpret_bits[S256, U256](me)).represent()
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
-routine S256.$diagnose() -> Text
-  return "S256(" + me.$represent() + ")"
+routine S256.diagnose() -> Text
+  return "S256(" + me.represent() + ")"
 
 ### Parses a decimal string into an `S256`, accepting an optional leading `+` or `−` sign.
 ### :param from_text: The decimal string to parse.
 ### :returns: The parsed `S256` value.
 ### :throws: {InvalidValueError} if `from_text` is empty, sign-only, or contains non-digit characters.
-routine S256.$create!(from_text: Text) -> S256
+routine S256!(from_text: Text) -> S256
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S256")
   var start = 0u64
@@ -737,12 +737,12 @@ routine S256.$create!(from_text: Text) -> S256
 
 ### Returns a hash of this 256-bit value by folding its two 128-bit halves.
 ### :returns: A `U64` hash combining the high and low 128-bit halves of the bit pattern.
-routine S256.$fast_hash() -> U64
-  return reinterpret_bits[S256, U256](me).$fast_hash()
+routine S256.fast_hash() -> U64
+  return reinterpret_bits[S256, U256](me).fast_hash()
 
 ### Returns a SipHash-2-4 keyed hash of this 256-bit value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine S256.$hash(k0: U64, k1: U64) -> U64
-  return reinterpret_bits[S256, U256](me).$hash(k0: k0, k1: k1)
+routine S256.hash(k0: U64, k1: U64) -> U64
+  return reinterpret_bits[S256, U256](me).hash(k0: k0, k1: k1)

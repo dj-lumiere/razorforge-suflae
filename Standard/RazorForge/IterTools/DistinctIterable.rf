@@ -1,0 +1,110 @@
+module IterTools
+
+### Represents a lazy adapter that suppresses duplicate values from a source iterable.
+### Two values are considered equal when they produce the same hash and compare as equal.
+### :typeparam T: The element type of the source sequence.
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity DistinctIterable[T, S] obeys Iterable[T]
+needs S obeys Iterable[T]
+relates DistinctEmittable[T, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+
+### Returns the stateful iterator that tracks already-seen values across calls.
+### :returns: The resulting `DistinctEmittable[T, S/Iter]` value.
+@readonly
+routine DistinctIterable[T, S].iter() -> DistinctEmittable[T, S/Iter]
+needs T obeys Hashable, Comparable
+  var seen = Set[T]()
+  danger
+    return DistinctEmittable[T, S/Iter](source: me.source.as_entity().iter(), seen: steal seen)
+
+### Iterates over a source sequence while suppressing values already produced.
+### :typeparam T: The element type of the source sequence.
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity DistinctEmittable[T, SE] obeys Emittable[T]
+needs SE obeys Emittable[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
+  ### Stores the set of values already yielded.
+  secret seen: Set[T]
+
+### Returns the next value not yet yielded by this iterator.
+### Source values that have already been seen are discarded until a new one is found.
+### :returns: The resulting `T` value.
+@migratable
+routine DistinctEmittable[T, SE].emit!() -> T
+needs T obeys Hashable, Comparable
+  danger
+    loop
+      var item = me.source.as_entity().emit()
+      if not me.seen.contains(item)
+        discard me.seen.add(item)
+        return item
+
+### Returns a lazy adapter that suppresses duplicate values.
+### :returns: The resulting `DistinctIterable[T, Me]` value.
+@readonly
+routine Iterable[T].distinct() -> DistinctIterable[T, Me]
+needs T obeys Hashable, Comparable
+  danger
+    return DistinctIterable[T, Me](source: me.hijack())
+
+### Represents a lazy adapter that suppresses elements whose key has already been seen.
+### Two elements are considered duplicates when their computed keys produce the same hash
+### and compare as equal.
+### :typeparam T: The source element type.
+### :typeparam U: The key type used for equality comparison.
+### :typeparam S: The concrete source iterable type (borrowed).
+entity DistinctByIterable[T, U, S] obeys Iterable[T]
+needs S obeys Iterable[T]
+relates DistinctByEmittable[T, U, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+  ### Stores the key-selector routine.
+  secret key: Routine[(T,), U]
+
+### Returns the stateful iterator that tracks already-seen keys across calls.
+### :returns: The resulting `DistinctByEmittable[T, U, S/Iter]` value.
+@readonly
+routine DistinctByIterable[T, U, S].iter() -> DistinctByEmittable[T, U, S/Iter]
+needs U obeys Hashable, Comparable
+  var seen = Set[U]()
+  danger
+    return DistinctByEmittable[T, U, S/Iter](source: me.source.as_entity().iter(), key: me.key, seen: steal seen)
+
+### Iterates over a source sequence while suppressing elements whose key has already been produced.
+### :typeparam T: The source element type.
+### :typeparam U: The key type used for equality comparison.
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity DistinctByEmittable[T, U, SE] obeys Emittable[T]
+needs SE obeys Emittable[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
+  ### Stores the key-selector routine.
+  secret key: Routine[(T,), U]
+  ### Stores the set of keys already seen.
+  secret seen: Set[U]
+
+### Returns the next element whose key has not yet been yielded.
+### Elements are consumed and discarded until one with a fresh key is found.
+### :returns: The resulting `T` value.
+@migratable
+routine DistinctByEmittable[T, U, SE].emit!() -> T
+needs U obeys Hashable, Comparable
+  danger
+    loop
+      var item = me.source.as_entity().emit()
+      var k = me.key(item)
+      if not me.seen.contains(k)
+        discard me.seen.add(k)
+        return item
+
+### Returns a lazy adapter that suppresses elements whose computed key has already appeared.
+### :param key: The routine that extracts the comparison key from each element.
+### :returns: The resulting `DistinctByIterable[T, U, Me]` value.
+@readonly
+routine Iterable[T].distinct_by[U](key: Routine[(T,), U]) -> DistinctByIterable[T, U, Me]
+needs U obeys Hashable, Comparable
+  danger
+    return DistinctByIterable[T, U, Me](source: me.hijack(), key: key)

@@ -8,4 +8,4 @@ protocol InPlaceSubtractable
   ### The right-hand operand should remain unchanged.
   ### :param you: The value to subtract.
   @writable
-  routine Me.$isub(you: Me)
+  routine Me.isub(you: Me)

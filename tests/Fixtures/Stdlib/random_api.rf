@@ -1,0 +1,78 @@
+module Tests/Stdlib/RandomApi
+
+# Random stdlib module — end-to-end smoke test for the xoshiro256** generator and its
+# Sized-powered collection helpers. Exercises make_random (splitmix64 seeding), next_u64
+# determinism, next_f64 range, chance() distribution, pick! across List + Deque (the
+# MutableIndexable extension), and in-place Fisher-Yates shuffle. All draws use fixed seeds
+# so the output is fully deterministic.
+
+import IO/Console
+import Random
+import Collections
+
+### All failable draws (pick!, indexing) live here so the `!` calls propagate naturally;
+### returns a deterministic checksum so the fixture output is stable.
+routine run_demo!() -> S64
+  # Determinism: same seed replays the same 64-bit stream.
+  var a = make_random(seed: 12345u64)
+  var b = make_random(seed: 12345u64)
+  var same = true
+  var i = 0u64
+  while i < 8u64
+    if a.next_u64() != b.next_u64()
+      same = false
+    i = i +% 1u64
+  show(f"same-seed streams match: {same}")
+
+  # next_f64 stays in the half-open unit interval.
+  var d = make_random(seed: 7u64)
+  var in_range = true
+  var j = 0u64
+  while j < 1000u64
+    var x = d.next_f64()
+    if x < 0.0_f64 or x >= 1.0_f64
+      in_range = false
+    j = j +% 1u64
+  show(f"1000 f64 draws all in [0,1): {in_range}")
+
+  # chance(0.5) over 10000 trials — deterministic count for this seed.
+  var e = make_random(seed: 2024u64)
+  var heads = 0u64
+  var k = 0u64
+  while k < 10000u64
+    if e.chance(probability: 0.5_f64)
+      heads = heads +% 1u64
+    k = k +% 1u64
+  show(f"heads out of 10000: {heads}")
+
+  # pick! generalizes across MutableIndexable collections (List and Deque here).
+  var r = make_random(seed: 42u64)
+  var lst = List[S64]()
+  var dq = Deque[S64]()
+  var f = 0s64
+  while f < 6s64
+    lst.add_last(value: f)
+    dq.add_last(value: f)
+    f = f + 1s64
+  var lv = lst.pick(rng: r.modify())
+  var dv = dq.pick(rng: r.modify())
+  show(f"List pick in [0,6): {lv >= 0s64 and lv < 6s64}")
+  show(f"Deque pick in [0,6): {dv >= 0s64 and dv < 6s64}")
+
+  # shuffle moves elements in place; the multiset is preserved (sum invariant) and
+  # the count is unchanged.
+  lst.shuffle(rng: r.modify())
+  var total = 0s64
+  var m = 0u64
+  while m < lst.count()
+    total = total + lst[m]
+    m = m +% 1u64
+  show(f"count after shuffle: {lst.count()}")
+  show(f"sum after shuffle: {total}")
+  return total
+
+routine start() -> Blank
+  when try_run_demo()
+    is None => show("demo produced no value")
+    else result => show(f"demo checksum: {result}")
+  return

@@ -80,7 +80,7 @@ internal sealed class CallOverloadResolutionPass
     /// <summary>
     /// Classifies call expressions in a flat sequence of statement bodies.
     /// Used for <c>InstantiatedGenericBodies</c> produced by GMP: <see cref="GenericAstRewriter"/>
-    /// rewrites type parameters but does not re-classify <c>try_next</c> and other wired calls,
+    /// rewrites type parameters but does not re-classify <c>try_emit</c> and other wired calls,
     /// leaving their <c>LoweringKind = Unknown</c>. This pass fills in the missing kind.
     /// </summary>
     public void RunOnStatements(IEnumerable<Statement> statements)
@@ -170,6 +170,7 @@ internal sealed class CallOverloadResolutionPass
                 break;
             case UsingStatement us:
                 WalkStatement(us.Body);
+                if (us.FallbackBody != null) WalkStatement(us.FallbackBody);
                 break;
             case DangerStatement danger:
                 WalkStatement(danger.Body);
@@ -308,7 +309,7 @@ internal sealed class CallOverloadResolutionPass
         if (call.LoweringKind != CallLoweringKind.Unknown) return;
 
         // Fast path: routine already resolved by DerivedOperatorPass or SA.
-        // Wired routines like ComparisonSign.$eq may not be findable via LookupMethodOverload
+        // Wired routines like ComparisonSign.eq may not be findable via LookupMethodOverload
         // (they are handled by codegen directly, not registered as normal overloads).
         if (call.ResolvedRoutine != null)
         {
@@ -362,21 +363,22 @@ internal sealed class CallOverloadResolutionPass
 
                 RoutineInfo? method = allArgTypesKnown
                     ? _registry.LookupMethodOverload(type: receiverType,
-                        methodName: member.PropertyName, argTypes: argTypes)
+                        methodName: member.MemberName, argTypes: argTypes)
                     : null;
                 method ??= _registry.LookupMethod(type: receiverType,
-                    methodName: member.PropertyName);
+                    methodName: member.MemberName);
 
                 // If the non-failable form isn't registered, try the failable form.
-                // E.g. U64.$sub is not defined (underflow is undefined); only U64.$sub! exists.
-                if (method == null && !member.PropertyName.EndsWith('!'))
+                // E.g. U64.sub is not defined (underflow is undefined); only U64.sub! exists.
+                // MemberName is bare; failability is structural — retry with isFailable: true.
+                if (method == null && !member.IsFailable)
                 {
-                    string failableName = member.PropertyName + "!";
                     method = allArgTypesKnown
                         ? _registry.LookupMethodOverload(type: receiverType,
-                            methodName: failableName, argTypes: argTypes)
+                            methodName: member.MemberName, argTypes: argTypes)
                         : null;
-                    method ??= _registry.LookupMethod(type: receiverType, methodName: failableName);
+                    method ??= _registry.LookupMethod(type: receiverType,
+                        methodName: member.MemberName, isFailable: true);
                 }
 
                 if (method == null) return;
@@ -387,9 +389,14 @@ internal sealed class CallOverloadResolutionPass
             }
             case IdentifierExpression { Name: var name }:
             {
-                if (!allArgTypesKnown) return;
-                RoutineInfo? routine = _registry.LookupRoutineOverload(
-                    baseName: name, argTypes: argTypes);
+                // Overload-by-arg-types when all arg types are known; otherwise fall back to a
+                // unique by-name lookup. Stdlib bodies aren't fully type-annotated, so a free call
+                // like `decimalfixed_neg(a: you)` inside a variant body can reach here with an
+                // untyped argument — the by-name lookup still resolves it when the name is
+                // unambiguous. (A genuinely ambiguous name with unknown arg types stays unresolved.)
+                RoutineInfo? routine = allArgTypesKnown
+                    ? _registry.LookupRoutineOverload(baseName: name, argTypes: argTypes)
+                    : null;
                 routine ??= _registry.LookupRoutine(fullName: name);
                 if (routine == null) return;
 

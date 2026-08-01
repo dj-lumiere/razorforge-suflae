@@ -6,7 +6,7 @@ module Core
 ### (`me.<field>.hijack()`), so cloning/dropping a handle is safe across threads.
 ###
 ### Also holds the access-discipline lock `P` (a {LockPolicy}). The lock state lives here — at the one
-### address every handle references — so `inspect()`/`claim!()` (a later phase) synchronize correctly.
+### address every handle references — so `inspect()`/`claim()` (a later phase) synchronize correctly.
 ### Selected by monomorphization: `ReadOnly` is zero-sized (no overhead), `Exclusive`/`MultiRead` carry
 ### their atomic flags.
 ### :typeparam T: The exclusively owned entity type.
@@ -25,7 +25,7 @@ needs T is EntityType, P obeys LockPolicy
 ### Creates a new controller with one strong reference, no weak references, and a fresh lock.
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `ShareController[T, P]` value.
-dangerous routine ShareController[T, P].$create(data: Hijacked[T]) -> ?ShareController[T, P]
+dangerous routine ShareController[T, P](data: Hijacked[T]) -> ShareController[T, P]
   return ShareController[T, P](
     strong_count: 1_u64,
     weak_count: 0_u64,
@@ -35,55 +35,55 @@ dangerous routine ShareController[T, P].$create(data: Hijacked[T]) -> ?ShareCont
 
 ### Atomically increments the strong count when a `Shared` handle is cloned.
 routine ShareController[T, P].increase_strong_count()
-  danger!
+  danger
     discard atomic_add[U64](ptr: me.strong_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the strong count. When it reaches zero the managed entity is dropped,
 ### and the controller itself is freed if no weak handles remain.
 routine ShareController[T, P].decrease_strong_count()
-  danger!
+  danger
     var previous = atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
     if previous == 1_u64
       me.drop_data()
       if me.weak_count() == 0_u64
-        me.$destroy()
+        me.destroy()
   return
 
 ### Atomically increments the weak count when a `Watched` handle is cloned.
 routine ShareController[T, P].increase_weak_count()
-  danger!
+  danger
     discard atomic_add[U64](ptr: me.weak_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the weak count, freeing the controller when both counts reach zero.
 routine ShareController[T, P].decrease_weak_count()
-  danger!
+  danger
     var previous = atomic_sub[U64](ptr: me.weak_count.hijack(), value: 1_u64)
     if previous == 1_u64
       if me.strong_count() == 0_u64
-        me.$destroy()
+        me.destroy()
   return
 
 ### Returns the current number of live strong (`Shared`) handles. Snapshot only.
 ### :returns: The strong reference count.
 routine ShareController[T, P].strong_count() -> U64
-  danger!
+  danger
     return atomic_load[U64](ptr: me.strong_count.hijack())
 
 ### Returns the current number of live weak (`Watched`) handles. Snapshot only.
 ### :returns: The weak reference count.
 routine ShareController[T, P].weak_count() -> U64
-  danger!
+  danger
     return atomic_load[U64](ptr: me.weak_count.hijack())
 
 ### Returns a non-owning pointer to the managed data.
 ### :returns: The resulting `Hijacked[T]` value.
-dangerous routine ShareController[T, P].borrow_data() -> Hijacked[T]
+routine ShareController[T, P].borrow_data() -> Hijacked[T]
   return me.data
 
 # ============================================================================
-# Access-discipline lock — drives `Shared.inspect()` / `Shared.claim!()`. The lock state lives
+# Access-discipline lock — drives `Shared.inspect()` / `Shared.claim()`. The lock state lives
 # here, at the single address every handle shares, so synchronization is correct across threads.
 # Each call delegates to the monomorphized policy `P` (no runtime dispatch).
 # ============================================================================
@@ -108,15 +108,25 @@ routine ShareController[T, P].remove_claimer()
   me.lock.remove_claimer()
   return
 
+### Non-blocking inspector admission through the lock (drives `Shared.try_inspect`).
+### :returns: `true` if a read hold was taken without waiting.
+routine ShareController[T, P].try_add_inspector() -> Bool
+  return me.lock.try_add_inspector()
+
+### Non-blocking claimer admission through the lock (drives `Shared.try_claim`).
+### :returns: `true` if the exclusive hold was taken without waiting.
+routine ShareController[T, P].try_add_claimer() -> Bool
+  return me.lock.try_add_claimer()
+
 ### Destroys the managed entity. Call only when the strong count reaches zero.
-### Runs the entity's own `$destroy` (the sole free under unified teardown); does not also
+### Runs the entity's own `destroy` (the sole free under unified teardown); does not also
 ### `invalidate`, which would double-free a self-freeing entity.
 dangerous routine ShareController[T, P].drop_data()
-  me.data.as_entity().$destroy()
+  me.data.as_entity().destroy()
   return
 
-dangerous routine ShareController[T, P].$destroy()
-  me.strong_count.$destroy()
-  me.weak_count.$destroy()
+dangerous routine ShareController[T, P].destroy()
+  me.strong_count.destroy()
+  me.weak_count.destroy()
   me.hijack().invalidate()
   return

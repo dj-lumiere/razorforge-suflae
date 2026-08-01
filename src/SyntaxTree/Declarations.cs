@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TypeModel.Symbols;
 
 namespace SyntaxTree;
 
@@ -144,7 +145,7 @@ public record VariableDeclaration(
 /// <param name="IsFailable">Whether the routine has a failable <c>!</c> suffix.</param>
 /// <param name="Storage">Storage class for the routine.</param>
 /// <param name="Async">Suspended or threaded routine mode.</param>
-/// <param name="IsDangerous">Whether the routine requires a <c>danger!</c> context.</param>
+/// <param name="IsDangerous">Whether the routine requires a <c>danger</c> context.</param>
 /// <remarks>
 /// Function declarations support:
 /// <list type="bullet">
@@ -169,7 +170,8 @@ public record RoutineDeclaration(
     bool IsFailable = false,
     StorageClass Storage = StorageClass.None,
     AsyncStatus Async = AsyncStatus.None,
-    bool IsDangerous = false) : Declaration(Location: Location)
+    bool IsDangerous = false,
+    bool IsWiredMemberRoutine = false) : Declaration(Location: Location)
 {
     /// <summary>
     /// Generic parameter names. Settable so SignatureResolver can desugar a protocol-typed
@@ -195,6 +197,15 @@ public record RoutineDeclaration(
     /// wrapper being normalized away (e.g. <c>Text(from_list: steal digits)</c> → <c>Text(digits)</c>).
     /// </summary>
     public HashSet<string>? StolenVariableNames { get; set; }
+
+    /// <summary>
+    /// The <see cref="RoutineInfo"/> this declaration was registered as, attached at registration time
+    /// (SignatureResolver for user code, StdlibLoader for the stdlib). Codegen reads this DIRECTLY
+    /// instead of re-deriving the binding by parsing the name string and looking the owner type up by
+    /// bare name — a module-blind re-lookup that bound one module's body to another module's symbol
+    /// when two modules declared the same-named type. Parallel to <see cref="CallExpression.ResolvedRoutine"/>.
+    /// </summary>
+    public RoutineInfo? ResolvedInfo { get; set; }
 
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
@@ -341,7 +352,7 @@ public record ChoiceDeclaration(
 /// <list type="bullet">
 /// <item>Combining: perms = READ or WRITE</item>
 /// <item>Testing: perms is READ</item>
-/// <item>Exact match: perms isonly READ and WRITE</item>
+/// <item>Exact match: perms == (READ and WRITE)</item>
 /// <item>Removal: perms but WRITE</item>
 /// <item>Max 64 members (U64 backing)</item>
 /// </list>
@@ -430,7 +441,7 @@ public record VariantDeclaration(
 /// Protocol declarations enable polymorphism and code reuse:
 /// <list type="bullet">
 /// <item>Interface contracts: protocol Drawable { routine Me.draw() }</item>
-/// <item>Generic protocols: protocol Comparable[T] { routine Me.$cmp(you: Me) -> ComparisonSign }</item>
+/// <item>Generic protocols: protocol Comparable[T] { routine Me.cmp(you: Me) -> ComparisonSign }</item>
 /// <item>Multiple implementation: types can implement multiple protocols</item>
 /// <item>Default methods: protocols can provide default implementations</item>
 /// <item>Protocol bounds: generic constraints (where T obeys Comparable)</item>
@@ -631,7 +642,14 @@ public record RoutineSignature(
     List<Parameter> Parameters,
     TypeExpression? ReturnType,
     List<string>? Annotations,
-    SourceLocation Location);
+    SourceLocation Location)
+{
+    /// <summary>
+    /// True when the signature was written with the failable `!` marker. The `!` is a STRUCTURED
+    /// attribute — <see cref="Name"/> stays bare.
+    /// </summary>
+    public bool IsFailable { get; init; }
+}
 
 #endregion
 
@@ -687,6 +705,9 @@ public record PresetDeclaration(
     Expression Value,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <summary>Whether declared <c>secret preset</c> — file-private (inlinable only in its own file).</summary>
+    public bool IsSecret { get; init; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -730,6 +751,12 @@ public record ExternalDeclaration(
     bool IsDangerous,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <summary>
+    /// True when the external routine was declared with the failable `!` marker. The `!` is a
+    /// STRUCTURED attribute — <see cref="Name"/> stays bare.
+    /// </summary>
+    public bool IsFailable { get; init; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

@@ -66,7 +66,7 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
         {
             bool? isFailable = node.ResolvedRoutine?.IsFailable;
             RoutineInfo? resolved = _registry.LookupMethod(type: _concreteType,
-                methodName: me.PropertyName, isFailable: isFailable);
+                methodName: me.MemberName, isFailable: isFailable);
             if (resolved != null)
             {
                 node.ResolvedRoutine = resolved;
@@ -150,6 +150,9 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
     { Visit(e: node.Object); VisitAll(xs: node.Arguments); return false; }
     public bool VisitGenericMemberExpression(GenericMemberExpression node)
     { Visit(e: node.Object); return false; }
+    public bool VisitBracketAccessExpression(BracketAccessExpression node) =>
+        throw new System.InvalidOperationException(
+            "BracketAccessExpression must be lowered by BracketReclassifyPass before analysis.");
     public bool VisitCarrierPayloadExpression(CarrierPayloadExpression node)
     { Visit(e: node.Carrier); return false; }
     public bool VisitIsPatternExpression(IsPatternExpression node)
@@ -215,7 +218,8 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
     public bool VisitDangerStatement(DangerStatement node)
     { Visit(s: node.Body); return false; }
     public bool VisitUsingStatement(UsingStatement node)
-    { Visit(e: node.Resource); Visit(s: node.Body); return false; }
+    { Visit(e: node.Resource); Visit(s: node.Body);
+      if (node.FallbackBody != null) Visit(s: node.FallbackBody); return false; }
     public bool VisitDiscardStatement(DiscardStatement node)
     { Visit(e: node.Expression); return false; }
 

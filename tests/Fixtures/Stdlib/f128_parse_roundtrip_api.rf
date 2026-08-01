@@ -5,7 +5,7 @@ import IO/Console
 # (correctly-rounded for every non-tie input) plus the exact-tie resolution (exp >= 0 is
 # exact in F512; exp < 0 with 5^|exp| | coeff uses the exact ldexp path), and the shared
 # decimal scanner. All assertions are BIT-EXACT booleans so they are stable regardless of
-# how F128.$represent formats values.
+# how F128.represent formats values.
 
 routine ck(got: F128, want: F128, label: Text)
   show(label + ": " + f"{int_eq[U128](a: got.to_bits(), b: want.to_bits())}")

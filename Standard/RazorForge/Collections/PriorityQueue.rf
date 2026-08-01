@@ -35,7 +35,7 @@ needs TPriority obeys Comparable
 ### | `peek!` / `peek_priority!` / `peek_entry!` | O(1) |
 ### | `add_all` | O(k log n) |
 ### | `drain` | O(n log n) |
-### | `$contains` | O(n) |
+### | `contains` | O(n) |
 ### | Iteration | O(n), heap order |
 ###
 ### :typeparam TPriority: The comparable type used for heap ordering. Smaller values rank higher.
@@ -55,7 +55,7 @@ needs TPriority obeys Comparable
 
 ### Creates an empty priority queue with no allocated backing storage.
 ### Storage is acquired lazily on the first insertion or explicit `reserve`.
-routine PriorityQueue[TPriority, TElement].$create() -> ?PriorityQueue[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement]() -> PriorityQueue[TPriority, TElement]
   return PriorityQueue[TPriority, TElement](
     priorities: hijacked_none[TPriority](),
     elements: hijacked_none[TElement](),
@@ -66,10 +66,10 @@ routine PriorityQueue[TPriority, TElement].$create() -> ?PriorityQueue[TPriority
 ### Creates an empty priority queue with storage pre-allocated for `capacity` entries.
 ### Use this when the expected queue size is known and early reallocations should be avoided.
 ### :param capacity: The number of entries to reserve space for.
-routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> ?PriorityQueue[TPriority, TElement]
+routine PriorityQueue[TPriority, TElement](capacity: U64) -> PriorityQueue[TPriority, TElement]
   var priority_byte_size = TPriority.data_size() * capacity
   var element_byte_size = TElement.data_size() * capacity
-  danger!
+  danger
     var priority_ptr = rf_allocate_dynamic_uninit(priority_byte_size)
     var element_ptr = rf_allocate_dynamic_uninit(element_byte_size)
     return PriorityQueue[TPriority, TElement](
@@ -87,17 +87,17 @@ routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> ?PriorityQu
 ### :param index: The zero-based heap position to read.
 ### :returns: The priority stored at that heap node.
 @inline
-routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> ?TPriority
-  danger!
-    return me.priorities.offset(TPriority.data_size() * index).extract()
+routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> TPriority
+  danger
+    return me.priorities.offset(TPriority.data_size() * index).peek()
 
 ### Writes `value` into the priority buffer at `index` without bounds checking.
 ### :param index: The zero-based heap position to update.
 ### :param value: The priority value to store.
 @inline
 routine PriorityQueue[TPriority, TElement].set_priority_raw(index: U64, value: TPriority)
-  danger!
-    me.priorities.offset(TPriority.data_size() * index).inject(value)
+  danger
+    me.priorities.offset(TPriority.data_size() * index).poke(value)
   return
 
 ### Returns the element at `index` without bounds checking.
@@ -106,17 +106,17 @@ routine PriorityQueue[TPriority, TElement].set_priority_raw(index: U64, value: T
 ### :returns: The element stored at that heap node.
 @readonly
 @inline
-routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> ?TElement
-  danger!
-    return me.elements.offset(TElement.data_size() * index).extract()
+routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> TElement
+  danger
+    return me.elements.offset(TElement.data_size() * index).peek()
 
 ### Writes `value` into the element buffer at `index` without bounds checking.
 ### :param index: The zero-based heap position to update.
 ### :param value: The element value to store.
 @inline
 routine PriorityQueue[TPriority, TElement].set_element_raw(index: U64, value: TElement)
-  danger!
-    me.elements.offset(TElement.data_size() * index).inject(value)
+  danger
+    me.elements.offset(TElement.data_size() * index).poke(value)
   return
 
 ### Returns the full heap entry at `index` as a `PQEntry`.
@@ -147,7 +147,7 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
     var priority_byte_size = TPriority.data_size() * new_capacity
     var element_byte_size = TElement.data_size() * new_capacity
 
-    danger!
+    danger
       if me.priorities.is_none()
         var ptr = rf_allocate_dynamic_uninit(priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
@@ -290,7 +290,7 @@ routine PriorityQueue[TPriority, TElement].add(element: TElement, priority: TPri
 ### The last heap entry is moved to the root and sifted down to restore heap order.
 ### :returns: The element associated with the minimum priority.
 ### :absent: The queue is empty.
-routine PriorityQueue[TPriority, TElement].remove!() -> ?TElement
+routine PriorityQueue[TPriority, TElement].remove!() -> TElement
   if me.is_empty()
     absent
 
@@ -309,7 +309,7 @@ routine PriorityQueue[TPriority, TElement].remove!() -> ?TElement
 ### Returns the element at the front of the queue without removing it.
 ### :returns: The element with the smallest priority.
 ### :absent: The queue is empty.
-routine PriorityQueue[TPriority, TElement].peek!() -> ?TElement
+routine PriorityQueue[TPriority, TElement].peek!() -> TElement
   if me.is_empty()
     absent
   return me.get_element_raw(0u64)
@@ -317,7 +317,7 @@ routine PriorityQueue[TPriority, TElement].peek!() -> ?TElement
 ### Returns the smallest priority currently in the queue without removing its entry.
 ### :returns: The minimum priority value.
 ### :absent: The queue is empty.
-routine PriorityQueue[TPriority, TElement].peek_priority!() -> ?TPriority
+routine PriorityQueue[TPriority, TElement].peek_priority!() -> TPriority
   if me.is_empty()
     absent
   return me.get_priority_raw(0u64)
@@ -339,23 +339,23 @@ routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, T
 ### :param elements: The elements to enqueue.
 ### :param priorities: The priorities to assign at matching positions.
 routine PriorityQueue[TPriority, TElement].add_all(elements: Referring[List[TElement]], priorities: Referring[List[TPriority]])
-needs TElement obeys Cloneable
-needs TPriority obeys Cloneable
+needs TElement obeys Copyable
+needs TPriority obeys Copyable
   var i = 0u64
   var limit = if elements.count() < priorities.count() then elements.count() else priorities.count()
   while i < limit
-    # `clone` out of the read-only borrows (elided for trivial types; retain-aware via `$copy` for
+    # `clone` out of the read-only borrows (elided for trivial types; retain-aware via `store` for
     # RC records) — `add` takes ownership, so aliasing would double-free when both queues drop.
-    me.add(element: elements[i].clone(), priority: priorities[i].clone())
+    me.add(element: elements[i].copy(), priority: priorities[i].copy())
     i = i +% 1u64
   return
 
 ### Removes all entries and returns their elements in dequeue order (smallest priority first).
-### :returns: A `List[TElement]` whose order matches repeated `remove!()` calls.
-routine PriorityQueue[TPriority, TElement].drain() -> ?List[TElement]
+### :returns: A `List[TElement]` whose order matches repeated `remove()` calls.
+routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
   var result = List[TElement](me.count())
   while not me.is_empty()
-    result.add_last(me.remove!())
+    result.add_last(me.remove())
   return steal result
 
 # ============================================================================
@@ -367,7 +367,7 @@ routine PriorityQueue[TPriority, TElement].drain() -> ?List[TElement]
 ### :param element: The element value to search for.
 ### :returns: `true` if `element` is found in any heap entry; `false` otherwise.
 @readonly
-routine PriorityQueue[TPriority, TElement].$contains(element: TElement) -> Bool
+routine PriorityQueue[TPriority, TElement].contains(element: TElement) -> Bool
 needs TElement obeys Equatable
   var i = 0u64
   while i < me.count
@@ -381,7 +381,7 @@ needs TElement obeys Equatable
 ### Use `drain()` on a copy if you need priority order without consuming the queue.
 ### :param source: The queue to copy entries from.
 ### :returns: A `List[PQEntry[TPriority, TElement]]` in heap array order.
-routine List[PQEntry[TPriority, TElement]].$create(source: PriorityQueue[TPriority, TElement]) -> ?List[PQEntry[TPriority, TElement]]
+routine List[PQEntry[TPriority, TElement]](source: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
   var result = List[PQEntry[TPriority, TElement]](source.count())
   var i = 0u64
   while i < source.count()
@@ -397,7 +397,7 @@ routine List[PQEntry[TPriority, TElement]].$create(source: PriorityQueue[TPriori
 ### Iteration order is heap order — NOT priority-sorted order.
 ### :typeparam TPriority: The priority type carried by yielded entries.
 ### :typeparam TElement: The element type carried by yielded entries.
-entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriority, TElement]]
+entity PriorityQueueEmittable[TPriority, TElement] obeys Emittable[PQEntry[TPriority, TElement]]
   ### Raw pointer into the source queue's priority buffer.
   secret priorities: Hijacked[TPriority]
   ### Raw pointer into the source queue's element buffer.
@@ -408,9 +408,9 @@ entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriori
   secret index: U64
 
 @readonly
-routine PriorityQueue[TPriority, TElement].$iter() -> ?PriorityQueueIterator[TPriority, TElement]
-  danger!
-    return PriorityQueueIterator[TPriority, TElement](
+routine PriorityQueue[TPriority, TElement].iter() -> PriorityQueueEmittable[TPriority, TElement]
+  danger
+    return PriorityQueueEmittable[TPriority, TElement](
       priorities: me.priorities,
       elements: me.elements,
       count: me.count(),
@@ -420,47 +420,47 @@ routine PriorityQueue[TPriority, TElement].$iter() -> ?PriorityQueueIterator[TPr
 ### Returns the next heap entry in storage order.
 ### :returns: The next priority–element pair from the heap array.
 ### :absent: All entries captured at iterator creation have been yielded.
-routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority, TElement]
+routine PriorityQueueEmittable[TPriority, TElement].emit!() -> PQEntry[TPriority, TElement]
   if me.index >= me.count
     absent
   lateinit var p: TPriority
   lateinit var e: TElement
-  danger!
-    p = me.priorities.offset(TPriority.data_size() * me.index).extract()
-    e = me.elements.offset(TElement.data_size() * me.index).extract()
+  danger
+    p = me.priorities.offset(TPriority.data_size() * me.index).peek()
+    e = me.elements.offset(TElement.data_size() * me.index).peek()
   var _result = PQEntry[TPriority, TElement](priority: p, element: e)
   me.index = me.index + 1u64
   return _result
 
-routine PriorityQueue[TPriority, TElement].$represent() -> Text
+routine PriorityQueue[TPriority, TElement].represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.priority.$represent() + ": " + entry.element.$represent()
+    result = result + entry.priority.represent() + ": " + entry.element.represent()
     i = i +% 1u64
   result = result + "])"
   return steal result
 
-routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
+routine PriorityQueue[TPriority, TElement].diagnose() -> Text
+  var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.priority.$represent() + ": " + entry.element.$represent()
+    result = result + entry.priority.represent() + ": " + entry.element.represent()
     i = i +% 1u64
   result = result + "])"
   return steal result
 
-dangerous routine PriorityQueue[TPriority, TElement].$destroy()
+dangerous routine PriorityQueue[TPriority, TElement].destroy()
   # Tear down each stored priority and element before freeing the buffers. No-op for value
   # types; frees owned entity priorities/elements.
   var i = 0u64
   while i < me.count
-    me.priorities.offset(TPriority.data_size() * i).extract().$destroy()
-    me.elements.offset(TElement.data_size() * i).extract().$destroy()
+    me.priorities.offset(TPriority.data_size() * i).peek().destroy()
+    me.elements.offset(TElement.data_size() * i).peek().destroy()
     i = i + 1u64
   me.priorities.invalidate()
   me.elements.invalidate()

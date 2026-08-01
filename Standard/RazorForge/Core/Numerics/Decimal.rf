@@ -77,7 +77,7 @@ common routine Decimal.from_bits(bits: U256) -> Decimal
 ### Canonicalization (trailing-zero stripping) keeps equal values bit-identical, so equal
 ### `Decimal`s hash equally.
 ### :returns: A `U64` hash of `me`.
-routine Decimal.$fast_hash() -> U64
+routine Decimal.fast_hash() -> U64
   var raw = me.to_bits()
   var lo = __hash_u128(v: raw.low128())
   var hi = __hash_u128(v: raw.high128())
@@ -173,8 +173,8 @@ routine scan_decimal_parts256!(from_text: Text) -> DecimalParts
 
 ### Parses a decimal literal into a `Decimal` (scans the full 70-digit coefficient).
 ### :throws: {InvalidValueError} if the text is not a valid finite decimal literal.
-routine Decimal.$create!(from_text: Text) -> Decimal
-  var p = scan_decimal_parts256!(from_text: from_text)
+routine Decimal!(from_text: Text) -> Decimal
+  var p = scan_decimal_parts256(from_text: from_text)
   return Decimal.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
 
 # ============================================================================
@@ -249,7 +249,7 @@ routine decimal_normalize_parts(p: DecimalParts) -> DecimalParts
 
 ### BINARY encode — pack sign / specials (combination prefix) / exponent / coefficient.
 ### Finite values are canonicalized (trailing zeros stripped) so the stored bits — and thus
-### `decode`, `$eq`, `$cmp`, `$hash`, `to_bytes`, and `$represent` — are all consistent.
+### `decode`, `eq`, `cmp`, `hash`, `to_bytes`, and `represent` — are all consistent.
 routine decimalfixed_of_parts(p: DecimalParts) -> Decimal
   var sbit = shift_left[U256](value: zero_extend[U64, U256](if p.sign then 1_u64 else 0_u64), bits: U256.to_width(s: 255_s64))
   if int_ne[U64](a: p.special, b: 0_u64)
@@ -278,7 +278,7 @@ common routine Decimal.quiet_nan() -> Decimal
 
 # ============================================================================
 # Creators — integers. A `Decimal` is an `@llvm("i256")` carrier, so without these
-# `$create` overloads `Decimal(from: <int>)` would lower to a RAW i256 cast (storing
+# `create` overloads `Decimal(from: <int>)` would lower to a RAW i256 cast (storing
 # the bare integer in the bits) instead of the BID encoding {coeff, exp: 0}. decfinA
 # rounds magnitudes wider than 70 digits (round-half-even).
 # ============================================================================
@@ -295,30 +295,30 @@ common routine Decimal.from_int64(value: S64) -> Decimal
 
 ### Signed integer -> Decimal.
 ### S8 -> Decimal (widened to S64, exponent 0).
-routine Decimal.$create(from: S8) -> Decimal
+routine Decimal(from: S8) -> Decimal
   return Decimal.from_int64(value: S64(from))
 
 ### S16 -> Decimal (widened to S64, exponent 0).
-routine Decimal.$create(from: S16) -> Decimal
+routine Decimal(from: S16) -> Decimal
   return Decimal.from_int64(value: S64(from))
 
 ### S32 -> Decimal (widened to S64, exponent 0).
-routine Decimal.$create(from: S32) -> Decimal
+routine Decimal(from: S32) -> Decimal
   return Decimal.from_int64(value: S64(from))
 
 ### S64 -> Decimal (exponent 0).
-routine Decimal.$create(from: S64) -> Decimal
+routine Decimal(from: S64) -> Decimal
   return Decimal.from_int64(value: from)
 
 ### S128 -> Decimal (split sign / magnitude into a U256 coefficient, exponent 0).
-routine Decimal.$create(from: S128) -> Decimal
+routine Decimal(from: S128) -> Decimal
   # negate via two's complement on the signed value, then reinterpret the magnitude as unsigned
   var neg = signed_lt[S128](a: from, b: 0_s128)
   var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
   return Decimal.from_components(sign: neg, coeff: zero_extend[U128, U256](mag), exp: 0_s64)
 
 ### S256 -> Decimal (split sign / magnitude into the U256 coefficient, exponent 0).
-routine Decimal.$create(from: S256) -> Decimal
+routine Decimal(from: S256) -> Decimal
   # S256_MIN negates to itself in two's complement; its magnitude (2^255) still fits the 256-bit
   # coeff
   var neg = signed_lt[S256](a: from, b: 0_s256)
@@ -327,27 +327,27 @@ routine Decimal.$create(from: S256) -> Decimal
 
 ### Unsigned integer -> Decimal.
 ### U8 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.$create(from: U8) -> Decimal
+routine Decimal(from: U8) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U8, U256](from), exp: 0_s64)
 
 ### U16 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.$create(from: U16) -> Decimal
+routine Decimal(from: U16) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U16, U256](from), exp: 0_s64)
 
 ### U32 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.$create(from: U32) -> Decimal
+routine Decimal(from: U32) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U32, U256](from), exp: 0_s64)
 
 ### U64 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.$create(from: U64) -> Decimal
+routine Decimal(from: U64) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U64, U256](from), exp: 0_s64)
 
 ### U128 -> Decimal (zero-extend into the coefficient, exponent 0).
-routine Decimal.$create(from: U128) -> Decimal
+routine Decimal(from: U128) -> Decimal
   return Decimal.from_components(sign: false, coeff: zero_extend[U128, U256](from), exp: 0_s64)
 
 ### U256 -> Decimal (coefficient stored directly, exponent 0).
-routine Decimal.$create(from: U256) -> Decimal
+routine Decimal(from: U256) -> Decimal
   return Decimal.from_components(sign: false, coeff: from, exp: 0_s64)
 
 # ============================================================================
@@ -360,19 +360,19 @@ routine Decimal.$create(from: U256) -> Decimal
 
 ### Binary float -> Decimal (correctly rounded via D128).
 ### F16 -> Decimal via D128 (round-trip-exact: F16 fits well inside D128's 34 digits).
-routine Decimal.$create(from: F16) -> Decimal
+routine Decimal(from: F16) -> Decimal
   return Decimal(from: D128(from: from))
 
 ### F32 -> Decimal via D128 (round-trip-exact).
-routine Decimal.$create(from: F32) -> Decimal
+routine Decimal(from: F32) -> Decimal
   return Decimal(from: D128(from: from))
 
 ### F64 -> Decimal via D128 (round-trip-exact).
-routine Decimal.$create(from: F64) -> Decimal
+routine Decimal(from: F64) -> Decimal
   return Decimal(from: D128(from: from))
 
 ### F128 -> Decimal via D128 (correctly rounded to 34 digits; full 70-digit path is future work).
-routine Decimal.$create(from: F128) -> Decimal
+routine Decimal(from: F128) -> Decimal
   return Decimal(from: D128(from: from))
 
 # ============================================================================
@@ -392,17 +392,17 @@ common routine Decimal.from_decimal_parts(sign: Bool, special: U64, exp: S64, co
 
 ### IEEE decimal -> Decimal.
 ### D32 -> Decimal (exact: decode parts, widen coefficient into the 70-digit cohort).
-routine Decimal.$create(from: D32) -> Decimal
+routine Decimal(from: D32) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U256](p.coeff))
 
 ### D64 -> Decimal (exact: decode parts, widen coefficient into the 70-digit cohort).
-routine Decimal.$create(from: D64) -> Decimal
+routine Decimal(from: D64) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U64, U256](p.coeff))
 
 ### D128 -> Decimal (exact: decode parts, widen the 34-digit coefficient into the cohort).
-routine Decimal.$create(from: D128) -> Decimal
+routine Decimal(from: D128) -> Decimal
   var p = from.decode()
   return Decimal.from_decimal_parts(sign: p.sign, special: p.special, exp: p.exp, coeff: zero_extend[U128, U256](p.coeff))
 
@@ -453,7 +453,7 @@ routine decimal_cmp_mag(ca: U256, ea: S64, cb: U256, eb: S64) -> ComparisonSign
 ### Three-way comparison under IEEE ordered semantics. NaN is unordered and maps to
 ### SAME (matching the engine convention). Zero compares equal regardless of sign.
 @readonly
-routine Decimal.$cmp(you: Decimal) -> ComparisonSign
+routine Decimal.cmp(you: Decimal) -> ComparisonSign
   var pa = me.decode()
   var pb = you.decode()
   if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
@@ -483,10 +483,10 @@ routine Decimal.$cmp(you: Decimal) -> ComparisonSign
 ### Value equality. NaN is never equal to anything (including itself); every other
 ### case follows the three-way comparison (so 1.0 and 1.00 are equal).
 @readonly
-routine Decimal.$eq(you: Decimal) -> Bool
+routine Decimal.eq(you: Decimal) -> Bool
   if me.is_nan() or you.is_nan()
     return false
-  var c = me.$cmp(you: you)
+  var c = me.cmp(you: you)
   return c is SAME
 
 # ============================================================================
@@ -663,11 +663,11 @@ routine decfinA(sign: Bool, coeff: U512, exp: S64, pref: S64) -> DecimalParts
   return DecimalParts(sign: sign, special: 0_u64, exp: e, coeff: cu)
 
 # ============================================================================
-# Arithmetic operators ($mul / $add / $neg / $sub / $truediv)
+# Arithmetic operators (mul / add / neg / sub / truediv)
 # ============================================================================
 
 ### Returns me * you.
-routine Decimal.$mul!(you: Decimal) -> Decimal
+routine Decimal.mul!(you: Decimal) -> Decimal
   var pa = me.decode()
   var pb = you.decode()
   if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
@@ -693,7 +693,7 @@ routine Decimal.$mul!(you: Decimal) -> Decimal
   return __dchk1
 
 ### Returns me + you (align to smaller exponent, guard 76, U512 combine).
-routine Decimal.$add!(you: Decimal) -> Decimal
+routine Decimal.add!(you: Decimal) -> Decimal
   var pa = me.decode()
   var pb = you.decode()
   if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
@@ -755,14 +755,14 @@ routine Decimal.$add!(you: Decimal) -> Decimal
 routine decimalfixed_neg(a: Decimal) -> Decimal
   return Decimal.from_bits(bits: bit_xor[U256](a: a.to_bits(), b: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 255_s64))))
 
-### Returns me - you. Failable like `$add!`/`$mul!`/`$truediv!`: subtraction can overflow the
-### `Decimal` range (e.g. MAX - (-MAX)), so the throw propagates through `$add!` (the `-` operator
-### crashes on it in non-failable context; `try_$sub!` recovers).
-routine Decimal.$sub!(you: Decimal) -> Decimal
-  return me.$add!(you: decimalfixed_neg(a: you))
+### Returns me - you. Failable like `add!`/`mul!`/`truediv!`: subtraction can overflow the
+### `Decimal` range (e.g. MAX - (-MAX)), so the throw propagates through `add!` (the `-` operator
+### crashes on it in non-failable context; `try_sub!` recovers).
+routine Decimal.sub!(you: Decimal) -> Decimal
+  return me.add(you: decimalfixed_neg(a: you))
 
 ### Returns me / you (scale numerator ~74 digits past, divide, sticky, round).
-routine Decimal.$truediv!(you: Decimal) -> Decimal
+routine Decimal.truediv!(you: Decimal) -> Decimal
   var pa = me.decode()
   var pb = you.decode()
   if int_ne[U64](a: pa.special, b: 0_u64) or int_ne[U64](a: pb.special, b: 0_u64)
@@ -815,7 +815,7 @@ routine Decimal.$truediv!(you: Decimal) -> Decimal
   return __dchk6
 
 # ============================================================================
-# Formatting — decimal text ($represent), decNumber decToString style
+# Formatting — decimal text (represent), decNumber decToString style
 # ============================================================================
 
 ### Full decimal256 text — up to 70 digits (decNumber decToString style: plain when
@@ -870,9 +870,9 @@ routine d256b_represent(p: DecimalParts) -> Text
   return if sign then "-" + out else out
 
 ### Returns the decimal text of this value (full 70-digit formatter).
-routine Decimal.$represent() -> Text
+routine Decimal.represent() -> Text
   return d256b_represent(p: me.decode())
 
 ### Returns a debug rendering of this value, e.g. `Decimal(3.5)`. Mirrors the D32/D64/D128 surface.
-routine Decimal.$diagnose() -> Text
-  return "Decimal(" + me.$represent() + ")"
+routine Decimal.diagnose() -> Text
+  return "Decimal(" + me.represent() + ")"

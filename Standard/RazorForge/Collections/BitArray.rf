@@ -23,11 +23,11 @@ import BuilderService
 ### **Complexity**
 ### | Operation | Time |
 ### |---|---|
-### | `$getitem!` | O(1) |
+### | `getitem!` | O(1) |
 ### | `with_set` / `with_flipped` | O(1) — returns a new copy |
 ### | `count_ones` / `count_zeros` | O(N) |
 ### | `any` / `all` / `none` | O(N) |
-### | `$contains` | O(N) |
+### | `contains` | O(N) |
 ###
 ### :typeparam N: The compile-time bit count, supplied as a `U64` literal.
 ### :see: {BitList} for a heap-backed growable bit sequence.
@@ -35,7 +35,7 @@ import BuilderService
 @llvm("[{(N+7)//8} x i8]")
 record BitArray[N] obeys Comparable, Iterable[Bool], MutableIndexable[Bool]
 needs N is U64
-relates BitArrayIterator[N] as Iter
+relates BitArrayEmittable[N] as Iter
   pass
 
 ### Reads the byte at `index` from a `BitArray[N]`'s packed storage.
@@ -79,7 +79,7 @@ routine BitArray[N].is_empty() -> Bool
 ### :returns: `true` if the bit at `index` is set; `false` if it is clear.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @readonly
-routine BitArray[N].$getitem!(index: U64) -> Bool
+routine BitArray[N].getitem!(index: U64) -> Bool
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: N)
   # Access bit at index within packed bytes
@@ -87,7 +87,7 @@ routine BitArray[N].$getitem!(index: U64) -> Bool
   var bit_off = U8(index % 8u64)
   var byte_val = 0u8
   # Read the packed byte in place through the storage pointer — no whole-array copy.
-  danger!
+  danger
     byte_val = load_element_ref[BitArray[N], U8](me.hijack(), byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
@@ -95,14 +95,14 @@ routine BitArray[N].$getitem!(index: U64) -> Bool
 ### :param index: The zero-based bit position to update.
 ### :param value: The new bit value.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
-routine BitArray[N].$setitem!(index: U64, value: ?Bool)
+routine BitArray[N].setitem!(index: U64, value: Bool)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: N)
   var byte_idx = unsigned_div[U64](index, 8u64)
   var bit_off = U8(unsigned_rem[U64](index, 8u64))
-  # `me` is by reference (struct-record `$setitem!`): read-modify-write the single packed byte in
+  # `me` is by reference (struct-record `setitem!`): read-modify-write the single packed byte in
   # place through `me.hijack()` so the bit change reaches the caller's storage — no whole-array copy.
-  danger!
+  danger
     var byte_val = load_element_ref[BitArray[N], U8](me.hijack(), byte_idx)
     if value
       store_element_ref[BitArray[N], U8](me.hijack(), byte_idx, byte_val | (1u8 << bit_off))
@@ -204,7 +204,7 @@ routine BitArray[N].none() -> Bool
 ### :param value: The bit value to search for.
 ### :returns: `true` if at least one stored bit matches `value`.
 @readonly
-routine BitArray[N].$contains(value: Bool) -> Bool
+routine BitArray[N].contains(value: Bool) -> Bool
   if value
     return me.any()
   return not me.all()
@@ -214,25 +214,25 @@ routine BitArray[N].$contains(value: Bool) -> Bool
 # ============================================================================
 
 @readonly
-routine BitArray[N].$represent() -> Text
+routine BitArray[N].represent() -> Text
   var result = "BitArray(["
   var i = 0u64
   while i < N
     if i > 0u64
       result = result + ", "
-    result = result + me[i].$represent()
+    result = result + me[i].represent()
     i = i +% 1u64
   result = result + "])"
   return result
 
 @readonly
-routine BitArray[N].$diagnose() -> Text
+routine BitArray[N].diagnose() -> Text
   var result = me.full_type_name() + "(["
   var i = 0u64
   while i < N
     if i > 0u64
       result = result + ", "
-    result = result + me[i].$represent()
+    result = result + me[i].represent()
     i = i +% 1u64
   result = result + "])"
   return result
@@ -244,7 +244,7 @@ routine BitArray[N].$diagnose() -> Text
 ### Walks the bits of a fixed-size `BitArray[N]` from index 0 to N - 1.
 ### Because `BitArray` is a record type, the iterator holds its own copy of the packed bits.
 ### :typeparam N: The compile-time bit count.
-entity BitArrayIterator[N] obeys Iterator[Bool]
+entity BitArrayEmittable[N] obeys Emittable[Bool]
 needs N is U64
   ### Stores the bit array being iterated.
   bits: BitArray[N]
@@ -252,13 +252,13 @@ needs N is U64
   index: U64
 
 @readonly
-routine BitArray[N].$iter() -> ?BitArrayIterator[N]
-  return BitArrayIterator[N](bits: me, index: 0u64)
+routine BitArray[N].iter() -> BitArrayEmittable[N]
+  return BitArrayEmittable[N](bits: me, index: 0u64)
 
 ### Returns the next bit from the iterator in ascending index order.
 ### :returns: The bit at the current index.
 ### :absent: All `N` bits have been yielded.
-routine BitArrayIterator[N].$next!() -> ?Bool
+routine BitArrayEmittable[N].emit!() -> Bool
   if me.index >= N
     absent
   var value = me.bits[me.index]
@@ -275,7 +275,7 @@ routine BitArrayIterator[N].$next!() -> ?Bool
 ### :note: Bit-by-bit comparison is required because the trailing bits of the
 ###        last byte are unspecified — a raw `memcmp` would compare padding.
 @readonly
-routine BitArray[N].$eq(you: BitArray[N]) -> Bool
+routine BitArray[N].eq(you: BitArray[N]) -> Bool
   for i in 0u64 til N
     if me[i] != you[i]
       return false
@@ -286,7 +286,7 @@ routine BitArray[N].$eq(you: BitArray[N]) -> Bool
 ### :param you: The other bit array to compare against.
 ### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
 @readonly
-routine BitArray[N].$cmp(you: BitArray[N]) -> ComparisonSign
+routine BitArray[N].cmp(you: BitArray[N]) -> ComparisonSign
   for i in 0u64 til N
     var a = me[i]
     var b = you[i]

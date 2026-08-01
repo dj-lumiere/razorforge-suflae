@@ -48,7 +48,7 @@ routine Range[T].is_ascending() -> Bool
 ### This is the increment used for each successive value.
 ### :returns: The resulting `T` value.
 @readonly
-routine Range[T].get_step() -> ?T
+routine Range[T].get_step() -> T
   return me.step
 
 ### Returns true if this value is empty.
@@ -66,10 +66,10 @@ routine Range[T].is_empty() -> Bool
 # Iterable protocol support
 # ============================================================================
 
-### Represents the `RangeEmitter` entity.
-### `RangeEmitter[T]` holds the mutable iteration state for a `Range[T]`.
+### Represents the `RangeEmittable` entity.
+### `RangeEmittable[T]` holds the mutable iteration state for a `Range[T]`.
 ### :typeparam T: The type argument bound to `T`.
-entity RangeEmitter[T] needs T obeys Comparable, Numeric
+entity RangeEmittable[T] needs T obeys Comparable, Numeric
   ### Stores the next value to yield.
   current: T
   ### Stores the terminating bound.
@@ -85,10 +85,10 @@ entity RangeEmitter[T] needs T obeys Comparable, Numeric
 
 ### Creates an iterator for this value.
 ### The emitter starts at `me.start`.
-### :returns: The resulting `RangeEmitter[T]` value.
+### :returns: The resulting `RangeEmittable[T]` value.
 @readonly
-routine Range[T].$iter() -> ?RangeEmitter[T]
-  return RangeEmitter[T](
+routine Range[T].iter() -> RangeEmittable[T]
+  return RangeEmittable[T](
     current: me.start,
     end: me.end,
     step: me.step,
@@ -101,7 +101,7 @@ routine Range[T].$iter() -> ?RangeEmitter[T]
 ### Each successful call yields the current value and advances by `step`.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
-routine RangeEmitter[T].$next!() -> ?T
+routine RangeEmittable[T].emit!() -> T
   if me.done
     absent
 

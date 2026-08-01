@@ -23,3 +23,13 @@ routine ReadOnly.add_claimer()
 ### No-op: `ReadOnly` grants no claimer. Present only to complete the {LockPolicy} interface.
 routine ReadOnly.remove_claimer()
   return
+
+### Always succeeds immediately — immutable data is always readable, no lock to contend.
+### :returns: always `true`.
+routine ReadOnly.try_add_inspector() -> Bool
+  return true
+
+### Always succeeds — present only to complete the interface (`ReadOnly` has no real claimer).
+### :returns: always `true`.
+routine ReadOnly.try_add_claimer() -> Bool
+  return true

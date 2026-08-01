@@ -1,0 +1,4 @@
+building self-cycle
+collecting
+beacon 7 destroyed
+DONE

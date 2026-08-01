@@ -24,13 +24,13 @@ routine start()
   coros.add_last(value: compute(x: 30))
   coros.add_last(value: compute(x: 5))
   coros.add_last(value: compute(x: 15))
-  var rs = coros.gather!()
+  var rs = coros.gather()
   show(f"coros => {rs[0]} {rs[1]} {rs[2]}")
 
   # Mixed coroutine + thread set: both run at once, gathered in order.
   var mixed = List[Agent[S64]]()
   mixed.add_last(value: compute(x: 10))
   mixed.add_last(value: twork(x: 20))
-  var rs2 = mixed.gather!()
+  var rs2 = mixed.gather()
   show(f"mixed => {rs2[0]} {rs2[1]}")
   return

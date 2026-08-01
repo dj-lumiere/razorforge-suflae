@@ -3,18 +3,18 @@ module Core
 ### Represents the protocol implemented by closed choice types.
 ### `ChoiceType` gives enum-like types a shared reflection and conversion
 ### surface, including stable case enumeration and integral identities.
-protocol ChoiceType obeys Diagnosable, FastHashable, Hashable, Assignable
+protocol ChoiceType obeys Diagnosable, FastHashable, Hashable, Copyable
   ### Converts a choice case to its signed integral representation.
   ### The numeric value follows the case definition order or explicit case
   ### values established by the choice declaration.
   ### :param from: The choice case to convert.
   ### :returns: The resulting `S64` value.
   @[readonly, innate]
-  routine S64.$create(from: Me) -> S64
+  routine S64(from: Me) -> S64
 
   ### Returns every declared case for this choice type.
   ### Cases are returned in declaration order and are suitable for iteration,
   ### diagnostics, and user-defined lookup tables.
   ### :returns: The resulting `List[Me]` value.
   @[readonly, innate]
-  routine Me.all_cases() -> ?List[Me]
+  routine Me.all_cases() -> List[Me]

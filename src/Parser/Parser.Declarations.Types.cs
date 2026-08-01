@@ -686,7 +686,7 @@ public partial class Parser
                 methodIsCommon = true;
             }
 
-            // Optional `dangerous` qualifier — marks the protocol method as requiring a `danger!`
+            // Optional `dangerous` qualifier — marks the protocol method as requiring a `danger`
             // block at the call site (mirrors the impl-side `dangerous routine` syntax).
             bool methodIsDangerous = false;
             if (Match(type: TokenType.Dangerous))
@@ -724,7 +724,13 @@ public partial class Parser
             // Parse routine signature
             if (Match(type: TokenType.Routine))
             {
-                var methodNameSb = new System.Text.StringBuilder(ConsumeIdentifier(errorMessage: "Expected member routine name"));
+                _routineNameWired = false;
+                if (Match(type: TokenType.Dollar))
+                {
+                    _routineNameWired = true;
+                }
+                var methodNameSb = new System.Text.StringBuilder(
+                    ConsumeIdentifier(errorMessage: "Expected member routine name"));
 
                 // Handle Me.methodName syntax for instance member routines
                 // Protocol member routines can be: "routine Me.methodName()" or "routine methodName()"
@@ -736,11 +742,9 @@ public partial class Parser
 
                 string methodName = methodNameSb.ToString();
 
-                // Support failable member routines: "routine!"
-                if (Match(type: TokenType.Bang))
-                {
-                    methodName += "!";
-                }
+                // Support failable member routines: "routine!". The `!` is a STRUCTURED flag on
+                // the RoutineSignature — the name stays bare.
+                bool methodIsFailable = Match(type: TokenType.Bang);
 
                 // Parameters
                 Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after member routine name");
@@ -809,7 +813,10 @@ public partial class Parser
                     Annotations: methodAnnotations.Count > 0
                         ? methodAnnotations
                         : null,
-                    Location: GetLocation()));
+                    Location: GetLocation())
+                {
+                    IsFailable = methodIsFailable
+                });
                 Match(type: TokenType.Newline);
             }
             else
@@ -971,7 +978,7 @@ public partial class Parser
     /// Syntax: <c>preset name: Type = value</c>
     /// </summary>
     /// <returns>A <see cref="PresetDeclaration"/> AST node.</returns>
-    private PresetDeclaration ParsePresetDeclaration()
+    private PresetDeclaration ParsePresetDeclaration(bool isSecret = false)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -986,7 +993,7 @@ public partial class Parser
         return new PresetDeclaration(Name: name,
             Type: type,
             Value: value,
-            Location: location);
+            Location: location) { IsSecret = isSecret };
     }
 
 }

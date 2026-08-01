@@ -13,7 +13,7 @@ namespace Compiler.Postprocessing.Passes;
 /// RAII teardown for owned <b>rvalue temporaries</b> — the heap-owning intermediate values that
 /// <see cref="ScopeTeardownLoweringPass"/> cannot reach because it only tracks <i>named</i> bindings.
 ///
-/// <para>Consider <c>x.$represent().count()</c>: <c>x.$represent()</c> mints a fresh owned
+/// <para>Consider <c>x.represent().count()</c>: <c>x.represent()</c> mints a fresh owned
 /// <c>Text</c> (an RC-record holding a heap buffer), <c>.count()</c> borrows it, and the <c>Text</c>
 /// is then dropped on the floor — never destroyed. Inside a hot loop that leaks one buffer per
 /// iteration. This pass spills such a temporary into a synthetic block-scoped local and emits its
@@ -21,7 +21,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para><b>Why a separate, late pass.</b> <see cref="ScopeTeardownLoweringPass"/> runs before
 /// reachability and before user-code Phase 7 lowering — at that point a <c>var u = when … =>
-/// x.$represent().count()</c> is still a <c>when</c>-<i>expression</i>, so the producing call is
+/// x.represent().count()</c> is still a <c>when</c>-<i>expression</i>, so the producing call is
 /// buried in conditional arms with no statement to attach teardown to. This pass runs AFTER Phase 7
 /// (when→if already lowered, so arms are real blocks) and emits its own <c>$destroy</c> calls;
 /// codegen's emit-on-demand picks up the referenced concrete <c>$destroy</c>.</para>
@@ -30,14 +30,14 @@ namespace Compiler.Postprocessing.Passes;
 /// Exactly one shape: the <b>receiver of a method call where (a) the receiver is a fresh RC-record
 /// producer and (b) the call result is not a borrow/view wrapper</b> (so it cannot alias the
 /// receiver). <c>retain</c>/<c>track</c> verbs (which consume the receiver) are excluded. This covers
-/// both <c>x.$represent().count()</c> (scalar result) and the intermediate <c>Text</c> of a
+/// both <c>x.represent().count()</c> (scalar result) and the intermediate <c>Text</c> of a
 /// concatenation chain <c>a + "-" + b</c> (each <c>$add</c> result is the receiver of the next).</para>
 ///
 /// <para><b>Why this is safe.</b> An RC-record <c>$destroy</c> releases a <i>refcounted</i>
 /// controller, so a balanced release is harmless. A method's record/RC-record return is always
 /// <i>independent</i> of the receiver — freshly allocated (string concat builds a new buffer) or a
 /// retaining +1 copy (<see cref="ScopeTeardownLoweringPass"/>'s sibling RecordCopyLoweringPass injects
-/// <c>$copy</c> on <c>me</c>/lvalue returns) — so freeing the receiver leaves the result valid. The
+/// <c>$store</c> on <c>me</c>/lvalue returns) — so freeing the receiver leaves the result valid. The
 /// only alias hazard is a borrow/view result pointing into the receiver, which the guard excludes.</para>
 ///
 /// <para>Crucially NOT spilled (each a real double-free / leak-vs-crash hazard): call
@@ -49,7 +49,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para><b>Why a separate, late pass.</b> <see cref="ScopeTeardownLoweringPass"/> runs before
 /// reachability and before user-code Phase 7 lowering — at that point a <c>var u = when … =>
-/// x.$represent().count()</c> is still a <c>when</c>-expression with the producing call buried in
+/// x.represent().count()</c> is still a <c>when</c>-expression with the producing call buried in
 /// conditional arms. This pass runs AFTER Phase 7 (when→if lowered, arms are real blocks) and emits
 /// its own <c>$destroy</c> calls; codegen's emit-on-demand resolves the concrete <c>$destroy</c>.</para>
 ///
@@ -66,21 +66,19 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// <summary>The reference primitives whose result is a borrow of a referent owned elsewhere —
     /// a temporary produced by one of these owns nothing, so it must not be torn down. Mirrors
     /// <see cref="ScopeTeardownLoweringPass"/>'s view-verb exclusion.</summary>
-    private static readonly HashSet<string> ViewVerbs =
-        new(comparer: System.StringComparer.Ordinal) { "as_entity", "$refer", "$control" };
+    private static readonly IReadOnlySet<string> ViewVerbs = RuntimeContract.ViewVerbs;
 
     /// <summary>Method verbs that consume their receiver (ownership moves into the RC controller),
     /// so the receiver must NOT be torn down here.</summary>
-    private static readonly HashSet<string> ConsumingReceiverVerbs =
-        new(comparer: System.StringComparer.Ordinal) { "retain", "track" };
+    private static readonly IReadOnlySet<string> ConsumingReceiverVerbs =
+        RuntimeContract.ConsumingReceiverVerbs;
 
     /// <summary>Borrow/view wrapper names whose value points INTO another value, so a method
     /// returning one may alias its receiver — freeing the receiver would then dangle it. The owning
     /// RC wrappers (Retained/Tracked/Shared/Watched) are NOT here: they carry a refcounted controller,
     /// so an aliasing owned result is balanced by refcount.</summary>
-    private static readonly HashSet<string> BorrowWrapperNames =
-        new(comparer: System.StringComparer.Ordinal)
-            { "Viewing", "Modifying", "Inspecting", "Claiming", "Hijacked" };
+    private static readonly IReadOnlySet<string> BorrowWrapperNames =
+        RuntimeContract.ReferringWrapperNAmes;
 
     private sealed record Spill(string Name, TypeInfo Type, RoutineInfo Destroy, Expression Init);
 
@@ -173,7 +171,13 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 return d with { Body = (BlockStatement)TransformStatement(d.Body) };
 
             case UsingStatement u:
-                return u with { Body = TransformStatement(u.Body) };
+                return u with
+                {
+                    Body = TransformStatement(u.Body),
+                    FallbackBody = u.FallbackBody != null
+                        ? TransformStatement(u.FallbackBody)
+                        : null
+                };
 
             case WhenStatement whenStmt:
             {
@@ -240,7 +244,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// position (var init / assignment RHS / return value), so its top-level producer is left intact.
     /// </summary>
     private Statement SpillAround(Statement owner, Expression root,
-        System.Func<Expression, Statement> rebuildWithCondition, bool topOwning = true)
+        Func<Expression, Statement> rebuildWithCondition, bool topOwning = true)
     {
         var spills = new List<Spill>();
         Expression rewritten = Visit(root, objectPos: !topOwning, spills);
@@ -264,14 +268,14 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// record), the overwrite must first release the old value or it leaks — the dominant cost in
     /// string-building loops (<c>s = s + part</c>). The new RHS is already an independent owned value
     /// (RecordCopyLoweringPass, which has already run, turned any lvalue source into a fresh
-    /// <c>$copy</c>; computed results are fresh), so the rewrite is:
-    /// <code>var __rv = RHS ; target.$destroy() ; target = __rv</code>
+    /// <c>$store</c>; computed results are fresh), so the rewrite is:
+    /// <code>var __rv = RHS ; target.destroy() ; target = __rv</code>
     /// computing RHS (which may read the old target) BEFORE the destroy. For other targets the old
     /// value is released elsewhere (entities by ScopeTeardownLoweringPass; HasRCFields / RC-wrapper
     /// records by codegen's EmitVariableAssignment; scalars need nothing), so we only spill receivers.
     /// </summary>
     private Statement LowerReassign(Statement owner, Expression rhs, IdentifierExpression target,
-        System.Func<Expression, Statement> rebuild)
+        Func<Expression, Statement> rebuild)
     {
         if (!IsManagedLeafReassignTarget(target.ResolvedType))
             return SpillAround(owner, rhs, rebuildWithCondition: rebuild);
@@ -301,11 +305,11 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
 
     /// <summary>RC-wrapper base names whose reassignment release is handled by codegen's
     /// EmitVariableAssignment (EmitRetainedVarRelease) — excluded so we never double-release.</summary>
-    private static readonly HashSet<string> RcWrapperBaseNames =
-        new(comparer: System.StringComparer.Ordinal) { "Retained", "Tracked", "Shared", "Watched" };
+    private static readonly IReadOnlySet<string> RcWrapperBaseNames =
+        RuntimeContract.RcWrapperBaseNames;
 
     /// <summary>True for a managed-leaf record target whose old value codegen does NOT release on
-    /// reassignment: a record with a retaining <c>$copy</c> (Text/Decimal, or one carrying such a
+    /// reassignment: a record with a retaining <c>$store</c> (Text/Decimal, or one carrying such a
     /// field) that is neither a <c>HasRCFields</c> record nor an RC wrapper (both released by
     /// codegen). Scalars (no retaining copy) and entities (handled by ScopeTeardownLoweringPass) are
     /// excluded.</summary>
@@ -337,7 +341,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // teardown is decided HERE, where the enclosing call's result type is known, so the
                 // aliasing guard can apply. Nested receivers (a.b().c()) are handled by this same
                 // branch one level down, each guarded by its own call's result type.
-                bool receiverConsumed = ConsumingReceiverVerbs.Contains(m.PropertyName);
+                bool receiverConsumed = ConsumingReceiverVerbs.Contains(m.MemberName);
                 Expression newRecv = Visit(m.Object, objectPos: false, spills);
 
                 // Spill the receiver iff it is a fresh heap-owning RC-record producer, the verb does
@@ -345,7 +349,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // cannot be a borrow/view aliasing it. An RC-record receiver is safe to free even when
                 // the result is another owned value: a method's RC-record/record return is always
                 // independent of the receiver — fresh (e.g. string concat allocates a new buffer) or a
-                // retaining +1 copy (RecordCopyLoweringPass injects $copy on lvalue/`me` returns) — so
+                // retaining +1 copy (RecordCopyLoweringPass injects $store on lvalue/`me` returns) — so
                 // the controller refcount stays balanced. The only hazard is a borrow/view result
                 // (Viewing/Modifying/…) pointing into the receiver, which the guard excludes.
                 if (!receiverConsumed && IsSpillableProducer(newRecv)
@@ -436,7 +440,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     {
         if (e is not (CallExpression or CreatorExpression))
             return false;
-        if (e is CallExpression { Callee: MemberExpression vm } && ViewVerbs.Contains(vm.PropertyName))
+        if (e is CallExpression { Callee: MemberExpression vm } && ViewVerbs.Contains(vm.MemberName))
             return false;
         TypeInfo? t = e.ResolvedType;
         if (t is null)
@@ -444,7 +448,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(t);
         if (lc.IsBorrow || lc.Destroy is null)
             return false;
-        // Only HEAP-owning RECORDS are spilled: a managed leaf with a retaining $copy (Text/Decimal)
+        // Only HEAP-owning RECORDS are spilled: a managed leaf with a retaining $store (Text/Decimal)
         // or a record carrying RC-wrapper fields. Their $destroy releases a refcounted controller, so
         // an extra balanced release is always safe. Entities are deliberately excluded for now (their
         // single-owner lifetime and fluent `me` returns are trickier to prove alias-free); plain value
@@ -473,7 +477,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         SourceLocation loc)
     {
         var ident = new IdentifierExpression(Name: name, Location: loc) { ResolvedType = type };
-        var callee = new MemberExpression(Object: ident, PropertyName: "$destroy", Location: loc)
+        var callee = new MemberExpression(Object: ident, MemberName: "destroy", Location: loc)
             { ResolvedType = _blankType };
         var call = new CallExpression(Callee: callee, Arguments: [], Location: loc)
         {

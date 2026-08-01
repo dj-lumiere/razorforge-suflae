@@ -10,4 +10,4 @@ protocol Addable
   ### :param you: The other value to add.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$add!(you: Me) -> ?Me
+  routine Me.add!(you: Me) -> Me

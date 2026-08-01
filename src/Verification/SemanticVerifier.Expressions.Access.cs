@@ -13,7 +13,7 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
-    private const string GetItemMethodName = "$getitem";
+    private const string GetItemMethodName = "getitem";
 
     private static bool TryGetTransparentProtocolTarget(TypeSymbol type, out TypeSymbol targetType)
     {
@@ -37,7 +37,7 @@ public sealed partial class SemanticVerifier
     {
         foreach (ProtocolMethodInfo m in proto.Methods)
         {
-            if (m.Name != "$refer" && m.Name != "$control") return false;
+            if (m.Name != "refer" && m.Name != "control") return false;
         }
         return true;
     }
@@ -45,12 +45,41 @@ public sealed partial class SemanticVerifier
     private static bool IsReadOnlyTransparentProtocol(TypeSymbol type)
     {
         return type is ProtocolTypeInfo proto &&
-               GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name) == "Referring";
+               (proto.GenericDefinition ?? proto).BareName == Compiler.Resolution.RuntimeContract.Referring;
     }
 
     private TypeSymbol AnalyzeMemberExpression(MemberExpression member)
     {
         TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+        // The receiver already failed to resolve (its own error was reported). A follow-on
+        // "Type '<error>' does not have a member ..." is pure cascade noise — bail quietly.
+        if (objectType is ErrorTypeInfo)
+        {
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Suflae flow typing: dereferencing (member access / method call) a possibly-none entity
+        // reference is rejected until it has been null-checked. Covers both a nullable local/param
+        // (`x.field` on an unchecked `x: E?`) and a nullable field-chain (`a.b.c` where `b: E?`) — a
+        // field read is never flow-narrowed (Kotlin doesn't smart-cast mutable fields either), so it
+        // must always be bound to a local and checked there.
+        if (_registry.Language == Language.Suflae && IsNullableEntityRead(expr: member.Object))
+        {
+            string receiver = member.Object is IdentifierExpression idRecv
+                ? $"'{idRecv.Name}'"
+                : member.Object is MemberExpression mRecv
+                    ? $"'{mRecv.MemberName}'"
+                    : "the value";
+            string hint = member.Object is IdentifierExpression idHint
+                ? $"Null-check it first (e.g. 'if {idHint.Name} isnot None' or 'if {idHint.Name} is None: return')."
+                : "Bind it to a local and null-check that local first (e.g. 'var v = …' then 'if v isnot None').";
+            ReportError(code: SemanticDiagnosticCode.NullableEntityDeref,
+                message:
+                $"Cannot access member '{member.MemberName}' on possibly-none entity {receiver}. {hint}",
+                location: member.Location);
+        }
+
         bool hasTransparentTarget = TryGetTransparentProtocolTarget(type: objectType,
             targetType: out TypeSymbol lookupType);
 
@@ -58,7 +87,7 @@ public sealed partial class SemanticVerifier
         if (lookupType is RecordTypeInfo record)
         {
             MemberVariableInfo? memberVariable =
-                record.LookupMemberVariable(memberVariableName: member.PropertyName);
+                record.LookupMemberVariable(memberVariableName: member.MemberName);
             if (memberVariable != null)
             {
                 // Validate member variable access (read access)
@@ -73,7 +102,7 @@ public sealed partial class SemanticVerifier
             {
                 MemberVariableInfo? innerMemberVariable =
                     LookupMemberVariableOnWrapperInnerType(wrapperType: lookupType,
-                        memberVariableName: member.PropertyName);
+                        memberVariableName: member.MemberName);
                 if (innerMemberVariable != null)
                 {
                     ValidateMemberVariableAccess(memberVariable: innerMemberVariable,
@@ -84,9 +113,9 @@ public sealed partial class SemanticVerifier
 
                 RoutineInfo? innerMethod =
                     TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                        methodName: member.PropertyName, isFailable: false)
+                        methodName: member.MemberName, isFailable: false)
                     ?? _registry.LookupMethod(type: lookupType,
-                        methodName: member.PropertyName);
+                        methodName: member.MemberName);
                 if (innerMethod != null)
                 {
                     ValidateReadOnlyWrapperMethodAccess(wrapperType: lookupType,
@@ -101,7 +130,7 @@ public sealed partial class SemanticVerifier
         else if (lookupType is TupleTypeInfo tupleType)
         {
             MemberVariableInfo? memberVariable =
-                tupleType.GetField(memberVariableName: member.PropertyName);
+                tupleType.GetField(memberVariableName: member.MemberName);
             if (memberVariable != null)
             {
                 return memberVariable.Type;
@@ -110,7 +139,7 @@ public sealed partial class SemanticVerifier
         else if (lookupType is EntityTypeInfo entity)
         {
             MemberVariableInfo? memberVariable =
-                entity.LookupMemberVariable(memberVariableName: member.PropertyName);
+                entity.LookupMemberVariable(memberVariableName: member.MemberName);
             if (memberVariable != null)
             {
                 // Validate member variable access (read access)
@@ -123,7 +152,7 @@ public sealed partial class SemanticVerifier
         else if (lookupType is CrashableTypeInfo crashable)
         {
             MemberVariableInfo? memberVariable =
-                crashable.LookupMemberVariable(memberVariableName: member.PropertyName);
+                crashable.LookupMemberVariable(memberVariableName: member.MemberName);
             if (memberVariable != null)
             {
                 ValidateMemberVariableAccess(memberVariable: memberVariable,
@@ -138,7 +167,7 @@ public sealed partial class SemanticVerifier
             // Try to forward member variable access to the inner type
             MemberVariableInfo? innerMemberVariable =
                 LookupMemberVariableOnWrapperInnerType(wrapperType: lookupType,
-                    memberVariableName: member.PropertyName);
+                    memberVariableName: member.MemberName);
             if (innerMemberVariable != null)
             {
                 // Validate member variable access on the inner type
@@ -151,8 +180,8 @@ public sealed partial class SemanticVerifier
             // Try to forward method access to the inner type via Phase D synthesized forwarders
             RoutineInfo? innerMethod =
                 TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                    methodName: member.PropertyName, isFailable: false)
-                ?? _registry.LookupMethod(type: lookupType, methodName: member.PropertyName);
+                    methodName: member.MemberName, isFailable: false)
+                ?? _registry.LookupMethod(type: lookupType, methodName: member.MemberName);
             if (innerMethod != null)
             {
                 // Validate read-only wrapper restrictions
@@ -171,7 +200,7 @@ public sealed partial class SemanticVerifier
         if (lookupType is ChoiceTypeInfo choice)
         {
             ChoiceCaseInfo? caseInfo =
-                choice.Cases.FirstOrDefault(predicate: c => c.Name == member.PropertyName);
+                choice.Cases.FirstOrDefault(predicate: c => c.Name == member.MemberName);
             if (caseInfo != null)
             {
                 return choice; // Color.RED has type Color
@@ -184,7 +213,7 @@ public sealed partial class SemanticVerifier
         if (lookupType is FlagsTypeInfo flags)
         {
             FlagsMemberInfo? memberInfo =
-                flags.Members.FirstOrDefault(predicate: m => m.Name == member.PropertyName);
+                flags.Members.FirstOrDefault(predicate: m => m.Name == member.MemberName);
             if (memberInfo != null)
             {
                 return flags; // Permissions.READ has type Permissions
@@ -193,12 +222,9 @@ public sealed partial class SemanticVerifier
             // Fall through to method lookup — flags types can have builder service methods
         }
 
-        // Could be a method reference - use LookupMethod which handles generic resolutions
-        // Strip '!' suffix from failable method calls (e.g., invalidate!() -> invalidate)
-        // The parser stores '!' in PropertyName, but routine declarations strip it (IsFailable = true)
-        string lookupName = member.PropertyName.EndsWith(value: '!')
-            ? member.PropertyName[..^1]
-            : member.PropertyName;
+        // Could be a member-routine reference - use LookupMethod which handles generic resolutions.
+        // MemberName is always bare; failability is carried structurally in member.IsFailable.
+        string lookupName = member.MemberName;
         RoutineInfo? method = _registry.LookupMethod(type: lookupType, methodName: lookupName);
         if (method != null)
         {
@@ -211,7 +237,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.MemberNotFound,
                 message:
                 $"'{lookupName}' is a method on '{objectType.Name}', not a member variable. " +
-                $"Bare `.{lookupName}` reads a member variable; call the method as `{member.PropertyName}()`.",
+                $"Bare `.{lookupName}` reads a member variable; call the method as `{member.MemberName}()`.",
                 location: member.Location);
             return ErrorTypeInfo.Instance;
         }
@@ -220,7 +246,7 @@ public sealed partial class SemanticVerifier
         // Currently only Tuple[...] supports destructuring. Record breakdown is planned for the future.
         // When the element type is not a tuple, this means the user wrote `for (a, b) in non_tuple`.
         if (lookupType is not TupleTypeInfo &&
-            System.Text.RegularExpressions.Regex.IsMatch(input: member.PropertyName,
+            System.Text.RegularExpressions.Regex.IsMatch(input: member.MemberName,
                 pattern: @"^item\d+$"))
         {
             ReportError(code: SemanticDiagnosticCode.DestructuringArityMismatch,
@@ -232,7 +258,7 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.MemberNotFound,
                 message:
-                $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.{DidYouMean(target: member.PropertyName, candidates: MemberSuggestionCandidates(type: lookupType))}",
+                $"Type '{objectType.Name}' does not have a member '{member.MemberName}'.{DidYouMean(target: member.MemberName, candidates: MemberSuggestionCandidates(type: lookupType))}",
                 location: member.Location);
         }
         return ErrorTypeInfo.Instance;
@@ -246,7 +272,7 @@ public sealed partial class SemanticVerifier
         // Delegate to regular member analysis for the property lookup
         // The result is wrapped in Maybe[T] since the access may produce none
         var regularMember = new MemberExpression(Object: optMember.Object,
-            PropertyName: optMember.PropertyName,
+            MemberName: optMember.MemberName,
             Location: optMember.Location);
         TypeSymbol memberType = AnalyzeMemberExpression(member: regularMember);
 
@@ -347,7 +373,7 @@ public sealed partial class SemanticVerifier
         AnalyzeExpression(expression: index.Index, expectedType: indexExpectedType);
 
         // Failability propagation: the resolved $getitem may be `!` per its protocol contract
-        // (e.g. Indexable.$getitem!). A non-failable caller using `arr[i]` must propagate that.
+        // (e.g. Indexable.getitem!). A non-failable caller using `arr[i]` must propagate that.
         if (getItem is { IsFailable: true } && _currentRoutine != null)
         {
             _currentRoutine.HasFailableCalls = true;
@@ -930,7 +956,7 @@ public sealed partial class SemanticVerifier
         // Named-arg → $create routing: if the provided names don't match any field but DO match
         // a `$create(named:)` overload's parameter names, dispatch through that creator instead
         // of doing inline field-init. Lets `SegTreeLazy[..](size: 10, alg: alg)` route to
-        // `SegTreeLazy.$create(size:, alg:)` even though `size`/`alg` aren't field names.
+        // `SegTreeLazy.create(size:, alg:)` even though `size`/`alg` aren't field names.
         if (creator.MemberVariables.Count > 0 &&
             TryRouteCreatorToCreate(type: type, creator: creator))
         {
@@ -960,8 +986,8 @@ public sealed partial class SemanticVerifier
 
         // Name-based match against $create overloads. Iterate type's methods looking for ones
         // named `$create` whose parameter names match the provided set exactly. If multiple
-        // overloads share the same param names (e.g. `S64.$create(from: S8)` vs
-        // `S64.$create(from: ComparisonSign)`), bail out — disambiguation by arg type is the
+        // overloads share the same param names (e.g. `S64.create(from: S8)` vs
+        // `S64.create(from: ComparisonSign)`), bail out — disambiguation by arg type is the
         // job of the legacy path and we don't want to silently pick the wrong overload.
         // Use CollectMemberRoutineCandidates: it walks the generic definition for
         // generic resolutions (e.g. List[V] → List[T]) and runs SubstituteMethodForOwner
@@ -969,15 +995,15 @@ public sealed partial class SemanticVerifier
         var providedNameSet = new HashSet<string>(collection: providedNames);
         var nameMatches = new List<RoutineInfo>();
         var candidates = new List<RoutineInfo>();
-        _registry.CollectMemberRoutineCandidates(type: type, methodName: "$create",
+        _registry.CollectMemberRoutineCandidates(type: type, methodName: "create",
             candidates: candidates);
-        _registry.CollectMemberRoutineCandidates(type: type, methodName: "$create!",
+        _registry.CollectMemberRoutineCandidates(type: type, methodName: "create!",
             candidates: candidates);
         // Also pull the concrete type's own routines directly — CollectMemberRoutineCandidates
         // can miss a user-declared `$create` on an entity, while GetMethodsForType returns it
         // (this is how the entity `$destroy` resolves correctly elsewhere).
         candidates.AddRange(collection: _registry.GetMethodsForType(type: type)
-            .Where(predicate: m => m.Name is "$create" or "$create!"));
+            .Where(predicate: m => m.Name is "create" or "create!"));
         foreach (RoutineInfo m in candidates)
         {
             if (m.Parameters.Count != creator.MemberVariables.Count) continue;
@@ -994,7 +1020,7 @@ public sealed partial class SemanticVerifier
         // auto-synthesized all-args `$create` (AutoWiredRegistrationPass) whose only job is inline
         // field-init ("stuffing") — when that's the sole match we fall through to inline
         // construction below. A user `$create` with the same signature as the all-args creator
-        // (e.g. `Resource.$create(tag:)` where `tag` is the only field) is the real constructor
+        // (e.g. `Resource.create(tag:)` where `tag` is the only field) is the real constructor
         // and must be called so its body/side-effects run.
         // Dedupe by registry key — CollectMemberRoutineCandidates can surface the same overload
         // through more than one path (owner table + protocol/universal walk), which would make a
@@ -1010,7 +1036,7 @@ public sealed partial class SemanticVerifier
         // `$create(from: U128)`) is an ordinary conversion and must route to that overload;
         // otherwise codegen falls back to inline field-init and mis-lowers bit-carrier types like
         // F128 to a raw integer reinterpret of the IEEE storage.
-        bool insideOwnCreate = _currentRoutine is { Name: "$create" or "$create!" } currentCreate
+        bool insideOwnCreate = _currentRoutine is { Name: "create" or "create!" } currentCreate
             && currentCreate.OwnerType != null
             && (currentCreate.OwnerType.FullName == type.FullName
                 || currentCreate.OwnerType.Name == type.Name)

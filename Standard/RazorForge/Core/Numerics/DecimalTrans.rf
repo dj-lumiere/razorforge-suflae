@@ -12,7 +12,7 @@ module Core
 # The two radix adapters are the substance here:
 #   decimalfixed_to_f512 (dec->bin): load coeff exactly into the engine, multiply by 10^exp
 #     computed by binary-exponentiation of 10.0 in F512 (no big-int 10^k table).
-#   f512_to_decimala (bin->dec): scale |x|*10^(76-decexp) to ~10^77, extract the integer
+#   f512_to_decimala (bin->dec): scale |x|*10^(76-decexp) to ~10^77, peek the integer
 #     with round-half-even, hand the 77-digit coeff to Decimal's decfinA (rounds to 70).
 #
 # SUPPORTED RANGE: values whose magnitude keeps 10^(76-decexp) inside F512's range
@@ -26,7 +26,7 @@ module Core
 
 ### Builds the engine value of a non-negative U256 integer (exact; coeff <= 233 bits
 ### fits the 489-bit significand). value = mant * 2^(exp-509), mant MSB at bit 510.
-routine uf512_from_u256(c: U256) -> ?UnpackedFloat[U512, U1024, 512]
+routine uf512_from_u256(c: U256) -> UnpackedFloat[U512, U1024, 512]
   if int_eq[U256](a: c, b: 0)
     return UnpackedFloat[U512, U1024, 512].zero(sign: false)
   var cw = zero_extend[U256, U512](c)
@@ -73,7 +73,7 @@ routine f512_pow10(e: S64) -> F512
 ### dec -> bin (F512): D128 parts (sign, coeff, exp10) as an F512. The 489-bit significand
 ### makes `coeff x 10^exp` correctly-rounded for EVERY non-tie decimal->binary128 input —
 ### the ~2^-475 worst-case error (correctly-rounded f512_pow10 table for |exp|<=400, faithful
-### beyond) is far below the ~2^-239 hardest-case decimal->F128 separation. F128.$create! uses
+### beyond) is far below the ~2^-239 hardest-case decimal->F128 separation. F128.create! uses
 ### this as its provably-correct fast path; exact ties are resolved separately.
 routine d128parts_to_f512(p: D128Parts) -> F512
   var s = if p.sign then 1_u64 else 0_u64
@@ -85,7 +85,7 @@ routine d128parts_to_f512(p: D128Parts) -> F512
     return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](s), bits: U512.to_width(s: 511_s64)))
   var v = uf512_from_u256(c: zero_extend[U128, U256](p.coeff)).to_f512a() * f512_pow10(e: p.exp)
   if p.sign
-    return v.$neg()
+    return v.neg()
   return v
 
 ### dec -> bin: Decimal value as an F512 (coeff exact, scaled by 10^exp).
@@ -101,7 +101,7 @@ routine decimalfixed_to_f512(x: Decimal) -> F512
   var c = uf512_from_u256(c: p.coeff).to_f512a()
   var v = c * f512_pow10(e: p.exp)
   if p.sign
-    return v.$neg()
+    return v.neg()
   return v
 
 ### bin -> dec: F512 value as a Decimal, correctly rounded to <=70 digits, then
@@ -199,7 +199,7 @@ routine f512_atan_cr(x: F512) -> F512
     return F512.from_bits(bits: f512a_qnan())
   if x.is_infinite()
     if x.is_negative()
-      return atanc512_halfpi().$neg()
+      return atanc512_halfpi().neg()
     return atanc512_halfpi()
   if x.is_zero()
     return x
@@ -219,7 +219,7 @@ routine f512_atan_cr(x: F512) -> F512
   if invert
     r = atanc512_halfpi() - r
   if neg
-    return r.$neg()
+    return r.neg()
   return r
 
 ### Correctly-rounded-to-D256 binary512 asin, composed on the atan core:
@@ -234,7 +234,7 @@ routine f512_asin_cr(x: F512) -> F512
     return F512.from_bits(bits: f512a_qnan())
   if ax == one
     if x.is_negative()
-      return atanc512_halfpi().$neg()
+      return atanc512_halfpi().neg()
     return atanc512_halfpi()
   var t = x / (one - x * x).sqrt()
   return f512_atan_cr(x: t)
@@ -342,7 +342,7 @@ routine Decimal.exp10() -> Decimal
 
 ### me raised to the power `you`: exp(you * log(me)) via the Remez core.
 ### Crashes with NumericDomainError if me <= 0, NumericOverflowError on overflow.
-routine Decimal.$pow!(you: Decimal) -> Decimal
+routine Decimal.pow!(you: Decimal) -> Decimal
   if me.signbit() or me.is_zero()
     throw NumericDomainError(description: "domain error: no real result")
   return f512_to_decimala(x: f512_exp_cr(x: decimalfixed_to_f512(x: you) * decimalfixed_to_f512(x: me).log()))
@@ -451,7 +451,7 @@ routine f512_erf_cr(x: F512) -> F512
     return f512_intval(n: 1_s64)
   var thr = f512_intval(n: 31_s64) / f512_intval(n: 10_s64)
   var a = x.to_uf()
-  if x < thr.$neg()
+  if x < thr.neg()
     return UnpackedFloat[U512, U1024, 512].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f512a()
   if x < thr
     return a.erf_cf(levels: 120_s64).to_f512a()
@@ -468,7 +468,7 @@ routine f512_erfc_cr(x: F512) -> F512
     return f512_intval(n: 0_s64)
   var thr = f512_intval(n: 31_s64) / f512_intval(n: 10_s64)
   var a = x.to_uf()
-  if x < thr.$neg()
+  if x < thr.neg()
     return UnpackedFloat[U512, U1024, 512].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_f512a()
   if x < thr
     return UnpackedFloat[U512, U1024, 512].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 120_s64)).to_f512a()
@@ -640,7 +640,7 @@ routine Decimal.abs() -> Decimal
   return decimalfixed_of_parts(p: DecimalParts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
 
 ### Negation (flips the sign, including on NaN/inf/zero).
-routine Decimal.$neg() -> Decimal
+routine Decimal.neg() -> Decimal
   var p = me.decode()
   return decimalfixed_of_parts(p: DecimalParts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
@@ -808,7 +808,7 @@ routine Decimal.total_order(you: Decimal) -> Bool
   var pb = you.decode()
   if unsigned_ge[U64](a: pa.special, b: 2_u64) or unsigned_ge[U64](a: pb.special, b: 2_u64)
     return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
-  var c = me.$cmp(you: you)
+  var c = me.cmp(you: you)
   if c isnot SAME
     return c is ME_SMALL
   if pa.sign != pb.sign
@@ -853,7 +853,7 @@ routine Decimal.minimum(you: Decimal) -> Decimal
     return me
   if you.is_nan()
     return you
-  var c = me.$cmp(you: you)
+  var c = me.cmp(you: you)
   if c is ME_SMALL
     return me
   if c is ME_LARGE
@@ -870,7 +870,7 @@ routine Decimal.maximum(you: Decimal) -> Decimal
     return me
   if you.is_nan()
     return you
-  var c = me.$cmp(you: you)
+  var c = me.cmp(you: you)
   if c is ME_LARGE
     return me
   if c is ME_SMALL

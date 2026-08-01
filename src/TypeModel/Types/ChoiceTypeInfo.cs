@@ -19,12 +19,7 @@ public sealed class ChoiceTypeInfo : RecordTypeInfo
     /// <summary>The cases of this choice type.</summary>
     public List<ChoiceCaseInfo> Cases { get; init; } = [];
 
-    /// <summary>Protocols this choice implements (obeys).</summary>
-    public new List<TypeInfo> ImplementedProtocols
-    {
-        get => base.ImplementedProtocols;
-        init => base.ImplementedProtocols = value;
-    }
+    // ImplementedProtocols is inherited from RecordTypeInfo (no shadowing).
 
     /// <summary>Whether all cases have explicit values.</summary>
     public bool HasExplicitValues => Cases.All(predicate: c => c.Value.HasValue);

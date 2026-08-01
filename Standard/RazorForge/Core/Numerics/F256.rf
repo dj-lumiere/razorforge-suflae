@@ -23,7 +23,7 @@ module Core
 
 ### A software octuple-precision binary float backed by a raw 256-bit container.
 @llvm("i256")
-record F256 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible
+secret record F256 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible
   pass
 
 # ============================================================================
@@ -81,7 +81,7 @@ common routine F256.from_bits(bits: U256) -> F256
 ### F128 subnormals normalize into the vast F256 normal range. Mirrors the F64->F128 widening
 ### in `Numerics/F128.rf`. Used by decimal<-binary conversions, which round a binary value into
 ### a decimal via `f256_to_d128`.
-routine F256.$create(from: F128) -> F256
+routine F256(from: F128) -> F256
   var bits = from.to_bits()
   var sign = int_ne[U128](a: bit_and[U128](a: bits, b: shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))), b: 0)
   var e = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, U128.to_width(s: 112_s64)), b: zero_extend[U64, U128](0x7FFF_u64)))
@@ -185,7 +185,7 @@ routine F256.frac() -> F256
 # ============================================================================
 
 ### Returns the arithmetic negation (sign bit flipped).
-routine F256.$neg() -> F256
+routine F256.neg() -> F256
   return F256.from_bits(bits: bit_xor[U256](a: me.to_bits(), b: f256a_sign_mask()))
 
 ### Returns the absolute value (sign bit cleared).
@@ -203,7 +203,7 @@ routine F256.copysign(sign: F256) -> F256
 # ============================================================================
 
 ### Returns whether two values compare equal (NaN unequal; +0 == -0).
-routine F256.$eq(you: F256) -> Bool
+routine F256.eq(you: F256) -> Bool
   if me.is_nan() or you.is_nan()
     return false
   if me.is_zero() and you.is_zero()
@@ -211,7 +211,7 @@ routine F256.$eq(you: F256) -> Bool
   return int_eq[U256](a: me.to_bits(), b: you.to_bits())
 
 ### Compares this value with `you` under IEEE ordered semantics.
-routine F256.$cmp(you: F256) -> ComparisonSign
+routine F256.cmp(you: F256) -> ComparisonSign
   if me.is_nan() or you.is_nan()
     return SAME
   if me.is_zero() and you.is_zero()
@@ -305,19 +305,19 @@ routine UnpackedFloat[M, L, W].to_f256a() -> F256
 # ============================================================================
 
 ### Returns `me + you`.
-routine F256.$add(you: F256) -> F256
+routine F256.add(you: F256) -> F256
   return me.to_uf().add(you: you.to_uf()).to_f256a()
 
 ### Returns `me - you`.
-routine F256.$sub(you: F256) -> F256
+routine F256.sub(you: F256) -> F256
   return me.to_uf().sub(you: you.to_uf()).to_f256a()
 
 ### Returns `me * you`.
-routine F256.$mul(you: F256) -> F256
+routine F256.mul(you: F256) -> F256
   return me.to_uf().mul(you: you.to_uf()).to_f256a()
 
 ### Returns `me / you`.
-routine F256.$truediv(you: F256) -> F256
+routine F256.truediv(you: F256) -> F256
   return me.to_uf().div(you: you.to_uf()).to_f256a()
 
 # ============================================================================
@@ -438,7 +438,7 @@ routine F256.exp10() -> F256
 ### me ** you with the full C99 / IEEE pow special-case matrix (mirrors F128.pow):
 ### odd-integer exponent sign rules, the pow(-1,±inf)=1 / pow(1,NaN)=1 carve-outs, and
 ### pow(negative, non-integer) = NaN. Finite results go through exp(you*log|me|).
-routine F256.$pow(you: F256) -> F256
+routine F256.pow(you: F256) -> F256
   var one = UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a()
   var poszero = F256.from_bits(bits: zero_extend[U64, U256](0_u64))
   var negzero = F256.from_bits(bits: shift_left[U256](value: zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 255_s64)))
@@ -637,13 +637,13 @@ routine F256.to_f128() -> F128
   return me.to_uf().to_f128()
 
 ### Returns the decimal text (narrowed to binary128 precision for display).
-routine F256.$represent() -> Text
+routine F256.represent() -> Text
   if me.is_nan()
     return "NaN"
   if me.is_infinite()
     return if me.is_negative() then "-inf" else "inf"
-  return me.to_f128().$represent()
+  return me.to_f128().represent()
 
 ### Returns a diagnostic representation tagged with the type name.
-routine F256.$diagnose() -> Text
-  return "F256(" + me.$represent() + ")"
+routine F256.diagnose() -> Text
+  return "F256(" + me.represent() + ")"

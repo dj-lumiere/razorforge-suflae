@@ -38,43 +38,43 @@ routine CStr.ptr() -> Hijacked[Byte]
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The pointer to wrap.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from_ptr: Hijacked[Byte]) -> CStr
+routine CStr(from_ptr: Hijacked[Byte]) -> CStr
   return reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
 
 ### Wraps an existing raw address as `CStr`.
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The address to wrap.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from_ptr: Address) -> CStr
+routine CStr(from_ptr: Address) -> CStr
   return reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
 
 ### Creates a null-terminated C string by copying raw bytes and appending a trailing null byte.
 ### :param from: The byte sequence to copy.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from: Bytes) -> CStr
+routine CStr(from: Bytes) -> CStr
   var len = from.count()
-  danger!
+  danger
     var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
 
     var i: U64 = 0u64
     loop
       if i >= len
         break
-      buffer.offset(ByteSize(bytes: i)).inject(from[i])
+      buffer.offset(ByteSize(bytes: i)).poke(from[i])
       i = i + 1u64
-    buffer.offset(ByteSize(bytes: len)).inject(BYTE_NULL)
+    buffer.offset(ByteSize(bytes: len)).poke(BYTE_NULL)
 
     return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Creates a UTF-8 encoded null-terminated C string from `Text`.
 ### :param from: The text value to encode and copy.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from: Text) -> CStr
+routine CStr(from: Text) -> CStr
   var len = from.count()
-  danger!
+  danger
     if len == 0u64
       var empty_buffer = Hijacked[Byte](rf_allocate_dynamic(1u64))
-      empty_buffer.inject(BYTE_NULL)
+      empty_buffer.poke(BYTE_NULL)
       return reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
 
     var max_bytes = len * 4u64 + 1u64
@@ -86,27 +86,27 @@ routine CStr.$create(from: Text) -> CStr
       var cp = from[i].codepoint()
 
       if cp <= 0x7Fu32
-        buffer.offset(ByteSize(bytes: write_pos)).inject(Byte(U8(cp)))
+        buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(cp)))
         write_pos = write_pos + 1u64
       elseif cp <= 0x7FFu32
-        buffer.offset(ByteSize(bytes: write_pos)).inject(Byte(U8(0xC0u32 | (cp >> 6u32))))
-        buffer.offset(ByteSize(bytes: write_pos + 1u64)).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xC0u32 | (cp >> 6u32))))
+        buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
         write_pos = write_pos + 2u64
       elseif cp <= 0xFFFFu32
-        buffer.offset(ByteSize(bytes: write_pos)).inject(Byte(U8(0xE0u32 | (cp >> 12u32))))
-        buffer.offset(ByteSize(bytes: write_pos + 1u64)).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-        buffer.offset(ByteSize(bytes: write_pos + 2u64)).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xE0u32 | (cp >> 12u32))))
+        buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+        buffer.offset(ByteSize(bytes: write_pos + 2u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
         write_pos = write_pos + 3u64
       else
-        buffer.offset(ByteSize(bytes: write_pos)).inject(Byte(U8(0xF0u32 | (cp >> 18u32))))
-        buffer.offset(ByteSize(bytes: write_pos + 1u64)).inject(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
-        buffer.offset(ByteSize(bytes: write_pos + 2u64)).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-        buffer.offset(ByteSize(bytes: write_pos + 3u64)).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xF0u32 | (cp >> 18u32))))
+        buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
+        buffer.offset(ByteSize(bytes: write_pos + 2u64)).poke(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+        buffer.offset(ByteSize(bytes: write_pos + 3u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
         write_pos = write_pos + 4u64
 
       i = i + 1u64
 
-    buffer.offset(ByteSize(bytes: write_pos)).inject(BYTE_NULL)
+    buffer.offset(ByteSize(bytes: write_pos)).poke(BYTE_NULL)
     return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Returns the length of this C string in bytes, excluding the trailing null.
@@ -117,7 +117,7 @@ routine CStr.count() -> U64
 ### Returns `true` when this wrapper does not reference any C string.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_null() -> Bool
-  danger!
+  danger
     return me.ptr().is_none()
 
 ### Returns `true` when this C string is null or has zero length.
@@ -129,19 +129,19 @@ routine CStr.is_empty() -> Bool
 ### This does not copy the string and assumes the caller stays within bounds.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
-dangerous routine CStr.$getitem(index: U64) -> Byte
-  return me.ptr().offset(ByteSize(bytes: index)).extract()
+dangerous routine CStr.getitem(index: U64) -> Byte
+  return me.ptr().offset(ByteSize(bytes: index)).peek()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
-routine CStr.$eq(you: CStr) -> Bool
+routine CStr.eq(you: CStr) -> Bool
   return rf_cstr_compare(a: me, b: you) == 0s32
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
-routine CStr.$cmp(you: CStr) -> ComparisonSign
+routine CStr.cmp(you: CStr) -> ComparisonSign
   var cmp = rf_cstr_compare(a: me, b: you)
   if cmp < 0s32
     return ME_SMALL
@@ -154,7 +154,7 @@ routine CStr.$cmp(you: CStr) -> ComparisonSign
 ### :returns: The resulting `CStr` value.
 routine CStr.copy() -> CStr
   var len = me.count()
-  danger!
+  danger
     var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
     rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
     return reinterpret_bits[Hijacked[Byte], CStr](buffer)

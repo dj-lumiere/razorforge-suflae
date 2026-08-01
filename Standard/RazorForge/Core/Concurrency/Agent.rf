@@ -1,7 +1,7 @@
 module Core
 
 # TaskSpawnError / TaskTimeoutError are defined in Core/Errors/Common.rf (alongside the other
-# Core crashables) so their synthesized $represent/$diagnose resolve crash_message correctly.
+# Core crashables) so their synthesized represent/diagnose resolve crash_message correctly.
 
 ### Which substrate runs an `Agent[T]`. One concrete handle backs both so a heterogeneous set can be
 ### raced from a single `List[Agent[T]]`.
@@ -11,18 +11,18 @@ choice AgentKind
   ### Backed by an OS worker thread (a `threaded routine`).
   THREAD
 
-### A handle to in-flight work whose result you can fetch with `retrieve!()`. One concrete type backs
+### A handle to in-flight work whose result you can fetch with `retrieve()`. One concrete type backs
 ### BOTH kinds of asynchrony so a heterogeneous set can be raced from a `List[Agent[T]]`:
 ###   * a `suspended routine` call yields a coroutine-backed Agent (kind CORO) — runs on this thread's
 ###     implicit scheduler, parks (never blocks) at `waitfor`/await points;
 ###   * a `threaded routine` call yields a thread-backed Agent (kind THREAD) — runs on an OS thread.
-### `retrieve!()` and `waitfor()` branch on `kind`, reusing the coroutine-park and thread-wait paths.
+### `retrieve()` and `waitfor()` branch on `kind`, reusing the coroutine-park and thread-wait paths.
 ### The metaphor: you delegate to an agent, it runs on its own, you only fetch the result.
 ###
 ### Teardown is status-based (NOT done in `retrieve!`): a completed Agent is freed; one still in
 ### flight is abandoned — a parked coroutine runs its cancellation shadow stack, while a running
 ### worker thread (which cannot be killed) is joined before its block is freed, so the worker never
-### writes into freed memory. `retrieve!` only extracts the value; `$destroy` always does the freeing.
+### writes into freed memory. `retrieve!` only extracts the value; `destroy` always does the freeing.
 record Agent[T]
   ### CORO = coroutine-backed (suspended routine); THREAD = thread-backed (threaded routine).
   secret kind: AgentKind
@@ -56,8 +56,28 @@ routine Agent[T].coro_handle() -> CPtr
 routine Agent[T].task_handle() -> Address
   return me.agent
 
+### Whether the work has finished (its value is ready to `retrieve!` without waiting). A racy snapshot
+### for polling/heuristics, not a synchronization decision — it can flip to true the instant after you
+### read it. Branches on kind: a coroutine is done at status COMPLETED (3); a thread at COMPLETED (4).
+### :returns: `true` if the work has completed.
+routine Agent[T].is_done() -> Bool
+  if me.kind is AgentKind.CORO
+    if me.coro.is_none()
+      return true
+    danger
+      return rf_coro_status_get(coro: me.coro) == 3_u32
+  if not me.spawned
+    return false
+  danger
+    return rf_task_status_get(task: me.agent) == 4_u32
+
+### Whether the work was spawned and has not yet finished. Racy snapshot (see `is_done`).
+### :returns: `true` if still in flight.
+routine Agent[T].is_running() -> Bool
+  return not me.is_done()
+
 ### Requests cooperative cancellation of this agent — sets a flag in NATIVE memory (reached through
-### the handle) and returns; it NEVER frees or unwinds (teardown stays in `$destroy`, the sole
+### the handle) and returns; it NEVER frees or unwinds (teardown stays in `destroy`, the sole
 ### freer). A coroutine observes the request at its next suspend point (`waitfor` returns early) or
 ### via `cancellation_requested()`; a worker thread observes it only by polling
 ### `cancellation_requested()` (a thread cannot be killed). Internal plumbing for `Nursery[T].cancel`,
@@ -72,7 +92,7 @@ dangerous routine Agent[T].request_cancel()
     rf_task_request_cancel(task: me.agent)
   return
 
-### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve!()` on a
+### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve()` on a
 ### thread-backed Agent. The returned value is a TEMPORARY copy aliasing the same worker — use it
 ### inline (never bind it to a name alongside the original, or both would tear the worker down).
 ### :param deadline: The maximum time `retrieve!` will wait.
@@ -85,31 +105,31 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
 ### awaited inside a scheduler-driven coroutine PARKS (siblings run meanwhile) instead of blocking;
 ### on a plain thread it blocks. A coroutine-backed Agent drives this thread's implicit scheduler
 ### until THIS coroutine finishes (siblings spawned earlier progress concurrently). A deadline
-### (`agent.waitfor(d).retrieve!()`) races completion against the timer and throws {TaskTimeoutError}
-### if the deadline wins. `retrieve!` only reads the value out; freeing happens later in `$destroy`.
+### (`agent.waitfor(d).retrieve()`) races completion against the timer and throws {TaskTimeoutError}
+### if the deadline wins. `retrieve!` only reads the value out; freeing happens later in `destroy`.
 ### :throws: {TaskSpawnError} if the work could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
-routine Agent[T].retrieve!() -> ?T
+routine Agent[T].retrieve!() -> T
   if me.kind is AgentKind.CORO
     if me.coro.is_none()
       throw TaskSpawnError()
-    danger!
+    danger
       rf_sched_run_until_default(coro: me.coro)
       var payload = rf_task_result_payload(task: me.agent)
-      var value = Hijacked[T](from: payload).extract()
+      var value = Hijacked[T](from: payload).peek()
       rf_invalidate(ptr: payload)
       return value
 
   if not me.spawned
     throw TaskSpawnError()
-  danger!
+  danger
     if me.has_deadline
       var total = me.deadline.total_nanoseconds()
       if rf_in_coroutine() != 0_u32
         # Inside a scheduler-driven coroutine: race the worker against the deadline WITHOUT
         # blocking. Park on a deadline timer that is also externally wakeable; siblings run.
-        # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — $destroy
+        # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — destroy
         # joins the still-running worker before freeing (the timeout does not stop it).
         var outcome = rf_task_await_coro_deadline(task: me.agent, timeout_ns: U64(total))
         if outcome == 0_u32
@@ -131,7 +151,7 @@ routine Agent[T].retrieve!() -> ?T
         discard rf_task_wait(task: me.agent)
 
     var payload = rf_task_result_payload(task: me.agent)
-    var value = Hijacked[T](from: payload).extract()
+    var value = Hijacked[T](from: payload).peek()
     rf_invalidate(ptr: payload)
     return value
 
@@ -141,17 +161,26 @@ routine Agent[T].retrieve!() -> ?T
 ### JOINED before the block is freed (a thread cannot be killed, and the worker keeps writing into
 ### the block until it finishes) — abandoning a thread therefore means detach-and-discard-the-result,
 ### not stop-the-thread.
-dangerous routine Agent[T].$destroy()
+dangerous routine Agent[T].destroy()
   if me.kind is AgentKind.CORO
     if not me.coro.is_none()
       var status = rf_coro_status_get(coro: me.coro)
+      # Dispose race-free against the work-stealing workers. `rf_sched_dispose_default` detaches the
+      # coroutine from the pool and, under the scheduler lock, decides whether WE may free it now (returns
+      # 1) or the free was DEFERRED (returns 0) because a worker still holds it (RUNNING, or mid-pop between
+      # the deque pop and the RUNNING store). Freeing a coroutine a worker is one step from resuming is the
+      # M:N use-after-free (worker co_switch()es a freed stack → jump to NULL → SIGSEGV); deferring lets the
+      # worker free it from its completion path instead. A plain `unschedule + free` cannot see the mid-pop
+      # window and races that resume.
       if status == 3_u32                # RF_CORO_COMPLETED
-        rf_coro_delete(coro: me.coro)
+        if rf_sched_dispose_default(coro: me.coro) == 1_u32
+          rf_coro_delete(coro: me.coro)
       else
-        # Never retrieved: detach from the implicit scheduler (drop its ready/live reference) BEFORE
-        # abandoning, so the scheduler does not dangle on freed memory.
-        discard rf_sched_unschedule_default(coro: me.coro)
-        rf_coro_abandon(coro: me.coro)
+        # Never retrieved. If disposal succeeds now (parked / idle / removed) run its cancellation shadow
+        # stack + free (abandon); if deferred (still RUNNING) the coroutine runs to completion and the
+        # worker frees it — its own scope teardown replaces the abandon walk.
+        if rf_sched_dispose_default(coro: me.coro) == 1_u32
+          rf_coro_abandon(coro: me.coro)
       rf_task_destroy(task: me.agent)
     return
 
@@ -166,20 +195,20 @@ dangerous routine Agent[T].$destroy()
 # A `List[Agent[T]]` bound to a name IS the structured-concurrency scope: ownership already
 # guarantees no child outlives it (the list's teardown abandons every still-running Agent). So the
 # scope operations are MEMBER routines on that list — `race!` / `gather!` / `cancel_all` — read as
-# `agents.gather!()`. They BORROW the list (`me` is by-reference): they never consume or free it, so
+# `agents.gather()`. They BORROW the list (`me` is by-reference): they never consume or free it, so
 # there is no hidden ownership transfer; cleanup stays with the list's own teardown at scope exit.
 # Each Agent is read only as a temporary (`me[i]`), so nothing aliases an Agent or double-frees.
 
 ### Races the Agents, driving them CONCURRENTLY until the FIRST one finishes, and returns that
-### winner's value. BORROWS the list — call it `agents.race!()`. The losers are not freed here; they
+### winner's value. BORROWS the list — call it `agents.race()`. The losers are not freed here; they
 ### are ABANDONED when the list itself tears down at the enclosing scope's return (a parked coroutine
 ### runs its cancellation shadow stack; a still-running worker thread is joined then discarded). To
 ### drop the losers promptly, race inside a routine that returns the winner, so the list tears down
 ### right after. Mixed coroutine/thread sets are supported.
 ### :throws: {TaskSpawnError} if the set is empty (there is nothing to race).
 ### :returns: The value produced by the first Agent to finish.
-routine List[Agent[V]].race!() -> ?V
-  danger!
+routine List[Agent[V]].race!() -> V
+  danger
     var n = me.count()
     if n == 0_u64
       throw TaskSpawnError()
@@ -199,40 +228,40 @@ routine List[Agent[V]].race!() -> ?V
     rf_race_end(race: race)
     var w = U64(winner)
     var payload = rf_task_result_payload(task: me[w].task_handle())
-    var value = Hijacked[V](from: payload).extract()
+    var value = Hijacked[V](from: payload).peek()
     rf_invalidate(ptr: payload)
     return value
 
 ### Drives the Agents CONCURRENTLY and waits for ALL of them to finish, returning their results in
 ### INPUT order. The twin of `race!` (first finisher); `gather!` returns every finisher. BORROWS the
-### list — call it `agents.gather!()`. Each Agent is driven with the same uncolored `retrieve!` logic,
+### list — call it `agents.gather()`. Each Agent is driven with the same uncolored `retrieve!` logic,
 ### so coroutine children progress on this thread's scheduler and thread children run on their OS
 ### threads; total wait is the SLOWEST child, not the sum. FAIL-FAST: if any Agent's routine throws,
 ### that throw propagates out and the remaining children are abandoned when the list tears down at
 ### scope exit. An empty set yields an empty list.
 ### :returns: The values produced by every Agent, in the order they appear in the list.
-routine List[Agent[V]].gather!() -> ?List[V]
-  danger!
+routine List[Agent[V]].gather!() -> List[V]
+  danger
     var n = me.count()
     var results = List[V]()
     var i = 0_u64
     while i < n
-      var value = me[i].retrieve!()
+      var value = me[i].retrieve()
       results.add_last(value: value)
       i = i + 1
     return results
 
 ### Requests cooperative cancellation of EVERY Agent in the set, then waits out the wind-down,
 ### returning each Agent's final value in input order (a cooperative worker returns its own sentinel
-### when it observes the request). BORROWS the list — call it `agents.cancel_all!()`. It sets a cancel
+### when it observes the request). BORROWS the list — call it `agents.cancel_all()`. It sets a cancel
 ### flag on each Agent (in native memory, through the handle), then drives them to completion with the
 ### same uncolored logic as `gather!`: a worker thread observes the flag via `cancellation_requested()`
 ### (the only way to halt one — a thread cannot be killed) and returns; a coroutine observes it at its
 ### next `waitfor` returning early. `!` because the wind-down join can surface a child's throw. To
 ### cancel WITHOUT waiting, simply let the list tear down at scope exit (abandon-all).
 ### :returns: Each Agent's final value, in input order.
-routine List[Agent[V]].cancel_all!() -> ?List[V]
-  danger!
+routine List[Agent[V]].cancel_all!() -> List[V]
+  danger
     var n = me.count()
     var i = 0u64
     while i < n
@@ -242,7 +271,7 @@ routine List[Agent[V]].cancel_all!() -> ?List[V]
     var results = List[V]()
     i = 0u64
     while i < n
-      var value = me[i].retrieve!()
+      var value = me[i].retrieve()
       results.add_last(value: value)
       i = i + 1
     return results
@@ -258,7 +287,7 @@ routine waitfor(duration: Duration)
   # instead of sleeping out the full duration.
   if rf_cancel_requested() != 0_u32
     return
-  danger!
+  danger
     var total = duration.total_nanoseconds()
     if rf_in_coroutine() != 0_u32
       rf_sched_park_timer(delay_ns: U64(total))
@@ -266,6 +295,19 @@ routine waitfor(duration: Duration)
       var secs = total // 1000000000
       var nanos = U32(total - secs * 1000000000)
       rf_waitfor_duration(secs: secs, ns: nanos)
+  return
+
+### Cooperatively hands the current turn back to the scheduler, then immediately re-queues this
+### coroutine as READY — the scheduler runs the other ready coroutines once before resuming here on
+### the next tick. Unlike `waitfor`, it waits for NOTHING: it gives up the turn but stays runnable, so
+### resumption is unconditional (no timer, no event). Use it to interleave a long yield-free stretch
+### of CPU work with siblings; prefer `waitfor` or a channel op when there is an actual event to await.
+### UNCOLORED: outside a scheduler-driven coroutine (a plain thread) there is no turn to yield, so it
+### is a no-op.
+routine yield_now()
+  danger
+    if rf_in_coroutine() != 0_u32
+      rf_coro_yield()
   return
 
 ### Whether cooperative cancellation has been requested for the currently-running agent — a

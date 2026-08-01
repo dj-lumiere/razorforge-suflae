@@ -1,0 +1,329 @@
+module Core
+
+### Cycle-collector color for the Bacon-Rajan synchronous recycler (see
+### internal-wiki/v0.4.x-cycle-collector.md). Touched only by the single-threaded collector.
+choice RoamColor
+  ### In use — not garbage.
+  BLACK: 0
+  ### Being traced this cycle-collection pass.
+  GRAY: 1
+  ### Garbage candidate (provisionally unreachable).
+  WHITE: 2
+  ### Buffered as a possible cycle root.
+  PURPLE: 3
+
+### Compiler intrinsic: yields a closure over this type's synthesized `roam_trace_impl` cycle-collector
+### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
+### routine-value reference to that hook; the `cptr_none()` body is a never-used fallback (NOT `@innate`
+### — an unrecognized `@innate` T-method is folded to a default before the rewrite runs).
+### See internal-wiki/v0.4.x-cycle-collector.md §9.3.
+routine T.roam_trace_ref() -> CPtr
+  return cptr_none()
+
+### Compiler intrinsic: yields a closure over this type's synthesized `roam_free_impl` hook (tears down
+### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass; `cptr_none()` fallback.
+routine T.roam_free_ref() -> CPtr
+  return cptr_none()
+
+### Biased reference-counting controller for {Roamed[T]} — the hybrid of {RetainController[T]}
+### (non-atomic, single-thread) and {ShareController[T, P]} (atomic + lock). Starts in LOCAL mode:
+### one non-atomic `count`, no lock, owner only. On the first escape across a concurrency boundary
+### `promote()` flips it — irreversibly — to ESCAPED mode: `count` becomes atomic and a reentrant,
+### TASK-keyed exclusive lock is armed. The mode flag lives here, at the one address every {Roamed}
+### handle shares, so all handles observe the flip.
+###
+### v1 biased scheme = SINGLE count + one-way flip (the classic dual-counter BRC, which keeps the
+### owner fast even AFTER escape, is a deferred perf optimization). Reentrancy is keyed to the
+### task/coroutine id (NOT the OS thread) because M:N migration moves a coroutine across workers.
+### :typeparam T: The exclusively owned entity type.
+entity RoamController[T]
+needs T is EntityType
+  ### Reference count. Read/written non-atomically in LOCAL mode, atomically once ESCAPED.
+  secret count: U64
+  ### `0` = LOCAL, `1` = ESCAPED. Flipped once by `promote()`. Every handle observes it.
+  ### **`Atomic[U8]`, not `Bool`:** `promote()` publishes the flip cross-thread at the escape site
+  ### and non-owner threads read it from `retain`/`release`/`guard_enter` — a plaintext `Bool` would
+  ### be a data race (and could be hoisted/cached so a promoted object still looks LOCAL forever).
+  ### SeqCst load/store on the atomic gives the release-store / acquire-load the flip needs. `Bool`
+  ### also lowers to `i1`, which has no hardware atomic; the flag is `0`/`1` over `Atomic[U8]`.
+  secret escaped: Atomic[U8]
+  ### Raw pointer to the managed entity.
+  secret data: Hijacked[T]
+  ### Exclusive-lock flag (`0` free / `1` held). Armed and used only in ESCAPED mode.
+  secret locked: Atomic[U8]
+  ### Task/coroutine id of the current lock holder (`0` when free). Task-keyed for migration safety.
+  secret holder_task: Atomic[U64]
+  ### Reentrancy depth. Only ever touched by the holder under mutual exclusion, so non-atomic.
+  secret depth: U64
+  ### Cycle-collector color (Bacon-Rajan). Touched only by the single-threaded collector.
+  secret color: RoamColor
+  ### `true` while this controller sits in the collector's roots buffer — dedups `mark_cycle_candidate`.
+  secret buffered: Bool
+  ### Address of the compiler-generated per-type trace function for `T` (visits `T`'s `Roamed`
+  ### fields). `cptr_none()` = no trace wired yet / `T` has no `Roamed` fields (cannot form a cycle).
+  ### Called as `fn(controller_address)`; reinterprets and `rf_cc_visit_child`s each `Roamed` field.
+  secret trace_hook: CPtr
+  ### Address of the compiler-generated per-type free function for `T`. Called as
+  ### `fn(controller_address)` when the collector reaps a white (garbage) node: runs the managed
+  ### entity's `destroy` (type-correct) then frees the controller. `cptr_none()` until wired.
+  secret free_hook: CPtr
+
+### Creates a controller with one strong reference in LOCAL mode (unlocked, non-atomic).
+### :param data: The raw pointer to the entity; ownership transfers to this controller.
+### :returns: The resulting `RoamController[T]` value.
+dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
+  return RoamController[T](
+    count: 1_u64,
+    escaped: Atomic[U8](initial: 0_u8),
+    data: data,
+    locked: Atomic[U8](initial: 0_u8),
+    holder_task: Atomic[U64](initial: 0_u64),
+    depth: 0_u64,
+    color: RoamColor.BLACK,
+    buffered: false,
+    trace_hook: data.as_entity().roam_trace_ref(),
+    free_hook: data.as_entity().roam_free_ref()
+  )
+
+# ============================================================================
+# Biased reference counting — branches on mode: non-atomic (LOCAL) vs atomic (ESCAPED).
+# ============================================================================
+
+### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED.
+routine RoamController[T].retain()
+  danger
+    if me.escaped.load() == 1_u8
+      discard atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
+    else
+      me.count = me.count + 1
+  return
+
+### Drops an alias. At zero the managed entity is destroyed immediately (deterministic teardown).
+### A decrement that does NOT reach zero registers the object as a cycle-collection candidate.
+routine RoamController[T].release()
+  danger
+    if me.escaped.load() == 1_u8
+      var previous = atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
+      if previous == 1_u64
+        # Dead at zero — free eagerly (deterministic teardown). If it was a buffered cycle candidate,
+        # first drop its roots entry so the collector never dereferences this freed controller. (Reading
+        # `buffered` on the escaped path is racy in principle; safe under Stage-1 single-thread collection.)
+        if me.buffered
+          rf_cc_roots_remove(ptr: me.hijack().get_address())
+        me.drop_data()
+        me.destroy()
+      else
+        me.mark_cycle_candidate()
+    else
+      me.count = me.count - 1
+      if me.count == 0_u64
+        if me.buffered
+          rf_cc_roots_remove(ptr: me.hijack().get_address())
+        me.drop_data()
+        me.destroy()
+      else
+        me.mark_cycle_candidate()
+  return
+
+### Reports this object to the cycle collector as a possible cycle root. The SOLE collector entry
+### point — only `Roamed` decrements reach it, which is what scopes the collector to `Roamed`.
+dangerous routine RoamController[T].mark_cycle_candidate()
+  # Acyclic-type fast out (standard Bacon-Rajan optimization): a `T` with no `Roamed` fields cannot be
+  # part of a cycle, and the compiler wires its `trace_hook` to `cptr_none()` (see `create`). Skipping
+  # the candidate buffer here keeps the common non-zero decrement off the collector's books entirely.
+  if me.trace_hook.is_none()
+    return
+  if me.buffered
+    return
+  me.buffered = true
+  me.color = RoamColor.PURPLE
+  rf_cc_add_candidate(obj: me.hijack().get_address())
+  # Auto-collect once the candidate set crosses the threshold (guarded against re-entry).
+  if rf_cc_should_collect()
+    cc_collect()
+  return
+
+# ============================================================================
+# Cycle-collector accessors. The collector (Core/Memory/CycleCollector.rf) holds each candidate as a
+# type-erased `RoamController[RoamErased]` — every field below sits at a T-independent offset, so these
+# read/write correctly through the erased view. Count adjustment is non-atomic: the collector runs
+# single-threaded (core-local), so trial deletion touches the same count the RC uses without atomics.
+# `cc_set_hooks` is a test/wiring hatch (compiler auto-wires trace_hook/free_hook in Stage 2).
+# ============================================================================
+
+### The address of the managed entity — the collector passes this to the entity-based trace/free
+### hooks (`roam_trace_impl` / `roam_free_impl`, whose `me` is the entity). :returns: the entity address.
+routine RoamController[T].cc_data_addr() -> Address
+  danger
+    return me.data.get_address()
+
+### The collector color. :returns: this controller's `RoamColor`.
+routine RoamController[T].cc_color() -> RoamColor
+  return me.color
+
+### Sets the collector color. :param c: the new color.
+dangerous routine RoamController[T].cc_set_color(c: RoamColor)
+  me.color = c
+  return
+
+### Whether this controller is buffered as a root. :returns: the `buffered` flag.
+routine RoamController[T].cc_buffered() -> Bool
+  return me.buffered
+
+### Sets the buffered flag. :param b: the new value.
+dangerous routine RoamController[T].cc_set_buffered(b: Bool)
+  me.buffered = b
+  return
+
+### Non-atomic strong count. :returns: the current count.
+routine RoamController[T].cc_count() -> U64
+  return me.count
+
+### Trial-deletion decrement (non-atomic).
+dangerous routine RoamController[T].cc_dec()
+  me.count = me.count - 1
+  return
+
+### Trial-deletion restore increment (non-atomic).
+dangerous routine RoamController[T].cc_inc()
+  me.count = me.count + 1
+  return
+
+### The per-type trace function address. :returns: `trace_hook`.
+routine RoamController[T].cc_trace_hook() -> CPtr
+  return me.trace_hook
+
+### The per-type free function address. :returns: `free_hook`.
+routine RoamController[T].cc_free_hook() -> CPtr
+  return me.free_hook
+
+### Wires the per-type trace/free hooks (test/Stage-1 hatch). :param trace: trace fn. :param free: free fn.
+dangerous routine RoamController[T].cc_set_hooks(trace: CPtr, free: CPtr)
+  me.trace_hook = trace
+  me.free_hook = free
+  return
+
+### Returns the current strong count. Snapshot only.
+### :returns: The number of live strong handles.
+routine RoamController[T].strong_count() -> U64
+  danger
+    if me.escaped.load() == 1_u8
+      return atomic_load[U64](ptr: me.count.hijack())
+    else
+      return me.count
+
+# ============================================================================
+# Escape — one-way LOCAL -> ESCAPED promotion.
+# ============================================================================
+
+### Flips to ESCAPED (idempotent). Runs on the owner BEFORE the handle is published to another
+### thread (the compiler inserts it at the escape site, pre-spawn), so no concurrent access races
+### the flip. After this, `count` is atomic and the reentrant lock is live.
+dangerous routine RoamController[T].promote()
+  if me.escaped.load() == 1_u8
+    return
+  me.holder_task.store(desired: 0_u64)
+  me.depth = 0_u64
+  me.escaped.store(desired: 1_u8)
+  # Escape is a GRAPH property, not a per-object one: everything reachable through this object's lock is
+  # reachable by the other task too, so it must escape as well. A one-object flip would leave a LOCAL
+  # child (non-atomic count, no lock) that both the owner and the crossing task then touch — a data race.
+  # So walk the `Roamed` children through the per-type trace hook and promote each. The escaped-check at
+  # the top prunes already-escaped nodes, so cyclic graphs terminate and repeated promotion is amortized.
+  me.promote_reachable()
+  return
+
+### Promotes every `Roamed` child of this controller (transitively, via `promote`). Children are viewed
+### through `RoamController[T]` purely for the fields `promote` touches — `escaped` / `holder_task` /
+### `depth` / `trace_hook` / `data` all sit at a T-INDEPENDENT offset — so reusing `T` on a child of a
+### different type is a sound reinterpretation (no `RoamErased` needed). A type with no `Roamed` fields
+### (`trace_hook` = `cptr_none()`) cannot own an edge and is skipped.
+dangerous routine RoamController[T].promote_reachable()
+  if me.trace_hook.is_none()
+    return
+  # Snapshot THIS node's child controllers before recursing — tracing fills a shared native scratch that
+  # a nested promote would clobber (same discipline as the collector's `cc_children`).
+  var kids = List[Address]()
+  rf_cc_scratch_reset()
+  rf_cc_trace_into_scratch(trace_hook: me.trace_hook.get_address(), controller: me.data.get_address())
+  var n = rf_cc_scratch_count()
+  var i = 0_u64
+  while i < n
+    kids.add_last(value: rf_cc_scratch_at(i: i))
+    i = i + 1_u64
+  var j = 0_u64
+  while j < kids.count()
+    var child = Hijacked[RoamController[T]](kids.get_raw(index: j)).as_entity()
+    child.promote()
+    j = j + 1_u64
+  return
+
+### Whether this object has escaped. Drives `Roamed`'s access-lock wrapping.
+### :returns: `true` if ESCAPED.
+routine RoamController[T].is_escaped() -> Bool
+  return me.escaped.load() == 1_u8
+
+# ============================================================================
+# Reentrant, task-keyed exclusive lock — active only in ESCAPED mode.
+# ============================================================================
+
+### Acquires the exclusive lock, spinning while another task holds it. If the CALLING task already
+### holds it, this is a re-entry: the depth is bumped and it returns without re-acquiring — so a
+### member routine calling itself (normal class recursion) never self-deadlocks. Keyed to the
+### task/coroutine id, not the OS thread, so a migrated coroutine still recognizes its own hold.
+dangerous routine RoamController[T].reentrant_acquire()
+  var tid = rf_current_task_id()
+  loop
+    if me.holder_task.load() == tid and me.locked.load() == 1_u8
+      me.depth = me.depth + 1
+      break
+    if me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
+      me.holder_task.store(desired: tid)
+      me.depth = 1_u64
+      break
+    # Contended by another task. Yield instead of a bare spin: under M:N the holder may be a coroutine
+    # parked on this very worker (or awaiting reschedule after migration), and a tight spin would pin
+    # the worker and livelock when workers are scarce. `rf_coro_yield` re-queues this coroutine so the
+    # holder can run; off a coroutine (top-level thread) it is a no-op and this stays a busy-spin.
+    rf_coro_yield()
+  return
+
+### Releases one level of the lock. The lock is freed only when the outermost holder releases (depth
+### reaches zero); the holder is cleared before the flag so a waiter never observes the old id.
+dangerous routine RoamController[T].reentrant_release()
+  me.depth = me.depth - 1
+  if me.depth == 0_u64
+    me.holder_task.store(desired: 0_u64)
+    me.locked.store(desired: 0_u8)
+  return
+
+### Mode-checked lock entry: acquires the reentrant lock only when ESCAPED (a no-op in LOCAL mode,
+### where there is no contention). Drives `Roamed`'s access wrapping and the `Roaming[T]` guard token.
+dangerous routine RoamController[T].guard_enter()
+  if me.escaped.load() == 1_u8
+    me.reentrant_acquire()
+  return
+
+### Mode-checked lock exit: the `guard_enter` counterpart.
+dangerous routine RoamController[T].guard_exit()
+  if me.escaped.load() == 1_u8
+    me.reentrant_release()
+  return
+
+# ============================================================================
+# Teardown.
+# ============================================================================
+
+### Returns a non-owning pointer to the managed entity.
+### :returns: The resulting `Hijacked[T]` value.
+routine RoamController[T].data_ptr() -> Hijacked[T]
+  return me.data
+
+### Destroys the managed entity. Call only when the strong count reaches zero.
+dangerous routine RoamController[T].drop_data()
+  me.data.as_entity().destroy()
+  return
+
+dangerous routine RoamController[T].destroy()
+  me.hijack().invalidate()
+  return

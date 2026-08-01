@@ -9,17 +9,17 @@ namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
 /// Lowers <see cref="InsertedTextExpression"/> f-strings to <c>$represent</c>/<c>$diagnose</c>
-/// method calls folded with <c>Text.$add</c>.
+/// method calls folded with <c>Text.add</c>.
 /// Runs after <see cref="ExpressionLoweringPass"/> and before <see cref="OperatorLoweringPass"/>
 /// in the per-file desugaring pipeline.
 ///
 /// <para>Part conversion:</para>
 /// <list type="bullet">
 ///   <item><c>TextPart("text")</c> ??<c>LiteralExpression("text")</c></item>
-///   <item><c>ExpressionPart(e, null)</c> ??<c>e.$represent()</c></item>
-///   <item><c>ExpressionPart(e, "?")</c> ??<c>e.$diagnose()</c></item>
-///   <item><c>ExpressionPart(e, "=")</c> ??<c>"name=" + e.$represent()</c></item>
-///   <item><c>ExpressionPart(e, "=?")</c> ??<c>"name=" + e.$diagnose()</c></item>
+///   <item><c>ExpressionPart(e, null)</c> ??<c>e.represent()</c></item>
+///   <item><c>ExpressionPart(e, "?")</c> ??<c>e.diagnose()</c></item>
+///   <item><c>ExpressionPart(e, "=")</c> ??<c>"name=" + e.represent()</c></item>
+///   <item><c>ExpressionPart(e, "=?")</c> ??<c>"name=" + e.diagnose()</c></item>
 /// </list>
 ///
 /// <para>Scope: per-file user/stdlib code via <see cref="Run"/>, plus synthesized variant
@@ -176,8 +176,10 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
             {
                 Expression res = LowerExpression(u.Resource);
                 Statement body = LowerStatement(u.Body);
-                bool changed = !ReferenceEquals(res, u.Resource) || !ReferenceEquals(body, u.Body);
-                return changed ? u with { Resource = res, Body = body } : stmt;
+                Statement? fb = u.FallbackBody != null ? LowerStatement(u.FallbackBody) : null;
+                bool changed = !ReferenceEquals(res, u.Resource) || !ReferenceEquals(body, u.Body)
+                               || !ReferenceEquals(fb, u.FallbackBody);
+                return changed ? u with { Resource = res, Body = body, FallbackBody = fb } : stmt;
             }
 
             case DangerStatement d:
@@ -454,7 +456,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// Converts an <see cref="InsertedTextExpression"/> to a left-folded chain of
-    /// <c>Text.$add</c> calls interleaved with <c>$represent</c>/<c>$diagnose</c> calls.
+    /// <c>Text.add</c> calls interleaved with <c>$represent</c>/<c>$diagnose</c> calls.
     /// </summary>
     private Expression LowerFString(InsertedTextExpression ftext) // NOSONAR S3776
     {
@@ -476,7 +478,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                 case ExpressionPart ep:
                 {
                     Expression loweredInner = LowerExpression(ep.Expression);
-                    string methodName = ep.FormatSpec is "?" or "=?" ? "$diagnose" : "$represent";
+                    string methodName = ep.FormatSpec is "?" or "=?" ? "diagnose" : "represent";
 
                     // "=" and "=?" format specs prepend "varName=" as a text literal.
                     if (ep.FormatSpec is "=" or "=?")
@@ -494,12 +496,12 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                     Expression renderCall = new CallExpression(
                         Callee: new MemberExpression(
                             Object: loweredInner,
-                            PropertyName: methodName,
+                            MemberName: methodName,
                             Location: ep.Location),
                         Arguments: [],
                         Location: ep.Location) { ResolvedType = textType };
 
-                    // In-flight entity values (`?T`) inject `?` immediately before the
+                    // In-flight entity values (`T`) inject `?` immediately before the
                     // short type name in the rendered output, so a value of type
                     // `Module.Counter` renders as `Module.?Counter(...)`. The rendered
                     // text is post-processed via `Text.replace` because the type-name
@@ -515,7 +517,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                         renderCall = new CallExpression(
                             Callee: new MemberExpression(
                                 Object: renderCall,
-                                PropertyName: "replace",
+                                MemberName: Resolution.RuntimeContract.Collection.Replace,
                                 Location: ep.Location) { ResolvedType = textType },
                             Arguments:
                             [
@@ -546,14 +548,14 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                 { ResolvedType = textType };
         }
 
-        // Left-fold: acc = acc.$add(other: next)
+        // Left-fold: acc = acc.add(other: next)
         Expression result = exprs[0];
         for (int i = 1; i < exprs.Count; i++)
         {
             result = new CallExpression(
                 Callee: new MemberExpression(
                     Object: result,
-                    PropertyName: "$add",
+                    MemberName: "add",
                     Location: loc),
                 Arguments:
                 [

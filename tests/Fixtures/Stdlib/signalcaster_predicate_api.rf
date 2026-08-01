@@ -1,0 +1,40 @@
+module Tests/Stdlib/SignalCasterPredicateApi
+
+# v0.3.0 SignalCaster — CORRECT condvar usage with a shared predicate. The consumer tests a shared
+# flag UNDER the monitor lock and only `wait`s while it is unset, so the handoff cannot be lost: the
+# consumer parks, the producer sets the flag and casts, and the consumer re-checks the flag on wake.
+#
+# The predicate cell is a raw `Hijacked[S64]` aliasing a slot on start()'s frame. Coroutines pass
+# value-records BY VALUE (a copy), so an `Atomic[S64]` argument would NOT be shared the way it is
+# across `threaded` workers (those marshal struct args by reference, see shared_counter_api); a raw
+# pointer is the simplest cell two coroutines can share. It needs no atomics because cooperative
+# coroutines never run simultaneously — only one touches the slot at a time.
+
+import IO/Console
+
+suspended routine consumer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+  sig.lock()
+  danger
+    while cell.peek() == 0_s64    # predicate, tested under the lock
+      sig.wait()                     # releases the lock while parked, re-acquires on wake
+  sig.unlock()
+  danger
+    return cell.peek()
+
+suspended routine producer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+  danger
+    cell.poke(value: 42_s64)       # make the predicate true...
+  sig.cast_one()                     # ...then wake the waiter
+  return 1
+
+routine start()
+  var slot = 0_s64
+  var sig = SignalCaster()
+  danger
+    var cell = slot.hijack()         # raw pointer to `slot`, copyable -> both coroutines share it
+    var con = consumer(sig: steal sig.duplicate(), cell: cell)
+    var pro = producer(sig: steal sig, cell: cell)
+    var got = con.retrieve()        # consumer parks on the predicate; producer sets it and casts
+    discard pro.retrieve()
+    show(f"got={got}")
+  return

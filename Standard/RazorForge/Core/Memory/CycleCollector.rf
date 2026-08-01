@@ -1,0 +1,215 @@
+module Core
+
+### Cycle collector for {Roamed[T]} biased-refcounted objects — a Bacon-Rajan synchronous recycler
+### (trial deletion). Reclaims reference cycles that plain refcounting leaks (a cycle keeps its own
+### counts above zero). See internal-wiki/v0.4.x-cycle-collector.md.
+###
+### Every candidate reported through {RoamController.mark_cycle_candidate} lands in the native roots
+### buffer (`rf_cc_roots_*`). {cc_collect} runs the three passes — MarkRoots, ScanRoots, CollectRoots —
+### over that buffer and reaps whatever is provably cyclic garbage.
+###
+### **Type erasure.** A candidate is held as a raw {Address}; every access reinterprets it as
+### `RoamController[RoamErased]`. The controller layout is T-independent (the managed pointer is just a
+### `ptr`), so the collector's field accesses — color / count / buffered — are correct for any real T.
+### The two T-specific operations, tracing a node's {Roamed} children and freeing it, go through
+### per-type hooks stored on the controller (`trace_hook` / `free_hook`) and invoked via the native
+### indirect-call shims.
+###
+### **Stage 1: manually driven.** Hooks are wired by hand (test hatch); {cc_collect} is called
+### explicitly. Stage 2 auto-wires the compiler-generated hooks and triggers collection on a threshold.
+
+### Type-erased stand-in for the managed entity — never constructed or dereferenced. It exists only so
+### `RoamController[RoamErased]` is a concrete monomorph the collector can reinterpret candidates into.
+entity RoamErased
+  secret marker: U8
+
+### Snapshots the child controllers of one candidate into a fresh list. Tracing fills a shared native
+### scratch buffer, so we must copy it out BEFORE any recursive trace clobbers it.
+### :param addr: The controller address to trace.
+### :returns: The addresses of its `Roamed`-field child controllers.
+routine cc_children(addr: Address) -> List[Address]
+  var kids = List[Address]()
+  danger
+    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+    var hook = c.cc_trace_hook()
+    var target = c.cc_data_addr()
+    rf_cc_scratch_reset()
+    rf_cc_trace_into_scratch(trace_hook: hook.get_address(), controller: target)
+    var n = rf_cc_scratch_count()
+    var i = 0_u64
+    while i < n
+      kids.add_last(value: rf_cc_scratch_at(i: i))
+      i = i + 1_u64
+  return kids
+
+### MarkGray: paint the node gray and trial-decrement each child's count (subtracting the cycle's
+### internal references), recursing into children not yet gray.
+### :param addr: The controller address.
+routine cc_mark_gray(addr: Address)
+  var already = false
+  danger
+    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+    if c.cc_color() is GRAY
+      already = true
+    else
+      c.cc_set_color(c: RoamColor.GRAY)
+  if already
+    return
+  var kids = cc_children(addr: addr)
+  var i = 0_u64
+  while i < kids.count()
+    var kid = kids.get_raw(index: i)
+    danger
+      var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
+      kc.cc_dec()
+    cc_mark_gray(addr: kid)
+    i = i + 1_u64
+  return
+
+### Scan: a gray node with a surviving external reference (count > 0 after trial deletion) is live —
+### repaint it and its subgraph black (ScanBlack). Otherwise it is provisionally garbage — paint it
+### white and scan its children.
+### :param addr: The controller address.
+routine cc_scan(addr: Address)
+  var live = false
+  var garbage = false
+  danger
+    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+    if c.cc_color() is GRAY
+      if c.cc_count() > 0_u64
+        live = true
+      else
+        c.cc_set_color(c: RoamColor.WHITE)
+        garbage = true
+  if live
+    cc_scan_black(addr: addr)
+  elseif garbage
+    var kids = cc_children(addr: addr)
+    var i = 0_u64
+    while i < kids.count()
+      cc_scan(addr: kids.get_raw(index: i))
+      i = i + 1_u64
+  return
+
+### ScanBlack: undo a MarkGray subtree that turned out to be live — repaint black and restore each
+### child's trial-decremented count, recursing into children not yet black.
+### :param addr: The controller address.
+routine cc_scan_black(addr: Address)
+  danger
+    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+    c.cc_set_color(c: RoamColor.BLACK)
+  var kids = cc_children(addr: addr)
+  var i = 0_u64
+  while i < kids.count()
+    var kid = kids.get_raw(index: i)
+    var recurse = false
+    danger
+      var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
+      kc.cc_inc()
+      if not (kc.cc_color() is BLACK)
+        recurse = true
+    if recurse
+      cc_scan_black(addr: kid)
+    i = i + 1_u64
+  return
+
+### CollectWhite: gather the white (garbage) subgraph onto the native reap buffer, repainting black to
+### prevent re-entry. Freeing is DEFERRED to after the whole traversal — freeing mid-walk would leave
+### the roots/child lists holding dangling pointers. (The reap buffer, not an RF list, because an RF
+### list parameter is consuming — it cannot serve as a recursion accumulator.)
+### :param addr: The controller address.
+routine cc_collect_white(addr: Address)
+  var take = false
+  danger
+    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+    if (c.cc_color() is WHITE) and (not c.cc_buffered())
+      c.cc_set_color(c: RoamColor.BLACK)
+      take = true
+  if take
+    var kids = cc_children(addr: addr)
+    var i = 0_u64
+    while i < kids.count()
+      cc_collect_white(addr: kids.get_raw(index: i))
+      i = i + 1_u64
+    danger
+      rf_cc_reap_push(ctrl: addr)
+  return
+
+### Reaps a controller: runs the entity-based free hook (`roam_free_impl`: tears down the entity's
+### non-`Roamed` fields + frees its allocation) over the managed entity, then frees the controller
+### itself (type-independent — the controller layout does not depend on `T`).
+### :param addr: The controller address.
+routine cc_free(addr: Address)
+  danger
+    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+    var hook = c.cc_free_hook()
+    var target = c.cc_data_addr()
+    rf_cc_invoke_free(free_hook: hook.get_address(), controller: target)
+    Hijacked[RoamController[RoamErased]](addr).as_entity().destroy()
+  return
+
+### Runs one full cycle-collection pass over the current roots buffer: MarkRoots → ScanRoots →
+### CollectRoots. Empties the roots buffer and reaps every controller found to be cyclic garbage.
+### Runs one synchronous Bacon-Rajan cycle-collection pass over the buffered candidates and returns the
+### number of objects reclaimed (the size of the reaped white subgraph). 0 means nothing was collected.
+### :returns: The count of objects freed this pass.
+routine cc_collect() -> U64
+  # Mark a pass in progress so a candidate reported mid-collection cannot auto-trigger a nested pass.
+  danger
+    rf_cc_enter_collect()
+  # MarkRoots: purple roots seed the trace (MarkGray); anything else is stale and simply un-buffered.
+  var gray_roots = List[Address]()
+  var n = 0_u64
+  danger
+    n = rf_cc_roots_count()
+  var i = 0_u64
+  while i < n
+    var addr = 0_addr
+    var purple = false
+    danger
+      addr = rf_cc_roots_at(i: i)
+      var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+      if c.cc_color() is PURPLE
+        purple = true
+      else
+        c.cc_set_buffered(b: false)
+    if purple
+      cc_mark_gray(addr: addr)
+      gray_roots.add_last(value: addr)
+    i = i + 1_u64
+  # Drop exactly the `n` candidates this pass snapshotted — NOT a blanket clear. The reap phase below
+  # can append fresh candidates (a finalizer-triggered release inside `cc_free`), and those must
+  # survive to a later pass; a clear-all would strip them while leaving `buffered=true` → a permanent
+  # leak (they'd never be re-buffered). Also robust if a future change makes MarkRoots add candidates.
+  danger
+    rf_cc_roots_remove_front(n: n)
+
+  # ScanRoots
+  i = 0_u64
+  while i < gray_roots.count()
+    cc_scan(addr: gray_roots.get_raw(index: i))
+    i = i + 1_u64
+
+  # CollectRoots: un-buffer each root, gather the white subgraph onto the reap buffer, then free.
+  danger
+    rf_cc_reap_clear()
+  i = 0_u64
+  while i < gray_roots.count()
+    var addr = gray_roots.get_raw(index: i)
+    danger
+      var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+      c.cc_set_buffered(b: false)
+    cc_collect_white(addr: addr)
+    i = i + 1_u64
+
+  var reaped = 0_u64
+  danger
+    var m = rf_cc_reap_count()
+    reaped = m
+    var j = 0_u64
+    while j < m
+      cc_free(addr: rf_cc_reap_at(i: j))
+      j = j + 1_u64
+    rf_cc_reap_clear()
+    rf_cc_exit_collect()
+  return reaped

@@ -300,6 +300,10 @@ public enum SemanticDiagnosticCode
     /// collection on every use.</summary>
     NonPresettableCollectionPreset = 260,
 
+    /// <summary>A <c>preset</c> and a type of the same name are declared in the same file — the
+    /// bare identifier is ambiguous between the constant and the type.</summary>
+    PresetTypeNameCollision = 261,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -372,6 +376,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Module 'Core' is reserved for standard library.</summary>
     ReservedModuleCore = 401,
 
+    /// <summary>
+    /// Referenced a <c>secret</c> (module-private) type from outside its declaring module.
+    /// The type exists but is intentionally hidden from importers.
+    /// </summary>
+    SecretTypeAccess = 402,
+
     /// <summary>Cannot access secret member from outside its defining file.</summary>
     SecretMemberAccess = 403,
 
@@ -390,7 +400,11 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid visibility modifier for this context.</summary>
     InvalidVisibilityModifier = 408,
 
-    /// <summary>Routine name uses reserved prefix (try_, check_, lookup_).</summary>
+    /// <summary>
+    /// A hand-declared routine collides with the try_/check_/lookup_ variant the compiler
+    /// synthesizes for a failable (<c>!</c>) routine of the same owner and signature. The
+    /// prefix itself is only reserved when such a failable base actually exists.
+    /// </summary>
     ReservedRoutinePrefix = 409,
 
     /// <summary>Routine name uses reserved '$' prefix but is not a known wired method.</summary>
@@ -458,9 +472,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>'or' connective on flags is only valid in test context (is ... or), not in assignment.</summary>
     FlagsOrInAssignment = 428,
-
-    /// <summary>'isonly' rejects 'or' and 'but' connectives — only 'and' is valid.</summary>
-    FlagsIsOnlyRejectsOrBut = 429,
 
     /// <summary>Flags member not found in the flags type.</summary>
     FlagsMemberNotFound = 430,
@@ -556,6 +567,10 @@ public enum SemanticDiagnosticCode
     /// must be either all positional or all named.</summary>
     MixedPositionalAndNamedArguments = 512,
 
+    /// <summary>A module-qualified call (`Leaf.routine(...)`) matches module-level routines in more
+    /// than one imported module that share the same path leaf. Disambiguate the module name.</summary>
+    AmbiguousModuleQualifiedCall = 513,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // COLLECTION LITERAL ERRORS (RF-S550 - RF-S599)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -606,6 +621,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot steal Hijacked type.</summary>
     StealHijacked = 605,
 
+    /// <summary>Cannot steal a reference-counted handle (Retained/Tracked) — shared ownership, not unique.</summary>
+    StealSharedOwnership = 617,
+
     /// <summary>Cannot capture scope-bound token in lambda.</summary>
     LambdaCaptureToken = 606,
 
@@ -615,11 +633,14 @@ public enum SemanticDiagnosticCode
     /// <summary>Nested grasping is not allowed - cannot grasp a member of an already-grasped object.</summary>
     NestedHijackingNotAllowed = 608,
 
-    /// <summary>Dangerous routine called outside a danger! block.</summary>
+    /// <summary>Dangerous routine called outside a danger block.</summary>
     DangerousCallOutsideDangerBlock = 609,
 
     /// <summary>Lambda captures variable without declaring it in 'given' clause.</summary>
     LambdaCaptureWithoutGiven = 610,
+
+    /// <summary>A `using ... fallback` target must have `$try_enter` (non-blocking acquisition).</summary>
+    UsingFallbackRequiresTryEnter = 611,
 
     /// <summary>Using target must have $enter/$exit for resource management.</summary>
     UsingTargetMissingEnterExit = 612,
@@ -639,6 +660,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot downgrade token permission (e.g., .view() on Modifying/Claiming).</summary>
     TokenDowngradeProhibited = 618,
 
+    /// <summary>Suflae: member access on a possibly-none (`E?`) entity reference that has not been
+    /// null-checked in the current flow. Guard it with `if x isnot none` / `when x is none`.</summary>
+    NullableEntityDeref = 619,
+
     /// <summary>Same entity cannot be modified multiple times in one call.</summary>
     HijackDuplicateInCall = 620,
 
@@ -654,10 +679,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot write to member variable through read-only wrapper (Viewing, Inspecting).</summary>
     WriteThroughReadOnlyWrapper = 631,
 
-    /// <summary>Hijacked[T] method calls require danger! block.</summary>
+    /// <summary>Hijacked[T] method calls require danger block.</summary>
     HijackedRequiresDanger = 627,
 
-    /// <summary>.hijack() on Shared/Watched requires danger! block.</summary>
+    /// <summary>.hijack() on Shared/Watched requires danger block.</summary>
     SnatchRequiresDanger = 628,
 
     /// <summary>A multi-threaded access token (Inspecting/Claiming from inspect()/claim()) must be
@@ -823,10 +848,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Danger blocks cannot be nested.</summary>
     NestedDangerBlock = 801,
 
-    /// <summary>`?T` rvalue mark is only valid at routine return position (slots are lvalue).</summary>
+    /// <summary>`T` rvalue mark is only valid at routine return position (slots are lvalue).</summary>
     RvalueMarkInSlotPosition = 802,
 
-    /// <summary>Bare entity in return position must use `?T` rvalue mark.</summary>
+    /// <summary>Bare entity in return position must use `T` rvalue mark.</summary>
     BareEntityReturnMissingRvalueMark = 803,
 
     /// <summary>Blank cannot be used as a generic type argument (it has no value).</summary>

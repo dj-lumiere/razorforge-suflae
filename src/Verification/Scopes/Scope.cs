@@ -28,6 +28,14 @@ public sealed class Scope
     /// <summary>Type narrowings applied in this scope (e.g., after null checks).</summary>
     private readonly Dictionary<string, TypeSymbol> _typeNarrowings = new();
 
+    /// <summary>Suflae flow typing: per-scope nullability facts for nullable entity references. A value
+    /// of <c>true</c> means PROVEN non-none in this scope (e.g. inside `if x isnot None` or after a
+    /// `if x is None: return` guard); <c>false</c> means KNOWN nullable again (e.g. reassigned a
+    /// possibly-none value), which SHADOWS an outer proven fact. Absence falls through to the parent
+    /// scope. Scoped like narrowings — a branch-scope fact is discarded on exit; a guard-clause fact
+    /// lands in the enclosing scope and persists.</summary>
+    private readonly Dictionary<string, bool> _nullabilityFacts = new();
+
     /// <summary>For type scopes, the associated type.</summary>
     public TypeSymbol? AssociatedType { get; init; }
 
@@ -93,6 +101,34 @@ public sealed class Scope
         return _typeNarrowings.TryGetValue(key: name, value: out TypeSymbol? type)
             ? type
             : Parent?.GetNarrowedType(name: name);
+    }
+
+    /// <summary>
+    /// Suflae flow typing: marks a nullable entity reference as PROVEN non-none in this scope.
+    /// </summary>
+    public void MarkNonNull(string name)
+    {
+        _nullabilityFacts[key: name] = true;
+    }
+
+    /// <summary>
+    /// Suflae flow typing: records that a variable is KNOWN nullable again in this scope (e.g. after
+    /// reassigning a possibly-none value). This SHADOWS any proven-non-none fact from an outer scope.
+    /// </summary>
+    public void MarkNullableAgain(string name)
+    {
+        _nullabilityFacts[key: name] = false;
+    }
+
+    /// <summary>
+    /// Suflae flow typing: true if the variable has been proven non-none in the nearest enclosing scope
+    /// that has a fact about it. A nearer <c>false</c> (re-nullified) shadows a farther <c>true</c>.
+    /// </summary>
+    public bool IsProvenNonNull(string name)
+    {
+        return _nullabilityFacts.TryGetValue(key: name, value: out bool proven)
+            ? proven
+            : Parent?.IsProvenNonNull(name: name) ?? false;
     }
 
     /// <summary>

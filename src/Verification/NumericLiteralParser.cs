@@ -170,12 +170,12 @@ public static class NumericLiteralParser
         // prematurely. (Digit-group separators "_" between digits are handled below.)
         foreach (string suf in new[] { "decimal", "f128", "d128", "d64", "d32", "dec", "dn" })
         {
-            if (cleaned.EndsWith("_" + suf, System.StringComparison.OrdinalIgnoreCase))
+            if (cleaned.EndsWith("_" + suf, StringComparison.OrdinalIgnoreCase))
             {
                 cleaned = cleaned[..^(suf.Length + 1)];
                 break;
             }
-            if (cleaned.EndsWith(suf, System.StringComparison.OrdinalIgnoreCase))
+            if (cleaned.EndsWith(suf, StringComparison.OrdinalIgnoreCase))
             {
                 cleaned = cleaned[..^suf.Length];
                 break;
@@ -573,121 +573,6 @@ public static class NumericLiteralParser
         CallingConvention = CallingConvention.Cdecl,
         EntryPoint = "rf_cs_integer_exponent")]
     public static extern long GetIntegerExponent(nint handle);
-
-    #endregion
-
-    #region Arbitrary precision Decimal (decNumber)
-
-    /// <summary>
-    /// Parses a string to an arbitrary precision decimal (decNumber-backed).
-    /// Returns an opaque handle that must be freed with FreeDecimal.
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_from_string")]
-    public static extern nint ParseDecimal(
-        [MarshalAs(unmanagedType: UnmanagedType.LPStr)] string str);
-
-    /// <summary>
-    /// Frees an arbitrary precision decimal handle.
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_free")]
-    public static extern void FreeDecimal(nint handle);
-
-    /// <summary>
-    /// Gets the sign of the decimal (-1 = negative, 0 = zero, 1 = positive).
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_sign")]
-    public static extern int GetDecimalSign(nint handle);
-
-    /// <summary>
-    /// Gets the exponent (power of 10) of the decimal.
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_exponent")]
-    public static extern int GetDecimalExponent(nint handle);
-
-    /// <summary>
-    /// Gets the number of significant digits in the decimal.
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_significant_digits")]
-    public static extern int GetDecimalSignificantDigits(nint handle);
-
-    /// <summary>
-    /// Checks if the decimal represents an integer value.
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_is_integer")]
-    public static extern int IsDecimalInteger(nint handle);
-
-    /// <summary>
-    /// Negates the decimal value in place.
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_negate")]
-    public static extern void NegateDecimal(nint handle);
-
-    /// <summary>
-    /// Converts decimal to string with specified decimal places.
-    /// Caller must free the returned string with FreeString.
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_to_string")]
-    private static extern nint DecimalToStringNative(nint handle, int decimalPlaces);
-
-    /// <summary>
-    /// Converts decimal to integer string (no decimal point).
-    /// Caller must free the returned string with FreeString.
-    /// </summary>
-    [DllImport(dllName: RuntimeLib,
-        CallingConvention = CallingConvention.Cdecl,
-        EntryPoint = "rf_cs_decimal_to_integer_string")]
-    private static extern nint DecimalToIntegerStringNative(nint handle);
-
-    /// <summary>
-    /// Converts a decimal handle to a managed string.
-    /// </summary>
-    /// <param name="handle">The decimal handle.</param>
-    /// <param name="decimalPlaces">Number of decimal places in output.</param>
-    /// <returns>String representation of the decimal.</returns>
-    public static string DecimalToString(nint handle, int decimalPlaces)
-    {
-        nint strPtr = DecimalToStringNative(handle: handle, decimalPlaces: decimalPlaces);
-        if (strPtr == nint.Zero)
-        {
-            return string.Empty;
-        }
-
-        string result = Marshal.PtrToStringAnsi(ptr: strPtr) ?? string.Empty;
-        // Note: The native library allocates this with malloc, so we need to free it
-        // For now, we'll leak this memory. In production, add a proper free function.
-        return result;
-    }
-
-    /// <summary>
-    /// Converts a decimal handle to an integer string.
-    /// </summary>
-    public static string DecimalToIntegerString(nint handle)
-    {
-        nint strPtr = DecimalToIntegerStringNative(handle: handle);
-        if (strPtr == nint.Zero)
-        {
-            return string.Empty;
-        }
-
-        string result = Marshal.PtrToStringAnsi(ptr: strPtr) ?? string.Empty;
-        return result;
-    }
 
     #endregion
 

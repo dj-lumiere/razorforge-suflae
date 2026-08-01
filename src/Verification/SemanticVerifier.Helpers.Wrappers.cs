@@ -12,10 +12,10 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
-    private const string ModifyingWrapperName = "Modifying";
-    private const string ClaimingWrapperName = "Claiming";
-    private const string ViewingWrapperName = "Viewing";
-    private const string InspectingWrapperName = "Inspecting";
+    private const string ModifyingWrapperName = Compiler.Resolution.RuntimeContract.Modifying;
+    private const string ClaimingWrapperName = Compiler.Resolution.RuntimeContract.Claiming;
+    private const string ViewingWrapperName = Compiler.Resolution.RuntimeContract.Viewing;
+    private const string InspectingWrapperName = Compiler.Resolution.RuntimeContract.Inspecting;
     private const string ScopedNoEscapeHint = "(none — scoped, can't escape)";
 
     private bool IsNestedModifying(Expression source)
@@ -65,7 +65,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsSharedType(TypeSymbol type)
     {
-        return type.Name == "Shared";
+        return type.Name == Compiler.Resolution.RuntimeContract.Shared;
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsWatchedType(TypeSymbol type)
     {
-        return type.Name == "Watched";
+        return type.Name == Compiler.Resolution.RuntimeContract.Watched;
     }
 
     /// <summary>
@@ -85,11 +85,12 @@ public sealed partial class SemanticVerifier
         ModifyingWrapperName,  // Exclusive write single-threaded token
         InspectingWrapperName, // Read-only multi-threaded token
         ClaimingWrapperName,   // Exclusive write multi-threaded token
-        "Shared",    // Reference-counted multi-threaded handle
-        "Watched",   // Weak reference multi-threaded handle
-        "Retained",  // Reference-counted handle
-        "Tracked",   // Weak reference handle
-        "Hijacked",  // Unmanaged raw pointer handle
+        Compiler.Resolution.RuntimeContract.Shared,    // Reference-counted multi-threaded handle
+        Compiler.Resolution.RuntimeContract.Watched,   // Weak reference multi-threaded handle
+        Compiler.Resolution.RuntimeContract.Retained,  // Reference-counted handle
+        Compiler.Resolution.RuntimeContract.Tracked,   // Weak reference handle
+        Compiler.Resolution.RuntimeContract.Hijacked,  // Unmanaged raw pointer handle
+        Compiler.Resolution.RuntimeContract.Roamed,    // Biased-RC handle; forwards inner under a lock
     ];
 
     /// <summary>
@@ -108,7 +109,7 @@ public sealed partial class SemanticVerifier
     /// <returns>True if the type is a wrapper type.</returns>
     private static bool IsWrapperType(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return WrapperTypes.Contains(value: baseName);
     }
 
@@ -119,7 +120,7 @@ public sealed partial class SemanticVerifier
     /// <returns>True if the wrapper is read-only.</returns>
     private static bool IsReadOnlyWrapper(TypeSymbol type)
     {
-        string baseName = GetBaseTypeName(typeName: type.Name);
+        string baseName = type.BareName;
         return ReadOnlyWrapperTypes.Contains(value: baseName);
     }
 
@@ -187,7 +188,7 @@ public sealed partial class SemanticVerifier
         // Read-only wrappers can only access @readonly methods
         if (!method.IsReadOnly)
         {
-            string wrapperName = GetBaseTypeName(typeName: wrapperType.Name);
+            string wrapperName = wrapperType.BareName;
             ReportError(code: SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
                 message:
                 $"Cannot call writable method '{method.Name}' through read-only wrapper '{wrapperName}[T]'. " +
@@ -227,10 +228,10 @@ public sealed partial class SemanticVerifier
     private static readonly Dictionary<string, string> NonTriviallyCopyableWrappers =
         new(StringComparer.Ordinal)
         {
-            ["Retained"] = "a.retain()",
-            ["Tracked"] = "a.track()",
-            ["Shared"] = "a.share()",
-            ["Watched"] = "a.watch()",
+            [Compiler.Resolution.RuntimeContract.Retained] = "a.retain()",
+            [Compiler.Resolution.RuntimeContract.Tracked] = "a.track()",
+            [Compiler.Resolution.RuntimeContract.Shared] = "a.share()",
+            [Compiler.Resolution.RuntimeContract.Watched] = "a.watch()",
             [ViewingWrapperName] = ScopedNoEscapeHint,
             [ModifyingWrapperName] = ScopedNoEscapeHint,
             [InspectingWrapperName] = ScopedNoEscapeHint,
@@ -239,7 +240,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Returns true when the type can appear in an implicit-copy position (var binding,
-    /// non-<c>steal</c> argument pass, non-<c>?T</c> return, <c>with</c> base). The check
+    /// non-<c>steal</c> argument pass, non-<c>T</c> return, <c>with</c> base). The check
     /// is "obeys <c>Assignable</c>" — auto-derived for records whose @llvm layout has no
     /// <c>ptr</c>, explicitly opt-in for raw-pointer wrappers (<c>Hijacked</c>, <c>CPtr</c>),
     /// never auto-derived for ownership-bearing wrappers (<c>Retained</c>,
@@ -247,14 +248,21 @@ public sealed partial class SemanticVerifier
     /// is now subsumed by the protocol's auto-derivation rule.
     /// </summary>
     /// <summary>
-    /// True when a type carries its own cross-thread synchronization and may therefore be passed
-    /// to a <c>threaded routine</c> by reference (the worker aliases the spawner's cell). Exactly
-    /// the atomic / shared-ownership wrappers — <c>Atomic[T]</c>, <c>Shared[T,P]</c>,
-    /// <c>Watched[T,P]</c>. Every other type must be trivially copyable (passed by value as an
-    /// independent copy) so unsynchronized state can never alias across the thread boundary.
+    /// True when a type carries its own cross-thread synchronization and may therefore cross an
+    /// async spawn boundary (<c>threaded</c> OR <c>suspended</c> under M:N — both are potentially
+    /// parallel) by reference, aliasing the spawner's cell safely. These are the atomic /
+    /// shared-ownership wrappers — <c>Atomic[T]</c>, <c>Shared[T,P]</c>, <c>Watched[T,P]</c> (atomic
+    /// refcount) — plus the <em>multi-threaded</em> lock-backed tokens <c>Inspecting[T,P]</c>
+    /// (read-only) and <c>Claiming[T,P]</c> (exclusive), whose mutex/rwlock makes concurrent access
+    /// sound. The single-threaded tokens <c>Viewing</c>/<c>Modifying</c> are deliberately NOT here —
+    /// they are unsynchronized (see the 2×2 in <c>internal-wiki/v0.3.x-mn-scheduler.md</c> §4). Every
+    /// other type must be trivially copyable (passed by value as an independent copy) or
+    /// <c>steal</c>-moved so unsynchronized state can never alias across the boundary.
     /// </summary>
     private static bool IsThreadShareable(TypeSymbol type) =>
-        GetBaseTypeName(typeName: type.Name) is "Atomic" or "Shared" or "Watched";
+        type.BareName is Compiler.Resolution.RuntimeContract.Atomic
+            or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched
+            or Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
 
     private static bool IsTriviallyCopyable(TypeSymbol type)
     {
@@ -291,7 +299,10 @@ public sealed partial class SemanticVerifier
 
         if (implemented != null)
         {
-            return implemented.Any(predicate: p => p.Name == "Assignable");
+            // Either capability qualifies: `Storable` (can `$store`) or `Copyable` (deep copy, which
+            // obeys Storable). The auto-derive adds `Copyable` directly (not `Storable`), so this direct
+            // name check must accept both.
+            return implemented.Any(predicate: p => p.Name is "Storable" or "Copyable");
         }
 
         // Anything we did not recognise falls back to trivially copyable so this pass does
@@ -313,7 +324,7 @@ public sealed partial class SemanticVerifier
 
         (string, string)? FindCore(TypeSymbol type, string prefix, HashSet<string> visited)
         {
-            string baseName = GetBaseTypeName(typeName: type.Name);
+            string baseName = type.BareName;
             if (NonTriviallyCopyableWrappers.ContainsKey(key: baseName))
             {
                 return (baseName, prefix.Length == 0 ? "<value>" : prefix);

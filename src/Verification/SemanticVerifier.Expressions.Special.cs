@@ -101,7 +101,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Extract base name (e.g., "List" from "List[S32]")
-        string baseName = GetBaseTypeName(typeName: resolution.Name);
+        string baseName = resolution.BareName;
         TypeSymbol? def = _registry.LookupType(name: baseName);
         // Try slash-qualified module path lookup for non-Core types (e.g., "Collections/Deque")
         if (def == null && !string.IsNullOrEmpty(value: resolution.Module))
@@ -282,8 +282,26 @@ public sealed partial class SemanticVerifier
             return operandType;
         }
 
+        // Check for a single-threaded reference-counted handle (Retained/Tracked). These are SHARED
+        // ownership, not unique — multiple handles to the same non-atomic control block can coexist,
+        // so `steal` (an exclusive-transfer marker) is a category error: moving one handle proves
+        // nothing about the others. Clone with `.retain()`/`.track()`, or convert to `Shared`/
+        // `Watched` (atomic Arc) to move ownership across a coroutine/thread boundary.
+        if (operandType.BareName is
+            Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
+        {
+            ReportError(code: SemanticDiagnosticCode.StealSharedOwnership,
+                message:
+                $"Cannot steal '{operandType.Name}' - a reference-counted handle is shared ownership, " +
+                "not unique, so it cannot be exclusively moved. Clone it with `.retain()`/`.track()`, " +
+                "or use `Shared`/`Watched` to move ownership across a coroutine/thread boundary.",
+                location: steal.Location);
+            steal.ResolvedType = operandType;
+            return operandType;
+        }
+
         // T is explicitly stealable — ownership transfer is its design purpose
-        bool isOwned = operandType is WrapperTypeInfo { Name: "Owned" };
+        bool isOwned = operandType is WrapperTypeInfo { Name: Compiler.Resolution.RuntimeContract.Owned };
 
         // `steal` on a record is a no-op — records are value-typed and have no
         // ownership to transfer. Returning the operand type as-is lets stdlib
@@ -309,7 +327,7 @@ public sealed partial class SemanticVerifier
         // `steal T` unwraps to bare T — T is a binding-only ownership marker,
         // and steal transfers the bare entity out of that binding. For raw entity operands
         // (already bare), steal is a no-op on the type.
-        // `steal` always produces an rvalue `?T` — it consumes an lvalue binding and yields
+        // `steal` always produces an rvalue `T` — it consumes an lvalue binding and yields
         // an in-flight entity that must be re-bound (or consumed) at the use site.
         steal.IsInFlight = true;
         if (isOwned && operandType is WrapperTypeInfo { InnerType: not null } owned)
@@ -328,7 +346,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsMemoryToken(TypeSymbol type)
     {
-        return type.Name is "Viewing" or "Modifying";
+        return type.Name is Compiler.Resolution.RuntimeContract.Viewing or Compiler.Resolution.RuntimeContract.Modifying;
     }
 
     /// <summary>
@@ -336,12 +354,12 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static string GetMemoryTokenKind(TypeSymbol type)
     {
-        if (type.Name.StartsWith(value: "Viewing"))
+        if (type.Name.StartsWith(value: Compiler.Resolution.RuntimeContract.Viewing))
         {
             return "Viewing[T]";
         }
 
-        if (type.Name.StartsWith(value: "Modifying"))
+        if (type.Name.StartsWith(value: Compiler.Resolution.RuntimeContract.Modifying))
         {
             return "Modifying[T]";
         }
@@ -354,7 +372,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsHijacked(TypeSymbol type)
     {
-        return type.Name == "Hijacked";
+        return type.Name == Compiler.Resolution.RuntimeContract.Hijacked;
     }
 
     /// <summary>
