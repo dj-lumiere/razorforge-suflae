@@ -86,6 +86,16 @@ The language cleanup that ships alongside channels — same programs, fewer requ
   token-passing container routine. `danger` is also a plain keyword now (was `danger!`).
 - **`flags isonly X` → `flags == X`.** One redundant keyword removed; the codegen was already identical.
 
+## 📦 Prefix / package import
+
+- **`import A/B` now pulls in every submodule under `A/B`.** A single import brings in every module
+  whose declared path is a strict descendant (`A/B/Sub`, `A/B/Sub/Deep`, …), instead of one `import`
+  line per module. Resolution keys on the *declared* `module` path, not the directory layout.
+- Each submodule's leaf stays callable leaf-qualified (`XxxApi.start()`); a cross-module leaf clash
+  surfaces as a compile error (RF-S513), disambiguated by importing the specific module. (Multi-segment
+  call-site qualification like `Foo/Alpha.greet()` is not spellable — `/` is division in expression
+  position.)
+
 ## 🩹 Runtime stability
 
 - **Per-thread coroutine context on the M:N pool.** The stackful-coroutine backend's active-context
@@ -94,7 +104,7 @@ The language cleanup that ships alongside channels — same programs, fewer requ
 
 ## ✅ Tests
 
-Full stdlib end-to-end suite green — **162 fixtures**, including the `channel_*` (backpressure,
+Full stdlib end-to-end suite green — **163 fixtures**, including the `channel_*` (backpressure,
 fan-in, rendezvous, try-feed, worker-pool, introspection), `signalcaster_*` (predicate, timeout), and
 `coro_*` scheduler fixtures (migration, parallel, work-steal) — alongside the analyzer and unit suites
 (**1,475 tests total**). CI green on Linux, macOS, and Windows.
