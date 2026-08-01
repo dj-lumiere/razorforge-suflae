@@ -78,11 +78,19 @@ public sealed partial class SemanticVerifier
             TokenType.D64Literal => "D64",
             TokenType.D128Literal => "D128",
 
-            // Unsuffixed literals: type inference resolves these; fallback is S64/F64 (RF) or Integer/Decimal (Suflae)
-            TokenType.UndecidedInteger => _registry.Language == Language.Suflae
+            // Unsuffixed literals: type inference resolves these; fallback is S64/F64 (RF) or Integer/Decimal
+            // (Suflae). CRITICAL: the Suflae default applies ONLY to Suflae SOURCE. The RF stdlib is shared
+            // by SF ("SF's Core IS RF's Core") and its bodies get (re-)analyzed under an SF compile (generic
+            // monomorphization / variant-body collection) OUTSIDE the AnalyzeStdlibBodies RF-mode override —
+            // there `_registry.Language` is Suflae. A stdlib `int_eq[U256](b: 0)` must keep RF's S64 default
+            // (coerces to the U256/i256 compare); the SF Integer default is a HEAP RECORD that can't coerce
+            // into a scalar op → `store %Record.Numerics.Integer` / `icmp i256, %Record` type errors. Key on
+            // the LITERAL's own file (its Location), NOT `_currentFilePath` (stale = the user entry under
+            // cross-module body analysis).
+            TokenType.UndecidedInteger => UsesSuflaeNumericDefaults(literal)
                 ? "Integer"
                 : "S64",
-            TokenType.UndecidedDecimal => _registry.Language == Language.Suflae
+            TokenType.UndecidedDecimal => UsesSuflaeNumericDefaults(literal)
                 ? "Decimal"
                 : "F64",
 
@@ -187,6 +195,24 @@ public sealed partial class SemanticVerifier
     private bool IsFixedWidthIntegerType(TypeSymbol type)
     {
         return ImplementsProtocol(type: type, protocolName: "FixedIntegral");
+    }
+
+    /// <summary>
+    /// Suflae's unsuffixed-literal defaults (Integer/Decimal) apply ONLY to Suflae source. The shared RF
+    /// stdlib keeps RF's S64/F64 defaults even under a Suflae compile, so a stdlib literal like
+    /// <c>int_eq[U256](b: 0)</c> stays a coercible scalar instead of a heap Integer record. Keys on the
+    /// literal's own file (its Location), because <c>_currentFilePath</c> is the user entry when a
+    /// cross-module stdlib body is (re-)analyzed during monomorphization.
+    /// </summary>
+    private bool UsesSuflaeNumericDefaults(LiteralExpression literal)
+    {
+        if (_registry.Language != Language.Suflae)
+        {
+            return false;
+        }
+        string? litFile = literal.Location.FileName;
+        string probeFile = string.IsNullOrEmpty(value: litFile) ? _currentFilePath ?? "" : litFile;
+        return !IsStdlibFile(filePath: probeFile);
     }
 
     /// <summary>
