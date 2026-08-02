@@ -830,7 +830,11 @@ public record TypeExpression(
     string Name,
     List<TypeExpression>? GenericArguments,
     SourceLocation Location,
-    bool IsRvalue = false) : Expression(Location: Location)
+    bool IsRvalue = false,
+    // Cross-language realm tag from a `Realm::Name` qualifier (e.g. `RF::Core.List`). "RF" = the
+    // RazorForge/bare realm (the resolver skips Suflae's entity->Roamed lowering for it); null = the
+    // ambient realm of the file. Only "RF" is wired for now (Suflae wrappers holding a bare RF entity).
+    string? Realm = null) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

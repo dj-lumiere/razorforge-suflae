@@ -816,6 +816,10 @@ public enum TokenType
     /// <summary>Type annotation colon (:)</summary>
     Colon,
 
+    /// <summary>Realm-qualifier separator (::) — e.g. <c>RF::Core.List</c> references the RazorForge
+    /// (RF-mode, bare) realm from a Suflae file. Only meaningful immediately after a realm tag (RF/SF).</summary>
+    DoubleColon,
+
     /// <summary>Vararg declaration operator (...) (ex, routine foo(values...: S32) -> S32</summary>
     DotDotDot,
 

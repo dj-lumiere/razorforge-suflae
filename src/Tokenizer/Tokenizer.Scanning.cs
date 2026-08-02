@@ -153,13 +153,11 @@ public partial class Tokenizer
             case ':':
                 if (Match(expected: ':'))
                 {
-                    throw new GrammarException(code: GrammarDiagnosticCode.InvalidCharacter,
-                        message:
-                        "Static access operator '::' is no longer supported. Use '.' instead.",
-                        fileName: _fileName,
-                        line: _line,
-                        column: _column,
-                        language: _language);
+                    // Realm-qualifier separator, e.g. `RF::Core.List` (reach the RazorForge/bare realm from
+                    // a Suflae file). The old static-access `::` was removed in favour of `.`; this is a new,
+                    // distinct role — only valid right after a realm tag (RF/SF), rejected elsewhere in parse.
+                    AddToken(type: TokenType.DoubleColon);
+                    break;
                 }
 
                 AddToken(type: TokenType.Colon);

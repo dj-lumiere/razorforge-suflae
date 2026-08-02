@@ -129,6 +129,26 @@ public partial class Parser
         string name = PeekToken(offset: -1)
            .Text;
 
+        // Realm qualifier: `RF::Core.List` — the identifier before `::` is a realm tag (RF/SF), and the
+        // rest is a qualified type name resolved in that realm. `RF::` reaches the RazorForge/bare realm
+        // from a Suflae file (the resolver skips the entity->Roamed lowering for it). The qualified name
+        // after `::` uses `.`/`/` segment separators (e.g. `RF::Core.List`), consumed here so the general
+        // `/`-path loop below is a no-op.
+        string? realm = null;
+        if (Match(type: TokenType.DoubleColon))
+        {
+            realm = name;
+            var realmSb = new System.Text.StringBuilder(
+                ConsumeIdentifier(errorMessage: "Expected type name after realm qualifier '::'"));
+            while (Check(type: TokenType.Dot) || Check(type: TokenType.Slash))
+            {
+                realmSb.Append(Match(type: TokenType.Dot) ? '.' : (Match(type: TokenType.Slash) ? '/' : '.'));
+                realmSb.Append(ConsumeIdentifier(
+                    errorMessage: "Expected name component after '.'/'/' in realm-qualified type"));
+            }
+            name = realmSb.ToString();
+        }
+
         // Support qualified type paths like RazorForge/Collections.Dict
         // This allows referencing types from other modules in type annotations
         var nameSb = new System.Text.StringBuilder(name);
@@ -152,7 +172,7 @@ public partial class Parser
         // ─────────────────────────────────────────────────────────────────────
         if (!Match(type: TokenType.LeftBracket))
         {
-            return new TypeExpression(Name: name, GenericArguments: null, Location: location);
+            return new TypeExpression(Name: name, GenericArguments: null, Location: location, Realm: realm);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -167,7 +187,7 @@ public partial class Parser
 
         Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after type arguments");
 
-        return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location);
+        return new TypeExpression(Name: name, GenericArguments: typeArgs, Location: location, Realm: realm);
 
     }
 
