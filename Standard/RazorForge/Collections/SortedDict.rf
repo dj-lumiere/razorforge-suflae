@@ -329,9 +329,9 @@ routine BTreeDictNode[K, V].children_add_range_from(other: Referring[BTreeDictNo
 
 routine BTreeDictNode[K, V](is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
-    entry_keys: zero_value[Array[K, 63]](),
-    entry_values: zero_value[Array[V, 63]](),
-    children: zero_value[Array[BTreeDictNode[K, V], 64]](),
+    entry_keys: LLVM::zero_value[Array[K, 63]](),
+    entry_values: LLVM::zero_value[Array[V, 63]](),
+    children: LLVM::zero_value[Array[BTreeDictNode[K, V], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,
@@ -381,7 +381,7 @@ routine SortedDict[K, V].lower_bound(node: Referring[BTreeDictNode[K, V]], key: 
   var lo = 0u64
   var hi = node.keys_count()
   while lo < hi
-    var mid = lo +% unsigned_div[U64](hi -% lo, 2u64)
+    var mid = lo +% LLVM::unsigned_div[U64](hi -% lo, 2u64)
     if node.key_get(mid) < key
       lo = mid +% 1u64
     else
@@ -532,7 +532,7 @@ routine SortedDict[K, V].insert_non_full(node: Controlling[BTreeDictNode[K, V]],
 routine SortedDict[K, V].split_child(parent_node: Controlling[BTreeDictNode[K, V]], child_idx: U64)
   danger
     var child = parent_node.children_get(child_idx).as_entity()
-    var mid = unsigned_div[U64](B_DICT -% 1u64, 2u64)
+    var mid = LLVM::unsigned_div[U64](B_DICT -% 1u64, 2u64)
 
     var new_node_ptr = BTreeDictNode[K, V](is_leaf: child.is_leaf).hijack()
     var new_node = new_node_ptr.as_entity()

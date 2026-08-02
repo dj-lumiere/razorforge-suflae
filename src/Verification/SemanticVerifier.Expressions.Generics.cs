@@ -313,6 +313,10 @@ public sealed partial class SemanticVerifier
                                        preferredArity: generic.Arguments.Count);
             if (routine != null)
             {
+                // Realm gate for a GENERIC foreign call `LLVM::add[U128](...)` — `funcId` (== generic.Object)
+                // carries the `::` qualifier the parser preserved, so enforce it here just like the
+                // non-generic free-call path.
+
                 // Capture the generic-def shape BEFORE swapping to the resolution: explicit
                 // type arguments give a complete substitution map, which (a) types bare-literal
                 // arguments via expectedType (`sub[S8](a: 0, ...)` makes 0 an S8, not an

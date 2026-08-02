@@ -38,7 +38,7 @@ routine Tracked[T].recover!() -> Retained[T]
     if ctrl.strong_count() == 0
       absent
     ctrl.increase_strong_count()
-    return reinterpret_bits[Tracked[T], Retained[T]](me)
+    return LLVM::reinterpret_bits[Tracked[T], Retained[T]](me)
 
 # ============================================================================
 # Inspection

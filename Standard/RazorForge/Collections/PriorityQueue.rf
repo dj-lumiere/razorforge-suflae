@@ -152,14 +152,14 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
         var ptr = rf_allocate_dynamic_uninit(priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
       else
-        var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[TPriority, Address](me.priorities), size: priority_byte_size)
+        var ptr = rf_reallocate_dynamic(ptr: LLVM::pointer_to_int[TPriority, Address](me.priorities), size: priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
 
       if me.elements.is_none()
         var ptr = rf_allocate_dynamic_uninit(element_byte_size)
         me.elements = Hijacked[TElement](ptr)
       else
-        var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[TElement, Address](me.elements), size: element_byte_size)
+        var ptr = rf_reallocate_dynamic(ptr: LLVM::pointer_to_int[TElement, Address](me.elements), size: element_byte_size)
         me.elements = Hijacked[TElement](ptr)
 
     me.capacity = new_capacity
@@ -180,7 +180,7 @@ routine PriorityQueue[TPriority, TElement].grow()
 ### :param index: The child index whose parent to find.
 ### :returns: The index of the parent node.
 routine PriorityQueue[TPriority, TElement].parent_index(index: U64) -> U64
-  return unsigned_div[U64](index -% 1u64, 2u64)
+  return LLVM::unsigned_div[U64](index -% 1u64, 2u64)
 
 ### Returns the heap index of the left child of node `index`.
 ### :param index: The parent index to expand.

@@ -68,7 +68,7 @@ routine S8!(from: S128) -> S8
 routine S8!(from: U8) -> S8
   if from > 127_u8
     throw IntegerOverflowError()
-  return reinterpret_bits[U8, S8](from)
+  return LLVM::reinterpret_bits[U8, S8](from)
 
 ### Converts a `U16` to `S8`, throwing if the value exceeds 127.
 ### :param from: The `U16` value to convert.
@@ -181,19 +181,19 @@ routine S8!(from: D128) -> S8
 ### :param you: The right operand.
 ### :returns: A tuple of `(wrapped_sum, overflowed)`.
 routine S8.add_with_overflow(you: S8) -> (S8, Bool)
-  return signed_add_checked[S8](me, you)
+  return LLVM::signed_add_checked[S8](me, you)
 
 ### Returns the difference and a flag indicating whether the result overflowed.
 ### :param you: The value to subtract.
 ### :returns: A tuple of `(wrapped_difference, overflowed)`.
 routine S8.sub_with_overflow(you: S8) -> (S8, Bool)
-  return signed_sub_checked[S8](me, you)
+  return LLVM::signed_sub_checked[S8](me, you)
 
 ### Returns the product and a flag indicating whether the result overflowed.
 ### :param you: The right operand.
 ### :returns: A tuple of `(wrapped_product, overflowed)`.
 routine S8.mul_with_overflow(you: S8) -> (S8, Bool)
-  return signed_mul_checked[S8](me, you)
+  return LLVM::signed_mul_checked[S8](me, you)
 
 ### Returns `me + you`, throwing on overflow.
 ### :param you: The right operand.
@@ -274,19 +274,19 @@ routine S8.neg!() -> S8
 ### :param you: The right operand.
 ### :returns: The sum, wrapping on overflow.
 routine S8.add_wrap(you: S8) -> S8
-  return add[S8](a: me, b: you)
+  return LLVM::add[S8](a: me, b: you)
 
 ### Returns `(me - you)` with wrapping arithmetic (mod 256, signed).
 ### :param you: The value to subtract.
 ### :returns: The difference, wrapping on underflow.
 routine S8.sub_wrap(you: S8) -> S8
-  return sub[S8](a: me, b: you)
+  return LLVM::sub[S8](a: me, b: you)
 
 ### Returns `(me * you)` with wrapping arithmetic (mod 256, signed).
 ### :param you: The right operand.
 ### :returns: The product, wrapping on overflow.
 routine S8.mul_wrap(you: S8) -> S8
-  return mul[S8](a: me, b: you)
+  return LLVM::mul[S8](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -296,26 +296,26 @@ routine S8.mul_wrap(you: S8) -> S8
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
 dangerous routine S8.add_unchecked(you: S8) -> S8
-  return signed_add_exact[S8](a: me, b: you)
+  return LLVM::signed_add_exact[S8](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no overflow.
 dangerous routine S8.sub_unchecked(you: S8) -> S8
-  return signed_sub_exact[S8](a: me, b: you)
+  return LLVM::signed_sub_exact[S8](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
 dangerous routine S8.mul_unchecked(you: S8) -> S8
-  return signed_mul_exact[S8](a: me, b: you)
+  return LLVM::signed_mul_exact[S8](a: me, b: you)
 
 ### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
 dangerous routine S8.floordiv_unchecked(you: S8) -> S8
-  var quotient = signed_div[S8](a: me, b: you)
-  var remainder = signed_rem[S8](a: me, b: you)
+  var quotient = LLVM::signed_div[S8](a: me, b: you)
+  var remainder = LLVM::signed_rem[S8](a: me, b: you)
   if remainder < 0_s8
     if you > 0_s8
       return quotient - 1_s8
@@ -326,7 +326,7 @@ dangerous routine S8.floordiv_unchecked(you: S8) -> S8
 ### :param you: The divisor.
 ### :returns: The euclidean remainder, assuming `you != 0`.
 dangerous routine S8.mod_unchecked(you: S8) -> S8
-  var remainder = signed_rem[S8](a: me, b: you)
+  var remainder = LLVM::signed_rem[S8](a: me, b: you)
   if remainder < 0_s8
     if you > 0_s8
       return remainder + you
@@ -341,24 +341,24 @@ dangerous routine S8.mod_unchecked(you: S8) -> S8
 ### :param you: The right operand.
 ### :returns: The sum, or `127` / `−128` if it would overflow.
 routine S8.add_clamp(you: S8) -> S8
-  return signed_add_sat[S8](a: me, b: you)
+  return LLVM::signed_add_sat[S8](a: me, b: you)
 
 ### Returns `me - you`, clamped to `S8_MAX` or `S8_MIN` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `127` / `−128` if it would overflow.
 routine S8.sub_clamp(you: S8) -> S8
-  return signed_sub_sat[S8](a: me, b: you)
+  return LLVM::signed_sub_sat[S8](a: me, b: you)
 
 ### Returns `me * you`, clamped to `S8_MAX` or `S8_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `127` / `−128` if it would overflow.
 routine S8.mul_clamp(you: S8) -> S8
-  var wide = mul[S16](sign_extend[S8, S16](me), sign_extend[S8, S16](you))
-  if signed_gt[S16](wide, 127_s16)
+  var wide = LLVM::mul[S16](LLVM::sign_extend[S8, S16](me), LLVM::sign_extend[S8, S16](you))
+  if LLVM::signed_gt[S16](wide, 127_s16)
     return S8_MAX
-  if signed_lt[S16](wide, -128_s16)
+  if LLVM::signed_lt[S16](wide, -128_s16)
     return S8_MIN
-  return int_truncate[S16, S8](wide)
+  return LLVM::int_truncate[S16, S8](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -442,24 +442,24 @@ routine S8.pow_clamp!(exp: S8) -> S8
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine S8.bitand(you: S8) -> S8
-  return bit_and[S8](a: me, b: you)
+  return LLVM::bit_and[S8](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine S8.bitor(you: S8) -> S8
-  return bit_or[S8](a: me, b: you)
+  return LLVM::bit_or[S8](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine S8.bitxor(you: S8) -> S8
-  return bit_xor[S8](a: me, b: you)
+  return LLVM::bit_xor[S8](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine S8.bitnot() -> S8
-  return bit_xor[S8](a: me, b: -1)
+  return LLVM::bit_xor[S8](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, >>, <<<, >>>)
@@ -469,25 +469,25 @@ routine S8.bitnot() -> S8
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S8.ashl(bits: U32) -> S8
-  return shift_left[S8](me, S8(bits))
+  return LLVM::shift_left[S8](me, S8(bits))
 
 ### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits`, copying the sign bit into vacated positions.
 routine S8.ashr(bits: U32) -> S8
-  return shift_right_signed[S8](me, S8(bits))
+  return LLVM::shift_right_signed[S8](me, S8(bits))
 
 ### Left-shifts this value by `bits` positions (same as `ashl` for signed integers).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S8.lshl(bits: U32) -> S8
-  return shift_left[S8](me, S8(bits))
+  return LLVM::shift_left[S8](me, S8(bits))
 
 ### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
 routine S8.lshr(bits: U32) -> S8
-  return shift_right_unsigned[S8](me, S8(bits))
+  return LLVM::shift_right_unsigned[S8](me, S8(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -497,15 +497,15 @@ routine S8.lshr(bits: U32) -> S8
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine S8.eq(you: S8) -> Bool
-  return int_eq[S8](a: me, b: you)
+  return LLVM::int_eq[S8](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine S8.cmp(you: S8) -> ComparisonSign
-  if signed_lt[S8](me, you)
+  if LLVM::signed_lt[S8](me, you)
     return ME_SMALL
-  if signed_gt[S8](me, you)
+  if LLVM::signed_gt[S8](me, you)
     return ME_LARGE
   return SAME
 
@@ -548,7 +548,7 @@ routine S8.clamp(min_val: S8, max_val: S8) -> S8
 ### Returns the count of set bits (popcount) in this value's 8-bit representation.
 ### :returns: The number of `1` bits; between 0 and 8.
 routine S8.count_ones() -> S8
-  return count_ones[S8](me)
+  return LLVM::count_ones[S8](me)
 
 ### Returns the count of clear bits in this value's 8-bit representation.
 ### :returns: `8` minus the popcount; between 0 and 8.
@@ -558,12 +558,12 @@ routine S8.count_zeros() -> S8
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `8` if the value is zero.
 routine S8.leading_zeros() -> S8
-  return leading_zeros[S8](me)
+  return LLVM::leading_zeros[S8](me)
 
 ### Returns the number of trailing zero bits, starting from the least-significant bit.
 ### :returns: The trailing zero count; `8` if the value is zero.
 routine S8.trailing_zeros() -> S8
-  return trailing_zeros[S8](me)
+  return LLVM::trailing_zeros[S8](me)
 
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `8` if the value is `−1` (all bits set).
@@ -578,7 +578,7 @@ routine S8.trailing_ones() -> S8
 ### Returns this value with its bits reversed (bit 7 ↔ bit 0, etc.).
 ### :returns: The bit-reversed `S8`.
 routine S8.reverse_bits() -> S8
-  return reverse_bits[S8](me)
+  return LLVM::reverse_bits[S8](me)
 
 ### Returns this value with its single byte unchanged (8-bit byte swap is identity).
 ### Provided for API uniformity with the wider integer types.
@@ -588,15 +588,15 @@ routine S8.swap_bytes() -> S8
 
 ### Returns this value rotated left by `bits` positions.
 routine S8.rotate_left(bits: U32) -> S8
-  return reinterpret_bits[U8, S8](reinterpret_bits[S8, U8](me).rotate_left(bits: bits))
+  return LLVM::reinterpret_bits[U8, S8](LLVM::reinterpret_bits[S8, U8](me).rotate_left(bits: bits))
 
 ### Returns this value rotated right by `bits` positions.
 routine S8.rotate_right(bits: U32) -> S8
-  return reinterpret_bits[U8, S8](reinterpret_bits[S8, U8](me).rotate_right(bits: bits))
+  return LLVM::reinterpret_bits[U8, S8](LLVM::reinterpret_bits[S8, U8](me).rotate_right(bits: bits))
 
 ### Returns the raw byte representation of this value in little-endian order.
 routine S8.to_bytes_le() -> Array[Byte, 1]
-  return reinterpret_bits[S8, U8](me).to_bytes_le()
+  return LLVM::reinterpret_bits[S8, U8](me).to_bytes_le()
 
 ### Returns the raw byte representation of this value in big-endian order.
 routine S8.to_bytes_be() -> Array[Byte, 1]
@@ -604,7 +604,7 @@ routine S8.to_bytes_be() -> Array[Byte, 1]
 
 ### Builds an `S8` from its little-endian raw byte representation.
 common routine S8.from_bytes_le(bytes: Array[Byte, 1]) -> S8
-  return reinterpret_bits[U8, S8](U8.from_bytes_le(bytes: bytes))
+  return LLVM::reinterpret_bits[U8, S8](U8.from_bytes_le(bytes: bytes))
 
 ### Builds an `S8` from its big-endian raw byte representation.
 common routine S8.from_bytes_be(bytes: Array[Byte, 1]) -> S8
@@ -632,8 +632,8 @@ routine S8.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine S8.is_even() -> Bool
-  var result = bit_and[S8](a: me, b: 1_s8)
-  return int_eq[S8](a: result, b: 0_s8)
+  var result = LLVM::bit_and[S8](a: me, b: 1_s8)
+  return LLVM::int_eq[S8](a: result, b: 0_s8)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -668,7 +668,7 @@ routine S8.represent() -> Text
   # Use reinterpret_bits (not U8(me)) — U8.create(S8) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u8 -% bits`
   # yields |me| (works correctly even for S8.MIN, whose absolute value overflows S8).
-  return "-" + (0u8 -% reinterpret_bits[S8, U8](me)).represent()
+  return "-" + (0u8 -% LLVM::reinterpret_bits[S8, U8](me)).represent()
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
@@ -714,11 +714,11 @@ routine S8!(from_text: Text) -> S8
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the zero-extended 8-bit representation.
 routine S8.fast_hash() -> U64
-  return __hash_leaf(v: zero_extend[S8, U64](me))
+  return __hash_leaf(v: LLVM::zero_extend[S8, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine S8.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zero_extend[S8, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: LLVM::zero_extend[S8, U64](me), k0: k0, k1: k1)

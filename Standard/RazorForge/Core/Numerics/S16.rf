@@ -23,7 +23,7 @@ preset S16_ONE: S16 = 1_s16
 ### :param from: The `S8` value to widen.
 ### :returns: An `S16` with the same signed value as `from`.
 routine S16(from: S8) -> S16
-  return sign_extend[S8, S16](from)
+  return LLVM::sign_extend[S8, S16](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S16` value to return.
@@ -62,7 +62,7 @@ routine S16!(from: S128) -> S16
 ### :param from: The `U8` value to widen.
 ### :returns: An `S16` equal in value to `from`.
 routine S16(from: U8) -> S16
-  return zero_extend[U8, S16](from)
+  return LLVM::zero_extend[U8, S16](from)
 
 ### Reinterprets a `U16` as `S16` using two's complement, throwing if the value exceeds 32767.
 ### :param from: The `U16` value to convert.
@@ -175,19 +175,19 @@ routine S16!(from: D128) -> S16
 ### :param you: The right operand.
 ### :returns: A tuple of `(wrapped_sum, overflowed)`.
 routine S16.add_with_overflow(you: S16) -> (S16, Bool)
-  return signed_add_checked[S16](me, you)
+  return LLVM::signed_add_checked[S16](me, you)
 
 ### Returns the difference and a flag indicating whether the result overflowed.
 ### :param you: The value to subtract.
 ### :returns: A tuple of `(wrapped_difference, overflowed)`.
 routine S16.sub_with_overflow(you: S16) -> (S16, Bool)
-  return signed_sub_checked[S16](me, you)
+  return LLVM::signed_sub_checked[S16](me, you)
 
 ### Returns the product and a flag indicating whether the result overflowed.
 ### :param you: The right operand.
 ### :returns: A tuple of `(wrapped_product, overflowed)`.
 routine S16.mul_with_overflow(you: S16) -> (S16, Bool)
-  return signed_mul_checked[S16](me, you)
+  return LLVM::signed_mul_checked[S16](me, you)
 
 ### Returns `me + you`, throwing on overflow.
 ### :param you: The right operand.
@@ -269,19 +269,19 @@ routine S16.neg!() -> S16
 ### :param you: The right operand.
 ### :returns: The sum, wrapping on overflow.
 routine S16.add_wrap(you: S16) -> S16
-  return add[S16](a: me, b: you)
+  return LLVM::add[S16](a: me, b: you)
 
 ### Returns `(me - you)` with wrapping arithmetic (mod 65536, signed).
 ### :param you: The value to subtract.
 ### :returns: The difference, wrapping on underflow.
 routine S16.sub_wrap(you: S16) -> S16
-  return sub[S16](a: me, b: you)
+  return LLVM::sub[S16](a: me, b: you)
 
 ### Returns `(me * you)` with wrapping arithmetic (mod 65536, signed).
 ### :param you: The right operand.
 ### :returns: The product, wrapping on overflow.
 routine S16.mul_wrap(you: S16) -> S16
-  return mul[S16](a: me, b: you)
+  return LLVM::mul[S16](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -291,26 +291,26 @@ routine S16.mul_wrap(you: S16) -> S16
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
 dangerous routine S16.add_unchecked(you: S16) -> S16
-  return signed_add_exact[S16](a: me, b: you)
+  return LLVM::signed_add_exact[S16](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no overflow.
 dangerous routine S16.sub_unchecked(you: S16) -> S16
-  return signed_sub_exact[S16](a: me, b: you)
+  return LLVM::signed_sub_exact[S16](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
 dangerous routine S16.mul_unchecked(you: S16) -> S16
-  return signed_mul_exact[S16](a: me, b: you)
+  return LLVM::signed_mul_exact[S16](a: me, b: you)
 
 ### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
 dangerous routine S16.floordiv_unchecked(you: S16) -> S16
-  var quotient = signed_div[S16](a: me, b: you)
-  var remainder = signed_rem[S16](a: me, b: you)
+  var quotient = LLVM::signed_div[S16](a: me, b: you)
+  var remainder = LLVM::signed_rem[S16](a: me, b: you)
   if remainder < 0_s16
     if you > 0_s16
       return quotient - 1_s16
@@ -321,7 +321,7 @@ dangerous routine S16.floordiv_unchecked(you: S16) -> S16
 ### :param you: The divisor.
 ### :returns: The euclidean remainder, assuming `you != 0`.
 dangerous routine S16.mod_unchecked(you: S16) -> S16
-  var remainder = signed_rem[S16](a: me, b: you)
+  var remainder = LLVM::signed_rem[S16](a: me, b: you)
   if remainder < 0_s16
     if you > 0_s16
       return remainder + you
@@ -336,24 +336,24 @@ dangerous routine S16.mod_unchecked(you: S16) -> S16
 ### :param you: The right operand.
 ### :returns: The sum, or `32767` / `−32768` if it would overflow.
 routine S16.add_clamp(you: S16) -> S16
-  return signed_add_sat[S16](a: me, b: you)
+  return LLVM::signed_add_sat[S16](a: me, b: you)
 
 ### Returns `me - you`, clamped to `S16_MAX` or `S16_MIN` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `32767` / `−32768` if it would overflow.
 routine S16.sub_clamp(you: S16) -> S16
-  return signed_sub_sat[S16](a: me, b: you)
+  return LLVM::signed_sub_sat[S16](a: me, b: you)
 
 ### Returns `me * you`, clamped to `S16_MAX` or `S16_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `32767` / `−32768` if it would overflow.
 routine S16.mul_clamp(you: S16) -> S16
-  var wide = mul[S32](sign_extend[S16, S32](me), sign_extend[S16, S32](you))
-  if signed_gt[S32](wide, 32767_s32)
+  var wide = LLVM::mul[S32](LLVM::sign_extend[S16, S32](me), LLVM::sign_extend[S16, S32](you))
+  if LLVM::signed_gt[S32](wide, 32767_s32)
     return S16_MAX
-  if signed_lt[S32](wide, -32768_s32)
+  if LLVM::signed_lt[S32](wide, -32768_s32)
     return S16_MIN
-  return int_truncate[S32, S16](wide)
+  return LLVM::int_truncate[S32, S16](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -437,24 +437,24 @@ routine S16.pow_clamp!(exp: S16) -> S16
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine S16.bitand(you: S16) -> S16
-  return bit_and[S16](a: me, b: you)
+  return LLVM::bit_and[S16](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine S16.bitor(you: S16) -> S16
-  return bit_or[S16](a: me, b: you)
+  return LLVM::bit_or[S16](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine S16.bitxor(you: S16) -> S16
-  return bit_xor[S16](a: me, b: you)
+  return LLVM::bit_xor[S16](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine S16.bitnot() -> S16
-  return bit_xor[S16](a: me, b: -1)
+  return LLVM::bit_xor[S16](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -464,25 +464,25 @@ routine S16.bitnot() -> S16
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S16.ashl(bits: U32) -> S16
-  return shift_left[S16](me, S16(bits))
+  return LLVM::shift_left[S16](me, S16(bits))
 
 ### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits`, copying the sign bit into vacated positions.
 routine S16.ashr(bits: U32) -> S16
-  return shift_right_signed[S16](me, S16(bits))
+  return LLVM::shift_right_signed[S16](me, S16(bits))
 
 ### Left-shifts this value by `bits` positions (same as `ashl` for signed integers).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S16.lshl(bits: U32) -> S16
-  return shift_left[S16](me, S16(bits))
+  return LLVM::shift_left[S16](me, S16(bits))
 
 ### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
 routine S16.lshr(bits: U32) -> S16
-  return shift_right_unsigned[S16](me, S16(bits))
+  return LLVM::shift_right_unsigned[S16](me, S16(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -492,15 +492,15 @@ routine S16.lshr(bits: U32) -> S16
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine S16.eq(you: S16) -> Bool
-  return int_eq[S16](a: me, b: you)
+  return LLVM::int_eq[S16](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine S16.cmp(you: S16) -> ComparisonSign
-  if signed_lt[S16](me, you)
+  if LLVM::signed_lt[S16](me, you)
     return ME_SMALL
-  if signed_gt[S16](me, you)
+  if LLVM::signed_gt[S16](me, you)
     return ME_LARGE
   return SAME
 
@@ -543,7 +543,7 @@ routine S16.clamp(min_val: S16, max_val: S16) -> S16
 ### Returns the count of set bits (popcount) in this value's 16-bit representation.
 ### :returns: The number of `1` bits; between 0 and 16.
 routine S16.count_ones() -> S16
-  return count_ones[S16](me)
+  return LLVM::count_ones[S16](me)
 
 ### Returns the count of clear bits in this value's 16-bit representation.
 ### :returns: `16` minus the popcount; between 0 and 16.
@@ -553,12 +553,12 @@ routine S16.count_zeros() -> S16
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `16` if the value is zero.
 routine S16.leading_zeros() -> S16
-  return leading_zeros[S16](me)
+  return LLVM::leading_zeros[S16](me)
 
 ### Returns the number of trailing zero bits, starting from the least-significant bit.
 ### :returns: The trailing zero count; `16` if the value is zero.
 routine S16.trailing_zeros() -> S16
-  return trailing_zeros[S16](me)
+  return LLVM::trailing_zeros[S16](me)
 
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `16` if the value is `−1` (all bits set).
@@ -573,36 +573,36 @@ routine S16.trailing_ones() -> S16
 ### Returns this value with its bits reversed (bit 15 ↔ bit 0, etc.).
 ### :returns: The bit-reversed `S16`.
 routine S16.reverse_bits() -> S16
-  return reverse_bits[S16](me)
+  return LLVM::reverse_bits[S16](me)
 
 ### Returns this value with its two bytes swapped (for endianness conversion).
 ### :returns: An `S16` with the high and low bytes exchanged.
 routine S16.swap_bytes() -> S16
-  return byte_swap[S16](me)
+  return LLVM::byte_swap[S16](me)
 
 ### Returns this value rotated left by `bits` positions.
 routine S16.rotate_left(bits: U32) -> S16
-  return reinterpret_bits[U16, S16](reinterpret_bits[S16, U16](me).rotate_left(bits: bits))
+  return LLVM::reinterpret_bits[U16, S16](LLVM::reinterpret_bits[S16, U16](me).rotate_left(bits: bits))
 
 ### Returns this value rotated right by `bits` positions.
 routine S16.rotate_right(bits: U32) -> S16
-  return reinterpret_bits[U16, S16](reinterpret_bits[S16, U16](me).rotate_right(bits: bits))
+  return LLVM::reinterpret_bits[U16, S16](LLVM::reinterpret_bits[S16, U16](me).rotate_right(bits: bits))
 
 ### Returns the raw byte representation of this value in little-endian order.
 routine S16.to_bytes_le() -> Array[Byte, 2]
-  return reinterpret_bits[S16, U16](me).to_bytes_le()
+  return LLVM::reinterpret_bits[S16, U16](me).to_bytes_le()
 
 ### Returns the raw byte representation of this value in big-endian order.
 routine S16.to_bytes_be() -> Array[Byte, 2]
-  return reinterpret_bits[S16, U16](me).to_bytes_be()
+  return LLVM::reinterpret_bits[S16, U16](me).to_bytes_be()
 
 ### Builds an `S16` from its little-endian raw byte representation.
 common routine S16.from_bytes_le(bytes: Array[Byte, 2]) -> S16
-  return reinterpret_bits[U16, S16](U16.from_bytes_le(bytes: bytes))
+  return LLVM::reinterpret_bits[U16, S16](U16.from_bytes_le(bytes: bytes))
 
 ### Builds an `S16` from its big-endian raw byte representation.
 common routine S16.from_bytes_be(bytes: Array[Byte, 2]) -> S16
-  return reinterpret_bits[U16, S16](U16.from_bytes_be(bytes: bytes))
+  return LLVM::reinterpret_bits[U16, S16](U16.from_bytes_be(bytes: bytes))
 
 # ============================================================================
 # Utility Methods
@@ -626,8 +626,8 @@ routine S16.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine S16.is_even() -> Bool
-  var result = bit_and[S16](a: me, b: 1_s16)
-  return int_eq[S16](a: result, b: 0_s16)
+  var result = LLVM::bit_and[S16](a: me, b: 1_s16)
+  return LLVM::int_eq[S16](a: result, b: 0_s16)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -662,7 +662,7 @@ routine S16.represent() -> Text
   # Use reinterpret_bits (not U16(me)) — U16.create(S16) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u16 -% bits`
   # yields |me| (works correctly even for S16.MIN, whose absolute value overflows S16).
-  return "-" + (0u16 -% reinterpret_bits[S16, U16](me)).represent()
+  return "-" + (0u16 -% LLVM::reinterpret_bits[S16, U16](me)).represent()
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
@@ -708,11 +708,11 @@ routine S16!(from_text: Text) -> S16
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the zero-extended 16-bit representation.
 routine S16.fast_hash() -> U64
-  return __hash_leaf(v: zero_extend[S16, U64](me))
+  return __hash_leaf(v: LLVM::zero_extend[S16, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine S16.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zero_extend[S16, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: LLVM::zero_extend[S16, U64](me), k0: k0, k1: k1)

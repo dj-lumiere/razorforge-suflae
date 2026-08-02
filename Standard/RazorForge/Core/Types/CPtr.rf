@@ -20,7 +20,7 @@ record CPtr obeys Storable
 ### :returns: The resulting `Address` value.
 @readonly
 routine CPtr.get_address() -> Address
-  return pointer_to_int[CPtr, Address](me)
+  return LLVM::pointer_to_int[CPtr, Address](me)
 
 ### Returns a bitwise duplicate of this raw pointer.
 ### `CPtr` is `@llvm("ptr")` so it does not auto-derive `Storable`; this trivial
@@ -36,7 +36,7 @@ routine CPtr.store() -> CPtr
 ### :param from: The address to wrap.
 ### :returns: The resulting `CPtr` value.
 dangerous routine CPtr(from: Address) -> CPtr
-  return reinterpret_bits[Hijacked[CPtr], CPtr](int_to_pointer[Address, CPtr](from))
+  return LLVM::reinterpret_bits[Hijacked[CPtr], CPtr](LLVM::int_to_pointer[Address, CPtr](from))
 
 ### Returns the null `CPtr` value.
 ### This sentinel indicates that no live runtime object is associated with the pointer.
@@ -48,7 +48,7 @@ routine cptr_none() -> CPtr
 ### :returns: The resulting `Bool` value.
 @readonly
 routine CPtr.is_none() -> Bool
-  return int_eq[CPtr](me, cptr_none())
+  return LLVM::int_eq[CPtr](me, cptr_none())
 
 ### Formats this pointer as its raw address.
 ### :returns: The resulting `Text` value.

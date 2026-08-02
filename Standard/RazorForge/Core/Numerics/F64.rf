@@ -40,21 +40,21 @@ preset F64_LN_10: F64 = 2.302585092994046_f64
 ### :returns: The corresponding `F64` value.
 @inline
 routine F64(from: S8) -> F64
-  return signed_to_float[S8, F64](from)
+  return LLVM::signed_to_float[S8, F64](from)
 
 ### Converts an `S16` to `F64`. The result is exact for all values.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
 routine F64(from: S16) -> F64
-  return signed_to_float[S16, F64](from)
+  return LLVM::signed_to_float[S16, F64](from)
 
 ### Converts an `S32` to `F64`. The result is exact for all values.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
 routine F64(from: S32) -> F64
-  return signed_to_float[S32, F64](from)
+  return LLVM::signed_to_float[S32, F64](from)
 
 ### Converts an `S64` to `F64`.
 ### Values with magnitude larger than 2⁵³ may be rounded to the nearest
@@ -63,7 +63,7 @@ routine F64(from: S32) -> F64
 ### :returns: The closest representable `F64` value.
 @inline
 routine F64(from: S64) -> F64
-  return signed_to_float[S64, F64](from)
+  return LLVM::signed_to_float[S64, F64](from)
 
 ### Converts an `S128` to `F64`.
 ### Precision is limited to approximately 53 bits of significand.
@@ -71,28 +71,28 @@ routine F64(from: S64) -> F64
 ### :returns: The closest representable `F64` value.
 @inline
 routine F64(from: S128) -> F64
-  return signed_to_float[S128, F64](from)
+  return LLVM::signed_to_float[S128, F64](from)
 
 ### Converts a `U8` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
 routine F64(from: U8) -> F64
-  return unsigned_to_float[U8, F64](from)
+  return LLVM::unsigned_to_float[U8, F64](from)
 
 ### Converts a `U16` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
 routine F64(from: U16) -> F64
-  return unsigned_to_float[U16, F64](from)
+  return LLVM::unsigned_to_float[U16, F64](from)
 
 ### Converts a `U32` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
 @inline
 routine F64(from: U32) -> F64
-  return unsigned_to_float[U32, F64](from)
+  return LLVM::unsigned_to_float[U32, F64](from)
 
 ### Converts a `U64` to `F64`.
 ### Values larger than 2⁵³ may be rounded to the nearest representable double.
@@ -100,7 +100,7 @@ routine F64(from: U32) -> F64
 ### :returns: The closest representable `F64` value.
 @inline
 routine F64(from: U64) -> F64
-  return unsigned_to_float[U64, F64](from)
+  return LLVM::unsigned_to_float[U64, F64](from)
 
 ### Converts a `U128` to `F64`.
 ### Precision is limited to approximately 53 bits of significand.
@@ -108,35 +108,35 @@ routine F64(from: U64) -> F64
 ### :returns: The closest representable `F64` value.
 @inline
 routine F64(from: U128) -> F64
-  return unsigned_to_float[U128, F64](from)
+  return LLVM::unsigned_to_float[U128, F64](from)
 
 ### Converts an `S256` to `F64` (precision limited to ~53 bits of significand).
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
 routine F64(from: S256) -> F64
-  return signed_to_float[S256, F64](from)
+  return LLVM::signed_to_float[S256, F64](from)
 
 ### Converts a `U256` to `F64` (precision limited to ~53 bits of significand).
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F64` value.
 @inline
 routine F64(from: U256) -> F64
-  return unsigned_to_float[U256, F64](from)
+  return LLVM::unsigned_to_float[U256, F64](from)
 
 ### Widens a half-precision float to double precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
 @inline
 routine F64(from: F16) -> F64
-  return float_extend[F16, F64](from)
+  return LLVM::float_extend[F16, F64](from)
 
 ### Widens a single-precision float to double precision.
 ### :param from: The `F32` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
 @inline
 routine F64(from: F32) -> F64
-  return float_extend[F32, F64](from)
+  return LLVM::float_extend[F32, F64](from)
 
 ### Returns an existing `F64` unchanged.
 ### :param from: The double-precision value to forward.
@@ -242,7 +242,7 @@ routine F64.finite!() -> F64
 ### Returns the arithmetic negation of this value.
 ### :returns: `-me` in double precision.
 routine F64.neg() -> F64
-  return float_neg[F64](me)
+  return LLVM::float_neg[F64](me)
 
 # Unchecked variants — raw IEEE 754 propagation (the float analog of integer `+%`/`+^`). inf/NaN
 # are valid IEEE values, not memory hazards, so these are plain (NOT `dangerous`) — the operator
@@ -253,19 +253,19 @@ routine F64.neg() -> F64
 ### :param you: The divisor.
 ### :returns: The double-precision quotient, possibly ±infinity or NaN.
 routine F64.truediv_unchecked(you: F64) -> F64
-  return float_div[F64](a: me, b: you)
+  return LLVM::float_div[F64](a: me, b: you)
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F64.add_unchecked(you: F64) -> F64
-  return float_add[F64](a: me, b: you)
+  return LLVM::float_add[F64](a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F64.sub_unchecked(you: F64) -> F64
-  return float_sub[F64](a: me, b: you)
+  return LLVM::float_sub[F64](a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F64.mul_unchecked(you: F64) -> F64
-  return float_mul[F64](a: me, b: you)
+  return LLVM::float_mul[F64](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -275,15 +275,15 @@ routine F64.mul_unchecked(you: F64) -> F64
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` if either operand is NaN.
 routine F64.eq(you: F64) -> Bool
-  return float_eq[F64](a: me, b: you)
+  return LLVM::float_eq[F64](a: me, b: you)
 
 ### Compares this value with `you` under IEEE 754 ordered comparison.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL`, `ME_LARGE`, or `SAME`.
 routine F64.cmp(you: F64) -> ComparisonSign
-  if float_lt[F64](a: me, b: you)
+  if LLVM::float_lt[F64](a: me, b: you)
     return ME_SMALL
-  if float_gt[F64](a: me, b: you)
+  if LLVM::float_gt[F64](a: me, b: you)
     return ME_LARGE
   return SAME
 
@@ -305,42 +305,42 @@ routine F64.sqrt!() -> F64
 
 ### Returns the square root with raw IEEE 754 propagation (`sqrt(<0)` -> NaN).
 routine F64.sqrt_unchecked() -> F64
-  return sqrt[F64](me)
+  return LLVM::sqrt[F64](me)
 
 ### Returns the absolute value.
 ### :returns: `|me|` in double precision.
 routine F64.abs() -> F64
-  return float_abs[F64](me)
+  return LLVM::float_abs[F64](me)
 
 ### Rounds this value toward negative infinity.
 ### :returns: The greatest integral-valued `F64` not larger than `me`.
 routine F64.floor() -> F64
-  return floor[F64](me)
+  return LLVM::floor[F64](me)
 
 ### Rounds this value toward positive infinity.
 ### :returns: The smallest integral-valued `F64` not smaller than `me`.
 routine F64.ceil() -> F64
-  return ceil[F64](me)
+  return LLVM::ceil[F64](me)
 
 ### Rounds this value to the nearest integral-valued `F64`.
 ### :returns: The rounded result in double precision.
 routine F64.round() -> F64
-  return round[F64](me)
+  return LLVM::round[F64](me)
 
 ### Discards the fractional part of this value toward zero.
 ### :returns: The truncated result in double precision.
 routine F64.int_truncate() -> F64
-  return float_truncate[F64](me)
+  return LLVM::float_truncate[F64](me)
 
 ### Returns the sine of this value, interpreting it as radians.
 ### :returns: The double-precision sine result.
 routine F64.sin() -> F64
-  return sin[F64](me)
+  return LLVM::sin[F64](me)
 
 ### Returns the cosine of this value, interpreting it as radians.
 ### :returns: The double-precision cosine result.
 routine F64.cos() -> F64
-  return cos[F64](me)
+  return LLVM::cos[F64](me)
 
 ### Returns `e` raised to this value. Checked: crashes (overflow) if the result is ±infinity.
 ### Use `exp_unchecked` for raw IEEE 754 propagation.
@@ -355,7 +355,7 @@ routine F64.exp!() -> F64
 
 ### Returns `e` raised to this value with raw IEEE 754 propagation (overflow -> +infinity).
 routine F64.exp_unchecked() -> F64
-  return exp[F64](me)
+  return LLVM::exp[F64](me)
 
 ### Returns the natural logarithm. Checked: crashes on a non-finite result (`log(0)` -> -inf,
 ### `log(<0)` -> NaN). Use `log_unchecked` for raw IEEE 754 propagation.
@@ -371,7 +371,7 @@ routine F64.log!() -> F64
 ### Returns the natural logarithm with raw IEEE 754 propagation (`log(0)` -> -inf, `log(<0)` ->
 ### NaN).
 routine F64.log_unchecked() -> F64
-  return log[F64](me)
+  return LLVM::log[F64](me)
 
 ### Returns the base-10 logarithm. Checked: crashes on a non-finite result.
 ### Use `log10_unchecked` for raw IEEE 754 propagation.
@@ -386,7 +386,7 @@ routine F64.log10!() -> F64
 
 ### Returns the base-10 logarithm with raw IEEE 754 propagation.
 routine F64.log10_unchecked() -> F64
-  return log10[F64](me)
+  return LLVM::log10[F64](me)
 
 ### Raises this value to the power `exp`. Checked: crashes on a non-finite result (overflow -> inf,
 ### domain error like `(-1)^0.5` -> NaN). Use `pow_unchecked` for raw IEEE 754 propagation.
@@ -398,7 +398,7 @@ routine F64.log10_unchecked() -> F64
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp`, possibly ±infinity or NaN.
 routine F64.pow_unchecked(exp: F64) -> F64
-  return pow[F64](me, exp)
+  return LLVM::pow[F64](me, exp)
 
 ### `**` operator: raises this value to `exp`, checked (crashes on non-finite result).
 ### NOTE: contrary to mathematical convention, `0 ** 0 == 1` (IEEE 754 `pow`).
@@ -416,7 +416,7 @@ routine F64.pow!(exp: F64) -> F64
 ### :param sign: The value supplying the sign bit.
 ### :returns: A value with the magnitude of `me` and the sign of `sign`.
 routine F64.copysign(sign: F64) -> F64
-  return copysign[F64](me, sign)
+  return LLVM::copysign[F64](me, sign)
 
 # ============================================================================
 # Utility Methods
@@ -466,8 +466,8 @@ routine F64.is_finite() -> Bool
 ### :returns: Whether the bit pattern represents a not-a-number payload.
 routine F64.is_nan() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000u64)
-  var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
+  var exponent = LLVM::bit_and[U64](a: bits, b: 0x7FF0000000000000u64)
+  var mantissa = LLVM::bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
   return exponent == 0x7FF0000000000000u64 and mantissa != 0u64
 
 ### Returns `true` when this is a SIGNALING NaN (a NaN whose quiet bit is clear). RazorForge
@@ -475,14 +475,14 @@ routine F64.is_nan() -> Bool
 ### `signaling_nan()`. `is_nan` stays true for both kinds.
 ### :returns: Whether the value is a signaling NaN.
 routine F64.is_signaling() -> Bool
-  return me.is_nan() and bit_and[U64](a: me.to_bits(), b: 0x0008000000000000_u64) == 0_u64
+  return me.is_nan() and LLVM::bit_and[U64](a: me.to_bits(), b: 0x0008000000000000_u64) == 0_u64
 
 ### Returns `true` when this value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern represents an infinity.
 routine F64.is_infinite() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000u64)
-  var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
+  var exponent = LLVM::bit_and[U64](a: bits, b: 0x7FF0000000000000u64)
+  var mantissa = LLVM::bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
   return exponent == 0x7FF0000000000000u64 and mantissa == 0u64
 
 ### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
@@ -496,13 +496,13 @@ routine F64.signum() -> F64
 ### Reinterprets this float as its raw IEEE 754 bit pattern.
 ### :returns: The underlying `U64` encoding of this value.
 routine F64.to_bits() -> U64
-  return reinterpret_bits[F64, U64](me)
+  return LLVM::reinterpret_bits[F64, U64](me)
 
 ### Reinterprets a raw IEEE 754 bit pattern as an `F64`.
 ### :param bits: The exact double-precision encoding to decode.
 ### :returns: The `F64` value with that bit pattern.
 common routine F64.from_bits(bits: U64) -> F64
-  return reinterpret_bits[U64, F64](bits)
+  return LLVM::reinterpret_bits[U64, F64](bits)
 
 ### Returns a signaling NaN (exponent all-ones, quiet bit clear, nonzero payload). For interop /
 ### testing; RazorForge arithmetic never produces one, and consuming it in checked arithmetic
@@ -597,7 +597,7 @@ routine F64!(from_text: Text) -> F64
 ### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
 ### :returns: A `U64` hash of the 64-bit float encoding.
 routine F64.fast_hash() -> U64
-  return __hash_leaf(v: reinterpret_bits[F64, U64](me))
+  return __hash_leaf(v: LLVM::reinterpret_bits[F64, U64](me))
 
 # ============================================================================
 # Byte Representation
@@ -606,31 +606,31 @@ routine F64.fast_hash() -> U64
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `Array[Byte, 8]` value.
 routine F64.to_bytes_le() -> Array[Byte, 8]
-  var raw = reinterpret_bits[F64, U64](me)
+  var raw = LLVM::reinterpret_bits[F64, U64](me)
   var result = Array[Byte, 8]()
-  result = LLVM::set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](raw))
-  result = LLVM::set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
-  result = LLVM::set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
-  result = LLVM::set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
-  result = LLVM::set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
-  result = LLVM::set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 40u64)))
-  result = LLVM::set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
-  result = LLVM::set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
+  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](raw))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 8_u64)))
+  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 16_u64)))
+  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 24_u64)))
+  result = LLVM::set_byte_at(array: result, index: 4_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 32_u64)))
+  result = LLVM::set_byte_at(array: result, index: 5_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 40u64)))
+  result = LLVM::set_byte_at(array: result, index: 6_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 48_u64)))
+  result = LLVM::set_byte_at(array: result, index: 7_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 56_u64)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 8]` value.
 routine F64.to_bytes_be() -> Array[Byte, 8]
-  var raw = byte_swap[U64](reinterpret_bits[F64, U64](me))
+  var raw = LLVM::byte_swap[U64](LLVM::reinterpret_bits[F64, U64](me))
   var result = Array[Byte, 8]()
-  result = LLVM::set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](raw))
-  result = LLVM::set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
-  result = LLVM::set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
-  result = LLVM::set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
-  result = LLVM::set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
-  result = LLVM::set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 40u64)))
-  result = LLVM::set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
-  result = LLVM::set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
+  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](raw))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 8_u64)))
+  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 16_u64)))
+  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 24_u64)))
+  result = LLVM::set_byte_at(array: result, index: 4_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 32_u64)))
+  result = LLVM::set_byte_at(array: result, index: 5_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 40u64)))
+  result = LLVM::set_byte_at(array: result, index: 6_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 48_u64)))
+  result = LLVM::set_byte_at(array: result, index: 7_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned[U64](raw, 56_u64)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -638,7 +638,7 @@ routine F64.to_bytes_be() -> Array[Byte, 8]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine F64.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: reinterpret_bits[F64, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: LLVM::reinterpret_bits[F64, U64](me), k0: k0, k1: k1)
 
 # ============================================================================
 # Platform libm (<math.h>) doubles via the runtime's UNIQUELY-NAMED rf_f64_*
@@ -1019,33 +1019,33 @@ routine F64.fmin(you: F64) -> F64
 
 ### Truncates toward zero (C trunc; alias of int_truncate).
 routine F64.trunc() -> F64
-  return float_truncate[F64](me)
+  return LLVM::float_truncate[F64](me)
 
 ### Fractional part me - trunc(me).
 routine F64.frac() -> F64
-  return me - float_truncate[F64](me)
+  return me - LLVM::float_truncate[F64](me)
 
 ### Integer and fractional parts (C modf); both carry me's sign.
 routine F64.modf() -> (F64, F64)
-  var ip = float_truncate[F64](me)
+  var ip = LLVM::float_truncate[F64](me)
   return (ip, me - ip)
 
 ### Fraction in [0.5,1) and power-of-two exponent (C frexp).
 routine F64.frexp() -> (F64, S64)
   if me.is_zero() or me.is_infinite() or me.is_nan()
     return (me, 0_s64)
-  var e = add[S64](a: C::rf_f64_ilogb(value: me), b: 1_s64)
-  return (C::rf_f64_scalbn(value: me, n: sub[S64](a: 0_s64, b: e)), e)
+  var e = LLVM::add[S64](a: C::rf_f64_ilogb(value: me), b: 1_s64)
+  return (C::rf_f64_scalbn(value: me, n: LLVM::sub[S64](a: 0_s64, b: e)), e)
 
 ### True if the sign bit is set (C signbit; true for -0 and -NaN).
 routine F64.signbit() -> Bool
-  return int_ne[U64](a: bit_and[U64](a: me.to_bits(), b: 0x8000000000000000_u64), b: 0_u64)
+  return LLVM::int_ne[U64](a: LLVM::bit_and[U64](a: me.to_bits(), b: 0x8000000000000000_u64), b: 0_u64)
 
 ### True for a subnormal (denormalized, nonzero) value.
 routine F64.is_subnormal() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000_u64)
-  var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
+  var exponent = LLVM::bit_and[U64](a: bits, b: 0x7FF0000000000000_u64)
+  var mantissa = LLVM::bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
   return exponent == 0_u64 and mantissa != 0_u64
 
 ### True for a finite, normal value (nonzero and not subnormal).
@@ -1073,9 +1073,9 @@ routine F64.fpclassify() -> FpClass
 ### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
 ### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
 routine f64_order_key(bits: U64) -> U64
-  if int_ne[U64](a: bit_and[U64](a: bits, b: 0x8000000000000000_u64), b: 0_u64)
-    return bit_xor[U64](a: bits, b: 0xFFFFFFFFFFFFFFFF_u64)
-  return bit_or[U64](a: bits, b: 0x8000000000000000_u64)
+  if LLVM::int_ne[U64](a: LLVM::bit_and[U64](a: bits, b: 0x8000000000000000_u64), b: 0_u64)
+    return LLVM::bit_xor[U64](a: bits, b: 0xFFFFFFFFFFFFFFFF_u64)
+  return LLVM::bit_or[U64](a: bits, b: 0x8000000000000000_u64)
 
 ### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
@@ -1088,7 +1088,7 @@ routine F64.total_order(you: F64) -> Bool
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine F64.total_order_mag(you: F64) -> Bool
-  return bit_and[U64](a: me.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64) <= bit_and[U64](a: you.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64)
+  return LLVM::bit_and[U64](a: me.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64) <= LLVM::bit_and[U64](a: you.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64)
 
 # ============================================================================
 # IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding

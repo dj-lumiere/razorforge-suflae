@@ -53,7 +53,7 @@ routine Array[T, N].getitem!(index: U64) -> T
     throw IndexOutOfBoundsError(index: index, count: me.count())
   # Read in place through the storage pointer — no whole-array copy.
   danger
-    return load_element_ref[Array[T, N], T](me.hijack(), index)
+    return LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
 
 ### Replaces the element at `index` with `value`, mutating this `Array` in place.
 ### `me` is received by reference (struct-record `setitem!`), so the single-element write through
@@ -65,7 +65,7 @@ routine Array[T, N].setitem!(index: U64, value: T)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
   danger
-    store_element_ref[Array[T, N], T](me.hijack(), index, value)
+    LLVM::store_element_ref[Array[T, N], T](me.hijack(), index, value)
   return
 
 ### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
@@ -75,7 +75,7 @@ routine Array[T, N].setitem!(index: U64, value: T)
 dangerous routine Array[T, N].destroy()
   var i = 0u64
   while i < N
-    element_at[Array[T, N], T](me, i).destroy()
+    LLVM::element_at[Array[T, N], T](me, i).destroy()
     i = i + 1u64
   return
 
@@ -103,7 +103,7 @@ routine Array[T, N].is_empty() -> Bool
 routine Array[T, N].first!() -> T
   if N == 0u64
     absent
-  return element_at[Array[T, N], T](me, 0u64)
+  return LLVM::element_at[Array[T, N], T](me, 0u64)
 
 ### Returns the last element of the array.
 ### :returns: The element at index `N - 1`.
@@ -112,7 +112,7 @@ routine Array[T, N].first!() -> T
 routine Array[T, N].last!() -> T
   if N == 0u64
     absent
-  return element_at[Array[T, N], T](me, N - 1u64)
+  return LLVM::element_at[Array[T, N], T](me, N - 1u64)
 
 ### Returns true if any element equals `value`.
 ### Scans from index 0 to N - 1 using the element type's equality operator.

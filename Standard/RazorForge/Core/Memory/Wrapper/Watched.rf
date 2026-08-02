@@ -40,7 +40,7 @@ routine Watched[T, P].recover!() -> Shared[T, P]
     if ctrl.strong_count() == 0_u64
       absent
     ctrl.increase_strong_count()
-    return reinterpret_bits[Watched[T, P], Shared[T, P]](me)
+    return LLVM::reinterpret_bits[Watched[T, P], Shared[T, P]](me)
 
 # ============================================================================
 # Inspection

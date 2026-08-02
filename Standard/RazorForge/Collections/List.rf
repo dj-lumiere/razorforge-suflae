@@ -311,7 +311,7 @@ routine List[T].reserve(new_capacity: U64)
         var ptr = rf_allocate_dynamic_uninit(new_byte_size)
         me.data = hijacked_from[T](ptr)
       else
-        var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[T, Address](me.data), size: new_byte_size)
+        var ptr = rf_reallocate_dynamic(ptr: LLVM::pointer_to_int[T, Address](me.data), size: new_byte_size)
         me.data = hijacked_from[T](ptr)
 
     me.capacity = new_capacity

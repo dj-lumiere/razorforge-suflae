@@ -25,25 +25,25 @@ preset S128_ONE: S128 = 1_s128
 ### :param from: The `S8` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
 routine S128(from: S8) -> S128
-  return sign_extend[S8, S128](from)
+  return LLVM::sign_extend[S8, S128](from)
 
 ### Sign-extends an `S16` to `S128` (always succeeds).
 ### :param from: The `S16` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
 routine S128(from: S16) -> S128
-  return sign_extend[S16, S128](from)
+  return LLVM::sign_extend[S16, S128](from)
 
 ### Sign-extends an `S32` to `S128` (always succeeds).
 ### :param from: The `S32` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
 routine S128(from: S32) -> S128
-  return sign_extend[S32, S128](from)
+  return LLVM::sign_extend[S32, S128](from)
 
 ### Sign-extends an `S64` to `S128` (always succeeds).
 ### :param from: The `S64` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
 routine S128(from: S64) -> S128
-  return sign_extend[S64, S128](from)
+  return LLVM::sign_extend[S64, S128](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S128` value to return.
@@ -55,25 +55,25 @@ routine S128(from: S128) -> S128
 ### :param from: The `U8` value to widen.
 ### :returns: An `S128` equal in value to `from`.
 routine S128(from: U8) -> S128
-  return zero_extend[U8, S128](from)
+  return LLVM::zero_extend[U8, S128](from)
 
 ### Zero-extends a `U16` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U16` value to widen.
 ### :returns: An `S128` equal in value to `from`.
 routine S128(from: U16) -> S128
-  return zero_extend[U16, S128](from)
+  return LLVM::zero_extend[U16, S128](from)
 
 ### Zero-extends a `U32` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U32` value to widen.
 ### :returns: An `S128` equal in value to `from`.
 routine S128(from: U32) -> S128
-  return zero_extend[U32, S128](from)
+  return LLVM::zero_extend[U32, S128](from)
 
 ### Zero-extends a `U64` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U64` value to widen.
 ### :returns: An `S128` equal in value to `from`.
 routine S128(from: U64) -> S128
-  return zero_extend[U64, S128](from)
+  return LLVM::zero_extend[U64, S128](from)
 
 ### Reinterprets a `U128` as `S128` using two's complement, throwing if the value exceeds S128_MAX.
 ### :param from: The `U128` value to convert.
@@ -181,19 +181,19 @@ routine S128!(from: D64) -> S128
 ### :param you: The right operand.
 ### :returns: A tuple of `(wrapped_sum, overflowed)`.
 routine S128.add_with_overflow(you: S128) -> (S128, Bool)
-  return signed_add_checked[S128](me, you)
+  return LLVM::signed_add_checked[S128](me, you)
 
 ### Returns the difference and a flag indicating whether the result overflowed.
 ### :param you: The value to subtract.
 ### :returns: A tuple of `(wrapped_difference, overflowed)`.
 routine S128.sub_with_overflow(you: S128) -> (S128, Bool)
-  return signed_sub_checked[S128](me, you)
+  return LLVM::signed_sub_checked[S128](me, you)
 
 ### Returns the product and a flag indicating whether the result overflowed.
 ### :param you: The right operand.
 ### :returns: A tuple of `(wrapped_product, overflowed)`.
 routine S128.mul_with_overflow(you: S128) -> (S128, Bool)
-  return signed_mul_checked[S128](me, you)
+  return LLVM::signed_mul_checked[S128](me, you)
 
 ### Returns `me + you`, throwing on overflow.
 ### :param you: The right operand.
@@ -235,9 +235,9 @@ routine S128.mul!(you: S128) -> S128
 ### `|x|` as a U128 magnitude. `S128_MIN` maps to exactly 2¹²⁷ (the wrapping
 ### negate reinterpreted as unsigned), so there is no overflow.
 routine s128_abs_u128(x: S128) -> U128
-  if signed_ge[S128](a: x, b: 0_s128)
-    return reinterpret_bits[S128, U128](x)
-  return reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: x))
+  if LLVM::signed_ge[S128](a: x, b: 0_s128)
+    return LLVM::reinterpret_bits[S128, U128](x)
+  return LLVM::reinterpret_bits[S128, U128](LLVM::sub[S128](a: 0_s128, b: x))
 
 ### Euclidean floor division of `me` by `you`.
 ### :param you: The divisor.
@@ -295,19 +295,19 @@ routine S128.neg!() -> S128
 ### :param you: The right operand.
 ### :returns: The sum, wrapping on overflow.
 routine S128.add_wrap(you: S128) -> S128
-  return add[S128](a: me, b: you)
+  return LLVM::add[S128](a: me, b: you)
 
 ### Returns `(me - you)` with wrapping arithmetic (mod 2¹²⁸, signed).
 ### :param you: The value to subtract.
 ### :returns: The difference, wrapping on underflow.
 routine S128.sub_wrap(you: S128) -> S128
-  return sub[S128](a: me, b: you)
+  return LLVM::sub[S128](a: me, b: you)
 
 ### Returns `(me * you)` with wrapping arithmetic (mod 2¹²⁸, signed).
 ### :param you: The right operand.
 ### :returns: The product, wrapping on overflow.
 routine S128.mul_wrap(you: S128) -> S128
-  return mul[S128](a: me, b: you)
+  return LLVM::mul[S128](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -317,19 +317,19 @@ routine S128.mul_wrap(you: S128) -> S128
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
 dangerous routine S128.add_unchecked(you: S128) -> S128
-  return signed_add_exact[S128](a: me, b: you)
+  return LLVM::signed_add_exact[S128](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no overflow.
 dangerous routine S128.sub_unchecked(you: S128) -> S128
-  return signed_sub_exact[S128](a: me, b: you)
+  return LLVM::signed_sub_exact[S128](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
 dangerous routine S128.mul_unchecked(you: S128) -> S128
-  return signed_mul_exact[S128](a: me, b: you)
+  return LLVM::signed_mul_exact[S128](a: me, b: you)
 
 ### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
@@ -341,14 +341,14 @@ dangerous routine S128.floordiv_unchecked(you: S128) -> S128
   var amag = s128_abs_u128(x: me)
   var bmag = s128_abs_u128(x: you)
   var uq = u128_floordiv(a: amag, b: bmag)
-  var aneg = signed_lt[S128](a: me, b: 0_s128)
-  var bneg = signed_lt[S128](a: you, b: 0_s128)
-  if aneg and int_ne[U128](a: u128_mod(a: amag, b: bmag), b: 0_u128)
-    uq = add[U128](a: uq, b: 1_u128)
-  var q = reinterpret_bits[U128, S128](uq)
+  var aneg = LLVM::signed_lt[S128](a: me, b: 0_s128)
+  var bneg = LLVM::signed_lt[S128](a: you, b: 0_s128)
+  if aneg and LLVM::int_ne[U128](a: u128_mod(a: amag, b: bmag), b: 0_u128)
+    uq = LLVM::add[U128](a: uq, b: 1_u128)
+  var q = LLVM::reinterpret_bits[U128, S128](uq)
   if aneg == bneg
     return q
-  return sub[S128](a: 0_s128, b: q)
+  return LLVM::sub[S128](a: 0_s128, b: q)
 
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
@@ -357,9 +357,9 @@ dangerous routine S128.mod_unchecked(you: S128) -> S128
   # Mirror mod! (euclidean, custom Knuth magnitude kernel) minus the zero guard — not LLVM `srem` i128.
   var bmag = s128_abs_u128(x: you)
   var ur = u128_mod(a: s128_abs_u128(x: me), b: bmag)
-  if signed_lt[S128](a: me, b: 0_s128) and int_ne[U128](a: ur, b: 0_u128)
-    ur = sub[U128](a: bmag, b: ur)
-  return reinterpret_bits[U128, S128](ur)
+  if LLVM::signed_lt[S128](a: me, b: 0_s128) and LLVM::int_ne[U128](a: ur, b: 0_u128)
+    ur = LLVM::sub[U128](a: bmag, b: ur)
+  return LLVM::reinterpret_bits[U128, S128](ur)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -369,13 +369,13 @@ dangerous routine S128.mod_unchecked(you: S128) -> S128
 ### :param you: The right operand.
 ### :returns: The sum, or `S128_MAX` / `S128_MIN` if it would overflow.
 routine S128.add_clamp(you: S128) -> S128
-  return signed_add_sat[S128](a: me, b: you)
+  return LLVM::signed_add_sat[S128](a: me, b: you)
 
 ### Returns `me - you`, clamped to `S128_MAX` or `S128_MIN` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `S128_MAX` / `S128_MIN` if it would overflow.
 routine S128.sub_clamp(you: S128) -> S128
-  return signed_sub_sat[S128](a: me, b: you)
+  return LLVM::signed_sub_sat[S128](a: me, b: you)
 
 ### Returns `me * you`, clamped to `S128_MAX` or `S128_MIN` on overflow.
 ### Uses a division-based overflow check since no 256-bit type is available.
@@ -384,12 +384,12 @@ routine S128.sub_clamp(you: S128) -> S128
 ### :returns: The product, or `S128_MAX` / `S128_MIN` if it would overflow.
 routine S128.mul_clamp(you: S128) -> S128
   # Can't widen to 256-bit, use division-based overflow check
-  if int_eq[S128](a: me, b: 0_s128) or int_eq[S128](a: you, b: 0_s128)
+  if LLVM::int_eq[S128](a: me, b: 0_s128) or LLVM::int_eq[S128](a: you, b: 0_s128)
     return 0_s128
-  var result = mul[S128](a: me, b: you)
-  if int_ne[S128](signed_div[S128](a: result, b: me), you)
+  var result = LLVM::mul[S128](a: me, b: you)
+  if LLVM::int_ne[S128](LLVM::signed_div[S128](a: result, b: me), you)
     # Overflow: clamp to MAX or MIN based on result sign
-    var same_sign = int_eq[Bool](signed_gt[S128](me, 0_s128), signed_gt[S128](you, 0_s128))
+    var same_sign = LLVM::int_eq[Bool](LLVM::signed_gt[S128](me, 0_s128), LLVM::signed_gt[S128](you, 0_s128))
     if same_sign
       return S128_MAX
     return S128_MIN
@@ -477,24 +477,24 @@ routine S128.pow_clamp!(exp: S128) -> S128
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine S128.bitand(you: S128) -> S128
-  return bit_and[S128](a: me, b: you)
+  return LLVM::bit_and[S128](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine S128.bitor(you: S128) -> S128
-  return bit_or[S128](a: me, b: you)
+  return LLVM::bit_or[S128](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine S128.bitxor(you: S128) -> S128
-  return bit_xor[S128](a: me, b: you)
+  return LLVM::bit_xor[S128](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine S128.bitnot() -> S128
-  return bit_xor[S128](a: me, b: -1)
+  return LLVM::bit_xor[S128](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -504,25 +504,25 @@ routine S128.bitnot() -> S128
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S128.ashl(bits: U32) -> S128
-  return shift_left[S128](me, S128(bits))
+  return LLVM::shift_left[S128](me, S128(bits))
 
 ### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits`, copying the sign bit into vacated positions.
 routine S128.ashr(bits: U32) -> S128
-  return shift_right_signed[S128](me, S128(bits))
+  return LLVM::shift_right_signed[S128](me, S128(bits))
 
 ### Left-shifts this value by `bits` positions (same as `ashl` for signed integers).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S128.lshl(bits: U32) -> S128
-  return shift_left[S128](me, S128(bits))
+  return LLVM::shift_left[S128](me, S128(bits))
 
 ### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
 routine S128.lshr(bits: U32) -> S128
-  return shift_right_unsigned[S128](me, S128(bits))
+  return LLVM::shift_right_unsigned[S128](me, S128(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -532,15 +532,15 @@ routine S128.lshr(bits: U32) -> S128
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine S128.eq(you: S128) -> Bool
-  return int_eq[S128](a: me, b: you)
+  return LLVM::int_eq[S128](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine S128.cmp(you: S128) -> ComparisonSign
-  if signed_lt[S128](me, you)
+  if LLVM::signed_lt[S128](me, you)
     return ME_SMALL
-  if signed_gt[S128](me, you)
+  if LLVM::signed_gt[S128](me, you)
     return ME_LARGE
   return SAME
 
@@ -583,7 +583,7 @@ routine S128.clamp(min_val: S128, max_val: S128) -> S128
 ### Returns the count of set bits (popcount) in this value's 128-bit representation.
 ### :returns: The number of `1` bits; between 0 and 128.
 routine S128.count_ones() -> S128
-  return count_ones[S128](me)
+  return LLVM::count_ones[S128](me)
 
 ### Returns the count of clear bits in this value's 128-bit representation.
 ### :returns: `128` minus the popcount; between 0 and 128.
@@ -593,12 +593,12 @@ routine S128.count_zeros() -> S128
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `128` if the value is zero.
 routine S128.leading_zeros() -> S128
-  return leading_zeros[S128](me)
+  return LLVM::leading_zeros[S128](me)
 
 ### Returns the number of trailing zero bits, starting from the least-significant bit.
 ### :returns: The trailing zero count; `128` if the value is zero.
 routine S128.trailing_zeros() -> S128
-  return trailing_zeros[S128](me)
+  return LLVM::trailing_zeros[S128](me)
 
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `128` if the value is `−1` (all bits set).
@@ -613,36 +613,36 @@ routine S128.trailing_ones() -> S128
 ### Returns this value with its bits reversed (bit 127 ↔ bit 0, etc.).
 ### :returns: The bit-reversed `S128`.
 routine S128.reverse_bits() -> S128
-  return reverse_bits[S128](me)
+  return LLVM::reverse_bits[S128](me)
 
 ### Returns this value with its 16 bytes swapped (for endianness conversion).
 ### :returns: An `S128` with its bytes in reverse order.
 routine S128.swap_bytes() -> S128
-  return byte_swap[S128](me)
+  return LLVM::byte_swap[S128](me)
 
 ### Returns this value rotated left by `bits` positions.
 routine S128.rotate_left(bits: U32) -> S128
-  return reinterpret_bits[U128, S128](reinterpret_bits[S128, U128](me).rotate_left(bits: bits))
+  return LLVM::reinterpret_bits[U128, S128](LLVM::reinterpret_bits[S128, U128](me).rotate_left(bits: bits))
 
 ### Returns this value rotated right by `bits` positions.
 routine S128.rotate_right(bits: U32) -> S128
-  return reinterpret_bits[U128, S128](reinterpret_bits[S128, U128](me).rotate_right(bits: bits))
+  return LLVM::reinterpret_bits[U128, S128](LLVM::reinterpret_bits[S128, U128](me).rotate_right(bits: bits))
 
 ### Returns the raw byte representation of this value in little-endian order.
 routine S128.to_bytes_le() -> Array[Byte, 16]
-  return reinterpret_bits[S128, U128](me).to_bytes_le()
+  return LLVM::reinterpret_bits[S128, U128](me).to_bytes_le()
 
 ### Returns the raw byte representation of this value in big-endian order.
 routine S128.to_bytes_be() -> Array[Byte, 16]
-  return reinterpret_bits[S128, U128](me).to_bytes_be()
+  return LLVM::reinterpret_bits[S128, U128](me).to_bytes_be()
 
 ### Builds an `S128` from its little-endian raw byte representation.
 common routine S128.from_bytes_le(bytes: Array[Byte, 16]) -> S128
-  return reinterpret_bits[U128, S128](U128.from_bytes_le(bytes: bytes))
+  return LLVM::reinterpret_bits[U128, S128](U128.from_bytes_le(bytes: bytes))
 
 ### Builds an `S128` from its big-endian raw byte representation.
 common routine S128.from_bytes_be(bytes: Array[Byte, 16]) -> S128
-  return reinterpret_bits[U128, S128](U128.from_bytes_be(bytes: bytes))
+  return LLVM::reinterpret_bits[U128, S128](U128.from_bytes_be(bytes: bytes))
 
 # ============================================================================
 # Utility Methods
@@ -666,8 +666,8 @@ routine S128.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine S128.is_even() -> Bool
-  var result = bit_and[S128](a: me, b: 1_s128)
-  return int_eq[S128](a: result, b: 0_s128)
+  var result = LLVM::bit_and[S128](a: me, b: 1_s128)
+  return LLVM::int_eq[S128](a: result, b: 0_s128)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -701,7 +701,7 @@ routine S128.represent() -> Text
   # Use reinterpret_bits (not U128(me)) — U128.create(S128) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u128 -% bits`
   # yields |me| (works correctly even for S128.MIN, whose absolute value overflows S128).
-  return "-" + (0u128 -% reinterpret_bits[S128, U128](me)).represent()
+  return "-" + (0u128 -% LLVM::reinterpret_bits[S128, U128](me)).represent()
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
@@ -747,11 +747,11 @@ routine S128!(from_text: Text) -> S128
 ### Returns an xxHash64-based hash of this 128-bit value.
 ### :returns: A `U64` hash combining both 64-bit halves of the bit pattern.
 routine S128.fast_hash() -> U64
-  return __hash_u128(v: reinterpret_bits[S128, U128](me))
+  return __hash_u128(v: LLVM::reinterpret_bits[S128, U128](me))
 
 ### Returns a SipHash-2-4 keyed hash of this 128-bit value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine S128.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u128(v: reinterpret_bits[S128, U128](me), k0: k0, k1: k1)
+  return __secure_hash_u128(v: LLVM::reinterpret_bits[S128, U128](me), k0: k0, k1: k1)

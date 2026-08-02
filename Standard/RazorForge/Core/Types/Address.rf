@@ -33,14 +33,14 @@ routine Address(from: Address) -> Address
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.add_wrap(you: Address) -> Address
-  return add[Address](me, you)
+  return LLVM::add[Address](me, you)
 
 ### Returns the wrapping difference between two raw addresses.
 ### :param you: The address value to subtract.
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.sub_wrap(you: Address) -> Address
-  return sub[Address](me, you)
+  return LLVM::sub[Address](me, you)
 
 # Note: Address × Address and Address // Address have no meaningful semantics
 # (addresses are points in a memory space, not scalars). Use pointer arithmetic
@@ -56,16 +56,16 @@ routine Address.sub_wrap(you: Address) -> Address
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Address.eq(you: Address) -> Bool
-  return int_eq[Address](me, you)
+  return LLVM::int_eq[Address](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Address.cmp(you: Address) -> ComparisonSign
-  if unsigned_lt[Address](me, you)
+  if LLVM::unsigned_lt[Address](me, you)
     return ME_SMALL
-  if unsigned_gt[Address](me, you)
+  if LLVM::unsigned_gt[Address](me, you)
     return ME_LARGE
   return SAME
 
@@ -107,21 +107,21 @@ routine Address.is_power_of_two() -> Bool
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.add(offset: ByteSize) -> Address
-  return add[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
+  return LLVM::add[Address](me, LLVM::reinterpret_bits[ByteSize, Address](value: offset))
 
 ### Returns the byte distance from this address to another address.
 ### :param other: The address to subtract.
 ### :returns: The resulting `ByteSize` value.
 @readonly
 routine Address.sub(other: Address) -> ByteSize
-  return ByteSize(U64(sub[Address](me, other)))
+  return ByteSize(U64(LLVM::sub[Address](me, other)))
 
 ### Returns the result of stepping this address back by a byte size.
 ### :param offset: The byte count to subtract.
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.sub(offset: ByteSize) -> Address
-  return sub[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
+  return LLVM::sub[Address](me, LLVM::reinterpret_bits[ByteSize, Address](value: offset))
 
 # ============================================================================
 # Text Representation and Parsing

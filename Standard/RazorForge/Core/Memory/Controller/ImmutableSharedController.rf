@@ -39,14 +39,14 @@ dangerous routine ImmutableSharedController.increase_strong_count()
 ### :returns: The previous count. The caller deallocates the payload + controller
 ###          when this returns `1` (i.e. the cell is now zero).
 dangerous routine ImmutableSharedController.decrease_strong_count() -> U64
-  return atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
+  return LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
 
 ### Returns the current number of live strong handles.
 ### Snapshot only — value may have changed by the time the caller observes it.
 ### :returns: The current strong reference count.
 @readonly
 dangerous routine ImmutableSharedController.strong_count() -> U64
-  return atomic_load[U64](ptr: me.strong_count.hijack())
+  return LLVM::atomic_load[U64](ptr: me.strong_count.hijack())
 
 dangerous routine ImmutableSharedController.destroy()
   if me.strong_count() == 0

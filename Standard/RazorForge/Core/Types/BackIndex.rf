@@ -12,7 +12,7 @@ record BackIndex
 ### :param offset: The end-relative offset where `1` means the last element.
 ### :returns: The resulting `BackIndex` value.
 routine BackIndex(offset: U64) -> BackIndex
-  return reinterpret_bits[U64, BackIndex](offset)
+  return LLVM::reinterpret_bits[U64, BackIndex](offset)
 
 ### Resolves this back index against a collection length.
 ### For example, `^1` resolves to the last valid position and `^length`
@@ -30,7 +30,7 @@ routine BackIndex.resolve!(length: U64) -> U64
 ### :returns: The resulting `U64` value.
 @readonly
 routine BackIndex.get_offset() -> U64
-  return reinterpret_bits[BackIndex, U64](me)
+  return LLVM::reinterpret_bits[BackIndex, U64](me)
 
 ### Returns `true` when both back indices represent the same end-relative
 ### offset.
@@ -38,7 +38,7 @@ routine BackIndex.get_offset() -> U64
 ### :returns: The resulting `Bool` value.
 @readonly
 routine BackIndex.eq(other: BackIndex) -> Bool
-  return reinterpret_bits[BackIndex, U64](me) == reinterpret_bits[BackIndex, U64](other)
+  return LLVM::reinterpret_bits[BackIndex, U64](me) == LLVM::reinterpret_bits[BackIndex, U64](other)
 
 ### Compares this back index with another by effective position from the end.
 ### A smaller offset means a position closer to the end of the collection.
@@ -46,4 +46,4 @@ routine BackIndex.eq(other: BackIndex) -> Bool
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine BackIndex.cmp(other: BackIndex) -> ComparisonSign
-  return reinterpret_bits[BackIndex, U64](other).cmp(reinterpret_bits[BackIndex, U64](me))
+  return LLVM::reinterpret_bits[BackIndex, U64](other).cmp(LLVM::reinterpret_bits[BackIndex, U64](me))

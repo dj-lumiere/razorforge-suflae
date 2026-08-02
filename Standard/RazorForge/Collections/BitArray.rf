@@ -88,7 +88,7 @@ routine BitArray[N].getitem!(index: U64) -> Bool
   var byte_val = 0u8
   # Read the packed byte in place through the storage pointer — no whole-array copy.
   danger
-    byte_val = load_element_ref[BitArray[N], U8](me.hijack(), byte_idx)
+    byte_val = LLVM::load_element_ref[BitArray[N], U8](me.hijack(), byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
 ### Writes `value` into the bit at `index`, mutating this `BitArray` in place.
@@ -98,16 +98,16 @@ routine BitArray[N].getitem!(index: U64) -> Bool
 routine BitArray[N].setitem!(index: U64, value: Bool)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: N)
-  var byte_idx = unsigned_div[U64](index, 8u64)
-  var bit_off = U8(unsigned_rem[U64](index, 8u64))
+  var byte_idx = LLVM::unsigned_div[U64](index, 8u64)
+  var bit_off = U8(LLVM::unsigned_rem[U64](index, 8u64))
   # `me` is by reference (struct-record `setitem!`): read-modify-write the single packed byte in
   # place through `me.hijack()` so the bit change reaches the caller's storage — no whole-array copy.
   danger
-    var byte_val = load_element_ref[BitArray[N], U8](me.hijack(), byte_idx)
+    var byte_val = LLVM::load_element_ref[BitArray[N], U8](me.hijack(), byte_idx)
     if value
-      store_element_ref[BitArray[N], U8](me.hijack(), byte_idx, byte_val | (1u8 << bit_off))
+      LLVM::store_element_ref[BitArray[N], U8](me.hijack(), byte_idx, byte_val | (1u8 << bit_off))
     else
-      store_element_ref[BitArray[N], U8](me.hijack(), byte_idx, byte_val & ~(1u8 << bit_off))
+      LLVM::store_element_ref[BitArray[N], U8](me.hijack(), byte_idx, byte_val & ~(1u8 << bit_off))
   return
 
 # ============================================================================
@@ -127,13 +127,13 @@ routine BitArray[N].with_set(index: U64, value: Bool) -> BitArray[N]
     return me
   var result = me
   # Modify the bit in the copy
-  var byte_idx = unsigned_div[U64](index, 8u64)
-  var bit_off = U8(unsigned_rem[U64](index, 8u64))
-  var byte_val = byte_at_bits[N](result,byte_idx)
+  var byte_idx = LLVM::unsigned_div[U64](index, 8u64)
+  var bit_off = U8(LLVM::unsigned_rem[U64](index, 8u64))
+  var byte_val = LLVM::byte_at_bits[N](result,byte_idx)
   if value
-    result = set_byte_at_bits[N](result,byte_idx, byte_val | (1u8 << bit_off))
+    result = LLVM::set_byte_at_bits[N](result,byte_idx, byte_val | (1u8 << bit_off))
   else
-    result = set_byte_at_bits[N](result,byte_idx, byte_val & ~(1u8 << bit_off))
+    result = LLVM::set_byte_at_bits[N](result,byte_idx, byte_val & ~(1u8 << bit_off))
   return result
 
 ### Returns a new `BitArray` identical to this one but with the bit at `index` toggled.

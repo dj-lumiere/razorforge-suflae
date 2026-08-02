@@ -20,10 +20,10 @@ routine U1024.floordiv(you: U1024) -> U1024
   var rem = Array[U64, 16]()
   danger
     var q = knuth_divide[16](
-      a: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
-      b: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
+      a: LLVM::reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
       rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](q.hijack()).peek()
+    return LLVM::reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](q.hijack()).peek()
 
 ### Returns me % you (remainder from the same Knuth-D kernel).
 routine U1024.mod(you: U1024) -> U1024
@@ -32,10 +32,10 @@ routine U1024.mod(you: U1024) -> U1024
   var rem = Array[U64, 16]()
   danger
     var q = knuth_divide[16](
-      a: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
-      b: reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
+      a: LLVM::reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
       rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](rem.hijack()).peek()
+    return LLVM::reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](rem.hijack()).peek()
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
 routine U1024.represent() -> Text

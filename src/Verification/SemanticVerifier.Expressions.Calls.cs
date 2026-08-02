@@ -511,10 +511,8 @@ public sealed partial class SemanticVerifier
                 }
 
                 if (routine != null)
-                {
-                    // Realm-strict gate (CheckCallRealm) is staged OFF pending generic realm-qualified call
-                    // support (`LLVM::add[U128](...)` currently loses the realm through generic resolution).
-                    // The migration to C::/LLVM:: call sites is already in place; re-enable the check then.
+                {
+
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 
@@ -810,10 +808,8 @@ public sealed partial class SemanticVerifier
                 }
 
                 if (routine != null)
-                {
-                    // Realm-strict gate (CheckCallRealm) is staged OFF pending generic realm-qualified call
-                    // support (`LLVM::add[U128](...)` currently loses the realm through generic resolution).
-                    // The migration to C::/LLVM:: call sites is already in place; re-enable the check then.
+                {
+
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 

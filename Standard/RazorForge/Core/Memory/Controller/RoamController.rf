@@ -93,7 +93,7 @@ dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
 routine RoamController[T].retain()
   danger
     if me.escaped.load() == 1_u8
-      discard atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
+      discard LLVM::atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
     else
       me.count = me.count + 1
   return
@@ -103,7 +103,7 @@ routine RoamController[T].retain()
 routine RoamController[T].release()
   danger
     if me.escaped.load() == 1_u8
-      var previous = atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
+      var previous = LLVM::atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
       if previous == 1_u64
         # Dead at zero — free eagerly (deterministic teardown). If it was a buffered cycle candidate,
         # first drop its roots entry so the collector never dereferences this freed controller. (Reading
@@ -208,7 +208,7 @@ dangerous routine RoamController[T].cc_set_hooks(trace: CPtr, free: CPtr)
 routine RoamController[T].strong_count() -> U64
   danger
     if me.escaped.load() == 1_u8
-      return atomic_load[U64](ptr: me.count.hijack())
+      return LLVM::atomic_load[U64](ptr: me.count.hijack())
     else
       return me.count
 

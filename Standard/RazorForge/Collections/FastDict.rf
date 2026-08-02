@@ -84,7 +84,7 @@ routine FastDict[K, V]() -> FastDict[K, V]
   )
   danger
     dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
-    C::rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
     dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
@@ -115,7 +115,7 @@ routine FastDict[K, V](capacity: U64) -> FastDict[K, V]
   )
   danger
     dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
-    C::rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
     dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
@@ -255,7 +255,7 @@ routine FastDict[K, V].rehash()
 
   danger
     me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
-    C::rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
     me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
     me.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * new_ecap))
     me.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * new_ecap))
@@ -284,15 +284,15 @@ routine FastDict[K, V].rehash()
 
   danger
     if not old_ctrl.is_none()
-      C::rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
+      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
     if not old_indices.is_none()
-      C::rf_invalidate(pointer_to_int[U64, Address](old_indices))
+      C::rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
     if not old_keys.is_none()
-      C::rf_invalidate(pointer_to_int[K, Address](old_keys))
+      C::rf_invalidate(LLVM::pointer_to_int[K, Address](old_keys))
     if not old_vals.is_none()
-      C::rf_invalidate(pointer_to_int[V, Address](old_vals))
+      C::rf_invalidate(LLVM::pointer_to_int[V, Address](old_vals))
     if not old_entry_live.is_none()
-      C::rf_invalidate(pointer_to_int[U8, Address](old_entry_live))
+      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
   return
 
 # ============================================================================
@@ -317,7 +317,7 @@ routine FastDict[K, V].is_empty() -> Bool
 @migratable
 routine FastDict[K, V].clear()
   danger
-    C::rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
   me.entries_used = 0u64

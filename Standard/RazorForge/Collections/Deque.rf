@@ -294,7 +294,7 @@ routine Deque[T].rotate_left(n: U64)
   # Front elements move to back
   if me.count == 0u64
     return
-  var shift = unsigned_rem[U64](n, me.count)
+  var shift = LLVM::unsigned_rem[U64](n, me.count)
   me.start = me.wrap_index(me.start +% shift)
   return
 
@@ -307,7 +307,7 @@ routine Deque[T].rotate_right(n: U64)
   # Back elements move to front
   if me.count == 0u64
     return
-  var shift = unsigned_rem[U64](n, me.count)
+  var shift = LLVM::unsigned_rem[U64](n, me.count)
   if shift > me.start
     me.start = me.capacity -% (shift -% me.start)
   else

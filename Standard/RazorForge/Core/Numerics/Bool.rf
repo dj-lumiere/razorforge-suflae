@@ -13,7 +13,7 @@ record Bool obeys Equatable, ConstCompatible
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine Bool.eq(you: Bool) -> Bool
-  return int_eq[Bool](me, you)
+  return LLVM::int_eq[Bool](me, you)
 
 # ============================================================================
 # Type Conversions
@@ -58,11 +58,11 @@ routine Bool.represent() -> Text
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash — `0` maps to a hash of `0`, `1` maps to a hash of `1`.
 routine Bool.fast_hash() -> U64
-  return __hash_leaf(v: zero_extend[Bool, U64](me))
+  return __hash_leaf(v: LLVM::zero_extend[Bool, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine Bool.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zero_extend[Bool, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: LLVM::zero_extend[Bool, U64](me), k0: k0, k1: k1)

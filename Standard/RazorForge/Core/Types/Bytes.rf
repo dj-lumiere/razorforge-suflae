@@ -406,17 +406,17 @@ routine Text.encode_as_utf8() -> Bytes
       codepoint <= 0x7Fu32 =>
         result.add_last(Byte(U8(codepoint)))
       codepoint <= 0x7FFu32 =>
-        result.add_last(Byte(int_truncate[U32, U8](0xC0u32 | (codepoint >> 6u32))))
-        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0xC0u32 | (codepoint >> 6u32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
       codepoint <= 0xFFFFu32 =>
-        result.add_last(Byte(int_truncate[U32, U8](0xE0u32 | (codepoint >> 12u32))))
-        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
-        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0xE0u32 | (codepoint >> 12u32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
       else =>
-        result.add_last(Byte(int_truncate[U32, U8](0xF0u32 | (codepoint >> 18u32))))
-        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | ((codepoint >> 12u32) & 0x3Fu32))))
-        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
-        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0xF0u32 | (codepoint >> 18u32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80u32 | ((codepoint >> 12u32) & 0x3Fu32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
+        result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
   return Bytes(from_list: steal result)
 
 ### Decodes this byte sequence as UTF-8, replacing malformed subsequences with

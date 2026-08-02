@@ -22,13 +22,13 @@ preset S32_ONE: S32 = 1_s32
 ### :param from: The `S8` value to widen.
 ### :returns: An `S32` with the same signed value as `from`.
 routine S32(from: S8) -> S32
-  return sign_extend[S8, S32](from)
+  return LLVM::sign_extend[S8, S32](from)
 
 ### Sign-extends an `S16` to `S32`.
 ### :param from: The `S16` value to widen.
 ### :returns: An `S32` with the same signed value as `from`.
 routine S32(from: S16) -> S32
-  return sign_extend[S16, S32](from)
+  return LLVM::sign_extend[S16, S32](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S32` value to return.
@@ -58,13 +58,13 @@ routine S32!(from: S128) -> S32
 ### :param from: The `U8` value to widen.
 ### :returns: An `S32` equal in value to `from`.
 routine S32(from: U8) -> S32
-  return zero_extend[U8, S32](from)
+  return LLVM::zero_extend[U8, S32](from)
 
 ### Zero-extends a `U16` to `S32` (always succeeds — `U16` max 65535 fits in S32).
 ### :param from: The `U16` value to widen.
 ### :returns: An `S32` equal in value to `from`.
 routine S32(from: U16) -> S32
-  return zero_extend[U16, S32](from)
+  return LLVM::zero_extend[U16, S32](from)
 
 ### Reinterprets a `U32` as `S32` using two's complement, throwing if the value exceeds S32_MAX.
 ### :param from: The `U32` value to convert.
@@ -172,19 +172,19 @@ routine S32!(from: D128) -> S32
 ### :param you: The right operand.
 ### :returns: A tuple of `(wrapped_sum, overflowed)`.
 routine S32.add_with_overflow(you: S32) -> (S32, Bool)
-  return signed_add_checked[S32](me, you)
+  return LLVM::signed_add_checked[S32](me, you)
 
 ### Returns the difference and a flag indicating whether the result overflowed.
 ### :param you: The value to subtract.
 ### :returns: A tuple of `(wrapped_difference, overflowed)`.
 routine S32.sub_with_overflow(you: S32) -> (S32, Bool)
-  return signed_sub_checked[S32](me, you)
+  return LLVM::signed_sub_checked[S32](me, you)
 
 ### Returns the product and a flag indicating whether the result overflowed.
 ### :param you: The right operand.
 ### :returns: A tuple of `(wrapped_product, overflowed)`.
 routine S32.mul_with_overflow(you: S32) -> (S32, Bool)
-  return signed_mul_checked[S32](me, you)
+  return LLVM::signed_mul_checked[S32](me, you)
 
 ### Returns `me + you`, throwing on overflow.
 ### :param you: The right operand.
@@ -265,19 +265,19 @@ routine S32.neg!() -> S32
 ### :param you: The right operand.
 ### :returns: The sum, wrapping on overflow.
 routine S32.add_wrap(you: S32) -> S32
-  return add[S32](a: me, b: you)
+  return LLVM::add[S32](a: me, b: you)
 
 ### Returns `(me - you)` with wrapping arithmetic (mod 2³², signed).
 ### :param you: The value to subtract.
 ### :returns: The difference, wrapping on underflow.
 routine S32.sub_wrap(you: S32) -> S32
-  return sub[S32](a: me, b: you)
+  return LLVM::sub[S32](a: me, b: you)
 
 ### Returns `(me * you)` with wrapping arithmetic (mod 2³², signed).
 ### :param you: The right operand.
 ### :returns: The product, wrapping on overflow.
 routine S32.mul_wrap(you: S32) -> S32
-  return mul[S32](a: me, b: you)
+  return LLVM::mul[S32](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -287,26 +287,26 @@ routine S32.mul_wrap(you: S32) -> S32
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
 dangerous routine S32.add_unchecked(you: S32) -> S32
-  return signed_add_exact[S32](a: me, b: you)
+  return LLVM::signed_add_exact[S32](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no overflow.
 dangerous routine S32.sub_unchecked(you: S32) -> S32
-  return signed_sub_exact[S32](a: me, b: you)
+  return LLVM::signed_sub_exact[S32](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
 dangerous routine S32.mul_unchecked(you: S32) -> S32
-  return signed_mul_exact[S32](a: me, b: you)
+  return LLVM::signed_mul_exact[S32](a: me, b: you)
 
 ### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
 dangerous routine S32.floordiv_unchecked(you: S32) -> S32
-  var quotient = signed_div[S32](a: me, b: you)
-  var remainder = signed_rem[S32](a: me, b: you)
+  var quotient = LLVM::signed_div[S32](a: me, b: you)
+  var remainder = LLVM::signed_rem[S32](a: me, b: you)
   if remainder < 0_s32
     if you > 0_s32
       return quotient - 1_s32
@@ -317,7 +317,7 @@ dangerous routine S32.floordiv_unchecked(you: S32) -> S32
 ### :param you: The divisor.
 ### :returns: The euclidean remainder, assuming `you != 0`.
 dangerous routine S32.mod_unchecked(you: S32) -> S32
-  var remainder = signed_rem[S32](a: me, b: you)
+  var remainder = LLVM::signed_rem[S32](a: me, b: you)
   if remainder < 0_s32
     if you > 0_s32
       return remainder + you
@@ -332,24 +332,24 @@ dangerous routine S32.mod_unchecked(you: S32) -> S32
 ### :param you: The right operand.
 ### :returns: The sum, or `2147483647` / `−2147483648` if it would overflow.
 routine S32.add_clamp(you: S32) -> S32
-  return signed_add_sat[S32](a: me, b: you)
+  return LLVM::signed_add_sat[S32](a: me, b: you)
 
 ### Returns `me - you`, clamped to `S32_MAX` or `S32_MIN` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `2147483647` / `−2147483648` if it would overflow.
 routine S32.sub_clamp(you: S32) -> S32
-  return signed_sub_sat[S32](a: me, b: you)
+  return LLVM::signed_sub_sat[S32](a: me, b: you)
 
 ### Returns `me * you`, clamped to `S32_MAX` or `S32_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `2147483647` / `−2147483648` if it would overflow.
 routine S32.mul_clamp(you: S32) -> S32
-  var wide = mul[S64](sign_extend[S32, S64](me), sign_extend[S32, S64](you))
-  if signed_gt[S64](wide, 2147483647_s64)
+  var wide = LLVM::mul[S64](LLVM::sign_extend[S32, S64](me), LLVM::sign_extend[S32, S64](you))
+  if LLVM::signed_gt[S64](wide, 2147483647_s64)
     return S32_MAX
-  if signed_lt[S64](wide, -2147483648_s64)
+  if LLVM::signed_lt[S64](wide, -2147483648_s64)
     return S32_MIN
-  return int_truncate[S64, S32](wide)
+  return LLVM::int_truncate[S64, S32](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -433,24 +433,24 @@ routine S32.pow_clamp!(exp: S32) -> S32
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine S32.bitand(you: S32) -> S32
-  return bit_and[S32](a: me, b: you)
+  return LLVM::bit_and[S32](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine S32.bitor(you: S32) -> S32
-  return bit_or[S32](a: me, b: you)
+  return LLVM::bit_or[S32](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine S32.bitxor(you: S32) -> S32
-  return bit_xor[S32](a: me, b: you)
+  return LLVM::bit_xor[S32](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine S32.bitnot() -> S32
-  return bit_xor[S32](a: me, b: -1)
+  return LLVM::bit_xor[S32](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -460,25 +460,25 @@ routine S32.bitnot() -> S32
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S32.ashl(bits: U32) -> S32
-  return shift_left[S32](me, bits)
+  return LLVM::shift_left[S32](me, bits)
 
 ### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits`, copying the sign bit into vacated positions.
 routine S32.ashr(bits: U32) -> S32
-  return shift_right_signed[S32](me, bits)
+  return LLVM::shift_right_signed[S32](me, bits)
 
 ### Left-shifts this value by `bits` positions (same as `ashl` for signed integers).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S32.lshl(bits: U32) -> S32
-  return shift_left[S32](me, bits)
+  return LLVM::shift_left[S32](me, bits)
 
 ### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
 routine S32.lshr(bits: U32) -> S32
-  return shift_right_unsigned[S32](me, bits)
+  return LLVM::shift_right_unsigned[S32](me, bits)
 
 # ============================================================================
 # Comparison Operations
@@ -488,15 +488,15 @@ routine S32.lshr(bits: U32) -> S32
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine S32.eq(you: S32) -> Bool
-  return int_eq[S32](a: me, b: you)
+  return LLVM::int_eq[S32](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine S32.cmp(you: S32) -> ComparisonSign
-  if signed_lt[S32](me, you)
+  if LLVM::signed_lt[S32](me, you)
     return ME_SMALL
-  if signed_gt[S32](me, you)
+  if LLVM::signed_gt[S32](me, you)
     return ME_LARGE
   return SAME
 
@@ -539,7 +539,7 @@ routine S32.clamp(min_val: S32, max_val: S32) -> S32
 ### Returns the count of set bits (popcount) in this value's 32-bit representation.
 ### :returns: The number of `1` bits; between 0 and 32.
 routine S32.count_ones() -> S32
-  return count_ones[S32](me)
+  return LLVM::count_ones[S32](me)
 
 ### Returns the count of clear bits in this value's 32-bit representation.
 ### :returns: `32` minus the popcount; between 0 and 32.
@@ -549,12 +549,12 @@ routine S32.count_zeros() -> S32
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `32` if the value is zero.
 routine S32.leading_zeros() -> S32
-  return leading_zeros[S32](me)
+  return LLVM::leading_zeros[S32](me)
 
 ### Returns the number of trailing zero bits, starting from the least-significant bit.
 ### :returns: The trailing zero count; `32` if the value is zero.
 routine S32.trailing_zeros() -> S32
-  return trailing_zeros[S32](me)
+  return LLVM::trailing_zeros[S32](me)
 
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `32` if the value is `−1` (all bits set).
@@ -569,36 +569,36 @@ routine S32.trailing_ones() -> S32
 ### Returns this value with its bits reversed (bit 31 ↔ bit 0, etc.).
 ### :returns: The bit-reversed `S32`.
 routine S32.reverse_bits() -> S32
-  return reverse_bits[S32](me)
+  return LLVM::reverse_bits[S32](me)
 
 ### Returns this value with its four bytes swapped (for endianness conversion).
 ### :returns: An `S32` with its bytes in reverse order.
 routine S32.swap_bytes() -> S32
-  return byte_swap[S32](me)
+  return LLVM::byte_swap[S32](me)
 
 ### Returns this value rotated left by `bits` positions.
 routine S32.rotate_left(bits: U32) -> S32
-  return reinterpret_bits[U32, S32](reinterpret_bits[S32, U32](me).rotate_left(bits: bits))
+  return LLVM::reinterpret_bits[U32, S32](LLVM::reinterpret_bits[S32, U32](me).rotate_left(bits: bits))
 
 ### Returns this value rotated right by `bits` positions.
 routine S32.rotate_right(bits: U32) -> S32
-  return reinterpret_bits[U32, S32](reinterpret_bits[S32, U32](me).rotate_right(bits: bits))
+  return LLVM::reinterpret_bits[U32, S32](LLVM::reinterpret_bits[S32, U32](me).rotate_right(bits: bits))
 
 ### Returns the raw byte representation of this value in little-endian order.
 routine S32.to_bytes_le() -> Array[Byte, 4]
-  return reinterpret_bits[S32, U32](me).to_bytes_le()
+  return LLVM::reinterpret_bits[S32, U32](me).to_bytes_le()
 
 ### Returns the raw byte representation of this value in big-endian order.
 routine S32.to_bytes_be() -> Array[Byte, 4]
-  return reinterpret_bits[S32, U32](me).to_bytes_be()
+  return LLVM::reinterpret_bits[S32, U32](me).to_bytes_be()
 
 ### Builds an `S32` from its little-endian raw byte representation.
 common routine S32.from_bytes_le(bytes: Array[Byte, 4]) -> S32
-  return reinterpret_bits[U32, S32](U32.from_bytes_le(bytes: bytes))
+  return LLVM::reinterpret_bits[U32, S32](U32.from_bytes_le(bytes: bytes))
 
 ### Builds an `S32` from its big-endian raw byte representation.
 common routine S32.from_bytes_be(bytes: Array[Byte, 4]) -> S32
-  return reinterpret_bits[U32, S32](U32.from_bytes_be(bytes: bytes))
+  return LLVM::reinterpret_bits[U32, S32](U32.from_bytes_be(bytes: bytes))
 
 # ============================================================================
 # Utility Methods
@@ -622,8 +622,8 @@ routine S32.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine S32.is_even() -> Bool
-  var result = bit_and[S32](a: me, b: 1_s32)
-  return int_eq[S32](a: result, b: 0_s32)
+  var result = LLVM::bit_and[S32](a: me, b: 1_s32)
+  return LLVM::int_eq[S32](a: result, b: 0_s32)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -642,10 +642,10 @@ routine S32.signum() -> S32
 ### Negative values always return `false`.
 ### :returns: `true` if `me` is 1, 2, 4, ..., 1073741824; `false` otherwise (including zero and negatives).
 routine S32.is_power_of_two() -> Bool
-  var is_pos = signed_gt[S32](me, 0_s32)
-  var minus_one = sub[S32](a: me, b: 1_s32)
-  var anded = bit_and[S32](a: me, b: minus_one)
-  var is_zero = int_eq[S32](a: anded, b: 0_s32)
+  var is_pos = LLVM::signed_gt[S32](me, 0_s32)
+  var minus_one = LLVM::sub[S32](a: me, b: 1_s32)
+  var anded = LLVM::bit_and[S32](a: me, b: minus_one)
+  var is_zero = LLVM::int_eq[S32](a: anded, b: 0_s32)
   return is_pos and is_zero
 
 # ============================================================================
@@ -662,7 +662,7 @@ routine S32.represent() -> Text
   # Use reinterpret_bits (not U32(me)) — U32.create(S32) throws on negative inputs,
   # and we need the raw bit pattern so the two's-complement negation `0u32 -% bits`
   # yields |me| (works correctly even for S32.MIN, whose absolute value overflows S32).
-  return "-" + (0u32 -% reinterpret_bits[S32, U32](me)).represent()
+  return "-" + (0u32 -% LLVM::reinterpret_bits[S32, U32](me)).represent()
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
@@ -708,11 +708,11 @@ routine S32!(from_text: Text) -> S32
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the zero-extended 32-bit representation.
 routine S32.fast_hash() -> U64
-  return __hash_leaf(v: zero_extend[S32, U64](me))
+  return __hash_leaf(v: LLVM::zero_extend[S32, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine S32.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zero_extend[S32, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: LLVM::zero_extend[S32, U64](me), k0: k0, k1: k1)
