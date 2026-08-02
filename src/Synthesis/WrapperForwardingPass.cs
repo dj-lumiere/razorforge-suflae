@@ -199,8 +199,14 @@ internal sealed class WrapperForwardingPass
             _ => innerType
         };
 
+        // Resolve the method against the CONCRETE inner type first (e.g. `Box[S64]`, `List[S64]`) so a
+        // generic entity's owner type parameters bind (`Box[T].get` → `Box[S64].get -> S64`). Falling
+        // straight to the generic DEFINITION (innerLookupType = `Box[T]`) would return an
+        // un-monomorphized `-> T` method, which codegen rejects ("no concrete SA-resolved return type").
+        // Non-generic inners have innerType == innerLookupType, so this is a no-op there.
         RoutineInfo? innerMethod =
-            _registry.LookupMethod(type: innerLookupType, methodName: methodName,
+            _registry.LookupMethod(type: innerType, methodName: methodName, isFailable: isFailable)
+            ?? _registry.LookupMethod(type: innerLookupType, methodName: methodName,
                 isFailable: isFailable);
         if (innerMethod == null)
         {

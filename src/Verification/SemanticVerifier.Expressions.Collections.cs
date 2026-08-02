@@ -24,14 +24,19 @@ public sealed partial class SemanticVerifier
                 current = wrapper.InnerType;
                 continue;
             }
-            // T / Retained[T] / Tracked[T] are declared as `record` in stdlib so they
+            // T / Retained[T] / Tracked[T] / Roamed[T] are declared as `record` in stdlib so they
             // surface as RecordTypeInfo, not WrapperTypeInfo. Their single TypeArgument is the
             // wrapped collection type — unwrap so the literal can resolve its base name
             // (PriorityQueue, SortedSet, etc.) from the expected type even when LHS is
             // `Owned[SortedSet[S64]]` etc. Use base-name extraction since instantiated record
-            // types have Name like "Foo", not bare "Owned".
+            // types have Name like "Foo", not bare "Owned". Roamed[T] is the Suflae lowering of an
+            // annotated collection type (`var l: List[S64]` ⇒ `Roamed[List[S64]]`); it MUST be
+            // transparent here too, else a bare literal element loses its S64 context and falls back
+            // to the Suflae `Integer` default — producing `List[Integer]` that won't assign to the
+            // `Roamed[List[S64]]` slot (RF-S201). Inferring the element type through the wrapper is
+            // exactly the compiler's job.
             if (current is RecordTypeInfo { TypeArguments: { Count: 1 } recArgs } recRT
-                && GetTypeBaseName(recRT) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
+                && GetTypeBaseName(recRT) is Compiler.Resolution.RuntimeContract.Owned or Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Roamed)
             {
                 current = recArgs[0];
                 continue;

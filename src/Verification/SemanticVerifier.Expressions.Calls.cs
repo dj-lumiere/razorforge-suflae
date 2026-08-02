@@ -293,15 +293,34 @@ public sealed partial class SemanticVerifier
                         // (`next: Roamed[Node]` → T = Node) instead of staying unmonomorphized. Variant
                         // args keep the variant itself as context (the auto-wrap case above).
                         TypeSymbol? argExpected = variantArgContext;
-                        if (argExpected == null && callableType is EntityTypeInfo entityCtor)
+                        // Field-init constructor `T(field: value)` — the arg's expected type is the target
+                        // field's type, so a bare integer literal adapts to it (S64/…) instead of stalling
+                        // at the Suflae `Integer` default (RF escapes this only because its default IS S64).
+                        // BOTH entity and record targets do inline field-init construction, so both need
+                        // this — gating on EntityTypeInfo alone left RECORD constructors (`Point(x: 1)`)
+                        // with a null expected type → `1` stayed Integer → codegen `Integer`-into-`i64` /
+                        // pruned `Integer.from_literal`. Inferring the field type is the compiler's job.
+                        List<MemberVariableInfo>? ctorFields = callableType switch
+                        {
+                            EntityTypeInfo entityCtor => entityCtor.MemberVariables,
+                            RecordTypeInfo recordCtor => recordCtor.MemberVariables,
+                            _ => null
+                        };
+                        if (argExpected == null && ctorFields != null)
                         {
                             MemberVariableInfo? field = arg is NamedArgumentExpression na
-                                ? entityCtor.MemberVariables
-                                    .FirstOrDefault(predicate: mv => mv.Name == na.Name)
-                                : (creatorPosIdx < entityCtor.MemberVariables.Count
-                                    ? entityCtor.MemberVariables[index: creatorPosIdx]
+                                ? ctorFields.FirstOrDefault(predicate: mv => mv.Name == na.Name)
+                                : (creatorPosIdx < ctorFields.Count
+                                    ? ctorFields[index: creatorPosIdx]
                                     : null);
                             argExpected = field?.Type;
+                            // For a generic record/entity instantiation (Box[S64]), resolve the field's
+                            // formal param (`T`) to the concrete type arg so the literal conforms to S64,
+                            // not to the unresolved `T`.
+                            if (argExpected != null && callableType is { IsGenericResolution: true, TypeArguments: not null })
+                            {
+                                argExpected = SubstituteTypeParameters(type: argExpected, genericType: callableType);
+                            }
                             Expression argVal = arg is NamedArgumentExpression nav ? nav.Value : arg;
                             TypeSymbol argAnalyzed =
                                 AnalyzeExpression(expression: arg, expectedType: argExpected);
@@ -560,15 +579,29 @@ public sealed partial class SemanticVerifier
                         // an unmonomorphized generic. Mirrors the field-init path
                         // (ValidateCreatorMemberVariables). Variant args keep the variant as context.
                         TypeSymbol? argExpected = variantArgContext;
-                        if (argExpected == null && type is EntityTypeInfo entityCtorType)
+                        // Both entity AND record targets do inline field-init construction here — gating on
+                        // EntityTypeInfo alone left a RECORD constructor's arg with a null expected type, so
+                        // a bare `1` reset to the Suflae `Integer` default (this is the SECOND, final ctor
+                        // block: it re-analyzes and would clobber the first block's conformance → the record
+                        // literal ended up Integer → codegen `Integer`-into-`i64` / pruned from_literal).
+                        List<MemberVariableInfo>? ctorFields = type switch
+                        {
+                            EntityTypeInfo entityCtorType => entityCtorType.MemberVariables,
+                            RecordTypeInfo recordCtorType => recordCtorType.MemberVariables,
+                            _ => null
+                        };
+                        if (argExpected == null && ctorFields != null)
                         {
                             MemberVariableInfo? field = arg is NamedArgumentExpression na
-                                ? entityCtorType.MemberVariables
-                                    .FirstOrDefault(predicate: mv => mv.Name == na.Name)
-                                : (ctorPosIdx < entityCtorType.MemberVariables.Count
-                                    ? entityCtorType.MemberVariables[index: ctorPosIdx]
+                                ? ctorFields.FirstOrDefault(predicate: mv => mv.Name == na.Name)
+                                : (ctorPosIdx < ctorFields.Count
+                                    ? ctorFields[index: ctorPosIdx]
                                     : null);
                             argExpected = field?.Type;
+                            if (argExpected != null && type is { IsGenericResolution: true, TypeArguments: not null })
+                            {
+                                argExpected = SubstituteTypeParameters(type: argExpected, genericType: type);
+                            }
                         }
                         argTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: argExpected));
                         ctorPosIdx++;

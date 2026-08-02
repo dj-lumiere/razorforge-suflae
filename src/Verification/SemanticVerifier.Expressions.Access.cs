@@ -288,8 +288,23 @@ public sealed partial class SemanticVerifier
     {
         if (getItem is not { Parameters.Count: >= 1 }) return null;
         TypeSymbol paramType = getItem.Parameters[index: 0].Type;
-        return SubstituteOwnerGenerics(paramType: paramType, lookupType: lookupType,
+        paramType = SubstituteOwnerGenerics(paramType: paramType, lookupType: lookupType,
             ownerType: getItem.OwnerType);
+
+        // The index param is frequently a by-reference marker wrapper — `Dict.getitem!(key:
+        // Referring[K])` / `Controlling[K]` — the `$refer`/`$control` coercion the container declares on
+        // its key. That wrapper is TRANSPARENT: the caller passes a bare `K`. Unwrap it to the inner key
+        // type so a bare integer key literal (`d[1]`) conforms to e.g. S64 instead of stalling at the
+        // Suflae `Integer` default (RF escapes this only because its default already IS S64). Inferring
+        // the key type through the coercion wrapper is the compiler's job.
+        if (paramType.TypeArguments is { Count: >= 1 } referArgs &&
+            GetTypeBaseName(type: paramType) is Compiler.Resolution.RuntimeContract.Referring
+                or Compiler.Resolution.RuntimeContract.Controlling)
+        {
+            paramType = referArgs[index: 0];
+        }
+
+        return paramType;
     }
 
     private TypeSymbol? SubstituteOwnerGenerics(TypeSymbol paramType, TypeSymbol lookupType,

@@ -491,22 +491,30 @@ public sealed class BuildDriver
                     Location: new SourceLocation(FileName: filePath, Line: 0, Column: 0, Position: 0)));
             }
 
-            // Suflae prelude: SF's unsuffixed integer literals default to `Integer` (RF defaults to S64),
-            // and Integer/Real/Complex live in the `Numerics` module — NOT Core — so a bare `6` in an SF
-            // USER file fails to resolve (RF-S002) without it. Inject a synthetic `import Numerics` into
-            // BOTH the extracted imports (so the module's files load) and the AST right after the module
-            // declaration (so SA adds it to _importedModules AND the top-of-file import order holds),
-            // unless already present. Stdlib `.rf` files are excluded — they're RF source. (Real/Complex
-            // riding along relaxes #1's "import-only" for now; TODO: narrow the SF prelude to Integer.)
-            if (isSuflae && !isStdlibFile &&
-                imports.All(predicate: i => i.ModulePath != "Numerics"))
+            // Suflae prelude: modules an SF USER file gets for free (no explicit `import`). These are
+            // injected into BOTH the extracted imports (so their files load) and the AST right after the
+            // module declaration (so SA adds them to _importedModules AND the top-of-file import order
+            // holds), each only if not already present. Stdlib `.rf` files are excluded — they're RF
+            // source. Members:
+            //   - `Numerics` — SF's unsuffixed integer literals default to `Integer` (RF defaults to S64),
+            //     and Integer/Real/Complex live in `Numerics` (NOT Core), so a bare `6` fails to resolve
+            //     (RF-S002) without it. (Real/Complex riding along relaxes #1's "import-only" for now;
+            //     TODO: narrow to Integer.)
+            //   - `IO/Console`, `IO/File` — always-available I/O in SF, so `show(...)` / file access need
+            //     no ceremony import.
+            if (isSuflae && !isStdlibFile)
             {
-                var preludeImport = new ImportDeclaration(ModulePath: "Numerics", Alias: null,
-                    SpecificImports: null,
-                    Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0));
-                imports.Add(item: preludeImport);
-                // Module declaration is guaranteed at index 0 by now (parsed or synthesized above).
-                ast.Declarations.Insert(index: 1, item: preludeImport);
+                string[] preludeModules = ["Numerics", "IO/Console", "IO/File"];
+                int insertAt = 1; // Module declaration is guaranteed at index 0 by now.
+                foreach (string preludeModule in preludeModules)
+                {
+                    if (imports.Any(predicate: i => i.ModulePath == preludeModule)) continue;
+                    var preludeImport = new ImportDeclaration(ModulePath: preludeModule, Alias: null,
+                        SpecificImports: null,
+                        Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0));
+                    imports.Add(item: preludeImport);
+                    ast.Declarations.Insert(index: insertAt++, item: preludeImport);
+                }
             }
 
             return new FileBuildUnit(FilePath: filePath,

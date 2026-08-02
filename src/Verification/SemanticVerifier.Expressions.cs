@@ -349,6 +349,24 @@ public sealed partial class SemanticVerifier
             leftType = AnalyzeExpression(expression: binary.Left, expectedType: rightType);
         }
 
+        // Membership (`x in coll` / `x notin coll`) reverses to `coll.contains(x)`: the LEFT operand
+        // must conform to the collection's ELEMENT type, not stay at the bare-literal default. Without
+        // this a Suflae `20 in list_of_s64` keeps `20` at the `Integer` default → the element type
+        // never matches → `contains` is silently always false. (RF only escapes this by luck: its
+        // default already IS S64.) Inferring the operand type through the container is the compiler's
+        // job — unwrap SF's `Roamed`/RC wrappers to reach the collection, then take its first type
+        // argument (List/Set/Array element, Dict key).
+        if (binary.Operator is BinaryOperator.In or BinaryOperator.NotIn &&
+            binary.Left is LiteralExpression { LiteralType: TokenType.UndecidedInteger })
+        {
+            TypeSymbol container = UnwrapCollectionLiteralExpectedType(type: rightType);
+            if (container.TypeArguments is { Count: >= 1 } contArgs &&
+                IsFixedWidthIntegerType(type: contArgs[index: 0]))
+            {
+                leftType = AnalyzeExpression(expression: binary.Left, expectedType: contArgs[index: 0]);
+            }
+        }
+
         switch (binary.Operator)
         {
             // Handle assignment operator
