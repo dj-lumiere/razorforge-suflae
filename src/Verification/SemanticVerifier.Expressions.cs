@@ -848,12 +848,12 @@ public sealed partial class SemanticVerifier
         // copyable. See AnalyzeVariableDeclaration for the same rule applied to var initializers.
         if (_registry.Language == Language.RazorForge &&
             value is IdentifierExpression or MemberExpression &&
-            !IsTriviallyCopyable(type: valueType))
+            !IsTriviallyStorable(type: valueType))
         {
-            var hint = FindNonTriviallyCopyableWrapper(type: valueType);
+            var hint = FindNonTriviallyStorableWrapper(type: valueType);
             if (hint != null)
             {
-                string verb = NonTriviallyCopyableWrappers[key: hint.Value.Wrapper];
+                string verb = NonTriviallyStorableWrappers[key: hint.Value.Wrapper];
                 string fieldNote = hint.Value.Path == "<value>"
                     ? $"value of type '{valueType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
                     : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";

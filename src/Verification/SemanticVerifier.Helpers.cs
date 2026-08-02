@@ -446,13 +446,13 @@ public sealed partial class SemanticVerifier
                                  paramBase is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
             if (_registry.Language == Language.RazorForge &&
                 argValue is IdentifierExpression or MemberExpression &&
-                !IsTriviallyCopyable(type: argType) &&
+                !IsTriviallyStorable(type: argType) &&
                 !paramIsBorrow)
             {
-                var hint = FindNonTriviallyCopyableWrapper(type: argType);
+                var hint = FindNonTriviallyStorableWrapper(type: argType);
                 if (hint != null)
                 {
-                    string verb = NonTriviallyCopyableWrappers[key: hint.Value.Wrapper];
+                    string verb = NonTriviallyStorableWrappers[key: hint.Value.Wrapper];
                     string fieldNote = hint.Value.Path == "<value>"
                         ? $"argument of type '{argType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
                         : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";
@@ -563,14 +563,14 @@ public sealed partial class SemanticVerifier
             if (argType.Category == TypeCategory.Error) continue;
 
             // Rewrite for args that don't match the bare-Text/Bytes overloads:
-            //   - copy-restricted wrappers (Owned, Retained, Tracked, …) — `IsTriviallyCopyable`
+            //   - copy-restricted wrappers (Owned, Retained, Tracked, …) — `IsTriviallyStorable`
             //     returns false; we need the rewrite to avoid S420.
-            //   - raw entities (List[T], Set[T], Dict[K,V]) — `IsTriviallyCopyable` returns
+            //   - raw entities (List[T], Set[T], Dict[K,V]) — `IsTriviallyStorable` returns
             //     true (fallback), but the generic `alert[T]` / `show[T]` monomorphization
             //     copies the entity ptr by value, which corrupts. Rewriting to `arg.diagnose()`
             //     extracts a Text and uses the cleaner `Referring[Text]` overload instead.
             bool isEntity = argType is EntityTypeInfo;
-            if (!isEntity && IsTriviallyCopyable(type: argType)) continue;
+            if (!isEntity && IsTriviallyStorable(type: argType)) continue;
 
             string methodName = isAlert ? "diagnose" : "represent";
             var memberAccess = new MemberExpression(

@@ -205,7 +205,7 @@ public sealed partial class SemanticVerifier
             }
 
             (string Wrapper, string Path)? offender =
-                isEntity ? null : FindNonTriviallyCopyableWrapper(type: type);
+                isEntity ? null : FindNonTriviallyStorableWrapper(type: type);
             if (!isEntity && offender == null)
             {
                 continue;

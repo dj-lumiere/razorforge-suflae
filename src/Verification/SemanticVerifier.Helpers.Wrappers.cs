@@ -225,7 +225,7 @@ public sealed partial class SemanticVerifier
     /// `Hijacked[T]` is excluded because it is a raw pointer and copies bitwise.
     /// See <c>RazorForge-Wiki/docs/Records.md#copy-semantics</c>.
     /// </summary>
-    private static readonly Dictionary<string, string> NonTriviallyCopyableWrappers =
+    private static readonly Dictionary<string, string> NonTriviallyStorableWrappers =
         new(StringComparer.Ordinal)
         {
             [Compiler.Resolution.RuntimeContract.Retained] = "a.retain()",
@@ -264,7 +264,7 @@ public sealed partial class SemanticVerifier
             or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched
             or Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
 
-    private static bool IsTriviallyCopyable(TypeSymbol type)
+    private static bool IsTriviallyStorable(TypeSymbol type)
     {
         if (type is ErrorTypeInfo or GenericParameterTypeInfo || type.IsBlank)
         {
@@ -283,7 +283,7 @@ public sealed partial class SemanticVerifier
         // Tuples — anonymous; auto-derive cascades only when every element does.
         if (type is TupleTypeInfo tuple)
         {
-            return tuple.ElementTypes.All(predicate: IsTriviallyCopyable);
+            return tuple.ElementTypes.All(predicate: IsTriviallyStorable);
         }
 
         // Records / choices / flags / entities carry ImplementedProtocols populated by
@@ -318,14 +318,14 @@ public sealed partial class SemanticVerifier
     /// <param name="type">Type to classify.</param>
     /// <returns>The offending wrapper's base name (e.g. <c>"Retained"</c>) and the path
     /// of field names leading to it, or null when no offender exists.</returns>
-    private static (string Wrapper, string Path)? FindNonTriviallyCopyableWrapper(TypeSymbol type)
+    private static (string Wrapper, string Path)? FindNonTriviallyStorableWrapper(TypeSymbol type)
     {
         return FindCore(type: type, prefix: "", visited: new HashSet<string>(StringComparer.Ordinal));
 
         (string, string)? FindCore(TypeSymbol type, string prefix, HashSet<string> visited)
         {
             string baseName = type.BareName;
-            if (NonTriviallyCopyableWrappers.ContainsKey(key: baseName))
+            if (NonTriviallyStorableWrappers.ContainsKey(key: baseName))
             {
                 return (baseName, prefix.Length == 0 ? "<value>" : prefix);
             }

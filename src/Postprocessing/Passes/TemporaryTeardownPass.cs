@@ -323,7 +323,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         if (RcWrapperBaseNames.Contains(item: baseName))
             return false;
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(t);
-        return !lc.IsBorrow && lc.Destroy != null && lc.Copy != null;
+        return !lc.IsBorrow && lc.Destroy != null && lc.Store != null;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -453,7 +453,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         // an extra balanced release is always safe. Entities are deliberately excluded for now (their
         // single-owner lifetime and fluent `me` returns are trickier to prove alias-free); plain value
         // records / scalars have a no-op $destroy and would only bloat the IR.
-        return t is RecordTypeInfo rec && (lc.Copy != null || rec.HasRCFields);
+        return t is RecordTypeInfo rec && (lc.Store != null || rec.HasRCFields);
     }
 
     /// <summary>True when a call result MAY be a borrow/view pointing into the receiver, so freeing

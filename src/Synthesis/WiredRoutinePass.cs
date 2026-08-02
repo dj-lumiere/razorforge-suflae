@@ -854,7 +854,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Otherwise the shallow byte-copy is both correct and cheaper.
         var anyRetaining = record.MemberVariables.Any(predicate: f => ctx.Registry
            .GetLifecycle(type: f.Type)
-           .Copy is not null);
+           .Store is not null);
         if (!anyRetaining)
             return BuildReturnMeBody(ownerType: record);
 
@@ -874,7 +874,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             // Retaining field → me.f.store() (bumps its refcount); value field → me.f (shallow).
             Expression argExpr = ctx.Registry.GetLifecycle(type: field.Type)
-                                    .Copy is not null
+                                    .Store is not null
                 ? new CallExpression(
                     Callee: new MemberExpression(Object: fieldRef,
                         MemberName: "store",

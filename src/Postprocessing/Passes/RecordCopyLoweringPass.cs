@@ -153,7 +153,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             Statement body = ctx.VariantBodies[key];
             // A variant's deep `copy` body (BuildVariantCopyBody) has an `else => return me` arm for
             // its non-destructible (scalar/None) arms. Since a destructible-arm variant now carries a
-            // GetLifecycle.Copy, that bare `return me` would otherwise re-inject `me.copy()` → infinite
+            // GetLifecycle.Store, that bare `return me` would otherwise re-inject `me.copy()` → infinite
             // recursion. Treat the copy body like `$store`: its `return me` is the identity primitive.
             _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: key);
             Statement lowered = LowerStatement(stmt: body);
@@ -638,7 +638,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         // records and excluding the borrow tier — resolved through GetOwnMethodsResolved so generic
         // resolutions (e.g. Maybe[Text]) agree with what teardown sees for the same type.
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(type: type);
-        copyMethod = lc.Copy;
+        copyMethod = lc.Store;
         return !lc.IsBorrow && copyMethod != null;
     }
 

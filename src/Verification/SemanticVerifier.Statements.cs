@@ -703,12 +703,12 @@ public sealed partial class SemanticVerifier
         // hard error once stdlib migration completes (Phase 2).
         else if (_registry.Language == Language.RazorForge &&
             varDecl.Initializer is IdentifierExpression or MemberExpression &&
-            !IsTriviallyCopyable(type: varType))
+            !IsTriviallyStorable(type: varType))
         {
-            var hint = FindNonTriviallyCopyableWrapper(type: varType);
+            var hint = FindNonTriviallyStorableWrapper(type: varType);
             if (hint != null)
             {
-                string verb = NonTriviallyCopyableWrappers[key: hint.Value.Wrapper];
+                string verb = NonTriviallyStorableWrappers[key: hint.Value.Wrapper];
                 string fieldNote = hint.Value.Path == "<value>"
                     ? $"type '{varType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
                     : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";

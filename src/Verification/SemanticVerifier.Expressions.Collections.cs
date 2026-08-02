@@ -465,7 +465,7 @@ public sealed partial class SemanticVerifier
                 message: $"'with' expression requires a record type, got '{baseType.Name}'.",
                 location: with.Location);
         }
-        else if (!IsTriviallyCopyable(type: baseType))
+        else if (!IsTriviallyStorable(type: baseType))
         {
             // `with` lowers to `tmp = base.store(); tmp.field = v` — so the base must obey
             // Assignable. Records with ownership-bearing fields that don't opt in are rejected

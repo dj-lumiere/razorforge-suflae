@@ -241,28 +241,28 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// A type whose copy is trivial — a plain bitwise duplicate is sound, with no managed
+    /// A type whose store is trivial — a plain bitwise duplicate is sound, with no managed
     /// <c>$store</c> to bump a refcount and no managed <c>$destroy</c> to balance. Decided by the
     /// SAME oracle the copy-lowering and teardown passes use: <see cref="TypeRegistry.GetLifecycle"/>
-    /// returns a non-null <c>Copy</c> exactly when the type (or, recursively, a field of it) is a
-    /// managed leaf like <c>Text</c>/<c>Decimal</c>; a null <c>Copy</c> means trivially copyable.
+    /// returns a non-null <c>Store</c> exactly when the type (or, recursively, a field of it) is a
+    /// managed leaf like <c>Text</c>/<c>Decimal</c>; a null <c>Store</c> means trivially storable.
     /// Tuples and composite records are handled by the recursion inside GetLifecycle.
     ///
     /// This gates <c>byval</c>: byval is a bitwise memcpy that bypasses the managed protocol, so for
     /// a managed record the callee's <c>$destroy</c> of its byval copy would free state the caller
     /// still owns — a double-free. Because the copy-lowering pass injects a retaining <c>$store</c>
     /// for EXACTLY the same (non-trivial) types, gating on this oracle also guarantees byval never
-    /// races that injected copy: trivially-copyable args get no <c>$store</c>, so byval is the only
+    /// races that injected store: trivially-storable args get no <c>$store</c>, so byval is the only
     /// duplication and it is sound.
     /// </summary>
-    private bool IsTriviallyCopyableRecord(TypeInfo type) =>
-        _registry.GetLifecycle(type: type).Copy == null;
+    private bool IsTriviallyStorableRecord(TypeInfo type) =>
+        _registry.GetLifecycle(type: type).Store == null;
 
     /// <summary>
     /// Whether the explicit value parameter <paramref name="paramType"/> of <paramref name="routine"/>
     /// is passed BY VALUE through a hidden <c>ptr byval(%T)</c> copy (the
-    /// <see cref="AbiKind.Indirect"/> argument form). Requires the type to be trivially copyable (see
-    /// <see cref="IsTriviallyCopyableRecord"/>) — byval is a bitwise copy and is unsound for managed
+    /// <see cref="AbiKind.Indirect"/> argument form). Requires the type to be trivially storable (see
+    /// <see cref="IsTriviallyStorableRecord"/>) — byval is a bitwise copy and is unsound for managed
     /// records (which keep the existing by-value path that the copy-lowering pass balances with an
     /// explicit <c>$store</c>). EXCLUDES async routines: suspended/threaded workers receive their args
     /// through their own handoff (the thread cell / closure), not the C calling convention, so byval
@@ -272,7 +272,7 @@ public partial class LlvmCodeGenerator
     private bool ParameterPassedByval(RoutineInfo routine, TypeInfo paramType) =>
         !routine.IsAsync
         && AbiClassify(type: paramType).Kind == AbiKind.Indirect
-        && IsTriviallyCopyableRecord(type: paramType);
+        && IsTriviallyStorableRecord(type: paramType);
 
     /// <summary>
     /// The ABI register type a value parameter is COERCED to (e.g. <c>i64</c> / <c>{ i64, i32 }</c>),

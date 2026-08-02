@@ -1558,7 +1558,7 @@ public sealed partial class TypeRegistry
     /// <summary>The owned-value lifecycle of a type, resolved through the single unified own-method
     /// resolver (<see cref="GetOwnMethodsResolved"/>) so the teardown and copy passes agree about
     /// generic resolutions like <c>Retained[Tracer]</c> / <c>Maybe[Text]</c>.</summary>
-    public readonly record struct Lifecycle(RoutineInfo? Copy, RoutineInfo? Destroy, bool IsBorrow);
+    public readonly record struct Lifecycle(RoutineInfo? Store, RoutineInfo? Destroy, bool IsBorrow);
 
     /// <summary>
     /// Lifecycle and reference are governed by the four wired routines
@@ -1611,14 +1611,17 @@ public sealed partial class TypeRegistry
     public Lifecycle GetLifecycle(TypeInfo type)
     {
         if (IsBorrowTier(type: type))
-            return new Lifecycle(Copy: null, Destroy: null, IsBorrow: true);
+            return new Lifecycle(Store: null, Destroy: null, IsBorrow: true);
 
         List<RoutineInfo> own = GetOwnMethodsResolved(type: type).ToList();
         RoutineInfo? destroy = own
             .Where(predicate: m => m.Name == "destroy" && m.Parameters.Count == 0)
             .OrderBy(keySelector: m => m.IsSynthesized ? 1 : 0)
             .FirstOrDefault();
-        RoutineInfo? copy = null;
+        // The store-site hook: the verb the copy-lowering pass injects at each `$store` point to make
+        // an aliased value sound. For records/RC wrappers it is the retaining `$store`; for a variant
+        // with a destructible arm it is the deep `copy` (a bitwise alias would double-free the heap arm).
+        RoutineInfo? store = null;
         // Variant MUST be checked before RecordTypeInfo: VariantTypeInfo is a RecordTypeInfo subclass,
         // so `type is RecordTypeInfo` would otherwise capture variants and give them the record
         // field-walk copy — but a variant is a { tag, payload } union whose deep copy needs tag
@@ -1627,7 +1630,7 @@ public sealed partial class TypeRegistry
         // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) define no literal `store` method — their
         // retaining copy IS the refcount verb (retain/track/share/watch/roam). LookupMethod redirects
         // `store`→that verb, but GetOwnMethodsResolved (below) never surfaces a `store` for them, so the
-        // record branch's name=="store" filter would miss it → Copy=null → no retain injected. A container
+        // record branch's name=="store" filter would miss it → Store=null → no retain injected. A container
         // storing a Roamed element (`List[Roamed[E]].add_last`'s `poke(value)`) then aliases without a
         // refcount bump → the element dangles when the caller's handle releases (the List[entity] UAF).
         // Resolve the copy verb through the redirect so instantiated generic bodies get a real retaining
@@ -1637,7 +1640,7 @@ public sealed partial class TypeRegistry
         // roamed_cycle_api), so auto-retain here would double-count and leak. Gate to the SF compile.
         if (Language == TypeModel.Enums.Language.Suflae && GetRcWrapperBaseName(type: type) is not null)
         {
-            copy = LookupMethod(type: type, methodName: "store");
+            store = LookupMethod(type: type, methodName: "store");
         }
         else if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
         {
@@ -1646,28 +1649,28 @@ public sealed partial class TypeRegistry
             // one) would DOUBLE-FREE if bitwise-aliased: two copies of the variant both tear down the
             // same heap arm. Its synthesized deep `copy` (WiredRoutinePass.BuildVariantCopyBody,
             // tag-dispatch → reconstruct each destructible arm with `arm.copy()`) makes an independent
-            // value. Return it as Copy so the copy-lowering pass injects it at every copy point
-            // (record-ctor field-store, call-arg, assignment) — exactly where a bare alias would
+            // value. Return it as the store hook so the copy-lowering pass injects it at every store
+            // point (record-ctor field-store, call-arg, assignment) — exactly where a bare alias would
             // otherwise be torn down by both owners.
-            copy = own.FirstOrDefault(predicate: m =>
+            store = own.FirstOrDefault(predicate: m =>
                 m.Name == "copy" && m.Parameters.Count == 0);
         }
         else if (type is RecordTypeInfo rec)
         {
             // A hand-written $store is always a retaining copy (the managed-leaf retain hook,
             // e.g. Text/Decimal bumping a shared controller).
-            copy = own.FirstOrDefault(predicate: m =>
+            store = own.FirstOrDefault(predicate: m =>
                 m.Name == "store" && m.Parameters.Count == 0 && !m.IsSynthesized);
 
             // The synthesized record $store is field-delegating (WiredRoutinePass.
             // BuildRecordCopyBody) — symmetric with the field-delegating synthesized $destroy.
             // Treat it as a retaining copy iff some field itself needs one, so it gets injected
             // at copy sites and balances the per-field $destroy at teardown (else: double-free).
-            if (copy is null && RecordHasRetainingField(record: rec))
-                copy = own.FirstOrDefault(predicate: m =>
+            if (store is null && RecordHasRetainingField(record: rec))
+                store = own.FirstOrDefault(predicate: m =>
                     m.Name == "store" && m.Parameters.Count == 0);
         }
-        return new Lifecycle(Copy: copy, Destroy: destroy, IsBorrow: false);
+        return new Lifecycle(Store: store, Destroy: destroy, IsBorrow: false);
     }
 
     /// <summary>
