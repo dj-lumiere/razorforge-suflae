@@ -138,11 +138,43 @@ public sealed partial class SemanticVerifier
     /// Validates argument count and types for a routine call against the routine's parameter list.
     /// Reports errors for too-few arguments, too-many arguments (on non-variadic routines), and type mismatches.
     /// </summary>
+    /// <summary>
+    /// Named-argument punning (field-init shorthand): when EVERY argument is a bare identifier that
+    /// matches a distinct target parameter/field name, rewrite each into <c>name: name</c> in place.
+    /// So <c>Point(x, y)</c> == <c>Point(x: x, y: y)</c> — bound by NAME (reorder-safe) and valid even
+    /// under the RF-S510 "3+ params need names" rule. All-or-nothing: a partial match is left untouched
+    /// so it still follows the normal positional rules instead of becoming a mixed-args S512 error.
+    /// </summary>
+    private static void PunMatchingNamedArgs(List<Expression> arguments,
+        IReadOnlyList<string> targetNames)
+    {
+        if (arguments.Count == 0) return;
+        var names = new HashSet<string>(collection: targetNames, comparer: StringComparer.Ordinal);
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach (Expression arg in arguments)
+        {
+            if (arg is not IdentifierExpression id || !names.Contains(item: id.Name)
+                || !seen.Add(item: id.Name))
+                return; // not all bare-identifier-and-distinct-matching → do not pun
+        }
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            var id = (IdentifierExpression)arguments[index: i];
+            arguments[index: i] =
+                new NamedArgumentExpression(Name: id.Name, Value: id, Location: id.Location);
+        }
+    }
+
     private void AnalyzeCallArguments(RoutineInfo routine, List<Expression> arguments,
         SourceLocation location, TypeSymbol? callObjectType = null)
     {
         List<ParameterInfo> parameters = routine.Parameters;
         int totalParams = parameters.Count;
+
+        // Field-init shorthand: pun bare identifiers matching parameter names into named args.
+        PunMatchingNamedArgs(arguments: arguments,
+            targetNames: parameters.Where(predicate: p => p.Name != "me")
+                                   .Select(selector: p => p.Name).ToList());
 
         // Phase 1: Validate named argument ordering and build parameter bindings.
         // Each entry maps parameter index -> argument expression.

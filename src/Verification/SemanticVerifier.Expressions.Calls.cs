@@ -319,6 +319,18 @@ public sealed partial class SemanticVerifier
 
                 if (callableType != null && call.Arguments.Count > 0)
                 {
+                    // Field-init shorthand: `Point(x, y)` == `Point(x: x, y: y)` — pun bare identifiers
+                    // matching field names into named args before construction binding.
+                    List<MemberVariableInfo>? punFields = callableType switch
+                    {
+                        EntityTypeInfo punEntity => punEntity.MemberVariables,
+                        RecordTypeInfo punRecord => punRecord.MemberVariables,
+                        _ => null
+                    };
+                    if (punFields != null)
+                        PunMatchingNamedArgs(arguments: call.Arguments,
+                            targetNames: punFields.Select(selector: f => f.Name).ToList());
+
                     // Variant construction auto-wraps the argument into the variant (e.g.
                     // `Inner(7_s32)` -> Inner's S32 arm, `Inner(none)` -> Inner's None arm), so the
                     // argument's contextual type is the variant itself. Without this, a bare `none`
