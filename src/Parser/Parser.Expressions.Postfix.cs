@@ -86,7 +86,10 @@ public partial class Parser
                 {
                     expr = new CallExpression(
                         Callee: new IdentifierExpression(Name: identExpr.Name,
-                            Location: identExpr.Location),
+                            Location: identExpr.Location,
+                            // Preserve the `::` realm qualifier on a failable foreign call
+                            // (`C::rf_foo!(...)`) so the strict realm gate can see it.
+                            Realm: identExpr.Realm),
                         Arguments: args,
                         Location: expr.Location) { IsFailable = true };
                 }

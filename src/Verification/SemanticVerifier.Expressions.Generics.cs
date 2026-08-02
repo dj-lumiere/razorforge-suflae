@@ -315,7 +315,9 @@ public sealed partial class SemanticVerifier
             {
                 // Realm gate for a GENERIC foreign call `LLVM::add[U128](...)` — `funcId` (== generic.Object)
                 // carries the `::` qualifier the parser preserved, so enforce it here just like the
-                // non-generic free-call path.
+                // non-generic free-call path.
+
+                CheckCallRealm(callee: funcId, routine: routine, location: generic.Location);
 
                 // Capture the generic-def shape BEFORE swapping to the resolution: explicit
                 // type arguments give a complete substitution map, which (a) types bare-literal

@@ -511,7 +511,11 @@ public sealed partial class SemanticVerifier
                 }
 
                 if (routine != null)
-                {
+                {
+
+                    // Realm gate: a foreign routine (C extern / LLVM intrinsic) must be called via its
+                    // `C::`/`LLVM::` qualifier, and a `C::`/`LLVM::` qualifier must name a matching realm.
+                    CheckCallRealm(callee: id, routine: routine, location: call.Location);
 
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
@@ -808,7 +812,11 @@ public sealed partial class SemanticVerifier
                 }
 
                 if (routine != null)
-                {
+                {
+
+                    // Realm gate: a foreign routine (C extern / LLVM intrinsic) must be called via its
+                    // `C::`/`LLVM::` qualifier, and a `C::`/`LLVM::` qualifier must name a matching realm.
+                    CheckCallRealm(callee: id, routine: routine, location: call.Location);
 
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);

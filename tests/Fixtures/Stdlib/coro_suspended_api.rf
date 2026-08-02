@@ -11,9 +11,9 @@ suspended routine compute(x: S64) -> S64
 
 suspended routine counter() -> S64
   var n = 10_s64
-  rf_coro_yield()
+  C::rf_coro_yield()
   n = n + 5_s64
-  rf_coro_yield()
+  C::rf_coro_yield()
   n = n + 5_s64
   return n
 

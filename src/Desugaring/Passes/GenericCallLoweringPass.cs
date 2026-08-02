@@ -523,7 +523,11 @@ internal sealed class GenericCallLoweringPass
                 // ConstructedType/ResolvedRoutine, so the name only identifies the type.
                 Callee: new IdentifierExpression(
                     Name: isTypeConstruction ? id.Name : gmc.ResolvedRoutine.Name,
-                    Location: gmc.Location),
+                    Location: gmc.Location,
+                    // Preserve the `::` realm qualifier (`LLVM::add[U128]`) so a re-analysis of the
+                    // lowered body (monomorphized stdlib bodies re-run SA post-lowering) still sees the
+                    // foreign realm and the strict realm gate passes instead of false-flagging.
+                    Realm: id.Realm),
                 Arguments: loweredArgs,
                 Location: gmc.Location)
             {

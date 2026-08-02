@@ -15,7 +15,7 @@ routine ck(got: F128, want: F128, label: Text)
   return
 
 routine bits_eq(got: F128, want: F128, label: Text)
-  show(label + ": " + f"{int_eq[U128](a: got.to_bits(), b: want.to_bits())}")
+  show(label + ": " + f"{LLVM::int_eq[U128](a: got.to_bits(), b: want.to_bits())}")
   return
 
 routine start()
@@ -35,10 +35,10 @@ routine start()
   # exposed the original disproportionate-cost path). Bit-exact across t=1..12.
   var t = 1_s64
   var all_exact = true
-  while signed_le[S64](a: t, b: 12_s64)
+  while LLVM::signed_le[S64](a: t, b: 12_s64)
     var tf = F128(from: t)
-    if int_ne[U128](a: tf.cosh_unchecked().acosh_unchecked().to_bits(), b: tf.to_bits())
+    if LLVM::int_ne[U128](a: tf.cosh_unchecked().acosh_unchecked().to_bits(), b: tf.to_bits())
       all_exact = false
-    t = add[S64](a: t, b: 1_s64)
+    t = LLVM::add[S64](a: t, b: 1_s64)
   show("acosh(cosh(t))==t for t=1..12: " + f"{all_exact}")
   return

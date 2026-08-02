@@ -318,8 +318,10 @@ public partial class Tokenizer
                 return;
             }
 
-            // Check for : at entry depth — format specifier
-            if (Peek() == ':' && _bracketDepth == entryDepth)
+            // Check for : at entry depth — format specifier. A `::` is a REALM qualifier
+            // (`f"{LLVM::int_eq[U128](...)}"`), NOT a format-spec start, so only a lone `:`
+            // (not followed by another `:`) begins the format specifier.
+            if (Peek() == ':' && Peek(offset: 1) != ':' && _bracketDepth == entryDepth)
             {
                 ScanFormatSpec(entryDepth: entryDepth);
                 continue;
@@ -396,12 +398,16 @@ public partial class Tokenizer
                     ScanPercentOperator();
                     break;
                 case ':':
-                    // Note: `:` at entry depth was already handled above as a
-                    // format-spec start (line ~319). Reaching here means we're
-                    // inside nested parens/brackets — emit a regular Colon
-                    // token so named arguments like `value: 42` inside an
-                    // f-string interpolation parse correctly.
-                    AddToken(type: TokenType.Colon);
+                    // `::` is a realm qualifier (`LLVM::int_eq`) — emit DoubleColon so a
+                    // realm-qualified call parses inside an f-string interpolation.
+                    // Otherwise a lone `:` at entry depth was already handled above as a
+                    // format-spec start (line ~319); reaching here with a lone `:` means
+                    // we're inside nested parens/brackets — emit a regular Colon token so
+                    // named arguments like `value: 42` inside an f-string interpolation
+                    // parse correctly.
+                    AddToken(type: Match(expected: ':')
+                        ? TokenType.DoubleColon
+                        : TokenType.Colon);
                     break;
                 case '=':
                     AddToken(type: Match(expected: '=') ? TokenType.Equal :
