@@ -641,7 +641,7 @@ public class CompilerPipelineLoweringTests
 
         string llvmIr = generator.Generate();
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define %\"Record.Core.Maybe[Core.U8]\" @\"[member] Collections.BitList.try_to_u8");
+            functionMarker: "define internal %\"Record.Core.Maybe[Core.U8]\" @\"[member] Collections.BitList.try_to_u8");
         Assert.Contains(expectedSubstring: "call i64 @\"[dangerous, member] Core.Hijacked[Core.U64].peek()\"",
             actualString: tryToU8Body);
         Assert.DoesNotContain(expectedSubstring: "@\"[dangerous, member] Core.Hijacked[Core.Bytes].peek()\"",

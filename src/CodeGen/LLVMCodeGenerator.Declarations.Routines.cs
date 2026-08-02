@@ -471,7 +471,17 @@ public partial class LlvmCodeGenerator
             : _currentReturnCoerceType ?? returnType;
         string returnPrefix =
             !_currentReturnViaSret && isCreator && returnType == "ptr" ? "noalias " : "";
+        // Compiler-synthesized routines (lifecycle $destroy/$store/copy, derived operators, wrapper
+        // forwarding, variant-arm constructors, try_/check_ variants, …) are only ever referenced
+        // within this whole-program module, so give them `internal` linkage: LLVM's GlobalDCE can then
+        // strip the ones that end up uncalled (e.g. a no-op $destroy) and inline+eliminate single-use
+        // helpers. The runtime never unwinds (no invoke/landingpad/personality is ever emitted), so
+        // they are also `nounwind`. main / start / user routines and extern `declare`s are untouched.
+        bool isCompilerGenerated = routineInfo.IsSynthesized || routineInfo.IsWiredMemberRoutine;
+        string linkagePrefix = isCompilerGenerated ? "internal " : "";
         string funcAttrs = isInline ? " alwaysinline" : "";
+        if (isCompilerGenerated)
+            funcAttrs += " nounwind";
         // `@no_optimize` emits `noinline optnone` — a per-routine optimization barrier for routines
         // that an LLVM backend pass miscompiles. Currently the softfloat gamma cores (F128.lgamma/
         // tgamma_unchecked + UnpackedFloat.lgamma_core + f512_lgamma_core): LLVM 21's InstCombine
@@ -480,7 +490,7 @@ public partial class LlvmCodeGenerator
         if (routineInfo.Annotations.Contains(value: "no_optimize"))
             funcAttrs += " noinline optnone";
         string defineHeader =
-            $"define {returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
+            $"define {linkagePrefix}{returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;
         RecordDebugSubprogram(funcName: funcName, location: routineInfo.Location);
         _currentDbgLoc = null; // reset the Layer-2 location cursor at each routine boundary

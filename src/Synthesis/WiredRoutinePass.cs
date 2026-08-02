@@ -2631,6 +2631,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             foreach (MemberVariableInfo field in fields)
             {
+                // A trivially-destructible field's `$destroy` is a transitive no-op — skip the call
+                // (it would only emit an unstrippable `ret void` chain). Non-trivial fields (entity,
+                // RC wrapper, managed leaf, user destroy) still tear down.
+                if (ctx.Registry.IsTriviallyDestructible(type: field.Type))
+                    continue;
                 var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
                 {
                     ResolvedType = owner
@@ -2716,11 +2721,18 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     ResolvedType = member.Type
                 };
 
+            // A trivially-destructible payload arm's `$destroy` is a no-op, so it needs no binding or
+            // teardown — collapse it to the same empty clause as None/Blank. (Entity arms and unresolved
+            // generic-instance arms are NOT trivial — IsTriviallyDestructible returns false — so they
+            // still bind + tear down, matching the generic-entity-arm rule elsewhere in this pass.)
+            bool trivialPayload = !member.IsNone && !isVoidPayload && member.Type is not null &&
+                                  ctx.Registry.IsTriviallyDestructible(type: member.Type);
+
             Pattern pattern;
             Statement clauseBody;
-            if (member.IsNone || isVoidPayload)
+            if (member.IsNone || isVoidPayload || trivialPayload)
             {
-                // `is None` / `is Blank` — no payload to tear down.
+                // `is None` / `is Blank` / trivially-destructible payload — no payload to tear down.
                 pattern = new TypePattern(Type: typeExpr,
                     VariableName: null,
                     Bindings: null,

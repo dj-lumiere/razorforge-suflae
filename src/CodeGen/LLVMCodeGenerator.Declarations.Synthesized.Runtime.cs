@@ -53,7 +53,15 @@ public partial class LlvmCodeGenerator
 
         int savedLength = _functionDefinitions.Length;
         int savedTempCounter = _tempCounter;
-        string defineHeader = $"define {headerReturnType} @{funcName}({parameters}) {{";
+        // Same whole-program-internal treatment as GenerateRoutineDefinition: these are all
+        // compiler-synthesized bodies (auto-derived $destroy/$store/copy, wrapper forwarding, …),
+        // referenced only within this module, so `internal` linkage lets GlobalDCE strip the uncalled
+        // ones and `nounwind` reflects that the runtime never unwinds.
+        bool isCompilerGenerated = routine.IsSynthesized || routine.IsWiredMemberRoutine;
+        string linkagePrefix = isCompilerGenerated ? "internal " : "";
+        string synthAttrs = isCompilerGenerated ? " nounwind" : "";
+        string defineHeader =
+            $"define {linkagePrefix}{headerReturnType} @{funcName}({parameters}){synthAttrs} {{";
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;
         EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
