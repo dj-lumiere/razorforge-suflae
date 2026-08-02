@@ -803,9 +803,36 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 }
                 else
                 {
-                    stepExpr = new LiteralExpression(
-                        Value: 1L, LiteralType: TokenType.S64Literal, Location: loc)
-                        { ResolvedType = elemType };
+                    // Default step of 1. LiteralLoweringPass has ALREADY run, so a raw literal stamped
+                    // with a record element type (Suflae's arbitrary-precision `Integer`/`Decimal`)
+                    // would reach codegen as an invalid `%Record.Integer 1` constant. When the element
+                    // type has a `from_literal` constructor (Integer/Decimal), build `T.from_literal(
+                    // text: "1")` — mirroring how LiteralLoweringPass lowers the start/end literals.
+                    // Scalar element types (RF's S64) have no `from_literal` and keep the raw literal.
+                    RoutineInfo? stepFromLiteral = elemType != null
+                        ? ctx.Registry.LookupMethod(type: elemType, methodName: "from_literal")
+                        : null;
+                    if (elemType != null && stepFromLiteral != null)
+                    {
+                        var stepText = new LiteralExpression(
+                            Value: "1", LiteralType: TokenType.TextLiteral, Location: loc)
+                            { ResolvedType = ctx.Registry.LookupType(name: "Text") };
+                        stepExpr = new CallExpression(
+                            Callee: new MemberExpression(
+                                Object: new IdentifierExpression(Name: elemType.Name, Location: loc)
+                                    { ResolvedType = elemType },
+                                MemberName: "from_literal", Location: loc),
+                            Arguments: [new NamedArgumentExpression(Name: "text", Value: stepText,
+                                Location: loc)],
+                            Location: loc)
+                            { ResolvedRoutine = stepFromLiteral, ResolvedType = stepFromLiteral.ReturnType };
+                    }
+                    else
+                    {
+                        stepExpr = new LiteralExpression(
+                            Value: 1L, LiteralType: TokenType.S64Literal, Location: loc)
+                            { ResolvedType = elemType };
+                    }
                 }
 
                 var inclusiveLit = new LiteralExpression(
