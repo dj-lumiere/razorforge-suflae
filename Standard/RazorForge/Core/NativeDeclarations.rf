@@ -6,7 +6,7 @@ module Core
 
 ### Initializes the RazorForge runtime.
 ### This routine must run before runtime services that depend on global runtime state.
-external("C") routine rf_runtime_init()
+routine C::rf_runtime_init()
 
 ### Hardware 128/64 -> 64 unsigned divide: computes (hi:lo) / d, returns the quotient
 ### and writes the remainder through `rem`. PRECONDITION: hi < d (so the 64-bit quotient
@@ -17,11 +17,11 @@ external("C") routine rf_runtime_init()
 ### :param d: The 64-bit divisor (must exceed `hi`).
 ### :param rem: Pointer to a `U64` slot that receives the remainder.
 ### :returns: The 64-bit quotient.
-dangerous external("C") routine rf_udivrem_128_64(hi: U64, lo: U64, d: U64, rem: Hijacked[U64]) -> U64
+dangerous routine C::rf_udivrem_128_64(hi: U64, lo: U64, d: U64, rem: Hijacked[U64]) -> U64
 ### Allocates zero-initialized dynamic memory.
 ### :param size: The number of bytes to allocate.
 ### :returns: The resulting `Address` value.
-dangerous external("C") routine rf_allocate_dynamic(size: U64) -> Address
+dangerous routine C::rf_allocate_dynamic(size: U64) -> Address
 ### Allocates zero-initialized dynamic memory.
 ### :param size: The number of bytes to allocate.
 ### :returns: The resulting `Address` value.
@@ -30,7 +30,7 @@ dangerous routine rf_allocate_dynamic(size: ByteSize) -> Address
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
 ### :returns: The resulting `Address` value.
-dangerous external("C") routine rf_allocate_dynamic_uninit(size: U64) -> Address
+dangerous routine C::rf_allocate_dynamic_uninit(size: U64) -> Address
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
 ### :returns: The resulting `Address` value.
@@ -40,7 +40,7 @@ dangerous routine rf_allocate_dynamic_uninit(size: ByteSize) -> Address
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size in bytes.
 ### :returns: The resulting `Address` value.
-dangerous external("C") routine rf_reallocate_dynamic(ptr: Address, size: U64) -> Address
+dangerous routine C::rf_reallocate_dynamic(ptr: Address, size: U64) -> Address
 ### Reallocates a dynamic memory block to a new size.
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size.
@@ -49,7 +49,7 @@ dangerous routine rf_reallocate_dynamic(ptr: Address, size: ByteSize) -> Address
   return rf_reallocate_dynamic(ptr: ptr, size: size.byte_size())
 ### Frees a dynamic memory block previously returned by the runtime allocator.
 ### :param ptr: The allocation to release.
-dangerous external("C") routine rf_invalidate(ptr: Address)
+dangerous routine C::rf_invalidate(ptr: Address)
 
 # ============================================================================
 # Threaded tasks (v0.1 concurrency)
@@ -57,74 +57,74 @@ dangerous external("C") routine rf_invalidate(ptr: Address)
 
 ### Creates a task control block. `kind` is 1 for an OS thread (RF_TASK_THREADED).
 ### :returns: The `rf_task*` handle as an `Address` (null on allocation failure).
-dangerous external("C") routine rf_task_create(kind: U32) -> Address
+dangerous routine C::rf_task_create(kind: U32) -> Address
 ### Spawns an OS thread running `entry(task, userdata)`.
 ### :returns: 0 on success, non-zero on failure.
-dangerous external("C") routine rf_task_spawn_threaded(task: Address, entry: Address, userdata: Address) -> S32
+dangerous routine C::rf_task_spawn_threaded(task: Address, entry: Address, userdata: Address) -> S32
 ### Blocks until the task completes. :returns: the completion kind (1 = value).
-dangerous external("C") routine rf_task_wait(task: Address) -> S32
+dangerous routine C::rf_task_wait(task: Address) -> S32
 ### Blocks until the task completes or the deadline elapses.
 ### :returns: the completion kind (1 = value, 4 = timeout).
-dangerous external("C") routine rf_task_wait_within(task: Address, secs: S64, ns: U32) -> S32
+dangerous routine C::rf_task_wait_within(task: Address, secs: S64, ns: U32) -> S32
 ### :returns: the boxed result payload pointer set by the task's entry thunk.
-dangerous external("C") routine rf_task_result_payload(task: Address) -> Address
+dangerous routine C::rf_task_result_payload(task: Address) -> Address
 ### Reads a task's status (0 new, 1 ready, 2 running, 3 parked, 4 completed). Used by Agent[T].destroy
 ### to decide between freeing a completed worker and joining one still in flight.
-dangerous external("C") routine rf_task_status_get(task: Address) -> U32
+dangerous routine C::rf_task_status_get(task: Address) -> U32
 ### Releases a task control block.
-dangerous external("C") routine rf_task_destroy(task: Address)
+dangerous routine C::rf_task_destroy(task: Address)
 ### Opaque, stable identifier for the calling OS thread (lock re-entrancy detection). Safe: takes
 ### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
 ### the same thread.
-external("C") routine rf_current_thread_id() -> U64
+routine C::rf_current_thread_id() -> U64
 ### Identity of the current logical execution context — the coroutine if inside one (stable across
 ### worker migration), else the OS thread. The key for {Roamed}'s reentrant, migration-safe lock.
 ### Safe: takes no pointers. :returns: a per-context id, equal across calls in the same coroutine/thread.
-external("C") routine rf_current_task_id() -> U64
+routine C::rf_current_task_id() -> U64
 ### Cycle collector (Bacon-Rajan) — the SOLE entry point. A {Roamed} strong-decrement that leaves the
 ### count > 0 reports the controller here as a possible cycle root (RF dedups via `buffered` first).
 ### See internal-wiki/v0.4.x-cycle-collector.md.
-dangerous external("C") routine rf_cc_add_candidate(obj: Address)
+dangerous routine C::rf_cc_add_candidate(obj: Address)
 ### Number of candidate controllers currently in the roots buffer.
-dangerous external("C") routine rf_cc_roots_count() -> U64
+dangerous routine C::rf_cc_roots_count() -> U64
 ### The i-th candidate controller in the roots buffer (`Address(0)` if out of range).
-dangerous external("C") routine rf_cc_roots_at(i: U64) -> Address
+dangerous routine C::rf_cc_roots_at(i: U64) -> Address
 ### Empties the roots buffer (after a CollectCycles pass consumes it).
-dangerous external("C") routine rf_cc_roots_clear()
+dangerous routine C::rf_cc_roots_clear()
 ### Drops the first `n` (processed) candidates, keeping any appended after the pass snapshotted `n`
 ### (e.g. a candidate reported by a finalizer during reap). Prevents dropping late arrivals.
-dangerous external("C") routine rf_cc_roots_remove_front(n: U64)
+dangerous routine C::rf_cc_roots_remove_front(n: U64)
 ### Drops one candidate about to be freed — a buffered controller reaching count 0 is freed eagerly, so
 ### its roots entry must go first or the collector would dereference freed memory.
-dangerous external("C") routine rf_cc_roots_remove(ptr: Address)
+dangerous routine C::rf_cc_roots_remove(ptr: Address)
 ### Resets the scratch buffer before tracing one controller's children.
-dangerous external("C") routine rf_cc_scratch_reset()
+dangerous routine C::rf_cc_scratch_reset()
 ### Number of children collected into the scratch buffer by the last trace.
-dangerous external("C") routine rf_cc_scratch_count() -> U64
+dangerous routine C::rf_cc_scratch_count() -> U64
 ### The i-th child controller in the scratch buffer (`Address(0)` if out of range).
-dangerous external("C") routine rf_cc_scratch_at(i: U64) -> Address
+dangerous routine C::rf_cc_scratch_at(i: U64) -> Address
 ### Called by a compiler-generated per-type trace, once per {Roamed} field, with its controller.
-dangerous external("C") routine rf_cc_visit_child(child_ctrl: Address)
+dangerous routine C::rf_cc_visit_child(child_ctrl: Address)
 ### Pushes a collected white controller onto the deferred-free (reap) buffer.
-dangerous external("C") routine rf_cc_reap_push(ctrl: Address)
+dangerous routine C::rf_cc_reap_push(ctrl: Address)
 ### Number of controllers awaiting deferred free in the reap buffer.
-dangerous external("C") routine rf_cc_reap_count() -> U64
+dangerous routine C::rf_cc_reap_count() -> U64
 ### The i-th controller in the reap buffer (`Address(0)` if out of range).
-dangerous external("C") routine rf_cc_reap_at(i: U64) -> Address
+dangerous routine C::rf_cc_reap_at(i: U64) -> Address
 ### Empties the reap buffer.
-dangerous external("C") routine rf_cc_reap_clear()
+dangerous routine C::rf_cc_reap_clear()
 ### The sole trace indirect-call site: runs the per-type trace hook over a controller, filling scratch
 ### with its child controllers.
-dangerous external("C") routine rf_cc_trace_into_scratch(trace_hook: Address, controller: Address)
+dangerous routine C::rf_cc_trace_into_scratch(trace_hook: Address, controller: Address)
 ### The free indirect-call site: runs the per-type free hook over a white (garbage) controller —
 ### type-correct entity `destroy` then controller free.
-dangerous external("C") routine rf_cc_invoke_free(free_hook: Address, controller: Address)
+dangerous routine C::rf_cc_invoke_free(free_hook: Address, controller: Address)
 ### Whether a collection pass should run now (candidate set reached the threshold, none in progress).
-dangerous external("C") routine rf_cc_should_collect() -> Bool
+dangerous routine C::rf_cc_should_collect() -> Bool
 ### Marks a collection pass in progress (guards against re-entrant auto-triggering).
-dangerous external("C") routine rf_cc_enter_collect()
+dangerous routine C::rf_cc_enter_collect()
 ### Marks the collection pass finished.
-dangerous external("C") routine rf_cc_exit_collect()
+dangerous routine C::rf_cc_exit_collect()
 
 # ============================================================================
 # Stackful coroutine substrate (v0.2.0 — single coroutine, no scheduler).
@@ -135,23 +135,23 @@ dangerous external("C") routine rf_cc_exit_collect()
 ### Allocates a coroutine running `entry(userdata)`. `entry` is a C function pointer — a
 ### non-capturing routine coerces to `CPtr`. `stack_size` of 0 picks a default.
 ### :returns: an opaque coroutine handle as a `CPtr` (null on failure). Does not start it.
-dangerous external("C") routine rf_coro_create(entry: CPtr, userdata: CPtr, stack_size: U64) -> CPtr
+dangerous routine C::rf_coro_create(entry: CPtr, userdata: CPtr, stack_size: U64) -> CPtr
 ### Switches into the coroutine, blocking the caller until it parks or finishes.
 ### :returns: the resulting status (2 = parked, 3 = completed).
-dangerous external("C") routine rf_coro_resume(coro: CPtr) -> U32
+dangerous routine C::rf_coro_resume(coro: CPtr) -> U32
 ### Parks the coroutine currently running on this OS thread, switching back to its resumer.
 ### Safe: takes no pointers; a no-op outside a coroutine. THIS is the suspend point.
-external("C") routine rf_coro_yield()
+routine C::rf_coro_yield()
 ### Reads a coroutine's status (0 new, 1 running, 2 parked, 3 completed, 4 cancelled).
-dangerous external("C") routine rf_coro_status_get(coro: CPtr) -> U32
+dangerous routine C::rf_coro_status_get(coro: CPtr) -> U32
 ### Abandons a parked (or never-started) coroutine: walks its cancellation shadow stack
 ### innermost-first, runs each teardown thunk once, then frees the coroutine and its stack.
-dangerous external("C") routine rf_coro_abandon(coro: CPtr)
+dangerous routine C::rf_coro_abandon(coro: CPtr)
 ### Frees a completed (or never-started) coroutine and its stack. Use rf_coro_abandon for a parked one.
-dangerous external("C") routine rf_coro_delete(coro: CPtr)
+dangerous routine C::rf_coro_delete(coro: CPtr)
 ### Blocks the calling thread for the given duration. The synchronous-sleep backing for the
 ### `waitfor` routine; a `suspended` waitfor will instead park on a timer (v0.3.0 scheduler).
-dangerous external("C") routine rf_waitfor_duration(secs: S64, ns: U32)
+dangerous routine C::rf_waitfor_duration(secs: S64, ns: U32)
 
 # ============================================================================
 # Cooperative cancellation (structured concurrency). cancel() sets a flag only —
@@ -163,14 +163,14 @@ dangerous external("C") routine rf_waitfor_duration(secs: S64, ns: U32)
 ### Requests cooperative cancellation of a coroutine-backed agent. Sets a flag; the coroutine
 ### observes it at its next suspend point (waitfor returns early) or via a poll, and returns on
 ### its own. Never frees.
-dangerous external("C") routine rf_coro_request_cancel(coro: CPtr)
+dangerous routine C::rf_coro_request_cancel(coro: CPtr)
 ### Requests cooperative cancellation of a thread-backed agent. Sets a flag the worker polls. Never
 ### frees — destroy still joins the worker at teardown.
-dangerous external("C") routine rf_task_request_cancel(task: Address)
+dangerous routine C::rf_task_request_cancel(task: Address)
 ### Whether cancellation has been requested for the agent (coroutine OR worker thread) running on
 ### THIS thread. The backing for the `cancellation_requested()` free routine. Reads only
 ### thread-local state. :returns: 1 if requested, else 0.
-external("C") routine rf_cancel_requested() -> U32
+routine C::rf_cancel_requested() -> U32
 
 # ============================================================================
 # Cooperative coroutine scheduler (v0.2.0 async). Drives many coroutines on one
@@ -178,50 +178,50 @@ external("C") routine rf_cancel_requested() -> U32
 # ============================================================================
 
 ### Creates a scheduler. :returns: an opaque `rf_sched*` handle as a `CPtr`.
-dangerous external("C") routine rf_sched_create() -> CPtr
+dangerous routine C::rf_sched_create() -> CPtr
 ### Frees a scheduler.
-dangerous external("C") routine rf_sched_destroy(sched: CPtr)
+dangerous routine C::rf_sched_destroy(sched: CPtr)
 ### Queues a NEW coroutine to run on the scheduler (starts on its first resume by the run loop).
-dangerous external("C") routine rf_sched_spawn(sched: CPtr, coro: CPtr)
+dangerous routine C::rf_sched_spawn(sched: CPtr, coro: CPtr)
 ### Parks the coroutine currently running under the loop for `delay_ns`, then resumes it. Called
 ### from inside a coroutine (e.g. by waitfor). A no-op outside a running scheduler/coroutine.
-external("C") routine rf_sched_park_timer(delay_ns: U64)
+routine C::rf_sched_park_timer(delay_ns: U64)
 ### Parks the current coroutine with no scheduler-side wake: only rf_sched_wake re-queues it.
 ### How a coroutine awaits work on another OS thread without blocking the scheduler thread.
-external("C") routine rf_sched_park_external()
+routine C::rf_sched_park_external()
 ### Makes a parked coroutine runnable again. Safe to call from ANY thread — the bridge a worker
 ### thread uses to hand a result back to a coroutine awaiting it on the scheduler thread.
-dangerous external("C") routine rf_sched_wake(sched: CPtr, coro: CPtr)
+dangerous routine C::rf_sched_wake(sched: CPtr, coro: CPtr)
 ### Drives all spawned coroutines to completion on this thread (returns when none remain).
-dangerous external("C") routine rf_sched_run(sched: CPtr)
+dangerous routine C::rf_sched_run(sched: CPtr)
 ### Spawns a NEW coroutine onto THIS thread's implicit scheduler (created lazily). Emitted at a
 ### `suspended routine` call site so the coroutine is ready before any retrieve! drives the loop.
-dangerous external("C") routine rf_sched_spawn_default(coro: CPtr)
+dangerous routine C::rf_sched_spawn_default(coro: CPtr)
 ### Drives this thread's implicit scheduler until `coro` finishes, leaving siblings parked. The
 ### engine behind Agent[T].retrieve() (run-until-this-handle: siblings progress concurrently).
-dangerous external("C") routine rf_sched_run_until_default(coro: CPtr)
+dangerous routine C::rf_sched_run_until_default(coro: CPtr)
 ### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
 ### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
-dangerous external("C") routine rf_sched_unschedule_default(coro: CPtr) -> U32
+dangerous routine C::rf_sched_unschedule_default(coro: CPtr) -> U32
 ### Race-free owner-side disposal for an Agent handle's destroy. Detaches `coro` from the pool and,
 ### under the scheduler lock, decides whether the OWNER may free it now (returns 1) or the free was
 ### DEFERRED (returns 0) because a worker still holds it (RUNNING / mid-pop) and will free it on
 ### completion. Prevents the owner from freeing a coroutine a worker is about to resume (the M:N UAF).
-dangerous external("C") routine rf_sched_dispose_default(coro: CPtr) -> U32
+dangerous routine C::rf_sched_dispose_default(coro: CPtr) -> U32
 ### Number of worker threads driving the process pool (fixed host-core-count, min 1). Creates the pool
 ### on first call. Coroutine migration across workers can only occur when this is > 1.
-external("C") routine rf_sched_worker_count() -> U64
+routine C::rf_sched_worker_count() -> U64
 ### Registers the current scheduler-driven coroutine as `task`'s awaiter. Returns 1 if the task is
 ### already complete (read the result, don't park), 0 if registered (park via rf_sched_park_external;
 ### the worker wakes you on completion). Outside a scheduler-driven coroutine returns 1 (block-wait).
-dangerous external("C") routine rf_task_await_coro(task: Address) -> U32
+dangerous routine C::rf_task_await_coro(task: Address) -> U32
 ### Timed variant: parks (deadline timer + externally wakeable) until the task completes or
 ### `timeout_ns` elapses. Returns 1 if completed (read the result), 0 if it timed out, 2 if not on a
 ### scheduler-driven coroutine (the caller should block-wait with the deadline instead).
-dangerous external("C") routine rf_task_await_coro_deadline(task: Address, timeout_ns: U64) -> U32
+dangerous routine C::rf_task_await_coro_deadline(task: Address, timeout_ns: U64) -> U32
 ### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
 ### Safe: reads only thread-local scheduler state. Lets `waitfor` be uncolored.
-external("C") routine rf_in_coroutine() -> U32
+routine C::rf_in_coroutine() -> U32
 
 # ============================================================================
 # Channels (v0.3.0). A refcounted ring buffer carrying payload pointers between
@@ -233,30 +233,30 @@ external("C") routine rf_in_coroutine() -> U32
 ### Creates a channel. `capacity` = buffered slots; 0 = rendezvous. Starts with one producer ref +
 ### one consumer ref. Throws OutOfMemoryError on a capacity*slot overflow or allocation failure.
 ### :returns: an opaque `rf_channel*` handle as a `CPtr`.
-dangerous external("C") routine rf_channel_create(capacity: U64) -> CPtr
+dangerous routine C::rf_channel_create(capacity: U64) -> CPtr
 ### Adds a producer (Sender) reference.
-dangerous external("C") routine rf_channel_add_feeder(chan: CPtr)
+dangerous routine C::rf_channel_add_feeder(chan: CPtr)
 ### Drops a producer reference. The last Sender dropping auto-closes the channel.
-dangerous external("C") routine rf_channel_drop_feeder(chan: CPtr)
+dangerous routine C::rf_channel_drop_feeder(chan: CPtr)
 ### Adds a consumer (Receiver / SharedReceiver) reference.
-dangerous external("C") routine rf_channel_add_consumer(chan: CPtr)
+dangerous routine C::rf_channel_add_consumer(chan: CPtr)
 ### Drops a consumer reference. The struct frees once both producer and consumer refs reach 0.
-dangerous external("C") routine rf_channel_drop_consumer(chan: CPtr)
+dangerous routine C::rf_channel_drop_consumer(chan: CPtr)
 ### Sends one payload pointer. Returns 1 on success, 0 if the channel is closed or has no consumers.
 ### Blocks/parks while the buffer is full (backpressure); for a rendezvous channel additionally waits
 ### until a consumer takes the item.
-dangerous external("C") routine rf_channel_feed(chan: CPtr, payload: Address) -> U32
+dangerous routine C::rf_channel_feed(chan: CPtr, payload: Address) -> U32
 ### Receives one payload pointer, or null (Address 0) when the channel is closed AND drained. Parks
 ### while the buffer is empty.
-dangerous external("C") routine rf_channel_next(chan: CPtr) -> Address
+dangerous routine C::rf_channel_next(chan: CPtr) -> Address
 ### Explicit early close (drop auto-closes too). Not dangerous semantically; double-close is a no-op.
-dangerous external("C") routine rf_channel_close(chan: CPtr)
+dangerous routine C::rf_channel_close(chan: CPtr)
 ### Buffered item count — diagnostic snapshot only, not a synchronization primitive.
-dangerous external("C") routine rf_channel_count(chan: CPtr) -> U64
+dangerous routine C::rf_channel_count(chan: CPtr) -> U64
 ### 1 if the channel is closed (may still hold buffered items to drain). Introspection snapshot.
-dangerous external("C") routine rf_channel_is_closed(chan: CPtr) -> U32
+dangerous routine C::rf_channel_is_closed(chan: CPtr) -> U32
 ### The buffered capacity the channel was created with (0 = rendezvous). Introspection.
-dangerous external("C") routine rf_channel_capacity(chan: CPtr) -> U64
+dangerous routine C::rf_channel_capacity(chan: CPtr) -> U64
 
 # ============================================================================
 # SignalCaster (v0.3.0). A condition-variable monitor: internal mutex + wait set.
@@ -266,25 +266,25 @@ dangerous external("C") routine rf_channel_capacity(chan: CPtr) -> U64
 # ============================================================================
 
 ### Creates a monitor (refcount 1). :returns: an opaque `rf_signal*` handle as a `CPtr`.
-dangerous external("C") routine rf_signal_create() -> CPtr
+dangerous routine C::rf_signal_create() -> CPtr
 ### Adds a handle reference (for clone).
-dangerous external("C") routine rf_signal_add_ref(sig: CPtr)
+dangerous routine C::rf_signal_add_ref(sig: CPtr)
 ### Drops a handle reference; the monitor frees at 0.
-dangerous external("C") routine rf_signal_drop(sig: CPtr)
+dangerous routine C::rf_signal_drop(sig: CPtr)
 ### Acquires the monitor lock that guards the caller's shared predicate.
-dangerous external("C") routine rf_signal_lock(sig: CPtr)
+dangerous routine C::rf_signal_lock(sig: CPtr)
 ### Releases the monitor lock.
-dangerous external("C") routine rf_signal_unlock(sig: CPtr)
+dangerous routine C::rf_signal_unlock(sig: CPtr)
 ### Waits for a cast — MUST hold the monitor lock. Drops the lock, parks (coroutine) or blocks
 ### (thread), and re-acquires the lock before returning. Re-check the predicate in a loop.
-dangerous external("C") routine rf_signal_wait(sig: CPtr)
+dangerous routine C::rf_signal_wait(sig: CPtr)
 ### Timed wait. Returns 1 if woken before the deadline (re-check the predicate), 0 if it timed out.
 ### MUST hold the lock; releases/re-acquires it around the suspend.
-dangerous external("C") routine rf_signal_wait_deadline(sig: CPtr, timeout_ns: U64) -> U32
+dangerous routine C::rf_signal_wait_deadline(sig: CPtr, timeout_ns: U64) -> U32
 ### Wakes one waiter. Call after updating the predicate (not while holding the lock).
-dangerous external("C") routine rf_signal_cast_one(sig: CPtr)
+dangerous routine C::rf_signal_cast_one(sig: CPtr)
 ### Wakes all waiters. Call after updating the predicate (not while holding the lock).
-dangerous external("C") routine rf_signal_cast_all(sig: CPtr)
+dangerous routine C::rf_signal_cast_all(sig: CPtr)
 
 # ============================================================================
 # race! competitor set (v0.2.0). Built one entry per Agent in List order, then
@@ -293,21 +293,21 @@ dangerous external("C") routine rf_signal_cast_all(sig: CPtr)
 # ============================================================================
 
 ### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as a `CPtr`.
-dangerous external("C") routine rf_race_begin() -> CPtr
+dangerous routine C::rf_race_begin() -> CPtr
 ### Appends a coroutine competitor (Agent of kind CORO), preserving add (List) order.
-dangerous external("C") routine rf_race_add_coro(race: CPtr, coro: CPtr)
+dangerous routine C::rf_race_add_coro(race: CPtr, coro: CPtr)
 ### Appends a thread competitor (Agent of kind THREAD), preserving add (List) order.
-dangerous external("C") routine rf_race_add_task(race: CPtr, task: Address)
+dangerous routine C::rf_race_add_task(race: CPtr, task: Address)
 ### Drives the scheduler until one competitor completes; :returns: its index in add (List) order, or
 ### -1 if the set is empty. Thread competitors' completions wake the loop; no wake can be lost.
-dangerous external("C") routine rf_race_wait(race: CPtr) -> S64
+dangerous routine C::rf_race_wait(race: CPtr) -> S64
 ### Frees the competitor set. Does NOT touch the Agents themselves (the caller still owns them).
-dangerous external("C") routine rf_race_end(race: CPtr)
+dangerous routine C::rf_race_end(race: CPtr)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
 ### :param size: The number of bytes to copy.
-dangerous external("C") routine rf_copy_bytes_at(dest: Address, src: Address, size: U64)
+dangerous routine C::rf_copy_bytes_at(dest: Address, src: Address, size: U64)
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
@@ -319,7 +319,7 @@ dangerous routine rf_copy_bytes_at(dest: Address, src: Address, size: ByteSize)
 ### :param dest: The destination location.
 ### :param value: The byte value to write.
 ### :param size: The number of bytes to set.
-dangerous external("C") routine rf_set_bytes_at(dest: Address, value: U8, size: U64)
+dangerous routine C::rf_set_bytes_at(dest: Address, value: U8, size: U64)
 ### Fills `size` bytes at `dest` with `value`.
 ### :param dest: The destination location.
 ### :param value: The byte value to write.
@@ -343,106 +343,106 @@ dangerous routine rf_set_bytes_at(dest: Address, value: U8, size: ByteSize)
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_sin_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_sin_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the cosine of an `F128` value interpreted as radians.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_cos_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_cos_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the tangent of an `F128` value interpreted as radians.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_tan_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_tan_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse sine of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_asin_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_asin_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse cosine of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_acos_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_acos_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse tangent of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_atan_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_atan_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the quadrant-aware angle of the point `(x, y)`.
 ### :param y_low: The low 64 bits of the y-coordinate.
 ### :param y_high: The high 64 bits of the y-coordinate.
 ### :param x_low: The low 64 bits of the x-coordinate.
 ### :param x_high: The high 64 bits of the x-coordinate.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_atan2_parts(y_low: U64, y_high: U64, x_low: U64, x_high: U64, out: Hijacked[F128])
+routine C::rf_f128_atan2_parts(y_low: U64, y_high: U64, x_low: U64, x_high: U64, out: Hijacked[F128])
 
 ### Returns the hyperbolic sine of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_sinh_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_sinh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the hyperbolic cosine of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_cosh_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_cosh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the hyperbolic tangent of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_tanh_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_tanh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse hyperbolic sine of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_asinh_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_asinh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse hyperbolic cosine of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_acosh_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_acosh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse hyperbolic tangent of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_atanh_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_atanh_parts(low: U64, high: U64, out: Hijacked[F128])
 
 ### Returns `e` raised to an `F128` value.
 ### :param low: The low 64 bits of the exponent.
 ### :param high: The high 64 bits of the exponent.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_exp_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_exp_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns `2` raised to an `F128` value.
 ### :param low: The low 64 bits of the exponent.
 ### :param high: The high 64 bits of the exponent.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_exp2_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_exp2_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns `exp(value) - 1` with high precision for small inputs.
 ### :param low: The low 64 bits of the exponent.
 ### :param high: The high 64 bits of the exponent.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_expm1_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_expm1_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the natural logarithm of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_log_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_log_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the base-2 logarithm of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_log2_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_log2_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the base-10 logarithm of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_log10_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_log10_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns `log(1 + value)` with high precision for small inputs.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_log1p_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_log1p_parts(low: U64, high: U64, out: Hijacked[F128])
 
 ### Raises an `F128` base to an `F128` exponent.
 ### :param base_low: The low 64 bits of the base value.
@@ -450,26 +450,26 @@ external("C") routine rf_f128_log1p_parts(low: U64, high: U64, out: Hijacked[F12
 ### :param exp_low: The low 64 bits of the exponent value.
 ### :param exp_high: The high 64 bits of the exponent value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_pow_parts(base_low: U64, base_high: U64, exp_low: U64, exp_high: U64, out: Hijacked[F128])
+routine C::rf_f128_pow_parts(base_low: U64, base_high: U64, exp_low: U64, exp_high: U64, out: Hijacked[F128])
 ### Returns the real cube root of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_cbrt_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_cbrt_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the Euclidean length of the vector `(x, y)`.
 ### :param x_low: The low 64 bits of the x-coordinate.
 ### :param x_high: The high 64 bits of the x-coordinate.
 ### :param y_low: The low 64 bits of the y-coordinate.
 ### :param y_high: The high 64 bits of the y-coordinate.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_hypot_parts(x_low: U64, x_high: U64, y_low: U64, y_high: U64, out: Hijacked[F128])
+routine C::rf_f128_hypot_parts(x_low: U64, x_high: U64, y_low: U64, y_high: U64, out: Hijacked[F128])
 ### Returns `value` with its sign copied from `sign`.
 ### :param value_low: The low 64 bits of the magnitude source.
 ### :param value_high: The high 64 bits of the magnitude source.
 ### :param sign_low: The low 64 bits of the sign source.
 ### :param sign_high: The high 64 bits of the sign source.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_copysign_parts(value_low: U64, value_high: U64, sign_low: U64, sign_high: U64, out: Hijacked[F128])
+routine C::rf_f128_copysign_parts(value_low: U64, value_high: U64, sign_low: U64, sign_high: U64, out: Hijacked[F128])
 
 # ----------------------------------------------------------------------------
 # F128 core operations. F128 carries its bits as an LLVM i128 (never fp128),
@@ -483,110 +483,110 @@ external("C") routine rf_f128_copysign_parts(value_low: U64, value_high: U64, si
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_add_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+routine C::rf_f128_add_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
 ### Returns the difference `a - b` of two `F128` values.
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_sub_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+routine C::rf_f128_sub_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
 ### Returns the product `a * b` of two `F128` values.
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_mul_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+routine C::rf_f128_mul_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
 ### Returns the quotient `a / b` of two `F128` values.
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_div_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+routine C::rf_f128_div_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
 ### Returns the square root of an `F128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_sqrt_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_sqrt_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Rounds an `F128` value toward negative infinity.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_floor_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_floor_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Rounds an `F128` value toward positive infinity.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_ceil_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_ceil_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Rounds an `F128` value to the nearest integer, ties away from zero.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_round_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_round_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Discards the fractional part of an `F128` value (rounds toward zero).
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f128_trunc_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_f128_trunc_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns whether two `F128` values compare equal (IEEE: false for NaN).
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :returns: `1` when equal, `0` otherwise.
-external("C") routine rf_f128_eq_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+routine C::rf_f128_eq_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
 ### Returns whether `a < b` (IEEE ordered: false when either is NaN).
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :returns: `1` when `a < b`, `0` otherwise.
-external("C") routine rf_f128_lt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+routine C::rf_f128_lt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
 ### Returns whether `a > b` (IEEE ordered: false when either is NaN).
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :returns: `1` when `a > b`, `0` otherwise.
-external("C") routine rf_f128_gt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+routine C::rf_f128_gt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
 ### Converts a signed 64-bit integer to `F128`.
 ### :param x: The integer to convert.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_s64_to_f128_parts(x: S64, out: Hijacked[F128])
+routine C::rf_s64_to_f128_parts(x: S64, out: Hijacked[F128])
 ### Converts an unsigned 64-bit integer to `F128`.
 ### :param x: The integer to convert.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_u64_to_f128_parts(x: U64, out: Hijacked[F128])
+routine C::rf_u64_to_f128_parts(x: U64, out: Hijacked[F128])
 ### Converts a signed 128-bit integer (as low/high words) to `F128`.
 ### :param low: The low 64 bits of the integer.
 ### :param high: The high 64 bits of the integer.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_s128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_s128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Converts an unsigned 128-bit integer (as low/high words) to `F128`.
 ### :param low: The low 64 bits of the integer.
 ### :param high: The high 64 bits of the integer.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_u128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
+routine C::rf_u128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Widens an `F32` to `F128` exactly.
 ### :param x: The single-precision value to widen.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f32_to_f128_parts(x: F32, out: Hijacked[F128])
+routine C::rf_f32_to_f128_parts(x: F32, out: Hijacked[F128])
 ### Widens an `F64` to `F128` exactly.
 ### :param x: The double-precision value to widen.
 ### :param out: Storage receiving the resulting `F128` value.
-external("C") routine rf_f64_to_f128_parts(x: F64, out: Hijacked[F128])
+routine C::rf_f64_to_f128_parts(x: F64, out: Hijacked[F128])
 ### Narrows an `F128` to the nearest `F32`.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :returns: The nearest single-precision value.
-external("C") routine rf_f128_to_f32_parts(low: U64, high: U64) -> F32
+routine C::rf_f128_to_f32_parts(low: U64, high: U64) -> F32
 ### Narrows an `F128` to the nearest `F64`.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :returns: The nearest double-precision value.
-external("C") routine rf_f128_to_f64_parts(low: U64, high: U64) -> F64
+routine C::rf_f128_to_f64_parts(low: U64, high: U64) -> F64
 
 # ============================================================================
 # Moment - System Clock
@@ -594,7 +594,7 @@ external("C") routine rf_f128_to_f64_parts(low: U64, high: U64) -> F64
 
 ### Returns the current system clock timestamp as a `Moment`.
 ### :returns: The current wall-clock time.
-external("C") routine rf_moment_now() -> Moment
+routine C::rf_moment_now() -> Moment
 
 # ============================================================================
 # Cryptographic Random
@@ -602,7 +602,7 @@ external("C") routine rf_moment_now() -> Moment
 
 ### Returns a cryptographically-random 64-bit value from OS entropy.
 ### :returns: The resulting `U64` value.
-external("C") routine rf_random_u64() -> U64
+routine C::rf_random_u64() -> U64
 
 # ============================================================================
 # C String Operations (CStr / char*)
@@ -611,16 +611,16 @@ external("C") routine rf_random_u64() -> U64
 ### Returns the length of a null-terminated C string in code units.
 ### :param ptr: The C string pointer to measure.
 ### :returns: The number of `char` code units before the terminator.
-external("C") routine rf_cstr_count(ptr: CStr) -> U64
+routine C::rf_cstr_count(ptr: CStr) -> U64
 ### Compares two null-terminated C strings lexicographically.
 ### :param a: The left-hand string.
 ### :param b: The right-hand string.
 ### :returns: A negative, zero, or positive comparison result.
-external("C") routine rf_cstr_compare(a: CStr, b: CStr) -> S32
+routine C::rf_cstr_compare(a: CStr, b: CStr) -> S32
 ### Copies a null-terminated C string into destination storage.
 ### :param dest: The destination buffer.
 ### :param src: The source string.
-external("C") routine rf_cstr_copy(dest: CStr, src: CStr) -> CStr
+routine C::rf_cstr_copy(dest: CStr, src: CStr) -> CStr
 
 # ============================================================================
 # Stack Trace + Crash Reporting
@@ -631,9 +631,9 @@ external("C") routine rf_cstr_copy(dest: CStr, src: CStr) -> CStr
 ### :param file: The source file path or file name text.
 ### :param line: The source line number.
 ### :param col: The source column number.
-external("C") routine rf_trace_push(routine_name: Address, file: Address, line: S32, col: S32)
+routine C::rf_trace_push(routine_name: Address, file: Address, line: S32, col: S32)
 ### Executes `rf trace pop`.
-external("C") routine rf_trace_pop()
+routine C::rf_trace_pop()
 ### Terminates execution and reports a structured runtime crash.
 ### :param type_name: The crash type name text.
 ### :param type_len: The length of the crash type name text.
@@ -643,7 +643,7 @@ external("C") routine rf_trace_pop()
 ### :param col: The source column number.
 ### :param message: The crash message text.
 ### :param message_len: The length of the crash message text.
-external("C") routine rf_crash(type_name: Address, type_len: U64, file: Address, file_len: U64, line: S32, col: S32, message: Address, message_len: U64)
+routine C::rf_crash(type_name: Address, type_len: U64, file: Address, file_len: U64, line: S32, col: S32, message: Address, message_len: U64)
 
 # ============================================================================
 # Console I/O
@@ -652,25 +652,25 @@ external("C") routine rf_crash(type_name: Address, type_len: U64, file: Address,
 ### Writes a UTF-8 byte buffer to standard output.
 ### :param ptr: Pointer to the bytes to write.
 ### :param len: Number of bytes to write.
-external("C") routine rf_console_show(ptr: Hijacked[Byte], len: U64)
+routine C::rf_console_show(ptr: Hijacked[Byte], len: U64)
 ### Writes a UTF-8 byte buffer to the console's alert or error stream.
 ### :param ptr: Pointer to the bytes to write.
 ### :param len: Number of bytes to write.
-external("C") routine rf_console_alert(ptr: Hijacked[Byte], len: U64)
+routine C::rf_console_alert(ptr: Hijacked[Byte], len: U64)
 
 ### Reads one line of console input and returns its bytes.
 ### :returns: A runtime-managed byte buffer containing the captured line.
-external("C") routine rf_console_ask_line() -> Hijacked[Byte]
+routine C::rf_console_ask_line() -> Hijacked[Byte]
 ### Reads one whitespace-delimited token from console input.
 ### :returns: A runtime-managed byte buffer containing the captured token.
-external("C") routine rf_console_ask_word() -> Hijacked[Byte]
+routine C::rf_console_ask_word() -> Hijacked[Byte]
 ### Reads the remaining console input as text bytes.
 ### :returns: A runtime-managed byte buffer containing the captured input.
-external("C") routine rf_console_ask_all() -> Hijacked[Byte]
+routine C::rf_console_ask_all() -> Hijacked[Byte]
 ### Reads exactly `count` bytes from console input when available.
 ### :param count: The requested number of bytes to read.
 ### :returns: A runtime-managed byte buffer containing the captured bytes.
-external("C") routine rf_console_ask_bytes(count: U64) -> Hijacked[Byte]
+routine C::rf_console_ask_bytes(count: U64) -> Hijacked[Byte]
 
 # ============================================================================
 # Integer (Arbitrary Precision) - LibTomMath
@@ -679,139 +679,139 @@ external("C") routine rf_console_ask_bytes(count: U64) -> Hijacked[Byte]
 
 ### Allocates and initializes a new arbitrary-precision integer handle.
 ### :returns: A live `CPtr` ready for use with the bigint runtime.
-external("C") routine rf_bigint_new() -> CPtr
+routine C::rf_bigint_new() -> CPtr
 ### Releases the storage owned by an arbitrary-precision integer handle.
 ### :param handle: The bigint handle to destroy.
-external("C") routine rf_bigint_clear(handle: CPtr)
+routine C::rf_bigint_clear(handle: CPtr)
 ### Copies the value stored in `src` into `dest`.
 ### :param dest: The destination bigint handle.
 ### :param src: The source bigint handle.
-external("C") routine rf_bigint_copy(dest: CPtr, src: CPtr)
+routine C::rf_bigint_copy(dest: CPtr, src: CPtr)
 
 ### Replaces a bigint handle with the signed 64-bit value `value`.
 ### :param handle: The bigint handle to update.
 ### :param value: The signed integer value to assign.
-external("C") routine rf_bigint_set_i64(handle: CPtr, value: S64)
+routine C::rf_bigint_set_i64(handle: CPtr, value: S64)
 ### Replaces a bigint handle with the unsigned 64-bit value `value`.
 ### :param handle: The bigint handle to update.
 ### :param value: The unsigned integer value to assign.
-external("C") routine rf_bigint_set_u64(handle: CPtr, value: U64)
+routine C::rf_bigint_set_u64(handle: CPtr, value: U64)
 ### Parses `str` in the requested radix and stores the result in `handle`.
 ### :param handle: The bigint handle to update.
 ### :param str: The null-terminated integer text to parse.
 ### :param radix: The numeric base used to interpret the digits.
 ### :returns: A runtime status code indicating parse success or failure.
-external("C") routine rf_bigint_set_str(handle: CPtr, str: CStr, radix: S32) -> S32
+routine C::rf_bigint_set_str(handle: CPtr, str: CStr, radix: S32) -> S32
 
 ### Converts a bigint handle to `S64`.
 ### :param handle: The bigint handle to read.
 ### :returns: The converted `S64` value.
-external("C") routine rf_bigint_get_i64(handle: CPtr) -> S64
+routine C::rf_bigint_get_i64(handle: CPtr) -> S64
 ### Converts a bigint handle to `U64`.
 ### :param handle: The bigint handle to read.
 ### :returns: The converted `U64` value.
-external("C") routine rf_bigint_get_u64(handle: CPtr) -> U64
+routine C::rf_bigint_get_u64(handle: CPtr) -> U64
 ### Formats a bigint handle as a null-terminated string in the requested radix.
 ### :param handle: The bigint handle to render.
 ### :param radix: The numeric base to use for formatting.
 ### :returns: A pointer to the formatted C string.
-external("C") routine rf_bigint_get_str(handle: CPtr, radix: S32) -> CStr
+routine C::rf_bigint_get_str(handle: CPtr, radix: S32) -> CStr
 
 ### Stores the sum of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_add(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_add(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the difference `a - b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_sub(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_sub(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the product of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_mul(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_mul(result: CPtr, a: CPtr, b: CPtr)
 ### Divides `a` by `b` and writes both quotient and remainder.
 ### :param quotient: The destination handle for the quotient.
 ### :param remainder: The destination handle for the remainder.
 ### :param a: The dividend.
 ### :param b: The divisor.
-external("C") routine rf_bigint_div(quotient: CPtr, remainder: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_div(quotient: CPtr, remainder: CPtr, a: CPtr, b: CPtr)
 ### Stores the remainder of `a mod b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The dividend.
 ### :param b: The divisor.
-external("C") routine rf_bigint_mod(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_mod(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the arithmetic negation of `a` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
-external("C") routine rf_bigint_neg(result: CPtr, a: CPtr)
+routine C::rf_bigint_neg(result: CPtr, a: CPtr)
 
 ### Compares two bigint handles numerically.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
 ### :returns: A negative, zero, or positive comparison result.
-external("C") routine rf_bigint_cmp(a: CPtr, b: CPtr) -> S32
+routine C::rf_bigint_cmp(a: CPtr, b: CPtr) -> S32
 
 ### Stores the bitwise AND of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_and(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_and(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the bitwise OR of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_or(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_or(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the bitwise XOR of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_xor(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_xor(result: CPtr, a: CPtr, b: CPtr)
 ### Stores `a` shifted left by `bits` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
 ### :param bits: The shift amount in bits.
-external("C") routine rf_bigint_shl(result: CPtr, a: CPtr, bits: S32)
+routine C::rf_bigint_shl(result: CPtr, a: CPtr, bits: S32)
 ### Stores `a` shifted right by `bits` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
 ### :param bits: The shift amount in bits.
-external("C") routine rf_bigint_shr(result: CPtr, a: CPtr, bits: S32)
+routine C::rf_bigint_shr(result: CPtr, a: CPtr, bits: S32)
 
 ### Stores the absolute value of `a` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
-external("C") routine rf_bigint_abs(result: CPtr, a: CPtr)
+routine C::rf_bigint_abs(result: CPtr, a: CPtr)
 ### Raises `base` to the unsigned exponent `exp` and stores the result.
 ### :param result: The destination bigint handle.
 ### :param base: The base value.
 ### :param exp: The exponent value.
-external("C") routine rf_bigint_pow(result: CPtr, base: CPtr, exp: U32)
+routine C::rf_bigint_pow(result: CPtr, base: CPtr, exp: U32)
 ### Stores the integer square root of `a` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
-external("C") routine rf_bigint_sqrt(result: CPtr, a: CPtr)
+routine C::rf_bigint_sqrt(result: CPtr, a: CPtr)
 ### Stores the greatest common divisor of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_gcd(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_gcd(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the least common multiple of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_lcm(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_bigint_lcm(result: CPtr, a: CPtr, b: CPtr)
 
 ### Returns whether the bigint handle currently stores zero.
 ### :param handle: The bigint handle to inspect.
 ### :returns: A non-zero runtime truth value when the number is zero.
-external("C") routine rf_bigint_is_zero(handle: CPtr) -> S32
+routine C::rf_bigint_is_zero(handle: CPtr) -> S32
 ### Returns whether the bigint handle currently stores a negative value.
 ### :param handle: The bigint handle to inspect.
 ### :returns: A non-zero runtime truth value when the number is negative.
-external("C") routine rf_bigint_is_neg(handle: CPtr) -> S32
+routine C::rf_bigint_is_neg(handle: CPtr) -> S32
 
 # ============================================================================
 # Text Parsing (CStr -> primitive values)
@@ -822,21 +822,21 @@ external("C") routine rf_bigint_is_neg(handle: CPtr) -> S32
 ### Parses a null-terminated UTF-8 string as `F16`.
 ### :param cstr: The text to parse.
 ### :returns: The parsed `F16` value.
-external("C") routine rf_parse_F16(cstr: CStr) -> F16
+routine C::rf_parse_F16(cstr: CStr) -> F16
 ### Parses a null-terminated UTF-8 string as `F32`.
 ### :param cstr: The text to parse.
 ### :returns: The parsed `F32` value.
-external("C") routine rf_parse_F32(cstr: CStr) -> F32
+routine C::rf_parse_F32(cstr: CStr) -> F32
 ### Parses a null-terminated UTF-8 string as `F64`.
 ### :param cstr: The text to parse.
 ### :returns: The parsed `F64` value.
-external("C") routine rf_parse_F64(cstr: CStr) -> F64
+routine C::rf_parse_F64(cstr: CStr) -> F64
 ### Parses a null-terminated UTF-8 string as `F128`, writing the result through `out`.
 ### :param cstr: The text to parse.
 ### :param out: Storage receiving the parsed `F128` value.
 ### :note: Out-param ABI — the C function `void rf_parse_F128(const char*, f128_t*)`
 ###        avoids the Windows x64 sret/xmm0 mismatch that breaks an f128_t return value.
-external("C") routine rf_parse_F128(cstr: CStr, out: Hijacked[F128])
+routine C::rf_parse_F128(cstr: CStr, out: Hijacked[F128])
 
 # ============================================================================
 # Text Formatting (primitive values -> heap-allocated CStr pointer)
@@ -847,22 +847,22 @@ external("C") routine rf_parse_F128(cstr: CStr, out: Hijacked[F128])
 ### Formats an `F16` value as a heap-allocated null-terminated UTF-8 string.
 ### :param value: The value to format.
 ### :returns: A pointer to the formatted string.
-external("C") routine rf_format_F16(value: F16) -> Address
+routine C::rf_format_F16(value: F16) -> Address
 ### Formats an `F32` value as a heap-allocated null-terminated UTF-8 string.
 ### :param value: The value to format.
 ### :returns: A pointer to the formatted string.
-external("C") routine rf_format_F32(value: F32) -> Address
+routine C::rf_format_F32(value: F32) -> Address
 ### Formats an `F64` value as a heap-allocated null-terminated UTF-8 string.
 ### :param value: The value to format.
 ### :returns: A pointer to the formatted string.
-external("C") routine rf_format_F64(value: F64) -> Address
+routine C::rf_format_F64(value: F64) -> Address
 ### Formats an `F128` value as a heap-allocated null-terminated UTF-8 string.
 ### :param low: The low 64 bits of the value to format.
 ### :param high: The high 64 bits of the value to format.
 ### :returns: A pointer to the formatted string.
 ### :note: Parts ABI — passing the 16-byte `f128_t` by value does not match
 ###        the scalar `fp128` ABI emitted for `F128` parameters.
-external("C") routine rf_format_F128_parts(low: U64, high: U64) -> Address
+routine C::rf_format_F128_parts(low: U64, high: U64) -> Address
 
 # ============================================================================
 # File I/O
@@ -871,33 +871,33 @@ external("C") routine rf_format_F128_parts(low: U64, high: U64) -> Address
 ### Returns the byte length associated with the most recent runtime buffer result.
 ### This is used by higher-level wrappers after calls that return raw byte pointers.
 ### :returns: The length of the current result buffer in bytes.
-external("C") routine rf_get_result_len() -> U64
+routine C::rf_get_result_len() -> U64
 ### Opens a file and returns the runtime file descriptor.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
 ### :param mode: The runtime file-open mode code.
 ### :returns: A runtime file descriptor, or a failure code defined by the runtime.
-external("C") routine rf_file_open(path: CStr, path_len: S32, mode: S32) -> S32
+routine C::rf_file_open(path: CStr, path_len: S32, mode: S32) -> S32
 ### Closes an open runtime file descriptor.
 ### :param fd: The file descriptor to close.
-external("C") routine rf_file_close(fd: S32)
+routine C::rf_file_close(fd: S32)
 ### Reads the remaining contents of a file into a runtime-managed byte buffer.
 ### :param fd: The file descriptor to read from.
 ### :returns: A pointer to the captured byte buffer.
-external("C") routine rf_file_read_all(fd: S32) -> Hijacked[Byte]
+routine C::rf_file_read_all(fd: S32) -> Hijacked[Byte]
 ### Reads one line from a file into a runtime-managed byte buffer.
 ### :param fd: The file descriptor to read from.
 ### :returns: A pointer to the captured byte buffer.
-external("C") routine rf_file_read_line(fd: S32) -> Hijacked[Byte]
+routine C::rf_file_read_line(fd: S32) -> Hijacked[Byte]
 ### Reads a whole file asynchronously off the libuv threadpool. Inside a suspended routine the calling
 ### coroutine parks while the read runs (siblings keep progressing); outside one it reads inline.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
 ### :returns: A pointer to the captured byte buffer (length via `rf_io_get_result_len`).
-external("C") routine rf_io_read_file_all(path: CStr, path_len: S32) -> Hijacked[Byte]
+routine C::rf_io_read_file_all(path: CStr, path_len: S32) -> Hijacked[Byte]
 ### Returns the byte length of the most recent async I/O buffer result.
 ### :returns: The length of the current async result buffer in bytes.
-external("C") routine rf_io_get_result_len() -> U64
+routine C::rf_io_get_result_len() -> U64
 ### Writes a whole file asynchronously off the libuv threadpool, truncating any existing contents.
 ### Inside a suspended routine the calling coroutine parks while the write runs (siblings keep
 ### progressing); outside one it writes inline. The payload is copied, so the caller's buffer need not
@@ -907,56 +907,56 @@ external("C") routine rf_io_get_result_len() -> U64
 ### :param data: Pointer to the bytes to write.
 ### :param data_len: The number of bytes to write.
 ### :returns: The number of bytes written, or a negative value on error.
-external("C") routine rf_io_write_file_all(path: CStr, path_len: S32, data: Hijacked[Byte], data_len: S64) -> S64
+routine C::rf_io_write_file_all(path: CStr, path_len: S32, data: Hijacked[Byte], data_len: S64) -> S64
 ### Runs a shell command, capturing stdout/stderr, while the calling coroutine parks (siblings keep
 ### progressing); blocks on a plain thread. Returns the child's exit code (-1 if it could not be
 ### spawned). The captured streams + signal are read via the accessors below.
 ### :param command: The null-terminated command line, run via the platform shell.
 ### :param command_len: The command length in bytes.
 ### :returns: The child's exit code, or -1 on spawn failure.
-external("C") routine rf_proc_run(command: CStr, command_len: S32) -> S64
+routine C::rf_proc_run(command: CStr, command_len: S32) -> S64
 ### Returns the signal that killed the most recent `rf_proc_run` child, or 0 if it exited normally.
-external("C") routine rf_proc_term_signal() -> S32
+routine C::rf_proc_term_signal() -> S32
 ### Returns the captured stdout buffer of the most recent `rf_proc_run` (length via `rf_proc_output_len`).
-external("C") routine rf_proc_output() -> Hijacked[Byte]
+routine C::rf_proc_output() -> Hijacked[Byte]
 ### Returns the byte length of the most recent `rf_proc_run` stdout capture.
-external("C") routine rf_proc_output_len() -> U64
+routine C::rf_proc_output_len() -> U64
 ### Returns the captured stderr buffer of the most recent `rf_proc_run` (length via `rf_proc_errors_len`).
-external("C") routine rf_proc_errors() -> Hijacked[Byte]
+routine C::rf_proc_errors() -> Hijacked[Byte]
 ### Returns the byte length of the most recent `rf_proc_run` stderr capture.
-external("C") routine rf_proc_errors_len() -> U64
+routine C::rf_proc_errors_len() -> U64
 ### Begins an argv subprocess builder (no shell), setting argv[0] to `file`. Returns an opaque handle.
 ### :param file: The executable to run.
 ### :param file_len: The file length in bytes.
 ### :returns: An opaque builder handle for `rf_proc_add_arg`/`rf_proc_set_cwd`/`rf_proc_run_built`.
-external("C") routine rf_proc_begin(file: CStr, file_len: S32) -> CPtr
+routine C::rf_proc_begin(file: CStr, file_len: S32) -> CPtr
 ### Appends an argument to a subprocess builder.
-external("C") routine rf_proc_add_arg(builder: CPtr, arg: CStr, arg_len: S32)
+routine C::rf_proc_add_arg(builder: CPtr, arg: CStr, arg_len: S32)
 ### Sets the working directory for a subprocess builder (empty = inherit the parent's).
-external("C") routine rf_proc_set_cwd(builder: CPtr, cwd: CStr, cwd_len: S32)
+routine C::rf_proc_set_cwd(builder: CPtr, cwd: CStr, cwd_len: S32)
 ### Adds an environment override (KEY=VALUE), merged into the parent environment at launch.
-external("C") routine rf_proc_add_env(builder: CPtr, key: CStr, key_len: S32, val: CStr, val_len: S32)
+routine C::rf_proc_add_env(builder: CPtr, key: CStr, key_len: S32, val: CStr, val_len: S32)
 ### Launches a built subprocess (no shell), capturing stdout/stderr like `rf_proc_run`, and consumes
 ### the builder. Parks the calling coroutine while it runs. Returns the exit code, or -1 on failure.
-external("C") routine rf_proc_run_built(builder: CPtr) -> S64
+routine C::rf_proc_run_built(builder: CPtr) -> S64
 ### Reads up to `count` bytes from a file into a runtime-managed buffer.
 ### :param fd: The file descriptor to read from.
 ### :param count: The maximum number of bytes to read.
 ### :returns: A pointer to the captured byte buffer.
-external("C") routine rf_file_read_bytes(fd: S32, count: U64) -> Hijacked[Byte]
+routine C::rf_file_read_bytes(fd: S32, count: U64) -> Hijacked[Byte]
 ### Writes `len` bytes from `ptr` to an open file descriptor.
 ### :param fd: The file descriptor to write to.
 ### :param ptr: Pointer to the bytes to write.
 ### :param len: Number of bytes to write.
 ### :returns: The number of bytes written.
-external("C") routine rf_file_write(fd: S32, ptr: Hijacked[Byte], len: U64) -> U64
+routine C::rf_file_write(fd: S32, ptr: Hijacked[Byte], len: U64) -> U64
 ### Flushes buffered output associated with a file descriptor.
 ### :param fd: The file descriptor to flush.
-external("C") routine rf_file_flush(fd: S32)
+routine C::rf_file_flush(fd: S32)
 ### Returns whether a file descriptor has reached end-of-file.
 ### :param fd: The file descriptor to inspect.
 ### :returns: `true` when no more data can be read.
-external("C") routine rf_file_is_eof(fd: S32) -> Bool
+routine C::rf_file_is_eof(fd: S32) -> Bool
 
 # ============================================================================
 # FileSystem
@@ -966,217 +966,217 @@ external("C") routine rf_file_is_eof(fd: S32) -> Bool
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when the path exists.
-external("C") routine rf_fs_exists(path: CStr, len: S32) -> Bool
+routine C::rf_fs_exists(path: CStr, len: S32) -> Bool
 ### Returns whether a filesystem path refers to a regular file.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when the path exists and is a regular file.
-external("C") routine rf_fs_is_file(path: CStr, len: S32) -> Bool
+routine C::rf_fs_is_file(path: CStr, len: S32) -> Bool
 ### Returns whether a filesystem path refers to a directory.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when the path exists and is a directory.
-external("C") routine rf_fs_is_directory(path: CStr, len: S32) -> Bool
+routine C::rf_fs_is_directory(path: CStr, len: S32) -> Bool
 ### Creates one directory at `path`.
 ### :param path: The null-terminated directory path.
 ### :param len: The path length in bytes.
 ### :returns: A runtime status code.
-external("C") routine rf_fs_create_dir(path: CStr, len: S32) -> S32
+routine C::rf_fs_create_dir(path: CStr, len: S32) -> S32
 ### Creates a directory path recursively, including missing parents.
 ### :param path: The null-terminated directory path.
 ### :param len: The path length in bytes.
 ### :returns: A runtime status code.
-external("C") routine rf_fs_create_dir_all(path: CStr, len: S32) -> S32
+routine C::rf_fs_create_dir_all(path: CStr, len: S32) -> S32
 ### Removes a file or empty directory at `path`.
 ### :param path: The null-terminated path to remove.
 ### :param len: The path length in bytes.
 ### :returns: A runtime status code.
-external("C") routine rf_fs_remove(path: CStr, len: S32) -> S32
+routine C::rf_fs_remove(path: CStr, len: S32) -> S32
 ### Removes a directory tree or path recursively.
 ### :param path: The null-terminated path to remove.
 ### :param len: The path length in bytes.
 ### :returns: A runtime status code.
-external("C") routine rf_fs_remove_all(path: CStr, len: S32) -> S32
+routine C::rf_fs_remove_all(path: CStr, len: S32) -> S32
 ### Copies a filesystem object from `src` to `dst`.
 ### :param src: The null-terminated source path.
 ### :param src_len: The source path length in bytes.
 ### :param dst: The null-terminated destination path.
 ### :param dst_len: The destination path length in bytes.
 ### :returns: A runtime status code.
-external("C") routine rf_fs_copy(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
+routine C::rf_fs_copy(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
 ### Moves or renames a filesystem object from `src` to `dst`.
 ### :param src: The null-terminated source path.
 ### :param src_len: The source path length in bytes.
 ### :param dst: The null-terminated destination path.
 ### :param dst_len: The destination path length in bytes.
 ### :returns: A runtime status code.
-external("C") routine rf_fs_move(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
+routine C::rf_fs_move(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
 ### Returns the file size for a regular file path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: The file size in bytes.
-external("C") routine rf_fs_file_size(path: CStr, len: S32) -> S64
+routine C::rf_fs_file_size(path: CStr, len: S32) -> S64
 ### Joins two path fragments using the platform path separator rules.
 ### :param a: The left-hand path fragment.
 ### :param a_len: The length of `a` in bytes.
 ### :param b: The right-hand path fragment.
 ### :param b_len: The length of `b` in bytes.
 ### :returns: A runtime-managed byte buffer containing the joined path.
-external("C") routine rf_fs_join_path(a: CStr, a_len: S32, b: CStr, b_len: S32) -> Hijacked[Byte]
+routine C::rf_fs_join_path(a: CStr, a_len: S32, b: CStr, b_len: S32) -> Hijacked[Byte]
 ### Returns the parent directory portion of a path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the parent path.
-external("C") routine rf_fs_parent_path(path: CStr, len: S32) -> Hijacked[Byte]
+routine C::rf_fs_parent_path(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the final path component of a path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the file name.
-external("C") routine rf_fs_file_name(path: CStr, len: S32) -> Hijacked[Byte]
+routine C::rf_fs_file_name(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the file name without its final extension.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the stem text.
-external("C") routine rf_fs_file_stem(path: CStr, len: S32) -> Hijacked[Byte]
+routine C::rf_fs_file_stem(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the final extension component of a path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the extension text.
-external("C") routine rf_fs_extension(path: CStr, len: S32) -> Hijacked[Byte]
+routine C::rf_fs_extension(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns an absolute version of a path without necessarily resolving symlinks.
 ### :param path: The null-terminated path to normalize.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the absolute path.
-external("C") routine rf_fs_absolute_path(path: CStr, len: S32) -> Hijacked[Byte]
+routine C::rf_fs_absolute_path(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the canonicalized path with platform-specific resolution applied.
 ### :param path: The null-terminated path to canonicalize.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the canonical path.
-external("C") routine rf_fs_canonical_path(path: CStr, len: S32) -> Hijacked[Byte]
+routine C::rf_fs_canonical_path(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns whether the current process can read the path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when read access is available.
-external("C") routine rf_fs_can_read(path: CStr, len: S32) -> Bool
+routine C::rf_fs_can_read(path: CStr, len: S32) -> Bool
 ### Returns whether the current process can write to the path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when write access is available.
-external("C") routine rf_fs_can_write(path: CStr, len: S32) -> Bool
+routine C::rf_fs_can_write(path: CStr, len: S32) -> Bool
 ### Returns whether the current process can execute the path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when execute access is available.
-external("C") routine rf_fs_can_execute(path: CStr, len: S32) -> Bool
+routine C::rf_fs_can_execute(path: CStr, len: S32) -> Bool
 ### Sets or clears the readonly attribute for a filesystem path.
 ### :param path: The null-terminated path to update.
 ### :param len: The path length in bytes.
 ### :param readonly_flag: `true` to mark readonly, `false` to clear it.
 ### :returns: A runtime status code.
-external("C") routine rf_fs_set_readonly(path: CStr, len: S32, readonly_flag: Bool) -> S32
+routine C::rf_fs_set_readonly(path: CStr, len: S32, readonly_flag: Bool) -> S32
 
 # ============================================================================
 # Real (arbitrary-precision binary float, libbf-backed) — handle lifecycle +
 # operations. Mirrors the rf_bigint_* surface; handles are heap bf_t pointers.
 # ============================================================================
 ### Allocates a new zero-initialized Real handle.
-external("C") routine rf_real_new() -> CPtr
+routine C::rf_real_new() -> CPtr
 ### Frees a Real handle and its backing storage.
-external("C") routine rf_real_clear(handle: CPtr)
+routine C::rf_real_clear(handle: CPtr)
 ### Sets the handle to a signed 64-bit integer value.
-external("C") routine rf_real_set_i64(handle: CPtr, value: S64)
+routine C::rf_real_set_i64(handle: CPtr, value: S64)
 ### Sets the handle to an F64 value (exact).
-external("C") routine rf_real_set_f64(handle: CPtr, value: F64)
+routine C::rf_real_set_f64(handle: CPtr, value: F64)
 ### Parses a decimal string into the handle (radix 10). Returns a libbf status.
-external("C") routine rf_real_set_str(handle: CPtr, str: CPtr, radix: S32) -> S32
+routine C::rf_real_set_str(handle: CPtr, str: CPtr, radix: S32) -> S32
 ### Rounds the value to the nearest F64.
-external("C") routine rf_real_get_f64(handle: CPtr) -> F64
+routine C::rf_real_get_f64(handle: CPtr) -> F64
 ### Formats the value as a freshly-allocated decimal C string (free with rf_invalidate).
-external("C") routine rf_real_to_str(handle: CPtr) -> CStr
+routine C::rf_real_to_str(handle: CPtr) -> CStr
 ### Stores a + b (exact) into result.
-external("C") routine rf_real_add(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_real_add(result: CPtr, a: CPtr, b: CPtr)
 ### Stores a - b (exact) into result.
-external("C") routine rf_real_sub(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_real_sub(result: CPtr, a: CPtr, b: CPtr)
 ### Stores a * b (exact) into result.
-external("C") routine rf_real_mul(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_real_mul(result: CPtr, a: CPtr, b: CPtr)
 ### Stores a / b (rounded to the working precision) into result.
-external("C") routine rf_real_div(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_real_div(result: CPtr, a: CPtr, b: CPtr)
 ### Stores -a into result.
-external("C") routine rf_real_neg(result: CPtr, a: CPtr)
+routine C::rf_real_neg(result: CPtr, a: CPtr)
 ### Stores sqrt(a) into result.
-external("C") routine rf_real_sqrt(result: CPtr, a: CPtr)
+routine C::rf_real_sqrt(result: CPtr, a: CPtr)
 ### Stores exp(a) into result.
-external("C") routine rf_real_exp(result: CPtr, a: CPtr)
+routine C::rf_real_exp(result: CPtr, a: CPtr)
 ### Stores log(a) into result.
-external("C") routine rf_real_log(result: CPtr, a: CPtr)
+routine C::rf_real_log(result: CPtr, a: CPtr)
 ### Stores a ** b into result.
-external("C") routine rf_real_pow(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_real_pow(result: CPtr, a: CPtr, b: CPtr)
 ### Stores sin(a) into result.
-external("C") routine rf_real_sin(result: CPtr, a: CPtr)
+routine C::rf_real_sin(result: CPtr, a: CPtr)
 ### Stores cos(a) into result.
-external("C") routine rf_real_cos(result: CPtr, a: CPtr)
+routine C::rf_real_cos(result: CPtr, a: CPtr)
 ### Stores tan(a) into result.
-external("C") routine rf_real_tan(result: CPtr, a: CPtr)
+routine C::rf_real_tan(result: CPtr, a: CPtr)
 ### Stores asin(a) into result.
-external("C") routine rf_real_asin(result: CPtr, a: CPtr)
+routine C::rf_real_asin(result: CPtr, a: CPtr)
 ### Stores acos(a) into result.
-external("C") routine rf_real_acos(result: CPtr, a: CPtr)
+routine C::rf_real_acos(result: CPtr, a: CPtr)
 ### Stores atan(a) into result.
-external("C") routine rf_real_atan(result: CPtr, a: CPtr)
+routine C::rf_real_atan(result: CPtr, a: CPtr)
 ### Stores atan2(y, x) into result.
-external("C") routine rf_real_atan2(result: CPtr, y: CPtr, x: CPtr)
+routine C::rf_real_atan2(result: CPtr, y: CPtr, x: CPtr)
 ### Stores sinh(a) into result.
-external("C") routine rf_real_sinh(result: CPtr, a: CPtr)
+routine C::rf_real_sinh(result: CPtr, a: CPtr)
 ### Stores cosh(a) into result.
-external("C") routine rf_real_cosh(result: CPtr, a: CPtr)
+routine C::rf_real_cosh(result: CPtr, a: CPtr)
 ### Stores tanh(a) into result.
-external("C") routine rf_real_tanh(result: CPtr, a: CPtr)
+routine C::rf_real_tanh(result: CPtr, a: CPtr)
 ### Stores asinh(a) into result.
-external("C") routine rf_real_asinh(result: CPtr, a: CPtr)
+routine C::rf_real_asinh(result: CPtr, a: CPtr)
 ### Stores acosh(a) into result.
-external("C") routine rf_real_acosh(result: CPtr, a: CPtr)
+routine C::rf_real_acosh(result: CPtr, a: CPtr)
 ### Stores atanh(a) into result.
-external("C") routine rf_real_atanh(result: CPtr, a: CPtr)
+routine C::rf_real_atanh(result: CPtr, a: CPtr)
 ### Stores log2(a) into result.
-external("C") routine rf_real_log2(result: CPtr, a: CPtr)
+routine C::rf_real_log2(result: CPtr, a: CPtr)
 ### Stores log10(a) into result.
-external("C") routine rf_real_log10(result: CPtr, a: CPtr)
+routine C::rf_real_log10(result: CPtr, a: CPtr)
 ### Stores hypot(a, b) into result.
-external("C") routine rf_real_hypot(result: CPtr, a: CPtr, b: CPtr)
+routine C::rf_real_hypot(result: CPtr, a: CPtr, b: CPtr)
 ### Stores cbrt(a) into result.
-external("C") routine rf_real_cbrt(result: CPtr, a: CPtr)
+routine C::rf_real_cbrt(result: CPtr, a: CPtr)
 ### Stores floor(a) (round toward -inf) into result.
-external("C") routine rf_real_floor(result: CPtr, a: CPtr)
+routine C::rf_real_floor(result: CPtr, a: CPtr)
 ### Stores ceil(a) (round toward +inf) into result.
-external("C") routine rf_real_ceil(result: CPtr, a: CPtr)
+routine C::rf_real_ceil(result: CPtr, a: CPtr)
 ### Stores trunc(a) (round toward zero) into result.
-external("C") routine rf_real_trunc(result: CPtr, a: CPtr)
+routine C::rf_real_trunc(result: CPtr, a: CPtr)
 ### Stores round(a) (round to nearest, ties away from zero) into result.
-external("C") routine rf_real_round(result: CPtr, a: CPtr)
+routine C::rf_real_round(result: CPtr, a: CPtr)
 ### Stores rint(a) (round to nearest, ties to even) into result.
-external("C") routine rf_real_rint(result: CPtr, a: CPtr)
+routine C::rf_real_rint(result: CPtr, a: CPtr)
 ### Precision-aware variants (prec = decimal significant digits).
-external("C") routine rf_real_div_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
-external("C") routine rf_real_sqrt_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_exp_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_log_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_pow_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
-external("C") routine rf_real_sin_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_cos_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_tan_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_asin_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_acos_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_atan_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_atan2_p(result: CPtr, y: CPtr, x: CPtr, prec: S32)
-external("C") routine rf_real_sinh_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_cosh_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_tanh_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_asinh_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_acosh_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_atanh_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_log2_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_log10_p(result: CPtr, a: CPtr, prec: S32)
-external("C") routine rf_real_hypot_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
-external("C") routine rf_real_cbrt_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_div_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+routine C::rf_real_sqrt_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_exp_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_log_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_pow_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+routine C::rf_real_sin_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_cos_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_tan_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_asin_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_acos_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_atan_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_atan2_p(result: CPtr, y: CPtr, x: CPtr, prec: S32)
+routine C::rf_real_sinh_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_cosh_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_tanh_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_asinh_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_acosh_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_atanh_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_log2_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_log10_p(result: CPtr, a: CPtr, prec: S32)
+routine C::rf_real_hypot_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
+routine C::rf_real_cbrt_p(result: CPtr, a: CPtr, prec: S32)
 ### Compares two Real handles: -1 / 0 / 1 (2 = unordered/NaN).
-external("C") routine rf_real_cmp(a: CPtr, b: CPtr) -> S32
+routine C::rf_real_cmp(a: CPtr, b: CPtr) -> S32

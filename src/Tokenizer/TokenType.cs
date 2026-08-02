@@ -323,9 +323,6 @@ public enum TokenType
     /// <summary>Posted access modifier - open read, secret write</summary>
     Posted,
 
-    /// <summary>External linkage modifier - marks externally-linked declarations (FFI)</summary>
-    External,
-
     /// <summary>Dangerous modifier - marks unsafe/dangerous routines or blocks</summary>
     Dangerous,
 

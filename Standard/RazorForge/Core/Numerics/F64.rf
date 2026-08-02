@@ -649,63 +649,63 @@ routine F64.hash(k0: U64, k1: U64) -> U64
 # twin, so their bare libm symbols bind fine.
 # ============================================================================
 ### C libm extern (rf_f64_ passthrough): sine (radians).
-external("C") routine rf_f64_sin(value: F64) -> F64
+routine C::rf_f64_sin(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): cosine (radians).
-external("C") routine rf_f64_cos(value: F64) -> F64
+routine C::rf_f64_cos(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): tangent (radians).
-external("C") routine rf_f64_tan(value: F64) -> F64
+routine C::rf_f64_tan(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): arc sine.
-external("C") routine rf_f64_asin(value: F64) -> F64
+routine C::rf_f64_asin(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): arc cosine.
-external("C") routine rf_f64_acos(value: F64) -> F64
+routine C::rf_f64_acos(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): arc tangent.
-external("C") routine rf_f64_atan(value: F64) -> F64
+routine C::rf_f64_atan(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): two-argument arc tangent atan2(y, x).
-external("C") routine rf_f64_atan2(y: F64, x: F64) -> F64
+routine C::rf_f64_atan2(y: F64, x: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): hyperbolic sine.
-external("C") routine rf_f64_sinh(value: F64) -> F64
+routine C::rf_f64_sinh(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): hyperbolic cosine.
-external("C") routine rf_f64_cosh(value: F64) -> F64
+routine C::rf_f64_cosh(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): hyperbolic tangent.
-external("C") routine rf_f64_tanh(value: F64) -> F64
+routine C::rf_f64_tanh(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): inverse hyperbolic sine.
-external("C") routine rf_f64_asinh(value: F64) -> F64
+routine C::rf_f64_asinh(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): inverse hyperbolic cosine.
-external("C") routine rf_f64_acosh(value: F64) -> F64
+routine C::rf_f64_acosh(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): inverse hyperbolic tangent.
-external("C") routine rf_f64_atanh(value: F64) -> F64
+routine C::rf_f64_atanh(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): square root.
-external("C") routine rf_f64_sqrt(value: F64) -> F64
+routine C::rf_f64_sqrt(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): cube root.
-external("C") routine rf_f64_cbrt(value: F64) -> F64
+routine C::rf_f64_cbrt(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): natural exponential e^x.
-external("C") routine rf_f64_exp(value: F64) -> F64
+routine C::rf_f64_exp(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): base-2 exponential 2^x.
-external("C") routine rf_f64_exp2(value: F64) -> F64
+routine C::rf_f64_exp2(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): exp(x) - 1, accurate near zero.
-external("C") routine rf_f64_expm1(value: F64) -> F64
+routine C::rf_f64_expm1(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): natural logarithm.
-external("C") routine rf_f64_log(value: F64) -> F64
+routine C::rf_f64_log(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): base-2 logarithm.
-external("C") routine rf_f64_log2(value: F64) -> F64
+routine C::rf_f64_log2(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): base-10 logarithm.
-external("C") routine rf_f64_log10(value: F64) -> F64
+routine C::rf_f64_log10(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): log(1 + x), accurate near zero.
-external("C") routine rf_f64_log1p(value: F64) -> F64
+routine C::rf_f64_log1p(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): base raised to exp.
-external("C") routine rf_f64_pow(base: F64, exp: F64) -> F64
+routine C::rf_f64_pow(base: F64, exp: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): hypotenuse sqrt(x^2 + y^2) without overflow.
-external("C") routine rf_f64_hypot(x: F64, y: F64) -> F64
+routine C::rf_f64_hypot(x: F64, y: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): fused multiply-add x*y + z with a single rounding.
-external("C") routine rf_f64_fma(x: F64, y: F64, z: F64) -> F64
+routine C::rf_f64_fma(x: F64, y: F64, z: F64) -> F64
 ### C libm extern (bare symbol, no UnpackedFloat twin): error function.
-external("C") routine erf(value: F64) -> F64
+routine C::erf(value: F64) -> F64
 ### C libm extern (bare symbol): complementary error function.
-external("C") routine erfc(value: F64) -> F64
+routine C::erfc(value: F64) -> F64
 ### C libm extern (bare symbol): gamma function.
-external("C") routine tgamma(value: F64) -> F64
+routine C::tgamma(value: F64) -> F64
 ### C libm extern (bare symbol): natural log of the absolute value of gamma.
-external("C") routine lgamma(value: F64) -> F64
+routine C::lgamma(value: F64) -> F64
 
 # ============================================================================
 # F64 libm methods (the C99 doubles F64 didn't already have via LLVM intrinsics),
@@ -930,31 +930,31 @@ routine F64.lgamma() -> F64
 # classification (signbit/is_normal/is_subnormal/fpclassify).
 # ============================================================================
 ### C libm extern (rf_f64_ passthrough): base-10 exponential 10^x.
-external("C") routine rf_f64_exp10(value: F64) -> F64
+routine C::rf_f64_exp10(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): sin(pi*x).
-external("C") routine rf_f64_sinpi(value: F64) -> F64
+routine C::rf_f64_sinpi(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): cos(pi*x).
-external("C") routine rf_f64_cospi(value: F64) -> F64
+routine C::rf_f64_cospi(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): tan(pi*x).
-external("C") routine rf_f64_tanpi(value: F64) -> F64
+routine C::rf_f64_tanpi(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): next representable value after x toward y.
-external("C") routine rf_f64_nextafter(x: F64, y: F64) -> F64
+routine C::rf_f64_nextafter(x: F64, y: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): x * 2^n (C scalbn).
-external("C") routine rf_f64_scalbn(value: F64, n: S64) -> F64
+routine C::rf_f64_scalbn(value: F64, n: S64) -> F64
 ### C libm extern (rf_f64_ passthrough): unbiased radix-2 exponent as an integer (C ilogb).
-external("C") routine rf_f64_ilogb(value: F64) -> S64
+routine C::rf_f64_ilogb(value: F64) -> S64
 ### C libm extern (rf_f64_ passthrough): round to nearest integer in the current mode (C rint).
-external("C") routine rf_f64_rint(value: F64) -> F64
+routine C::rf_f64_rint(value: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): positive difference max(x - y, 0) (C fdim).
-external("C") routine rf_f64_fdim(x: F64, y: F64) -> F64
+routine C::rf_f64_fdim(x: F64, y: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): floating-point remainder (C fmod).
-external("C") routine rf_f64_fmod(x: F64, y: F64) -> F64
+routine C::rf_f64_fmod(x: F64, y: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): IEEE remainder, ties to even (C remainder).
-external("C") routine rf_f64_remainder(x: F64, y: F64) -> F64
+routine C::rf_f64_remainder(x: F64, y: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): larger of x and y (C fmax).
-external("C") routine rf_f64_fmax(x: F64, y: F64) -> F64
+routine C::rf_f64_fmax(x: F64, y: F64) -> F64
 ### C libm extern (rf_f64_ passthrough): smaller of x and y (C fmin).
-external("C") routine rf_f64_fmin(x: F64, y: F64) -> F64
+routine C::rf_f64_fmin(x: F64, y: F64) -> F64
 
 ### Base-10 exponential 10**me. Checked: crashes on overflow. Use `exp10_unchecked` for raw IEEE.
 routine F64.exp10!() -> F64

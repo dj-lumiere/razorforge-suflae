@@ -602,75 +602,75 @@ routine F32.hash(k0: U64, k1: U64) -> U64
 # LLVM intrinsics; the extended surface binds the single-precision runtime.
 # ============================================================================
 ### C libm extern: tangent (radians).
-external("C") routine rf_f32_tan(value: F32) -> F32
+routine C::rf_f32_tan(value: F32) -> F32
 ### C libm extern: arc sine.
-external("C") routine rf_f32_asin(value: F32) -> F32
+routine C::rf_f32_asin(value: F32) -> F32
 ### C libm extern: arc cosine.
-external("C") routine rf_f32_acos(value: F32) -> F32
+routine C::rf_f32_acos(value: F32) -> F32
 ### C libm extern: arc tangent.
-external("C") routine rf_f32_atan(value: F32) -> F32
+routine C::rf_f32_atan(value: F32) -> F32
 ### C libm extern: two-argument arc tangent atan2(y, x).
-external("C") routine rf_f32_atan2(y: F32, x: F32) -> F32
+routine C::rf_f32_atan2(y: F32, x: F32) -> F32
 ### C libm extern: hyperbolic sine.
-external("C") routine rf_f32_sinh(value: F32) -> F32
+routine C::rf_f32_sinh(value: F32) -> F32
 ### C libm extern: hyperbolic cosine.
-external("C") routine rf_f32_cosh(value: F32) -> F32
+routine C::rf_f32_cosh(value: F32) -> F32
 ### C libm extern: hyperbolic tangent.
-external("C") routine rf_f32_tanh(value: F32) -> F32
+routine C::rf_f32_tanh(value: F32) -> F32
 ### C libm extern: inverse hyperbolic sine.
-external("C") routine rf_f32_asinh(value: F32) -> F32
+routine C::rf_f32_asinh(value: F32) -> F32
 ### C libm extern: inverse hyperbolic cosine.
-external("C") routine rf_f32_acosh(value: F32) -> F32
+routine C::rf_f32_acosh(value: F32) -> F32
 ### C libm extern: inverse hyperbolic tangent.
-external("C") routine rf_f32_atanh(value: F32) -> F32
+routine C::rf_f32_atanh(value: F32) -> F32
 ### C libm extern: cube root.
-external("C") routine rf_f32_cbrt(value: F32) -> F32
+routine C::rf_f32_cbrt(value: F32) -> F32
 ### C libm extern: base-2 exponential 2^x.
-external("C") routine rf_f32_exp2(value: F32) -> F32
+routine C::rf_f32_exp2(value: F32) -> F32
 ### C libm extern: exp(x) - 1, accurate near zero.
-external("C") routine rf_f32_expm1(value: F32) -> F32
+routine C::rf_f32_expm1(value: F32) -> F32
 ### C libm extern: log(1 + x), accurate near zero.
-external("C") routine rf_f32_log1p(value: F32) -> F32
+routine C::rf_f32_log1p(value: F32) -> F32
 ### C libm extern: base-2 logarithm.
-external("C") routine rf_f32_log2(value: F32) -> F32
+routine C::rf_f32_log2(value: F32) -> F32
 ### C libm extern: hypotenuse sqrt(x^2 + y^2) without overflow.
-external("C") routine rf_f32_hypot(x: F32, y: F32) -> F32
+routine C::rf_f32_hypot(x: F32, y: F32) -> F32
 ### C libm extern: fused multiply-add x*y + z with a single rounding.
-external("C") routine rf_f32_fma(x: F32, y: F32, z: F32) -> F32
+routine C::rf_f32_fma(x: F32, y: F32, z: F32) -> F32
 ### C libm extern: floating-point remainder (C fmod).
-external("C") routine rf_f32_fmod(x: F32, y: F32) -> F32
+routine C::rf_f32_fmod(x: F32, y: F32) -> F32
 ### C libm extern: IEEE remainder (C remainder).
-external("C") routine rf_f32_remainder(x: F32, y: F32) -> F32
+routine C::rf_f32_remainder(x: F32, y: F32) -> F32
 ### C libm extern: positive difference max(x - y, 0) (C fdim).
-external("C") routine rf_f32_fdim(x: F32, y: F32) -> F32
+routine C::rf_f32_fdim(x: F32, y: F32) -> F32
 ### C libm extern: larger of x and y (C fmax).
-external("C") routine rf_f32_fmax(x: F32, y: F32) -> F32
+routine C::rf_f32_fmax(x: F32, y: F32) -> F32
 ### C libm extern: smaller of x and y (C fmin).
-external("C") routine rf_f32_fmin(x: F32, y: F32) -> F32
+routine C::rf_f32_fmin(x: F32, y: F32) -> F32
 ### C libm extern: base-10 exponential 10^x.
-external("C") routine rf_f32_exp10(value: F32) -> F32
+routine C::rf_f32_exp10(value: F32) -> F32
 ### C libm extern: sin(pi*x).
-external("C") routine rf_f32_sinpi(value: F32) -> F32
+routine C::rf_f32_sinpi(value: F32) -> F32
 ### C libm extern: cos(pi*x).
-external("C") routine rf_f32_cospi(value: F32) -> F32
+routine C::rf_f32_cospi(value: F32) -> F32
 ### C libm extern: tan(pi*x).
-external("C") routine rf_f32_tanpi(value: F32) -> F32
+routine C::rf_f32_tanpi(value: F32) -> F32
 ### C libm extern: next representable value after x toward y.
-external("C") routine rf_f32_nextafter(x: F32, y: F32) -> F32
+routine C::rf_f32_nextafter(x: F32, y: F32) -> F32
 ### C libm extern: x * 2^n (C scalbn).
-external("C") routine rf_f32_scalbn(value: F32, n: S64) -> F32
+routine C::rf_f32_scalbn(value: F32, n: S64) -> F32
 ### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
-external("C") routine rf_f32_ilogb(value: F32) -> S64
+routine C::rf_f32_ilogb(value: F32) -> S64
 ### C libm extern: round to nearest integer in the current rounding mode (C rint).
-external("C") routine rf_f32_rint(value: F32) -> F32
+routine C::rf_f32_rint(value: F32) -> F32
 ### C libm extern: error function.
-external("C") routine rf_f32_erf(value: F32) -> F32
+routine C::rf_f32_erf(value: F32) -> F32
 ### C libm extern: complementary error function.
-external("C") routine rf_f32_erfc(value: F32) -> F32
+routine C::rf_f32_erfc(value: F32) -> F32
 ### C libm extern: gamma function.
-external("C") routine rf_f32_tgamma(value: F32) -> F32
+routine C::rf_f32_tgamma(value: F32) -> F32
 ### C libm extern: natural log of the absolute value of gamma.
-external("C") routine rf_f32_lgamma(value: F32) -> F32
+routine C::rf_f32_lgamma(value: F32) -> F32
 
 ### Tangent (radians).
 routine F32.tan() -> F32

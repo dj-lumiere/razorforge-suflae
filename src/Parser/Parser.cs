@@ -304,56 +304,12 @@ public partial class Parser
         if (_language == Language.RazorForge)
         {
             isDangerous = Match(type: TokenType.Dangerous);
-
-            // Handle: dangerous external("C") routine ... (dangerous before external)
-            if (isDangerous && visibility == VisibilityModifier.Open &&
-                Match(type: TokenType.External))
-            {
-                visibility = VisibilityModifier.External;
-            }
         }
 
-        // ═══════════════════════════════════════════════════════════════════════════
-        // RF-ONLY: EXTERNAL DECLARATIONS
-        // ═══════════════════════════════════════════════════════════════════════════
-
-        // External declaration with optional calling convention (RazorForge only)
-        // Supports: external routine foo() or external("C") routine foo()
-        //           external("C") { routine ... routine ... } (block form)
-        if (_language == Language.RazorForge && visibility == VisibilityModifier.External)
-        {
-            string? callingConvention = null;
-
-            // Check for calling convention: external("C")
-            if (Match(type: TokenType.LeftParen))
-            {
-                if (Check(TokenType.TextLiteral, TokenType.BytesLiteral))
-                {
-                    Token conventionToken = Advance();
-                    // Remove quotes from the text literal
-                    callingConvention = conventionToken.Text.Trim(trimChar: '"');
-                }
-
-                Consume(type: TokenType.RightParen,
-                    errorMessage: "Expected ')' after calling convention");
-            }
-
-            // Block form: external("C")\n  routine ... routine ...
-            // Check for block form: next meaningful token is Newline (not 'routine')
-            if (Check(type: TokenType.Newline))
-            {
-                return ParseExternalBlockDeclaration(callingConvention: callingConvention,
-                    isDangerous: isDangerous);
-            }
-
-            // Single form: external("C") routine foo()
-            if (Match(type: TokenType.Routine))
-            {
-                return ParseExternalDeclaration(callingConvention: callingConvention,
-                    annotations: annotations,
-                    isDangerous: isDangerous);
-            }
-        }
+        // Foreign routines are declared via realm-qualified names — `routine C::name(...)` /
+        // `routine LLVM::name(...)` (handled in the routine-declaration dispatch below), which produce an
+        // ExternalDeclaration. The old `external("C"|"llvm")` keyword form (incl. the block form) was
+        // removed in favor of that spelling.
 
         // Field declaration in type bodies: name: Type
         // Detected by identifier followed by colon (no var keyword needed)
@@ -457,6 +413,28 @@ public partial class Parser
         // Routine (function) declaration
         if (Match(type: TokenType.Routine))
         {
+            // Realm-qualified FOREIGN routine: `routine C::malloc(...)` / `routine LLVM::sqrt(...)`. The
+            // realm tag before `::` picks the calling convention; the declaration is an ExternalDeclaration
+            // (no body, foreign impl) — the modern spelling of `external("C"|"llvm") routine ...`.
+            if (Check(type: TokenType.Identifier) &&
+                PeekToken(offset: 1).Type == TokenType.DoubleColon)
+            {
+                string? conv = CurrentToken.Text switch
+                {
+                    "C" => "C",
+                    "LLVM" => "llvm",
+                    _ => null
+                };
+                if (conv != null)
+                {
+                    Advance(); // realm tag (C / LLVM)
+                    Advance(); // ::
+                    return ParseExternalDeclaration(callingConvention: conv,
+                        annotations: annotations,
+                        isDangerous: isDangerous);
+                }
+            }
+
             return ParseRoutineDeclaration(visibility: visibility,
                 annotations: annotations,
                 storage: storage,

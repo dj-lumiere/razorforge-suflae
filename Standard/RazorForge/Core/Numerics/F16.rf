@@ -522,87 +522,87 @@ routine F16.hash(k0: U64, k1: U64) -> U64
 # runtime and re-narrowed.
 # ============================================================================
 ### C libm extern: sine of the F16 bit pattern (radians); result is a U16 encoding.
-external("C") routine rf_f16_sin(bits: U16) -> U16
+routine C::rf_f16_sin(bits: U16) -> U16
 ### C libm extern: cosine of the F16 bit pattern (radians).
-external("C") routine rf_f16_cos(bits: U16) -> U16
+routine C::rf_f16_cos(bits: U16) -> U16
 ### C libm extern: tangent of the F16 bit pattern (radians).
-external("C") routine rf_f16_tan(bits: U16) -> U16
+routine C::rf_f16_tan(bits: U16) -> U16
 ### C libm extern: arc sine of the F16 bit pattern.
-external("C") routine rf_f16_asin(bits: U16) -> U16
+routine C::rf_f16_asin(bits: U16) -> U16
 ### C libm extern: arc cosine of the F16 bit pattern.
-external("C") routine rf_f16_acos(bits: U16) -> U16
+routine C::rf_f16_acos(bits: U16) -> U16
 ### C libm extern: arc tangent of the F16 bit pattern.
-external("C") routine rf_f16_atan(bits: U16) -> U16
+routine C::rf_f16_atan(bits: U16) -> U16
 ### C libm extern: two-argument arc tangent atan2(y, x).
-external("C") routine rf_f16_atan2(y: U16, x: U16) -> U16
+routine C::rf_f16_atan2(y: U16, x: U16) -> U16
 ### C libm extern: hyperbolic sine.
-external("C") routine rf_f16_sinh(bits: U16) -> U16
+routine C::rf_f16_sinh(bits: U16) -> U16
 ### C libm extern: hyperbolic cosine.
-external("C") routine rf_f16_cosh(bits: U16) -> U16
+routine C::rf_f16_cosh(bits: U16) -> U16
 ### C libm extern: hyperbolic tangent.
-external("C") routine rf_f16_tanh(bits: U16) -> U16
+routine C::rf_f16_tanh(bits: U16) -> U16
 ### C libm extern: inverse hyperbolic sine.
-external("C") routine rf_f16_asinh(bits: U16) -> U16
+routine C::rf_f16_asinh(bits: U16) -> U16
 ### C libm extern: inverse hyperbolic cosine.
-external("C") routine rf_f16_acosh(bits: U16) -> U16
+routine C::rf_f16_acosh(bits: U16) -> U16
 ### C libm extern: inverse hyperbolic tangent.
-external("C") routine rf_f16_atanh(bits: U16) -> U16
+routine C::rf_f16_atanh(bits: U16) -> U16
 ### C libm extern: natural exponential e^x.
-external("C") routine rf_f16_exp(bits: U16) -> U16
+routine C::rf_f16_exp(bits: U16) -> U16
 ### C libm extern: base-2 exponential 2^x.
-external("C") routine rf_f16_exp2(bits: U16) -> U16
+routine C::rf_f16_exp2(bits: U16) -> U16
 ### C libm extern: exp(x) - 1, accurate near zero.
-external("C") routine rf_f16_expm1(bits: U16) -> U16
+routine C::rf_f16_expm1(bits: U16) -> U16
 ### C libm extern: base-10 exponential 10^x.
-external("C") routine rf_f16_exp10(bits: U16) -> U16
+routine C::rf_f16_exp10(bits: U16) -> U16
 ### C libm extern: natural logarithm.
-external("C") routine rf_f16_log(bits: U16) -> U16
+routine C::rf_f16_log(bits: U16) -> U16
 ### C libm extern: base-2 logarithm.
-external("C") routine rf_f16_log2(bits: U16) -> U16
+routine C::rf_f16_log2(bits: U16) -> U16
 ### C libm extern: base-10 logarithm.
-external("C") routine rf_f16_log10(bits: U16) -> U16
+routine C::rf_f16_log10(bits: U16) -> U16
 ### C libm extern: log(1 + x), accurate near zero.
-external("C") routine rf_f16_log1p(bits: U16) -> U16
+routine C::rf_f16_log1p(bits: U16) -> U16
 ### C libm extern: base raised to exp.
-external("C") routine rf_f16_pow(base: U16, exp: U16) -> U16
+routine C::rf_f16_pow(base: U16, exp: U16) -> U16
 ### C libm extern: cube root.
-external("C") routine rf_f16_cbrt(bits: U16) -> U16
+routine C::rf_f16_cbrt(bits: U16) -> U16
 ### C libm extern: hypotenuse sqrt(x^2 + y^2) without overflow.
-external("C") routine rf_f16_hypot(x: U16, y: U16) -> U16
+routine C::rf_f16_hypot(x: U16, y: U16) -> U16
 ### C libm extern: fused multiply-add x*y + z with a single rounding.
-external("C") routine rf_f16_fma(x: U16, y: U16, z: U16) -> U16
+routine C::rf_f16_fma(x: U16, y: U16, z: U16) -> U16
 ### C libm extern: floating-point remainder (C fmod).
-external("C") routine rf_f16_fmod(x: U16, y: U16) -> U16
+routine C::rf_f16_fmod(x: U16, y: U16) -> U16
 ### C libm extern: IEEE remainder (C remainder).
-external("C") routine rf_f16_remainder(x: U16, y: U16) -> U16
+routine C::rf_f16_remainder(x: U16, y: U16) -> U16
 ### C libm extern: positive difference max(x - y, 0) (C fdim).
-external("C") routine rf_f16_fdim(x: U16, y: U16) -> U16
+routine C::rf_f16_fdim(x: U16, y: U16) -> U16
 ### C libm extern: larger of x and y (C fmax).
-external("C") routine rf_f16_max(x: U16, y: U16) -> U16
+routine C::rf_f16_max(x: U16, y: U16) -> U16
 ### C libm extern: smaller of x and y (C fmin).
-external("C") routine rf_f16_min(x: U16, y: U16) -> U16
+routine C::rf_f16_min(x: U16, y: U16) -> U16
 ### C libm extern: sin(pi*x).
-external("C") routine rf_f16_sinpi(bits: U16) -> U16
+routine C::rf_f16_sinpi(bits: U16) -> U16
 ### C libm extern: cos(pi*x).
-external("C") routine rf_f16_cospi(bits: U16) -> U16
+routine C::rf_f16_cospi(bits: U16) -> U16
 ### C libm extern: tan(pi*x).
-external("C") routine rf_f16_tanpi(bits: U16) -> U16
+routine C::rf_f16_tanpi(bits: U16) -> U16
 ### C libm extern: next representable value after x toward y.
-external("C") routine rf_f16_nextafter(x: U16, y: U16) -> U16
+routine C::rf_f16_nextafter(x: U16, y: U16) -> U16
 ### C libm extern: x * 2^n (C scalbn).
-external("C") routine rf_f16_scalbn(bits: U16, n: S64) -> U16
+routine C::rf_f16_scalbn(bits: U16, n: S64) -> U16
 ### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
-external("C") routine rf_f16_ilogb(bits: U16) -> S64
+routine C::rf_f16_ilogb(bits: U16) -> S64
 ### C libm extern: round to nearest integer in the current rounding mode (C rint).
-external("C") routine rf_f16_rint(bits: U16) -> U16
+routine C::rf_f16_rint(bits: U16) -> U16
 ### C libm extern: error function.
-external("C") routine rf_f16_erf(bits: U16) -> U16
+routine C::rf_f16_erf(bits: U16) -> U16
 ### C libm extern: complementary error function.
-external("C") routine rf_f16_erfc(bits: U16) -> U16
+routine C::rf_f16_erfc(bits: U16) -> U16
 ### C libm extern: gamma function.
-external("C") routine rf_f16_tgamma(bits: U16) -> U16
+routine C::rf_f16_tgamma(bits: U16) -> U16
 ### C libm extern: natural log of the absolute value of gamma.
-external("C") routine rf_f16_lgamma(bits: U16) -> U16
+routine C::rf_f16_lgamma(bits: U16) -> U16
 
 ### Sine (radians).
 routine F16.sin() -> F16

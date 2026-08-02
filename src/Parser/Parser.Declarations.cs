@@ -461,11 +461,6 @@ public partial class Parser
                 visibility = VisibilityModifier.Secret;
                 hasVisibility = true;
             }
-            else if (!hasVisibility && Match(type: TokenType.External))
-            {
-                visibility = VisibilityModifier.External;
-                hasVisibility = true;
-            }
             // Storage class modifiers
             else if (!hasStorage && Match(type: TokenType.Common))
             {
