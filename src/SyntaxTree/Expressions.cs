@@ -224,10 +224,10 @@ public record TupleLiteralExpression(List<Expression> Elements, SourceLocation L
 /// <item>Qualified names: may represent member access chains</item>
 /// </list>
 /// </remarks>
-public record IdentifierExpression(string Name, SourceLocation Location)
+public record IdentifierExpression(string Name, SourceLocation Location, string? Realm = null)
     : Expression(Location: Location)
 {
-    /// <summary>
+    /// <summary>``
     /// When set, this identifier resolved as a flag member in flag-context (e.g. a bare
     /// `READ` in a flags test). The bit position lets ExpressionLoweringPass emit
     /// the bitmask literal without re-doing the lookup.

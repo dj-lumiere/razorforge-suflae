@@ -111,6 +111,25 @@ public partial class Parser
                 return new IdentifierExpression(Name: "me", Location: location);
             }
 
+            // Realm-qualified reference in expression position: `RF::Core.List` (e.g. a
+            // `RF::Core.List[S64]()` constructor call inside a Suflae wrapper). The leading ident is the
+            // realm tag; consume the `.`/`/`-segmented qualified name and carry the realm so SA resolves
+            // it in the RazorForge/bare realm. Postfix `[..]` / `(..)` then apply as usual.
+            if (Check(type: TokenType.DoubleColon))
+            {
+                Advance();
+                var realmSb = new System.Text.StringBuilder(
+                    ConsumeIdentifier(errorMessage: "Expected name after realm qualifier '::'"));
+                while (Check(type: TokenType.Dot) || Check(type: TokenType.Slash))
+                {
+                    realmSb.Append(Match(type: TokenType.Dot) ? '.'
+                        : (Match(type: TokenType.Slash) ? '/' : '.'));
+                    realmSb.Append(ConsumeIdentifier(
+                        errorMessage: "Expected name component after '.'/'/' in realm-qualified reference"));
+                }
+                return new IdentifierExpression(Name: realmSb.ToString(), Location: location, Realm: text);
+            }
+
             return new IdentifierExpression(Name: text, Location: location);
         }
 
