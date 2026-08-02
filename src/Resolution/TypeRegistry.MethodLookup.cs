@@ -1733,6 +1733,81 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// True when a value's <c>$destroy</c> is transitively a no-op — nothing to free, no user side
+    /// effect — so its scope-exit teardown call can be ELIDED. Every synthesized <c>$destroy</c> is a
+    /// (possibly empty) chain of field/arm destroys; when the whole tree bottoms out in scalars, the
+    /// chain is pure <c>ret void</c>, yet the calls are NOT stripped by the optimizer (external linkage)
+    /// and pin the value's alloca, blocking SROA. Skipping the call lets a pure-scalar record scalarize.
+    ///
+    /// A value is NON-trivially destructible (needs the call) when it (or, recursively, a field/arm/
+    /// element) OWNS a resource or carries a user teardown: an <c>entity</c> (heap identity), an RC
+    /// wrapper (refcount release), a managed leaf with a hand-written <c>$store</c>/<c>$destroy</c>
+    /// (<c>Text</c>/<c>Decimal</c>), an RC-wrapper field (the separate <c>HasRCFields</c> teardown
+    /// path), a variant with a destructible arm, or ANY user-written <c>$destroy</c>. Abstract/unknown
+    /// shapes return false (conservative — keep the call). Mirrors the ownership signals
+    /// <see cref="GetLifecycle"/>, <see cref="VariantHasDestructibleArm"/> and
+    /// <see cref="RecordTypeInfo.HasRCFields"/> already trust, so it can never disagree with what
+    /// teardown/copy consider owning.
+    /// </summary>
+    public bool IsTriviallyDestructible(TypeInfo type, HashSet<string>? visited = null)
+    {
+        // Borrow/view tier owns nothing — no teardown either way.
+        if (IsBorrowTier(type: type))
+            return true;
+
+        switch (type)
+        {
+            // Abstract types have no concrete destructor to reason about — be conservative.
+            case GenericParameterTypeInfo or ProtocolTypeInfo:
+                return false;
+            // Heap reference with identity + destructor.
+            case EntityTypeInfo:
+                return false;
+            // A tuple is trivial iff every element is (its fields are the elements).
+            case TupleTypeInfo tuple:
+                return tuple.ElementTypes.All(predicate: e => IsTriviallyDestructible(type: e, visited: visited));
+        }
+
+        // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) release a refcounted controller.
+        if (GetRcWrapperBaseName(type: type) is not null)
+            return false;
+
+        // A user-written (non-synthesized) $destroy may have observable side effects even on a
+        // pointer-free value — it must run.
+        if (GetOwnMethodsResolved(type: type).Any(predicate: m =>
+                m.Name == "destroy" && m.Parameters.Count == 0 && !m.IsSynthesized))
+            return false;
+
+        if (type is VariantTypeInfo variant)
+            return !VariantHasDestructibleArm(variant: variant);
+
+        if (type is RecordTypeInfo rec)
+        {
+            // Scalar-backed records (S64/F64/Bool/Character/CPtr/Hijacked…) have a no-op $destroy.
+            if (rec.HasDirectBackendType)
+                return true;
+            // Generic definition without concrete args — analysed via monomorphisation; be conservative.
+            if (rec is { IsGenericDefinition: true, TypeArguments: null or { Count: 0 } })
+                return false;
+            // RC-wrapper fields tear down via the dedicated HasRCFields path.
+            if (rec.HasRCFields)
+                return false;
+            if (rec.MemberVariables is null)
+                return true;
+            visited ??= new HashSet<string>(comparer: StringComparer.Ordinal);
+            if (!visited.Add(item: rec.FullName ?? rec.Name))
+                return true; // recursive-record cycle guard (value records can't truly recurse)
+            foreach (MemberVariableInfo field in rec.MemberVariables)
+                if (!IsTriviallyDestructible(type: field.Type, visited: visited))
+                    return false;
+            return true;
+        }
+
+        // Unknown shape — keep the teardown call.
+        return false;
+    }
+
+    /// <summary>
     /// Gets or creates a resolved generic routine.
     /// </summary>
     /// <param name="genericDef">The generic routine definition.</param>

@@ -420,7 +420,18 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     {
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(type: type);
         destroy = lc.Destroy;
-        return !lc.IsBorrow && destroy != null;
+        if (lc.IsBorrow || destroy == null)
+            return false;
+        // Elide the teardown of a trivially-destructible value (a pure-scalar record/tuple with no
+        // user destroy): its $destroy is a transitive chain of `ret void`s that the optimizer can't
+        // strip (external linkage) and that pins the value's alloca, blocking SROA. Skipping the call
+        // lets the value scalarize — e.g. `record R { inner: S64 }` collapses to a bare `i64`.
+        if (ctx.Registry.IsTriviallyDestructible(type: type))
+        {
+            destroy = null;
+            return false;
+        }
+        return true;
     }
 
     /// <summary>
