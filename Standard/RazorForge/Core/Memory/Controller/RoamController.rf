@@ -109,7 +109,7 @@ routine RoamController[T].release()
         # first drop its roots entry so the collector never dereferences this freed controller. (Reading
         # `buffered` on the escaped path is racy in principle; safe under Stage-1 single-thread collection.)
         if me.buffered
-          rf_cc_roots_remove(ptr: me.hijack().get_address())
+          C::rf_cc_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
         me.destroy()
       else
@@ -118,7 +118,7 @@ routine RoamController[T].release()
       me.count = me.count - 1
       if me.count == 0_u64
         if me.buffered
-          rf_cc_roots_remove(ptr: me.hijack().get_address())
+          C::rf_cc_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
         me.destroy()
       else
@@ -137,9 +137,9 @@ dangerous routine RoamController[T].mark_cycle_candidate()
     return
   me.buffered = true
   me.color = RoamColor.PURPLE
-  rf_cc_add_candidate(obj: me.hijack().get_address())
+  C::rf_cc_add_candidate(obj: me.hijack().get_address())
   # Auto-collect once the candidate set crosses the threshold (guarded against re-entry).
-  if rf_cc_should_collect()
+  if C::rf_cc_should_collect()
     cc_collect()
   return
 
@@ -244,12 +244,12 @@ dangerous routine RoamController[T].promote_reachable()
   # Snapshot THIS node's child controllers before recursing — tracing fills a shared native scratch that
   # a nested promote would clobber (same discipline as the collector's `cc_children`).
   var kids = List[Address]()
-  rf_cc_scratch_reset()
-  rf_cc_trace_into_scratch(trace_hook: me.trace_hook.get_address(), controller: me.data.get_address())
-  var n = rf_cc_scratch_count()
+  C::rf_cc_scratch_reset()
+  C::rf_cc_trace_into_scratch(trace_hook: me.trace_hook.get_address(), controller: me.data.get_address())
+  var n = C::rf_cc_scratch_count()
   var i = 0_u64
   while i < n
-    kids.add_last(value: rf_cc_scratch_at(i: i))
+    kids.add_last(value: C::rf_cc_scratch_at(i: i))
     i = i + 1_u64
   var j = 0_u64
   while j < kids.count()
@@ -272,7 +272,7 @@ routine RoamController[T].is_escaped() -> Bool
 ### member routine calling itself (normal class recursion) never self-deadlocks. Keyed to the
 ### task/coroutine id, not the OS thread, so a migrated coroutine still recognizes its own hold.
 dangerous routine RoamController[T].reentrant_acquire()
-  var tid = rf_current_task_id()
+  var tid = C::rf_current_task_id()
   loop
     if me.holder_task.load() == tid and me.locked.load() == 1_u8
       me.depth = me.depth + 1
@@ -285,7 +285,7 @@ dangerous routine RoamController[T].reentrant_acquire()
     # parked on this very worker (or awaiting reschedule after migration), and a tight spin would pin
     # the worker and livelock when workers are scarce. `rf_coro_yield` re-queues this coroutine so the
     # holder can run; off a coroutine (top-level thread) it is a no-op and this stays a busy-spin.
-    rf_coro_yield()
+    C::rf_coro_yield()
   return
 
 ### Releases one level of the lock. The lock is freed only when the outermost holder releases (depth

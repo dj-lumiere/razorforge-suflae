@@ -25,7 +25,7 @@ preset U16_ONE: U16 = 1_u16
 routine U16!(from: S8) -> U16
   if from < 0_s8
     throw IntegerOverflowError()
-  return sign_extend[S8, U16](from)
+  return LLVM::sign_extend[S8, U16](from)
 
 ### Converts an `S16` to `U16`, throwing if the value is negative.
 ### :param from: The `S16` value to convert.
@@ -34,7 +34,7 @@ routine U16!(from: S8) -> U16
 routine U16!(from: S16) -> U16
   if from < 0_s16
     throw IntegerOverflowError()
-  return reinterpret_bits[S16, U16](from)
+  return LLVM::reinterpret_bits[S16, U16](from)
 
 ### Converts an `S32` to `U16`, throwing if the value is outside 0..65535.
 ### :param from: The `S32` value to convert.
@@ -43,7 +43,7 @@ routine U16!(from: S16) -> U16
 routine U16!(from: S32) -> U16
   if not (0_s32 <= from <= 65535_s32)
     throw IntegerOverflowError()
-  return int_truncate[S32, U16](from)
+  return LLVM::int_truncate[S32, U16](from)
 
 ### Converts an `S64` to `U16`, throwing if the value is outside 0..65535.
 ### :param from: The `S64` value to convert.
@@ -52,7 +52,7 @@ routine U16!(from: S32) -> U16
 routine U16!(from: S64) -> U16
   if not (0_s64 <= from <= 65535_s64)
     throw IntegerOverflowError()
-  return int_truncate[S64, U16](from)
+  return LLVM::int_truncate[S64, U16](from)
 
 ### Converts an `S128` to `U16`, throwing if the value is outside 0..65535.
 ### :param from: The `S128` value to convert.
@@ -61,7 +61,7 @@ routine U16!(from: S64) -> U16
 routine U16!(from: S128) -> U16
   if not (0_s128 <= from <= 65535_s128)
     throw IntegerOverflowError()
-  return int_truncate[S128, U16](from)
+  return LLVM::int_truncate[S128, U16](from)
 
 ### Zero-extends a `U8` to `U16`.
 ### :param from: The `U8` value to widen.
@@ -82,7 +82,7 @@ routine U16(from: U16) -> U16
 routine U16!(from: U32) -> U16
   if from > 65535_u32
     throw IntegerOverflowError()
-  return int_truncate[U32, U16](from)
+  return LLVM::int_truncate[U32, U16](from)
 
 ### Converts a `U64` to `U16`, throwing if the value exceeds 65535.
 ### :param from: The `U64` value to convert.
@@ -91,7 +91,7 @@ routine U16!(from: U32) -> U16
 routine U16!(from: U64) -> U16
   if from > 65535_u64
     throw IntegerOverflowError()
-  return int_truncate[U64, U16](from)
+  return LLVM::int_truncate[U64, U16](from)
 
 ### Converts a `U128` to `U16`, throwing if the value exceeds 65535.
 ### :param from: The `U128` value to convert.
@@ -100,7 +100,7 @@ routine U16!(from: U64) -> U16
 routine U16!(from: U128) -> U16
   if from > 65535_u128
     throw IntegerOverflowError()
-  return int_truncate[U128, U16](from)
+  return LLVM::int_truncate[U128, U16](from)
 
 ### Converts an `S256` to `U16`, throwing if the value is negative or exceeds 65535.
 ### :param from: The `S256` value to convert.
@@ -109,7 +109,7 @@ routine U16!(from: U128) -> U16
 routine U16!(from: S256) -> U16
   if not (0_s256 <= from <= 65535_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, U16](from)
+  return LLVM::int_truncate[S256, U16](from)
 
 ### Converts a `U256` to `U16`, throwing if the value exceeds 65535.
 ### :param from: The `U256` value to convert.
@@ -118,7 +118,7 @@ routine U16!(from: S256) -> U16
 routine U16!(from: U256) -> U16
   if from > 65535_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, U16](from)
+  return LLVM::int_truncate[U256, U16](from)
 
 ### Converts an `F16` to `U16` by first converting to `U32`, then truncating.
 ### :param from: The `F16` value to convert.
@@ -228,7 +228,7 @@ routine U16.mul!(you: U16) -> U16
 routine U16.floordiv!(you: U16) -> U16
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U16](a: me, b: you)
+  return LLVM::unsigned_div[U16](a: me, b: you)
 
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
@@ -236,7 +236,7 @@ routine U16.floordiv!(you: U16) -> U16
 routine U16.mod!(you: U16) -> U16
   if you == 0_u16
     throw DivisionByZeroError()
-  return unsigned_rem[U16](a: me, b: you)
+  return LLVM::unsigned_rem[U16](a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -548,8 +548,8 @@ routine U16.rotate_right(bits: U32) -> U16
 ### Returns the raw byte representation of this value in little-endian order.
 routine U16.to_bytes_le() -> Array[Byte, 2]
   var result = Array[Byte, 2]()
-  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U16, U8](me))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](me, 8_u16)))
+  result = LLVM::set_byte_at(array: result, index: 0_u64, value: int_truncate[U16, U8](me))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](me, 8_u16)))
   return result
 
 ### Returns the raw byte representation of this value in big-endian order.
@@ -558,8 +558,8 @@ routine U16.to_bytes_be() -> Array[Byte, 2]
 
 ### Builds a `U16` from its little-endian raw byte representation.
 common routine U16.from_bytes_le(bytes: Array[Byte, 2]) -> U16
-  var lo = zero_extend[U8, U16](byte_at(array: bytes, index: 0_u64))
-  var hi = shift_left[U16](zero_extend[U8, U16](byte_at(array: bytes, index: 1_u64)), 8_u16)
+  var lo = zero_extend[U8, U16](LLVM::byte_at(array: bytes, index: 0_u64))
+  var hi = shift_left[U16](zero_extend[U8, U16](LLVM::byte_at(array: bytes, index: 1_u64)), 8_u16)
   return bit_or[U16](a: lo, b: hi)
 
 ### Builds a `U16` from its big-endian raw byte representation.

@@ -22,7 +22,7 @@ routine Exclusive() -> Exclusive
 ### CALLING thread, that can never resolve, so it crashes with {ReentrantLockError} instead of
 ### hanging. Detection is best-effort (owner is read only on a failed CAS), so it never false-fires.
 routine Exclusive.acquire()
-  var tid = rf_current_thread_id()
+  var tid = C::rf_current_thread_id()
   loop
     if me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
       me.owner.store(desired: tid)
@@ -50,7 +50,7 @@ routine Exclusive.is_locked() -> Bool
 ### :returns: `true` if the lock was acquired.
 routine Exclusive.try_acquire() -> Bool
   if me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
-    me.owner.store(desired: rf_current_thread_id())
+    me.owner.store(desired: C::rf_current_thread_id())
     return true
   return false
 

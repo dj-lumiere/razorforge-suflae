@@ -214,17 +214,17 @@ common routine D128.from_int64(value: S64) -> D128
 ### the integer part overflows U128. The coefficient carries <= 34 digits, so a positive
 ### exponent past 38 always overflows and a negative exponent past -38 truncates to zero.
 routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
-  if int_eq[U128](a: coeff, b: 0)
+  if LLVM::int_eq[U128](a: coeff, b: 0)
     return 0_u128
-  if signed_ge[S64](a: exp, b: 0_s64)
-    if signed_ge[S64](a: exp, b: 39_s64)
+  if LLVM::signed_ge[S64](a: exp, b: 0_s64)
+    if LLVM::signed_ge[S64](a: exp, b: 39_s64)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
-    var prod = mul[U256](a: zero_extend[U128, U256](coeff), b: pow10_tbl(k: exp))
-    if int_ne[U256](a: shift_right_unsigned[U256](value: prod, bits: U256.to_width(s: 128_s64)), b: 0)
+    var prod = LLVM::mul[U256](a: LLVM::zero_extend[U128, U256](coeff), b: pow10_tbl(k: exp))
+    if LLVM::int_ne[U256](a: LLVM::shift_right_unsigned[U256](value: prod, bits: U256.to_width(s: 128_s64)), b: 0)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
-    return int_truncate[U256, U128](prod)
-  var d = sub[S64](a: 0_s64, b: exp)
-  if signed_ge[S64](a: d, b: 39_s64)
+    return LLVM::int_truncate[U256, U128](prod)
+  var d = LLVM::sub[S64](a: 0_s64, b: exp)
+  if LLVM::signed_ge[S64](a: d, b: 39_s64)
     return 0_u128
   return div_pow10_u128(x: coeff, k: d)
 
@@ -232,9 +232,9 @@ routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
 ### negative value, or an integer part beyond U128.
 routine U128!(from: D128) -> U128
   var p = from.decode()
-  if int_ne[U64](a: p.special, b: 0_u64)
+  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
-  if p.sign and int_ne[U128](a: p.coeff, b: 0)
+  if p.sign and LLVM::int_ne[U128](a: p.coeff, b: 0)
     throw NumericOverflowError(description: "negative decimal to unsigned integer")
   return d128_int_magnitude(coeff: p.coeff, exp: p.exp)
 
@@ -242,45 +242,45 @@ routine U128!(from: D128) -> U128
 ### integer part outside [-2^127, 2^127-1].
 routine S128!(from: D128) -> S128
   var p = from.decode()
-  if int_ne[U64](a: p.special, b: 0_u64)
+  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   var mag = d128_int_magnitude(coeff: p.coeff, exp: p.exp)
-  var lim = shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))
+  var lim = LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))
   if p.sign
-    if unsigned_gt[U128](a: mag, b: lim)
+    if LLVM::unsigned_gt[U128](a: mag, b: lim)
       throw NumericOverflowError(description: "decimal out of range for target integer")
-    if int_eq[U128](a: mag, b: lim)
-      return reinterpret_bits[U128, S128](lim)
-    return sub[S128](a: 0_s128, b: reinterpret_bits[U128, S128](mag))
-  if unsigned_ge[U128](a: mag, b: lim)
+    if LLVM::int_eq[U128](a: mag, b: lim)
+      return LLVM::reinterpret_bits[U128, S128](lim)
+    return LLVM::sub[S128](a: 0_s128, b: LLVM::reinterpret_bits[U128, S128](mag))
+  if LLVM::unsigned_ge[U128](a: mag, b: lim)
     throw NumericOverflowError(description: "decimal out of range for target integer")
-  return reinterpret_bits[U128, S128](mag)
+  return LLVM::reinterpret_bits[U128, S128](mag)
 
 ### Truncating integer magnitude (toward zero) of a finite decimal as a U256. Throws when
 ### the integer part overflows U256. Coefficient carries <= 34 digits so exp >= 78 always
 ### overflows; negative exp past -38 truncates to zero (no 34-digit value survives /10^39).
 routine d128_int_magnitude_u256!(coeff: U128, exp: S64) -> U256
-  if int_eq[U128](a: coeff, b: 0)
+  if LLVM::int_eq[U128](a: coeff, b: 0)
     return 0_u256
-  if signed_ge[S64](a: exp, b: 0_s64)
-    if signed_ge[S64](a: exp, b: 78_s64)
+  if LLVM::signed_ge[S64](a: exp, b: 0_s64)
+    if LLVM::signed_ge[S64](a: exp, b: 78_s64)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
-    var prod = mul[U512](a: zero_extend[U128, U512](coeff), b: zero_extend[U256, U512](pow10_tbl(k: exp)))
-    if int_ne[U512](a: shift_right_unsigned[U512](value: prod, bits: U512.to_width(s: 256_s64)), b: 0)
+    var prod = LLVM::mul[U512](a: LLVM::zero_extend[U128, U512](coeff), b: LLVM::zero_extend[U256, U512](pow10_tbl(k: exp)))
+    if LLVM::int_ne[U512](a: LLVM::shift_right_unsigned[U512](value: prod, bits: U512.to_width(s: 256_s64)), b: 0)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
-    return int_truncate[U512, U256](prod)
-  var d = sub[S64](a: 0_s64, b: exp)
-  if signed_ge[S64](a: d, b: 39_s64)
+    return LLVM::int_truncate[U512, U256](prod)
+  var d = LLVM::sub[S64](a: 0_s64, b: exp)
+  if LLVM::signed_ge[S64](a: d, b: 39_s64)
     return 0_u256
-  return zero_extend[U128, U256](div_pow10_u128(x: coeff, k: d))
+  return LLVM::zero_extend[U128, U256](div_pow10_u128(x: coeff, k: d))
 
 ### Truncates toward zero to an unsigned 256-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U256.
 routine U256!(from: D128) -> U256
   var p = from.decode()
-  if int_ne[U64](a: p.special, b: 0_u64)
+  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
-  if p.sign and int_ne[U128](a: p.coeff, b: 0)
+  if p.sign and LLVM::int_ne[U128](a: p.coeff, b: 0)
     throw NumericOverflowError(description: "negative decimal to unsigned integer")
   return d128_int_magnitude_u256(coeff: p.coeff, exp: p.exp)
 
@@ -288,19 +288,19 @@ routine U256!(from: D128) -> U256
 ### integer part outside [-2^255, 2^255-1].
 routine S256!(from: D128) -> S256
   var p = from.decode()
-  if int_ne[U64](a: p.special, b: 0_u64)
+  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   var mag = d128_int_magnitude_u256(coeff: p.coeff, exp: p.exp)
-  var lim = shift_left[U256](value: 1, bits: U256.to_width(s: 255_s64))
+  var lim = LLVM::shift_left[U256](value: 1, bits: U256.to_width(s: 255_s64))
   if p.sign
-    if unsigned_gt[U256](a: mag, b: lim)
+    if LLVM::unsigned_gt[U256](a: mag, b: lim)
       throw NumericOverflowError(description: "decimal out of range for target integer")
-    if int_eq[U256](a: mag, b: lim)
-      return reinterpret_bits[U256, S256](lim)
-    return sub[S256](a: 0_s256, b: reinterpret_bits[U256, S256](mag))
-  if unsigned_ge[U256](a: mag, b: lim)
+    if LLVM::int_eq[U256](a: mag, b: lim)
+      return LLVM::reinterpret_bits[U256, S256](lim)
+    return LLVM::sub[S256](a: 0_s256, b: LLVM::reinterpret_bits[U256, S256](mag))
+  if LLVM::unsigned_ge[U256](a: mag, b: lim)
     throw NumericOverflowError(description: "decimal out of range for target integer")
-  return reinterpret_bits[U256, S256](mag)
+  return LLVM::reinterpret_bits[U256, S256](mag)
 
 # ============================================================================
 # Arithmetic core (formerly DecMathB) — U256 working width, clz digit count,
@@ -1155,9 +1155,9 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
   while i < len
     var ch = from_text[i]
     if ch.is_numeric()
-      coeff = add[U128](a: mul[U128](a: coeff, b: 10_u128), b: zero_extend[U32, U128](reinterpret_bits[S32, U32](ch.digit_value())))
+      coeff = LLVM::add[U128](a: LLVM::mul[U128](a: coeff, b: 10_u128), b: LLVM::zero_extend[U32, U128](LLVM::reinterpret_bits[S32, U32](ch.digit_value())))
       if seen_dot
-        exp10 = sub[S64](a: exp10, b: 1_s64)
+        exp10 = LLVM::sub[S64](a: exp10, b: 1_s64)
       has_digit = true
     elseif ch == Character(0x002Eu32)
       if seen_dot
@@ -1177,12 +1177,12 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
         var ec = from_text[i]
         if not ec.is_numeric()
           throw InvalidValueError(input: from_text, target: "decimal number")
-        eval = add[S64](a: mul[S64](a: eval, b: 10_s64), b: S64(ec.digit_value()))
+        eval = LLVM::add[S64](a: LLVM::mul[S64](a: eval, b: 10_s64), b: S64(ec.digit_value()))
         has_edigit = true
         i = i + 1u64
       if not has_edigit
         throw InvalidValueError(input: from_text, target: "decimal number")
-      exp10 = add[S64](a: exp10, b: if esign then sub[S64](a: 0_s64, b: eval) else eval)
+      exp10 = LLVM::add[S64](a: exp10, b: if esign then LLVM::sub[S64](a: 0_s64, b: eval) else eval)
       break
     else
       throw InvalidValueError(input: from_text, target: "decimal number")
@@ -1195,9 +1195,9 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
 ### :throws: {InvalidValueError} on malformed input.
 routine parse_decimal_d128!(from_text: Text) -> D128
   var p = scan_decimal_parts(from_text: from_text)
-  if int_eq[U64](a: p.special, b: 1_u64)
+  if LLVM::int_eq[U64](a: p.special, b: 1_u64)
     return D128.infinity(sign: p.sign)
-  if unsigned_ge[U64](a: p.special, b: 2_u64)
+  if LLVM::unsigned_ge[U64](a: p.special, b: 2_u64)
     return D128.quiet_nan()
   return D128.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
 
@@ -1225,7 +1225,7 @@ routine D128.to_bytes_le() -> Array[Byte, 16]
   var i = 0_u64
   while unsigned_lt[U64](a: i, b: 16_u64)
     var b = int_truncate[U128, U8](shift_right_unsigned[U128](raw, zero_extend[U64, U128](mul[U64](a: i, b: 8_u64))))
-    result = set_byte_at(array: result, index: i, value: b)
+    result = LLVM::set_byte_at(array: result, index: i, value: b)
     i = add[U64](a: i, b: 1_u64)
   return result
 
@@ -1236,6 +1236,6 @@ routine D128.to_bytes_be() -> Array[Byte, 16]
   var i = 0_u64
   while unsigned_lt[U64](a: i, b: 16_u64)
     var b = int_truncate[U128, U8](shift_right_unsigned[U128](raw, zero_extend[U64, U128](mul[U64](a: sub[U64](a: 15_u64, b: i), b: 8_u64))))
-    result = set_byte_at(array: result, index: i, value: b)
+    result = LLVM::set_byte_at(array: result, index: i, value: b)
     i = add[U64](a: i, b: 1_u64)
   return result

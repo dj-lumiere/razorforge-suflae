@@ -28,7 +28,7 @@ preset U128_ONE: U128 = 1_u128
 routine U128!(from: S8) -> U128
   if from < 0_s8
     throw IntegerOverflowError()
-  return sign_extend[S8, U128](from)
+  return LLVM::sign_extend[S8, U128](from)
 
 ### Converts an `S16` to `U128`, throwing if the value is negative.
 ### :param from: The `S16` value to convert.
@@ -37,7 +37,7 @@ routine U128!(from: S8) -> U128
 routine U128!(from: S16) -> U128
   if from < 0_s16
     throw IntegerOverflowError()
-  return sign_extend[S16, U128](from)
+  return LLVM::sign_extend[S16, U128](from)
 
 ### Converts an `S32` to `U128`, throwing if the value is negative.
 ### :param from: The `S32` value to convert.
@@ -46,7 +46,7 @@ routine U128!(from: S16) -> U128
 routine U128!(from: S32) -> U128
   if from < 0_s32
     throw IntegerOverflowError()
-  return sign_extend[S32, U128](from)
+  return LLVM::sign_extend[S32, U128](from)
 
 ### Converts an `S64` to `U128`, throwing if the value is negative.
 ### :param from: The `S64` value to convert.
@@ -55,7 +55,7 @@ routine U128!(from: S32) -> U128
 routine U128!(from: S64) -> U128
   if from < 0_s64
     throw IntegerOverflowError()
-  return sign_extend[S64, U128](from)
+  return LLVM::sign_extend[S64, U128](from)
 
 ### Converts an `S128` to `U128`, throwing if the value is negative.
 ### :param from: The `S128` value to convert.
@@ -64,7 +64,7 @@ routine U128!(from: S64) -> U128
 routine U128!(from: S128) -> U128
   if from < 0_s128
     throw IntegerOverflowError()
-  return reinterpret_bits[S128, U128](from)
+  return LLVM::reinterpret_bits[S128, U128](from)
 
 ### Zero-extends a `U8` to `U128`.
 ### :param from: The `U8` value to widen.
@@ -103,7 +103,7 @@ routine U128(from: U128) -> U128
 routine U128!(from: S256) -> U128
   if not (0_s256 <= from <= 340282366920938463463374607431768211455_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, U128](from)
+  return LLVM::int_truncate[S256, U128](from)
 
 ### Converts a `U256` to `U128`, throwing if the value exceeds U128_MAX.
 ### :param from: The `U256` value to convert.
@@ -112,7 +112,7 @@ routine U128!(from: S256) -> U128
 routine U128!(from: U256) -> U128
   if from > 340282366920938463463374607431768211455_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, U128](from)
+  return LLVM::int_truncate[U256, U128](from)
 
 ### Converts an `F16` to `U128`, truncating toward zero.
 ### :param from: The `F16` value to convert.
@@ -128,7 +128,7 @@ routine U128!(from: F16) -> U128
 routine U128!(from: F32) -> U128
   if not from.is_finite() or from < 0.0_f32
     throw IntegerOverflowError()
-  return float_to_unsigned[F32, U128](from)
+  return LLVM::float_to_unsigned[F32, U128](from)
 
 ### Converts an `F64` to `U128`, truncating toward zero.
 ### :param from: The `F64` value to convert.
@@ -137,7 +137,7 @@ routine U128!(from: F32) -> U128
 routine U128!(from: F64) -> U128
   if from.is_nan() or from < 0.0_f64 or from >= 340282366920938463463374607431768211456.0_f64
     throw IntegerOverflowError()
-  return float_to_unsigned[F64, U128](from)
+  return LLVM::float_to_unsigned[F64, U128](from)
 
 ### Converts an `F128` to `U128`, truncating toward zero.
 ### :param from: The `F128` value to convert.
@@ -145,24 +145,24 @@ routine U128!(from: F64) -> U128
 ### :throws: {NumericOverflowError} if negative or >= 2^128; {NumericDomainError} if NaN.
 routine U128!(from: F128) -> U128
   var bits = from.to_bits()
-  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
-  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
-  var frac = bit_and[U128](a: bits, b: f128_mant_mask())
+  var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned[U128](bits, 127_u128))
+  var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var frac = LLVM::bit_and[U128](a: bits, b: f128_mant_mask())
   if biased == 0x7FFF_u64
-    if int_eq[U128](a: frac, b: 0_u128)
+    if LLVM::int_eq[U128](a: frac, b: 0_u128)
       throw NumericOverflowError(description: "cannot convert infinite F128 to U128")
     throw NumericDomainError(description: "cannot convert NaN F128 to U128")
-  if sign == 1_u64 and (int_ne[U64](a: biased, b: 0_u64) or int_ne[U128](a: frac, b: 0_u128))
+  if sign == 1_u64 and (LLVM::int_ne[U64](a: biased, b: 0_u64) or LLVM::int_ne[U128](a: frac, b: 0_u128))
     throw NumericOverflowError(description: "cannot convert negative F128 to U128")
   if biased < 16383_u64
     return 0_u128
-  var actual_exp = sub[U64](a: biased, b: 16383_u64)
+  var actual_exp = LLVM::sub[U64](a: biased, b: 16383_u64)
   if actual_exp >= 128_u64
     throw NumericOverflowError(description: "F128 value out of range for U128")
-  var sig = bit_or[U128](a: f128_implicit(), b: frac)
+  var sig = LLVM::bit_or[U128](a: f128_implicit(), b: frac)
   if actual_exp <= 112_u64
-    return shift_right_unsigned[U128](sig, zero_extend[U64, U128](sub[U64](a: 112_u64, b: actual_exp)))
-  return shift_left[U128](sig, zero_extend[U64, U128](sub[U64](a: actual_exp, b: 112_u64)))
+    return LLVM::shift_right_unsigned[U128](sig, LLVM::zero_extend[U64, U128](LLVM::sub[U64](a: 112_u64, b: actual_exp)))
+  return LLVM::shift_left[U128](sig, LLVM::zero_extend[U64, U128](LLVM::sub[U64](a: actual_exp, b: 112_u64)))
 
 ### Converts a `D32` to `U128`, truncating toward zero.
 ### :param from: The `D32` value to convert.
@@ -606,7 +606,7 @@ routine U128.to_bytes_le() -> Array[Byte, 16]
   var i = 0_u64
   while i < 16_u64
     var b = int_truncate[U128, U8](shift_right_unsigned[U128](me, U128(i * 8_u64)))
-    result = set_byte_at(array: result, index: i, value: b)
+    result = LLVM::set_byte_at(array: result, index: i, value: b)
     i = i + 1_u64
   return result
 
@@ -619,7 +619,7 @@ common routine U128.from_bytes_le(bytes: Array[Byte, 16]) -> U128
   var result = 0_u128
   var i = 0_u64
   while i < 16_u64
-    var part = shift_left[U128](zero_extend[U8, U128](byte_at(array: bytes, index: i)), U128(i * 8_u64))
+    var part = shift_left[U128](zero_extend[U8, U128](LLVM::byte_at(array: bytes, index: i)), U128(i * 8_u64))
     result = bit_or[U128](a: result, b: part)
     i = i + 1_u64
   return result

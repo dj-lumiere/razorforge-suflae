@@ -137,7 +137,7 @@ dangerous routine Hijacked[T].poke_at_offset(at: ByteSize, value: T)
 
 ### Deallocates the memory at this pointer's address.
 dangerous routine Hijacked[T].invalidate()
-  rf_invalidate(me.address())
+  C::rf_invalidate(me.address())
   return
 
 ### Zeroes out the pointed-to memory without deallocating it.

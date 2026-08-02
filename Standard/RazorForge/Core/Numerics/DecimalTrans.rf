@@ -116,25 +116,25 @@ routine f512_to_decimala!(x: F512) -> Decimal
   if x.is_infinite()
     throw NumericOverflowError(description: "overflow: out of range")
   if x.is_zero()
-    return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
+    return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U256](0_u64)))
   var sign = x.is_negative()
   var e_bin = x.to_uf().ilogb()
   # decexp ~ floor(e_bin * log10(2)); log10(2) ~ 315653 / 2^20. +-1 error is absorbed
   # by decfinA (it recounts digits and rounds to 70 either way).
-  var decexp = signed_div[S64](a: mul[S64](a: e_bin, b: 315653_s64), b: 1048576_s64)
-  var q = sub[S64](a: 76_s64, b: decexp)
+  var decexp = LLVM::signed_div[S64](a: LLVM::mul[S64](a: e_bin, b: 315653_s64), b: 1048576_s64)
+  var q = LLVM::sub[S64](a: 76_s64, b: decexp)
   var scaled = x.abs() * f512_pow10(e: q)
   var coeff = uf512_to_u512_round(u: scaled.to_uf())
   # decfinA may itself clamp an out-of-range magnitude to inf; decimalfixed_check! turns
   # that into NumericOverflowError (and is a no-op for an in-range finite result).
-  var __dchk0 = decimalfixed_of_parts(p: decfinA(sign: sign, coeff: coeff, exp: sub[S64](a: 0_s64, b: q), pref: sub[S64](a: 0_s64, b: q)))
+  var __dchk0 = decimalfixed_of_parts(p: decfinA(sign: sign, coeff: coeff, exp: LLVM::sub[S64](a: 0_s64, b: q), pref: LLVM::sub[S64](a: 0_s64, b: q)))
   var __dp0 = __dchk0.decode()
-  if int_eq[U64](a: __dp0.special, b: 1_u64)
+  if LLVM::int_eq[U64](a: __dp0.special, b: 1_u64)
     throw NumericOverflowError(description: "overflow: out of range")
-  if unsigned_ge[U64](a: __dp0.special, b: 2_u64)
+  if LLVM::unsigned_ge[U64](a: __dp0.special, b: 2_u64)
     throw NumericDomainError(description: "domain error: no real result")
-  if int_eq[U256](a: __dp0.coeff, b: 0)
-    return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp0.exp, coeff: zero_extend[U64, U256](0_u64)))
+  if LLVM::int_eq[U256](a: __dp0.coeff, b: 0)
+    return decimalfixed_of_parts(p: DecimalParts(sign: false, special: 0_u64, exp: __dp0.exp, coeff: LLVM::zero_extend[U64, U256](0_u64)))
   return __dchk0
 
 # ============================================================================
@@ -689,13 +689,13 @@ routine Decimal.fdim(you: Decimal) -> Decimal
 ### :throws: {NumericOverflowError} when the scaled magnitude exceeds the `Decimal` range.
 routine Decimal.scaleb!(n: S64) -> Decimal
   var p = me.decode()
-  if int_ne[U64](a: p.special, b: 0_u64) or int_eq[U256](a: p.coeff, b: 0)
+  if LLVM::int_ne[U64](a: p.special, b: 0_u64) or LLVM::int_eq[U256](a: p.coeff, b: 0)
     return me
-  var ne = add[S64](a: p.exp, b: n)
-  if signed_lt[S64](a: ne, b: -1572932_s64)
-    return decimalfixed_of_parts(p: DecimalParts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: zero_extend[U64, U256](0_u64)))
-  var scaled = decimalfixed_of_parts(p: decfinA(sign: p.sign, coeff: zero_extend[U256, U512](p.coeff), exp: ne, pref: ne))
-  if int_eq[U64](a: scaled.decode().special, b: 1_u64)
+  var ne = LLVM::add[S64](a: p.exp, b: n)
+  if LLVM::signed_lt[S64](a: ne, b: -1572932_s64)
+    return decimalfixed_of_parts(p: DecimalParts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U256](0_u64)))
+  var scaled = decimalfixed_of_parts(p: decfinA(sign: p.sign, coeff: LLVM::zero_extend[U256, U512](p.coeff), exp: ne, pref: ne))
+  if LLVM::int_eq[U64](a: scaled.decode().special, b: 1_u64)
     throw NumericOverflowError(description: "overflow: out of range")
   return scaled
 
@@ -829,9 +829,9 @@ routine Decimal.total_order_mag(you: Decimal) -> Bool
 ### :throws: {NumericDomainError} when `me` is zero (no finite exponent).
 routine Decimal.logb!() -> Decimal
   var p = me.decode()
-  if int_eq[U256](a: p.coeff, b: 0)
+  if LLVM::int_eq[U256](a: p.coeff, b: 0)
     throw NumericDomainError(description: "domain error: no real result")
-  return Decimal(from: add[S64](a: p.exp, b: sub[S64](a: digits10a(c: zero_extend[U256, U512](p.coeff)), b: 1_s64)))
+  return Decimal(from: LLVM::add[S64](a: p.exp, b: LLVM::sub[S64](a: digits10a(c: LLVM::zero_extend[U256, U512](p.coeff)), b: 1_s64)))
 
 ### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
@@ -907,27 +907,27 @@ routine Decimal.same_quantum(other: Decimal) -> Bool
 routine Decimal.quantize!(other: Decimal) -> Decimal
   var pa = me.decode()
   var target = other.decode().exp
-  if int_eq[S64](a: pa.exp, b: target)
+  if LLVM::int_eq[S64](a: pa.exp, b: target)
     return me
-  if signed_gt[S64](a: pa.exp, b: target)
+  if LLVM::signed_gt[S64](a: pa.exp, b: target)
     # Scale the coefficient UP by 10^(pa.exp - target); exact, but throws if it needs > 70 digits.
-    var shift = sub[S64](a: pa.exp, b: target)
-    if int_ne[U256](a: pa.coeff, b: 0) and signed_gt[S64](a: add[S64](a: digits10a(c: zero_extend[U256, U512](pa.coeff)), b: shift), b: 70_s64)
+    var shift = LLVM::sub[S64](a: pa.exp, b: target)
+    if LLVM::int_ne[U256](a: pa.coeff, b: 0) and LLVM::signed_gt[S64](a: LLVM::add[S64](a: digits10a(c: LLVM::zero_extend[U256, U512](pa.coeff)), b: shift), b: 70_s64)
       throw NumericOverflowError(description: "overflow: out of range")
-    var scaled = mul[U256](a: pa.coeff, b: pow10b(k: shift))
+    var scaled = LLVM::mul[U256](a: pa.coeff, b: pow10b(k: shift))
     return decimalfixed_of_parts(p: DecimalParts(sign: pa.sign, special: 0_u64, exp: target, coeff: scaled))
   # pa.exp < target: drop (target - pa.exp) digits with half-even rounding.
-  var drop = sub[S64](a: target, b: pa.exp)
-  if signed_gt[S64](a: drop, b: 70_s64)
-    return decimalfixed_of_parts(p: DecimalParts(sign: pa.sign, special: 0_u64, exp: target, coeff: zero_extend[U64, U256](0_u64)))
+  var drop = LLVM::sub[S64](a: target, b: pa.exp)
+  if LLVM::signed_gt[S64](a: drop, b: 70_s64)
+    return decimalfixed_of_parts(p: DecimalParts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::zero_extend[U64, U256](0_u64)))
   var divp = pow10b(k: drop)
   var q = div_pow10b(x: pa.coeff, k: drop)
-  var r = sub[U256](a: pa.coeff, b: mul[U256](a: q, b: divp))
-  var twice = mul[U256](a: r, b: zero_extend[U64, U256](2_u64))
-  if unsigned_gt[U256](a: twice, b: divp)
-    q = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
-  elseif int_eq[U256](a: twice, b: divp) and int_ne[U256](a: bit_and[U256](a: q, b: zero_extend[U64, U256](1_u64)), b: zero_extend[U64, U256](0_u64))
-    q = add[U256](a: q, b: zero_extend[U64, U256](1_u64))
+  var r = LLVM::sub[U256](a: pa.coeff, b: LLVM::mul[U256](a: q, b: divp))
+  var twice = LLVM::mul[U256](a: r, b: LLVM::zero_extend[U64, U256](2_u64))
+  if LLVM::unsigned_gt[U256](a: twice, b: divp)
+    q = LLVM::add[U256](a: q, b: LLVM::zero_extend[U64, U256](1_u64))
+  elseif LLVM::int_eq[U256](a: twice, b: divp) and LLVM::int_ne[U256](a: LLVM::bit_and[U256](a: q, b: LLVM::zero_extend[U64, U256](1_u64)), b: LLVM::zero_extend[U64, U256](0_u64))
+    q = LLVM::add[U256](a: q, b: LLVM::zero_extend[U64, U256](1_u64))
   return decimalfixed_of_parts(p: DecimalParts(sign: pa.sign, special: 0_u64, exp: target, coeff: q))
 
 ### IEEE 754 remainder: `me - other * n`, where `n` is the integer nearest `me / other`

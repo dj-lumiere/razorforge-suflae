@@ -42,7 +42,7 @@ needs N is U64
       var r = 0_u64
       var i = sub[S64](a: nl, b: 1_s64)
       while signed_ge[S64](a: i, b: 0_s64)
-        var qi = rf_udivrem_128_64(hi: r, lo: load_element_ref[Array[U64, N], U64](a, reinterpret_bits[S64, U64](i)), d: d0, rem: rscratch.hijack())
+        var qi = C::rf_udivrem_128_64(hi: r, lo: load_element_ref[Array[U64, N], U64](a, reinterpret_bits[S64, U64](i)), d: d0, rem: rscratch.hijack())
         store_element_ref[Array[U64, N], U64](qp, reinterpret_bits[S64, U64](i), qi)
         r = rscratch
         i = sub[S64](a: i, b: 1_s64)
@@ -114,7 +114,7 @@ needs N is U64
         qhat = U64_MAX
         rhat = add[U64](a: un_jn1, b: vn1)
       else
-        qhat = rf_udivrem_128_64(hi: un_jn, lo: un_jn1, d: vn1, rem: rscratch.hijack())
+        qhat = C::rf_udivrem_128_64(hi: un_jn, lo: un_jn1, d: vn1, rem: rscratch.hijack())
         rhat = rscratch
       # correct qhat: while qhat*vn2 > (rhat:un[j+n-2]) and rhat fits 64 bits
       var un_jn2 = load_element_ref[Array[U64, N], U64](unp, reinterpret_bits[S64, U64](sub[S64](a: add[S64](a: j, b: n), b: 2_s64)))

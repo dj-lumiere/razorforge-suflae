@@ -99,7 +99,7 @@ routine Bytes(ptr: Hijacked[Byte]) -> Bytes
 ### :param ptr: The source C string.
 ### :returns: The resulting `Bytes` value.
 routine Bytes(ptr: CStr) -> Bytes
-  var len = rf_cstr_count(ptr)
+  var len = C::rf_cstr_count(ptr)
   if len == 0u64
     return Bytes()
   danger

@@ -64,7 +64,7 @@ routine BitList(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var word_size = (capacity +% 63u64) >> 6u32
   danger
-    var data_ptr = Hijacked[U64](rf_allocate_dynamic_uninit(word_size *% 8u64))
+    var data_ptr = Hijacked[U64](C::rf_allocate_dynamic_uninit(word_size *% 8u64))
     # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
     # and mid-word appends only read bits we've already written ourselves.
     return BitList(
@@ -198,13 +198,13 @@ routine BitList.reserve(new_capacity: U64)
   if new_capacity > me.capacity
     var new_word_size = (new_capacity +% 63u64) >> 6u32
     danger
-      var new_data = Hijacked[U64](rf_allocate_dynamic_uninit(new_word_size *% 8u64))
+      var new_data = Hijacked[U64](C::rf_allocate_dynamic_uninit(new_word_size *% 8u64))
 
       # Copy existing words; remainder stays uninitialized — add_last overwrites
       # whole words at word boundaries, so the untouched tail is never read.
       if me.count > 0u64
         var copy_words = (me.count +% 63u64) >> 6u32
-        rf_copy_bytes_at(dest: new_data.get_address(), src: me.data.get_address(), size: copy_words *% 8u64)
+        C::rf_copy_bytes_at(dest: new_data.get_address(), src: me.data.get_address(), size: copy_words *% 8u64)
 
       me.data = new_data
     me.capacity = new_capacity
@@ -253,7 +253,7 @@ routine BitList.set_all(value: Bool)
   var byte_count = (me.count +% 7u64) >> 3u32
   var fill_byte = if value then 0xFFu8 else 0x00u8
   danger
-    rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
+    C::rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
   return
 
 ### Toggles the bit at `index`.

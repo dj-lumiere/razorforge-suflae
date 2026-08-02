@@ -25,7 +25,7 @@ preset U8_ONE: U8 = 1_u8
 routine U8!(from: S8) -> U8
   if from < 0_s8
     throw IntegerOverflowError()
-  return reinterpret_bits[S8, U8](from)
+  return LLVM::reinterpret_bits[S8, U8](from)
 
 ### Converts an `S16` to `U8`, throwing if the value is outside 0..255.
 ### :param from: The `S16` value to convert.
@@ -34,7 +34,7 @@ routine U8!(from: S8) -> U8
 routine U8!(from: S16) -> U8
   if not (0_s16 <= from <= 255_s16)
     throw IntegerOverflowError()
-  return int_truncate[S16, U8](from)
+  return LLVM::int_truncate[S16, U8](from)
 
 ### Converts an `S32` to `U8`, throwing if the value is outside 0..255.
 ### :param from: The `S32` value to convert.
@@ -43,7 +43,7 @@ routine U8!(from: S16) -> U8
 routine U8!(from: S32) -> U8
   if not (0_s32 <= from <= 255_s32)
     throw IntegerOverflowError()
-  return int_truncate[S32, U8](from)
+  return LLVM::int_truncate[S32, U8](from)
 
 ### Converts an `S64` to `U8`, throwing if the value is outside 0..255.
 ### :param from: The `S64` value to convert.
@@ -52,7 +52,7 @@ routine U8!(from: S32) -> U8
 routine U8!(from: S64) -> U8
   if not (0_s64 <= from <= 255_s64)
     throw IntegerOverflowError()
-  return int_truncate[S64, U8](from)
+  return LLVM::int_truncate[S64, U8](from)
 
 ### Converts an `S128` to `U8`, throwing if the value is outside 0..255.
 ### :param from: The `S128` value to convert.
@@ -61,7 +61,7 @@ routine U8!(from: S64) -> U8
 routine U8!(from: S128) -> U8
   if not (0_s128 <= from <= 255_s128)
     throw IntegerOverflowError()
-  return int_truncate[S128, U8](from)
+  return LLVM::int_truncate[S128, U8](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `U8` value to return.
@@ -76,7 +76,7 @@ routine U8(from: U8) -> U8
 routine U8!(from: U16) -> U8
   if from > 255_u16
     throw IntegerOverflowError()
-  return int_truncate[U16, U8](from)
+  return LLVM::int_truncate[U16, U8](from)
 
 ### Converts a `U32` to `U8`, throwing if the value exceeds 255.
 ### :param from: The `U32` value to convert.
@@ -85,7 +85,7 @@ routine U8!(from: U16) -> U8
 routine U8!(from: U32) -> U8
   if from > 255_u32
     throw IntegerOverflowError()
-  return int_truncate[U32, U8](from)
+  return LLVM::int_truncate[U32, U8](from)
 
 ### Converts a `U64` to `U8`, throwing if the value exceeds 255.
 ### :param from: The `U64` value to convert.
@@ -94,7 +94,7 @@ routine U8!(from: U32) -> U8
 routine U8!(from: U64) -> U8
   if from > 255_u64
     throw IntegerOverflowError()
-  return int_truncate[U64, U8](from)
+  return LLVM::int_truncate[U64, U8](from)
 
 ### Converts a `U128` to `U8`, throwing if the value exceeds 255.
 ### :param from: The `U128` value to convert.
@@ -103,7 +103,7 @@ routine U8!(from: U64) -> U8
 routine U8!(from: U128) -> U8
   if from > 255_u128
     throw IntegerOverflowError()
-  return int_truncate[U128, U8](from)
+  return LLVM::int_truncate[U128, U8](from)
 
 ### Converts an `S256` to `U8`, throwing if the value is negative or exceeds 255.
 ### :param from: The `S256` value to convert.
@@ -112,7 +112,7 @@ routine U8!(from: U128) -> U8
 routine U8!(from: S256) -> U8
   if not (0_s256 <= from <= 255_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, U8](from)
+  return LLVM::int_truncate[S256, U8](from)
 
 ### Converts a `U256` to `U8`, throwing if the value exceeds 255.
 ### :param from: The `U256` value to convert.
@@ -121,7 +121,7 @@ routine U8!(from: S256) -> U8
 routine U8!(from: U256) -> U8
   if from > 255_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, U8](from)
+  return LLVM::int_truncate[U256, U8](from)
 
 ### Converts an `F16` to `U8` by first converting to `U32`, then truncating.
 ### :param from: The `F16` value to convert.
@@ -231,7 +231,7 @@ routine U8.mul!(you: U8) -> U8
 routine U8.floordiv!(you: U8) -> U8
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U8](a: me, b: you)
+  return LLVM::unsigned_div[U8](a: me, b: you)
 
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
@@ -239,7 +239,7 @@ routine U8.floordiv!(you: U8) -> U8
 routine U8.mod!(you: U8) -> U8
   if you == 0_u8
     throw DivisionByZeroError()
-  return unsigned_rem[U8](a: me, b: you)
+  return LLVM::unsigned_rem[U8](a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -552,7 +552,7 @@ routine U8.rotate_right(bits: U32) -> U8
 ### Returns the raw byte representation of this value in little-endian order.
 routine U8.to_bytes_le() -> Array[Byte, 1]
   var result = Array[Byte, 1]()
-  result = set_byte_at(array: result, index: 0_u64, value: me)
+  result = LLVM::set_byte_at(array: result, index: 0_u64, value: me)
   return result
 
 ### Returns the raw byte representation of this value in big-endian order.
@@ -561,7 +561,7 @@ routine U8.to_bytes_be() -> Array[Byte, 1]
 
 ### Builds a `U8` from its little-endian raw byte representation.
 common routine U8.from_bytes_le(bytes: Array[Byte, 1]) -> U8
-  return byte_at(array: bytes, index: 0_u64)
+  return LLVM::byte_at(array: bytes, index: 0_u64)
 
 ### Builds a `U8` from its big-endian raw byte representation.
 common routine U8.from_bytes_be(bytes: Array[Byte, 1]) -> U8

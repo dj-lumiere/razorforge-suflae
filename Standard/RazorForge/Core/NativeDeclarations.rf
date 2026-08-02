@@ -26,7 +26,7 @@ dangerous routine C::rf_allocate_dynamic(size: U64) -> Address
 ### :param size: The number of bytes to allocate.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_allocate_dynamic(size: ByteSize) -> Address
-  return rf_allocate_dynamic(size: size.byte_size())
+  return C::rf_allocate_dynamic(size: size.byte_size())
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
 ### :returns: The resulting `Address` value.
@@ -35,7 +35,7 @@ dangerous routine C::rf_allocate_dynamic_uninit(size: U64) -> Address
 ### :param size: The byte count to allocate.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_allocate_dynamic_uninit(size: ByteSize) -> Address
-  return rf_allocate_dynamic_uninit(size: size.byte_size())
+  return C::rf_allocate_dynamic_uninit(size: size.byte_size())
 ### Reallocates a dynamic memory block to a new size.
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size in bytes.
@@ -46,7 +46,7 @@ dangerous routine C::rf_reallocate_dynamic(ptr: Address, size: U64) -> Address
 ### :param size: The new allocation size.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_reallocate_dynamic(ptr: Address, size: ByteSize) -> Address
-  return rf_reallocate_dynamic(ptr: ptr, size: size.byte_size())
+  return C::rf_reallocate_dynamic(ptr: ptr, size: size.byte_size())
 ### Frees a dynamic memory block previously returned by the runtime allocator.
 ### :param ptr: The allocation to release.
 dangerous routine C::rf_invalidate(ptr: Address)
@@ -313,7 +313,7 @@ dangerous routine C::rf_copy_bytes_at(dest: Address, src: Address, size: U64)
 ### :param src: The source location.
 ### :param size: The number of bytes to copy.
 dangerous routine rf_copy_bytes_at(dest: Address, src: Address, size: ByteSize)
-  rf_copy_bytes_at(dest: dest, src: src, size: size.byte_size())
+  C::rf_copy_bytes_at(dest: dest, src: src, size: size.byte_size())
   return
 ### Fills `size` bytes at `dest` with `value`.
 ### :param dest: The destination location.
@@ -325,7 +325,7 @@ dangerous routine C::rf_set_bytes_at(dest: Address, value: U8, size: U64)
 ### :param value: The byte value to write.
 ### :param size: The number of bytes to set.
 dangerous routine rf_set_bytes_at(dest: Address, value: U8, size: ByteSize)
-  rf_set_bytes_at(dest: dest, value: value, size: size.byte_size())
+  C::rf_set_bytes_at(dest: dest, value: value, size: size.byte_size())
   return
 
 

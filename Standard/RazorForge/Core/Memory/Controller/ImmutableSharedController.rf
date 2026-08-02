@@ -32,7 +32,7 @@ dangerous routine ImmutableSharedController() -> ImmutableSharedController
 
 ### Atomically increments the strong reference count when a handle is cloned.
 dangerous routine ImmutableSharedController.increase_strong_count()
-  discard atomic_add(ptr: me.strong_count.hijack(), value: 1_u64)
+  discard LLVM::atomic_add(ptr: me.strong_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the strong reference count when a handle is dropped.

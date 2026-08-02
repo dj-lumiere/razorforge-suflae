@@ -38,7 +38,7 @@ routine S16(from: S16) -> S16
 routine S16!(from: S32) -> S16
   if not (-32768s32 <= from <= 32767s32)
     throw IntegerOverflowError()
-  return int_truncate[S32, S16](from)
+  return LLVM::int_truncate[S32, S16](from)
 
 ### Converts an `S64` to `S16`, throwing if the value is outside −32768..32767.
 ### :param from: The `S64` value to convert.
@@ -47,7 +47,7 @@ routine S16!(from: S32) -> S16
 routine S16!(from: S64) -> S16
   if not (-32768s64 <= from <= 32767s64)
     throw IntegerOverflowError()
-  return int_truncate[S64, S16](from)
+  return LLVM::int_truncate[S64, S16](from)
 
 ### Converts an `S128` to `S16`, throwing if the value is outside −32768..32767.
 ### :param from: The `S128` value to convert.
@@ -56,7 +56,7 @@ routine S16!(from: S64) -> S16
 routine S16!(from: S128) -> S16
   if not (-32768s128 <= from <= 32767s128)
     throw IntegerOverflowError()
-  return int_truncate[S128, S16](from)
+  return LLVM::int_truncate[S128, S16](from)
 
 ### Zero-extends a `U8` to `S16` (always succeeds — `U8` max 255 fits in S16).
 ### :param from: The `U8` value to widen.
@@ -71,7 +71,7 @@ routine S16(from: U8) -> S16
 routine S16!(from: U16) -> S16
   if from > 32767_u16
     throw IntegerOverflowError()
-  return reinterpret_bits[U16, S16](from)
+  return LLVM::reinterpret_bits[U16, S16](from)
 
 ### Converts a `U32` to `S16`, throwing if the value exceeds 32767.
 ### :param from: The `U32` value to convert.
@@ -80,7 +80,7 @@ routine S16!(from: U16) -> S16
 routine S16!(from: U32) -> S16
   if from > 32767_u32
     throw IntegerOverflowError()
-  return int_truncate[U32, S16](from)
+  return LLVM::int_truncate[U32, S16](from)
 
 ### Converts a `U64` to `S16`, throwing if the value exceeds 32767.
 ### :param from: The `U64` value to convert.
@@ -89,7 +89,7 @@ routine S16!(from: U32) -> S16
 routine S16!(from: U64) -> S16
   if from > 32767_u64
     throw IntegerOverflowError()
-  return int_truncate[U64, S16](from)
+  return LLVM::int_truncate[U64, S16](from)
 
 ### Converts a `U128` to `S16`, throwing if the value exceeds 32767.
 ### :param from: The `U128` value to convert.
@@ -98,7 +98,7 @@ routine S16!(from: U64) -> S16
 routine S16!(from: U128) -> S16
   if from > 32767_u128
     throw IntegerOverflowError()
-  return int_truncate[U128, S16](from)
+  return LLVM::int_truncate[U128, S16](from)
 
 ### Converts an `S256` to `S16`, throwing if outside −32768..32767.
 ### :param from: The `S256` value to convert.
@@ -107,7 +107,7 @@ routine S16!(from: U128) -> S16
 routine S16!(from: S256) -> S16
   if not (-32768_s256 <= from <= 32767_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, S16](from)
+  return LLVM::int_truncate[S256, S16](from)
 
 ### Converts a `U256` to `S16`, throwing if the value exceeds 32767.
 ### :param from: The `U256` value to convert.
@@ -116,7 +116,7 @@ routine S16!(from: S256) -> S16
 routine S16!(from: U256) -> S16
   if from > 32767_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, S16](from)
+  return LLVM::int_truncate[U256, S16](from)
 
 ### Converts an `F16` to `S16` by first converting to `S32`, then truncating.
 ### :param from: The `F16` value to convert.
@@ -231,8 +231,8 @@ routine S16.floordiv!(you: S16) -> S16
     throw DivisionByZeroError()
   if me == S16_MIN and you == -1_s16
     throw IntegerOverflowError()
-  var quotient = signed_div[S16](a: me, b: you)
-  var remainder = signed_rem[S16](a: me, b: you)
+  var quotient = LLVM::signed_div[S16](a: me, b: you)
+  var remainder = LLVM::signed_rem[S16](a: me, b: you)
   if remainder < 0_s16
     if you > 0_s16
       return quotient - 1_s16
@@ -246,7 +246,7 @@ routine S16.floordiv!(you: S16) -> S16
 routine S16.mod!(you: S16) -> S16
   if you == 0
     throw DivisionByZeroError()
-  var remainder = signed_rem[S16](a: me, b: you)
+  var remainder = LLVM::signed_rem[S16](a: me, b: you)
   if remainder < 0_s16
     if you > 0_s16
       return remainder + you
@@ -259,7 +259,7 @@ routine S16.mod!(you: S16) -> S16
 routine S16.neg!() -> S16
   if me == -32768_s16
     throw IntegerOverflowError()
-  return sub[S16](a: 0_s16, b: me)
+  return LLVM::sub[S16](a: 0_s16, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -514,7 +514,7 @@ routine S16.cmp(you: S16) -> ComparisonSign
 routine S16.abs!() -> S16
   if me == -32768_s16
     throw IntegerOverflowError()
-  return int_abs[S16](me)
+  return LLVM::int_abs[S16](me)
 
 ### Returns the smaller of this value and `you`.
 ### :param you: The value to compare against.
@@ -698,7 +698,7 @@ routine S16!(from_text: Text) -> S16
   if negative
     if result > 32768u32
       throw IntegerOverflowError()
-    return reinterpret_bits[U16, S16](int_truncate[U32, U16](0u32 -% result))
+    return LLVM::reinterpret_bits[U16, S16](LLVM::int_truncate[U32, U16](0u32 -% result))
   return S16(result)
 
 # ============================================================================

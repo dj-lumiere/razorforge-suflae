@@ -54,7 +54,7 @@ routine CStr(from_ptr: Address) -> CStr
 routine CStr(from: Bytes) -> CStr
   var len = from.count()
   danger
-    var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
+    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
 
     var i: U64 = 0u64
     loop
@@ -73,12 +73,12 @@ routine CStr(from: Text) -> CStr
   var len = from.count()
   danger
     if len == 0u64
-      var empty_buffer = Hijacked[Byte](rf_allocate_dynamic(1u64))
+      var empty_buffer = Hijacked[Byte](C::rf_allocate_dynamic(1u64))
       empty_buffer.poke(BYTE_NULL)
       return reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
 
     var max_bytes = len * 4u64 + 1u64
-    var buffer = Hijacked[Byte](rf_allocate_dynamic(max_bytes))
+    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(max_bytes))
     var write_pos: U64 = 0u64
     var i: U64 = 0u64
 
@@ -112,7 +112,7 @@ routine CStr(from: Text) -> CStr
 ### Returns the length of this C string in bytes, excluding the trailing null.
 ### :returns: The byte count, not including the null terminator.
 routine CStr.count() -> U64
-  return rf_cstr_count(me)
+  return C::rf_cstr_count(me)
 
 ### Returns `true` when this wrapper does not reference any C string.
 ### :returns: The resulting `Bool` value.
@@ -136,13 +136,13 @@ dangerous routine CStr.getitem(index: U64) -> Byte
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine CStr.eq(you: CStr) -> Bool
-  return rf_cstr_compare(a: me, b: you) == 0s32
+  return C::rf_cstr_compare(a: me, b: you) == 0s32
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine CStr.cmp(you: CStr) -> ComparisonSign
-  var cmp = rf_cstr_compare(a: me, b: you)
+  var cmp = C::rf_cstr_compare(a: me, b: you)
   if cmp < 0s32
     return ME_SMALL
   if cmp > 0s32
@@ -155,8 +155,8 @@ routine CStr.cmp(you: CStr) -> ComparisonSign
 routine CStr.copy() -> CStr
   var len = me.count()
   danger
-    var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
-    rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
+    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
+    C::rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
     return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Returns a new `CStr` view offset by `n` bytes into the same underlying

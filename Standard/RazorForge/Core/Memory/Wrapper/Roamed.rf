@@ -133,7 +133,7 @@ routine Roamed[T].strong_count() -> U64
 ### synthesized trace, so no `danger` here.
 dangerous routine Roamed[T].cc_visit_self()
   if me.controller_address() != 0_addr
-    rf_cc_visit_child(child_ctrl: me.controller_address())
+    C::rf_cc_visit_child(child_ctrl: me.controller_address())
   return
 
 ### The address of the underlying {RoamController[T]} — the collector's currency and a Stage-1 test

@@ -17,8 +17,8 @@ public enum RoutineKind
     /// <summary>Creator ($create).</summary>
     Creator,
 
-    /// <summary>External FFI function.</summary>
-    External,
+    // (FFI external-ness moved to RoutineInfo.Realm / RoutineRealm — a routine's FOREIGN realm
+    //  is C/LLVM, orthogonal to its structural kind.)
 
     /// <summary>Operator overload ($add, $sub, etc.).</summary>
     Operator,

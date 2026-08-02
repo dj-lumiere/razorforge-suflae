@@ -65,11 +65,11 @@ routine Agent[T].is_done() -> Bool
     if me.coro.is_none()
       return true
     danger
-      return rf_coro_status_get(coro: me.coro) == 3_u32
+      return C::rf_coro_status_get(coro: me.coro) == 3_u32
   if not me.spawned
     return false
   danger
-    return rf_task_status_get(task: me.agent) == 4_u32
+    return C::rf_task_status_get(task: me.agent) == 4_u32
 
 ### Whether the work was spawned and has not yet finished. Racy snapshot (see `is_done`).
 ### :returns: `true` if still in flight.
@@ -86,10 +86,10 @@ routine Agent[T].is_running() -> Bool
 dangerous routine Agent[T].request_cancel()
   if me.kind is AgentKind.CORO
     if not me.coro.is_none()
-      rf_coro_request_cancel(coro: me.coro)
+      C::rf_coro_request_cancel(coro: me.coro)
     return
   if me.spawned
-    rf_task_request_cancel(task: me.agent)
+    C::rf_task_request_cancel(task: me.agent)
   return
 
 ### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve()` on a
@@ -115,10 +115,10 @@ routine Agent[T].retrieve!() -> T
     if me.coro.is_none()
       throw TaskSpawnError()
     danger
-      rf_sched_run_until_default(coro: me.coro)
-      var payload = rf_task_result_payload(task: me.agent)
+      C::rf_sched_run_until_default(coro: me.coro)
+      var payload = C::rf_task_result_payload(task: me.agent)
       var value = Hijacked[T](from: payload).peek()
-      rf_invalidate(ptr: payload)
+      C::rf_invalidate(ptr: payload)
       return value
 
   if not me.spawned
@@ -126,33 +126,33 @@ routine Agent[T].retrieve!() -> T
   danger
     if me.has_deadline
       var total = me.deadline.total_nanoseconds()
-      if rf_in_coroutine() != 0_u32
+      if C::rf_in_coroutine() != 0_u32
         # Inside a scheduler-driven coroutine: race the worker against the deadline WITHOUT
         # blocking. Park on a deadline timer that is also externally wakeable; siblings run.
         # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — destroy
         # joins the still-running worker before freeing (the timeout does not stop it).
-        var outcome = rf_task_await_coro_deadline(task: me.agent, timeout_ns: U64(total))
+        var outcome = C::rf_task_await_coro_deadline(task: me.agent, timeout_ns: U64(total))
         if outcome == 0_u32
           throw TaskTimeoutError()
       else
         var secs = total // 1000000000
         var nanos = U32(total - secs * 1000000000)
-        var kind = rf_task_wait_within(task: me.agent, secs: secs, ns: nanos)
+        var kind = C::rf_task_wait_within(task: me.agent, secs: secs, ns: nanos)
         if kind != 1
           throw TaskTimeoutError()
     else
-      if rf_in_coroutine() != 0_u32
+      if C::rf_in_coroutine() != 0_u32
         # Inside a scheduler-driven coroutine: park instead of blocking. Register as the task's
         # awaiter and yield; the worker wakes us (cross-thread) on completion. The loop re-checks
         # under the lock so no wake is lost, and tolerates spurious wakes.
-        while rf_task_await_coro(task: me.agent) == 0_u32
-          rf_sched_park_external()
+        while C::rf_task_await_coro(task: me.agent) == 0_u32
+          C::rf_sched_park_external()
       else
-        discard rf_task_wait(task: me.agent)
+        discard C::rf_task_wait(task: me.agent)
 
-    var payload = rf_task_result_payload(task: me.agent)
+    var payload = C::rf_task_result_payload(task: me.agent)
     var value = Hijacked[T](from: payload).peek()
-    rf_invalidate(ptr: payload)
+    C::rf_invalidate(ptr: payload)
     return value
 
 ### Teardown. A completed Agent is freed; one still in flight is abandoned. For a coroutine: a
@@ -164,7 +164,7 @@ routine Agent[T].retrieve!() -> T
 dangerous routine Agent[T].destroy()
   if me.kind is AgentKind.CORO
     if not me.coro.is_none()
-      var status = rf_coro_status_get(coro: me.coro)
+      var status = C::rf_coro_status_get(coro: me.coro)
       # Dispose race-free against the work-stealing workers. `rf_sched_dispose_default` detaches the
       # coroutine from the pool and, under the scheduler lock, decides whether WE may free it now (returns
       # 1) or the free was DEFERRED (returns 0) because a worker still holds it (RUNNING, or mid-pop between
@@ -173,22 +173,22 @@ dangerous routine Agent[T].destroy()
       # worker free it from its completion path instead. A plain `unschedule + free` cannot see the mid-pop
       # window and races that resume.
       if status == 3_u32                # RF_CORO_COMPLETED
-        if rf_sched_dispose_default(coro: me.coro) == 1_u32
-          rf_coro_delete(coro: me.coro)
+        if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
+          C::rf_coro_delete(coro: me.coro)
       else
         # Never retrieved. If disposal succeeds now (parked / idle / removed) run its cancellation shadow
         # stack + free (abandon); if deferred (still RUNNING) the coroutine runs to completion and the
         # worker frees it — its own scope teardown replaces the abandon walk.
-        if rf_sched_dispose_default(coro: me.coro) == 1_u32
-          rf_coro_abandon(coro: me.coro)
-      rf_task_destroy(task: me.agent)
+        if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
+          C::rf_coro_abandon(coro: me.coro)
+      C::rf_task_destroy(task: me.agent)
     return
 
   if me.spawned
-    var tstatus = rf_task_status_get(task: me.agent)
+    var tstatus = C::rf_task_status_get(task: me.agent)
     if tstatus != 4_u32               # not RF_TASK_COMPLETED: worker still running
-      discard rf_task_wait(task: me.agent)
-    rf_task_destroy(task: me.agent)
+      discard C::rf_task_wait(task: me.agent)
+    C::rf_task_destroy(task: me.agent)
   return
 
 # --- Structured concurrency over a set of Agents -----------------------------------------------
@@ -213,23 +213,23 @@ routine List[Agent[V]].race!() -> V
     if n == 0_u64
       throw TaskSpawnError()
 
-    var race = rf_race_begin()
+    var race = C::rf_race_begin()
     var i = 0_u64
     while i < n
       if me[i].is_coro()
-        rf_race_add_coro(race: race, coro: me[i].coro_handle())
+        C::rf_race_add_coro(race: race, coro: me[i].coro_handle())
       else
-        rf_race_add_task(race: race, task: me[i].task_handle())
+        C::rf_race_add_task(race: race, task: me[i].task_handle())
       i = i + 1
 
     # Drive until the first competitor completes; `winner` indexes the List in add order. Both kinds
     # box their produced value into a task block referenced by `agent`, so extraction is uniform.
-    var winner = rf_race_wait(race: race)
-    rf_race_end(race: race)
+    var winner = C::rf_race_wait(race: race)
+    C::rf_race_end(race: race)
     var w = U64(winner)
-    var payload = rf_task_result_payload(task: me[w].task_handle())
+    var payload = C::rf_task_result_payload(task: me[w].task_handle())
     var value = Hijacked[V](from: payload).peek()
-    rf_invalidate(ptr: payload)
+    C::rf_invalidate(ptr: payload)
     return value
 
 ### Drives the Agents CONCURRENTLY and waits for ALL of them to finish, returning their results in
@@ -285,16 +285,16 @@ routine waitfor(duration: Duration)
   # Interruptible: once cancellation has been requested for this agent, waitfor is a no-op so a
   # cooperative loop (`while ...: waitfor(...); if cancellation_requested(): return`) exits promptly
   # instead of sleeping out the full duration.
-  if rf_cancel_requested() != 0_u32
+  if C::rf_cancel_requested() != 0_u32
     return
   danger
     var total = duration.total_nanoseconds()
-    if rf_in_coroutine() != 0_u32
-      rf_sched_park_timer(delay_ns: U64(total))
+    if C::rf_in_coroutine() != 0_u32
+      C::rf_sched_park_timer(delay_ns: U64(total))
     else
       var secs = total // 1000000000
       var nanos = U32(total - secs * 1000000000)
-      rf_waitfor_duration(secs: secs, ns: nanos)
+      C::rf_waitfor_duration(secs: secs, ns: nanos)
   return
 
 ### Cooperatively hands the current turn back to the scheduler, then immediately re-queues this
@@ -306,8 +306,8 @@ routine waitfor(duration: Duration)
 ### is a no-op.
 routine yield_now()
   danger
-    if rf_in_coroutine() != 0_u32
-      rf_coro_yield()
+    if C::rf_in_coroutine() != 0_u32
+      C::rf_coro_yield()
   return
 
 ### Whether cooperative cancellation has been requested for the currently-running agent — a
@@ -316,4 +316,4 @@ routine yield_now()
 ### A coroutine's `waitfor` also honors the request by returning early. Outside any agent it is always
 ### false. :returns: true if cancellation was requested for this agent.
 routine cancellation_requested() -> Bool
-  return rf_cancel_requested() != 0_u32
+  return C::rf_cancel_requested() != 0_u32

@@ -21,7 +21,7 @@ routine BackIndex(offset: U64) -> BackIndex
 ### :returns: The resulting `U64` value.
 @readonly
 routine BackIndex.resolve!(length: U64) -> U64
-  var raw = reinterpret_bits[BackIndex, U64](me)
+  var raw = LLVM::reinterpret_bits[BackIndex, U64](me)
   if raw > length
     throw IndexOutOfBoundsError(index: raw, count: length)
   return length -% raw

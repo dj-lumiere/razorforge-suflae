@@ -153,7 +153,7 @@ public sealed partial class SemanticVerifier
 
         var routineInfo = new RoutineInfo(name: external.Name)
         {
-            Kind = RoutineKind.External,
+            // Foreign-ness is now carried by RoutineInfo.Realm (derived from CallingConvention).
             IsFailable = external.IsFailable,
             CallingConvention = external.CallingConvention,
             IsVariadic = external.IsVariadic,

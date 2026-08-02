@@ -47,7 +47,7 @@ routine S64(from: S64) -> S64
 routine S64!(from: S128) -> S64
   if not (-9223372036854775808s128 <= from <= 9223372036854775807s128)
     throw IntegerOverflowError()
-  return int_truncate[S128, S64](from)
+  return LLVM::int_truncate[S128, S64](from)
 
 ### Zero-extends an unsigned 8-bit integer to `S64`.
 ### :param from: The source value.
@@ -74,7 +74,7 @@ routine S64(from: U32) -> S64
 routine S64!(from: U64) -> S64
   if from > 9223372036854775807_u64
     throw IntegerOverflowError()
-  return reinterpret_bits[U64, S64](from)
+  return LLVM::reinterpret_bits[U64, S64](from)
 
 ### Truncates an unsigned 128-bit integer to `S64`.
 ### :param from: The source value.
@@ -83,7 +83,7 @@ routine S64!(from: U64) -> S64
 routine S64!(from: U128) -> S64
   if from > 9223372036854775807_u128
     throw IntegerOverflowError()
-  return int_truncate[U128, S64](from)
+  return LLVM::int_truncate[U128, S64](from)
 
 ### Converts an `S256` to `S64`, throwing if outside the S64 range.
 ### :param from: The `S256` value to convert.
@@ -92,7 +92,7 @@ routine S64!(from: U128) -> S64
 routine S64!(from: S256) -> S64
   if not (-9223372036854775808_s256 <= from <= 9223372036854775807_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, S64](from)
+  return LLVM::int_truncate[S256, S64](from)
 
 ### Converts a `U256` to `S64`, throwing if the value exceeds S64_MAX.
 ### :param from: The `U256` value to convert.
@@ -101,7 +101,7 @@ routine S64!(from: S256) -> S64
 routine S64!(from: U256) -> S64
   if from > 9223372036854775807_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, S64](from)
+  return LLVM::int_truncate[U256, S64](from)
 
 ### Truncates a 16-bit float to `S64` by first widening to `F32`.
 ### :param from: The source float value.
@@ -115,7 +115,7 @@ routine S64!(from: F16) -> S64
 routine S64!(from: F32) -> S64
   if from.is_nan() or not (-9223372036854775808.0_f32 <= from <= 9223372036854775807.0_f32)
     throw IntegerOverflowError()
-  return float_to_signed[F32, S64](from)
+  return LLVM::float_to_signed[F32, S64](from)
 
 ### Truncates a 64-bit float to `S64`, rounding toward zero.
 ### :param from: The source float value.
@@ -123,7 +123,7 @@ routine S64!(from: F32) -> S64
 routine S64!(from: F64) -> S64
   if from.is_nan() or not (-9223372036854775808.0_f64 <= from <= 9223372036854775807.0_f64)
     throw IntegerOverflowError()
-  return float_to_signed[F64, S64](from)
+  return LLVM::float_to_signed[F64, S64](from)
 
 ### Truncates a 128-bit float to `S64` by narrowing to `F64` first.
 ### :param from: The source float value.
@@ -215,8 +215,8 @@ routine S64.floordiv!(you: S64) -> S64
     throw DivisionByZeroError()
   if me == S64_MIN and you == -1_s64
     throw IntegerOverflowError()
-  var quotient = signed_div[S64](a: me, b: you)
-  var remainder = signed_rem[S64](a: me, b: you)
+  var quotient = LLVM::signed_div[S64](a: me, b: you)
+  var remainder = LLVM::signed_rem[S64](a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return quotient - 1_s64
@@ -230,7 +230,7 @@ routine S64.floordiv!(you: S64) -> S64
 routine S64.mod!(you: S64) -> S64
   if you == 0
     throw DivisionByZeroError()
-  var remainder = signed_rem[S64](a: me, b: you)
+  var remainder = LLVM::signed_rem[S64](a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return remainder + you
@@ -242,7 +242,7 @@ routine S64.mod!(you: S64) -> S64
 routine S64.neg!() -> S64
   if me == -9223372036854775808_s64
     throw IntegerOverflowError()
-  return sub[S64](a: 0_s64, b: me)
+  return LLVM::sub[S64](a: 0_s64, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -495,7 +495,7 @@ routine S64.cmp(you: S64) -> ComparisonSign
 routine S64.abs!() -> S64
   if me == -9223372036854775808_s64
     throw IntegerOverflowError()
-  return int_abs[S64](me)
+  return LLVM::int_abs[S64](me)
 
 ### Returns the smaller of this value and `you`.
 ### :param you: The value to compare.
@@ -690,7 +690,7 @@ routine S64!(from_text: Text) -> S64
   if negative
     if result > 9223372036854775808_u64
       throw IntegerOverflowError()
-    return reinterpret_bits[U64, S64](0u64 -% result)
+    return LLVM::reinterpret_bits[U64, S64](0u64 -% result)
   return S64(result)
 
 # ============================================================================

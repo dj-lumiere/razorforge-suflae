@@ -43,7 +43,7 @@ routine S32(from: S32) -> S32
 routine S32!(from: S64) -> S32
   unless S64(S32_MIN) <= from <= S64(S32_MAX)
     throw IntegerOverflowError()
-  return int_truncate[S64, S32](from)
+  return LLVM::int_truncate[S64, S32](from)
 
 ### Converts an `S128` to `S32`, throwing if the value is outside the S32 range.
 ### :param from: The `S128` value to convert.
@@ -52,7 +52,7 @@ routine S32!(from: S64) -> S32
 routine S32!(from: S128) -> S32
   unless S128(S32_MIN) <= from <= S128(S32_MAX)
     throw IntegerOverflowError()
-  return int_truncate[S128, S32](from)
+  return LLVM::int_truncate[S128, S32](from)
 
 ### Zero-extends a `U8` to `S32` (always succeeds — `U8` max 255 fits in S32).
 ### :param from: The `U8` value to widen.
@@ -73,7 +73,7 @@ routine S32(from: U16) -> S32
 routine S32!(from: U32) -> S32
   unless from <= U32(S32_MAX)
     throw IntegerOverflowError()
-  return reinterpret_bits[U32, S32](from)
+  return LLVM::reinterpret_bits[U32, S32](from)
 
 ### Converts a `U64` to `S32`, throwing if the value exceeds S32_MAX.
 ### :param from: The `U64` value to convert.
@@ -82,7 +82,7 @@ routine S32!(from: U32) -> S32
 routine S32!(from: U64) -> S32
   unless from <= U64(S32_MAX)
     throw IntegerOverflowError()
-  return int_truncate[U64, S32](from)
+  return LLVM::int_truncate[U64, S32](from)
 
 ### Converts a `U128` to `S32`, throwing if the value exceeds S32_MAX.
 ### :param from: The `U128` value to convert.
@@ -91,7 +91,7 @@ routine S32!(from: U64) -> S32
 routine S32!(from: U128) -> S32
   unless from <= U128(S32_MAX)
     throw IntegerOverflowError()
-  return int_truncate[U128, S32](from)
+  return LLVM::int_truncate[U128, S32](from)
 
 ### Converts an `S256` to `S32`, throwing if outside −2147483648..2147483647.
 ### :param from: The `S256` value to convert.
@@ -100,7 +100,7 @@ routine S32!(from: U128) -> S32
 routine S32!(from: S256) -> S32
   if not (-2147483648_s256 <= from <= 2147483647_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, S32](from)
+  return LLVM::int_truncate[S256, S32](from)
 
 ### Converts a `U256` to `S32`, throwing if the value exceeds 2147483647.
 ### :param from: The `U256` value to convert.
@@ -109,7 +109,7 @@ routine S32!(from: S256) -> S32
 routine S32!(from: U256) -> S32
   if from > 2147483647_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, S32](from)
+  return LLVM::int_truncate[U256, S32](from)
 
 ### Converts an `F16` to `S32` by widening to `F32` first, then truncating toward zero.
 ### :param from: The `F16` value to convert.
@@ -125,7 +125,7 @@ routine S32!(from: F16) -> S32
 routine S32!(from: F32) -> S32
   if from.is_nan() or not (-2147483648.0_f32 <= from <= 2147483647.0_f32)
     throw IntegerOverflowError()
-  return float_to_signed[F32, S32](from)
+  return LLVM::float_to_signed[F32, S32](from)
 
 ### Converts an `F64` to `S32`, truncating toward zero.
 ### :param from: The `F64` value to convert.
@@ -134,7 +134,7 @@ routine S32!(from: F32) -> S32
 routine S32!(from: F64) -> S32
   if from.is_nan() or not (-2147483648.0_f64 <= from <= 2147483647.0_f64)
     throw IntegerOverflowError()
-  return float_to_signed[F64, S32](from)
+  return LLVM::float_to_signed[F64, S32](from)
 
 ### Converts an `F128` to `S32` by narrowing to `F64` first, then truncating.
 ### :param from: The `F128` value to convert.
@@ -228,8 +228,8 @@ routine S32.floordiv!(you: S32) -> S32
     throw DivisionByZeroError()
   if me == S32_MIN and you == -1_s32
     throw IntegerOverflowError()
-  var quotient = signed_div[S32](a: me, b: you)
-  var remainder = signed_rem[S32](a: me, b: you)
+  var quotient = LLVM::signed_div[S32](a: me, b: you)
+  var remainder = LLVM::signed_rem[S32](a: me, b: you)
   if remainder < 0_s32
     if you > 0_s32
       return quotient - 1_s32
@@ -243,7 +243,7 @@ routine S32.floordiv!(you: S32) -> S32
 routine S32.mod!(you: S32) -> S32
   if you == 0
     throw DivisionByZeroError()
-  var remainder = signed_rem[S32](a: me, b: you)
+  var remainder = LLVM::signed_rem[S32](a: me, b: you)
   if remainder < 0_s32
     if you > 0_s32
       return remainder + you
@@ -255,7 +255,7 @@ routine S32.mod!(you: S32) -> S32
 routine S32.neg!() -> S32
   if me == -2147483648_s32
     throw IntegerOverflowError()
-  return sub[S32](a: 0_s32, b: me)
+  return LLVM::sub[S32](a: 0_s32, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -510,7 +510,7 @@ routine S32.cmp(you: S32) -> ComparisonSign
 routine S32.abs!() -> S32
   if me == -2147483648_s32
     throw IntegerOverflowError()
-  return int_abs[S32](me)
+  return LLVM::int_abs[S32](me)
 
 ### Returns the smaller of this value and `you`.
 ### :param you: The value to compare against.
@@ -698,7 +698,7 @@ routine S32!(from_text: Text) -> S32
   if negative
     if result > 2147483648u32
       throw IntegerOverflowError()
-    return reinterpret_bits[U32, S32](0u32 -% result)
+    return LLVM::reinterpret_bits[U32, S32](0u32 -% result)
   return S32(result)
 
 # ============================================================================

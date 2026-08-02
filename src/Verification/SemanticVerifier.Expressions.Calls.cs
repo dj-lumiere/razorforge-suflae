@@ -19,6 +19,47 @@ public sealed partial class SemanticVerifier
     private const string ModifyMethodName = "modify";
     private const string InspectMethodName = "inspect";
 
+    /// <summary>
+    /// Enforces the realm gate at a free-routine call site: a FOREIGN routine (C extern / LLVM intrinsic)
+    /// must be called with its realm qualifier (`C::name(...)` / `LLVM::name(...)`), and a `C::`/`LLVM::`
+    /// qualifier must resolve to a routine of that realm. `RF::`/`SF::` qualifiers (native cross-realm
+    /// references) are allowed through. Returns true if the call is legal, false (after reporting) if not.
+    /// </summary>
+    private bool CheckCallRealm(IdentifierExpression callee, RoutineInfo routine, SourceLocation location)
+    {
+        string? tag = callee.Realm;
+        if (tag == null)
+        {
+            if (routine.IsForeign)
+            {
+                string realm = routine.Realm == TypeModel.Enums.RoutineRealm.C ? "C" : "LLVM";
+                ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
+                    message:
+                    $"Foreign routine '{routine.Name}' lives in the {realm} realm — call it as " +
+                    $"'{realm}::{routine.Name}(...)'.",
+                    location: location);
+                return false;
+            }
+            return true;
+        }
+
+        if (tag is "C" or "LLVM")
+        {
+            TypeModel.Enums.RoutineRealm expected = tag == "C"
+                ? TypeModel.Enums.RoutineRealm.C
+                : TypeModel.Enums.RoutineRealm.LLVM;
+            if (routine.Realm != expected)
+            {
+                ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
+                    message: $"'{tag}::{routine.Name}' does not name a {tag} routine.",
+                    location: location);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private TypeSymbol AnalyzeCallExpression(CallExpression call, TypeSymbol? expectedType = null)
     {
         switch (call.Callee)
@@ -471,6 +512,9 @@ public sealed partial class SemanticVerifier
 
                 if (routine != null)
                 {
+                    // Realm-strict gate (CheckCallRealm) is staged OFF pending generic realm-qualified call
+                    // support (`LLVM::add[U128](...)` currently loses the realm through generic resolution).
+                    // The migration to C::/LLVM:: call sites is already in place; re-enable the check then.
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 
@@ -767,6 +811,9 @@ public sealed partial class SemanticVerifier
 
                 if (routine != null)
                 {
+                    // Realm-strict gate (CheckCallRealm) is staged OFF pending generic realm-qualified call
+                    // support (`LLVM::add[U128](...)` currently loses the realm through generic resolution).
+                    // The migration to C::/LLVM:: call sites is already in place; re-enable the check then.
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 

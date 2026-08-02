@@ -145,7 +145,7 @@ common routine Moment.from_timestamp(seconds: S64) -> Moment
 ### :returns: The resulting `Moment` value.
 common routine Moment.now() -> Moment
   # Implemented by compiler intrinsic / native runtime
-  return rf_moment_now()
+  return C::rf_moment_now()
 
 # ============================================================================
 # Date accessors (derived from seconds member variable)

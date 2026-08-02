@@ -347,6 +347,28 @@ public sealed class RoutineInfo
     /// <summary>For external routines, the calling convention.</summary>
     public string? CallingConvention { get; init; }
 
+    /// <summary>
+    /// The realm this routine's implementation lives in. DERIVED from <see cref="CallingConvention"/> for
+    /// the foreign realms (so it rides along automatically wherever CallingConvention is copied —
+    /// monomorphization, reachability, etc.), falling back to the native realm otherwise. A `C::`/`LLVM::`
+    /// declaration sets CallingConvention "C"/"llvm"; a native routine leaves it null and is RF (or SF via
+    /// <see cref="NativeRealm"/>). Replaces the old <c>RoutineKind.External</c> flag.
+    /// </summary>
+    public TypeModel.Enums.RoutineRealm Realm => CallingConvention switch
+    {
+        "C" => TypeModel.Enums.RoutineRealm.C,
+        "llvm" => TypeModel.Enums.RoutineRealm.LLVM,
+        _ => NativeRealm
+    };
+
+    /// <summary>Native realm for a non-foreign routine (RF for a <c>.rf</c> body, SF for a <c>.sf</c> body).
+    /// Defaults to RF; ignored when the routine is C/LLVM foreign.</summary>
+    public TypeModel.Enums.RoutineRealm NativeRealm { get; init; } = TypeModel.Enums.RoutineRealm.RF;
+
+    /// <summary>True if this routine is a FOREIGN declaration (C extern or LLVM intrinsic) — no native
+    /// body; must be called with its realm qualifier. Supersedes <c>Kind == RoutineKind.External</c>.</summary>
+    public bool IsForeign => Realm is TypeModel.Enums.RoutineRealm.C or TypeModel.Enums.RoutineRealm.LLVM;
+
     /// <summary>For external routines, whether it's variadic.</summary>
     public bool IsVariadic { get; init; }
 

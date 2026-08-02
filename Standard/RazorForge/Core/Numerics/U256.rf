@@ -22,7 +22,7 @@ record UDR
 routine udivrem128(hi: U64, lo: U64, d: U64) -> UDR
   var scratch = 0_u64
   danger
-    var q = rf_udivrem_128_64(hi: hi, lo: lo, d: d, rem: scratch.hijack())
+    var q = C::rf_udivrem_128_64(hi: hi, lo: lo, d: d, rem: scratch.hijack())
     return UDR(q: q, r: scratch)
 
 ### One Knuth-D quotient-digit step for a 2-limb divisor: divide (ujn:ujn1:ujn2) by
@@ -239,7 +239,7 @@ routine U256.diagnose() -> Text
 routine U256!(from: S8) -> U256
   if from < 0_s8
     throw IntegerOverflowError()
-  return sign_extend[S8, U256](from)
+  return LLVM::sign_extend[S8, U256](from)
 
 ### Converts an `S16` to `U256`, throwing if the value is negative.
 ### :param from: The `S16` value to convert.
@@ -248,7 +248,7 @@ routine U256!(from: S8) -> U256
 routine U256!(from: S16) -> U256
   if from < 0_s16
     throw IntegerOverflowError()
-  return sign_extend[S16, U256](from)
+  return LLVM::sign_extend[S16, U256](from)
 
 ### Converts an `S32` to `U256`, throwing if the value is negative.
 ### :param from: The `S32` value to convert.
@@ -257,7 +257,7 @@ routine U256!(from: S16) -> U256
 routine U256!(from: S32) -> U256
   if from < 0_s32
     throw IntegerOverflowError()
-  return sign_extend[S32, U256](from)
+  return LLVM::sign_extend[S32, U256](from)
 
 ### Converts an `S64` to `U256`, throwing if the value is negative.
 ### :param from: The `S64` value to convert.
@@ -266,7 +266,7 @@ routine U256!(from: S32) -> U256
 routine U256!(from: S64) -> U256
   if from < 0_s64
     throw IntegerOverflowError()
-  return sign_extend[S64, U256](from)
+  return LLVM::sign_extend[S64, U256](from)
 
 ### Converts an `S128` to `U256`, throwing if the value is negative.
 ### A non-negative `S128` sign-extends to the same magnitude in 256 bits.
@@ -276,7 +276,7 @@ routine U256!(from: S64) -> U256
 routine U256!(from: S128) -> U256
   if from < 0_s128
     throw IntegerOverflowError()
-  return sign_extend[S128, U256](from)
+  return LLVM::sign_extend[S128, U256](from)
 
 ### Converts an `S256` to `U256`, throwing if the value is negative.
 ### :param from: The `S256` value to convert.
@@ -285,7 +285,7 @@ routine U256!(from: S128) -> U256
 routine U256!(from: S256) -> U256
   if from < 0_s256
     throw IntegerOverflowError()
-  return reinterpret_bits[S256, U256](from)
+  return LLVM::reinterpret_bits[S256, U256](from)
 
 ### Zero-extends a `U8` to `U256`.
 ### :param from: The `U8` value to widen.
@@ -337,7 +337,7 @@ routine U256!(from: F16) -> U256
 routine U256!(from: F32) -> U256
   if not from.is_finite() or from < 0.0_f32
     throw IntegerOverflowError()
-  return float_to_unsigned[F32, U256](from)
+  return LLVM::float_to_unsigned[F32, U256](from)
 
 ### Converts an `F64` to `U256`, truncating toward zero.
 ### :param from: The `F64` value to convert.
@@ -346,7 +346,7 @@ routine U256!(from: F32) -> U256
 routine U256!(from: F64) -> U256
   if from.is_nan() or from < 0.0_f64 or from >= 115792089237316195423570985008687907853269984665640564039457584007913129639936.0_f64
     throw IntegerOverflowError()
-  return float_to_unsigned[F64, U256](from)
+  return LLVM::float_to_unsigned[F64, U256](from)
 
 ### Converts an `F128` to `U256`, truncating toward zero.
 ### :param from: The `F128` value to convert.
@@ -354,24 +354,24 @@ routine U256!(from: F64) -> U256
 ### :throws: {NumericOverflowError} if negative or >= 2^256; {NumericDomainError} if NaN.
 routine U256!(from: F128) -> U256
   var bits = from.to_bits()
-  var sign = int_truncate[U128, U64](shift_right_unsigned[U128](bits, 127_u128))
-  var biased = int_truncate[U128, U64](bit_and[U128](a: shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
-  var frac = bit_and[U128](a: bits, b: f128_mant_mask())
+  var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned[U128](bits, 127_u128))
+  var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
+  var frac = LLVM::bit_and[U128](a: bits, b: f128_mant_mask())
   if biased == 0x7FFF_u64
-    if int_eq[U128](a: frac, b: 0_u128)
+    if LLVM::int_eq[U128](a: frac, b: 0_u128)
       throw NumericOverflowError(description: "cannot convert infinite F128 to U256")
     throw NumericDomainError(description: "cannot convert NaN F128 to U256")
-  if sign == 1_u64 and (int_ne[U64](a: biased, b: 0_u64) or int_ne[U128](a: frac, b: 0_u128))
+  if sign == 1_u64 and (LLVM::int_ne[U64](a: biased, b: 0_u64) or LLVM::int_ne[U128](a: frac, b: 0_u128))
     throw NumericOverflowError(description: "cannot convert negative F128 to U256")
   if biased < 16383_u64
     return 0_u256
-  var actual_exp = sub[U64](a: biased, b: 16383_u64)
+  var actual_exp = LLVM::sub[U64](a: biased, b: 16383_u64)
   if actual_exp >= 256_u64
     throw NumericOverflowError(description: "F128 value out of range for U256")
-  var sig = zero_extend[U128, U256](bit_or[U128](a: f128_implicit(), b: frac))
+  var sig = LLVM::zero_extend[U128, U256](LLVM::bit_or[U128](a: f128_implicit(), b: frac))
   if actual_exp <= 112_u64
-    return shift_right_unsigned[U256](sig, zero_extend[U64, U256](sub[U64](a: 112_u64, b: actual_exp)))
-  return shift_left[U256](sig, zero_extend[U64, U256](sub[U64](a: actual_exp, b: 112_u64)))
+    return LLVM::shift_right_unsigned[U256](sig, LLVM::zero_extend[U64, U256](LLVM::sub[U64](a: 112_u64, b: actual_exp)))
+  return LLVM::shift_left[U256](sig, LLVM::zero_extend[U64, U256](LLVM::sub[U64](a: actual_exp, b: 112_u64)))
 
 ### Converts a `D32` to `U256`, truncating toward zero.
 ### :param from: The `D32` value to convert.
@@ -773,7 +773,7 @@ routine U256.to_bytes_le() -> Array[Byte, 32]
   var i = 0_u64
   while i < 32_u64
     var b = int_truncate[U256, U8](shift_right_unsigned[U256](me, U256(i * 8_u64)))
-    result = set_byte_at(array: result, index: i, value: b)
+    result = LLVM::set_byte_at(array: result, index: i, value: b)
     i = i + 1_u64
   return result
 
@@ -786,7 +786,7 @@ common routine U256.from_bytes_le(bytes: Array[Byte, 32]) -> U256
   var result = 0_u256
   var i = 0_u64
   while i < 32_u64
-    var part = shift_left[U256](zero_extend[U8, U256](byte_at(array: bytes, index: i)), U256(i * 8_u64))
+    var part = shift_left[U256](zero_extend[U8, U256](LLVM::byte_at(array: bytes, index: i)), U256(i * 8_u64))
     result = bit_or[U256](a: result, b: part)
     i = i + 1_u64
   return result

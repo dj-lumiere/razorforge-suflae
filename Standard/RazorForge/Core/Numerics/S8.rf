@@ -32,7 +32,7 @@ routine S8(from: S8) -> S8
 routine S8!(from: S16) -> S8
   if not (-128s16 <= from <= 127s16)
     throw IntegerOverflowError()
-  return int_truncate[S16, S8](from)
+  return LLVM::int_truncate[S16, S8](from)
 
 ### Converts an `S32` to `S8`, throwing if the value is outside −128..127.
 ### :param from: The `S32` value to convert.
@@ -41,7 +41,7 @@ routine S8!(from: S16) -> S8
 routine S8!(from: S32) -> S8
   if not (-128s32 <= from <= 127s32)
     throw IntegerOverflowError()
-  return int_truncate[S32, S8](from)
+  return LLVM::int_truncate[S32, S8](from)
 
 ### Converts an `S64` to `S8`, throwing if the value is outside −128..127.
 ### :param from: The `S64` value to convert.
@@ -50,7 +50,7 @@ routine S8!(from: S32) -> S8
 routine S8!(from: S64) -> S8
   if not (-128s64 <= from <= 127s64)
     throw IntegerOverflowError()
-  return int_truncate[S64, S8](from)
+  return LLVM::int_truncate[S64, S8](from)
 
 ### Converts an `S128` to `S8`, throwing if the value is outside −128..127.
 ### :param from: The `S128` value to convert.
@@ -59,7 +59,7 @@ routine S8!(from: S64) -> S8
 routine S8!(from: S128) -> S8
   if not (-128s128 <= from <= 127s128)
     throw IntegerOverflowError()
-  return int_truncate[S128, S8](from)
+  return LLVM::int_truncate[S128, S8](from)
 
 ### Reinterprets a `U8` as `S8` using two's complement, throwing if the value exceeds 127.
 ### :param from: The `U8` value to convert.
@@ -77,7 +77,7 @@ routine S8!(from: U8) -> S8
 routine S8!(from: U16) -> S8
   if from > 127_u16
     throw IntegerOverflowError()
-  return int_truncate[U16, S8](from)
+  return LLVM::int_truncate[U16, S8](from)
 
 ### Converts a `U32` to `S8`, throwing if the value exceeds 127.
 ### :param from: The `U32` value to convert.
@@ -86,7 +86,7 @@ routine S8!(from: U16) -> S8
 routine S8!(from: U32) -> S8
   if from > 127_u32
     throw IntegerOverflowError()
-  return int_truncate[U32, S8](from)
+  return LLVM::int_truncate[U32, S8](from)
 
 ### Converts a `U64` to `S8`, throwing if the value exceeds 127.
 ### :param from: The `U64` value to convert.
@@ -95,7 +95,7 @@ routine S8!(from: U32) -> S8
 routine S8!(from: U64) -> S8
   if from > 127_u64
     throw IntegerOverflowError()
-  return int_truncate[U64, S8](from)
+  return LLVM::int_truncate[U64, S8](from)
 
 ### Converts a `U128` to `S8`, throwing if the value exceeds 127.
 ### :param from: The `U128` value to convert.
@@ -104,7 +104,7 @@ routine S8!(from: U64) -> S8
 routine S8!(from: U128) -> S8
   if from > 127_u128
     throw IntegerOverflowError()
-  return int_truncate[U128, S8](from)
+  return LLVM::int_truncate[U128, S8](from)
 
 ### Converts an `S256` to `S8`, throwing if outside −128..127.
 ### :param from: The `S256` value to convert.
@@ -113,7 +113,7 @@ routine S8!(from: U128) -> S8
 routine S8!(from: S256) -> S8
   if not (-128_s256 <= from <= 127_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, S8](from)
+  return LLVM::int_truncate[S256, S8](from)
 
 ### Converts a `U256` to `S8`, throwing if the value exceeds 127.
 ### :param from: The `U256` value to convert.
@@ -122,7 +122,7 @@ routine S8!(from: S256) -> S8
 routine S8!(from: U256) -> S8
   if from > 127_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, S8](from)
+  return LLVM::int_truncate[U256, S8](from)
 
 ### Converts an `F16` to `S8` by first converting to `S32`, then truncating.
 ### :param from: The `F16` value to convert.
@@ -237,8 +237,8 @@ routine S8.floordiv!(you: S8) -> S8
     throw DivisionByZeroError()
   if me == S8_MIN and you == -1_s8
     throw IntegerOverflowError()
-  var quotient = signed_div[S8](a: me, b: you)
-  var remainder = signed_rem[S8](a: me, b: you)
+  var quotient = LLVM::signed_div[S8](a: me, b: you)
+  var remainder = LLVM::signed_rem[S8](a: me, b: you)
   if remainder < 0_s8
     if you > 0_s8
       return quotient - 1_s8
@@ -252,7 +252,7 @@ routine S8.floordiv!(you: S8) -> S8
 routine S8.mod!(you: S8) -> S8
   if you == 0
     throw DivisionByZeroError()
-  var remainder = signed_rem[S8](a: me, b: you)
+  var remainder = LLVM::signed_rem[S8](a: me, b: you)
   if remainder < 0_s8
     if you > 0_s8
       return remainder + you
@@ -264,7 +264,7 @@ routine S8.mod!(you: S8) -> S8
 routine S8.neg!() -> S8
   if me == -128_s8
     throw IntegerOverflowError()
-  return sub[S8](a: 0_s8, b: me)
+  return LLVM::sub[S8](a: 0_s8, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -519,7 +519,7 @@ routine S8.cmp(you: S8) -> ComparisonSign
 routine S8.abs!() -> S8
   if me == -128_s8
     throw IntegerOverflowError()
-  return int_abs[S8](me)
+  return LLVM::int_abs[S8](me)
 
 ### Returns the smaller of this value and `you`.
 ### :param you: The value to compare against.
@@ -704,7 +704,7 @@ routine S8!(from_text: Text) -> S8
   if negative
     if result > 128u32
       throw IntegerOverflowError()
-    return reinterpret_bits[U8, S8](int_truncate[U32, U8](0u32 -% result))
+    return LLVM::reinterpret_bits[U8, S8](LLVM::int_truncate[U32, U8](0u32 -% result))
   return S8(result)
 
 # ============================================================================

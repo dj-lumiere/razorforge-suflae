@@ -688,7 +688,7 @@ routine D32.to_bytes_le() -> Array[Byte, 4]
   var i = 0_u64
   while unsigned_lt[U64](a: i, b: 4_u64)
     var b = int_truncate[U32, U8](shift_right_unsigned[U32](raw, int_truncate[U64, U32](mul[U64](a: i, b: 8_u64))))
-    result = set_byte_at(array: result, index: i, value: b)
+    result = LLVM::set_byte_at(array: result, index: i, value: b)
     i = add[U64](a: i, b: 1_u64)
   return result
 
@@ -699,6 +699,6 @@ routine D32.to_bytes_be() -> Array[Byte, 4]
   var i = 0_u64
   while unsigned_lt[U64](a: i, b: 4_u64)
     var b = int_truncate[U32, U8](shift_right_unsigned[U32](raw, int_truncate[U64, U32](mul[U64](a: sub[U64](a: 3_u64, b: i), b: 8_u64))))
-    result = set_byte_at(array: result, index: i, value: b)
+    result = LLVM::set_byte_at(array: result, index: i, value: b)
     i = add[U64](a: i, b: 1_u64)
   return result

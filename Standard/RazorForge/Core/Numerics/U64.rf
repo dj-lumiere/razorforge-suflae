@@ -23,7 +23,7 @@ preset U64_ONE: U64 = 1_u64
 routine U64!(from: S8) -> U64
   if from < 0_s8
     throw IntegerOverflowError()
-  return sign_extend[S8, U64](from)
+  return LLVM::sign_extend[S8, U64](from)
 
 ### Converts a signed 16-bit integer to `U64`.
 ### :param from: The source value.
@@ -32,7 +32,7 @@ routine U64!(from: S8) -> U64
 routine U64!(from: S16) -> U64
   if from < 0_s16
     throw IntegerOverflowError()
-  return sign_extend[S16, U64](from)
+  return LLVM::sign_extend[S16, U64](from)
 
 ### Converts a signed 32-bit integer to `U64`.
 ### :param from: The source value.
@@ -41,7 +41,7 @@ routine U64!(from: S16) -> U64
 routine U64!(from: S32) -> U64
   if from < 0_s32
     throw IntegerOverflowError()
-  return sign_extend[S32, U64](from)
+  return LLVM::sign_extend[S32, U64](from)
 
 ### Converts a signed 64-bit integer to `U64`.
 ### :param from: The source value.
@@ -50,7 +50,7 @@ routine U64!(from: S32) -> U64
 routine U64!(from: S64) -> U64
   if from < 0_s64
     throw IntegerOverflowError()
-  return reinterpret_bits[S64, U64](from)
+  return LLVM::reinterpret_bits[S64, U64](from)
 
 ### Converts a signed 128-bit integer to `U64`.
 ### :param from: The source value.
@@ -59,7 +59,7 @@ routine U64!(from: S64) -> U64
 routine U64!(from: S128) -> U64
   if not (0_s128 <= from <= 18446744073709551615_s128)
     throw IntegerOverflowError()
-  return int_truncate[S128, U64](from)
+  return LLVM::int_truncate[S128, U64](from)
 
 ### Zero-extends an unsigned 8-bit integer to `U64`.
 ### :param from: The source value.
@@ -92,7 +92,7 @@ routine U64(from: U64) -> U64
 routine U64!(from: U128) -> U64
   if from > 18446744073709551615_u128
     throw IntegerOverflowError()
-  return int_truncate[U128, U64](from)
+  return LLVM::int_truncate[U128, U64](from)
 
 ### Converts an `S256` to `U64`, throwing if the value is negative or exceeds U64_MAX.
 ### :param from: The `S256` value to convert.
@@ -101,7 +101,7 @@ routine U64!(from: U128) -> U64
 routine U64!(from: S256) -> U64
   if not (0_s256 <= from <= 18446744073709551615_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, U64](from)
+  return LLVM::int_truncate[S256, U64](from)
 
 ### Converts a `U256` to `U64`, throwing if the value exceeds U64_MAX.
 ### :param from: The `U256` value to convert.
@@ -110,7 +110,7 @@ routine U64!(from: S256) -> U64
 routine U64!(from: U256) -> U64
   if from > 18446744073709551615_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, U64](from)
+  return LLVM::int_truncate[U256, U64](from)
 
 ### Truncates a 16-bit float to `U64` by first widening to `F32`.
 ### :param from: The source float value.
@@ -124,7 +124,7 @@ routine U64!(from: F16) -> U64
 routine U64!(from: F32) -> U64
   if from.is_nan() or not (0.0_f32 <= from <= 18446744073709551615.0_f32)
     throw IntegerOverflowError()
-  return float_to_unsigned[F32, U64](from)
+  return LLVM::float_to_unsigned[F32, U64](from)
 
 ### Truncates a 64-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
@@ -132,7 +132,7 @@ routine U64!(from: F32) -> U64
 routine U64!(from: F64) -> U64
   if from.is_nan() or not (0.0_f64 <= from <= 18446744073709551615.0_f64)
     throw IntegerOverflowError()
-  return float_to_unsigned[F64, U64](from)
+  return LLVM::float_to_unsigned[F64, U64](from)
 
 ### Truncates a 128-bit float to `U64` by narrowing to `F64` first.
 ### :param from: The source float value.
@@ -217,7 +217,7 @@ routine U64.mul!(you: U64) -> U64
 routine U64.floordiv!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U64](a: me, b: you)
+  return LLVM::unsigned_div[U64](a: me, b: you)
 
 ### Returns `me % you`, throwing if `you` is zero.
 ### :param you: The divisor.
@@ -226,7 +226,7 @@ routine U64.floordiv!(you: U64) -> U64
 routine U64.mod!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_rem[U64](a: me, b: you)
+  return LLVM::unsigned_rem[U64](a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -550,7 +550,7 @@ routine U64.to_bytes_le() -> Array[Byte, 8]
   var i = 0_u64
   while i < 8_u64
     var b = int_truncate[U64, U8](shift_right_unsigned[U64](me, i * 8_u64))
-    result = set_byte_at(array: result, index: i, value: b)
+    result = LLVM::set_byte_at(array: result, index: i, value: b)
     i = i + 1_u64
   return result
 
@@ -563,7 +563,7 @@ common routine U64.from_bytes_le(bytes: Array[Byte, 8]) -> U64
   var result = 0_u64
   var i = 0_u64
   while i < 8_u64
-    var part = shift_left[U64](zero_extend[U8, U64](byte_at(array: bytes, index: i)), i * 8_u64)
+    var part = shift_left[U64](zero_extend[U8, U64](LLVM::byte_at(array: bytes, index: i)), i * 8_u64)
     result = bit_or[U64](a: result, b: part)
     i = i + 1_u64
   return result

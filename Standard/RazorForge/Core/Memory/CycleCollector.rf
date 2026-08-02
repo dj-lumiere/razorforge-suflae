@@ -33,12 +33,12 @@ routine cc_children(addr: Address) -> List[Address]
     var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
     var hook = c.cc_trace_hook()
     var target = c.cc_data_addr()
-    rf_cc_scratch_reset()
-    rf_cc_trace_into_scratch(trace_hook: hook.get_address(), controller: target)
-    var n = rf_cc_scratch_count()
+    C::rf_cc_scratch_reset()
+    C::rf_cc_trace_into_scratch(trace_hook: hook.get_address(), controller: target)
+    var n = C::rf_cc_scratch_count()
     var i = 0_u64
     while i < n
-      kids.add_last(value: rf_cc_scratch_at(i: i))
+      kids.add_last(value: C::rf_cc_scratch_at(i: i))
       i = i + 1_u64
   return kids
 
@@ -132,7 +132,7 @@ routine cc_collect_white(addr: Address)
       cc_collect_white(addr: kids.get_raw(index: i))
       i = i + 1_u64
     danger
-      rf_cc_reap_push(ctrl: addr)
+      C::rf_cc_reap_push(ctrl: addr)
   return
 
 ### Reaps a controller: runs the entity-based free hook (`roam_free_impl`: tears down the entity's
@@ -144,7 +144,7 @@ routine cc_free(addr: Address)
     var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
     var hook = c.cc_free_hook()
     var target = c.cc_data_addr()
-    rf_cc_invoke_free(free_hook: hook.get_address(), controller: target)
+    C::rf_cc_invoke_free(free_hook: hook.get_address(), controller: target)
     Hijacked[RoamController[RoamErased]](addr).as_entity().destroy()
   return
 
@@ -156,18 +156,18 @@ routine cc_free(addr: Address)
 routine cc_collect() -> U64
   # Mark a pass in progress so a candidate reported mid-collection cannot auto-trigger a nested pass.
   danger
-    rf_cc_enter_collect()
+    C::rf_cc_enter_collect()
   # MarkRoots: purple roots seed the trace (MarkGray); anything else is stale and simply un-buffered.
   var gray_roots = List[Address]()
   var n = 0_u64
   danger
-    n = rf_cc_roots_count()
+    n = C::rf_cc_roots_count()
   var i = 0_u64
   while i < n
     var addr = 0_addr
     var purple = false
     danger
-      addr = rf_cc_roots_at(i: i)
+      addr = C::rf_cc_roots_at(i: i)
       var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
       if c.cc_color() is PURPLE
         purple = true
@@ -182,7 +182,7 @@ routine cc_collect() -> U64
   # survive to a later pass; a clear-all would strip them while leaving `buffered=true` → a permanent
   # leak (they'd never be re-buffered). Also robust if a future change makes MarkRoots add candidates.
   danger
-    rf_cc_roots_remove_front(n: n)
+    C::rf_cc_roots_remove_front(n: n)
 
   # ScanRoots
   i = 0_u64
@@ -192,7 +192,7 @@ routine cc_collect() -> U64
 
   # CollectRoots: un-buffer each root, gather the white subgraph onto the reap buffer, then free.
   danger
-    rf_cc_reap_clear()
+    C::rf_cc_reap_clear()
   i = 0_u64
   while i < gray_roots.count()
     var addr = gray_roots.get_raw(index: i)
@@ -204,12 +204,12 @@ routine cc_collect() -> U64
 
   var reaped = 0_u64
   danger
-    var m = rf_cc_reap_count()
+    var m = C::rf_cc_reap_count()
     reaped = m
     var j = 0_u64
     while j < m
-      cc_free(addr: rf_cc_reap_at(i: j))
+      cc_free(addr: C::rf_cc_reap_at(i: j))
       j = j + 1_u64
-    rf_cc_reap_clear()
-    rf_cc_exit_collect()
+    C::rf_cc_reap_clear()
+    C::rf_cc_exit_collect()
   return reaped
