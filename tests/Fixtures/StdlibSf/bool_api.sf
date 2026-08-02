@@ -1,0 +1,27 @@
+module Tests/StdlibSf/BoolApi
+import IO/Console
+
+routine start()
+  var t = true
+  var f = false
+
+  show(f"t: {t}")
+  show(f"f: {f}")
+  show(f"t (diagnose): {t:?}")
+  show(f"f (diagnose): {f:?}")
+
+  # Logical ops
+  show(f"t and t: {t and t}")
+  show(f"t and f: {t and f}")
+  show(f"t or f: {t or f}")
+  show(f"f or f: {f or f}")
+  show(f"not t: {not t}")
+  show(f"not f: {not f}")
+
+  # Equality
+  show(f"t == t: {t == t}")
+  show(f"t == f: {t == f}")
+  show(f"t != f: {t != f}")
+
+  show("DONE")
+  return

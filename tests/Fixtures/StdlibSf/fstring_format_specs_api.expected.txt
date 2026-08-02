@@ -1,0 +1,13 @@
+42
+S64(42)
+hello
+Text(count: 5, "hello")
+true
+Bool(true)
+Point(x: 3, y: 4)
+Tests/StdlibSf/FStringFormatSpecsApi.Point(x: 3, y: 4)
+n=42
+n=S64(42)
+p=Point(x: 3, y: 4)
+p=Tests/StdlibSf/FStringFormatSpecsApi.Point(x: 3, y: 4)
+DONE

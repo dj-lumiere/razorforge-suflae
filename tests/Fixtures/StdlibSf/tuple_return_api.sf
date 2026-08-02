@@ -1,0 +1,27 @@
+module Tests/StdlibSf/TupleReturn
+import IO/Console
+
+# Case #3 of the struct-ABI byval coverage: routines that RETURN a tuple by value.
+# Tuple is a record, so the return crosses the ABI boundary; the tiny (U32, Bool)
+# tuple is the register-coerce case (Tuple[U32,Bool] -> i64) that was previously
+# only verified via an IR probe, never run. Also covers a (S64, S64) return and
+# destructuring the result.
+
+@positional
+routine divmod_pair(a: S64, b: S64) -> (S64, S64)
+  return (a // b, a % b)
+
+@positional
+routine flag_pair(n: U32) -> (U32, Bool)
+  return (n + 1_u32, n > 0_u32)
+
+routine start()
+  var (q, r) = divmod_pair(17_s64, 5_s64)
+  show(f"divmod: {q} {r}")
+
+  var t = flag_pair(41_u32)
+  show(f"flag: {t.item0} {t.item1}")
+
+  var z = flag_pair(0_u32)
+  show(f"flag zero: {z.item0} {z.item1}")
+  return

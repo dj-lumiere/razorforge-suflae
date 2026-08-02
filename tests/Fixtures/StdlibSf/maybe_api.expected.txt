@@ -1,0 +1,8 @@
+some type: Maybe[Point]
+some present: Point(x: 3, y: 4)
+none present: none
+some diagnose: Core.Maybe[Tests/StdlibSf/MaybeApi.Point](Point(x: 3, y: 4))
+none diagnose: Core.Maybe[Tests/StdlibSf/MaybeApi.Point](none)
+  m_some => present: x=3 y=4
+  m_none => absent
+DONE

@@ -1,0 +1,8 @@
+a: int:42
+b: float:3.14
+c: text:hello
+d: none
+a represent: Number(42)
+a diagnose: Tests/StdlibSf/VariantApi.Number(type_id: 11394925126407376075, S64(42))
+d diagnose: Tests/StdlibSf/VariantApi.Number(type_id: 0, none)
+DONE
