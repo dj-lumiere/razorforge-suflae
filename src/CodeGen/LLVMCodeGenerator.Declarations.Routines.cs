@@ -578,12 +578,21 @@ public partial class LlvmCodeGenerator
         // Register implicit 'me' parameter for methods (skip for $create static factories and common routines)
         if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine) && !routine.IsCommon)
         {
+            // A Suflae entity member routine receives `me` as the `Roamed[E]` handle (SF slice 2 sets
+            // MeType), so bind the local to that handle type — otherwise `me.field` codegen sees the
+            // bare entity and reads the RC controller's refcount instead of dereferencing the handle.
+            // Gated to a Roamed MeType so the specialized-receiver MeType path (List[Agent[V]]) is
+            // untouched. The LLVM param type is a `ptr` for both, so only the tracked type changes.
+            TypeInfo meLocalType =
+                routine.MeType is RecordTypeInfo { GenericDefinition.Name: Resolution.RuntimeContract.Roamed }
+                    ? routine.MeType
+                    : routine.OwnerType;
             if (IsByRefMeReceiver(routine: routine))
             {
                 // Struct-record `me` is passed by reference: %me.addr IS the function parameter
                 // (the caller's storage pointer). No alloca/store — mutations and address-taking
                 // (hijack/get_address) reach the caller's variable directly.
-                _localVariables[key: "me"] = routine.OwnerType;
+                _localVariables[key: "me"] = meLocalType;
             }
             else
             {
@@ -595,7 +604,7 @@ public partial class LlvmCodeGenerator
                     EmitLine(sb: sb, line: $"  store {meType} %me, ptr %me.addr");
                 }
 
-                _localVariables[key: "me"] = routine.OwnerType;
+                _localVariables[key: "me"] = meLocalType;
             }
         }
         // Entity $create that references `me`: allocate the entity at routine entry, bind

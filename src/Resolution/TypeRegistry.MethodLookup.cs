@@ -1221,7 +1221,10 @@ public sealed partial class TypeRegistry
             OwnerType = resolvedOwner,
             // Carry the specialized-receiver pattern (e.g. List[Agent[V]]) unchanged: V is a method
             // generic param, not an owner param, so owner substitution leaves it intact. Receiver-
-            // based method-generic inference at the call site needs this pattern to bind V.
+            // based method-generic inference at the call site needs this pattern to bind V. (The
+            // Suflae entity `me`=Roamed[E] handle is substituted downstream in
+            // GenericMonomorphizationPass, so it does not need owner substitution here — and doing it
+            // here mistyped some stdlib Hijacked `me` receivers, tripping RF-S627.)
             MeType = method.MeType,
             Parameters = substitutedParams2,
             ReturnType = substitutedReturn2,

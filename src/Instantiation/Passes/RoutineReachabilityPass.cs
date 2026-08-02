@@ -766,6 +766,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             OwnerType = concreteOwner,
             Parameters = substParams,
             ReturnType = substReturn,
+            // Preserve the receiver-handle type (a Suflae entity's `me` is Roamed[E]); dropping it
+            // makes codegen bind `me` to the bare entity and read the RC controller instead of deref.
+            MeType = genericMethod.MeType != null
+                ? RoutineInfo.SubstituteType(type: genericMethod.MeType, substitution: subs)
+                : null,
             IsFailable = genericMethod.IsFailable,
             DeclaredMutation = genericMethod.DeclaredMutation,
             MutationCategory = genericMethod.MutationCategory,
@@ -1960,6 +1965,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             OwnerType = resolved.OwnerType,
             Parameters = resolved.Parameters,
             ReturnType = resolved.ReturnType,
+            // Preserve the receiver-handle type (Suflae entity `me` = Roamed[E]); already concrete on
+            // `resolved` (the SubstituteMethodForOwner output), so carry it through unchanged.
+            MeType = resolved.MeType,
             IsFailable = resolved.IsFailable,
             DeclaredMutation = resolved.DeclaredMutation,
             MutationCategory = resolved.MutationCategory,

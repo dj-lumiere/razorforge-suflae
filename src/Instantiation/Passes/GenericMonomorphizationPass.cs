@@ -1105,7 +1105,14 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             Storage = genMethod.Storage,
             AsyncStatus = genMethod.AsyncStatus,
             FailableVariant = genMethod.FailableVariant,
-            OriginalName = genMethod.OriginalName
+            OriginalName = genMethod.OriginalName,
+            // Carry the receiver-handle type through monomorphization: a Suflae entity's `me` is the
+            // Roamed[E] handle (MeType), and its owner param must be substituted (Roamed[Box[T]] →
+            // Roamed[Box[S64]]) so codegen binds `me` to the handle and deref's through the controller
+            // instead of reading the RC refcount off the bare entity.
+            MeType = genMethod.MeType != null
+                ? ResolveSubstitutedType(type: genMethod.MeType, subs: typeSubs)
+                : null
         };
     }
 
@@ -1259,6 +1266,13 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     private string FormatReceiverPatternAstName(TypeInfo type)
     {
         if (type is GenericParameterTypeInfo) return type.Name;
+        // A Suflae entity member routine has `MeType = Roamed[E]` (SF slice 2 in SignatureResolver),
+        // but its SOURCE receiver is the bare entity `E` — you never write `routine Roamed[Box[T]].get`.
+        // Unwrap the Roamed handle so the AST-index name matches the declaration (`Box[T].get`),
+        // otherwise the generic body is looked up under `Roamed[Box[T]].get`, never found, and codegen
+        // falls back to a naive direct field access that reads the RC controller instead of the entity.
+        if (type is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed, TypeArguments: [{ } roamedInner] })
+            return FormatReceiverPatternAstName(type: roamedInner);
         string baseName = type.Name;
         int bracket = baseName.IndexOf(value: '[');
         if (bracket >= 0) baseName = baseName[..bracket];

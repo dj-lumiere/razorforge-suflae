@@ -378,8 +378,23 @@ internal sealed class SignatureResolver
             && refreshedOwnerType is EntityTypeInfo ownerEntity
             && _sa._registry.LookupType(name: RuntimeContract.Roamed) is { } roamedOwnerDef)
         {
+            // Wrap the entity APPLIED TO ITS OWN GENERIC PARAMS (`Box[T]`), not the bare definition —
+            // otherwise `me` becomes `Roamed[Box]` with no `T` inside, and owner-monomorphization
+            // (Box[S64].get) can't substitute `T` into the handle, so codegen falls back to a bare
+            // entity access that reads the RC controller's refcount instead of the field. Mirrors the
+            // `Me` handling in TypeResolver.
+            // Wrap the entity APPLIED TO ITS OWN GENERIC PARAMS (`Box[T]`), not the bare definition,
+            // so monomorphization has a `T` inside the handle to substitute (Roamed[Box[T]] →
+            // Roamed[Box[S64]]). Mirrors the `Me` handling in TypeResolver.
+            TypeInfo entityForMe =
+                ownerEntity is { IsGenericDefinition: true, GenericParameters: { } ownerParams }
+                    ? _sa._registry.GetOrCreateResolution(genericDef: ownerEntity,
+                        typeArguments: ownerParams
+                            .Select(selector: p => (TypeInfo)new GenericParameterTypeInfo(name: p))
+                            .ToList())
+                    : ownerEntity;
             meType = _sa._registry.GetOrCreateResolution(
-                genericDef: roamedOwnerDef, typeArguments: [ownerEntity]);
+                genericDef: roamedOwnerDef, typeArguments: [entityForMe]);
         }
 
         _sa._currentRoutine = prevRoutine;

@@ -182,22 +182,19 @@ routine Hijacked[T].eq(you: Hijacked[T]) -> Bool
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine Hijacked[T].cmp(you: Hijacked[T]) -> ComparisonSign
-  danger
-    return me.address().cmp(you: you.address())
+  return me.address().cmp(you: you.address())
 
 ### Returns an xxHash64 hash of this pointer's address.
 ### :returns: An xxHash64 hash of this pointer's address.
 routine Hijacked[T].fast_hash() -> U64
-  danger
-    return __hash_leaf(v: U64(me.address()))
+  return __hash_leaf(v: U64(me.address()))
 
 ### Returns a SipHash-2-4 keyed hash of this pointer's address.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A SipHash-2-4 keyed hash of this pointer's address.
 routine Hijacked[T].hash(k0: U64, k1: U64) -> U64
-  danger
-    return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
+  return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
 
 # NOTE: All operations on Hijacked[T] are inherently unsafe
 # Undefined behavior can occur if:
@@ -221,12 +218,10 @@ routine Hijacked[T].hash(k0: U64, k1: U64) -> U64
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].represent() -> Text
-  danger
-    return me.type_name()
+  return me.type_name()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].diagnose() -> Text
-  danger
-    return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"
+  return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"

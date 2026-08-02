@@ -51,7 +51,15 @@ public partial class LlvmCodeGenerator
                 _localVariables.TryGetValue(key: innerIdName, value: out TypeInfo? localVarType))
             {
                 TypeInfo concreteLocal = ApplyTypeSubstitutions(type: localVarType);
+                // A Suflae entity `me` is bound to the `Roamed[E]` handle, but a monomorphized body's
+                // AST node can still carry the bare inner entity `E` as its ResolvedType. Prefer the
+                // Roamed handle so member access deref's through the RC controller instead of reading
+                // the controller's refcount off the bare entity pointer.
+                bool localRoamsResolved = expr.ResolvedType is { } rt
+                    && concreteLocal is RecordTypeInfo { GenericDefinition.Name: Resolution.RuntimeContract.Roamed, TypeArguments: [{ } roamInner] }
+                    && roamInner.FullName == rt.FullName;
                 if (concreteLocal is not GenericParameterTypeInfo && !concreteLocal.IsGenericDefinition && (expr.ResolvedType is null or ErrorTypeInfo or GenericParameterTypeInfo ||
+                        localRoamsResolved ||
                         ShouldPreferLocalIdentifierType(localType: concreteLocal,
                             resolvedType: expr.ResolvedType)))
                 {

@@ -1302,15 +1302,12 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #97: Hijacked[T] method calls require danger block
-                    if (IsHijacked(type: objectType) && !InDangerBlock)
-                    {
-                        ReportError(code: SemanticDiagnosticCode.HijackedRequiresDanger,
-                            message:
-                            "Method call on 'Hijacked[T]' type requires a 'danger' block. " +
-                            "Hijacked values bypass ownership safety checks.",
-                            location: call.Location);
-                    }
+                    // #97: A Hijacked[T] method requires a danger block ONLY when the method itself is
+                    // `dangerous` (peek/poke/as_entity/invalidate/… — real deref/free/UB ops). That is
+                    // already enforced uniformly by the `routine.IsDangerous` gate in
+                    // ValidateRoutineAccess, so there is NO blanket "any Hijacked method needs danger"
+                    // rule: the pointer-value ops (address/type_name/is_none/cmp/hash/represent) read
+                    // an integer without dereferencing and are safe outside danger (danger-audit).
 
                     // #98: .hijack() on Shared/Watched requires danger block
                     if (member.MemberName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && !InDangerBlock &&
