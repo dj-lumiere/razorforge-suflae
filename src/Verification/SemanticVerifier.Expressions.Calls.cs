@@ -76,6 +76,20 @@ public sealed partial class SemanticVerifier
                 // `LookupTypeWithImports("U32!")` returns null and the call falls through to
                 // non-creator paths, eventually mis-picking a non-failable overload by name.
                 TypeSymbol? callableType = LookupTypeWithImports(name: callName);
+                // Module-scoped ambiguity for a bare construction `T(...)`: T declared in 2+ imported
+                // modules (own module not shadowing) is ambiguous. Mirrors the type-annotation check in
+                // TypeResolver.ResolveTypeCore; still constructs (first-match) so no null cascade.
+                if (callableType != null)
+                {
+                    List<string> ambigCtor = _typeResolver.ImportedModulesDeclaring(name: callName);
+                    if (ambigCtor.Count >= 2)
+                        ReportError(code: SemanticDiagnosticCode.AmbiguousTypeReference,
+                            message:
+                            $"Type '{callName}' is declared in multiple imported modules " +
+                            $"({string.Join(separator: ", ", values: ambigCtor)}) — the current module " +
+                            "declares no such type to shadow it. Qualify the reference or restructure imports.",
+                            location: call.Location);
+                }
                 if (callableType != null && call.TypeArguments is { Count: > 0 } typeArguments)
                 {
                     var resolvedTypeArguments = new List<TypeSymbol>(capacity: typeArguments.Count);

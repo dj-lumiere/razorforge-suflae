@@ -93,6 +93,29 @@ internal sealed class TypeResolver
     }
 
     /// <summary>
+    /// For a BARE type name, returns the IMPORTED modules (import order, secret-excluded) that declare
+    /// it — used to flag an ambiguous cross-module reference (module-scoped names). Returns empty when
+    /// the name is qualified, or when the current module declares its own type of that name (own-module
+    /// SHADOWS, so there is no ambiguity to report). Core's auto-import is not an explicit import and is
+    /// intentionally not counted here.
+    /// </summary>
+    internal List<string> ImportedModulesDeclaring(string name)
+    {
+        if (name.Contains(value: '.')) return [];
+        if (_sa._currentModuleName != null
+            && _sa._registry.LookupType(name: $"{_sa._currentModuleName}.{name}") != null)
+            return [];
+        var declarers = new List<string>();
+        foreach (string ns in _sa._importedModules)
+        {
+            TypeSymbol? imported = _sa._registry.LookupType(name: $"{ns}.{name}");
+            if (imported is not null && imported.Visibility != VisibilityModifier.Secret)
+                declarers.Add(item: ns);
+        }
+        return declarers;
+    }
+
+    /// <summary>
     /// Looks up a routine by name, searching the Core module and imported modules.
     /// Called after type creator resolution to avoid shadowing type creators
     /// with identically-named convenience functions (e.g., "routine U32(from: U8)").
@@ -310,6 +333,20 @@ internal sealed class TypeResolver
         if (typeExpr.GenericArguments is { Count: > 0 })
         {
             return ResolveGenericType(typeExpr: typeExpr);
+        }
+
+        // Module-scoped ambiguity: a bare name declared in 2+ imported modules (with the current
+        // module NOT declaring its own to shadow) is ambiguous. Report here where a location exists;
+        // still resolve (first-match) below so downstream analysis doesn't cascade on a null type.
+        List<string> ambiguousDeclarers = ImportedModulesDeclaring(name: typeExpr.Name);
+        if (ambiguousDeclarers.Count >= 2)
+        {
+            _sa.ReportError(code: SemanticDiagnosticCode.AmbiguousTypeReference,
+                message:
+                $"Type '{typeExpr.Name}' is declared in multiple imported modules " +
+                $"({string.Join(separator: ", ", values: ambiguousDeclarers)}) — the current module " +
+                "declares no such type to shadow it. Qualify the reference or restructure imports.",
+                location: typeExpr.Location);
         }
 
         // Try to look up the type by name (including imported modules)

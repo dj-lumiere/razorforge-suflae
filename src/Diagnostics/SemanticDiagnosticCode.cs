@@ -304,6 +304,11 @@ public enum SemanticDiagnosticCode
     /// bare identifier is ambiguous between the constant and the type.</summary>
     PresetTypeNameCollision = 261,
 
+    /// <summary>A bare type name resolves to declarations in 2+ imported modules (module-scoped names).
+    /// The current module declares no such type to shadow it, so the reference is ambiguous — qualify
+    /// it or restructure imports.</summary>
+    AmbiguousTypeReference = 262,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
     // ═══════════════════════════════════════════════════════════════════════════
