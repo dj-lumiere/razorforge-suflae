@@ -281,6 +281,28 @@ internal sealed class SuflaeEntityLoweringPass
             {
                 Expression callee = LowerExpression(call.Callee);
                 bool changed = !ReferenceEquals(callee, call.Callee);
+
+                // Receiver projection: a Roamed handle flowing as the RECEIVER into a BARE-`me` method
+                // must be projected through `.raw_inner()` to the real entity pointer. Stdlib entities
+                // (analyzed in RF mode — e.g. an iterator's `emit!`/`try_emit`) have a bare `me`
+                // (MeType is NOT Roamed), so passing the RoamController handle makes the callee read the
+                // controller as the entity and crash. USER SF entity methods have MeType=Roamed and
+                // correctly take the handle; methods declared on Roamed/RoamController itself
+                // (roam/raw_inner/is_none) own the handle too. Gate on the resolved routine owning a
+                // bare entity with a non-Roamed MeType. Mirrors the argument projection below.
+                if (callee is MemberExpression { Object: { } recv } calleeMember
+                    && call.ResolvedRoutine is { OwnerType: EntityTypeInfo } resolvedCallee
+                    && resolvedCallee.MeType is not RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed }
+                    && RoamedInnerEntity(recv.ResolvedType) is { } recvEntity)
+                {
+                    Expression rawRecv = ProjectRawInner(arg: recv, targetEntity: recvEntity);
+                    if (!ReferenceEquals(rawRecv, recv))
+                    {
+                        callee = calleeMember with { Object = rawRecv };
+                        changed = true;
+                    }
+                }
+
                 var args = new List<Expression>(capacity: call.Arguments.Count);
                 foreach (Expression a in call.Arguments)
                 {
@@ -432,6 +454,16 @@ internal sealed class SuflaeEntityLoweringPass
     {
         return t is WrapperTypeInfo { Name: RuntimeContract.Roamed } or RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed };
     }
+
+    // The bare entity `E` inside a `Roamed[E]` handle, in either representation the pipeline produces
+    // (WrapperTypeInfo from WrapInRoam, RecordTypeInfo from a resolver-built handle). Null when the
+    // type is not a Roamed handle over an entity.
+    private static EntityTypeInfo? RoamedInnerEntity(TypeInfo? t) => t switch
+    {
+        WrapperTypeInfo { Name: RuntimeContract.Roamed, InnerType: EntityTypeInfo e } => e,
+        RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed, TypeArguments: [EntityTypeInfo e] } => e,
+        _ => null
+    };
 
     // A construction arg (a `NamedArgumentExpression` or bare value) whose value is a borrowed Roamed
     // reference must retain — it is stored into a Roamed field which the constructed entity now co-owns.
