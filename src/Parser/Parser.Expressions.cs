@@ -111,6 +111,17 @@ public partial class Parser
                 return new IdentifierExpression(Name: "me", Location: location);
             }
 
+            // Single-hole `_` lambda: `_` in expression position is the placeholder for the sole
+            // parameter of an implicit lambda. Parse it as a reference to the reserved hole name and
+            // flag it; ParseArgument wraps the enclosing argument into `LambdaExpression([<hole>], …)`.
+            // A stray `_` that no ParseArgument wraps stays an unknown-identifier reference (an error),
+            // exactly as before. Pattern/discard `_` is handled by their own parse paths, not here.
+            if (text == "_")
+            {
+                _sawHole = true;
+                return new IdentifierExpression(Name: HoleParamName, Location: location);
+            }
+
             // Realm-qualified reference in expression position: `RF::Core.List` (e.g. a
             // `RF::Core.List[S64]()` constructor call inside a Suflae wrapper). The leading ident is the
             // realm tag; consume the `.`/`/`-segmented qualified name and carry the realm so SA resolves

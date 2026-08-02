@@ -122,6 +122,19 @@ public partial class Parser
     private bool _inWhenConditionContext;
 
     /// <summary>
+    /// The reserved parameter name a single-hole `_` lambda desugars to. `xs.map(_ * 2)` parses the
+    /// `_` as a reference to this name and wraps the whole argument in `LambdaExpression([<hole>], _*2)`.
+    /// </summary>
+    internal const string HoleParamName = "__rf_hole";
+
+    /// <summary>
+    /// Set by <c>ParsePrimary</c> when it parses a bare `_` placeholder (single-hole lambda). Read and
+    /// reset per-argument by <c>ParseArgument</c>, which wraps the argument into a lambda when set — so
+    /// the lambda boundary is the nearest enclosing argument.
+    /// </summary>
+    private bool _sawHole;
+
+    /// <summary>
     /// Prevents 'is' expression parsing in when clause bodies.
     /// When true, 'is' is not treated as a pattern-matching operator.
     /// </summary>

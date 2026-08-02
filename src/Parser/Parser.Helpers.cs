@@ -164,34 +164,65 @@ public partial class Parser
     {
         SourceLocation location = GetLocation();
 
-        // Check for named argument: identifier followed by colon
-        if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
-               .Type == TokenType.Colon)
+        // Single-hole `_` lambda: the boundary is THIS argument. Save + reset the flag so a `_` in an
+        // outer argument doesn't leak in and a `_` here doesn't leak out; a nested call's ParseArgument
+        // saves/resets again, giving the nearest-enclosing-argument boundary.
+        bool savedSawHole = _sawHole;
+        _sawHole = false;
+        try
         {
-            string argName = CurrentToken.Text;
-            Advance(); // consume identifier
-            Advance(); // consume colon
+            // Check for named argument: identifier followed by colon
+            if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
+                   .Type == TokenType.Colon)
+            {
+                string argName = CurrentToken.Text;
+                Advance(); // consume identifier
+                Advance(); // consume colon
 
-            // Parse the value expression
-            Expression value = ParseExpression();
+                // Parse the value expression
+                Expression value =
+                    MaybeWrapHoleLambda(body: ParseExpression(), location: location);
 
-            return new NamedArgumentExpression(Name: argName, Value: value, Location: location);
+                return new NamedArgumentExpression(Name: argName, Value: value, Location: location);
+            }
+
+            // Regular positional argument
+            Expression expr = ParseExpression();
+
+            // Check for dict entry literal: expr:expr (e.g., 1:2 in Dict(1:2, 3:4))
+            // Named arguments (identifier: expr) are already handled above,
+            // so this catches non-identifier keys like literals: 1:2, "key":val
+            if (Check(type: TokenType.Colon))
+            {
+                Advance(); // consume colon
+                Expression value = ParseExpression();
+                return new DictEntryLiteralExpression(Key: expr, Value: value, Location: location);
+            }
+
+            return MaybeWrapHoleLambda(body: expr, location: location);
         }
-
-        // Regular positional argument
-        Expression expr = ParseExpression();
-
-        // Check for dict entry literal: expr:expr (e.g., 1:2 in Dict(1:2, 3:4))
-        // Named arguments (identifier: expr) are already handled above,
-        // so this catches non-identifier keys like literals: 1:2, "key":val
-        if (Check(type: TokenType.Colon))
+        finally
         {
-            Advance(); // consume colon
-            Expression value = ParseExpression();
-            return new DictEntryLiteralExpression(Key: expr, Value: value, Location: location);
+            _sawHole = savedSawHole;
         }
+    }
 
-        return expr;
+    /// <summary>
+    /// Wraps <paramref name="body"/> in a single-parameter lambda when a `_` placeholder was parsed
+    /// within it (see <see cref="_sawHole"/>): `xs.map(_ * 2)` -> `xs.map(__rf_hole => __rf_hole * 2)`.
+    /// All `_` occurrences in the argument share the ONE hole parameter. No-op when no hole was seen.
+    /// </summary>
+    private Expression MaybeWrapHoleLambda(Expression body, SourceLocation location)
+    {
+        if (!_sawHole) return body;
+        var parameters = new List<Parameter>
+        {
+            new(Name: HoleParamName, Type: null, DefaultValue: null, Location: location)
+        };
+        return new LambdaExpression(Parameters: parameters,
+            Body: body,
+            Captures: null,
+            Location: location);
     }
 
     /// <summary>
