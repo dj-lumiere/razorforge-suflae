@@ -1444,7 +1444,7 @@ internal static class GenericAstRewriter
 
             LoopStatement ls => ls with { Body = RewriteStatement(stmt: ls.Body, ctx: ctx) },
 
-            ForStatement fs => fs with
+            EachStatement fs => fs with
             {
                 Iterable = RewriteExpression(expr: fs.Iterable, ctx: ctx),
                 Body = RewriteStatement(stmt: fs.Body, ctx: ctx),

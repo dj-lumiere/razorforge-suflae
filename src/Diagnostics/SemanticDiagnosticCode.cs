@@ -218,6 +218,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Type is not in the allowed set for type equality constraint.</summary>
     TypeEqualityConstraintViolation = 160,
 
+    /// <summary>Generic type argument(s) could not be inferred from the call; specify explicitly.</summary>
+    CannotInferTypeArgument = 161,
+
     /// <summary>Type parameter in constraint is not declared on the type or function.</summary>
     UnknownTypeParameterInConstraint = 163,
 

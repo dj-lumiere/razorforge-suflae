@@ -100,7 +100,7 @@ public static class AstWalker
             case LoopStatement s:
                 yield return s.Body;
                 break;
-            case ForStatement s:
+            case EachStatement s:
                 if (s.VariablePattern != null) yield return s.VariablePattern;
                 yield return s.Iterable;
                 yield return s.Body;

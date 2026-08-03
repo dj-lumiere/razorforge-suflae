@@ -428,20 +428,20 @@ routine F32.is_zero() -> Bool
 ### :returns: Whether the bit pattern represents a not-a-number payload.
 routine F32.is_nan() -> Bool
   var bits = me.to_bits()
-  var exponent = LLVM::bit_and[U32](a: bits, b: 0x7F800000_u32)
-  var mantissa = LLVM::bit_and[U32](a: bits, b: 0x007FFFFF_u32)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
   return exponent == 0x7F800000_u32 and mantissa != 0_u32
 
 ### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
 routine F32.is_signaling() -> Bool
-  return me.is_nan() and LLVM::bit_and[U32](a: me.to_bits(), b: 0x00400000_u32) == 0_u32
+  return me.is_nan() and LLVM::bit_and(a: me.to_bits(), b: 0x00400000_u32) == 0_u32
 
 ### Returns `true` when this value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern represents an infinity.
 routine F32.is_infinite() -> Bool
   var bits = me.to_bits()
-  var exponent = LLVM::bit_and[U32](a: bits, b: 0x7F800000_u32)
-  var mantissa = LLVM::bit_and[U32](a: bits, b: 0x007FFFFF_u32)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
   return exponent == 0x7F800000_u32 and mantissa == 0_u32
 
 ### Returns `true` when this value is neither NaN nor infinity.
@@ -574,20 +574,20 @@ routine F32.to_bytes_le() -> Array[Byte, 4]
   var raw = LLVM::reinterpret_bits[F32, U32](me)
   var result = Array[Byte, 4]()
   result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U32, U8](raw))
-  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned[U32](raw, 8_u32)))
-  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned[U32](raw, 16_u32)))
-  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned[U32](raw, 24_u32)))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)))
+  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)))
+  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 4]` value.
 routine F32.to_bytes_be() -> Array[Byte, 4]
-  var raw = LLVM::byte_swap[U32](LLVM::reinterpret_bits[F32, U32](me))
+  var raw = LLVM::byte_swap(LLVM::reinterpret_bits[F32, U32](me))
   var result = Array[Byte, 4]()
   result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U32, U8](raw))
-  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned[U32](raw, 8_u32)))
-  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned[U32](raw, 16_u32)))
-  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned[U32](raw, 24_u32)))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)))
+  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)))
+  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -956,18 +956,18 @@ routine F32.modf() -> (F32, F32)
 routine F32.frexp() -> (F32, S64)
   if me.is_zero() or me.is_infinite() or me.is_nan()
     return (me, 0_s64)
-  var e = LLVM::add[S64](a: C::rf_f32_ilogb(value: me), b: 1_s64)
-  return (C::rf_f32_scalbn(value: me, n: LLVM::sub[S64](a: 0_s64, b: e)), e)
+  var e = LLVM::add(a: C::rf_f32_ilogb(value: me), b: 1_s64)
+  return (C::rf_f32_scalbn(value: me, n: LLVM::sub(a: 0_s64, b: e)), e)
 
 ### True if the sign bit is set (C signbit).
 routine F32.signbit() -> Bool
-  return LLVM::int_ne[U32](a: LLVM::bit_and[U32](a: me.to_bits(), b: 0x80000000_u32), b: 0_u32)
+  return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: 0x80000000_u32), b: 0_u32)
 
 ### True for a subnormal (denormalized, nonzero) value.
 routine F32.is_subnormal() -> Bool
   var bits = me.to_bits()
-  var exponent = LLVM::bit_and[U32](a: bits, b: 0x7F800000_u32)
-  var mantissa = LLVM::bit_and[U32](a: bits, b: 0x007FFFFF_u32)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
   return exponent == 0_u32 and mantissa != 0_u32
 
 ### True for a finite, normal value (nonzero and not subnormal).
@@ -995,9 +995,9 @@ routine F32.fpclassify() -> FpClass
 ### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
 ### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
 routine f32_order_key(bits: U32) -> U32
-  if LLVM::int_ne[U32](a: LLVM::bit_and[U32](a: bits, b: 0x80000000_u32), b: 0_u32)
-    return LLVM::bit_xor[U32](a: bits, b: 0xFFFFFFFF_u32)
-  return LLVM::bit_or[U32](a: bits, b: 0x80000000_u32)
+  if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: 0x80000000_u32), b: 0_u32)
+    return LLVM::bit_xor(a: bits, b: 0xFFFFFFFF_u32)
+  return LLVM::bit_or(a: bits, b: 0x80000000_u32)
 
 ### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
@@ -1010,7 +1010,7 @@ routine F32.total_order(you: F32) -> Bool
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine F32.total_order_mag(you: F32) -> Bool
-  return LLVM::bit_and[U32](a: me.to_bits(), b: 0x7FFFFFFF_u32) <= LLVM::bit_and[U32](a: you.to_bits(), b: 0x7FFFFFFF_u32)
+  return LLVM::bit_and(a: me.to_bits(), b: 0x7FFFFFFF_u32) <= LLVM::bit_and(a: you.to_bits(), b: 0x7FFFFFFF_u32)
 
 # ============================================================================
 # IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding

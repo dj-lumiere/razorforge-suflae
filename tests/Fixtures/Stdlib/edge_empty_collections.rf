@@ -22,15 +22,15 @@ routine start()
 
   # Iteration over empty containers — should produce zero side-effects
   var counter = 0_s64
-  for x in l
+  each x in l
     counter = counter + 1
   show(f"empty list iter count: {counter}")
 
-  for x in s
+  each x in s
     counter = counter + 1
   show(f"after empty set iter: {counter}")
 
-  for k in d
+  each k in d
     counter = counter + 1
   show(f"after empty dict iter: {counter}")
 

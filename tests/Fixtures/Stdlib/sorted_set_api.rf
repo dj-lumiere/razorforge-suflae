@@ -14,7 +14,7 @@ routine start()
   show(f"after 30/10/20/10, size: {ss.count()}")
 
   # iteration is sorted -> deterministic
-  for x in ss
+  each x in ss
     show(f"  iter: {x}")
 
   show(f"contains 20: {20 in ss}")

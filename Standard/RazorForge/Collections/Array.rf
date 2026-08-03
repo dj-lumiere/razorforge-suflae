@@ -121,7 +121,7 @@ routine Array[T, N].last!() -> T
 @readonly
 routine Array[T, N].contains(value: T) -> Bool
 needs T obeys Equatable
-  for i in 0u64 til N
+  each i in 0u64 til N
     if me[i] == value
       return true
   return false
@@ -133,7 +133,7 @@ needs T obeys Equatable
 @readonly
 routine Array[T, N].index_of!(value: T) -> U64
 needs T obeys Equatable
-  for i in 0u64 til N
+  each i in 0u64 til N
     if me[i] == value
       return i
   absent
@@ -172,7 +172,7 @@ routine ArrayEmittable[T, N].emit!() -> T
 
 routine Array[T, N].represent() -> Text
   var result = "Array(["
-  for i in 0u64 til N
+  each i in 0u64 til N
     if i > 0u64
       result = result + ", "
     result = result + me[i].represent()
@@ -181,7 +181,7 @@ routine Array[T, N].represent() -> Text
 
 routine Array[T, N].diagnose() -> Text
   var result = me.full_type_name() + "(["
-  for i in 0u64 til N
+  each i in 0u64 til N
     if i > 0u64
       result = result + ", "
     result = result + me[i].represent()
@@ -197,7 +197,7 @@ routine Array[T, N].diagnose() -> Text
 @readonly
 routine Array[T, N].eq(you: Array[T, N]) -> Bool
 needs T obeys Equatable
-  for i in 0u64 til N
+  each i in 0u64 til N
     if me[i] != you[i]
       return false
   return true
@@ -211,7 +211,7 @@ needs T obeys Equatable
 @readonly
 routine Array[T, N].cmp(you: Array[T, N]) -> ComparisonSign
 needs T obeys Comparable
-  for i in 0u64 til N
+  each i in 0u64 til N
     var sign = me[i].cmp(you[i])
     if sign isnot SAME
       return sign

@@ -1,4 +1,5 @@
 using System.Linq;
+using Compiler.Diagnostics;
 using Verification;
 using Verification.Results;
 using SyntaxTree;
@@ -580,6 +581,53 @@ public class GenericResolutionTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region S161 — Uninferable type argument reports cleanly (not a codegen crash)
+
+    /// <summary>
+    /// A generic routine whose type parameter appears ONLY in the return type, called with
+    /// no expected-type context, cannot bind that parameter. This must surface as RF-S161
+    /// during SA rather than silently passing and crashing in codegen.
+    /// </summary>
+    [Fact]
+    public void Analyze_ReturnOnlyTypeParam_NoContext_ReportsCannotInfer()
+    {
+        string source = """
+                        routine pick[T](flag: Bool) -> T
+                          return pick[T](flag: flag)
+
+                        routine test()
+                          var r = pick(flag: true)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CannotInferTypeArgument);
+    }
+
+    /// <summary>
+    /// The same call binds cleanly when the return-only type parameter has expected-type
+    /// context (a typed variable annotation), so no RF-S161 fires.
+    /// </summary>
+    [Fact]
+    public void Analyze_ReturnOnlyTypeParam_WithContext_NoCannotInfer()
+    {
+        string source = """
+                        routine pick[T](flag: Bool) -> T
+                          return pick[T](flag: flag)
+
+                        routine test()
+                          var r: S64 = pick(flag: true)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CannotInferTypeArgument);
     }
 
     #endregion

@@ -160,7 +160,7 @@ routine Text.count() -> U64
 @readonly
 routine Text.count_of(character: Character) -> U64
   var result: U64 = 0u64
-  for ch in me
+  each ch in me
     if ch == character
       result += 1u64
   return result
@@ -276,7 +276,7 @@ routine Text.cmp(other: Text) -> ComparisonSign
   var min_len = me.count
   if other_count < min_len
     min_len = other_count
-  for i in 0u64 til min_len
+  each i in 0u64 til min_len
     if me[i] < other[i]
       return ComparisonSign.ME_SMALL
     if me[i] > other[i]
@@ -293,7 +293,7 @@ routine Text.cmp(other: Text) -> ComparisonSign
 @readonly
 routine Text.fast_hash() -> U64
   var h = __hash_leaf(v: me.count)
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     h = __hash_round(acc: h, h: __hash_leaf(v: U64(me[i].codepoint())))
   return __hash_finalize(h)
 
@@ -306,7 +306,7 @@ routine Text.fast_hash() -> U64
 @readonly
 routine Text.hash(k0: U64, k1: U64) -> U64
   var h = __hash_leaf(v: me.count)
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     h = __hash_round(acc: h, h: __secure_hash_u64(v: U64(me[i].codepoint()), k0: k0, k1: k1))
   return __hash_finalize(h)
 
@@ -318,7 +318,7 @@ routine Text.hash(k0: U64, k1: U64) -> U64
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Text.contains(character: Character) -> Bool
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     if me[i] == character
       return true
   return false
@@ -338,7 +338,7 @@ routine Text.contains(other: Text) -> Bool
 
   # Build KMP longest-proper-prefix-also-suffix (LPS) table for `other`.
   var lps = List[U64]()
-  for _ in 0u64 til other_count
+  each _ in 0u64 til other_count
     lps.add_last(value: 0u64)
   var length = 0u64
   var i = 1u64
@@ -377,7 +377,7 @@ routine Text.starts_with(prefix: Text) -> Bool
   var prefix_count = prefix.count()
   if prefix_count > me.count
     return false
-  for i in 0u64 til prefix_count
+  each i in 0u64 til prefix_count
     if me[i] != prefix[i]
       return false
   return true
@@ -392,7 +392,7 @@ routine Text.ends_with(suffix: Text) -> Bool
   if suffix_count > me.count
     return false
   var offset = me.count - suffix_count
-  for i in 0u64 til suffix_count
+  each i in 0u64 til suffix_count
     if me[offset + i] != suffix[i]
       return false
   return true
@@ -403,7 +403,7 @@ routine Text.ends_with(suffix: Text) -> Bool
 ### :absent: Returns absent when the requested value is unavailable.
 @readonly
 routine Text.find!(letter: Character) -> U64
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     if me[i] == letter
       return i
   absent
@@ -419,9 +419,9 @@ routine Text.find!(other: Text) -> U64
   if other.count() > me.count
     absent
   var limit = me.count - other.count() + 1u64
-  for i in 0u64 til limit
+  each i in 0u64 til limit
     var found = true
-    for j in 0u64 til other.count()
+    each j in 0u64 til other.count()
       if me[i + j] != other[j]
         found = false
         break
@@ -437,7 +437,7 @@ routine Text.find!(other: Text) -> U64
 @readonly
 routine Text.to_uppercase() -> Text
   var result = List[Character]()
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     result.add_last(me[i].to_uppercase())
   return Text(from_list: steal result)
 
@@ -447,7 +447,7 @@ routine Text.to_uppercase() -> Text
 @readonly
 routine Text.to_lowercase() -> Text
   var result = List[Character]()
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     result.add_last(me[i].to_lowercase())
   return Text(from_list: steal result)
 
@@ -471,7 +471,7 @@ routine Text.trim() -> Text
       break
     end_idx -= 1u64
   var result = List[Character]()
-  for i in start til end_idx
+  each i in start til end_idx
     result.add_last(me[i])
   return Text(from_list: steal result)
 
@@ -488,7 +488,7 @@ routine Text.trim_start() -> Text
       break
     start += 1u64
   var result = List[Character]()
-  for i in start til me.count
+  each i in start til me.count
     result.add_last(me[i])
   return Text(from_list: steal result)
 
@@ -507,7 +507,7 @@ routine Text.trim_end() -> Text
       break
     end_idx -= 1u64
   var result = List[Character]()
-  for i in 0u64 til end_idx
+  each i in 0u64 til end_idx
     result.add_last(me[i])
   return Text(from_list: steal result)
 
@@ -530,12 +530,12 @@ routine Text.replace(old: Text, new: Text) -> Text
     var found = false
     if i + old_count <= me.count
       found = true
-      for j in 0u64 til old_count
+      each j in 0u64 til old_count
         if me[i + j] != old[j]
           found = false
           break
     if found
-      for j in 0u64 til new_count
+      each j in 0u64 til new_count
         result.add_last(new[j])
       i += old_count
     else
@@ -551,7 +551,7 @@ routine Text.replace(old: Text, new: Text) -> Text
 routine Text.remove_prefix(prefix: Text) -> Text
   if me.starts_with(prefix)
     var result = List[Character]()
-    for i in prefix.count() til me.count
+    each i in prefix.count() til me.count
       result.add_last(me[i])
     return Text(from_list: steal result)
   return me
@@ -565,7 +565,7 @@ routine Text.remove_suffix(suffix: Text) -> Text
   if me.ends_with(suffix)
     var result = List[Character]()
     var end_idx = me.count - suffix.count()
-    for i in 0u64 til end_idx
+    each i in 0u64 til end_idx
       result.add_last(me[i])
     return Text(from_list: steal result)
   return me
@@ -603,9 +603,9 @@ routine Text.pad_start(width: U64, fill: Character) -> Text
     return me
   var result = List[Character]()
   var pad_count = width - me.count
-  for p in 0u64 til pad_count
+  each p in 0u64 til pad_count
     result.add_last(fill)
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     result.add_last(me[i])
   return Text(from_list: steal result)
 
@@ -619,10 +619,10 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
   if me.count >= width
     return me
   var result = List[Character]()
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     result.add_last(me[i])
   var pad_count = width - me.count
-  for p in 0u64 til pad_count
+  each p in 0u64 til pad_count
     result.add_last(fill)
   return Text(from_list: steal result)
 
@@ -636,7 +636,7 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
 routine Text.split(separator: Character) -> List[Text]
   var parts = List[Text]()
   var current = List[Character]()
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     if me[i] == separator
       parts.add_last(Text(from_list: steal current))
       current = List[Character]()
@@ -653,7 +653,7 @@ routine Text.split(separator: Character) -> List[Text]
 routine Text.split(separator: Text) -> List[Text]
   if separator.is_empty()
     var parts = List[Text]()
-    for i in 0u64 til me.count
+    each i in 0u64 til me.count
       parts.add_last(Text(from_character: me[i]))
     return steal parts
   var separator_count = separator.count()
@@ -664,13 +664,13 @@ routine Text.split(separator: Text) -> List[Text]
     if i + separator_count > me.count
       break
     var found = true
-    for j in 0u64 til separator_count
+    each j in 0u64 til separator_count
       if me[i + j] != separator[j]
         found = false
         break
     if found
       var seg = List[Character]()
-      for k in start til i
+      each k in start til i
         seg.add_last(me[k])
       parts.add_last(Text(from_list: steal seg))
       i += separator_count
@@ -678,7 +678,7 @@ routine Text.split(separator: Text) -> List[Text]
     else
       i += 1u64
   var tail = List[Character]()
-  for k in start til me.count
+  each k in start til me.count
     tail.add_last(me[k])
   parts.add_last(Text(from_list: steal tail))
   return steal parts
@@ -693,11 +693,11 @@ routine Text.join(parts: List[Text]) -> Text
     return Text()
   var result = List[Character]()
   var first = true
-  for part in parts
+  each part in parts
     if not first
-      for i in 0u64 til me.count
+      each i in 0u64 til me.count
         result.add_last(me[i])
-    for i in 0u64 til part.count()
+    each i in 0u64 til part.count()
       result.add_last(part[i])
     first = false
   return Text(from_list: steal result)
@@ -717,7 +717,7 @@ routine Text.lines() -> List[Text]
 routine Text.words() -> List[Text]
   var parts = List[Text]()
   var current = List[Character]()
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     if me[i].is_whitespace()
       if not current.is_empty()
         parts.add_last(Text(from_list: steal current))

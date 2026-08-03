@@ -115,7 +115,7 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
                         message: $"Wired routine '{callName}' cannot be called directly. " +
-                                 "Use the corresponding language construct instead (e.g., '==' for $eq, 'for' for $iter).",
+                                 "Use the corresponding language construct instead (e.g., '==' for $eq, 'each' for $iter).",
                         location: call.Location);
                     return ErrorTypeInfo.Instance;
                 }
@@ -543,6 +543,26 @@ public sealed partial class SemanticVerifier
                     // `C::`/`LLVM::` qualifier, and a `C::`/`LLVM::` qualifier must name a matching realm.
                     CheckCallRealm(callee: id, routine: routine, location: call.Location);
 
+                    // Inference guard: if the routine is STILL a generic definition here — no explicit
+                    // `[...]` args and matching arity, yet none of the inference/overload passes above
+                    // instantiated it — then some type parameter (e.g. a return-only `To` with no
+                    // expected-type context) could not be bound. Report cleanly instead of letting a
+                    // call whose return type is an abstract type parameter reach codegen and crash.
+                    if (routine is { IsGenericDefinition: true } &&
+                        (call.TypeArguments == null || call.TypeArguments.Count == 0) &&
+                        call.Arguments.Count == routine.Parameters.Count)
+                    {
+                        string genericNames =
+                            string.Join(separator: ", ", values: routine.GenericParameters ?? []);
+                        ReportError(code: SemanticDiagnosticCode.CannotInferTypeArgument,
+                            message:
+                            $"Cannot infer type argument(s) [{genericNames}] for generic routine " +
+                            $"'{routine.BaseName}' from this call. Specify them explicitly, e.g. " +
+                            $"{routine.BaseName}[{genericNames}](...).",
+                            location: call.Location);
+                        return ErrorTypeInfo.Instance;
+                    }
+
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 
@@ -844,6 +864,26 @@ public sealed partial class SemanticVerifier
                     // `C::`/`LLVM::` qualifier, and a `C::`/`LLVM::` qualifier must name a matching realm.
                     CheckCallRealm(callee: id, routine: routine, location: call.Location);
 
+                    // Inference guard: if the routine is STILL a generic definition here — no explicit
+                    // `[...]` args and matching arity, yet none of the inference/overload passes above
+                    // instantiated it — then some type parameter (e.g. a return-only `To` with no
+                    // expected-type context) could not be bound. Report cleanly instead of letting a
+                    // call whose return type is an abstract type parameter reach codegen and crash.
+                    if (routine is { IsGenericDefinition: true } &&
+                        (call.TypeArguments == null || call.TypeArguments.Count == 0) &&
+                        call.Arguments.Count == routine.Parameters.Count)
+                    {
+                        string genericNames =
+                            string.Join(separator: ", ", values: routine.GenericParameters ?? []);
+                        ReportError(code: SemanticDiagnosticCode.CannotInferTypeArgument,
+                            message:
+                            $"Cannot infer type argument(s) [{genericNames}] for generic routine " +
+                            $"'{routine.BaseName}' from this call. Specify them explicitly, e.g. " +
+                            $"{routine.BaseName}[{genericNames}](...).",
+                            location: call.Location);
+                        return ErrorTypeInfo.Instance;
+                    }
+
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 
@@ -939,7 +979,7 @@ public sealed partial class SemanticVerifier
                     && !IsStdlibFile(filePath: call.Location.FileName))
                 {
                     string hint = member.MemberName == "iter"
-                        ? "use a 'for' loop or iterable combinators (skip, take, map, etc.) instead."
+                        ? "use an 'each' loop or iterable combinators (skip, take, map, etc.) instead."
                         : "pass the value to a routine whose parameter is typed " +
                           "Referring[T] / Controlling[T] — the compiler coerces it for you.";
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,

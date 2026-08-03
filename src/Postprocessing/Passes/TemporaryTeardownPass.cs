@@ -163,7 +163,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 return w with { Body = TransformStatement(w.Body),
                     ElseBranch = w.ElseBranch != null ? TransformStatement(w.ElseBranch) : null };
 
-            case ForStatement f:
+            case EachStatement f:
                 return f with { Body = TransformStatement(f.Body),
                     ElseBranch = f.ElseBranch != null ? TransformStatement(f.ElseBranch) : null };
 

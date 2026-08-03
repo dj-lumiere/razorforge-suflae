@@ -313,16 +313,16 @@ routine SetEmittable[T].emit!() -> T
 @readonly
 routine Set[T].union(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T](key: SecureHashKey.random(), capacity: me.count +% other.count)
-  for val in me
+  each val in me
     discard result.add(val)
-  for val in other
+  each val in other
     discard result.add(val)
   return steal result
 
 @readonly
 routine Set[T].intersection(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
-  for val in me
+  each val in me
     if val in other
       discard result.add(val)
   return steal result
@@ -330,7 +330,7 @@ routine Set[T].intersection(other: Referring[Set[T]]) -> Set[T]
 @readonly
 routine Set[T].difference(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
-  for val in me
+  each val in me
     if val notin other
       discard result.add(val)
   return steal result
@@ -338,10 +338,10 @@ routine Set[T].difference(other: Referring[Set[T]]) -> Set[T]
 @readonly
 routine Set[T].symmetric_difference(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
-  for val in me
+  each val in me
     if val notin other
       discard result.add(val)
-  for val in other
+  each val in other
     if val notin me
       discard result.add(val)
   return steal result
@@ -350,7 +350,7 @@ routine Set[T].symmetric_difference(other: Referring[Set[T]]) -> Set[T]
 routine Set[T].is_subset(other: Referring[Set[T]]) -> Bool
   if me.count > other.count
     return false
-  for val in me
+  each val in me
     if val notin other
       return false
   return true
@@ -361,7 +361,7 @@ routine Set[T].is_superset(other: Referring[Set[T]]) -> Bool
 
 @readonly
 routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
-  for val in me
+  each val in me
     if val in other
       return false
   return true
@@ -375,7 +375,7 @@ routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
 ### :returns: A new {List[T]} containing all elements of `from`.
 routine List[T](from: Set[T]) -> List[T]
   var result = List[T](capacity: from.count)
-  for val in from
+  each val in from
     result.add_last(val)
   return steal result
 
@@ -389,7 +389,7 @@ routine Set[T].represent() -> Text
     return "{}"
   var result = "{"
   var first = true
-  for val in me
+  each val in me
     if not first
       result = result + ", "
     result = result + val.represent()
@@ -401,7 +401,7 @@ routine Set[T].represent() -> Text
 routine Set[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
-  for val in me
+  each val in me
     if not first
       result = result + ", "
     result = result + val.represent()
@@ -417,7 +417,7 @@ routine Set[T].diagnose() -> Text
 routine Set[T].eq(other: Referring[Set[T]]) -> Bool
   if me.count != other.count
     return false
-  for val in me
+  each val in me
     if val notin other
       return false
   return true
@@ -444,6 +444,6 @@ dangerous routine Set[T].destroy()
 routine Set[T].serialize() -> SerialValue
 needs T obeys Serializable
   var __sv = List[SerialValue]()
-  for __x in me
+  each __x in me
     __sv.add_last(value: __x.serialize())
   return SerialValue(steal __sv)

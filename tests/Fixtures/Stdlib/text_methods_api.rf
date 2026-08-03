@@ -31,13 +31,13 @@ routine start()
   # Split / join (join lives on Iterable: parts.join(separator: sep))
   var parts = "a,b,c,d".split(separator: ',')
   show(f"split count: {parts.count()}")
-  for p in parts
+  each p in parts
     show(f"  part: {p}")
   show(f"join: '{parts.join(separator: "-glue-")}'")
 
   # Lines
   var multi = "line one\nline two\nline three"
-  for l in multi.lines()
+  each l in multi.lines()
     show(f"  line: {l}")
 
   # Find

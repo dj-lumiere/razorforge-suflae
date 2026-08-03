@@ -70,7 +70,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             IfStatement ifs => LowerIf(ifs),
             WhileStatement whileStmt => LowerWhile(whileStmt),
             LoopStatement loop => LowerLoop(loop),
-            ForStatement forStmt => LowerFor(forStmt),
+            EachStatement eachStmt => LowerEach(eachStmt),
             WhenStatement whenStmt => LowerWhen(whenStmt),
             UsingStatement usingStmt => LowerUsing(usingStmt),
             DangerStatement danger => LowerDanger(danger),
@@ -139,17 +139,17 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             : loop;
     }
 
-    private ForStatement LowerFor(ForStatement forStmt)
+    private EachStatement LowerEach(EachStatement eachStmt)
     {
-        Statement body = LowerStatement(forStmt.Body);
-        Statement? elseBranch = forStmt.ElseBranch != null
-            ? LowerStatement(forStmt.ElseBranch)
+        Statement body = LowerStatement(eachStmt.Body);
+        Statement? elseBranch = eachStmt.ElseBranch != null
+            ? LowerStatement(eachStmt.ElseBranch)
             : null;
 
-        return !ReferenceEquals(body, forStmt.Body) ||
-               !ReferenceEquals(elseBranch, forStmt.ElseBranch)
-            ? forStmt with { Body = body, ElseBranch = elseBranch }
-            : forStmt;
+        return !ReferenceEquals(body, eachStmt.Body) ||
+               !ReferenceEquals(elseBranch, eachStmt.ElseBranch)
+            ? eachStmt with { Body = body, ElseBranch = elseBranch }
+            : eachStmt;
     }
 
     private WhenStatement LowerWhen(WhenStatement whenStmt)
@@ -225,9 +225,9 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
                 ContainsBecomes(whileStmt.Body) ||
                 whileStmt.ElseBranch != null && ContainsBecomes(whileStmt.ElseBranch),
             LoopStatement loop => ContainsBecomes(loop.Body),
-            ForStatement forStmt =>
-                ContainsBecomes(forStmt.Body) ||
-                forStmt.ElseBranch != null && ContainsBecomes(forStmt.ElseBranch),
+            EachStatement eachStmt =>
+                ContainsBecomes(eachStmt.Body) ||
+                eachStmt.ElseBranch != null && ContainsBecomes(eachStmt.ElseBranch),
             WhenStatement whenStmt => whenStmt.Clauses.Any(clause => ContainsBecomes(clause.Body)),
             DangerStatement danger => ContainsBecomes(danger.Body),
             UsingStatement usingStmt => ContainsBecomes(usingStmt.Body) ||
@@ -268,11 +268,11 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             {
                 Body = RewriteBecomes(loop.Body, target)
             },
-            ForStatement forStmt => forStmt with
+            EachStatement eachStmt => eachStmt with
             {
-                Body = RewriteBecomes(forStmt.Body, target),
-                ElseBranch = forStmt.ElseBranch != null
-                    ? RewriteBecomes(forStmt.ElseBranch, target)
+                Body = RewriteBecomes(eachStmt.Body, target),
+                ElseBranch = eachStmt.ElseBranch != null
+                    ? RewriteBecomes(eachStmt.ElseBranch, target)
                     : null
             },
             WhenStatement whenStmt => whenStmt with

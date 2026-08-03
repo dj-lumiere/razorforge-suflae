@@ -181,7 +181,7 @@ internal sealed class SuflaeEntityLoweringPass
                 return ReferenceEquals(b, loop.Body) ? stmt : loop with { Body = b };
             }
 
-            case ForStatement f:
+            case EachStatement f:
             {
                 Statement b = LowerStatement(f.Body);
                 return ReferenceEquals(b, f.Body) ? stmt : f with { Body = b };

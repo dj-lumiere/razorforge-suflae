@@ -43,12 +43,12 @@ dangerous routine UnpackedFloat[M, L, W].destroy()
 ### Backs the wide-int and Decimal `represent`s.
 routine wide_dec[T](v: T) -> Text
 needs T obeys FloorDivisible
-  if LLVM::int_eq[T](a: v, b: LLVM::zero_extend[U64, T](0_u64))
+  if LLVM::int_eq(a: v, b: LLVM::zero_extend[U64, T](0_u64))
     return "0"
   var out = ""
   var x = v
   var ten = LLVM::zero_extend[U64, T](10_u64)
-  while LLVM::int_ne[T](a: x, b: LLVM::zero_extend[U64, T](0_u64))
+  while LLVM::int_ne(a: x, b: LLVM::zero_extend[U64, T](0_u64))
     var r = x % ten
     var d = LLVM::int_truncate[T, U64](r)
     out = f"{d}" + out
@@ -102,9 +102,9 @@ routine T.bit(pos: S64) -> Bool
 
 ### Logical left (s>=0) or right (s<0) shift of `me` by an S64 amount.
 routine T.shift(s: S64) -> T
-  if LLVM::signed_ge[S64](a: s, b: 0_s64)
-    return LLVM::shift_left[T](value: me, bits: T.to_width(s: s))
-  return LLVM::shift_right_unsigned[T](me, T.to_width(s: LLVM::sub[S64](a: 0_s64, b: s)))
+  if LLVM::signed_ge(a: s, b: 0_s64)
+    return LLVM::shift_left(value: me, bits: T.to_width(s: s))
+  return LLVM::shift_right_unsigned(me, T.to_width(s: LLVM::sub(a: 0_s64, b: s)))
 
 ### The mask `(1 << n) - 1` as a `T`.
 common routine T.low_mask(n: S64) -> T
@@ -117,11 +117,11 @@ routine Bool.xor(you: Bool) -> Bool
 ### Counts leading zeros of an `L` (over 2*W bits) using two M-wide halves.
 common routine UnpackedFloat[M, L, W].clz_wide(v: L) -> S64
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var hi = LLVM::int_truncate[L, M](LLVM::shift_right_unsigned[L](v, L.to_width(s: wb)))
+  var hi = LLVM::int_truncate[L, M](LLVM::shift_right_unsigned(v, L.to_width(s: wb)))
   if LLVM::int_ne[M](a: hi, b: 0)
-    return LLVM::int_truncate[M, S64](LLVM::leading_zeros[M](hi))
+    return LLVM::int_truncate[M, S64](LLVM::leading_zeros(hi))
   var lo = LLVM::int_truncate[L, M](v)
-  return LLVM::add[S64](a: wb, b: LLVM::int_truncate[M, S64](LLVM::leading_zeros[M](lo)))
+  return LLVM::add(a: wb, b: LLVM::int_truncate[M, S64](LLVM::leading_zeros(lo)))
 
 # ============================================================================
 # Constructors
@@ -186,10 +186,10 @@ routine UnpackedFloat[M, L, W].abs() -> UnpackedFloat[M, L, W]
 routine UnpackedFloat[M, L, W].ldexp(e: S64) -> UnpackedFloat[M, L, W]
   if me.iszero()
     return me
-  var y = LLVM::add[S64](a: me.exp, b: e)
-  if LLVM::signed_lt[S64](a: y, b: -2147483648_s64)
+  var y = LLVM::add(a: me.exp, b: e)
+  if LLVM::signed_lt(a: y, b: -2147483648_s64)
     return UnpackedFloat[M, L, W].zero(sign: me.sign())
-  if LLVM::signed_gt[S64](a: y, b: 2147483647_s64)
+  if LLVM::signed_gt(a: y, b: 2147483647_s64)
     return UnpackedFloat[M, L, W].inf(sign: me.sign())
   return UnpackedFloat[M, L, W].make(mant: me.mant, exp: y, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: false, isinf: false, isnan: false))
 
@@ -206,13 +206,13 @@ routine UnpackedFloat[M, L, W].cmp(you: UnpackedFloat[M, L, W]) -> S64
     return 1_s64
   if me.sign() and not you.sign()
     return -1_s64
-  if LLVM::signed_gt[S64](a: me.exp, b: you.exp)
+  if LLVM::signed_gt(a: me.exp, b: you.exp)
     return if me.sign() then -1_s64 else 1_s64
-  if LLVM::signed_lt[S64](a: me.exp, b: you.exp)
+  if LLVM::signed_lt(a: me.exp, b: you.exp)
     return if me.sign() then 1_s64 else -1_s64
-  if LLVM::unsigned_gt[M](a: me.mant, b: you.mant)
+  if LLVM::unsigned_gt(a: me.mant, b: you.mant)
     return if me.sign() then -1_s64 else 1_s64
-  if LLVM::unsigned_lt[M](a: me.mant, b: you.mant)
+  if LLVM::unsigned_lt(a: me.mant, b: you.mant)
     return if me.sign() then 1_s64 else -1_s64
   return 0_s64
 
@@ -223,12 +223,12 @@ routine UnpackedFloat[M, L, W].cmp(you: UnpackedFloat[M, L, W]) -> S64
 ### Core add/subtract: returns `me ± you` (subtract when `negate`).
 routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool) -> UnpackedFloat[M, L, W]
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var carry = LLVM::sub[S64](a: LLVM::mul[S64](a: 2_s64, b: wb), b: 1_s64)
-  var wm1 = LLVM::sub[S64](a: wb, b: 1_s64)
-  var negwb = LLVM::sub[S64](a: 0_s64, b: wb)
+  var carry = LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64)
+  var wm1 = LLVM::sub(a: wb, b: 1_s64)
+  var negwb = LLVM::sub(a: 0_s64, b: wb)
   var rsign = (you.sign()).xor(you: negate)
-  var ed = LLVM::sub[S64](a: me.exp, b: you.exp)
-  if me.iszero() or me.isinf() or me.isnan() or you.iszero() or you.isinf() or you.isnan() or LLVM::signed_gt[S64](a: ed, b: wb) or LLVM::signed_lt[S64](a: ed, b: negwb)
+  var ed = LLVM::sub(a: me.exp, b: you.exp)
+  if me.iszero() or me.isinf() or me.isnan() or you.iszero() or you.isinf() or you.isnan() or LLVM::signed_gt(a: ed, b: wb) or LLVM::signed_lt(a: ed, b: negwb)
     if me.iszero() and you.iszero()
       return UnpackedFloat[M, L, W].make(mant: LLVM::zero_extend[U64, M](0_u64), exp: 0_s64, fpclass: SignedFpClass.from_flags(sign: me.sign() and rsign, iszero: true, isinf: false, isnan: false))
     if me.isnan() or you.iszero()
@@ -243,64 +243,64 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
       if me.isinf()
         return me
       return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, fpclass: SignedFpClass.from_flags(sign: rsign, iszero: you.iszero(), isinf: you.isinf(), isnan: you.isnan()))
-    if LLVM::signed_gt[S64](a: ed, b: wb)
+    if LLVM::signed_gt(a: ed, b: wb)
       return me
-    if LLVM::signed_lt[S64](a: ed, b: negwb)
+    if LLVM::signed_lt(a: ed, b: negwb)
       return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, fpclass: SignedFpClass.from_flags(sign: rsign, iszero: you.iszero(), isinf: you.isinf(), isnan: you.isnan()))
   # True subtraction iff the effective signs differ; align both mantissas into the
   # wide L word so the larger keeps wb fraction bits and the smaller is shifted by ed.
   var subtract = me.sign() != rsign
-  var lsh = if LLVM::signed_gt[S64](a: ed, b: 0_s64) then wb else LLVM::add[S64](a: wb, b: ed)
-  var rsh = if LLVM::signed_gt[S64](a: ed, b: 0_s64) then LLVM::sub[S64](a: wb, b: ed) else wb
+  var lsh = if LLVM::signed_gt(a: ed, b: 0_s64) then wb else LLVM::add(a: wb, b: ed)
+  var rsh = if LLVM::signed_gt(a: ed, b: 0_s64) then LLVM::sub(a: wb, b: ed) else wb
   var lm = (LLVM::zero_extend[M, L](me.mant)).shift(s: lsh)
   var rm = (LLVM::zero_extend[M, L](you.mant)).shift(s: rsh)
-  var exp = if LLVM::signed_gt[S64](a: ed, b: 0_s64) then me.exp else you.exp
+  var exp = if LLVM::signed_gt(a: ed, b: 0_s64) then me.exp else you.exp
   var am = L.to_width(s: 0_s64)
   var rsign2 = me.sign()
   if not subtract
-    am = LLVM::add[L](a: lm, b: rm)
+    am = LLVM::add(a: lm, b: rm)
     # carry out of the top bit -> renormalize right by one, bump exponent.
     if (am).bit(pos: carry)
       am = (am).shift(s: -1_s64)
-      exp = LLVM::add[S64](a: exp, b: 1_s64)
+      exp = LLVM::add(a: exp, b: 1_s64)
     # round-half-even: base addend is all the low guard bits; +1 when the round bit (wb) is set.
     var addend = L.low_mask(n: wm1)
     if (am).bit(pos: wb)
-      addend = LLVM::add[L](a: addend, b: L.to_width(s: 1_s64))
-    am = LLVM::add[L](a: am, b: addend)
+      addend = LLVM::add(a: addend, b: L.to_width(s: 1_s64))
+    am = LLVM::add(a: am, b: addend)
     if (am).bit(pos: carry)
       am = (am).shift(s: -1_s64)
-      exp = LLVM::add[S64](a: exp, b: 1_s64)
+      exp = LLVM::add(a: exp, b: 1_s64)
   else
     # magnitude subtraction: result takes the sign of the larger operand.
-    if LLVM::unsigned_lt[L](a: lm, b: rm)
-      am = LLVM::sub[L](a: rm, b: lm)
+    if LLVM::unsigned_lt(a: lm, b: rm)
+      am = LLVM::sub(a: rm, b: lm)
       rsign2 = rsign
     else
-      am = LLVM::sub[L](a: lm, b: rm)
+      am = LLVM::sub(a: lm, b: rm)
       rsign2 = me.sign()
     # exact cancellation yields +0.
     if LLVM::int_eq[L](a: am, b: 0)
       rsign2 = false
     # renormalize: shift the leading set bit back up to its canonical position, adjust exp.
-    var x = LLVM::sub[S64](a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 1_s64)
+    var x = LLVM::sub(a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 1_s64)
     am = (am).shift(s: x)
-    exp = LLVM::sub[S64](a: exp, b: x)
+    exp = LLVM::sub(a: exp, b: x)
     var addend = L.low_mask(n: wm1)
     if (am).bit(pos: wb)
-      addend = LLVM::add[L](a: addend, b: L.to_width(s: 1_s64))
-    am = LLVM::add[L](a: am, b: addend)
+      addend = LLVM::add(a: addend, b: L.to_width(s: 1_s64))
+    am = LLVM::add(a: am, b: addend)
     if (am).bit(pos: carry)
       am = (am).shift(s: -1_s64)
-      exp = LLVM::add[S64](a: exp, b: 1_s64)
+      exp = LLVM::add(a: exp, b: 1_s64)
   am = (am).shift(s: negwb)
   var am128 = LLVM::int_truncate[L, M](am)
   var amzero = LLVM::int_eq[M](a: am128, b: 0)
   if amzero
     exp = 0_s64
-  if LLVM::signed_lt[S64](a: exp, b: -2147483648_s64)
+  if LLVM::signed_lt(a: exp, b: -2147483648_s64)
     return UnpackedFloat[M, L, W].zero(sign: rsign2)
-  if LLVM::signed_gt[S64](a: exp, b: 2147483647_s64)
+  if LLVM::signed_gt(a: exp, b: 2147483647_s64)
     return UnpackedFloat[M, L, W].inf(sign: rsign2)
   return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, fpclass: SignedFpClass.from_flags(sign: rsign2, iszero: amzero, isinf: false, isnan: false))
 
@@ -323,27 +323,27 @@ routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat
       return UnpackedFloat[M, L, W].nan()
     return UnpackedFloat[M, L, W].inf(sign: (me.sign()).xor(you: you.sign()))
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var carry = LLVM::sub[S64](a: LLVM::mul[S64](a: 2_s64, b: wb), b: 1_s64)
-  var wm1 = LLVM::sub[S64](a: wb, b: 1_s64)
-  var am = LLVM::mul[L](a: LLVM::zero_extend[M, L](me.mant), b: LLVM::zero_extend[M, L](you.mant))
-  var x = LLVM::sub[S64](a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 4_s64)
-  am = (am).shift(s: LLVM::add[S64](a: x, b: 3_s64))
-  var exp = LLVM::sub[S64](a: LLVM::add[S64](a: me.exp, b: you.exp), b: x)
+  var carry = LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64)
+  var wm1 = LLVM::sub(a: wb, b: 1_s64)
+  var am = LLVM::mul(a: LLVM::zero_extend[M, L](me.mant), b: LLVM::zero_extend[M, L](you.mant))
+  var x = LLVM::sub(a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 4_s64)
+  am = (am).shift(s: LLVM::add(a: x, b: 3_s64))
+  var exp = LLVM::sub(a: LLVM::add(a: me.exp, b: you.exp), b: x)
   var addend = L.low_mask(n: wm1)
   if (am).bit(pos: wb)
-    addend = LLVM::add[L](a: addend, b: L.to_width(s: 1_s64))
-  am = LLVM::add[L](a: am, b: addend)
+    addend = LLVM::add(a: addend, b: L.to_width(s: 1_s64))
+  am = LLVM::add(a: am, b: addend)
   if (am).bit(pos: carry)
     am = (am).shift(s: -1_s64)
-    exp = LLVM::add[S64](a: exp, b: 1_s64)
-  am = (am).shift(s: LLVM::sub[S64](a: 0_s64, b: wb))
+    exp = LLVM::add(a: exp, b: 1_s64)
+  am = (am).shift(s: LLVM::sub(a: 0_s64, b: wb))
   var am128 = LLVM::int_truncate[L, M](am)
   var amz = LLVM::int_eq[M](a: am128, b: 0)
   if amz
     exp = 0_s64
-  if LLVM::signed_lt[S64](a: exp, b: -2147483648_s64)
+  if LLVM::signed_lt(a: exp, b: -2147483648_s64)
     return UnpackedFloat[M, L, W].zero(sign: (me.sign()).xor(you: you.sign()))
-  if LLVM::signed_gt[S64](a: exp, b: 2147483647_s64)
+  if LLVM::signed_gt(a: exp, b: 2147483647_s64)
     return UnpackedFloat[M, L, W].inf(sign: (me.sign()).xor(you: you.sign()))
   return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, fpclass: SignedFpClass.from_flags(sign: (me.sign()).xor(you: you.sign()), iszero: amz, isinf: false, isnan: false))
 
@@ -370,8 +370,8 @@ routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> UnpackedFloat
   if me.iszero()
     return UnpackedFloat[M, L, W].zero(sign: (me.sign()).xor(you: you.sign()))
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var nbm = LLVM::sub[S64](a: wb, b: 2_s64)
-  var wm1 = LLVM::sub[S64](a: wb, b: 1_s64)
+  var nbm = LLVM::sub(a: wb, b: 2_s64)
+  var wm1 = LLVM::sub(a: wb, b: 1_s64)
   var sign = (me.sign()).xor(you: you.sign())
   var num = (LLVM::zero_extend[M, L](me.mant)).shift(s: wb)
   var den = LLVM::zero_extend[M, L](you.mant)
@@ -380,30 +380,30 @@ routine UnpackedFloat[M, L, W].div(you: UnpackedFloat[M, L, W]) -> UnpackedFloat
   # slow `udiv/urem iN` software expansion (~2.6us/op for i512). One knuth divide; the
   # remainder (only needed as a nonzero/sticky flag) comes from a cheap mul-back.
   var quo = num // den
-  var rrem = LLVM::sub[L](a: num, b: LLVM::mul[L](a: quo, b: den))
+  var rrem = LLVM::sub(a: num, b: LLVM::mul(a: quo, b: den))
   # msbq = index of the quotient's top set bit; s = how many low bits to drop to nbmant.
-  var msbq = LLVM::sub[S64](a: LLVM::sub[S64](a: LLVM::mul[S64](a: 2_s64, b: wb), b: 1_s64), b: UnpackedFloat[M, L, W].clz_wide(v: quo))
-  var s = LLVM::sub[S64](a: msbq, b: nbm)
-  var q = LLVM::int_truncate[L, M]((quo).shift(s: LLVM::sub[S64](a: 0_s64, b: s)))
+  var msbq = LLVM::sub(a: LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64), b: UnpackedFloat[M, L, W].clz_wide(v: quo))
+  var s = LLVM::sub(a: msbq, b: nbm)
+  var q = LLVM::int_truncate[L, M]((quo).shift(s: LLVM::sub(a: 0_s64, b: s)))
   # lost = the dropped low s bits; half = the round bit (2^(s-1)) for half-even decisions.
-  var lost = LLVM::int_truncate[L, M](LLVM::bit_and[L](a: quo, b: L.low_mask(n: s)))
-  var half = (M.to_width(s: 1_s64)).shift(s: LLVM::sub[S64](a: s, b: 1_s64))
-  var rexp = LLVM::sub[S64](a: LLVM::add[S64](a: LLVM::sub[S64](a: me.exp, b: you.exp), b: msbq), b: LLVM::add[S64](a: wb, b: 1_s64))
+  var lost = LLVM::int_truncate[L, M](LLVM::bit_and(a: quo, b: L.low_mask(n: s)))
+  var half = (M.to_width(s: 1_s64)).shift(s: LLVM::sub(a: s, b: 1_s64))
+  var rexp = LLVM::sub(a: LLVM::add(a: LLVM::sub(a: me.exp, b: you.exp), b: msbq), b: LLVM::add(a: wb, b: 1_s64))
   var roundup = false
   # > half -> round up; == half -> sticky (nonzero remainder) breaks the tie, else even.
-  if LLVM::unsigned_gt[M](a: lost, b: half)
+  if LLVM::unsigned_gt(a: lost, b: half)
     roundup = true
-  elseif LLVM::int_eq[M](a: lost, b: half)
+  elseif LLVM::int_eq(a: lost, b: half)
     if LLVM::int_ne[L](a: rrem, b: 0)
       roundup = true
     else
       roundup = LLVM::int_ne[M](a: LLVM::bit_and[M](a: q, b: M.to_width(s: 1_s64)), b: 0)
   if roundup
-    q = LLVM::add[M](a: q, b: M.to_width(s: 1_s64))
+    q = LLVM::add(a: q, b: M.to_width(s: 1_s64))
     # rounding may carry into bit W-1 -> renormalize down one and bump the exponent.
     if (q).bit(pos: wm1)
       q = (q).shift(s: -1_s64)
-      rexp = LLVM::add[S64](a: rexp, b: 1_s64)
+      rexp = LLVM::add(a: rexp, b: 1_s64)
   return UnpackedFloat[M, L, W].make(mant: q, exp: rexp, fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 # ============================================================================
@@ -445,16 +445,16 @@ common routine UnpackedFloat[M, L, W].isqrt_wide(v: L) -> L
   var rem = v
   var res = L.to_width(s: 0_s64)
   var bit = LLVM::shift_left[L](value: 1, bits: L.to_width(s: LLVM::sub[S64](a: LLVM::mul[S64](a: 2_s64, b: wb), b: 2_s64)))
-  while LLVM::unsigned_gt[L](a: bit, b: rem)
-    bit = LLVM::shift_right_unsigned[L](bit, L.to_width(s: 2_s64))
+  while LLVM::unsigned_gt(a: bit, b: rem)
+    bit = LLVM::shift_right_unsigned(bit, L.to_width(s: 2_s64))
   while LLVM::int_ne[L](a: bit, b: 0)
-    var rb = LLVM::add[L](a: res, b: bit)
-    if LLVM::unsigned_ge[L](a: rem, b: rb)
-      rem = LLVM::sub[L](a: rem, b: rb)
-      res = LLVM::add[L](a: LLVM::shift_right_unsigned[L](res, L.to_width(s: 1_s64)), b: bit)
+    var rb = LLVM::add(a: res, b: bit)
+    if LLVM::unsigned_ge(a: rem, b: rb)
+      rem = LLVM::sub(a: rem, b: rb)
+      res = LLVM::add(a: LLVM::shift_right_unsigned(res, L.to_width(s: 1_s64)), b: bit)
     else
-      res = LLVM::shift_right_unsigned[L](res, L.to_width(s: 1_s64))
-    bit = LLVM::shift_right_unsigned[L](bit, L.to_width(s: 2_s64))
+      res = LLVM::shift_right_unsigned(res, L.to_width(s: 1_s64))
+    bit = LLVM::shift_right_unsigned(bit, L.to_width(s: 2_s64))
   return res
 
 # ============================================================================
@@ -478,22 +478,22 @@ routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M
       return UnpackedFloat[M, L, W].inf(sign: c.sign())
     return UnpackedFloat[M, L, W].nan()
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var twoW = LLVM::mul[S64](a: 2_s64, b: wb)
-  var carry = LLVM::sub[S64](a: twoW, b: 1_s64)
-  var wm1 = LLVM::sub[S64](a: wb, b: 1_s64)
-  var pexp = LLVM::add[S64](a: me.exp, b: b.exp)
-  var am = LLVM::mul[L](a: LLVM::zero_extend[M, L](me.mant), b: LLVM::zero_extend[M, L](b.mant))
-  var x = LLVM::sub[S64](a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 4_s64)
-  am = (am).shift(s: LLVM::add[S64](a: x, b: 3_s64))
-  pexp = LLVM::sub[S64](a: pexp, b: x)
+  var twoW = LLVM::mul(a: 2_s64, b: wb)
+  var carry = LLVM::sub(a: twoW, b: 1_s64)
+  var wm1 = LLVM::sub(a: wb, b: 1_s64)
+  var pexp = LLVM::add(a: me.exp, b: b.exp)
+  var am = LLVM::mul(a: LLVM::zero_extend[M, L](me.mant), b: LLVM::zero_extend[M, L](b.mant))
+  var x = LLVM::sub(a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 4_s64)
+  am = (am).shift(s: LLVM::add(a: x, b: 3_s64))
+  pexp = LLVM::sub(a: pexp, b: x)
   var amzero = LLVM::int_eq[L](a: am, b: 0)
   if amzero
     pexp = 0_s64
-  var ed = LLVM::sub[S64](a: pexp, b: c.exp)
+  var ed = LLVM::sub(a: pexp, b: c.exp)
   if amzero and c.iszero()
     ed = 0_s64
   elseif amzero
-    ed = LLVM::sub[S64](a: 0_s64, b: twoW)
+    ed = LLVM::sub(a: 0_s64, b: twoW)
   elseif c.iszero()
     ed = twoW
   var subtract = ((me.sign()).xor(you: b.sign())).xor(you: c.sign())
@@ -501,55 +501,55 @@ routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M
   var amsb = false
   var zmsb = false
   var zm = (LLVM::zero_extend[M, L](c.mant)).shift(s: wb)
-  if LLVM::signed_lt[S64](a: ed, b: 0_s64)
-    if LLVM::signed_le[S64](a: ed, b: LLVM::sub[S64](a: 4_s64, b: twoW))
+  if LLVM::signed_lt(a: ed, b: 0_s64)
+    if LLVM::signed_le(a: ed, b: LLVM::sub(a: 4_s64, b: twoW))
       amsb = LLVM::int_ne[L](a: am, b: 0)
       am = L.to_width(s: 0_s64)
     else
       amsb = LLVM::int_ne[L](a: LLVM::bit_and[L](a: L.low_mask(n: LLVM::sub[S64](a: 4_s64, b: ed)), b: am), b: 0)
       am = ((am).shift(s: ed)).clear_low(n: 4_s64)
   else
-    if LLVM::signed_ge[S64](a: ed, b: LLVM::sub[S64](a: twoW, b: 4_s64))
+    if LLVM::signed_ge(a: ed, b: LLVM::sub(a: twoW, b: 4_s64))
       zmsb = LLVM::int_ne[L](a: zm, b: 0)
       zm = L.to_width(s: 0_s64)
     else
       zmsb = LLVM::int_ne[L](a: LLVM::bit_and[L](a: L.low_mask(n: LLVM::add[S64](a: 4_s64, b: ed)), b: zm), b: 0)
-      zm = ((zm).shift(s: LLVM::sub[S64](a: 0_s64, b: ed))).clear_low(n: 4_s64)
-  var exp = if LLVM::signed_gt[S64](a: ed, b: 0_s64) then pexp else c.exp
+      zm = ((zm).shift(s: LLVM::sub(a: 0_s64, b: ed))).clear_low(n: 4_s64)
+  var exp = if LLVM::signed_gt(a: ed, b: 0_s64) then pexp else c.exp
   if not subtract
-    am = LLVM::add[L](a: am, b: zm)
+    am = LLVM::add(a: am, b: zm)
     if (am).bit(pos: carry)
       am = (am).shift(s: -1_s64)
-      exp = LLVM::add[S64](a: exp, b: 1_s64)
-    var addend = LLVM::add[L](a: L.low_mask(n: wm1), b: L.from_bool(cond: amsb or zmsb or (am).bit(pos: wb)))
-    am = LLVM::add[L](a: am, b: addend)
+      exp = LLVM::add(a: exp, b: 1_s64)
+    var addend = LLVM::add(a: L.low_mask(n: wm1), b: L.from_bool(cond: amsb or zmsb or (am).bit(pos: wb)))
+    am = LLVM::add(a: am, b: addend)
   else
-    var amge = LLVM::unsigned_ge[L](a: am, b: zm)
+    var amge = LLVM::unsigned_ge(a: am, b: zm)
     var psb = if amge then amsb else zmsb
     var nsb = if amge then zmsb else amsb
     resultsign = if amge then resultsign else c.sign()
     if amge
-      am = LLVM::sub[L](a: am, b: zm)
+      am = LLVM::sub(a: am, b: zm)
     else
-      am = LLVM::sub[L](a: zm, b: am)
+      am = LLVM::sub(a: zm, b: am)
     if LLVM::int_eq[L](a: am, b: 0) and not psb
       resultsign = false
-    var x2 = LLVM::sub[S64](a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 1_s64)
+    var x2 = LLVM::sub(a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 1_s64)
     am = (am).shift(s: x2)
-    exp = LLVM::sub[S64](a: exp, b: x2)
-    var addend = LLVM::add[L](a: L.low_mask(n: wm1), b: L.from_bool(cond: (not nsb) and (psb or (am).bit(pos: wb))))
-    am = LLVM::add[L](a: am, b: addend)
+    exp = LLVM::sub(a: exp, b: x2)
+    var addend = LLVM::add(a: L.low_mask(n: wm1), b: L.from_bool(cond: (not nsb) and (psb or (am).bit(pos: wb))))
+    am = LLVM::add(a: am, b: addend)
   if (am).bit(pos: carry)
     am = (am).shift(s: -1_s64)
-    exp = LLVM::add[S64](a: exp, b: 1_s64)
-  am = (am).shift(s: LLVM::sub[S64](a: 0_s64, b: wb))
+    exp = LLVM::add(a: exp, b: 1_s64)
+  am = (am).shift(s: LLVM::sub(a: 0_s64, b: wb))
   var am128 = LLVM::int_truncate[L, M](am)
   var amz2 = LLVM::int_eq[M](a: am128, b: 0)
   if amz2
     exp = 0_s64
-  if LLVM::signed_lt[S64](a: exp, b: -2147483648_s64)
+  if LLVM::signed_lt(a: exp, b: -2147483648_s64)
     return UnpackedFloat[M, L, W].zero(sign: resultsign)
-  if LLVM::signed_gt[S64](a: exp, b: 2147483647_s64)
+  if LLVM::signed_gt(a: exp, b: 2147483647_s64)
     return UnpackedFloat[M, L, W].inf(sign: resultsign)
   return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, fpclass: SignedFpClass.from_flags(sign: resultsign, iszero: amz2, isinf: false, isnan: false))
 
@@ -565,19 +565,19 @@ routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M
 ### Normalize me = v * 2^(2k) with v in [1,4); seed 1/sqrt(v) to ~2 bits; iterate
 ### y <- y*(3 - v*y^2)/2; return (v*y) * 2^k.
 routine UnpackedFloat[M, L, W].sqrt_newton() -> UnpackedFloat[M, L, W]
-  var e1 = LLVM::add[S64](a: me.exp, b: 1_s64)
-  var twok = LLVM::bit_and[S64](a: e1, b: -2_s64)
-  var k = LLVM::signed_div[S64](a: twok, b: 2_s64)
-  var v = me.ldexp(e: LLVM::sub[S64](a: 0_s64, b: twok))
+  var e1 = LLVM::add(a: me.exp, b: 1_s64)
+  var twok = LLVM::bit_and(a: e1, b: -2_s64)
+  var k = LLVM::signed_div(a: twok, b: 2_s64)
+  var v = me.ldexp(e: LLVM::sub(a: 0_s64, b: twok))
   var y = UnpackedFloat[M, L, W].from_s64(src: 13_s64).ldexp(e: -4_s64)
-  if LLVM::signed_ge[S64](a: v.exp, b: 0_s64)
+  if LLVM::signed_ge(a: v.exp, b: 0_s64)
     y = UnpackedFloat[M, L, W].from_s64(src: 37_s64).ldexp(e: -6_s64)
   var three = UnpackedFloat[M, L, W].from_s64(src: 3_s64)
   var j = 0_s64
-  while LLVM::signed_lt[S64](a: j, b: 10_s64)
+  while LLVM::signed_lt(a: j, b: 10_s64)
     var t = v.mul(you: y).mul(you: y)
     y = y.mul(you: three.sub(you: t)).ldexp(e: -1_s64)
-    j = LLVM::add[S64](a: j, b: 1_s64)
+    j = LLVM::add(a: j, b: 1_s64)
   return v.mul(you: y).ldexp(e: k)
 
 ### Returns the correctly-rounded square root (NaN-of-negative, ±0 and +inf pass through).
@@ -599,24 +599,24 @@ routine UnpackedFloat[M, L, W].sqrt() -> UnpackedFloat[M, L, W]
     return me.sqrt_newton()
   var wb = LLVM::reinterpret_bits[U64, S64](W)
   var offset = 100000000_s64
-  var y = LLVM::sub[S64](a: LLVM::int_truncate[M, S64](LLVM::leading_zeros[M](me.mant)), b: 1_s64)
-  var x = LLVM::sub[S64](a: me.exp, b: y)
-  var tpar = LLVM::signed_rem[S64](a: LLVM::add[S64](a: x, b: offset), b: 2_s64)
-  var par = LLVM::sub[S64](a: 1_s64, b: tpar)
-  var s0 = LLVM::add[S64](a: LLVM::add[S64](a: wb, b: par), b: y)
+  var y = LLVM::sub(a: LLVM::int_truncate[M, S64](LLVM::leading_zeros(me.mant)), b: 1_s64)
+  var x = LLVM::sub(a: me.exp, b: y)
+  var tpar = LLVM::signed_rem(a: LLVM::add(a: x, b: offset), b: 2_s64)
+  var par = LLVM::sub(a: 1_s64, b: tpar)
+  var s0 = LLVM::add(a: LLVM::add(a: wb, b: par), b: y)
   var l = UnpackedFloat[M, L, W].isqrt_wide(v: (LLVM::zero_extend[M, L](me.mant)).shift(s: s0))
-  var s1 = LLVM::sub[S64](a: LLVM::add[S64](a: wb, b: 1_s64), b: UnpackedFloat[M, L, W].clz_wide(v: l))
-  var addl = L.low_mask(n: LLVM::sub[S64](a: s1, b: 1_s64))
+  var s1 = LLVM::sub(a: LLVM::add(a: wb, b: 1_s64), b: UnpackedFloat[M, L, W].clz_wide(v: l))
+  var addl = L.low_mask(n: LLVM::sub(a: s1, b: 1_s64))
   if (l).bit(pos: s1)
-    addl = LLVM::add[L](a: addl, b: L.to_width(s: 1_s64))
-  l = LLVM::add[L](a: l, b: addl)
-  if not (l).bit(pos: LLVM::sub[S64](a: LLVM::mul[S64](a: 2_s64, b: wb), b: 1_s64))
-    l = LLVM::sub[L](a: l, b: L.to_width(s: 1_s64))
-  var m = LLVM::int_truncate[L, M]((l).shift(s: LLVM::sub[S64](a: 0_s64, b: s1)))
-  if (m).bit(pos: LLVM::sub[S64](a: wb, b: 1_s64))
+    addl = LLVM::add(a: addl, b: L.to_width(s: 1_s64))
+  l = LLVM::add(a: l, b: addl)
+  if not (l).bit(pos: LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64))
+    l = LLVM::sub(a: l, b: L.to_width(s: 1_s64))
+  var m = LLVM::int_truncate[L, M]((l).shift(s: LLVM::sub(a: 0_s64, b: s1)))
+  if (m).bit(pos: LLVM::sub(a: wb, b: 1_s64))
     m = (m).shift(s: -1_s64)
-    x = LLVM::add[S64](a: x, b: 1_s64)
-  var rexp = LLVM::sub[S64](a: LLVM::signed_div[S64](a: LLVM::add[S64](a: LLVM::add[S64](a: x, b: LLVM::mul[S64](a: offset, b: 2_s64)), b: 1_s64), b: 2_s64), b: LLVM::add[S64](a: offset, b: 1_s64))
+    x = LLVM::add(a: x, b: 1_s64)
+  var rexp = LLVM::sub(a: LLVM::signed_div(a: LLVM::add(a: LLVM::add(a: x, b: LLVM::mul(a: offset, b: 2_s64)), b: 1_s64), b: 2_s64), b: LLVM::add(a: offset, b: 1_s64))
   return UnpackedFloat[M, L, W].make(mant: m, exp: rexp, fpclass: SignedFpClass.from_flags(sign: false, iszero: LLVM::int_eq[M](a: m, b: 0), isinf: false, isnan: false))
 
 # ============================================================================
@@ -628,30 +628,30 @@ routine UnpackedFloat[M, L, W].trunc() -> UnpackedFloat[M, L, W]
   if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  if LLVM::signed_ge[S64](a: me.exp, b: LLVM::sub[S64](a: wb, b: 2_s64))
+  if LLVM::signed_ge(a: me.exp, b: LLVM::sub(a: wb, b: 2_s64))
     return me
-  if LLVM::signed_lt[S64](a: me.exp, b: -1_s64)
+  if LLVM::signed_lt(a: me.exp, b: -1_s64)
     return UnpackedFloat[M, L, W].zero(sign: me.sign())
-  var s = LLVM::sub[S64](a: LLVM::sub[S64](a: wb, b: 3_s64), b: me.exp)
+  var s = LLVM::sub(a: LLVM::sub(a: wb, b: 3_s64), b: me.exp)
   var mask = LLVM::bit_xor[M](a: M.low_mask(n: s), b: LLVM::sub[M](a: 0, b: 1))
-  return UnpackedFloat[M, L, W].make(mant: LLVM::bit_and[M](a: me.mant, b: mask), exp: me.exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: false, isinf: false, isnan: false))
+  return UnpackedFloat[M, L, W].make(mant: LLVM::bit_and(a: me.mant, b: mask), exp: me.exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: false, isinf: false, isnan: false))
 
 ### Rounds to nearest integer, ties away from zero (TLFloat `round`).
 routine UnpackedFloat[M, L, W].round() -> UnpackedFloat[M, L, W]
   if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  if LLVM::signed_ge[S64](a: me.exp, b: LLVM::sub[S64](a: wb, b: 3_s64))
+  if LLVM::signed_ge(a: me.exp, b: LLVM::sub(a: wb, b: 3_s64))
     return me
-  if LLVM::signed_lt[S64](a: me.exp, b: -2_s64)
+  if LLVM::signed_lt(a: me.exp, b: -2_s64)
     return UnpackedFloat[M, L, W].zero(sign: me.sign())
-  var s = LLVM::sub[S64](a: LLVM::sub[S64](a: wb, b: 3_s64), b: me.exp)
+  var s = LLVM::sub(a: LLVM::sub(a: wb, b: 3_s64), b: me.exp)
   var m = LLVM::add[M](a: me.mant, b: LLVM::shift_left[M](value: 1, bits: M.to_width(s: LLVM::sub[S64](a: s, b: 1_s64))))
   m = LLVM::bit_and[M](a: m, b: LLVM::bit_xor[M](a: M.low_mask(n: s), b: LLVM::sub[M](a: 0, b: 1)))
   var exp = me.exp
-  if (m).bit(pos: LLVM::sub[S64](a: wb, b: 1_s64))
+  if (m).bit(pos: LLVM::sub(a: wb, b: 1_s64))
     m = (m).shift(s: -1_s64)
-    exp = LLVM::add[S64](a: exp, b: 1_s64)
+    exp = LLVM::add(a: exp, b: 1_s64)
   if LLVM::int_eq[M](a: m, b: 0)
     return UnpackedFloat[M, L, W].zero(sign: me.sign())
   return UnpackedFloat[M, L, W].make(mant: m, exp: exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: false, isinf: false, isnan: false))
@@ -661,18 +661,18 @@ routine UnpackedFloat[M, L, W].rint() -> UnpackedFloat[M, L, W]
   if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  if LLVM::signed_ge[S64](a: me.exp, b: LLVM::sub[S64](a: wb, b: 3_s64))
+  if LLVM::signed_ge(a: me.exp, b: LLVM::sub(a: wb, b: 3_s64))
     return me
-  if LLVM::signed_lt[S64](a: me.exp, b: -2_s64)
+  if LLVM::signed_lt(a: me.exp, b: -2_s64)
     return UnpackedFloat[M, L, W].zero(sign: me.sign())
-  var s = LLVM::sub[S64](a: LLVM::sub[S64](a: wb, b: 3_s64), b: me.exp)
-  var lsbit = LLVM::bit_and[M](a: LLVM::shift_right_unsigned[M](me.mant, M.to_width(s: s)), b: M.to_width(s: 1_s64))
+  var s = LLVM::sub(a: LLVM::sub(a: wb, b: 3_s64), b: me.exp)
+  var lsbit = LLVM::bit_and(a: LLVM::shift_right_unsigned(me.mant, M.to_width(s: s)), b: M.to_width(s: 1_s64))
   var m = LLVM::add[M](a: LLVM::add[M](a: me.mant, b: lsbit), b: LLVM::sub[M](a: LLVM::shift_left[M](value: 1, bits: M.to_width(s: LLVM::sub[S64](a: s, b: 1_s64))), b: 1))
   m = LLVM::bit_and[M](a: m, b: LLVM::bit_xor[M](a: M.low_mask(n: s), b: LLVM::sub[M](a: 0, b: 1)))
   var exp = me.exp
-  if (m).bit(pos: LLVM::sub[S64](a: wb, b: 1_s64))
+  if (m).bit(pos: LLVM::sub(a: wb, b: 1_s64))
     m = (m).shift(s: -1_s64)
-    exp = LLVM::add[S64](a: exp, b: 1_s64)
+    exp = LLVM::add(a: exp, b: 1_s64)
   if LLVM::int_eq[M](a: m, b: 0)
     return UnpackedFloat[M, L, W].zero(sign: me.sign())
   return UnpackedFloat[M, L, W].make(mant: m, exp: exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: false, isinf: false, isnan: false))
@@ -686,17 +686,17 @@ common routine UnpackedFloat[M, L, W].from_u64(v: U64) -> UnpackedFloat[M, L, W]
   if v == 0_u64
     return UnpackedFloat[M, L, W].zero(sign: false)
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var x = LLVM::sub[S64](a: 64_s64, b: LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros[U64](v)))
-  var s = LLVM::sub[S64](a: LLVM::sub[S64](a: LLVM::mul[S64](a: 2_s64, b: wb), b: 1_s64), b: x)
+  var x = LLVM::sub(a: 64_s64, b: LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(v)))
+  var s = LLVM::sub(a: LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64), b: x)
   var u = (LLVM::zero_extend[U64, L](v)).shift(s: s)
-  var rb = L.low_mask(n: LLVM::sub[S64](a: wb, b: 1_s64))
+  var rb = L.low_mask(n: LLVM::sub(a: wb, b: 1_s64))
   if (u).bit(pos: wb)
-    rb = LLVM::add[L](a: rb, b: L.to_width(s: 1_s64))
-  u = LLVM::add[L](a: u, b: rb)
-  if (u).bit(pos: LLVM::sub[S64](a: LLVM::mul[S64](a: 2_s64, b: wb), b: 1_s64))
+    rb = LLVM::add(a: rb, b: L.to_width(s: 1_s64))
+  u = LLVM::add(a: u, b: rb)
+  if (u).bit(pos: LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64))
     u = (u).shift(s: -1_s64)
-    x = LLVM::add[S64](a: x, b: 1_s64)
-  u = (u).shift(s: LLVM::sub[S64](a: 0_s64, b: wb))
+    x = LLVM::add(a: x, b: 1_s64)
+  u = (u).shift(s: LLVM::sub(a: 0_s64, b: wb))
   var m = LLVM::int_truncate[L, M](u)
   return UnpackedFloat[M, L, W].make(mant: m, exp: LLVM::sub[S64](a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: false, iszero: LLVM::int_eq[M](a: m, b: 0), isinf: false, isnan: false))
 
@@ -704,22 +704,22 @@ common routine UnpackedFloat[M, L, W].from_u64(v: U64) -> UnpackedFloat[M, L, W]
 common routine UnpackedFloat[M, L, W].from_s64(src: S64) -> UnpackedFloat[M, L, W]
   if src == 0_s64
     return UnpackedFloat[M, L, W].zero(sign: false)
-  var sign = LLVM::signed_lt[S64](a: src, b: 0_s64)
-  var v = if sign then LLVM::sub[S64](a: 0_s64, b: src) else src
+  var sign = LLVM::signed_lt(a: src, b: 0_s64)
+  var v = if sign then LLVM::sub(a: 0_s64, b: src) else src
   var r = UnpackedFloat[M, L, W].from_u64(v: LLVM::reinterpret_bits[S64, U64](v))
   return UnpackedFloat[M, L, W].make(mant: r.mant, exp: r.exp, fpclass: SignedFpClass.from_flags(sign: sign, iszero: r.iszero(), isinf: false, isnan: false))
 
 ### Truncates toward zero into a signed 64-bit integer (castToInt).
 routine UnpackedFloat[M, L, W].to_s64() -> S64
-  if LLVM::signed_lt[S64](a: me.exp, b: -1_s64)
+  if LLVM::signed_lt(a: me.exp, b: -1_s64)
     return 0_s64
-  if LLVM::signed_ge[S64](a: me.exp, b: 62_s64)
-    return LLVM::reinterpret_bits[U64, S64](LLVM::shift_left[U64](value: 1_u64, bits: 63_u64))
+  if LLVM::signed_ge(a: me.exp, b: 62_s64)
+    return LLVM::reinterpret_bits[U64, S64](LLVM::shift_left(value: 1_u64, bits: 63_u64))
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var s = LLVM::sub[S64](a: LLVM::sub[S64](a: wb, b: 3_s64), b: me.exp)
-  var r = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[M, U64](LLVM::shift_right_unsigned[M](me.mant, M.to_width(s: s))))
+  var s = LLVM::sub(a: LLVM::sub(a: wb, b: 3_s64), b: me.exp)
+  var r = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[M, U64](LLVM::shift_right_unsigned(me.mant, M.to_width(s: s))))
   if me.sign()
-    return LLVM::sub[S64](a: 0_s64, b: r)
+    return LLVM::sub(a: 0_s64, b: r)
   return r
 
 # ============================================================================
@@ -729,15 +729,15 @@ routine UnpackedFloat[M, L, W].to_s64() -> S64
 ### Returns floor(log2|me|) (TLFloat `ilogb`).
 routine UnpackedFloat[M, L, W].ilogb() -> S64
   if me.exp != 0_s64
-    return LLVM::add[S64](a: me.exp, b: 1_s64)
-  return LLVM::sub[S64](a: 2_s64, b: LLVM::int_truncate[M, S64](LLVM::leading_zeros[M](me.mant)))
+    return LLVM::add(a: me.exp, b: 1_s64)
+  return LLVM::sub(a: 2_s64, b: LLVM::int_truncate[M, S64](LLVM::leading_zeros(me.mant)))
 
 ### Returns `true` when integer-valued.
 routine UnpackedFloat[M, L, W].isint() -> Bool
   if me.isinf() or me.isnan()
     return false
   var t = me.trunc()
-  return LLVM::int_eq[M](a: t.mant, b: me.mant) and (t.exp == me.exp)
+  return LLVM::int_eq(a: t.mant, b: me.mant) and (t.exp == me.exp)
 
 ### Returns `true` when an even integer.
 routine UnpackedFloat[M, L, W].iseven() -> Bool
@@ -748,28 +748,28 @@ routine UnpackedFloat[M, L, W].toward0() -> UnpackedFloat[M, L, W]
   if me.iszero() or me.isinf() or me.isnan()
     return me
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var m = LLVM::sub[M](a: me.mant, b: M.to_width(s: 1_s64))
+  var m = LLVM::sub(a: me.mant, b: M.to_width(s: 1_s64))
   var exp = me.exp
-  if not (m).bit(pos: LLVM::sub[S64](a: wb, b: 2_s64))
-    exp = LLVM::sub[S64](a: exp, b: 1_s64)
+  if not (m).bit(pos: LLVM::sub(a: wb, b: 2_s64))
+    exp = LLVM::sub(a: exp, b: 1_s64)
     m = (m).shift(s: 1_s64)
   return UnpackedFloat[M, L, W].make(mant: m, exp: exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: false, isinf: false, isnan: false))
 
 ### Returns `true` when `me < you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].lt(you: UnpackedFloat[M, L, W]) -> Bool
-  return LLVM::signed_lt[S64](a: me.cmp(you: you), b: 0_s64)
+  return LLVM::signed_lt(a: me.cmp(you: you), b: 0_s64)
 
 ### Returns `true` when `me > you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].gt(you: UnpackedFloat[M, L, W]) -> Bool
-  return LLVM::signed_gt[S64](a: me.cmp(you: you), b: 0_s64)
+  return LLVM::signed_gt(a: me.cmp(you: you), b: 0_s64)
 
 ### Returns `true` when `me <= you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].le(you: UnpackedFloat[M, L, W]) -> Bool
-  return not LLVM::signed_gt[S64](a: me.cmp(you: you), b: 0_s64)
+  return not LLVM::signed_gt(a: me.cmp(you: you), b: 0_s64)
 
 ### Returns `true` when `me >= you` (via `cmp`; does not special-case NaN).
 routine UnpackedFloat[M, L, W].ge(you: UnpackedFloat[M, L, W]) -> Bool
-  return not LLVM::signed_lt[S64](a: me.cmp(you: you), b: 0_s64)
+  return not LLVM::signed_lt(a: me.cmp(you: you), b: 0_s64)
 
 ### Returns `true` when `me == you`; NaN compares unequal to everything (incl. itself).
 routine UnpackedFloat[M, L, W].eq(you: UnpackedFloat[M, L, W]) -> Bool
@@ -783,15 +783,15 @@ routine UnpackedFloat[M, L, W].eq(you: UnpackedFloat[M, L, W]) -> Bool
 
 ### Returns `10^a` as an unpacked value.
 common routine UnpackedFloat[M, L, W].exp10i(a: S64) -> UnpackedFloat[M, L, W]
-  var neg = LLVM::signed_lt[S64](a: a, b: 0_s64)
-  var e = if neg then LLVM::sub[S64](a: 0_s64, b: a) else a
+  var neg = LLVM::signed_lt(a: a, b: 0_s64)
+  var e = if neg then LLVM::sub(a: 0_s64, b: a) else a
   var r = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var d = UnpackedFloat[M, L, W].from_s64(src: 10_s64)
-  while LLVM::signed_gt[S64](a: e, b: 0_s64)
-    if LLVM::signed_rem[S64](a: e, b: 2_s64) == 1_s64
+  while LLVM::signed_gt(a: e, b: 0_s64)
+    if LLVM::signed_rem(a: e, b: 2_s64) == 1_s64
       r = (r * (d))
     d = (d * (d))
-    e = LLVM::shift_right_signed[S64](e, 1_s64)
+    e = LLVM::shift_right_signed(e, 1_s64)
   if neg
     return (UnpackedFloat[M, L, W].from_s64(src: 1_s64) / (r))
   return r
@@ -800,7 +800,7 @@ common routine UnpackedFloat[M, L, W].exp10i(a: S64) -> UnpackedFloat[M, L, W]
 ### returns (fraction, exp) with me = fraction * 2^exp.
 routine UnpackedFloat[M, L, W].frexp() -> UFExp[M, L, W]
   var fr = UnpackedFloat[M, L, W].make(mant: me.mant, exp: -2_s64, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan()))
-  return UFExp[M, L, W](item0: fr, item1: LLVM::add[S64](a: me.exp, b: 2_s64))
+  return UFExp[M, L, W](item0: fr, item1: LLVM::add(a: me.exp, b: 2_s64))
 
 ### Builds an `M`-typed value from two U64 halves (low, then high<<64).
 common routine M.from_words2(h1: U64, h0: U64) -> M
@@ -818,17 +818,17 @@ common routine M.from_words8(h7: U64, h6: U64, h5: U64, h4: U64, h3: U64, h2: U6
 ### `0x…_u128` instead of two U64 halves. Limbs are extracted via U64 (always a valid widening into
 ### any M, unlike a direct same-width/narrowing cast) and reassembled by `from_words2`.
 common routine M.from_u128(v: U128) -> M
-  return M.from_words2(h1: LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned[U128](v, U128.to_width(s: 64_s64))), h0: LLVM::int_truncate[U128, U64](v))
+  return M.from_words2(h1: LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(v, U128.to_width(s: 64_s64))), h0: LLVM::int_truncate[U128, U64](v))
 
 ### Builds an `M`-typed mantissa from a single 256-bit literal — octuple-tier constants write one
 ### `0x…_u256` instead of four U64 halves.
 common routine M.from_u256(v: U256) -> M
-  return M.from_words4(h3: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](v, U256.to_width(s: 192_s64))), h2: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](v, U256.to_width(s: 128_s64))), h1: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](v, U256.to_width(s: 64_s64))), h0: LLVM::int_truncate[U256, U64](v))
+  return M.from_words4(h3: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(v, U256.to_width(s: 192_s64))), h2: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(v, U256.to_width(s: 128_s64))), h1: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(v, U256.to_width(s: 64_s64))), h0: LLVM::int_truncate[U256, U64](v))
 
 ### Builds an `M`-typed 512-bit mantissa from a high and low 256-bit half — dec-tier constants write
 ### two `0x…_u256` literals instead of eight U64 halves.
 common routine M.from_u256x2(hi: U256, lo: U256) -> M
-  return M.from_words8(h7: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](hi, U256.to_width(s: 192_s64))), h6: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](hi, U256.to_width(s: 128_s64))), h5: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](hi, U256.to_width(s: 64_s64))), h4: LLVM::int_truncate[U256, U64](hi), h3: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](lo, U256.to_width(s: 192_s64))), h2: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](lo, U256.to_width(s: 128_s64))), h1: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned[U256](lo, U256.to_width(s: 64_s64))), h0: LLVM::int_truncate[U256, U64](lo))
+  return M.from_words8(h7: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(hi, U256.to_width(s: 192_s64))), h6: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(hi, U256.to_width(s: 128_s64))), h5: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(hi, U256.to_width(s: 64_s64))), h4: LLVM::int_truncate[U256, U64](hi), h3: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(lo, U256.to_width(s: 192_s64))), h2: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(lo, U256.to_width(s: 128_s64))), h1: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(lo, U256.to_width(s: 64_s64))), h0: LLVM::int_truncate[U256, U64](lo))
 
 ### Bitwise complement of `me`.
 routine T.bit_not() -> T

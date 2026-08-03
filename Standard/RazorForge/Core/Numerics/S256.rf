@@ -127,30 +127,30 @@ routine S256!(from: F64) -> S256
 ### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
 routine S256!(from: F128) -> S256
   var bits = from.to_bits()
-  var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned[U128](bits, 127_u128))
-  var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, 112_u128), b: 32767_u128))
-  var frac = LLVM::bit_and[U128](a: bits, b: f128_mant_mask())
+  var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127_u128))
+  var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
+  var frac = LLVM::bit_and(a: bits, b: f128_mant_mask())
   if biased == 0x7FFF_u64
-    if LLVM::int_eq[U128](a: frac, b: 0_u128)
+    if LLVM::int_eq(a: frac, b: 0_u128)
       throw NumericOverflowError(description: "cannot convert infinite F128 to S256")
     throw NumericDomainError(description: "cannot convert NaN F128 to S256")
   if biased < 16383_u64
     return 0_s256
-  var actual_exp = LLVM::sub[U64](a: biased, b: 16383_u64)
+  var actual_exp = LLVM::sub(a: biased, b: 16383_u64)
   if actual_exp >= 256_u64
     throw NumericOverflowError(description: "F128 value out of range for S256")
   if actual_exp == 255_u64
-    if sign == 0_u64 or LLVM::int_ne[U128](a: frac, b: 0_u128)
+    if sign == 0_u64 or LLVM::int_ne(a: frac, b: 0_u128)
       throw NumericOverflowError(description: "F128 value out of range for S256")
-    return LLVM::reinterpret_bits[U256, S256](LLVM::shift_left[U256](value: 1_u256, bits: 255_u256))
-  var sig = LLVM::zero_extend[U128, U256](LLVM::bit_or[U128](a: f128_implicit(), b: frac))
+    return LLVM::reinterpret_bits[U256, S256](LLVM::shift_left(value: 1_u256, bits: 255_u256))
+  var sig = LLVM::zero_extend[U128, U256](LLVM::bit_or(a: f128_implicit(), b: frac))
   lateinit var int_part: U256
   if actual_exp <= 112_u64
-    int_part = LLVM::shift_right_unsigned[U256](sig, LLVM::zero_extend[U64, U256](LLVM::sub[U64](a: 112_u64, b: actual_exp)))
+    int_part = LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U256](LLVM::sub(a: 112_u64, b: actual_exp)))
   else
-    int_part = LLVM::shift_left[U256](sig, LLVM::zero_extend[U64, U256](LLVM::sub[U64](a: actual_exp, b: 112_u64)))
+    int_part = LLVM::shift_left(sig, LLVM::zero_extend[U64, U256](LLVM::sub(a: actual_exp, b: 112_u64)))
   if sign == 1_u64
-    return LLVM::sub[S256](a: 0_s256, b: LLVM::reinterpret_bits[U256, S256](int_part))
+    return LLVM::sub(a: 0_s256, b: LLVM::reinterpret_bits[U256, S256](int_part))
   return LLVM::reinterpret_bits[U256, S256](int_part)
 
 ### Converts a `D32` to `S256`, truncating toward zero.
@@ -222,9 +222,9 @@ routine S256.mul!(you: S256) -> S256
 ### `|x|` as a U256 magnitude. `S256_MIN` maps to exactly 2²⁵⁵ (the wrapping
 ### negate reinterpreted as unsigned), so there is no overflow.
 routine s256_abs_u256(x: S256) -> U256
-  if LLVM::signed_ge[S256](a: x, b: 0_s256)
+  if LLVM::signed_ge(a: x, b: 0_s256)
     return LLVM::reinterpret_bits[S256, U256](x)
-  return LLVM::reinterpret_bits[S256, U256](LLVM::sub[S256](a: 0_s256, b: x))
+  return LLVM::reinterpret_bits[S256, U256](LLVM::sub(a: 0_s256, b: x))
 
 ### Returns `me // you` (euclidean division), throwing on errors.
 ### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `mod!`.
@@ -243,17 +243,17 @@ routine S256.floordiv!(you: S256) -> S256
   # ONE Knuth divide yields both magnitude quotient and remainder.
   var dr = udivrem256(num: amag, den: bmag)
   var uq = dr.q
-  var aneg = LLVM::signed_lt[S256](a: me, b: 0_s256)
-  var bneg = LLVM::signed_lt[S256](a: you, b: 0_s256)
+  var aneg = LLVM::signed_lt(a: me, b: 0_s256)
+  var bneg = LLVM::signed_lt(a: you, b: 0_s256)
   # EUCLIDEAN division (remainder always >= 0), consistent with S8..S128. When the
   # dividend is negative and the division is inexact the quotient MAGNITUDE rounds up
   # by one; the quotient is positive iff the operands share a sign.
-  if aneg and LLVM::int_ne[U256](a: dr.r, b: 0_u256)
-    uq = LLVM::add[U256](a: uq, b: 1_u256)
+  if aneg and LLVM::int_ne(a: dr.r, b: 0_u256)
+    uq = LLVM::add(a: uq, b: 1_u256)
   var q = LLVM::reinterpret_bits[U256, S256](uq)
   if aneg == bneg
     return q
-  return LLVM::sub[S256](a: 0_s256, b: q)
+  return LLVM::sub(a: 0_s256, b: q)
 
 ### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
 ### :param you: The divisor.
@@ -266,8 +266,8 @@ routine S256.mod!(you: S256) -> S256
   # dividend with a nonzero remainder, reflect the magnitude remainder into [0, |you|).
   var bmag = s256_abs_u256(x: you)
   var ur = s256_abs_u256(x: me).mod(bmag)
-  if LLVM::signed_lt[S256](a: me, b: 0_s256) and LLVM::int_ne[U256](a: ur, b: 0_u256)
-    ur = LLVM::sub[U256](a: bmag, b: ur)
+  if LLVM::signed_lt(a: me, b: 0_s256) and LLVM::int_ne(a: ur, b: 0_u256)
+    ur = LLVM::sub(a: bmag, b: ur)
   return LLVM::reinterpret_bits[U256, S256](ur)
 
 ### Returns `-me` (arithmetic negation), throwing on `S256_MIN`.
@@ -276,7 +276,7 @@ routine S256.mod!(you: S256) -> S256
 routine S256.neg!() -> S256
   if me == S256_MIN
     throw IntegerOverflowError()
-  return LLVM::sub[S256](a: 0_s256, b: me)
+  return LLVM::sub(a: 0_s256, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -286,19 +286,19 @@ routine S256.neg!() -> S256
 ### :param you: The right operand.
 ### :returns: The sum, wrapping on overflow.
 routine S256.add_wrap(you: S256) -> S256
-  return LLVM::add[S256](a: me, b: you)
+  return LLVM::add(a: me, b: you)
 
 ### Returns `(me - you)` with wrapping arithmetic (mod 2²⁵⁶, signed).
 ### :param you: The value to subtract.
 ### :returns: The difference, wrapping on underflow.
 routine S256.sub_wrap(you: S256) -> S256
-  return LLVM::sub[S256](a: me, b: you)
+  return LLVM::sub(a: me, b: you)
 
 ### Returns `(me * you)` with wrapping arithmetic (mod 2²⁵⁶, signed).
 ### :param you: The right operand.
 ### :returns: The product, wrapping on overflow.
 routine S256.mul_wrap(you: S256) -> S256
-  return LLVM::mul[S256](a: me, b: you)
+  return LLVM::mul(a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -329,14 +329,14 @@ dangerous routine S256.floordiv_unchecked(you: S256) -> S256
   # Knuth divide on magnitudes (one call → quotient + remainder), euclidean adjust.
   var dr = udivrem256(num: s256_abs_u256(x: me), den: s256_abs_u256(x: you))
   var uq = dr.q
-  var aneg = LLVM::signed_lt[S256](a: me, b: 0_s256)
-  var bneg = LLVM::signed_lt[S256](a: you, b: 0_s256)
-  if aneg and LLVM::int_ne[U256](a: dr.r, b: 0_u256)
-    uq = LLVM::add[U256](a: uq, b: 1_u256)
+  var aneg = LLVM::signed_lt(a: me, b: 0_s256)
+  var bneg = LLVM::signed_lt(a: you, b: 0_s256)
+  if aneg and LLVM::int_ne(a: dr.r, b: 0_u256)
+    uq = LLVM::add(a: uq, b: 1_u256)
   var q = LLVM::reinterpret_bits[U256, S256](uq)
   if aneg == bneg
     return q
-  return LLVM::sub[S256](a: 0_s256, b: q)
+  return LLVM::sub(a: 0_s256, b: q)
 
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
@@ -345,8 +345,8 @@ dangerous routine S256.mod_unchecked(you: S256) -> S256
   # Knuth divide on magnitudes; reflect a negative dividend's remainder into [0, |you|).
   var bmag = s256_abs_u256(x: you)
   var ur = udivrem256(num: s256_abs_u256(x: me), den: bmag).r
-  if LLVM::signed_lt[S256](a: me, b: 0_s256) and LLVM::int_ne[U256](a: ur, b: 0_u256)
-    ur = LLVM::sub[U256](a: bmag, b: ur)
+  if LLVM::signed_lt(a: me, b: 0_s256) and LLVM::int_ne(a: ur, b: 0_u256)
+    ur = LLVM::sub(a: bmag, b: ur)
   return LLVM::reinterpret_bits[U256, S256](ur)
 
 # ============================================================================
@@ -371,16 +371,16 @@ routine S256.sub_clamp(you: S256) -> S256
 ### :param you: The right operand.
 ### :returns: The product, or `S256_MAX` / `S256_MIN` if it would overflow.
 routine S256.mul_clamp(you: S256) -> S256
-  if LLVM::int_eq[S256](a: me, b: 0_s256) or LLVM::int_eq[S256](a: you, b: 0_s256)
+  if LLVM::int_eq(a: me, b: 0_s256) or LLVM::int_eq(a: you, b: 0_s256)
     return 0_s256
-  var result = LLVM::mul[S256](a: me, b: you)
+  var result = LLVM::mul(a: me, b: you)
   # Signed divide-back via Knuth on magnitudes (me != 0): trunc(result / me).
   var qmag = udivrem256(num: s256_abs_u256(x: result), den: s256_abs_u256(x: me)).q
   var q = LLVM::reinterpret_bits[U256, S256](qmag)
-  if LLVM::int_ne[Bool](a: LLVM::signed_lt[S256](a: result, b: 0_s256), b: LLVM::signed_lt[S256](a: me, b: 0_s256))
-    q = LLVM::sub[S256](a: 0_s256, b: q)
-  if LLVM::int_ne[S256](a: q, b: you)
-    var same_sign = LLVM::int_eq[Bool](LLVM::signed_gt[S256](me, 0_s256), LLVM::signed_gt[S256](you, 0_s256))
+  if LLVM::int_ne(a: LLVM::signed_lt(a: result, b: 0_s256), b: LLVM::signed_lt(a: me, b: 0_s256))
+    q = LLVM::sub(a: 0_s256, b: q)
+  if LLVM::int_ne(a: q, b: you)
+    var same_sign = LLVM::int_eq(LLVM::signed_gt(me, 0_s256), LLVM::signed_gt(you, 0_s256))
     if same_sign
       return S256_MAX
     return S256_MIN
@@ -468,19 +468,19 @@ routine S256.pow_clamp!(exp: S256) -> S256
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine S256.bitand(you: S256) -> S256
-  return LLVM::bit_and[S256](a: me, b: you)
+  return LLVM::bit_and(a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine S256.bitor(you: S256) -> S256
-  return LLVM::bit_or[S256](a: me, b: you)
+  return LLVM::bit_or(a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine S256.bitxor(you: S256) -> S256
-  return LLVM::bit_xor[S256](a: me, b: you)
+  return LLVM::bit_xor(a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
@@ -495,25 +495,25 @@ routine S256.bitnot() -> S256
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S256.ashl(bits: U32) -> S256
-  return LLVM::shift_left[S256](me, S256(bits))
+  return LLVM::shift_left(me, S256(bits))
 
 ### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits`, copying the sign bit into vacated positions.
 routine S256.ashr(bits: U32) -> S256
-  return LLVM::shift_right_signed[S256](me, S256(bits))
+  return LLVM::shift_right_signed(me, S256(bits))
 
 ### Left-shifts this value by `bits` positions (same as `ashl` for signed integers).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S256.lshl(bits: U32) -> S256
-  return LLVM::shift_left[S256](me, S256(bits))
+  return LLVM::shift_left(me, S256(bits))
 
 ### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
 routine S256.lshr(bits: U32) -> S256
-  return LLVM::shift_right_unsigned[S256](me, S256(bits))
+  return LLVM::shift_right_unsigned(me, S256(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -523,15 +523,15 @@ routine S256.lshr(bits: U32) -> S256
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine S256.eq(you: S256) -> Bool
-  return LLVM::int_eq[S256](a: me, b: you)
+  return LLVM::int_eq(a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine S256.cmp(you: S256) -> ComparisonSign
-  if LLVM::signed_lt[S256](me, you)
+  if LLVM::signed_lt(me, you)
     return ME_SMALL
-  if LLVM::signed_gt[S256](me, you)
+  if LLVM::signed_gt(me, you)
     return ME_LARGE
   return SAME
 
@@ -584,12 +584,12 @@ routine S256.count_zeros() -> S256
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `256` if the value is zero.
 routine S256.leading_zeros() -> S256
-  return LLVM::leading_zeros[S256](me)
+  return LLVM::leading_zeros(me)
 
 ### Returns the number of trailing zero bits, starting from the least-significant bit.
 ### :returns: The trailing zero count; `256` if the value is zero.
 routine S256.trailing_zeros() -> S256
-  return LLVM::trailing_zeros[S256](me)
+  return LLVM::trailing_zeros(me)
 
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `256` if the value is `−1` (all bits set).
@@ -609,7 +609,7 @@ routine S256.reverse_bits() -> S256
 ### Returns this value with its 32 bytes swapped (for endianness conversion).
 ### :returns: An `S256` with its bytes in reverse order.
 routine S256.swap_bytes() -> S256
-  return LLVM::byte_swap[S256](me)
+  return LLVM::byte_swap(me)
 
 ### Returns this value rotated left by `bits` positions.
 routine S256.rotate_left(bits: U32) -> S256
@@ -657,8 +657,8 @@ routine S256.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine S256.is_even() -> Bool
-  var result = LLVM::bit_and[S256](a: me, b: 1_s256)
-  return LLVM::int_eq[S256](a: result, b: 0_s256)
+  var result = LLVM::bit_and(a: me, b: 1_s256)
+  return LLVM::int_eq(a: result, b: 0_s256)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.

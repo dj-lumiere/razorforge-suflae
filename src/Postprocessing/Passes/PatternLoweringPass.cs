@@ -228,9 +228,9 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 return ReferenceEquals(body, loop.Body) ? loop : loop with { Body = body };
             }
 
-            case ForStatement f:
+            case EachStatement f:
             {
-                // ForStatements not lowered by ControlFlowLoweringPass (range/tuple/else forms)
+                // EachStatements not lowered by ControlFlowLoweringPass (range/tuple/else forms)
                 // pass through; still recurse into their bodies.
                 Statement body = LowerStatement(stmt: f.Body);
                 Statement? elseB = f.ElseBranch != null

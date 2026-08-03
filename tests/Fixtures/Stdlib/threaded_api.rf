@@ -18,7 +18,7 @@ threaded routine make_point(a: S64, b: S64) -> Point
   return Point(x: a, y: b)
 
 threaded routine excessive_compute(a: S64) -> S64
-  for i in 0 til 1000000000000000  # Magic big number to guarantee failure
+  each i in 0 til 1000000000000000  # Magic big number to guarantee failure
     a *%= i
   return a
 

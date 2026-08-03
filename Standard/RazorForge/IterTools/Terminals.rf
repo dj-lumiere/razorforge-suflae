@@ -6,7 +6,7 @@ module IterTools
 @readonly
 routine Iterable[T].List() -> List[T]
   var result = List[T]()
-  for item in me
+  each item in me
     result.add_last(item)
   return result
 
@@ -17,7 +17,7 @@ routine Iterable[T].List() -> List[T]
 routine Iterable[T].Set() -> Set[T]
 needs T obeys Hashable, Comparable
   var result = Set[T]()
-  for item in me
+  each item in me
     result.add(item)
   return result
 
@@ -27,7 +27,7 @@ needs T obeys Hashable, Comparable
 @readonly
 routine Iterable[T].get_count() -> U64
   var n = 0u64
-  for _ in me
+  each _ in me
     n = n + 1u64
   return n
 
@@ -58,7 +58,7 @@ routine Iterable[T].last!() -> T
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Iterable[T].any(predicate: Routine[(T,), Bool]) -> Bool
-  for item in me
+  each item in me
     if predicate(item)
       return true
   return false
@@ -69,7 +69,7 @@ routine Iterable[T].any(predicate: Routine[(T,), Bool]) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Iterable[T].all(predicate: Routine[(T,), Bool]) -> Bool
-  for item in me
+  each item in me
     if not predicate(item)
       return false
   return true
@@ -83,7 +83,7 @@ routine Iterable[T].all(predicate: Routine[(T,), Bool]) -> Bool
 @readonly
 routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
   var result = start
-  for item in me
+  each item in me
     result = combiner(result, item)
   return result
 
@@ -175,7 +175,7 @@ needs U obeys Comparable
 @readonly
 routine Iterable[T].get_count(predicate: Routine[(T,), Bool]) -> U64
   var n = 0u64
-  for item in me
+  each item in me
     if predicate(item)
       n = n + 1u64
   return n
@@ -197,7 +197,7 @@ routine Iterable[T].first_or_default(default: T) -> T
 @readonly
 routine Iterable[T].last_or_default(default: T) -> T
   var latest = default
-  for item in me
+  each item in me
     latest = item
   return latest
 
@@ -210,11 +210,11 @@ routine Iterable[T].last_or_default(default: T) -> T
 routine Iterable[Text].join(separator: Text) -> Text
   var result = List[Character]()
   var first = true
-  for part in me
+  each part in me
     if not first
-      for i in 0u64 til separator.count()
+      each i in 0u64 til separator.count()
         result.add_last(separator[i])
-    for i in 0u64 til part.count()
+    each i in 0u64 til part.count()
       result.add_last(part[i])
     first = false
   return Text(from_list: steal result)

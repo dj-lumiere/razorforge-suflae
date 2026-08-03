@@ -66,12 +66,12 @@ routine run_program(file: Text, args: Referring[List[Text]], cwd: Text = "",
                     env: Dict[Text, Text] = {:}) -> ProcessResult
   var fcstr = CStr(from: file)
   var builder = rf_proc_begin(file: fcstr, file_len: fcstr.count().S32!())
-  for arg in args
+  each arg in args
     var acstr = CStr(from: arg)
     rf_proc_add_arg(builder: builder, arg: acstr, arg_len: acstr.count().S32!())
   var ccstr = CStr(from: cwd)
   rf_proc_set_cwd(builder: builder, cwd: ccstr, cwd_len: ccstr.count().S32!())
-  for entry in env
+  each entry in env
     var kcstr = CStr(from: entry.key)
     var vcstr = CStr(from: entry.value)
     rf_proc_add_env(builder: builder, key: kcstr, key_len: kcstr.count().S32!(),

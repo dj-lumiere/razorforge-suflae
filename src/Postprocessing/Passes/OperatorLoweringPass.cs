@@ -120,7 +120,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return ReferenceEquals(body, loop.Body) ? stmt : loop with { Body = body };
             }
 
-            case ForStatement f:
+            case EachStatement f:
             {
                 Expression iterable = LowerExpression(f.Iterable);
                 Statement body = LowerStatement(f.Body);

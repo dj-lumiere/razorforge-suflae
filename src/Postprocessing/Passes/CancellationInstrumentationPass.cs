@@ -202,7 +202,7 @@ public sealed class CancellationInstrumentationPass
             case LoopStatement l:
                 RecurseStmt(stmt: l.Body, locals: locals);
                 break;
-            case ForStatement f:
+            case EachStatement f:
                 RecurseStmt(stmt: f.Body, locals: locals);
                 if (f.ElseBranch != null) RecurseStmt(stmt: f.ElseBranch, locals: locals);
                 break;

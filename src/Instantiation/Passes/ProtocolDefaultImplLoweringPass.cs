@@ -528,7 +528,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
 
         // Stdlib bodies are stored raw (no SA annotation). `me` identifiers therefore have
         // ResolvedType=null after cloning, which blocks downstream lowering: ControlFlowLowering
-        // can only set the synthesized `try_emit` call's ResolvedType when `forStmt.Iterable`
+        // can only set the synthesized `try_emit` call's ResolvedType when `eachStmt.Iterable`
         // (= `me`) carries one — without that, PatternLoweringPass sees subjectType=null and
         // refuses to fold the `is None / else var v` when-chain, leaking a NonePattern into codegen.
         AnnotateMeReferences(node: cloned, implementer: implementer);

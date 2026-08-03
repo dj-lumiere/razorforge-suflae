@@ -635,9 +635,9 @@ public partial class Parser
             return ParseLoopStatement();
         }
 
-        if (Match(type: TokenType.For))
+        if (Match(type: TokenType.Each))
         {
-            return ParseForStatement();
+            return ParseEachStatement();
         }
 
         if (Match(type: TokenType.When))

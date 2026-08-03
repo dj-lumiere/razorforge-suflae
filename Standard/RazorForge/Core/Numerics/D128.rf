@@ -49,7 +49,7 @@ common routine D128.from_bits(bits: U128) -> D128
 
 ### Builds a value from its low/high 64-bit words (matching Core.D128 layout).
 common routine D128.from_words(low: U64, high: U64) -> D128
-  var bits = LLVM::bit_or[U128](a: LLVM::zero_extend[U64, U128](low), b: LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](high), bits: U128.to_width(s: 64_s64)))
+  var bits = LLVM::bit_or(a: LLVM::zero_extend[U64, U128](low), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](high), bits: U128.to_width(s: 64_s64)))
   return D128.from_bits(bits: bits)
 
 # ---- DPD interchange (IEEE 754-2008 densely-packed-decimal) ----
@@ -64,68 +64,68 @@ routine D128.to_dpd() -> U128
   var p = me.decode()
   var zero128 = LLVM::zero_extend[U64, U128](0_u64)
   var one128 = LLVM::zero_extend[U64, U128](1_u64)
-  var sbit = LLVM::shift_left[U128](value: if p.sign then one128 else zero128, bits: U128.to_width(s: 127_s64))
-  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
-    var top5 = if LLVM::int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
-    var bb = LLVM::bit_or[U128](a: sbit, b: LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](top5), bits: U128.to_width(s: 122_s64)))
-    if LLVM::int_eq[U64](a: p.special, b: 3_u64)
-      bb = LLVM::bit_or[U128](a: bb, b: LLVM::shift_left[U128](value: one128, bits: U128.to_width(s: 121_s64)))
+  var sbit = LLVM::shift_left(value: if p.sign then one128 else zero128, bits: U128.to_width(s: 127_s64))
+  if LLVM::int_ne(a: p.special, b: 0_u64)
+    var top5 = if LLVM::int_eq(a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+    var bb = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](top5), bits: U128.to_width(s: 122_s64)))
+    if LLVM::int_eq(a: p.special, b: 3_u64)
+      bb = LLVM::bit_or(a: bb, b: LLVM::shift_left(value: one128, bits: U128.to_width(s: 121_s64)))
     return bb
-  var e = LLVM::add[U64](a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 6176_u64)
+  var e = LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 6176_u64)
   var thousand = LLVM::zero_extend[U64, U128](1000_u64)
   var c = p.coeff
   var cont = zero128
   var sh = 0_s64
   var k = 0_s64
-  while LLVM::signed_lt[S64](a: k, b: 11_s64)
-    var g = LLVM::int_truncate[U128, U64](LLVM::unsigned_rem[U128](a: c, b: thousand))
-    cont = LLVM::bit_or[U128](a: cont, b: LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](bin_to_dpd(v: g)), bits: U128.to_width(s: sh)))
-    c = LLVM::unsigned_div[U128](a: c, b: thousand)
-    sh = LLVM::add[S64](a: sh, b: 10_s64)
-    k = LLVM::add[S64](a: k, b: 1_s64)
+  while LLVM::signed_lt(a: k, b: 11_s64)
+    var g = LLVM::int_truncate[U128, U64](LLVM::unsigned_rem(a: c, b: thousand))
+    cont = LLVM::bit_or(a: cont, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](bin_to_dpd(v: g)), bits: U128.to_width(s: sh)))
+    c = LLVM::unsigned_div(a: c, b: thousand)
+    sh = LLVM::add(a: sh, b: 10_s64)
+    k = LLVM::add(a: k, b: 1_s64)
   var msd = LLVM::int_truncate[U128, U64](c)
-  var ehi = LLVM::shift_right_unsigned[U64](e, 12_u64)
-  var elo = LLVM::bit_and[U64](a: e, b: 0xFFF_u64)
+  var ehi = LLVM::shift_right_unsigned(e, 12_u64)
+  var elo = LLVM::bit_and(a: e, b: 0xFFF_u64)
   var combo = 0_u64
-  if LLVM::unsigned_lt[U64](a: msd, b: 8_u64)
-    combo = LLVM::bit_or[U64](a: LLVM::shift_left[U64](value: ehi, bits: 3_u64), b: msd)
+  if LLVM::unsigned_lt(a: msd, b: 8_u64)
+    combo = LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 3_u64), b: msd)
   else
-    combo = LLVM::bit_or[U64](a: 0x18_u64, b: LLVM::bit_or[U64](a: LLVM::shift_left[U64](value: ehi, bits: 1_u64), b: LLVM::sub[U64](a: msd, b: 8_u64)))
-  var w = LLVM::bit_or[U128](a: sbit, b: LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](combo), bits: U128.to_width(s: 122_s64)))
-  w = LLVM::bit_or[U128](a: w, b: LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](elo), bits: U128.to_width(s: 110_s64)))
-  w = LLVM::bit_or[U128](a: w, b: cont)
+    combo = LLVM::bit_or(a: 0x18_u64, b: LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 1_u64), b: LLVM::sub(a: msd, b: 8_u64)))
+  var w = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](combo), bits: U128.to_width(s: 122_s64)))
+  w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](elo), bits: U128.to_width(s: 110_s64)))
+  w = LLVM::bit_or(a: w, b: cont)
   return w
 
 ### Decodes a DPD interchange word into a decimal128. Never crashes.
 common routine D128.from_dpd(bits: U128) -> D128
   var zero128 = LLVM::zero_extend[U64, U128](0_u64)
-  var sign = LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: bits, b: LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](1_u64), bits: U128.to_width(s: 127_s64))), b: zero128)
-  var combo = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: 122_s64)), b: LLVM::zero_extend[U64, U128](0x1F_u64)))
-  if LLVM::int_eq[U64](a: combo, b: 0x1E_u64)
+  var sign = LLVM::int_ne(a: LLVM::bit_and(a: bits, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](1_u64), bits: U128.to_width(s: 127_s64))), b: zero128)
+  var combo = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U128.to_width(s: 122_s64)), b: LLVM::zero_extend[U64, U128](0x1F_u64)))
+  if LLVM::int_eq(a: combo, b: 0x1E_u64)
     return d128_of_parts(p: D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: zero128))
-  if LLVM::int_eq[U64](a: combo, b: 0x1F_u64)
+  if LLVM::int_eq(a: combo, b: 0x1F_u64)
     var sp = 2_u64
-    if LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: 121_s64)), b: LLVM::zero_extend[U64, U128](1_u64)), b: zero128)
+    if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U128.to_width(s: 121_s64)), b: LLVM::zero_extend[U64, U128](1_u64)), b: zero128)
       sp = 3_u64
     return d128_of_parts(p: D128Parts(sign: sign, special: sp, exp: 0_s64, coeff: zero128))
   var ehi = 0_u64
   var msd = 0_u64
-  if LLVM::unsigned_lt[U64](a: combo, b: 0x18_u64)
-    ehi = LLVM::shift_right_unsigned[U64](combo, 3_u64)
-    msd = LLVM::bit_and[U64](a: combo, b: 0x7_u64)
+  if LLVM::unsigned_lt(a: combo, b: 0x18_u64)
+    ehi = LLVM::shift_right_unsigned(combo, 3_u64)
+    msd = LLVM::bit_and(a: combo, b: 0x7_u64)
   else
-    ehi = LLVM::bit_and[U64](a: LLVM::shift_right_unsigned[U64](combo, 1_u64), b: 0x3_u64)
-    msd = LLVM::add[U64](a: 8_u64, b: LLVM::bit_and[U64](a: combo, b: 1_u64))
-  var elo = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: 110_s64)), b: LLVM::zero_extend[U64, U128](0xFFF_u64)))
-  var e = LLVM::bit_or[U64](a: LLVM::shift_left[U64](value: ehi, bits: 12_u64), b: elo)
-  var exp = LLVM::sub[S64](a: LLVM::reinterpret_bits[U64, S64](e), b: 6176_s64)
+    ehi = LLVM::bit_and(a: LLVM::shift_right_unsigned(combo, 1_u64), b: 0x3_u64)
+    msd = LLVM::add(a: 8_u64, b: LLVM::bit_and(a: combo, b: 1_u64))
+  var elo = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U128.to_width(s: 110_s64)), b: LLVM::zero_extend[U64, U128](0xFFF_u64)))
+  var e = LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 12_u64), b: elo)
+  var exp = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 6176_s64)
   var thousand = LLVM::zero_extend[U64, U128](1000_u64)
   var coeff = LLVM::zero_extend[U64, U128](msd)
   var k = 10_s64
-  while LLVM::signed_ge[S64](a: k, b: 0_s64)
-    var declet = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: LLVM::mul[S64](a: 10_s64, b: k))), b: LLVM::zero_extend[U64, U128](0x3FF_u64)))
-    coeff = LLVM::add[U128](a: LLVM::mul[U128](a: coeff, b: thousand), b: LLVM::zero_extend[U64, U128](dpd_to_bin(d: declet)))
-    k = LLVM::sub[S64](a: k, b: 1_s64)
+  while LLVM::signed_ge(a: k, b: 0_s64)
+    var declet = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U128.to_width(s: LLVM::mul(a: 10_s64, b: k))), b: LLVM::zero_extend[U64, U128](0x3FF_u64)))
+    coeff = LLVM::add(a: LLVM::mul(a: coeff, b: thousand), b: LLVM::zero_extend[U64, U128](dpd_to_bin(d: declet)))
+    k = LLVM::sub(a: k, b: 1_s64)
   return d128_of_parts(p: D128Parts(sign: sign, special: 0_u64, exp: exp, coeff: coeff))
 
 ### BINARY decode — sign / specials (combination prefix) / 14-bit biased exponent /
@@ -135,36 +135,36 @@ routine D128.decode() -> D128Parts
   # bit127 = sign.
   var sign = LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: bits, b: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))), b: 0)
   # Combination prefix = top 5 bits (126..122): 11110 (0x1E) = Inf, 11111 (0x1F) = NaN.
-  var top5 = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: 122_s64)), b: LLVM::zero_extend[U64, U128](0x1F_u64)))
-  if LLVM::int_eq[U64](a: top5, b: 0x1E_u64)
+  var top5 = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U128.to_width(s: 122_s64)), b: LLVM::zero_extend[U64, U128](0x1F_u64)))
+  if LLVM::int_eq(a: top5, b: 0x1E_u64)
     return D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64))
-  if LLVM::int_eq[U64](a: top5, b: 0x1F_u64)
+  if LLVM::int_eq(a: top5, b: 0x1F_u64)
     # NaN: bit121 is the signaling flag (1 = sNaN -> special 3, else qNaN -> 2).
     var sp = 2_u64
     if LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: 121_s64)), b: LLVM::zero_extend[U64, U128](1_u64)), b: 0)
       sp = 3_u64
     return D128Parts(sign: sign, special: sp, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64))
   # Finite: bits 126..113 = 14-bit biased exponent; bits 112..0 = 113-bit coefficient.
-  var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: 113_s64)), b: LLVM::zero_extend[U64, U128](0x3FFF_u64)))
+  var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U128.to_width(s: 113_s64)), b: LLVM::zero_extend[U64, U128](0x3FFF_u64)))
   var coeff = LLVM::bit_and[U128](a: bits, b: LLVM::sub[U128](a: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 113_s64)), b: 1))
   # Unbias by 6176 to recover the true base-10 exponent.
-  return D128Parts(sign: sign, special: 0_u64, exp: LLVM::sub[S64](a: LLVM::reinterpret_bits[U64, S64](biased), b: 6176_s64), coeff: coeff)
+  return D128Parts(sign: sign, special: 0_u64, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](biased), b: 6176_s64), coeff: coeff)
 
 ### BINARY encode — pack sign / specials / exponent / coefficient.
 routine d128_of_parts(p: D128Parts) -> D128
   # Sign goes to bit127.
-  var sbit = LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](if p.sign then 1_u64 else 0_u64), bits: U128.to_width(s: 127_s64))
-  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
+  var sbit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](if p.sign then 1_u64 else 0_u64), bits: U128.to_width(s: 127_s64))
+  if LLVM::int_ne(a: p.special, b: 0_u64)
     # Combination prefix 0x1E (Inf) or 0x1F (NaN) into bits 126..122; bit121 set for sNaN.
-    var top5 = if LLVM::int_eq[U64](a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
-    var b = LLVM::bit_or[U128](a: sbit, b: LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](top5), bits: U128.to_width(s: 122_s64)))
-    if LLVM::int_eq[U64](a: p.special, b: 3_u64)
+    var top5 = if LLVM::int_eq(a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+    var b = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](top5), bits: U128.to_width(s: 122_s64)))
+    if LLVM::int_eq(a: p.special, b: 3_u64)
       b = LLVM::bit_or[U128](a: b, b: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 121_s64)))
     return D128.from_bits(bits: b)
   # Finite: rebias the exponent (+6176), mask to 14 bits at bits 126..113, OR in the coefficient.
-  var biased = LLVM::add[U64](a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 6176_u64)
-  var ebits = LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](LLVM::bit_and[U64](a: biased, b: 0x3FFF_u64)), bits: U128.to_width(s: 113_s64))
-  return D128.from_bits(bits: LLVM::bit_or[U128](a: LLVM::bit_or[U128](a: sbit, b: ebits), b: p.coeff))
+  var biased = LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 6176_u64)
+  var ebits = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](LLVM::bit_and(a: biased, b: 0x3FFF_u64)), bits: U128.to_width(s: 113_s64))
+  return D128.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: ebits), b: p.coeff))
 
 ### Infinity with the given sign.
 common routine D128.infinity(sign: Bool) -> D128
@@ -180,24 +180,24 @@ common routine D128.signaling_nan() -> D128
 
 ### True when finite (neither inf nor NaN).
 routine D128.is_finite() -> Bool
-  return LLVM::int_eq[U64](a: me.decode().special, b: 0_u64)
+  return LLVM::int_eq(a: me.decode().special, b: 0_u64)
 
 ### True when infinite.
 routine D128.is_infinite() -> Bool
-  return LLVM::int_eq[U64](a: me.decode().special, b: 1_u64)
+  return LLVM::int_eq(a: me.decode().special, b: 1_u64)
 
 ### True when NaN (quiet or signaling).
 routine D128.is_nan() -> Bool
-  return LLVM::unsigned_ge[U64](a: me.decode().special, b: 2_u64)
+  return LLVM::unsigned_ge(a: me.decode().special, b: 2_u64)
 
 ### True when this is a SIGNALING NaN (special field == 3).
 routine D128.is_signaling() -> Bool
-  return LLVM::int_eq[U64](a: me.decode().special, b: 3_u64)
+  return LLVM::int_eq(a: me.decode().special, b: 3_u64)
 
 ### True when this is a finite zero (±0).
 routine D128.is_zero() -> Bool
   var p = me.decode()
-  return LLVM::int_eq[U64](a: p.special, b: 0_u64) and LLVM::int_eq[U128](a: p.coeff, b: LLVM::zero_extend[U64, U128](0_u64))
+  return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_eq(a: p.coeff, b: LLVM::zero_extend[U64, U128](0_u64))
 
 ### Builds a finite D128 from a signed coefficient and a base-10 exponent:
 ### value = (-1)^sign * coeff * 10^exp. The native constructor — no decNumber/DPD.
@@ -206,8 +206,8 @@ common routine D128.from_components(sign: Bool, coeff: U128, exp: S64) -> D128
 
 ### Builds a D128 from a 64-bit signed integer (exponent 0).
 common routine D128.from_int64(value: S64) -> D128
-  var neg = LLVM::signed_lt[S64](a: value, b: 0_s64)
-  var mag = if neg then LLVM::sub[S64](a: 0_s64, b: value) else value
+  var neg = LLVM::signed_lt(a: value, b: 0_s64)
+  var mag = if neg then LLVM::sub(a: 0_s64, b: value) else value
   return D128.from_components(sign: neg, coeff: LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](mag)), exp: 0_s64)
 
 ### Truncating integer magnitude (toward zero) of a finite decimal as a U128. Throws when
@@ -216,15 +216,15 @@ common routine D128.from_int64(value: S64) -> D128
 routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
   if LLVM::int_eq[U128](a: coeff, b: 0)
     return 0_u128
-  if LLVM::signed_ge[S64](a: exp, b: 0_s64)
-    if LLVM::signed_ge[S64](a: exp, b: 39_s64)
+  if LLVM::signed_ge(a: exp, b: 0_s64)
+    if LLVM::signed_ge(a: exp, b: 39_s64)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
-    var prod = LLVM::mul[U256](a: LLVM::zero_extend[U128, U256](coeff), b: pow10_tbl(k: exp))
+    var prod = LLVM::mul(a: LLVM::zero_extend[U128, U256](coeff), b: pow10_tbl(k: exp))
     if LLVM::int_ne[U256](a: LLVM::shift_right_unsigned[U256](value: prod, bits: U256.to_width(s: 128_s64)), b: 0)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
     return LLVM::int_truncate[U256, U128](prod)
-  var d = LLVM::sub[S64](a: 0_s64, b: exp)
-  if LLVM::signed_ge[S64](a: d, b: 39_s64)
+  var d = LLVM::sub(a: 0_s64, b: exp)
+  if LLVM::signed_ge(a: d, b: 39_s64)
     return 0_u128
   return div_pow10_u128(x: coeff, k: d)
 
@@ -232,7 +232,7 @@ routine d128_int_magnitude!(coeff: U128, exp: S64) -> U128
 ### negative value, or an integer part beyond U128.
 routine U128!(from: D128) -> U128
   var p = from.decode()
-  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
+  if LLVM::int_ne(a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   if p.sign and LLVM::int_ne[U128](a: p.coeff, b: 0)
     throw NumericOverflowError(description: "negative decimal to unsigned integer")
@@ -242,17 +242,17 @@ routine U128!(from: D128) -> U128
 ### integer part outside [-2^127, 2^127-1].
 routine S128!(from: D128) -> S128
   var p = from.decode()
-  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
+  if LLVM::int_ne(a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   var mag = d128_int_magnitude(coeff: p.coeff, exp: p.exp)
   var lim = LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))
   if p.sign
-    if LLVM::unsigned_gt[U128](a: mag, b: lim)
+    if LLVM::unsigned_gt(a: mag, b: lim)
       throw NumericOverflowError(description: "decimal out of range for target integer")
-    if LLVM::int_eq[U128](a: mag, b: lim)
+    if LLVM::int_eq(a: mag, b: lim)
       return LLVM::reinterpret_bits[U128, S128](lim)
-    return LLVM::sub[S128](a: 0_s128, b: LLVM::reinterpret_bits[U128, S128](mag))
-  if LLVM::unsigned_ge[U128](a: mag, b: lim)
+    return LLVM::sub(a: 0_s128, b: LLVM::reinterpret_bits[U128, S128](mag))
+  if LLVM::unsigned_ge(a: mag, b: lim)
     throw NumericOverflowError(description: "decimal out of range for target integer")
   return LLVM::reinterpret_bits[U128, S128](mag)
 
@@ -262,15 +262,15 @@ routine S128!(from: D128) -> S128
 routine d128_int_magnitude_u256!(coeff: U128, exp: S64) -> U256
   if LLVM::int_eq[U128](a: coeff, b: 0)
     return 0_u256
-  if LLVM::signed_ge[S64](a: exp, b: 0_s64)
-    if LLVM::signed_ge[S64](a: exp, b: 78_s64)
+  if LLVM::signed_ge(a: exp, b: 0_s64)
+    if LLVM::signed_ge(a: exp, b: 78_s64)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
-    var prod = LLVM::mul[U512](a: LLVM::zero_extend[U128, U512](coeff), b: LLVM::zero_extend[U256, U512](pow10_tbl(k: exp)))
+    var prod = LLVM::mul(a: LLVM::zero_extend[U128, U512](coeff), b: LLVM::zero_extend[U256, U512](pow10_tbl(k: exp)))
     if LLVM::int_ne[U512](a: LLVM::shift_right_unsigned[U512](value: prod, bits: U512.to_width(s: 256_s64)), b: 0)
       throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
     return LLVM::int_truncate[U512, U256](prod)
-  var d = LLVM::sub[S64](a: 0_s64, b: exp)
-  if LLVM::signed_ge[S64](a: d, b: 39_s64)
+  var d = LLVM::sub(a: 0_s64, b: exp)
+  if LLVM::signed_ge(a: d, b: 39_s64)
     return 0_u256
   return LLVM::zero_extend[U128, U256](div_pow10_u128(x: coeff, k: d))
 
@@ -278,7 +278,7 @@ routine d128_int_magnitude_u256!(coeff: U128, exp: S64) -> U256
 ### negative value, or an integer part beyond U256.
 routine U256!(from: D128) -> U256
   var p = from.decode()
-  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
+  if LLVM::int_ne(a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   if p.sign and LLVM::int_ne[U128](a: p.coeff, b: 0)
     throw NumericOverflowError(description: "negative decimal to unsigned integer")
@@ -288,17 +288,17 @@ routine U256!(from: D128) -> U256
 ### integer part outside [-2^255, 2^255-1].
 routine S256!(from: D128) -> S256
   var p = from.decode()
-  if LLVM::int_ne[U64](a: p.special, b: 0_u64)
+  if LLVM::int_ne(a: p.special, b: 0_u64)
     throw NumericDomainError(description: "non-finite decimal is not an integer")
   var mag = d128_int_magnitude_u256(coeff: p.coeff, exp: p.exp)
   var lim = LLVM::shift_left[U256](value: 1, bits: U256.to_width(s: 255_s64))
   if p.sign
-    if LLVM::unsigned_gt[U256](a: mag, b: lim)
+    if LLVM::unsigned_gt(a: mag, b: lim)
       throw NumericOverflowError(description: "decimal out of range for target integer")
-    if LLVM::int_eq[U256](a: mag, b: lim)
+    if LLVM::int_eq(a: mag, b: lim)
       return LLVM::reinterpret_bits[U256, S256](lim)
-    return LLVM::sub[S256](a: 0_s256, b: LLVM::reinterpret_bits[U256, S256](mag))
-  if LLVM::unsigned_ge[U256](a: mag, b: lim)
+    return LLVM::sub(a: 0_s256, b: LLVM::reinterpret_bits[U256, S256](mag))
+  if LLVM::unsigned_ge(a: mag, b: lim)
     throw NumericOverflowError(description: "decimal out of range for target integer")
   return LLVM::reinterpret_bits[U256, S256](mag)
 
@@ -319,12 +319,12 @@ routine digits10b(c: U256) -> S64
     return 1_s64
   # clz-based: digits ≈ ((nbits * 1233) >> 12) + 1, one ±1 compare vs pow10_tbl.
   # No wide multiply — leading_zeros is one instruction, the compare one U256 cmp.
-  var nbits = LLVM::sub[S64](a: 256_s64, b: LLVM::int_truncate[U256, S64](LLVM::leading_zeros[U256](c)))
-  var d = LLVM::add[S64](a: LLVM::signed_div[S64](a: LLVM::mul[S64](a: nbits, b: 1233_s64), b: 4096_s64), b: 1_s64)
-  if LLVM::signed_ge[S64](a: d, b: 1_s64) and LLVM::unsigned_lt[U256](a: c, b: pow10_tbl(k: LLVM::sub[S64](a: d, b: 1_s64)))
-    return LLVM::sub[S64](a: d, b: 1_s64)
-  if LLVM::signed_le[S64](a: d, b: 76_s64) and LLVM::unsigned_ge[U256](a: c, b: pow10_tbl(k: d))
-    return LLVM::add[S64](a: d, b: 1_s64)
+  var nbits = LLVM::sub(a: 256_s64, b: LLVM::int_truncate[U256, S64](LLVM::leading_zeros(c)))
+  var d = LLVM::add(a: LLVM::signed_div(a: LLVM::mul(a: nbits, b: 1233_s64), b: 4096_s64), b: 1_s64)
+  if LLVM::signed_ge(a: d, b: 1_s64) and LLVM::unsigned_lt(a: c, b: pow10_tbl(k: LLVM::sub(a: d, b: 1_s64)))
+    return LLVM::sub(a: d, b: 1_s64)
+  if LLVM::signed_le(a: d, b: 76_s64) and LLVM::unsigned_ge(a: c, b: pow10_tbl(k: d))
+    return LLVM::add(a: d, b: 1_s64)
   return d
 
 ### Widens a U128 coefficient to the U256 working width.
@@ -333,15 +333,15 @@ routine cwb(c: U128) -> U256
 
 ### Number of decimal digits in a U128 value (0 has 1 digit), via 10^18 chunks.
 routine digits10_u128(c: U128) -> S64
-  if LLVM::int_eq[U128](a: c, b: 0_u128)
+  if LLVM::int_eq(a: c, b: 0_u128)
     return 1_s64
   # clz-based digit count (see digits10b). pow10 at U128 = truncated pow10_tbl.
-  var nbits = LLVM::sub[S64](a: 128_s64, b: LLVM::int_truncate[U128, S64](LLVM::leading_zeros[U128](c)))
-  var d = LLVM::add[S64](a: LLVM::signed_div[S64](a: LLVM::mul[S64](a: nbits, b: 1233_s64), b: 4096_s64), b: 1_s64)
-  if LLVM::signed_ge[S64](a: d, b: 1_s64) and LLVM::unsigned_lt[U128](a: c, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: LLVM::sub[S64](a: d, b: 1_s64))))
-    return LLVM::sub[S64](a: d, b: 1_s64)
-  if LLVM::signed_le[S64](a: d, b: 38_s64) and LLVM::unsigned_ge[U128](a: c, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: d)))
-    return LLVM::add[S64](a: d, b: 1_s64)
+  var nbits = LLVM::sub(a: 128_s64, b: LLVM::int_truncate[U128, S64](LLVM::leading_zeros(c)))
+  var d = LLVM::add(a: LLVM::signed_div(a: LLVM::mul(a: nbits, b: 1233_s64), b: 4096_s64), b: 1_s64)
+  if LLVM::signed_ge(a: d, b: 1_s64) and LLVM::unsigned_lt(a: c, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: LLVM::sub(a: d, b: 1_s64))))
+    return LLVM::sub(a: d, b: 1_s64)
+  if LLVM::signed_le(a: d, b: 38_s64) and LLVM::unsigned_ge(a: c, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: d)))
+    return LLVM::add(a: d, b: 1_s64)
   return d
 
 ### Rounds a wide working value to <=34 significant digits (round-half-even) and
@@ -352,31 +352,31 @@ routine decfinB(sign: Bool, coeff: U256, exp: S64, pref: S64) -> D128Parts
   var one = LLVM::zero_extend[U64, U256](1_u64)
   if LLVM::int_eq[U256](a: coeff, b: 0)
     var ez = pref
-    if LLVM::signed_lt[S64](a: ez, b: -6176_s64)
+    if LLVM::signed_lt(a: ez, b: -6176_s64)
       ez = -6176_s64
-    if LLVM::signed_gt[S64](a: ez, b: 6111_s64)
+    if LLVM::signed_gt(a: ez, b: 6111_s64)
       ez = 6111_s64
     return D128Parts(sign: sign, special: 0_u64, exp: ez, coeff: LLVM::zero_extend[U64, U128](0_u64))
   var c = coeff
   var e = exp
   var nd = digits10b(c: c)
-  if LLVM::signed_gt[S64](a: nd, b: 34_s64)
-    var drop = LLVM::sub[S64](a: nd, b: 34_s64)
+  if LLVM::signed_gt(a: nd, b: 34_s64)
+    var drop = LLVM::sub(a: nd, b: 34_s64)
     var div = pow10b(k: drop)
     var q = div_pow10b(x: c, k: drop)
-    var r = LLVM::sub[U256](a: c, b: LLVM::mul[U256](a: q, b: div))
-    var twice = LLVM::mul[U256](a: r, b: two)
-    if LLVM::unsigned_gt[U256](a: twice, b: div)
-      q = LLVM::add[U256](a: q, b: one)
+    var r = LLVM::sub(a: c, b: LLVM::mul(a: q, b: div))
+    var twice = LLVM::mul(a: r, b: two)
+    if LLVM::unsigned_gt(a: twice, b: div)
+      q = LLVM::add(a: q, b: one)
     elseif LLVM::int_eq[U256](a: twice, b: div) and LLVM::int_ne[U256](a: LLVM::bit_and[U256](a: q, b: one), b: 0)
-      q = LLVM::add[U256](a: q, b: one)
+      q = LLVM::add(a: q, b: one)
     c = q
-    e = LLVM::add[S64](a: e, b: drop)
+    e = LLVM::add(a: e, b: drop)
     # Rounding can only carry 34 digits up to 35 (e.g. 9…9 -> 10…0), i.e. c >= 10^34.
     # One U256 compare instead of a second full digits10b clz+compare pass.
-    if LLVM::unsigned_ge[U256](a: c, b: pow10_tbl(k: 34_s64))
+    if LLVM::unsigned_ge(a: c, b: pow10_tbl(k: 34_s64))
       c = div_pow10b(x: c, k: 1_s64)
-      e = LLVM::add[S64](a: e, b: 1_s64)
+      e = LLVM::add(a: e, b: 1_s64)
   # c is now <= 34 digits, so it fits U128. Do strip / pad / digit-count in U128
   # (mulhi via U256, ~half the U256 path's U512) instead of widening every op.
   var cu = LLVM::int_truncate[U256, U128](c)
@@ -384,75 +384,75 @@ routine decfinB(sign: Bool, coeff: U256, exp: S64, pref: S64) -> D128Parts
   # Strip trailing zeros toward `pref`, batched: binary-search the largest tz (capped at
   # both `pref-e` and 34) with cu divisible by 10^tz, then strip all tz at once. cu is
   # divisible by 10^k iff (cu // 10^k) * 10^k == cu.
-  var room = LLVM::sub[S64](a: pref, b: e)
-  if LLVM::signed_gt[S64](a: room, b: 0_s64) and LLVM::int_ne[U128](a: cu, b: 0_u128)
-    var cap = if LLVM::signed_lt[S64](a: room, b: 34_s64) then room else 34_s64
+  var room = LLVM::sub(a: pref, b: e)
+  if LLVM::signed_gt(a: room, b: 0_s64) and LLVM::int_ne(a: cu, b: 0_u128)
+    var cap = if LLVM::signed_lt(a: room, b: 34_s64) then room else 34_s64
     # Decimal trailing zeros tz <= binary trailing zeros (each factor 10 carries a
     # factor 2). cttz is one hardware instruction; capping the search at it means the
     # probe loop's div_pow10/mul never fire for candidates > t2 — odd coeffs (t2=0,
     # ~half of cases) strip with zero wide multiplies.
-    var t2 = LLVM::int_truncate[U128, S64](LLVM::trailing_zeros[U128](cu))
-    if LLVM::signed_lt[S64](a: t2, b: cap)
+    var t2 = LLVM::int_truncate[U128, S64](LLVM::trailing_zeros(cu))
+    if LLVM::signed_lt(a: t2, b: cap)
       cap = t2
     var tz = 0_s64
-    if LLVM::signed_gt[S64](a: cap, b: 0_s64)
+    if LLVM::signed_gt(a: cap, b: 0_s64)
       # Fast path for exact-round results (a/a = 1.0…0, terminating quotients): if 10^cap
       # divides cu outright, tz = cap in ONE wide check instead of log2(cap) probes. This
       # is the common case for division, the strip's dominant cost.
       var ctop = div_pow10_u128(x: cu, k: cap)
-      if LLVM::int_eq[U128](a: cu, b: LLVM::mul[U128](a: ctop, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: cap))))
+      if LLVM::int_eq(a: cu, b: LLVM::mul(a: ctop, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: cap))))
         tz = cap
       else
-        var hi = LLVM::sub[S64](a: cap, b: 1_s64)
+        var hi = LLVM::sub(a: cap, b: 1_s64)
         var probe = 32_s64
-        while LLVM::signed_ge[S64](a: probe, b: 1_s64)
-          var cand = LLVM::add[S64](a: tz, b: probe)
-          if LLVM::signed_le[S64](a: cand, b: hi)
+        while LLVM::signed_ge(a: probe, b: 1_s64)
+          var cand = LLVM::add(a: tz, b: probe)
+          if LLVM::signed_le(a: cand, b: hi)
             var c10 = div_pow10_u128(x: cu, k: cand)
-            if LLVM::int_eq[U128](a: cu, b: LLVM::mul[U128](a: c10, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: cand))))
+            if LLVM::int_eq(a: cu, b: LLVM::mul(a: c10, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: cand))))
               tz = cand
-          probe = LLVM::signed_div[S64](a: probe, b: 2_s64)
-    if LLVM::signed_gt[S64](a: tz, b: 0_s64)
+          probe = LLVM::signed_div(a: probe, b: 2_s64)
+    if LLVM::signed_gt(a: tz, b: 0_s64)
       cu = div_pow10_u128(x: cu, k: tz)
-      e = LLVM::add[S64](a: e, b: tz)
+      e = LLVM::add(a: e, b: tz)
   # Pad toward `pref` while cu stays under 34 digits. "digits < 34" is exactly
   # "cu < 10^33" — one U128 compare per step instead of a digits10_u128 clz pass.
   var ten33 = LLVM::int_truncate[U256, U128](pow10_tbl(k: 33_s64))
-  while LLVM::signed_gt[S64](a: e, b: pref) and LLVM::unsigned_lt[U128](a: cu, b: ten33)
-    cu = LLVM::mul[U128](a: cu, b: ten128)
-    e = LLVM::sub[S64](a: e, b: 1_s64)
+  while LLVM::signed_gt(a: e, b: pref) and LLVM::unsigned_lt(a: cu, b: ten33)
+    cu = LLVM::mul(a: cu, b: ten128)
+    e = LLVM::sub(a: e, b: 1_s64)
   # IEEE decimal128 range clamp. The integer-significand exponent q must lie in
   # [qmin, qmax] = [Emin-(p-1), Emax-(p-1)] = [-6176, 6111] (p=34, Emax=6144, Emin=-6143).
   # Above qmax: pad the coefficient with zeros to pull q down (the canonical max-q cohort);
   # if it won't fit in 34 digits the magnitude exceeds Nmax -> overflow to infinity.
-  if LLVM::signed_gt[S64](a: e, b: 6111_s64)
-    var spread = LLVM::sub[S64](a: e, b: 6111_s64)
+  if LLVM::signed_gt(a: e, b: 6111_s64)
+    var spread = LLVM::sub(a: e, b: 6111_s64)
     var fits = false
-    if LLVM::signed_le[S64](a: spread, b: 33_s64)
-      var lim = LLVM::int_truncate[U256, U128](pow10_tbl(k: LLVM::sub[S64](a: 34_s64, b: spread)))
-      if LLVM::unsigned_lt[U128](a: cu, b: lim)
+    if LLVM::signed_le(a: spread, b: 33_s64)
+      var lim = LLVM::int_truncate[U256, U128](pow10_tbl(k: LLVM::sub(a: 34_s64, b: spread)))
+      if LLVM::unsigned_lt(a: cu, b: lim)
         fits = true
     if not fits
       return D128Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64))
-    cu = LLVM::int_truncate[U256, U128](LLVM::mul[U256](a: LLVM::zero_extend[U128, U256](cu), b: pow10b(k: spread)))
+    cu = LLVM::int_truncate[U256, U128](LLVM::mul(a: LLVM::zero_extend[U128, U256](cu), b: pow10b(k: spread)))
     e = 6111_s64
   # Below qmin: round the coefficient right (round-half-even) to land q at qmin. The
   # coefficient shrinks below 10^33 (gradual underflow / subnormal); if it rounds to 0
   # the result is a signed zero.
-  if LLVM::signed_lt[S64](a: e, b: -6176_s64)
-    var drop = LLVM::sub[S64](a: -6176_s64, b: e)
-    if LLVM::signed_ge[S64](a: drop, b: 35_s64)
+  if LLVM::signed_lt(a: e, b: -6176_s64)
+    var drop = LLVM::sub(a: -6176_s64, b: e)
+    if LLVM::signed_ge(a: drop, b: 35_s64)
       cu = 0_u128
     else
       var divp = pow10b(k: drop)
       var cw = LLVM::zero_extend[U128, U256](cu)
       var q = div_pow10b(x: cw, k: drop)
-      var r = LLVM::sub[U256](a: cw, b: LLVM::mul[U256](a: q, b: divp))
-      var twice = LLVM::mul[U256](a: r, b: two)
-      if LLVM::unsigned_gt[U256](a: twice, b: divp)
-        q = LLVM::add[U256](a: q, b: one)
+      var r = LLVM::sub(a: cw, b: LLVM::mul(a: q, b: divp))
+      var twice = LLVM::mul(a: r, b: two)
+      if LLVM::unsigned_gt(a: twice, b: divp)
+        q = LLVM::add(a: q, b: one)
       elseif LLVM::int_eq[U256](a: twice, b: divp) and LLVM::int_ne[U256](a: LLVM::bit_and[U256](a: q, b: one), b: 0)
-        q = LLVM::add[U256](a: q, b: one)
+        q = LLVM::add(a: q, b: one)
       cu = LLVM::int_truncate[U256, U128](q)
     e = -6176_s64
   return D128Parts(sign: sign, special: 0_u64, exp: e, coeff: cu)
@@ -476,17 +476,17 @@ routine zero_parts(sign: Bool) -> D128Parts
 
 ### True if either operand is NaN (special >= 2).
 routine has_nan(pa: D128Parts, pb: D128Parts) -> Bool
-  return LLVM::unsigned_ge[U64](a: pa.special, b: 2_u64) or LLVM::unsigned_ge[U64](a: pb.special, b: 2_u64)
+  return LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
 
 ### add/sub special rule: NaN propagates; inf + inf(same sign) = inf; inf + -inf = NaN.
 routine add_special_parts(pa: D128Parts, pb: D128Parts) -> D128Parts
   if has_nan(pa: pa, pb: pb)
     return nan_parts()
-  if LLVM::int_eq[U64](a: pa.special, b: 1_u64) and LLVM::int_eq[U64](a: pb.special, b: 1_u64)
+  if LLVM::int_eq(a: pa.special, b: 1_u64) and LLVM::int_eq(a: pb.special, b: 1_u64)
     if pa.sign == pb.sign
       return inf_parts(sign: pa.sign)
     return nan_parts()
-  if LLVM::int_eq[U64](a: pa.special, b: 1_u64)
+  if LLVM::int_eq(a: pa.special, b: 1_u64)
     return inf_parts(sign: pa.sign)
   return inf_parts(sign: pb.sign)
 
@@ -505,8 +505,8 @@ routine div_special_parts(pa: D128Parts, pb: D128Parts) -> D128Parts
   if has_nan(pa: pa, pb: pb)
     return nan_parts()
   var sign = pa.sign != pb.sign
-  if LLVM::int_eq[U64](a: pa.special, b: 1_u64)
-    if LLVM::int_eq[U64](a: pb.special, b: 1_u64)
+  if LLVM::int_eq(a: pa.special, b: 1_u64)
+    if LLVM::int_eq(a: pb.special, b: 1_u64)
       return nan_parts()
     return inf_parts(sign: sign)
   return zero_parts(sign: sign)
@@ -519,11 +519,11 @@ routine div_special_parts(pa: D128Parts, pb: D128Parts) -> D128Parts
 routine d128_mul(a: D128, b: D128) -> D128
   var pa = a.decode()
   var pb = b.decode()
-  if LLVM::int_ne[U64](a: pa.special, b: 0_u64) or LLVM::int_ne[U64](a: pb.special, b: 0_u64)
+  if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
     return d128_of_parts(p: mul_special_parts(pa: pa, pb: pb))
   var sign = pa.sign != pb.sign
-  var prod = LLVM::mul[U256](a: cwb(c: pa.coeff), b: cwb(c: pb.coeff))
-  var p = decfinB(sign: sign, coeff: prod, exp: LLVM::add[S64](a: pa.exp, b: pb.exp), pref: LLVM::add[S64](a: pa.exp, b: pb.exp))
+  var prod = LLVM::mul(a: cwb(c: pa.coeff), b: cwb(c: pb.coeff))
+  var p = decfinB(sign: sign, coeff: prod, exp: LLVM::add(a: pa.exp, b: pb.exp), pref: LLVM::add(a: pa.exp, b: pb.exp))
   return d128_of_parts(p: p)
 
 # ============================================================================
@@ -536,7 +536,7 @@ routine d128_mul(a: D128, b: D128) -> D128
 routine d128_add(a: D128, b: D128) -> D128
   var pa = a.decode()
   var pb = b.decode()
-  if LLVM::int_ne[U64](a: pa.special, b: 0_u64) or LLVM::int_ne[U64](a: pb.special, b: 0_u64)
+  if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
     return d128_of_parts(p: add_special_parts(pa: pa, pb: pb))
   var eh = pa.exp
   var ch = cwb(c: pa.coeff)
@@ -544,7 +544,7 @@ routine d128_add(a: D128, b: D128) -> D128
   var el = pb.exp
   var cl = cwb(c: pb.coeff)
   var sl = pb.sign
-  if LLVM::signed_lt[S64](a: pa.exp, b: pb.exp)
+  if LLVM::signed_lt(a: pa.exp, b: pb.exp)
     eh = pb.exp
     ch = cwb(c: pb.coeff)
     sh = pb.sign
@@ -552,29 +552,29 @@ routine d128_add(a: D128, b: D128) -> D128
     cl = cwb(c: pa.coeff)
     sl = pa.sign
   var pref = el
-  var shift = LLVM::sub[S64](a: eh, b: el)
+  var shift = LLVM::sub(a: eh, b: el)
   var ew = el
-  if LLVM::signed_le[S64](a: shift, b: 40_s64)
-    ch = LLVM::mul[U256](a: ch, b: pow10b(k: shift))
+  if LLVM::signed_le(a: shift, b: 40_s64)
+    ch = LLVM::mul(a: ch, b: pow10b(k: shift))
   else
-    ch = LLVM::mul[U256](a: ch, b: pow10b(k: 40_s64))
-    ew = LLVM::sub[S64](a: eh, b: 40_s64)
+    ch = LLVM::mul(a: ch, b: pow10b(k: 40_s64))
+    ew = LLVM::sub(a: eh, b: 40_s64)
     # keep the low operand's in-window digits (down to ew); sticky only below.
-    var drop = LLVM::sub[S64](a: shift, b: 40_s64)
-    if LLVM::signed_ge[S64](a: drop, b: 34_s64)
+    var drop = LLVM::sub(a: shift, b: 40_s64)
+    if LLVM::signed_ge(a: drop, b: 34_s64)
       cl = if LLVM::int_ne[U256](a: cl, b: 0) then LLVM::zero_extend[U64, U256](1_u64) else LLVM::zero_extend[U64, U256](0_u64)
     else
       var qcl = div_pow10b(x: cl, k: drop)
-      var remcl = LLVM::sub[U256](a: cl, b: LLVM::mul[U256](a: qcl, b: pow10b(k: drop)))
+      var remcl = LLVM::sub(a: cl, b: LLVM::mul(a: qcl, b: pow10b(k: drop)))
       cl = if LLVM::int_ne[U256](a: remcl, b: 0) then LLVM::bit_or[U256](a: qcl, b: LLVM::zero_extend[U64, U256](1_u64)) else qcl
   var rc = LLVM::zero_extend[U64, U256](0_u64)
   var rsign = sh
   if sh == sl
-    rc = LLVM::add[U256](a: ch, b: cl)
-  elseif LLVM::unsigned_ge[U256](a: ch, b: cl)
-    rc = LLVM::sub[U256](a: ch, b: cl)
+    rc = LLVM::add(a: ch, b: cl)
+  elseif LLVM::unsigned_ge(a: ch, b: cl)
+    rc = LLVM::sub(a: ch, b: cl)
   else
-    rc = LLVM::sub[U256](a: cl, b: ch)
+    rc = LLVM::sub(a: cl, b: ch)
     rsign = sl
   if LLVM::int_eq[U256](a: rc, b: 0)
     # IEEE 754: a zero SUM keeps the common sign when both operands share it
@@ -601,7 +601,7 @@ routine d128_neg(a: D128) -> D128
 routine d128_div(a: D128, b: D128) -> D128
   var pa = a.decode()
   var pb = b.decode()
-  if LLVM::int_ne[U64](a: pa.special, b: 0_u64) or LLVM::int_ne[U64](a: pb.special, b: 0_u64)
+  if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
     return d128_of_parts(p: div_special_parts(pa: pa, pb: pb))
   var sign = pa.sign != pb.sign
   var azero = LLVM::int_eq[U128](a: pa.coeff, b: 0)
@@ -611,7 +611,7 @@ routine d128_div(a: D128, b: D128) -> D128
     if azero
       return D128.quiet_nan()
     return D128.infinity(sign: sign)
-  var pref = LLVM::sub[S64](a: pa.exp, b: pb.exp)
+  var pref = LLVM::sub(a: pa.exp, b: pb.exp)
   if azero
     return d128_of_parts(p: decfinB(sign: sign, coeff: LLVM::zero_extend[U64, U256](0_u64), exp: pref, pref: pref))
   var num = cwb(c: pa.coeff)
@@ -620,15 +620,15 @@ routine d128_div(a: D128, b: D128) -> D128
   # (set below from a nonzero remainder) carries everything beneath, so 1 guard digit
   # suffices for correct round-half-even. Smaller num => narrower divide + less to strip
   # in decfin than the old +38 (which computed ~3 needless extra quotient digits).
-  var target = LLVM::add[S64](a: digits10b(c: den), b: 36_s64)
-  var shift = LLVM::sub[S64](a: target, b: digits10b(c: num))
-  if LLVM::signed_lt[S64](a: shift, b: 0_s64)
+  var target = LLVM::add(a: digits10b(c: den), b: 36_s64)
+  var shift = LLVM::sub(a: target, b: digits10b(c: num))
+  if LLVM::signed_lt(a: shift, b: 0_s64)
     shift = 0_s64
-  num = LLVM::mul[U256](a: num, b: pow10b(k: shift))
+  num = LLVM::mul(a: num, b: pow10b(k: shift))
   # register-resident U256/U128 divide (unrolled Knuth, no Array memory traffic),
   # returns quotient + remainder-sticky in one pass.
   var q = udiv256_by_u128_sticky(num: num, den: den)
-  var exp = LLVM::sub[S64](a: LLVM::sub[S64](a: pa.exp, b: pb.exp), b: shift)
+  var exp = LLVM::sub(a: LLVM::sub(a: pa.exp, b: pb.exp), b: shift)
   return d128_of_parts(p: decfinB(sign: sign, coeff: q, exp: exp, pref: pref))
 
 # ============================================================================
@@ -707,7 +707,7 @@ routine D128.eq(you: D128) -> Bool
   if me.is_infinite() or you.is_infinite()
     var pa = me.decode()
     var pb = you.decode()
-    return LLVM::int_eq[U64](a: pa.special, b: pb.special) and pa.sign == pb.sign
+    return LLVM::int_eq(a: pa.special, b: pb.special) and pa.sign == pb.sign
   return LLVM::int_eq[U128](a: d128_sub(a: me, b: you).decode().coeff, b: 0)
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
@@ -719,9 +719,9 @@ routine D128.cmp(you: D128) -> ComparisonSign
   if me.is_infinite() or you.is_infinite()
     var pa = me.decode()
     var pb = you.decode()
-    if LLVM::int_eq[U64](a: pa.special, b: pb.special) and pa.sign == pb.sign
+    if LLVM::int_eq(a: pa.special, b: pb.special) and pa.sign == pb.sign
       return SAME
-    if LLVM::int_eq[U64](a: pa.special, b: 1_u64)
+    if LLVM::int_eq(a: pa.special, b: 1_u64)
       return if pa.sign then ME_SMALL else ME_LARGE
     return if pb.sign then ME_LARGE else ME_SMALL
   var d = d128_sub(a: me, b: you).decode()
@@ -749,48 +749,48 @@ routine D128.pow!(you: D128) -> D128
 routine dec_zeros(n: S64) -> Text
   var s = ""
   var i = 0_s64
-  while LLVM::signed_lt[S64](a: i, b: n)
+  while LLVM::signed_lt(a: i, b: n)
     s = s + "0"
-    i = LLVM::add[S64](a: i, b: 1_s64)
+    i = LLVM::add(a: i, b: 1_s64)
   return s
 
 ### The coefficient digits for decimal powers `hi` down to `lo` (inclusive), MSD first.
 routine dec_digit_range(c: U128, hi: S64, lo: S64) -> Text
   var s = ""
   var i = hi
-  while LLVM::signed_ge[S64](a: i, b: lo)
+  while LLVM::signed_ge(a: i, b: lo)
     var p = LLVM::int_truncate[U256, U128](pow10_tbl(k: i))
-    var d = LLVM::int_truncate[U128, U64](LLVM::unsigned_rem[U128](a: LLVM::unsigned_div[U128](a: c, b: p), b: LLVM::zero_extend[U64, U128](10_u64)))
+    var d = LLVM::int_truncate[U128, U64](LLVM::unsigned_rem(a: LLVM::unsigned_div(a: c, b: p), b: LLVM::zero_extend[U64, U128](10_u64)))
     s = s + f"{d}"
-    i = LLVM::sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   return s
 
 ### Decimal text of decoded parts (decNumber decToString: plain when exp<=0 and the
 ### adjusted exponent >= -6, else scientific with an explicit-sign exponent).
 routine d128_represent(p: D128Parts) -> Text
-  if LLVM::int_eq[U64](a: p.special, b: 1_u64)
+  if LLVM::int_eq(a: p.special, b: 1_u64)
     return if p.sign then "-inf" else "inf"
-  if LLVM::int_eq[U64](a: p.special, b: 3_u64)
+  if LLVM::int_eq(a: p.special, b: 3_u64)
     return "sNaN"
-  if LLVM::unsigned_ge[U64](a: p.special, b: 2_u64)
+  if LLVM::unsigned_ge(a: p.special, b: 2_u64)
     return "NaN"
   var nd = digits10_u128(c: p.coeff)
-  var adj = LLVM::add[S64](a: p.exp, b: LLVM::sub[S64](a: nd, b: 1_s64))
+  var adj = LLVM::add(a: p.exp, b: LLVM::sub(a: nd, b: 1_s64))
   var body = ""
-  if LLVM::signed_le[S64](a: p.exp, b: 0_s64) and LLVM::signed_ge[S64](a: adj, b: -6_s64)
-    var point = LLVM::add[S64](a: nd, b: p.exp)
-    if LLVM::int_eq[U64](a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 0_u64)
-      body = dec_digit_range(c: p.coeff, hi: LLVM::sub[S64](a: nd, b: 1_s64), lo: 0_s64)
-    elseif LLVM::signed_le[S64](a: point, b: 0_s64)
-      body = "0." + dec_zeros(n: LLVM::sub[S64](a: 0_s64, b: point)) + dec_digit_range(c: p.coeff, hi: LLVM::sub[S64](a: nd, b: 1_s64), lo: 0_s64)
+  if LLVM::signed_le(a: p.exp, b: 0_s64) and LLVM::signed_ge(a: adj, b: -6_s64)
+    var point = LLVM::add(a: nd, b: p.exp)
+    if LLVM::int_eq(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 0_u64)
+      body = dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 1_s64), lo: 0_s64)
+    elseif LLVM::signed_le(a: point, b: 0_s64)
+      body = "0." + dec_zeros(n: LLVM::sub(a: 0_s64, b: point)) + dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 1_s64), lo: 0_s64)
     else
-      body = dec_digit_range(c: p.coeff, hi: LLVM::sub[S64](a: nd, b: 1_s64), lo: LLVM::sub[S64](a: nd, b: point)) + "." + dec_digit_range(c: p.coeff, hi: LLVM::sub[S64](a: LLVM::sub[S64](a: nd, b: point), b: 1_s64), lo: 0_s64)
+      body = dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 1_s64), lo: LLVM::sub(a: nd, b: point)) + "." + dec_digit_range(c: p.coeff, hi: LLVM::sub(a: LLVM::sub(a: nd, b: point), b: 1_s64), lo: 0_s64)
   else
-    var mant = dec_digit_range(c: p.coeff, hi: LLVM::sub[S64](a: nd, b: 1_s64), lo: LLVM::sub[S64](a: nd, b: 1_s64))
-    if LLVM::signed_gt[S64](a: nd, b: 1_s64)
-      mant = mant + "." + dec_digit_range(c: p.coeff, hi: LLVM::sub[S64](a: nd, b: 2_s64), lo: 0_s64)
-    var mag = if LLVM::signed_lt[S64](a: adj, b: 0_s64) then LLVM::sub[S64](a: 0_s64, b: adj) else adj
-    var es = if LLVM::signed_lt[S64](a: adj, b: 0_s64) then "-" else "+"
+    var mant = dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 1_s64), lo: LLVM::sub(a: nd, b: 1_s64))
+    if LLVM::signed_gt(a: nd, b: 1_s64)
+      mant = mant + "." + dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 2_s64), lo: 0_s64)
+    var mag = if LLVM::signed_lt(a: adj, b: 0_s64) then LLVM::sub(a: 0_s64, b: adj) else adj
+    var es = if LLVM::signed_lt(a: adj, b: 0_s64) then "-" else "+"
     body = mant + "E" + es + f"{mag}"
   return if p.sign then "-" + body else body
 
@@ -817,27 +817,27 @@ preset POW10_ADD: Array[U64, 77] = [0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 0_u64, 0_
 
 ### floor(x / 10^k) by reciprocal-multiply (k in 1..40); k<=0 returns x.
 routine div_pow10b(x: U256, k: S64) -> U256
-  if LLVM::signed_le[S64](a: k, b: 0_s64)
+  if LLVM::signed_le(a: k, b: 0_s64)
     return x
   var ku = LLVM::reinterpret_bits[S64, U64](k)
-  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul[S64](a: k, b: 4_s64))
-  var i1 = LLVM::add[U64](a: i0, b: 1_u64)
-  var i2 = LLVM::add[U64](a: i0, b: 2_u64)
-  var i3 = LLVM::add[U64](a: i0, b: 3_u64)
+  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul(a: k, b: 4_s64))
+  var i1 = LLVM::add(a: i0, b: 1_u64)
+  var i2 = LLVM::add(a: i0, b: 2_u64)
+  var i3 = LLVM::add(a: i0, b: 3_u64)
   var g0 = POW10_MAGIC[i0]
   var g1 = POW10_MAGIC[i1]
   var g2 = POW10_MAGIC[i2]
   var g3 = POW10_MAGIC[i3]
-  var mm = LLVM::bit_or[U256](a: LLVM::bit_or[U256](a: LLVM::zero_extend[U64, U256](g0), b: LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](g1), bits: U256.to_width(s: 64_s64))), b: LLVM::bit_or[U256](a: LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](g2), bits: U256.to_width(s: 128_s64)), b: LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](g3), bits: U256.to_width(s: 192_s64))))
-  var prod = LLVM::mul[U512](a: LLVM::zero_extend[U256, U512](x), b: LLVM::zero_extend[U256, U512](mm))
-  var t = LLVM::int_truncate[U512, U256](LLVM::shift_right_unsigned[U512](prod, U512.to_width(s: 256_s64)))
+  var mm = LLVM::bit_or(a: LLVM::bit_or(a: LLVM::zero_extend[U64, U256](g0), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U256](g1), bits: U256.to_width(s: 64_s64))), b: LLVM::bit_or(a: LLVM::shift_left(value: LLVM::zero_extend[U64, U256](g2), bits: U256.to_width(s: 128_s64)), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U256](g3), bits: U256.to_width(s: 192_s64))))
+  var prod = LLVM::mul(a: LLVM::zero_extend[U256, U512](x), b: LLVM::zero_extend[U256, U512](mm))
+  var t = LLVM::int_truncate[U512, U256](LLVM::shift_right_unsigned(prod, U512.to_width(s: 256_s64)))
   var s = POW10_SHIFT[ku]
   var ad = POW10_ADD[ku]
-  if LLVM::int_ne[U64](a: ad, b: 0_u64)
-    var dd = LLVM::shift_right_unsigned[U256](LLVM::sub[U256](a: x, b: t), U256.to_width(s: 1_s64))
-    var q = LLVM::add[U256](a: dd, b: t)
-    return LLVM::shift_right_unsigned[U256](q, U256.to_width(s: LLVM::sub[S64](a: s, b: 1_s64)))
-  return LLVM::shift_right_unsigned[U256](t, U256.to_width(s: s))
+  if LLVM::int_ne(a: ad, b: 0_u64)
+    var dd = LLVM::shift_right_unsigned(LLVM::sub(a: x, b: t), U256.to_width(s: 1_s64))
+    var q = LLVM::add(a: dd, b: t)
+    return LLVM::shift_right_unsigned(q, U256.to_width(s: LLVM::sub(a: s, b: 1_s64)))
+  return LLVM::shift_right_unsigned(t, U256.to_width(s: s))
 
 # Precomputed 10^k as U256 (k=0..76), little-endian limbs. Replaces pow10b's
 # multiply loop with an O(1) table lookup.
@@ -847,15 +847,15 @@ preset POW10_VAL: Array[U64, 308] = [
 
 ### 10^k as a U256 by table lookup (k in 0..76).
 routine pow10_tbl(k: S64) -> U256
-  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul[S64](a: k, b: 4_s64))
-  var i1 = LLVM::add[U64](a: i0, b: 1_u64)
-  var i2 = LLVM::add[U64](a: i0, b: 2_u64)
-  var i3 = LLVM::add[U64](a: i0, b: 3_u64)
+  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul(a: k, b: 4_s64))
+  var i1 = LLVM::add(a: i0, b: 1_u64)
+  var i2 = LLVM::add(a: i0, b: 2_u64)
+  var i3 = LLVM::add(a: i0, b: 3_u64)
   var g0 = POW10_VAL[i0]
   var g1 = POW10_VAL[i1]
   var g2 = POW10_VAL[i2]
   var g3 = POW10_VAL[i3]
-  return LLVM::bit_or[U256](a: LLVM::bit_or[U256](a: LLVM::zero_extend[U64, U256](g0), b: LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](g1), bits: U256.to_width(s: 64_s64))), b: LLVM::bit_or[U256](a: LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](g2), bits: U256.to_width(s: 128_s64)), b: LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](g3), bits: U256.to_width(s: 192_s64))))
+  return LLVM::bit_or(a: LLVM::bit_or(a: LLVM::zero_extend[U64, U256](g0), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U256](g1), bits: U256.to_width(s: 64_s64))), b: LLVM::bit_or(a: LLVM::shift_left(value: LLVM::zero_extend[U64, U256](g2), bits: U256.to_width(s: 128_s64)), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U256](g3), bits: U256.to_width(s: 192_s64))))
 
 # --- U128 reciprocals: floor(x / 10^k) for x:U128, k=1..38 (mulhi via U256). ---
 preset POW10_MAGIC128: Array[U64, 78] = [0_u64, 0_u64, 14757395258967641293_u64, 14757395258967641292_u64, 10330176681277348905_u64, 2951479051793528258_u64, 14462247353788288467_u64, 442721857769029238_u64, 15259146697772541097_u64, 15111572745182864683_u64, 14119875783780239189_u64, 3022314549036572936_u64, 6513323971497958161_u64, 604462909807314587_u64, 4409745821703674701_u64, 15474250491067253436_u64, 18123639758951610491_u64, 6312056711998053881_u64, 3560107088838733873_u64, 9903520314283042199_u64, 12492089279761224519_u64, 3961408125713216879_u64, 17838592806784456521_u64, 12676506002282294014_u64, 18325113820324532597_u64, 2535301200456458802_u64, 10678829633393670109_u64, 8112963841460668169_u64, 6018080969204141205_u64, 12980742146337069071_u64, 2250231921242805281_u64, 2322443360429758898_u64, 15207441643216202349_u64, 4153837486827862102_u64, 702278666647013315_u64, 13292279957849158729_u64, 8502343496119041951_u64, 2820903858849102350_u64, 10779635027931437427_u64, 8507059173023461586_u64, 1290692756703406857_u64, 8775845279965525461_u64, 12100600649588456455_u64, 3331327409230510045_u64, 5991131704928854841_u64, 17422457186352049329_u64, 15955621599953412261_u64, 3484491437270409865_u64, 14164500972431816003_u64, 11150372599265311570_u64, 4216457482181353989_u64, 17840596158824498513_u64, 5375931807614451919_u64, 7136238463529799405_u64, 4300745446091561535_u64, 5708990770823839524_u64, 10073036612751086589_u64, 18268770466636286477_u64, 679731660717048625_u64, 14615016373309029182_u64, 4776919471889188123_u64, 4937282123584895075_u64, 132186762769440175_u64, 260476884126005737_u64, 14968894079398745573_u64, 11484809458827340148_u64, 17055604075985229199_u64, 11972621413014756705_u64, 13644483260788183359_u64, 9578097130411805364_u64, 10763126773035362405_u64, 15324955408658888583_u64, 7994599523956055285_u64, 6129982163463555433_u64, 9102010423587778133_u64, 9807971461541688693_u64, 14660305968354043153_u64, 7846377169233350954_u64]
@@ -864,23 +864,23 @@ preset POW10_ADD128: Array[U64, 39] = [0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 0_u64,
 
 ### floor(x / 10^k) for a U128 x by reciprocal-multiply (k in 1..38; k<=0 returns x).
 routine div_pow10_u128(x: U128, k: S64) -> U128
-  if LLVM::signed_le[S64](a: k, b: 0_s64)
+  if LLVM::signed_le(a: k, b: 0_s64)
     return x
   var ku = LLVM::reinterpret_bits[S64, U64](k)
-  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul[S64](a: k, b: 2_s64))
-  var i1 = LLVM::add[U64](a: i0, b: 1_u64)
+  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul(a: k, b: 2_s64))
+  var i1 = LLVM::add(a: i0, b: 1_u64)
   var g0 = POW10_MAGIC128[i0]
   var g1 = POW10_MAGIC128[i1]
-  var mm = LLVM::bit_or[U128](a: LLVM::zero_extend[U64, U128](g0), b: LLVM::shift_left[U128](value: LLVM::zero_extend[U64, U128](g1), bits: U128.to_width(s: 64_s64)))
-  var prod = LLVM::mul[U256](a: LLVM::zero_extend[U128, U256](x), b: LLVM::zero_extend[U128, U256](mm))
-  var t = LLVM::int_truncate[U256, U128](LLVM::shift_right_unsigned[U256](prod, U256.to_width(s: 128_s64)))
+  var mm = LLVM::bit_or(a: LLVM::zero_extend[U64, U128](g0), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](g1), bits: U128.to_width(s: 64_s64)))
+  var prod = LLVM::mul(a: LLVM::zero_extend[U128, U256](x), b: LLVM::zero_extend[U128, U256](mm))
+  var t = LLVM::int_truncate[U256, U128](LLVM::shift_right_unsigned(prod, U256.to_width(s: 128_s64)))
   var s = POW10_SHIFT128[ku]
   var ad = POW10_ADD128[ku]
-  if LLVM::int_ne[U64](a: ad, b: 0_u64)
-    var dd = LLVM::shift_right_unsigned[U128](LLVM::sub[U128](a: x, b: t), U128.to_width(s: 1_s64))
-    var q = LLVM::add[U128](a: dd, b: t)
-    return LLVM::shift_right_unsigned[U128](q, U128.to_width(s: LLVM::sub[S64](a: s, b: 1_s64)))
-  return LLVM::shift_right_unsigned[U128](t, U128.to_width(s: s))
+  if LLVM::int_ne(a: ad, b: 0_u64)
+    var dd = LLVM::shift_right_unsigned(LLVM::sub(a: x, b: t), U128.to_width(s: 1_s64))
+    var q = LLVM::add(a: dd, b: t)
+    return LLVM::shift_right_unsigned(q, U128.to_width(s: LLVM::sub(a: s, b: 1_s64)))
+  return LLVM::shift_right_unsigned(t, U128.to_width(s: s))
 
 # --- W=32 reciprocals: floor(x / 10^k) for x:U32, k=1..9 (mulhi via U64). ---
 preset POW10_MAGIC32: Array[U64, 10] = [0_u64, 3435973837_u64, 1374389535_u64, 274877907_u64, 3518437209_u64, 1334532239_u64, 1125899907_u64, 1801439851_u64, 1441151881_u64, 316718723_u64]
@@ -889,19 +889,19 @@ preset POW10_ADD32: Array[U64, 10] = [0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64, 
 
 ### floor(x / 10^k) for a U32 x by reciprocal-multiply (k in 1..9; k<=0 returns x).
 routine div_pow10_u32(x: U32, k: S64) -> U32
-  if LLVM::signed_le[S64](a: k, b: 0_s64)
+  if LLVM::signed_le(a: k, b: 0_s64)
     return x
   var ku = LLVM::reinterpret_bits[S64, U64](k)
   var mm = LLVM::int_truncate[U64, U32](POW10_MAGIC32[ku])
-  var prod = LLVM::mul[U64](a: LLVM::zero_extend[U32, U64](x), b: LLVM::zero_extend[U32, U64](mm))
-  var t = LLVM::int_truncate[U64, U32](LLVM::shift_right_unsigned[U64](prod, 32_u64))
+  var prod = LLVM::mul(a: LLVM::zero_extend[U32, U64](x), b: LLVM::zero_extend[U32, U64](mm))
+  var t = LLVM::int_truncate[U64, U32](LLVM::shift_right_unsigned(prod, 32_u64))
   var s = POW10_SHIFT32[ku]
   var ad = POW10_ADD32[ku]
-  if LLVM::int_ne[U64](a: ad, b: 0_u64)
-    var dd = LLVM::shift_right_unsigned[U32](LLVM::sub[U32](a: x, b: t), 1_u32)
-    var q = LLVM::add[U32](a: dd, b: t)
-    return LLVM::shift_right_unsigned[U32](q, LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: s, b: 1_s64))))
-  return LLVM::shift_right_unsigned[U32](t, LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](s)))
+  if LLVM::int_ne(a: ad, b: 0_u64)
+    var dd = LLVM::shift_right_unsigned(LLVM::sub(a: x, b: t), 1_u32)
+    var q = LLVM::add(a: dd, b: t)
+    return LLVM::shift_right_unsigned(q, LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: s, b: 1_s64))))
+  return LLVM::shift_right_unsigned(t, LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](s)))
 
 # --- W=64 reciprocals: floor(x / 10^k) for x:U64, k=1..19 (mulhi via U128). ---
 preset POW10_MAGIC64: Array[U64, 20] = [0_u64, 14757395258967641293_u64, 5165088340638674453_u64, 442721857769029239_u64, 3777893186295716171_u64, 5731772318583031879_u64, 4835703278458516699_u64, 15474250491067253437_u64, 12379400392853802749_u64, 1360296554856532783_u64, 15845632502852867519_u64, 12676506002282294015_u64, 2535301200456458803_u64, 4056481920730334085_u64, 811296384146066817_u64, 2322443360429758899_u64, 4153837486827862103_u64, 8137815841988765843_u64, 2820903858849102351_u64, 8507059173023461587_u64]
@@ -910,19 +910,19 @@ preset POW10_ADD64: Array[U64, 20] = [0_u64, 0_u64, 1_u64, 1_u64, 0_u64, 1_u64, 
 
 ### floor(x / 10^k) for a U64 x by reciprocal-multiply (k in 1..19; k<=0 returns x).
 routine div_pow10_u64(x: U64, k: S64) -> U64
-  if LLVM::signed_le[S64](a: k, b: 0_s64)
+  if LLVM::signed_le(a: k, b: 0_s64)
     return x
   var ku = LLVM::reinterpret_bits[S64, U64](k)
   var mm = POW10_MAGIC64[ku]
-  var prod = LLVM::mul[U128](a: LLVM::zero_extend[U64, U128](x), b: LLVM::zero_extend[U64, U128](mm))
-  var t = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned[U128](prod, U128.to_width(s: 64_s64)))
+  var prod = LLVM::mul(a: LLVM::zero_extend[U64, U128](x), b: LLVM::zero_extend[U64, U128](mm))
+  var t = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(prod, U128.to_width(s: 64_s64)))
   var s = POW10_SHIFT64[ku]
   var ad = POW10_ADD64[ku]
-  if LLVM::int_ne[U64](a: ad, b: 0_u64)
-    var dd = LLVM::shift_right_unsigned[U64](LLVM::sub[U64](a: x, b: t), 1_u64)
-    var q = LLVM::add[U64](a: dd, b: t)
-    return LLVM::shift_right_unsigned[U64](q, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: s, b: 1_s64)))
-  return LLVM::shift_right_unsigned[U64](t, LLVM::reinterpret_bits[S64, U64](s))
+  if LLVM::int_ne(a: ad, b: 0_u64)
+    var dd = LLVM::shift_right_unsigned(LLVM::sub(a: x, b: t), 1_u64)
+    var q = LLVM::add(a: dd, b: t)
+    return LLVM::shift_right_unsigned(q, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: s, b: 1_s64)))
+  return LLVM::shift_right_unsigned(t, LLVM::reinterpret_bits[S64, U64](s))
 
 # --- W=512 reciprocals: floor(x / 10^k) for x:U512, k=1..76 (mulhi via U1024). ---
 preset POW10_MAGIC512: Array[U64, 616] = [0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 14757395258967641293_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 14757395258967641292_u64, 16971004547812787487_u64, 2213609288845146193_u64, 5902958103587056517_u64, 9592306918328966840_u64, 13281655733070877163_u64, 16971004547812787486_u64, 2213609288845146193_u64, 5902958103587056517_u64, 13724377590839906403_u64, 10772898539046378143_u64, 15200117116736670531_u64, 8559289250201231949_u64, 9297159013149614014_u64, 17413726405581816725_u64, 14462247353788288466_u64, 442721857769029238_u64, 10123573147651801927_u64, 16911974966776916921_u64, 14108069867573065075_u64, 16469253109007887682_u64, 1859431802629922802_u64, 3482745281116363345_u64, 17649844729725298986_u64, 3777893186295716170_u64, 16829333553326698131_u64, 16002919418824510217_u64, 16504670857629410021_u64, 16858848343844633412_u64, 832317092605774968_u64, 11221523354918994439_u64, 2278541827984603815_u64, 5731772318583031878_u64, 14110431050814499899_u64, 17469214211755535056_u64, 10291217157793674331_u64, 14122236967021674011_u64, 4022275651784220310_u64, 15556655786193328745_u64, 11979463175419572495_u64, 9671406556917033397_u64, 11288344840651599919_u64, 17664720184146338368_u64, 15611671355718760111_u64, 3919091944133518562_u64, 14285866965653107218_u64, 5066626999470842349_u64, 2204872910851837350_u64, 7737125245533626718_u64, 5947017782872230307_u64, 14600990481054998643_u64, 10501031900627572668_u64, 783818388826703712_u64, 10235871022614442090_u64, 12081371844119899439_u64, 11509021026396098439_u64, 1547425049106725343_u64, 6024200140668251789_u64, 17182632679376107767_u64, 12664697441549889494_u64, 6343526562239897197_u64, 16649335832465638733_u64, 18135653459284030867_u64, 7120214177677467745_u64, 1360296554856532782_u64, 4894188842875560681_u64, 18193921794842862846_u64, 2532939488309977898_u64, 12336751756673710409_u64, 3329867166493127746_u64, 14695177136082537143_u64, 12492089279761224518_u64, 3961408125713216879_u64, 15736233027542753429_u64, 14706830803194303538_u64, 506587897661995579_u64, 6156699166076652405_u64, 665973433298625549_u64, 10317733056700328075_u64, 17255813114919886196_u64, 792281625142643375_u64, 9577644385967907085_u64, 7469342358533479460_u64, 6484325090073543421_u64, 5018773030942944320_u64, 4835111131480496708_u64, 17697169868764979341_u64, 17960223060169475539_u64, 10141204801825835211_u64, 1915528877193581417_u64, 1493868471706695892_u64, 16054260276982349977_u64, 15761149865156230156_u64, 4656371041038009664_u64, 3539433973752995868_u64, 7281393426775805431_u64, 2028240960365167042_u64, 6072025554368290521_u64, 8053469993619976449_u64, 17337741993536653223_u64, 17275277536904229847_u64, 571968289415958538_u64, 15789964346103064528_u64, 12036161938408282408_u64, 7514740218964586526_u64, 4857620443494632417_u64, 2753427180154070836_u64, 2802147150603591609_u64, 10130873214781473555_u64, 7836272261016587477_u64, 12631971476882451622_u64, 2250231921242805280_u64, 2322443360429758898_u64, 12039570532924657453_u64, 7929383065514634813_u64, 11628475874346449291_u64, 13094221087182025680_u64, 5256603266945227818_u64, 17283789554344131617_u64, 15207441643216202348_u64, 4153837486827862102_u64, 8195266408453720955_u64, 5308315275339595055_u64, 158817325244767250_u64, 2504009665781689473_u64, 12099914041854274833_u64, 9207319213241058971_u64, 9574511370178282465_u64, 6646139978924579364_u64, 2866864312021066441_u64, 557303405529765721_u64, 14884449119163455093_u64, 9381905362109172224_u64, 9679931233483419866_u64, 11055204185334757500_u64, 11348957910884536295_u64, 5316911983139663491_u64, 9173965798467412611_u64, 16540766156662891600_u64, 14426097848645863388_u64, 507306640814068533_u64, 16218384688179302280_u64, 2172514060394031092_u64, 3112525982153323237_u64, 17014118346046923173_u64, 14717870268257750735_u64, 2164566481104582310_u64, 11540878278916690711_u64, 11473891756876985796_u64, 5596010121059621177_u64, 1738011248315224874_u64, 9868718415206479236_u64, 13611294676837538538_u64, 8791197170244759883_u64, 7152655184509242020_u64, 11086707616782884491_u64, 18358226811003177274_u64, 5264267378953483560_u64, 10159515626788180445_u64, 12100600649588456454_u64, 3331327409230510045_u64, 7032957736195807907_u64, 5722124147607393616_u64, 12558714908168217916_u64, 14686581448802541819_u64, 4211413903162786848_u64, 8127612501430544356_u64, 5991131704928854840_u64, 17422457186352049329_u64, 184685933687561681_u64, 5466049821429919463_u64, 5336548594101507373_u64, 1362437429632604972_u64, 6738262245060458958_u64, 1936133558063140000_u64, 16964508357369988391_u64, 9429187424453727310_u64, 7526446376433869991_u64, 4372839857143935570_u64, 15337285319506936868_u64, 1089949943706083977_u64, 16458656240274098136_u64, 12616953290676242969_u64, 9882257871154080389_u64, 3854001124821071525_u64, 6021157101147095993_u64, 3498271885715148456_u64, 4891130626121728848_u64, 871959954964867182_u64, 16856273806961188832_u64, 10093562632540994375_u64, 4216457482181353988_u64, 17840596158824498513_u64, 17012548991319174235_u64, 1907886202402327206_u64, 7825809001794766157_u64, 16152531186911428784_u64, 1144596387944529868_u64, 8771002582581770355_u64, 3056983156748256058_u64, 10098209780409646005_u64, 17299388007797249711_u64, 8905006591405682411_u64, 2571298386693902602_u64, 5543327320045322381_u64, 4605025925097534218_u64, 10706150880807326607_u64, 17202981784366246139_u64, 4389219009585806480_u64, 18217272860527091235_u64, 12849047762506867451_u64, 4203608492080690843_u64, 1108665464009064476_u64, 8299702814503327490_u64, 2141230176161465321_u64, 7129945171615159551_u64, 4567192616659071619_u64, 13288779494599894855_u64, 8446929385205745228_u64, 4767001460864959460_u64, 14474156599141833294_u64, 5156563421176461734_u64, 13703873127433378057_u64, 1359463321434097248_u64, 10783288672908506748_u64, 2657755898919978971_u64, 9068083506524969692_u64, 8332097921656812538_u64, 13962877764054097628_u64, 15788707943202933639_u64, 10119472254970496257_u64, 15029287923254460742_u64, 5846006549323611672_u64, 1126121247060112061_u64, 14260471961912261722_u64, 837271646108427860_u64, 7787720697554009179_u64, 17319726085572194738_u64, 10246218327454126085_u64, 132186762769440174_u64, 260476884126005737_u64, 15658292256615730941_u64, 15097726384271719700_u64, 4359166131628652611_u64, 6230176558043207343_u64, 6477083238973935144_u64, 818277032479480222_u64, 7484447039699372786_u64, 14965776766268445882_u64, 2917174722133707567_u64, 2020269326383289582_u64, 10664014625347754502_u64, 17346980122352952395_u64, 10363333182358296230_u64, 16066638510934809648_u64, 15664464078260906780_u64, 5498498752319961795_u64, 11651481388652472483_u64, 4093402680018568239_u64, 16890198184037192193_u64, 18226791283438231771_u64, 16830061895439300538_u64, 6902676516928872252_u64, 6822241630394091679_u64, 4789048565205902682_u64, 7574323777618225003_u64, 6549444288029709183_u64, 12266921835491866216_u64, 3337424350307798572_u64, 4792006144251418923_u64, 3665584797602374958_u64, 14604935423372457010_u64, 7662477704329444291_u64, 13438156651578400649_u64, 5239555430423767346_u64, 13502886283135403296_u64, 13737985924471969827_u64, 7522953730143045461_u64, 17689863097049541259_u64, 7994599523956055284_u64, 6129982163463555433_u64, 6376980145057590453_u64, 1047911086084753469_u64, 17457972515594721952_u64, 10126294814378214611_u64, 5193939560770519415_u64, 10916670248893728898_u64, 12666966349016942026_u64, 1225996432692711086_u64, 8654093658495338737_u64, 11277628661442681663_u64, 7180943317860854713_u64, 2025258962875642922_u64, 1038787912154103883_u64, 9562031679262566426_u64, 6222742084545298728_u64, 245199286538542217_u64, 7746435175415925197_u64, 1876172366127290750_u64, 2418765215026639340_u64, 7770189715943249223_u64, 1535057695903374290_u64, 9960676061795058998_u64, 12388443105140738074_u64, 12554203470773361527_u64, 17265194584558471127_u64, 12568984337127563569_u64, 13003058616247042441_u64, 9905500587496509701_u64, 4917394971464609755_u64, 4279192034694136875_u64, 2532056854628769813_u64, 10043362776618689222_u64, 1798869632100181541_u64, 5352979680436460419_u64, 13426196156511447260_u64, 15848800939994415522_u64, 7867831954343375608_u64, 6846707255510619000_u64, 7740639782147942024_u64, 16069380442589902755_u64, 8817793335163965879_u64, 7971732559091078658_u64, 14430305739951068131_u64, 5300343122511711771_u64, 9983614378216610810_u64, 9166714619150405523_u64, 6192511825718353619_u64, 12855504354071922204_u64, 5452907481774703499_u64, 12662392956043946701_u64, 10264758777474034272_u64, 4749417439244252677_u64, 5686071690385232485_u64, 12901389368055812074_u64, 15995897624111312016_u64, 2571100870814384440_u64, 17449303941679051197_u64, 18383564570889167504_u64, 3332437569981627086_u64, 15198135805581608568_u64, 18195429409232743952_u64, 8080306645101405728_u64, 14293384249737095221_u64, 8227522786606030210_u64, 16850839862460750945_u64, 10966959239713116391_u64, 12710597741454423985_u64, 16938319659446753062_u64, 18044640610546659354_u64, 5549793002678428519_u64, 4422670725869800738_u64, 13164036458569648337_u64, 9791323075226690433_u64, 8773567391770493113_u64, 10168478193163539188_u64, 2482609283331671480_u64, 18125061303179237807_u64, 4439834402142742815_u64, 14606183024921571560_u64, 10531229166855718669_u64, 9336962244529158733_u64, 16512108737321739915_u64, 5723044453374618160_u64, 4185870671408244619_u64, 18382407519603488854_u64, 15645362139396189855_u64, 17678631863951955604_u64, 2106245833371143733_u64, 4416326143857961043_u64, 13443775550311377379_u64, 18180740427888004613_u64, 15721525852787034593_u64, 3277594868463108647_u64, 4207248508845946675_u64, 6152128301777116498_u64, 13479973333575319897_u64, 8261962858255412855_u64, 13756801554288006445_u64, 3636148085577600922_u64, 10523002800041227565_u64, 655518973692621729_u64, 841449701769189335_u64, 8609123289839243946_u64, 2695994666715063979_u64, 4915027701189808071_u64, 3188507208379303817_u64, 15892650118212825259_u64, 4628288069651380922_u64, 4195321431632779069_u64, 5385278091322811744_u64, 10826203278068237376_u64, 17254365866976409468_u64, 7864044321903692913_u64, 1412262718664975784_u64, 14360193744914789445_u64, 11094609726184119799_u64, 3023165475870536187_u64, 15995142575600319437_u64, 13632576430167269478_u64, 9160241313452703533_u64, 14213664172987208135_u64, 564905087465990313_u64, 5744077497965915778_u64, 11816541519957468566_u64, 12277312634573945444_u64, 2708708215498217451_u64, 16521077016292638761_u64, 11042794154864902059_u64, 7984467417811891723_u64, 8282545769429405148_u64, 1811826367261644598_u64, 459722358222398090_u64, 12265002585834492065_u64, 4333933144797147922_u64, 15365676781842491048_u64, 17668470647783843295_u64, 2698225119507603055_u64, 14004734245027344765_u64, 1449461093809315678_u64, 367777886577918472_u64, 9812002068667593652_u64, 10845844145321538984_u64, 12292541425473992838_u64, 14134776518227074636_u64, 539645023901520611_u64, 2800946849005468953_u64, 7668589848245683782_u64, 73555577315583694_u64, 13030446857959249700_u64, 16926564088031949089_u64, 6147857099836708890_u64, 2826955303645414927_u64, 3453728152969731911_u64, 14236711018893090976_u64, 12185486881353272973_u64, 7849453324303556290_u64, 16986581225584812262_u64, 12406940980114805770_u64, 17210192550503474962_u64, 18092513943330655534_u64, 16138886520155534057_u64, 13073382037041057036_u64, 8563543567283219512_u64, 6829130144463332839_u64, 14173330119717745551_u64, 12341474021529742954_u64, 17952123464427120954_u64, 7237005577332262213_u64, 11061599902336695427_u64, 16009380815338010255_u64, 12645944156338661147_u64, 10785170018056934116_u64, 12150517050419592855_u64, 9977926350959894869_u64, 13174609309263863176_u64, 4711673773753687468_u64, 1470582292385535695_u64, 5428807022786587558_u64, 10116755325070928918_u64, 12317484829187457616_u64, 13409762455077584607_u64, 7982341080767915895_u64, 14229036262153000864_u64, 79990204261039651_u64, 294116458477107139_u64, 8464459034041138158_u64, 16780746323981827076_u64, 13531543410063222492_u64, 6371301305757427244_u64, 5285817030895493502_u64, 10224504881914420819_u64, 3705346855594118253_u64, 7849283963047192069_u64, 6164436824982000406_u64, 8402450044661371706_u64, 17961120641359245665_u64, 17572779718695704237_u64, 12146656064174699926_u64, 12669858996321162987_u64, 5928554968950589205_u64, 14049662237525283651_u64, 4968802580974760007_u64, 8441096069206837844_u64, 2135353831220931281_u64, 11960709322923329683_u64, 9354508887423757180_u64, 3650060640808618328_u64, 524631826932333842_u64, 12998562524493934107_u64, 13055567476615634972_u64, 3376438427682735137_u64, 11922187976714103482_u64, 12162981358653152519_u64, 11120501184453323518_u64, 5149373071065357654_u64, 7588550360256754183_u64, 2350955965480742955_u64, 17199559147843105633_u64, 16470347928518107189_u64, 8007454318516834601_u64, 1014026100135492415_u64, 3035406636157676337_u64, 4549648098962661924_u64, 12141680576410806693_u64, 7450878359511099051_u64, 16451248192323238043_u64, 7905812611919419887_u64, 1743880465401204393_u64, 9001139389700608511_u64, 8545999432594192462_u64, 3590088143598348755_u64, 979944848547739093_u64, 5960702687608879241_u64, 5782300924374769788_u64, 6324650089535535910_u64, 12463150816546694484_u64, 3511562697018576485_u64, 10526148360817264293_u64, 6561419329620589327_u64, 15541351137805832567_u64, 15949535796489417141_u64, 4845808999616864280_u64, 4954278832649017505_u64, 9871327792793159543_u64, 8081010168887535943_u64, 16862624931131094151_u64, 8690981495407938511_u64, 3108270227561166513_u64, 17222006358468332269_u64, 1498387079612648811_u64, 2192594011018429448_u64, 11525614467489476552_u64, 14824976933461126806_u64, 8308381561207423842_u64, 3971398164224061951_u64, 1446185382681914070_u64, 7133750086435576777_u64, 299677415922529762_u64, 7817216431687506536_u64, 2305122893497895310_u64, 17722390645659866654_u64, 9040373941725305414_u64, 4483628447586722713_u64, 3978585891278293137_u64, 16141210035252408787_u64, 12985981906129921448_u64, 16826045830122848921_u64, 18442135333128440309_u64, 13810882134191567859_u64, 2518161005913299807_u64, 6559129176103563427_u64, 7016205630471524462_u64, 16602316842943837353_u64, 6699436710162026835_u64, 13460836664098279137_u64, 11064359451760841924_u64, 3670008077869433641_u64, 2014528804730639846_u64, 12626000970366671388_u64, 1923615689635309246_u64, 4427614060258677825_u64, 7029749921517332614_u64, 14158641033073425973_u64, 2945579863849705786_u64, 16940059368816824796_u64, 3223246087569023753_u64, 5444206293619032928_u64, 14145831547642225764_u64, 885522812051735565_u64, 5095298799045376846_u64, 13899774650840416164_u64, 7967813602253761803_u64, 7077360688505275282_u64, 11712695661739535720_u64, 1088841258723806585_u64, 6518515124270355476_u64, 6523021813307464131_u64, 16304956156945205907_u64, 11275139550012138816_u64, 18118305897728217125_u64, 7890158944249239610_u64, 4276486784889321396_u64, 7173640842658091397_u64, 2412504323955585907_u64, 16061999621629134119_u64, 10639688860872861827_u64, 5944376724744338086_u64, 7313009994287553748_u64, 5267380603591758245_u64, 855297356977864279_u64, 12502774612757349249_u64, 4171849679533027504_u64, 14252426024620610605_u64, 1685730044231929880_u64, 1150522890944660522_u64, 6220427001279330434_u64, 11575142974535790831_u64, 9163251899400241710_u64, 17298827671034559699_u64, 8253093875301824413_u64]
@@ -931,17 +931,17 @@ preset POW10_ADD512: Array[U64, 77] = [0_u64, 0_u64, 0_u64, 1_u64, 0_u64, 1_u64,
 
 ### floor(x / 10^k) for a U512 x by reciprocal-multiply (k in 1..76; k<=0 returns x).
 routine div_pow10_u512(x: U512, k: S64) -> U512
-  if LLVM::signed_le[S64](a: k, b: 0_s64)
+  if LLVM::signed_le(a: k, b: 0_s64)
     return x
   var ku = LLVM::reinterpret_bits[S64, U64](k)
-  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul[S64](a: k, b: 8_s64))
-  var i1 = LLVM::add[U64](a: i0, b: 1_u64)
-  var i2 = LLVM::add[U64](a: i0, b: 2_u64)
-  var i3 = LLVM::add[U64](a: i0, b: 3_u64)
-  var i4 = LLVM::add[U64](a: i0, b: 4_u64)
-  var i5 = LLVM::add[U64](a: i0, b: 5_u64)
-  var i6 = LLVM::add[U64](a: i0, b: 6_u64)
-  var i7 = LLVM::add[U64](a: i0, b: 7_u64)
+  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul(a: k, b: 8_s64))
+  var i1 = LLVM::add(a: i0, b: 1_u64)
+  var i2 = LLVM::add(a: i0, b: 2_u64)
+  var i3 = LLVM::add(a: i0, b: 3_u64)
+  var i4 = LLVM::add(a: i0, b: 4_u64)
+  var i5 = LLVM::add(a: i0, b: 5_u64)
+  var i6 = LLVM::add(a: i0, b: 6_u64)
+  var i7 = LLVM::add(a: i0, b: 7_u64)
   var g0 = POW10_MAGIC512[i0]
   var g1 = POW10_MAGIC512[i1]
   var g2 = POW10_MAGIC512[i2]
@@ -950,16 +950,16 @@ routine div_pow10_u512(x: U512, k: S64) -> U512
   var g5 = POW10_MAGIC512[i5]
   var g6 = POW10_MAGIC512[i6]
   var g7 = POW10_MAGIC512[i7]
-  var mm = LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::zero_extend[U64, U512](g0), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g1), bits: U512.to_width(s: 64_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g2), bits: U512.to_width(s: 128_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g3), bits: U512.to_width(s: 192_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g4), bits: U512.to_width(s: 256_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g5), bits: U512.to_width(s: 320_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g6), bits: U512.to_width(s: 384_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g7), bits: U512.to_width(s: 448_s64)))
-  var prod = LLVM::mul[U1024](a: LLVM::zero_extend[U512, U1024](x), b: LLVM::zero_extend[U512, U1024](mm))
-  var t = LLVM::int_truncate[U1024, U512](LLVM::shift_right_unsigned[U1024](prod, U1024.to_width(s: 512_s64)))
+  var mm = LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::zero_extend[U64, U512](g0), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g1), bits: U512.to_width(s: 64_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g2), bits: U512.to_width(s: 128_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g3), bits: U512.to_width(s: 192_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g4), bits: U512.to_width(s: 256_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g5), bits: U512.to_width(s: 320_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g6), bits: U512.to_width(s: 384_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g7), bits: U512.to_width(s: 448_s64)))
+  var prod = LLVM::mul(a: LLVM::zero_extend[U512, U1024](x), b: LLVM::zero_extend[U512, U1024](mm))
+  var t = LLVM::int_truncate[U1024, U512](LLVM::shift_right_unsigned(prod, U1024.to_width(s: 512_s64)))
   var s = POW10_SHIFT512[ku]
   var ad = POW10_ADD512[ku]
-  if LLVM::int_ne[U64](a: ad, b: 0_u64)
-    var dd = LLVM::shift_right_unsigned[U512](LLVM::sub[U512](a: x, b: t), U512.to_width(s: 1_s64))
-    var q = LLVM::add[U512](a: dd, b: t)
-    return LLVM::shift_right_unsigned[U512](q, U512.to_width(s: LLVM::sub[S64](a: s, b: 1_s64)))
-  return LLVM::shift_right_unsigned[U512](t, U512.to_width(s: s))
+  if LLVM::int_ne(a: ad, b: 0_u64)
+    var dd = LLVM::shift_right_unsigned(LLVM::sub(a: x, b: t), U512.to_width(s: 1_s64))
+    var q = LLVM::add(a: dd, b: t)
+    return LLVM::shift_right_unsigned(q, U512.to_width(s: LLVM::sub(a: s, b: 1_s64)))
+  return LLVM::shift_right_unsigned(t, U512.to_width(s: s))
 
 # Precomputed 10^k as U512 (k=0..154), little-endian limbs — for D256 pow10 + digit-count
 # correction.
@@ -967,14 +967,14 @@ preset POW10_VAL512: Array[U64, 1240] = [1_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u6
 
 ### 10^k as a U512 by table lookup (k in 0..154).
 routine pow10_512_tbl(k: S64) -> U512
-  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul[S64](a: k, b: 8_s64))
-  var i1 = LLVM::add[U64](a: i0, b: 1_u64)
-  var i2 = LLVM::add[U64](a: i0, b: 2_u64)
-  var i3 = LLVM::add[U64](a: i0, b: 3_u64)
-  var i4 = LLVM::add[U64](a: i0, b: 4_u64)
-  var i5 = LLVM::add[U64](a: i0, b: 5_u64)
-  var i6 = LLVM::add[U64](a: i0, b: 6_u64)
-  var i7 = LLVM::add[U64](a: i0, b: 7_u64)
+  var i0 = LLVM::reinterpret_bits[S64, U64](LLVM::mul(a: k, b: 8_s64))
+  var i1 = LLVM::add(a: i0, b: 1_u64)
+  var i2 = LLVM::add(a: i0, b: 2_u64)
+  var i3 = LLVM::add(a: i0, b: 3_u64)
+  var i4 = LLVM::add(a: i0, b: 4_u64)
+  var i5 = LLVM::add(a: i0, b: 5_u64)
+  var i6 = LLVM::add(a: i0, b: 6_u64)
+  var i7 = LLVM::add(a: i0, b: 7_u64)
   var g0 = POW10_VAL512[i0]
   var g1 = POW10_VAL512[i1]
   var g2 = POW10_VAL512[i2]
@@ -983,7 +983,7 @@ routine pow10_512_tbl(k: S64) -> U512
   var g5 = POW10_VAL512[i5]
   var g6 = POW10_VAL512[i6]
   var g7 = POW10_VAL512[i7]
-  return LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::bit_or[U512](a: LLVM::zero_extend[U64, U512](g0), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g1), bits: U512.to_width(s: 64_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g2), bits: U512.to_width(s: 128_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g3), bits: U512.to_width(s: 192_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g4), bits: U512.to_width(s: 256_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g5), bits: U512.to_width(s: 320_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g6), bits: U512.to_width(s: 384_s64))), b: LLVM::shift_left[U512](value: LLVM::zero_extend[U64, U512](g7), bits: U512.to_width(s: 448_s64)))
+  return LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::bit_or(a: LLVM::zero_extend[U64, U512](g0), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g1), bits: U512.to_width(s: 64_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g2), bits: U512.to_width(s: 128_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g3), bits: U512.to_width(s: 192_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g4), bits: U512.to_width(s: 256_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g5), bits: U512.to_width(s: 320_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g6), bits: U512.to_width(s: 384_s64))), b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](g7), bits: U512.to_width(s: 448_s64)))
 
 # ============================================================================
 # Public surface — creators / presets / parser / hash / bytes
@@ -1028,16 +1028,16 @@ routine D128(from: S64) -> D128
 
 ### Converts a signed 128-bit integer into decimal128 (exact: <= 34 digits fit the coefficient).
 routine D128(from: S128) -> D128
-  var neg = LLVM::signed_lt[S128](a: from, b: 0_s128)
-  var mag = if neg then LLVM::reinterpret_bits[S128, U128](LLVM::sub[S128](a: 0_s128, b: from)) else LLVM::reinterpret_bits[S128, U128](from)
+  var neg = LLVM::signed_lt(a: from, b: 0_s128)
+  var mag = if neg then LLVM::reinterpret_bits[S128, U128](LLVM::sub(a: 0_s128, b: from)) else LLVM::reinterpret_bits[S128, U128](from)
   return D128.from_components(sign: neg, coeff: mag, exp: 0_s64)
 
 ### Converts a signed 256-bit integer into decimal128 (rounds half-even when > 34 digits).
 routine D128(from: S256) -> D128
   # The 256-bit magnitude can exceed 34 digits, so round it (half-even) via decfinB
   # rather than D128.from_components (which assumes a <=34-digit U128 coefficient).
-  var neg = LLVM::signed_lt[S256](a: from, b: 0_s256)
-  var mag = if neg then LLVM::reinterpret_bits[S256, U256](LLVM::sub[S256](a: 0_s256, b: from)) else LLVM::reinterpret_bits[S256, U256](from)
+  var neg = LLVM::signed_lt(a: from, b: 0_s256)
+  var mag = if neg then LLVM::reinterpret_bits[S256, U256](LLVM::sub(a: 0_s256, b: from)) else LLVM::reinterpret_bits[S256, U256](from)
   return d128_of_parts(p: decfinB(sign: neg, coeff: mag, exp: 0_s64, pref: 0_s64))
 
 ### Converts an unsigned integer into decimal128.
@@ -1155,9 +1155,9 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
   while i < len
     var ch = from_text[i]
     if ch.is_numeric()
-      coeff = LLVM::add[U128](a: LLVM::mul[U128](a: coeff, b: 10_u128), b: LLVM::zero_extend[U32, U128](LLVM::reinterpret_bits[S32, U32](ch.digit_value())))
+      coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 10_u128), b: LLVM::zero_extend[U32, U128](LLVM::reinterpret_bits[S32, U32](ch.digit_value())))
       if seen_dot
-        exp10 = LLVM::sub[S64](a: exp10, b: 1_s64)
+        exp10 = LLVM::sub(a: exp10, b: 1_s64)
       has_digit = true
     elseif ch == Character(0x002Eu32)
       if seen_dot
@@ -1177,12 +1177,12 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
         var ec = from_text[i]
         if not ec.is_numeric()
           throw InvalidValueError(input: from_text, target: "decimal number")
-        eval = LLVM::add[S64](a: LLVM::mul[S64](a: eval, b: 10_s64), b: S64(ec.digit_value()))
+        eval = LLVM::add(a: LLVM::mul(a: eval, b: 10_s64), b: S64(ec.digit_value()))
         has_edigit = true
         i = i + 1u64
       if not has_edigit
         throw InvalidValueError(input: from_text, target: "decimal number")
-      exp10 = LLVM::add[S64](a: exp10, b: if esign then LLVM::sub[S64](a: 0_s64, b: eval) else eval)
+      exp10 = LLVM::add(a: exp10, b: if esign then LLVM::sub(a: 0_s64, b: eval) else eval)
       break
     else
       throw InvalidValueError(input: from_text, target: "decimal number")
@@ -1195,9 +1195,9 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
 ### :throws: {InvalidValueError} on malformed input.
 routine parse_decimal_d128!(from_text: Text) -> D128
   var p = scan_decimal_parts(from_text: from_text)
-  if LLVM::int_eq[U64](a: p.special, b: 1_u64)
+  if LLVM::int_eq(a: p.special, b: 1_u64)
     return D128.infinity(sign: p.sign)
-  if LLVM::unsigned_ge[U64](a: p.special, b: 2_u64)
+  if LLVM::unsigned_ge(a: p.special, b: 2_u64)
     return D128.quiet_nan()
   return D128.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
 
@@ -1223,10 +1223,10 @@ routine D128.to_bytes_le() -> Array[Byte, 16]
   var raw = me.to_bits()
   var result = Array[Byte, 16]()
   var i = 0_u64
-  while LLVM::unsigned_lt[U64](a: i, b: 16_u64)
-    var b = LLVM::int_truncate[U128, U8](LLVM::shift_right_unsigned[U128](raw, LLVM::zero_extend[U64, U128](LLVM::mul[U64](a: i, b: 8_u64))))
+  while LLVM::unsigned_lt(a: i, b: 16_u64)
+    var b = LLVM::int_truncate[U128, U8](LLVM::shift_right_unsigned(raw, LLVM::zero_extend[U64, U128](LLVM::mul(a: i, b: 8_u64))))
     result = LLVM::set_byte_at(array: result, index: i, value: b)
-    i = LLVM::add[U64](a: i, b: 1_u64)
+    i = LLVM::add(a: i, b: 1_u64)
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
@@ -1234,8 +1234,8 @@ routine D128.to_bytes_be() -> Array[Byte, 16]
   var raw = me.to_bits()
   var result = Array[Byte, 16]()
   var i = 0_u64
-  while LLVM::unsigned_lt[U64](a: i, b: 16_u64)
-    var b = LLVM::int_truncate[U128, U8](LLVM::shift_right_unsigned[U128](raw, LLVM::zero_extend[U64, U128](LLVM::mul[U64](a: LLVM::sub[U64](a: 15_u64, b: i), b: 8_u64))))
+  while LLVM::unsigned_lt(a: i, b: 16_u64)
+    var b = LLVM::int_truncate[U128, U8](LLVM::shift_right_unsigned(raw, LLVM::zero_extend[U64, U128](LLVM::mul(a: LLVM::sub(a: 15_u64, b: i), b: 8_u64))))
     result = LLVM::set_byte_at(array: result, index: i, value: b)
-    i = LLVM::add[U64](a: i, b: 1_u64)
+    i = LLVM::add(a: i, b: 1_u64)
   return result

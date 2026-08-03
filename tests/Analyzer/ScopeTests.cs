@@ -140,11 +140,11 @@ public class ScopeTests
     /// </summary>
 
     [Fact]
-    public void Analyze_ForLoopVariable_InScope()
+    public void Analyze_EachLoopVariable_InScope()
     {
         string source = """
                         routine test()
-                          for i in 0 til 10
+                          each i in 0 til 10
                             show(i)
                           return
                         """;
@@ -157,11 +157,11 @@ public class ScopeTests
     /// </summary>
 
     [Fact]
-    public void Analyze_ForLoopVariable_OutOfScope()
+    public void Analyze_EachLoopVariable_OutOfScope()
     {
         string source = """
                         routine test()
-                          for i in 0 til 10
+                          each i in 0 til 10
                             show(i)
                           show(i)
                           return
@@ -373,12 +373,12 @@ public class ScopeTests
     /// Verifies that a for-loop variable shadows an outer variable of the same name without error.
     /// </summary>
     [Fact]
-    public void Analyze_ForLoopVariableShadowsOuter_NoError()
+    public void Analyze_EachLoopVariableShadowsOuter_NoError()
     {
         string source = """
                         routine test()
                           var i = 0
-                          for i in 0 til 5
+                          each i in 0 til 5
                             show(i)
                           return
                         """;
@@ -391,12 +391,12 @@ public class ScopeTests
     /// Verifies that nested for-loops with distinct loop variables both resolve correctly.
     /// </summary>
     [Fact]
-    public void Analyze_NestedForLoops_IndependentVariables_NoError()
+    public void Analyze_NestedEachLoops_IndependentVariables_NoError()
     {
         string source = """
                         routine test()
-                          for i in 0 til 3
-                            for j in 0 til 3
+                          each i in 0 til 3
+                            each j in 0 til 3
                               show(i + j)
                           return
                         """;

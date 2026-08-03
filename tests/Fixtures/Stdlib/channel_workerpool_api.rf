@@ -19,7 +19,7 @@ suspended routine feed_jobs(out: Sender[S64], n: S64) -> S64
 # Counts how many jobs this worker handled (sum of all workers' counts == jobs fed).
 suspended routine worker(belt: SharedReceiver[S64]) -> S64
   var done = 0_s64
-  for job in belt
+  each job in belt
     done = done + 1
   return done
 

@@ -135,7 +135,7 @@ internal sealed class CallOverloadResolutionPass
             case LoopStatement loop:
                 WalkStatement(loop.Body);
                 break;
-            case ForStatement f:
+            case EachStatement f:
                 WalkExpression(f.Iterable);
                 WalkStatement(f.Body);
                 break;

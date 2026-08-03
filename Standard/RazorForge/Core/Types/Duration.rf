@@ -56,11 +56,11 @@ routine normalize_duration(seconds: S64, nanoseconds: S64) -> Duration
   var ns = nanoseconds
 
   if ns >= NS_PER_SECOND
-    s = s +% LLVM::signed_div[S64](ns, NS_PER_SECOND)
-    ns = LLVM::signed_rem[S64](ns, NS_PER_SECOND)
+    s = s +% LLVM::signed_div(ns, NS_PER_SECOND)
+    ns = LLVM::signed_rem(ns, NS_PER_SECOND)
   elseif ns < 0_s64
     # For negative nanoseconds, borrow from seconds to keep nanoseconds non-negative
-    var borrow = LLVM::signed_div[S64](0_s64 -% ns -% 1_s64, NS_PER_SECOND) +% 1_s64
+    var borrow = LLVM::signed_div(0_s64 -% ns -% 1_s64, NS_PER_SECOND) +% 1_s64
     s = s -% borrow
     ns = ns + borrow *% NS_PER_SECOND
 
@@ -93,16 +93,16 @@ common routine Duration.from_nanoseconds(ns: S64) -> Duration
 ### :param us: The duration in microseconds.
 ### :returns: The resulting `Duration` value.
 common routine Duration.from_microseconds(us: S64) -> Duration
-  var s = LLVM::signed_div[S64](us, 1_000_000_s64)
-  var ns = LLVM::signed_rem[S64](us, 1_000_000_s64) *% NS_PER_MICROSECOND
+  var s = LLVM::signed_div(us, 1_000_000_s64)
+  var ns = LLVM::signed_rem(us, 1_000_000_s64) *% NS_PER_MICROSECOND
   return normalize_duration(seconds: s, nanoseconds: ns)
 
 ### Creates a value from milliseconds.
 ### :param ms: The duration in milliseconds.
 ### :returns: The resulting `Duration` value.
 common routine Duration.from_milliseconds(ms: S64) -> Duration
-  var s = LLVM::signed_div[S64](ms, 1_000_s64)
-  var ns = LLVM::signed_rem[S64](ms, 1_000_s64) *% NS_PER_MILLISECOND
+  var s = LLVM::signed_div(ms, 1_000_s64)
+  var ns = LLVM::signed_rem(ms, 1_000_s64) *% NS_PER_MILLISECOND
   return normalize_duration(seconds: s, nanoseconds: ns)
 
 ### Creates a value from seconds.
@@ -149,13 +149,13 @@ routine Duration.total_nanoseconds() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.total_microseconds() -> S64
-  return me.seconds *% 1_000_000_s64 +% LLVM::signed_div[S64](S64(me.nanoseconds), NS_PER_MICROSECOND)
+  return me.seconds *% 1_000_000_s64 +% LLVM::signed_div(S64(me.nanoseconds), NS_PER_MICROSECOND)
 
 ### Returns the total duration in milliseconds.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.total_milliseconds() -> S64
-  return me.seconds *% 1_000_s64 +% LLVM::signed_div[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
+  return me.seconds *% 1_000_s64 +% LLVM::signed_div(S64(me.nanoseconds), NS_PER_MILLISECOND)
 
 ### Returns the total duration in seconds.
 ### :returns: The resulting `S64` value.
@@ -195,37 +195,37 @@ routine Duration.get_days() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_hours() -> S64
-  return LLVM::signed_div[S64](LLVM::signed_rem[S64](me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
+  return LLVM::signed_div(LLVM::signed_rem(me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
 
 ### Returns the minutes component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_minutes() -> S64
-  return LLVM::signed_div[S64](LLVM::signed_rem[S64](me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
+  return LLVM::signed_div(LLVM::signed_rem(me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
 
 ### Returns the seconds component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_seconds() -> S64
-  return LLVM::signed_rem[S64](me.seconds, SECONDS_PER_MINUTE)
+  return LLVM::signed_rem(me.seconds, SECONDS_PER_MINUTE)
 
 ### Returns the milliseconds component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_milliseconds() -> S64
-  return LLVM::signed_div[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
+  return LLVM::signed_div(S64(me.nanoseconds), NS_PER_MILLISECOND)
 
 ### Returns the microseconds component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_microseconds() -> S64
-  return LLVM::signed_div[S64](LLVM::signed_rem[S64](S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
+  return LLVM::signed_div(LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
 
 ### Returns the nanoseconds component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_nanoseconds() -> S64
-  return LLVM::signed_rem[S64](S64(me.nanoseconds), NS_PER_MICROSECOND)
+  return LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MICROSECOND)
 
 ### Returns the nanosecond remainder within the current second.
 ### :returns: The resulting `U32` value.
@@ -307,7 +307,7 @@ routine Duration.mul(factor: S64) -> Duration
 routine Duration.floordiv(you: Duration) -> S64
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
-  return LLVM::signed_div[S64](me_ns, you_ns)
+  return LLVM::signed_div(me_ns, you_ns)
 
 ### Returns the duration remainder after floor-dividing by `you`.
 ### :param you: The divisor duration.
@@ -316,7 +316,7 @@ routine Duration.floordiv(you: Duration) -> S64
 routine Duration.mod(you: Duration) -> Duration
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
-  return Duration.from_nanoseconds(LLVM::signed_rem[S64](me_ns, you_ns))
+  return Duration.from_nanoseconds(LLVM::signed_rem(me_ns, you_ns))
 
 ### Returns this duration divided by `divisor`.
 ### :param divisor: The divisor to apply.
@@ -324,7 +324,7 @@ routine Duration.mod(you: Duration) -> Duration
 @readonly
 routine Duration.div_by(divisor: S64) -> Duration
   var total_ns = me.total_nanoseconds()
-  return Duration.from_nanoseconds(LLVM::signed_div[S64](total_ns, divisor))
+  return Duration.from_nanoseconds(LLVM::signed_div(total_ns, divisor))
 
 ### Returns the quotient of this value and the other value.
 ### :param divisor: The divisor to apply.

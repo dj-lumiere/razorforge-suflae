@@ -7,7 +7,7 @@ routine in_set_and_max[T](items: Referring[List[T]], target: T) -> Bool
 needs T obeys Equatable, Hashable
   # Hashable lets us build a Set; Equatable lets us check contains
   var s: Set[T] = Set[T]()
-  for x in items
+  each x in items
     discard s.add(value: x)
   return target in s
 

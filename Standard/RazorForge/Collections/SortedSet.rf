@@ -376,7 +376,7 @@ routine SortedSet[T].lower_bound(node: Referring[BTreeSetNode[T]], value: T) -> 
   # Invariant: all keys[0..lo) < value, all keys[hi..count) >= value.
   # We narrow [lo, hi) until lo == hi, which is the answer.
   while lo < hi
-    var mid = lo +% LLVM::unsigned_div[U64](hi -% lo, 2u64)
+    var mid = lo +% LLVM::unsigned_div(hi -% lo, 2u64)
     if node.keys_get(mid) < value
       # keys[mid] is too small, so the answer is at least mid+1.
       lo = mid +% 1u64
@@ -480,7 +480,7 @@ routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]], value: 
 routine SortedSet[T].split_child(parent_node: Controlling[BTreeSetNode[T]], child_idx: U64)
   danger
     var child = parent_node.children_get(child_idx).as_entity()
-    var mid = LLVM::unsigned_div[U64](BTREE_ORDER -% 1u64, 2u64)
+    var mid = LLVM::unsigned_div(BTREE_ORDER -% 1u64, 2u64)
 
     # Create the right half node (manual Hijacked graph node; build via an entity view).
     var new_node_ptr = BTreeSetNode[T](is_leaf: child.is_leaf).hijack()
@@ -1000,7 +1000,7 @@ routine SortedSetEmittable[T].emit!() -> T
 routine SortedSet[T].represent() -> Text
   var result = me.type_name() + "({"
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
     result = result + v.represent()
@@ -1014,7 +1014,7 @@ routine SortedSet[T].represent() -> Text
 routine SortedSet[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
     result = result + v.represent()
@@ -1043,6 +1043,6 @@ routine SortedSet[T].eq(other: Referring[SortedSet[T]]) -> Bool
 routine SortedSet[T].serialize() -> SerialValue
 needs T obeys Serializable
   var __sv = List[SerialValue]()
-  for __x in me
+  each __x in me
     __sv.add_last(value: __x.serialize())
   return SerialValue(steal __sv)

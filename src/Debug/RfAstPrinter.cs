@@ -710,7 +710,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitForStatement(ForStatement node) => $"{I}#ForStatement";
+    public string VisitEachStatement(EachStatement node) => $"{I}#EachStatement";
 
 
     /// <inheritdoc/>

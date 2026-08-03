@@ -215,8 +215,8 @@ routine S64.floordiv!(you: S64) -> S64
     throw DivisionByZeroError()
   if me == S64_MIN and you == -1_s64
     throw IntegerOverflowError()
-  var quotient = LLVM::signed_div[S64](a: me, b: you)
-  var remainder = LLVM::signed_rem[S64](a: me, b: you)
+  var quotient = LLVM::signed_div(a: me, b: you)
+  var remainder = LLVM::signed_rem(a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return quotient - 1_s64
@@ -230,7 +230,7 @@ routine S64.floordiv!(you: S64) -> S64
 routine S64.mod!(you: S64) -> S64
   if you == 0
     throw DivisionByZeroError()
-  var remainder = LLVM::signed_rem[S64](a: me, b: you)
+  var remainder = LLVM::signed_rem(a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return remainder + you
@@ -242,7 +242,7 @@ routine S64.mod!(you: S64) -> S64
 routine S64.neg!() -> S64
   if me == -9223372036854775808_s64
     throw IntegerOverflowError()
-  return LLVM::sub[S64](a: 0_s64, b: me)
+  return LLVM::sub(a: 0_s64, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -252,19 +252,19 @@ routine S64.neg!() -> S64
 ### :param you: The right operand.
 ### :returns: The wrapped sum.
 routine S64.add_wrap(you: S64) -> S64
-  return LLVM::add[S64](a: me, b: you)
+  return LLVM::add(a: me, b: you)
 
 ### Returns `(me - you) mod 2⁶⁴` in two's complement, without overflow check.
 ### :param you: The value to subtract.
 ### :returns: The wrapped difference.
 routine S64.sub_wrap(you: S64) -> S64
-  return LLVM::sub[S64](a: me, b: you)
+  return LLVM::sub(a: me, b: you)
 
 ### Returns `(me * you) mod 2⁶⁴` in two's complement, without overflow check.
 ### :param you: The right operand.
 ### :returns: The wrapped product.
 routine S64.mul_wrap(you: S64) -> S64
-  return LLVM::mul[S64](a: me, b: you)
+  return LLVM::mul(a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -292,8 +292,8 @@ dangerous routine S64.mul_unchecked(you: S64) -> S64
 ### :param you: The divisor.
 ### :returns: The euclidean quotient.
 dangerous routine S64.floordiv_unchecked(you: S64) -> S64
-  var quotient = LLVM::signed_div[S64](a: me, b: you)
-  var remainder = LLVM::signed_rem[S64](a: me, b: you)
+  var quotient = LLVM::signed_div(a: me, b: you)
+  var remainder = LLVM::signed_rem(a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return quotient - 1_s64
@@ -304,7 +304,7 @@ dangerous routine S64.floordiv_unchecked(you: S64) -> S64
 ### :param you: The divisor.
 ### :returns: The floor remainder.
 dangerous routine S64.mod_unchecked(you: S64) -> S64
-  var remainder = LLVM::signed_rem[S64](a: me, b: you)
+  var remainder = LLVM::signed_rem(a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return remainder + you
@@ -331,10 +331,10 @@ routine S64.sub_clamp(you: S64) -> S64
 ### :param you: The right operand.
 ### :returns: The clamped product.
 routine S64.mul_clamp(you: S64) -> S64
-  var wide = LLVM::mul[S128](LLVM::sign_extend[S64, S128](me), LLVM::sign_extend[S64, S128](you))
-  if LLVM::signed_gt[S128](wide, 9223372036854775807_s128)
+  var wide = LLVM::mul(LLVM::sign_extend[S64, S128](me), LLVM::sign_extend[S64, S128](you))
+  if LLVM::signed_gt(wide, 9223372036854775807_s128)
     return S64_MAX
-  if LLVM::signed_lt[S128](wide, -9223372036854775808_s128)
+  if LLVM::signed_lt(wide, -9223372036854775808_s128)
     return S64_MIN
   return LLVM::int_truncate[S128, S64](wide)
 
@@ -418,24 +418,24 @@ routine S64.pow_clamp!(exp: S64) -> S64
 ### :param you: The right operand.
 ### :returns: The bitwise intersection.
 routine S64.bitand(you: S64) -> S64
-  return LLVM::bit_and[S64](a: me, b: you)
+  return LLVM::bit_and(a: me, b: you)
 
 ### Returns `me | you` (bitwise OR).
 ### :param you: The right operand.
 ### :returns: The bitwise union.
 routine S64.bitor(you: S64) -> S64
-  return LLVM::bit_or[S64](a: me, b: you)
+  return LLVM::bit_or(a: me, b: you)
 
 ### Returns `me ^ you` (bitwise XOR).
 ### :param you: The right operand.
 ### :returns: The bitwise exclusive-or.
 routine S64.bitxor(you: S64) -> S64
-  return LLVM::bit_xor[S64](a: me, b: you)
+  return LLVM::bit_xor(a: me, b: you)
 
 ### Returns `~me` (bitwise NOT).
 ### :returns: The bitwise complement.
 routine S64.bitnot() -> S64
-  return LLVM::bit_xor[S64](a: me, b: -1)
+  return LLVM::bit_xor(a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -445,25 +445,25 @@ routine S64.bitnot() -> S64
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
 routine S64.ashl(bits: U32) -> S64
-  return LLVM::shift_left[S64](me, S64(bits))
+  return LLVM::shift_left(me, S64(bits))
 
 ### Returns `me >> bits` (arithmetic right shift, sign-filling).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
 routine S64.ashr(bits: U32) -> S64
-  return LLVM::shift_right_signed[S64](me, S64(bits))
+  return LLVM::shift_right_signed(me, S64(bits))
 
 ### Returns `me << bits` (logical left shift).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
 routine S64.lshl(bits: U32) -> S64
-  return LLVM::shift_left[S64](me, S64(bits))
+  return LLVM::shift_left(me, S64(bits))
 
 ### Returns `me >> bits` (logical right shift, zero-filling).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
 routine S64.lshr(bits: U32) -> S64
-  return LLVM::shift_right_unsigned[S64](me, S64(bits))
+  return LLVM::shift_right_unsigned(me, S64(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -473,15 +473,15 @@ routine S64.lshr(bits: U32) -> S64
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`.
 routine S64.eq(you: S64) -> Bool
-  return LLVM::int_eq[S64](a: me, b: you)
+  return LLVM::int_eq(a: me, b: you)
 
 ### Returns the ordering relationship between this value and `you`.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine S64.cmp(you: S64) -> ComparisonSign
-  if LLVM::signed_lt[S64](me, you)
+  if LLVM::signed_lt(me, you)
     return ME_SMALL
-  if LLVM::signed_gt[S64](me, you)
+  if LLVM::signed_gt(me, you)
     return ME_LARGE
   return SAME
 
@@ -540,12 +540,12 @@ routine S64.count_zeros() -> S64
 ### Returns the number of consecutive zero bits before the highest set bit.
 ### :returns: The leading zero count; `64` if the value is zero.
 routine S64.leading_zeros() -> S64
-  return LLVM::leading_zeros[S64](me)
+  return LLVM::leading_zeros(me)
 
 ### Returns the number of consecutive zero bits starting from the least significant bit.
 ### :returns: The trailing zero count; `64` if the value is zero.
 routine S64.trailing_zeros() -> S64
-  return LLVM::trailing_zeros[S64](me)
+  return LLVM::trailing_zeros(me)
 
 ### Returns the number of consecutive one bits before the highest clear bit.
 ### :returns: The leading one count.
@@ -565,7 +565,7 @@ routine S64.reverse_bits() -> S64
 ### Returns this value with the byte order reversed (big/little endian swap).
 ### :returns: The byte-swapped value.
 routine S64.swap_bytes() -> S64
-  return LLVM::byte_swap[S64](me)
+  return LLVM::byte_swap(me)
 
 ### Returns this value rotated left by `bits` positions.
 routine S64.rotate_left(bits: U32) -> S64
@@ -613,8 +613,8 @@ routine S64.is_zero() -> Bool
 ### Returns true if this value is even.
 ### :returns: `true` when the least significant bit is clear.
 routine S64.is_even() -> Bool
-  var result = LLVM::bit_and[S64](a: me, b: 1_s64)
-  return LLVM::int_eq[S64](a: result, b: 0_s64)
+  var result = LLVM::bit_and(a: me, b: 1_s64)
+  return LLVM::int_eq(a: result, b: 0_s64)
 
 ### Returns true if this value is odd.
 ### :returns: `true` when the least significant bit is set.
@@ -633,10 +633,10 @@ routine S64.signum() -> S64
 ### Negative values always return `false`.
 ### :returns: `true` if `me > 0 and (me & (me - 1)) == 0`.
 routine S64.is_power_of_two() -> Bool
-  var is_pos = LLVM::signed_gt[S64](me, 0_s64)
-  var minus_one = LLVM::sub[S64](a: me, b: 1_s64)
-  var anded = LLVM::bit_and[S64](a: me, b: minus_one)
-  var is_zero = LLVM::int_eq[S64](a: anded, b: 0_s64)
+  var is_pos = LLVM::signed_gt(me, 0_s64)
+  var minus_one = LLVM::sub(a: me, b: 1_s64)
+  var anded = LLVM::bit_and(a: me, b: minus_one)
+  var is_zero = LLVM::int_eq(a: anded, b: 0_s64)
   return is_pos and is_zero
 
 # ============================================================================

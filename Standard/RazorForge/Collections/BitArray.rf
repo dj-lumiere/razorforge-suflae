@@ -98,8 +98,8 @@ routine BitArray[N].getitem!(index: U64) -> Bool
 routine BitArray[N].setitem!(index: U64, value: Bool)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: N)
-  var byte_idx = LLVM::unsigned_div[U64](index, 8u64)
-  var bit_off = U8(LLVM::unsigned_rem[U64](index, 8u64))
+  var byte_idx = LLVM::unsigned_div(index, 8u64)
+  var bit_off = U8(LLVM::unsigned_rem(index, 8u64))
   # `me` is by reference (struct-record `setitem!`): read-modify-write the single packed byte in
   # place through `me.hijack()` so the bit change reaches the caller's storage — no whole-array copy.
   danger
@@ -127,8 +127,8 @@ routine BitArray[N].with_set(index: U64, value: Bool) -> BitArray[N]
     return me
   var result = me
   # Modify the bit in the copy
-  var byte_idx = LLVM::unsigned_div[U64](index, 8u64)
-  var bit_off = U8(LLVM::unsigned_rem[U64](index, 8u64))
+  var byte_idx = LLVM::unsigned_div(index, 8u64)
+  var bit_off = U8(LLVM::unsigned_rem(index, 8u64))
   var byte_val = LLVM::byte_at_bits[N](result,byte_idx)
   if value
     result = LLVM::set_byte_at_bits[N](result,byte_idx, byte_val | (1u8 << bit_off))
@@ -276,7 +276,7 @@ routine BitArrayEmittable[N].emit!() -> Bool
 ###        last byte are unspecified — a raw `memcmp` would compare padding.
 @readonly
 routine BitArray[N].eq(you: BitArray[N]) -> Bool
-  for i in 0u64 til N
+  each i in 0u64 til N
     if me[i] != you[i]
       return false
   return true
@@ -287,7 +287,7 @@ routine BitArray[N].eq(you: BitArray[N]) -> Bool
 ### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
 @readonly
 routine BitArray[N].cmp(you: BitArray[N]) -> ComparisonSign
-  for i in 0u64 til N
+  each i in 0u64 til N
     var a = me[i]
     var b = you[i]
     if a != b

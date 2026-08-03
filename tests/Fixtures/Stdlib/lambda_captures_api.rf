@@ -22,7 +22,7 @@ routine start()
 
   # Mutating capture target (via `given` for explicit capture binding)
   var sum = 0_s64
-  for x in src
+  each x in src
     sum = sum + x
   show(f"sum via for: {sum}")
 

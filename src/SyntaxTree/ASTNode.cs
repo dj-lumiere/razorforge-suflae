@@ -368,7 +368,7 @@ public interface ISyntaxTreeVisitor<T>
     /// <summary>Visits a for statement node (iterator loop over collections)</summary>
     /// <param name="node">The for statement to visit</param>
     /// <returns>Result of visiting the for statement</returns>
-    T VisitForStatement(ForStatement node);
+    T VisitEachStatement(EachStatement node);
 
     /// <summary>Visits a block statement node (grouped statements with lexical scope)</summary>
     /// <param name="node">The block statement to visit</param>

@@ -175,7 +175,7 @@ public partial class Tokenizer
             [key: "is"] = TokenType.Is,
             [key: "loop"] = TokenType.Loop,
             [key: "while"] = TokenType.While,
-            [key: "for"] = TokenType.For,
+            [key: "each"] = TokenType.Each,
             [key: "break"] = TokenType.Break,
             [key: "continue"] = TokenType.Continue,
             [key: "return"] = TokenType.Return,

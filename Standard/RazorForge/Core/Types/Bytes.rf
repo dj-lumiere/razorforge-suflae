@@ -146,7 +146,7 @@ routine Bytes.count() -> U64
 @readonly
 routine Bytes.count_of(byte: Byte) -> U64
   var result: U64 = 0u64
-  for b in me
+  each b in me
     if b == byte
       result += 1u64
   return result
@@ -207,7 +207,7 @@ routine Bytes.eq(other: Bytes) -> Bool
   if me.count != other.count
     return false
   var i: U64 = 0u64
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     if me[i] != other[i]
       return false
   return true
@@ -219,7 +219,7 @@ routine Bytes.eq(other: Bytes) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Bytes.contains(byte: Byte) -> Bool
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     if me[i] == byte
       return true
   return false
@@ -231,7 +231,7 @@ routine Bytes.contains(byte: Byte) -> Bool
 routine Bytes.starts_with(prefix: Bytes) -> Bool
   if prefix.count > me.count
     return false
-  for i in 0u64 til prefix.count
+  each i in 0u64 til prefix.count
     if me[i] != prefix[i]
       return false
   return true
@@ -244,7 +244,7 @@ routine Bytes.ends_with(suffix: Bytes) -> Bool
   if suffix.count > me.count
     return false
   var offset = me.count - suffix.count
-  for i in 0u64 til suffix.count
+  each i in 0u64 til suffix.count
     if me[offset + i] != suffix[i]
       return false
   return true
@@ -255,7 +255,7 @@ routine Bytes.ends_with(suffix: Bytes) -> Bool
 ### :absent: Returns absent when the requested value is unavailable.
 @readonly
 routine Bytes.find!(byte: Byte) -> U64
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     if me[i] == byte
       return i
   absent
@@ -270,7 +270,7 @@ routine Bytes.find!(byte: Byte) -> U64
 routine Bytes.split(separator: Byte) -> List[Bytes]
   var parts = List[Bytes]()
   var current = List[Byte]()
-  for i in 0u64 til me.count
+  each i in 0u64 til me.count
     if me[i] == separator
       parts.add_last(Bytes(from_list: steal current))
       current = List[Byte]()
@@ -399,7 +399,7 @@ routine Bytes.diagnose() -> Text
 routine Text.encode_as_utf8() -> Bytes
   var result = List[Byte]()
   var len = me.count()
-  for i in 0u64 til len
+  each i in 0u64 til len
     var current_letter = me[i]
     var codepoint = current_letter.codepoint()
     when

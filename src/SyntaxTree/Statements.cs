@@ -407,7 +407,7 @@ public record LoopStatement(
     /// <c>IteratorInlineLoweringPass</c> can find the iterator-advance loops to rewrite, instead of
     /// brittle shape-matching against every <c>loop</c>.
     /// </summary>
-    public bool IsIteratorForLoop { get; init; }
+    public bool IsIteratorEachLoop { get; init; }
 }
 
 /// <summary>
@@ -431,7 +431,7 @@ public record LoopStatement(
 /// <item>Python-style else: else branch executes if loop completes without break</item>
 /// </list>
 /// </remarks>
-public record ForStatement(
+public record EachStatement(
     string? Variable,
     DestructuringPattern? VariablePattern,
     Expression Iterable,
@@ -442,7 +442,7 @@ public record ForStatement(
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
-        return visitor.VisitForStatement(node: this);
+        return visitor.VisitEachStatement(node: this);
     }
 }
 

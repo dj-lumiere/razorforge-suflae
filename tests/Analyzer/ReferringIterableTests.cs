@@ -59,7 +59,7 @@ public class ReferringIterableTests
 
     /// <summary>Verifies for-loop over Referring[Iterable[T]] does not trigger S205.</summary>
     [Fact]
-    public void ForLoop_Over_Referring_Iterable_NoS205()
+    public void EachLoop_Over_Referring_Iterable_NoS205()
     {
         // The transparent-protocol unwrap in GetIterableElementType lets us
         // iterate a `Referring[Iterable[T]]` directly — the for-loop sees
@@ -69,7 +69,7 @@ public class ReferringIterableTests
                         import IO/Console
                         routine sum_it(xs: Referring[Iterable[S64]]) -> S64
                           var total = 0_s64
-                          for x in xs
+                          each x in xs
                             total = total + x
                           return total
                         """;
@@ -81,7 +81,7 @@ public class ReferringIterableTests
 
     /// <summary>Verifies for-loop over bare Iterable[T] does not trigger S205.</summary>
     [Fact]
-    public void ForLoop_Over_Bare_Iterable_NoS205()
+    public void EachLoop_Over_Bare_Iterable_NoS205()
     {
         // Bare Iterable[T] (no Referring wrap) must also iterate — the element
         // type comes from the protocol's first type-argument.
@@ -90,7 +90,7 @@ public class ReferringIterableTests
                         import IO/Console
                         routine count_it(xs: Iterable[S64]) -> S64
                           var n = 0_s64
-                          for x in xs
+                          each x in xs
                             n = n + 1_s64
                           return n
                         """;

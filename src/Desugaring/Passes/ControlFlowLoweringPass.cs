@@ -120,8 +120,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     {
         switch (stmt)
         {
-            case ForStatement f:
-                return LowerFor(forStmt: f);
+            case EachStatement f:
+                return LowerEach(eachStmt: f);
 
             case DestructuringStatement ds:
                 return LowerDestructuring(destruct: ds);
@@ -292,16 +292,16 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     /// <summary>
     /// Lower for as part of this compiler phase.
     /// </summary>
-    private BlockStatement LowerFor(ForStatement forStmt) // NOSONAR S3776
+    private BlockStatement LowerEach(EachStatement eachStmt) // NOSONAR S3776
     {
-        SourceLocation loc = forStmt.Location;
+        SourceLocation loc = eachStmt.Location;
         int n = _iterCount++;
         string iterName = $"_lf_iter_{n}";
 
         // -----------------------------------------------------------------------------
         var iterCallExpr = new CallExpression(
             Callee: new MemberExpression(
-                Object: forStmt.Iterable,
+                Object: eachStmt.Iterable,
                 MemberName: "iter",
                 Location: loc),
             Arguments: [],
@@ -321,7 +321,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         // need to re-classify them (which fails for instantiated bodies where the receiver variable
         // has no SA-annotated type), and so reachability marks the CONCRETE emitter's try_emit.
         // Skip ErrorTypeInfo: SA suppresses stdlib errors.
-        if (forStmt.Iterable.ResolvedType is { } iterType and not ErrorTypeInfo)
+        if (eachStmt.Iterable.ResolvedType is { } iterType and not ErrorTypeInfo)
         {
             RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "iter");
             if (iterMethod?.ReturnType is { } rawIteratorType)
@@ -360,23 +360,23 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             Location: loc);
 
         // -----------------------------------------------------------------------------
-        Statement loweredBody = LowerStatement(stmt: forStmt.Body);
+        Statement loweredBody = LowerStatement(stmt: eachStmt.Body);
 
         // -----------------------------------------------------------------------------
         Statement elseBody;
         string? elseVarName;
 
-        if (forStmt.VariablePattern != null)
+        if (eachStmt.VariablePattern != null)
         {
             // Tuple destructuring: else var _lf_elem_M -> { var a = elem.item0; var b = elem.item1; ... body }
             string elemName = $"_lf_elem_{n}";
             elseVarName = elemName;
 
             // Prepend: var a = _lf_elem_M.item0, var b = _lf_elem_M.item1, ??
-            var bindStmts = new List<Statement>(capacity: forStmt.VariablePattern.Bindings.Count + 1);
-            for (int i = 0; i < forStmt.VariablePattern.Bindings.Count; i++)
+            var bindStmts = new List<Statement>(capacity: eachStmt.VariablePattern.Bindings.Count + 1);
+            for (int i = 0; i < eachStmt.VariablePattern.Bindings.Count; i++)
             {
-                DestructuringBinding binding = forStmt.VariablePattern.Bindings[index: i];
+                DestructuringBinding binding = eachStmt.VariablePattern.Bindings[index: i];
                 string bindName = binding.BindingName ?? binding.MemberVariableName ?? $"_lf_b{i}";
                 if (bindName == "_") continue;
 
@@ -407,13 +407,13 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         else
         {
             // Simple variable or discard
-            elseVarName = forStmt.Variable == "_" ? null : forStmt.Variable;
+            elseVarName = eachStmt.Variable == "_" ? null : eachStmt.Variable;
             elseBody    = loweredBody;
         }
 
         // -----------------------------------------------------------------------------
-        Statement? elseBranchLowered = forStmt.ElseBranch != null
-            ? LowerStatement(stmt: forStmt.ElseBranch)
+        Statement? elseBranchLowered = eachStmt.ElseBranch != null
+            ? LowerStatement(stmt: eachStmt.ElseBranch)
             : null;
 
         Statement noneBody;
@@ -443,7 +443,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 Clauses: [noneClause, elseClause], Location: loc);
             var loopStmt = new LoopStatement(
                 Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc)
-                { IsIteratorForLoop = true };
+                { IsIteratorEachLoop = true };
 
             // var _lf_exhausted_N: Bool = false
             Statement exhaustedVarStmt = new DeclarationStatement(
@@ -483,7 +483,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 Clauses: [noneClause, elseClause], Location: loc);
             var loopStmt = new LoopStatement(
                 Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc)
-                { IsIteratorForLoop = true };
+                { IsIteratorEachLoop = true };
 
             return new BlockStatement(Statements: [iterVarStmt, loopStmt], Location: loc);
         }
@@ -535,7 +535,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Lower ForStatement/DestructuringStatement etc. in monomorphized bodies that GMP
+    /// Lower EachStatement/DestructuringStatement etc. in monomorphized bodies that GMP
     /// produced from stdlib originals (which never went through Phase 4 desugaring).
     /// Notable consumer: <see cref="Compiler.Instantiation.Passes.ProtocolDefaultImplLoweringPass"/>,
     /// which clones stdlib protocol-default-impl bodies (e.g. <c>Iterable[Text].join</c>) into

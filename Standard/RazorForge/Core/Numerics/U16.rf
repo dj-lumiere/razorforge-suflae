@@ -228,7 +228,7 @@ routine U16.mul!(you: U16) -> U16
 routine U16.floordiv!(you: U16) -> U16
   if you == 0
     throw DivisionByZeroError()
-  return LLVM::unsigned_div[U16](a: me, b: you)
+  return LLVM::unsigned_div(a: me, b: you)
 
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
@@ -236,7 +236,7 @@ routine U16.floordiv!(you: U16) -> U16
 routine U16.mod!(you: U16) -> U16
   if you == 0_u16
     throw DivisionByZeroError()
-  return LLVM::unsigned_rem[U16](a: me, b: you)
+  return LLVM::unsigned_rem(a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -246,19 +246,19 @@ routine U16.mod!(you: U16) -> U16
 ### :param you: The right operand.
 ### :returns: The sum modulo 65536.
 routine U16.add_wrap(you: U16) -> U16
-  return LLVM::add[U16](a: me, b: you)
+  return LLVM::add(a: me, b: you)
 
 ### Returns `(me - you) mod 65536` without underflow check.
 ### :param you: The value to subtract.
 ### :returns: The difference modulo 65536.
 routine U16.sub_wrap(you: U16) -> U16
-  return LLVM::sub[U16](a: me, b: you)
+  return LLVM::sub(a: me, b: you)
 
 ### Returns `(me * you) mod 65536` without overflow check.
 ### :param you: The right operand.
 ### :returns: The product modulo 65536.
 routine U16.mul_wrap(you: U16) -> U16
-  return LLVM::mul[U16](a: me, b: you)
+  return LLVM::mul(a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -286,13 +286,13 @@ dangerous routine U16.mul_unchecked(you: U16) -> U16
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
 dangerous routine U16.floordiv_unchecked(you: U16) -> U16
-  return LLVM::unsigned_div[U16](a: me, b: you)
+  return LLVM::unsigned_div(a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
 dangerous routine U16.mod_unchecked(you: U16) -> U16
-  return LLVM::unsigned_rem[U16](a: me, b: you)
+  return LLVM::unsigned_rem(a: me, b: you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -314,8 +314,8 @@ routine U16.sub_clamp(you: U16) -> U16
 ### :param you: The right operand.
 ### :returns: The product, or `65535` if it would exceed `U16_MAX`.
 routine U16.mul_clamp(you: U16) -> U16
-  var wide = LLVM::mul[U32](LLVM::zero_extend[U16, U32](me), LLVM::zero_extend[U16, U32](you))
-  if LLVM::unsigned_gt[U32](wide, 65535_u32)
+  var wide = LLVM::mul(LLVM::zero_extend[U16, U32](me), LLVM::zero_extend[U16, U32](you))
+  if LLVM::unsigned_gt(wide, 65535_u32)
     return U16_MAX
   return LLVM::int_truncate[U32, U16](wide)
 
@@ -390,24 +390,24 @@ routine U16.pow_clamp(exp: U16) -> U16
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine U16.bitand(you: U16) -> U16
-  return LLVM::bit_and[U16](a: me, b: you)
+  return LLVM::bit_and(a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine U16.bitor(you: U16) -> U16
-  return LLVM::bit_or[U16](a: me, b: you)
+  return LLVM::bit_or(a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine U16.bitxor(you: U16) -> U16
-  return LLVM::bit_xor[U16](a: me, b: you)
+  return LLVM::bit_xor(a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine U16.bitnot() -> U16
-  return LLVM::bit_xor[U16](a: me, b: U16_MAX)
+  return LLVM::bit_xor(a: me, b: U16_MAX)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -418,25 +418,25 @@ routine U16.bitnot() -> U16
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine U16.ashl(bits: U32) -> U16
-  return LLVM::shift_left[U16](me, U16(bits))
+  return LLVM::shift_left(me, U16(bits))
 
 ### Right-shifts this value by `bits` positions, filling vacated bits with zero.
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits` (logical, zero-filling).
 routine U16.ashr(bits: U32) -> U16
-  return LLVM::shift_right_unsigned[U16](me, U16(bits))
+  return LLVM::shift_right_unsigned(me, U16(bits))
 
 ### Left-shifts this value by `bits` positions (logical shift, same as `ashl` for unsigned).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine U16.lshl(bits: U32) -> U16
-  return LLVM::shift_left[U16](me, U16(bits))
+  return LLVM::shift_left(me, U16(bits))
 
 ### Right-shifts this value by `bits` positions (logical shift, same as `ashr` for unsigned).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits` (zero-filling).
 routine U16.lshr(bits: U32) -> U16
-  return LLVM::shift_right_unsigned[U16](me, U16(bits))
+  return LLVM::shift_right_unsigned(me, U16(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -446,15 +446,15 @@ routine U16.lshr(bits: U32) -> U16
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine U16.eq(you: U16) -> Bool
-  return LLVM::int_eq[U16](a: me, b: you)
+  return LLVM::int_eq(a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine U16.cmp(you: U16) -> ComparisonSign
-  if LLVM::unsigned_lt[U16](me, you)
+  if LLVM::unsigned_lt(me, you)
     return ME_SMALL
-  if LLVM::unsigned_gt[U16](me, you)
+  if LLVM::unsigned_gt(me, you)
     return ME_LARGE
   return SAME
 
@@ -499,12 +499,12 @@ routine U16.count_zeros() -> U16
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `16` if the value is zero.
 routine U16.leading_zeros() -> U16
-  return LLVM::leading_zeros[U16](me)
+  return LLVM::leading_zeros(me)
 
 ### Returns the number of trailing zero bits, starting from the least-significant bit.
 ### :returns: The trailing zero count; `16` if the value is zero.
 routine U16.trailing_zeros() -> U16
-  return LLVM::trailing_zeros[U16](me)
+  return LLVM::trailing_zeros(me)
 
 ### Returns the number of leading one bits, starting from the most-significant bit.
 ### :returns: The leading one count; `16` if the value is `65535`.
@@ -524,7 +524,7 @@ routine U16.reverse_bits() -> U16
 ### Returns this value with its two bytes swapped (for endianness conversion).
 ### :returns: A `U16` with the high and low bytes exchanged.
 routine U16.swap_bytes() -> U16
-  return LLVM::byte_swap[U16](me)
+  return LLVM::byte_swap(me)
 
 ### Returns `true` if this value is an exact power of two.
 ### :returns: `true` if `me` is 1, 2, 4, ..., 32768; `false` otherwise (including zero).
@@ -536,20 +536,20 @@ routine U16.rotate_left(bits: U32) -> U16
   var n = bits % 16_u32
   if n == 0_u32
     return me
-  return LLVM::bit_or[U16](a: LLVM::shift_left[U16](me, U16(n)), b: LLVM::shift_right_unsigned[U16](me, U16(16_u32 -% n)))
+  return LLVM::bit_or(a: LLVM::shift_left(me, U16(n)), b: LLVM::shift_right_unsigned(me, U16(16_u32 -% n)))
 
 ### Returns this value rotated right by `bits` positions.
 routine U16.rotate_right(bits: U32) -> U16
   var n = bits % 16_u32
   if n == 0_u32
     return me
-  return LLVM::bit_or[U16](a: LLVM::shift_right_unsigned[U16](me, U16(n)), b: LLVM::shift_left[U16](me, U16(16_u32 -% n)))
+  return LLVM::bit_or(a: LLVM::shift_right_unsigned(me, U16(n)), b: LLVM::shift_left(me, U16(16_u32 -% n)))
 
 ### Returns the raw byte representation of this value in little-endian order.
 routine U16.to_bytes_le() -> Array[Byte, 2]
   var result = Array[Byte, 2]()
   result = LLVM::set_byte_at(array: result, index: 0_u64, value: LLVM::int_truncate[U16, U8](me))
-  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](LLVM::shift_right_unsigned[U16](me, 8_u16)))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](LLVM::shift_right_unsigned(me, 8_u16)))
   return result
 
 ### Returns the raw byte representation of this value in big-endian order.
@@ -559,8 +559,8 @@ routine U16.to_bytes_be() -> Array[Byte, 2]
 ### Builds a `U16` from its little-endian raw byte representation.
 common routine U16.from_bytes_le(bytes: Array[Byte, 2]) -> U16
   var lo = LLVM::zero_extend[U8, U16](LLVM::byte_at(array: bytes, index: 0_u64))
-  var hi = LLVM::shift_left[U16](LLVM::zero_extend[U8, U16](LLVM::byte_at(array: bytes, index: 1_u64)), 8_u16)
-  return LLVM::bit_or[U16](a: lo, b: hi)
+  var hi = LLVM::shift_left(LLVM::zero_extend[U8, U16](LLVM::byte_at(array: bytes, index: 1_u64)), 8_u16)
+  return LLVM::bit_or(a: lo, b: hi)
 
 ### Builds a `U16` from its big-endian raw byte representation.
 common routine U16.from_bytes_be(bytes: Array[Byte, 2]) -> U16
@@ -578,8 +578,8 @@ routine U16.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine U16.is_even() -> Bool
-  var result = LLVM::bit_and[U16](a: me, b: 1_u16)
-  return LLVM::int_eq[U16](a: result, b: 0_u16)
+  var result = LLVM::bit_and(a: me, b: 1_u16)
+  return LLVM::int_eq(a: result, b: 0_u16)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.

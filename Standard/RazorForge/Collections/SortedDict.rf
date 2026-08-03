@@ -381,7 +381,7 @@ routine SortedDict[K, V].lower_bound(node: Referring[BTreeDictNode[K, V]], key: 
   var lo = 0u64
   var hi = node.keys_count()
   while lo < hi
-    var mid = lo +% LLVM::unsigned_div[U64](hi -% lo, 2u64)
+    var mid = lo +% LLVM::unsigned_div(hi -% lo, 2u64)
     if node.key_get(mid) < key
       lo = mid +% 1u64
     else
@@ -532,7 +532,7 @@ routine SortedDict[K, V].insert_non_full(node: Controlling[BTreeDictNode[K, V]],
 routine SortedDict[K, V].split_child(parent_node: Controlling[BTreeDictNode[K, V]], child_idx: U64)
   danger
     var child = parent_node.children_get(child_idx).as_entity()
-    var mid = LLVM::unsigned_div[U64](B_DICT -% 1u64, 2u64)
+    var mid = LLVM::unsigned_div(B_DICT -% 1u64, 2u64)
 
     var new_node_ptr = BTreeDictNode[K, V](is_leaf: child.is_leaf).hijack()
     var new_node = new_node_ptr.as_entity()
@@ -1050,7 +1050,7 @@ routine SortedDictEmittable[K, V].emit!() -> DictEntry[K, V]
 routine SortedDict[K, V].represent() -> Text
   var result = me.type_name() + "({"
   var i = 0u64
-  for entry in me
+  each entry in me
     if i > 0u64
       result = result + ", "
     result = result + entry.key.represent() + ": " + entry.value.represent()
@@ -1062,7 +1062,7 @@ routine SortedDict[K, V].represent() -> Text
 routine SortedDict[K, V].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var i = 0u64
-  for entry in me
+  each entry in me
     if i > 0u64
       result = result + ", "
     result = result + entry.key.represent() + ": " + entry.value.represent()
@@ -1076,6 +1076,6 @@ routine SortedDict[K, V].diagnose() -> Text
 routine SortedDict[K, V].serialize() -> SerialValue
 needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
-  for __e in me
+  each __e in me
     discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
   return SerialValue(steal __sv)

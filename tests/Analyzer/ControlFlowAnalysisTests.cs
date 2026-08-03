@@ -67,7 +67,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine find!(items: List[S32], target: S32) -> S32
-                          for item in items
+                          each item in items
                             if item == target
                               return item
                           absent
@@ -163,7 +163,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                          for i in 0 til 10
+                          each i in 0 til 10
                             if i == 5
                               break
                           return
@@ -181,7 +181,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                          for i in 0 til 10
+                          each i in 0 til 10
                             if i == 5
                               continue
                             show(i)

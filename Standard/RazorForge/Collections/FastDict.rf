@@ -511,7 +511,7 @@ routine FastDictEmittable[K, V].emit!() -> DictEntry[K, V]
 routine FastDict[K, V].represent() -> Text
   var result = "FastDict({"
   var first = true
-  for entry in me
+  each entry in me
     if not first
       result = result + ", "
     result = result + entry.key.represent() + ": " + entry.value.represent()
@@ -524,7 +524,7 @@ routine FastDict[K, V].represent() -> Text
 routine FastDict[K, V].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
-  for entry in me
+  each entry in me
     if not first
       result = result + ", "
     result = result + entry.key.represent() + ": " + entry.value.represent()
@@ -585,6 +585,6 @@ dangerous routine FastDict[K, V].destroy()
 routine FastDict[K, V].serialize() -> SerialValue
 needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
-  for __e in me
+  each __e in me
     discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
   return SerialValue(steal __sv)

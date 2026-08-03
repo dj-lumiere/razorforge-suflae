@@ -1451,10 +1451,10 @@ public class CompilerPipelineLoweringTests
                                         whileStmt.ElseBranch != null &&
                                         ContainsLambda(statement: whileStmt.ElseBranch),
             LoopStatement loop => ContainsLambda(statement: loop.Body),
-            ForStatement forStmt => ContainsLambda(expression: forStmt.Iterable) ||
-                                    ContainsLambda(statement: forStmt.Body) ||
-                                    forStmt.ElseBranch != null &&
-                                    ContainsLambda(statement: forStmt.ElseBranch),
+            EachStatement eachStmt => ContainsLambda(expression: eachStmt.Iterable) ||
+                                    ContainsLambda(statement: eachStmt.Body) ||
+                                    eachStmt.ElseBranch != null &&
+                                    ContainsLambda(statement: eachStmt.ElseBranch),
             WhenStatement whenStmt => ContainsLambda(expression: whenStmt.Expression) ||
                                       whenStmt.Clauses.Any(predicate: clause =>
                                           ContainsLambda(statement: clause.Body)),
@@ -1731,11 +1731,11 @@ public class CompilerPipelineLoweringTests
                     foreach (Expression e in EnumerateExpressions(statement: whileStmt.ElseBranch))
                         yield return e;
                 yield break;
-            case ForStatement forStmt:
-                foreach (Expression e in EnumerateExpressions(statement: forStmt.Body))
+            case EachStatement eachStmt:
+                foreach (Expression e in EnumerateExpressions(statement: eachStmt.Body))
                     yield return e;
-                if (forStmt.ElseBranch != null)
-                    foreach (Expression e in EnumerateExpressions(statement: forStmt.ElseBranch))
+                if (eachStmt.ElseBranch != null)
+                    foreach (Expression e in EnumerateExpressions(statement: eachStmt.ElseBranch))
                         yield return e;
                 yield break;
             case WhenStatement whenStmt:

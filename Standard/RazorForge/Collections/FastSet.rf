@@ -301,16 +301,16 @@ routine FastSet[T].remove(value: T) -> Bool
 @readonly
 routine FastSet[T].union(other: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T](me.count +% other.count)
-  for val in me
+  each val in me
     discard result.add(val)
-  for val in other
+  each val in other
     discard result.add(val)
   return steal result
 
 @readonly
 routine FastSet[T].intersection(other: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
-  for val in me
+  each val in me
     if val in other
       discard result.add(val)
   return steal result
@@ -318,7 +318,7 @@ routine FastSet[T].intersection(other: Referring[FastSet[T]]) -> FastSet[T]
 @readonly
 routine FastSet[T].difference(other: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
-  for val in me
+  each val in me
     if val notin other
       discard result.add(val)
   return steal result
@@ -326,10 +326,10 @@ routine FastSet[T].difference(other: Referring[FastSet[T]]) -> FastSet[T]
 @readonly
 routine FastSet[T].symmetric_difference(other: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
-  for val in me
+  each val in me
     if val notin other
       discard result.add(val)
-  for val in other
+  each val in other
     if val notin me
       discard result.add(val)
   return steal result
@@ -338,7 +338,7 @@ routine FastSet[T].symmetric_difference(other: Referring[FastSet[T]]) -> FastSet
 routine FastSet[T].is_subset(other: Referring[FastSet[T]]) -> Bool
   if me.count > other.count
     return false
-  for val in me
+  each val in me
     if val notin other
       return false
   return true
@@ -349,7 +349,7 @@ routine FastSet[T].is_superset(other: Referring[FastSet[T]]) -> Bool
 
 @readonly
 routine FastSet[T].is_disjoint(other: Referring[FastSet[T]]) -> Bool
-  for val in me
+  each val in me
     if val in other
       return false
   return true
@@ -363,7 +363,7 @@ routine FastSet[T].is_disjoint(other: Referring[FastSet[T]]) -> Bool
 ### :returns: A new {List[T]} containing all elements of `from`.
 routine List[T](from: Referring[FastSet[T]]) -> List[T]
   var result = List[T](capacity: from.count)
-  for val in from
+  each val in from
     result.add_last(val)
   return steal result
 
@@ -406,7 +406,7 @@ routine FastSetEmittable[T].emit!() -> T
 routine FastSet[T].represent() -> Text
   var result = "FastSet({"
   var first = true
-  for val in me
+  each val in me
     if not first
       result = result + ", "
     result = result + val.represent()
@@ -418,7 +418,7 @@ routine FastSet[T].represent() -> Text
 routine FastSet[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
-  for val in me
+  each val in me
     if not first
       result = result + ", "
     result = result + val.represent()
@@ -458,6 +458,6 @@ dangerous routine FastSet[T].destroy()
 routine FastSet[T].serialize() -> SerialValue
 needs T obeys Serializable
   var __sv = List[SerialValue]()
-  for __x in me
+  each __x in me
     __sv.add_last(value: __x.serialize())
   return SerialValue(steal __sv)

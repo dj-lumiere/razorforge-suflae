@@ -387,7 +387,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          for i in 0 til 10
+                          each i in 0 til 10
                             show(i)
                           return
                         """;
@@ -396,10 +396,10 @@ public class ControlFlowTests
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         var body = routine.Body as BlockStatement;
         Assert.NotNull(@object: body);
-        ForStatement? forStmt = body.Statements
-                                    .OfType<ForStatement>()
+        EachStatement? eachStmt = body.Statements
+                                    .OfType<EachStatement>()
                                     .FirstOrDefault();
-        Assert.NotNull(@object: forStmt);
+        Assert.NotNull(@object: eachStmt);
     }
     /// <summary>
     /// Verifies that the parser accepts for range with step.
@@ -410,7 +410,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          for i in 0 til 100 by 5
+                          each i in 0 til 100 by 5
                             show(i)
                           return
                         """;
@@ -427,7 +427,7 @@ public class ControlFlowTests
         string source = """
                         routine test()
                           var items = [1, 2, 3, 4, 5]
-                          for item in items
+                          each item in items
                             show(item)
                           return
                         """;
@@ -444,7 +444,7 @@ public class ControlFlowTests
         string source = """
                         routine test()
                           var items = ["a", "b", "c"]
-                          for (index, item) in items.enumerate()
+                          each (index, item) in items.enumerate()
                             show(f"{index}: {item}")
                           return
                         """;
@@ -460,7 +460,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine find_first(items: List[S32], target: S32)
-                          for item in items
+                          each item in items
                             if item == target
                               show("Found!")
                               break
@@ -478,7 +478,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine process_valid(items: List[S32])
-                          for item in items
+                          each item in items
                             if item < 0
                               continue
                             process(item)
@@ -496,8 +496,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine matrix()
-                          for i in 0 til 10
-                            for j in 0 til 10
+                          each i in 0 til 10
+                            each j in 0 til 10
                               show(f"{i},{j}")
                           return
                         """;
@@ -693,8 +693,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine process_matrix(matrix: List[List[S32]])
-                          for row in matrix
-                            for cell in row
+                          each row in matrix
+                            each cell in row
                               if cell < 0
                                 continue
                               if cell > 100
@@ -715,7 +715,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine search!(items: List[S32], target: S32) -> S32
-                          for (index, item) in items.enumerate()
+                          each (index, item) in items.enumerate()
                             if item == target
                               return index
                           absent

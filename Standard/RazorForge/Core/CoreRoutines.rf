@@ -33,99 +33,99 @@ needs N is U64
 
     # significant limb count of the divisor (highest non-zero limb + 1)
     var n = nl
-    while LLVM::signed_gt[S64](a: n, b: 1_s64) and LLVM::int_eq[U64](a: LLVM::load_element_ref[Array[U64, N], U64](b, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: n, b: 1_s64))), b: 0_u64)
-      n = LLVM::sub[S64](a: n, b: 1_s64)
+    while LLVM::signed_gt(a: n, b: 1_s64) and LLVM::int_eq(a: LLVM::load_element_ref[Array[U64, N], U64](b, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: n, b: 1_s64))), b: 0_u64)
+      n = LLVM::sub(a: n, b: 1_s64)
 
     # ---- Single-limb divisor: simple long division, high limb to low ----
-    if LLVM::signed_le[S64](a: n, b: 1_s64)
+    if LLVM::signed_le(a: n, b: 1_s64)
       var d0 = LLVM::load_element_ref[Array[U64, N], U64](b, 0_u64)
       var r = 0_u64
-      var i = LLVM::sub[S64](a: nl, b: 1_s64)
-      while LLVM::signed_ge[S64](a: i, b: 0_s64)
+      var i = LLVM::sub(a: nl, b: 1_s64)
+      while LLVM::signed_ge(a: i, b: 0_s64)
         var qi = C::rf_udivrem_128_64(hi: r, lo: LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](i)), d: d0, rem: rscratch.hijack())
         LLVM::store_element_ref[Array[U64, N], U64](qp, LLVM::reinterpret_bits[S64, U64](i), qi)
         r = rscratch
-        i = LLVM::sub[S64](a: i, b: 1_s64)
+        i = LLVM::sub(a: i, b: 1_s64)
       LLVM::store_element_ref[Array[U64, N], U64](rem, 0_u64, r)
       var z = 1_s64
-      while LLVM::signed_lt[S64](a: z, b: nl)
+      while LLVM::signed_lt(a: z, b: nl)
         LLVM::store_element_ref[Array[U64, N], U64](rem, LLVM::reinterpret_bits[S64, U64](z), 0_u64)
-        z = LLVM::add[S64](a: z, b: 1_s64)
+        z = LLVM::add(a: z, b: 1_s64)
       return q
 
     # significant limb count of the dividend
     var mlen = nl
-    while LLVM::signed_gt[S64](a: mlen, b: 1_s64) and LLVM::int_eq[U64](a: LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: mlen, b: 1_s64))), b: 0_u64)
-      mlen = LLVM::sub[S64](a: mlen, b: 1_s64)
+    while LLVM::signed_gt(a: mlen, b: 1_s64) and LLVM::int_eq(a: LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: mlen, b: 1_s64))), b: 0_u64)
+      mlen = LLVM::sub(a: mlen, b: 1_s64)
 
     # Dividend shorter than divisor → quotient 0, remainder = dividend.
-    if LLVM::signed_lt[S64](a: mlen, b: n)
+    if LLVM::signed_lt(a: mlen, b: n)
       var z2 = 0_s64
-      while LLVM::signed_lt[S64](a: z2, b: nl)
+      while LLVM::signed_lt(a: z2, b: nl)
         LLVM::store_element_ref[Array[U64, N], U64](rem, LLVM::reinterpret_bits[S64, U64](z2), LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](z2)))
-        z2 = LLVM::add[S64](a: z2, b: 1_s64)
+        z2 = LLVM::add(a: z2, b: 1_s64)
       return q
-    var m = LLVM::sub[S64](a: mlen, b: n)
+    var m = LLVM::sub(a: mlen, b: n)
 
     # ---- D1: normalize so the divisor's top limb has its MSB set ----
-    var vtop = LLVM::load_element_ref[Array[U64, N], U64](b, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: n, b: 1_s64)))
+    var vtop = LLVM::load_element_ref[Array[U64, N], U64](b, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: n, b: 1_s64)))
     var s = 0_s64
-    while LLVM::int_eq[U64](a: LLVM::bit_and[U64](a: vtop, b: LLVM::shift_left[U64](1_u64, 63_u64)), b: 0_u64)
-      vtop = LLVM::shift_left[U64](vtop, 1_u64)
-      s = LLVM::add[S64](a: s, b: 1_s64)
+    while LLVM::int_eq(a: LLVM::bit_and(a: vtop, b: LLVM::shift_left(1_u64, 63_u64)), b: 0_u64)
+      vtop = LLVM::shift_left(vtop, 1_u64)
+      s = LLVM::add(a: s, b: 1_s64)
     var su = LLVM::reinterpret_bits[S64, U64](s)
-    var su_inv = LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: 64_s64, b: s))
+    var su_inv = LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 64_s64, b: s))
 
     # vn = b << s  (n limbs)
     var vn = Array[U64, N]()
     var vnp = vn.hijack()
-    var vi = LLVM::sub[S64](a: n, b: 1_s64)
-    while LLVM::signed_ge[S64](a: vi, b: 0_s64)
-      var hi = LLVM::shift_left[U64](LLVM::load_element_ref[Array[U64, N], U64](b, LLVM::reinterpret_bits[S64, U64](vi)), su)
-      var lo = if LLVM::signed_gt[S64](a: vi, b: 0_s64) and LLVM::signed_gt[S64](a: s, b: 0_s64) then LLVM::shift_right_unsigned[U64](LLVM::load_element_ref[Array[U64, N], U64](b, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: vi, b: 1_s64))), su_inv) else 0_u64
-      LLVM::store_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](vi), LLVM::bit_or[U64](a: hi, b: lo))
-      vi = LLVM::sub[S64](a: vi, b: 1_s64)
+    var vi = LLVM::sub(a: n, b: 1_s64)
+    while LLVM::signed_ge(a: vi, b: 0_s64)
+      var hi = LLVM::shift_left(LLVM::load_element_ref[Array[U64, N], U64](b, LLVM::reinterpret_bits[S64, U64](vi)), su)
+      var lo = if LLVM::signed_gt(a: vi, b: 0_s64) and LLVM::signed_gt(a: s, b: 0_s64) then LLVM::shift_right_unsigned(LLVM::load_element_ref[Array[U64, N], U64](b, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: vi, b: 1_s64))), su_inv) else 0_u64
+      LLVM::store_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](vi), LLVM::bit_or(a: hi, b: lo))
+      vi = LLVM::sub(a: vi, b: 1_s64)
 
     # un = a << s  (mlen+1 limbs; the top limb lives in `un_hi`)
     var un = Array[U64, N]()
     var unp = un.hijack()
-    var un_hi = if LLVM::signed_gt[S64](a: s, b: 0_s64) then LLVM::shift_right_unsigned[U64](LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: mlen, b: 1_s64))), su_inv) else 0_u64
-    var ui = LLVM::sub[S64](a: mlen, b: 1_s64)
-    while LLVM::signed_ge[S64](a: ui, b: 0_s64)
-      var uhi = LLVM::shift_left[U64](LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](ui)), su)
-      var ulo = if LLVM::signed_gt[S64](a: ui, b: 0_s64) and LLVM::signed_gt[S64](a: s, b: 0_s64) then LLVM::shift_right_unsigned[U64](LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: ui, b: 1_s64))), su_inv) else 0_u64
-      LLVM::store_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](ui), LLVM::bit_or[U64](a: uhi, b: ulo))
-      ui = LLVM::sub[S64](a: ui, b: 1_s64)
+    var un_hi = if LLVM::signed_gt(a: s, b: 0_s64) then LLVM::shift_right_unsigned(LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: mlen, b: 1_s64))), su_inv) else 0_u64
+    var ui = LLVM::sub(a: mlen, b: 1_s64)
+    while LLVM::signed_ge(a: ui, b: 0_s64)
+      var uhi = LLVM::shift_left(LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](ui)), su)
+      var ulo = if LLVM::signed_gt(a: ui, b: 0_s64) and LLVM::signed_gt(a: s, b: 0_s64) then LLVM::shift_right_unsigned(LLVM::load_element_ref[Array[U64, N], U64](a, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: ui, b: 1_s64))), su_inv) else 0_u64
+      LLVM::store_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](ui), LLVM::bit_or(a: uhi, b: ulo))
+      ui = LLVM::sub(a: ui, b: 1_s64)
 
-    var vn1 = LLVM::load_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: n, b: 1_s64)))
-    var vn2 = LLVM::load_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: n, b: 2_s64)))
+    var vn1 = LLVM::load_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: n, b: 1_s64)))
+    var vn2 = LLVM::load_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: n, b: 2_s64)))
 
     # ---- D2..D7: main loop over quotient limbs, high to low ----
     var j = m
-    while LLVM::signed_ge[S64](a: j, b: 0_s64)
+    while LLVM::signed_ge(a: j, b: 0_s64)
       # un_get(j+n) is in un_hi when j+n == mlen, else in the un array
-      var un_jn = if LLVM::int_eq[S64](a: LLVM::add[S64](a: j, b: n), b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::add[S64](a: j, b: n)))
-      var un_jn1 = LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: LLVM::add[S64](a: j, b: n), b: 1_s64)))
+      var un_jn = if LLVM::int_eq(a: LLVM::add(a: j, b: n), b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::add(a: j, b: n)))
+      var un_jn1 = LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: LLVM::add(a: j, b: n), b: 1_s64)))
 
       # D3: estimate qhat, rhat from the top two dividend limbs / top divisor limb
       var qhat = 0_u64
       var rhat = 0_u64
-      if LLVM::int_eq[U64](a: un_jn, b: vn1)
+      if LLVM::int_eq(a: un_jn, b: vn1)
         qhat = U64_MAX
-        rhat = LLVM::add[U64](a: un_jn1, b: vn1)
+        rhat = LLVM::add(a: un_jn1, b: vn1)
       else
         qhat = C::rf_udivrem_128_64(hi: un_jn, lo: un_jn1, d: vn1, rem: rscratch.hijack())
         rhat = rscratch
       # correct qhat: while qhat*vn2 > (rhat:un[j+n-2]) and rhat fits 64 bits
-      var un_jn2 = LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::sub[S64](a: LLVM::add[S64](a: j, b: n), b: 2_s64)))
+      var un_jn2 = LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: LLVM::add(a: j, b: n), b: 2_s64)))
       var keep = true
       while keep
-        var lhs = LLVM::mul[U128](a: LLVM::zero_extend[U64, U128](qhat), b: LLVM::zero_extend[U64, U128](vn2))
-        var rhs = LLVM::bit_or[U128](a: LLVM::shift_left[U128](LLVM::zero_extend[U64, U128](rhat), 64_u128), b: LLVM::zero_extend[U64, U128](un_jn2))
-        if LLVM::unsigned_gt[U128](a: lhs, b: rhs)
-          qhat = LLVM::sub[U64](a: qhat, b: 1_u64)
-          var rnew = LLVM::add[U64](a: rhat, b: vn1)
-          if LLVM::unsigned_lt[U64](a: rnew, b: rhat)
+        var lhs = LLVM::mul(a: LLVM::zero_extend[U64, U128](qhat), b: LLVM::zero_extend[U64, U128](vn2))
+        var rhs = LLVM::bit_or(a: LLVM::shift_left(LLVM::zero_extend[U64, U128](rhat), 64_u128), b: LLVM::zero_extend[U64, U128](un_jn2))
+        if LLVM::unsigned_gt(a: lhs, b: rhs)
+          qhat = LLVM::sub(a: qhat, b: 1_u64)
+          var rnew = LLVM::add(a: rhat, b: vn1)
+          if LLVM::unsigned_lt(a: rnew, b: rhat)
             keep = false
           else
             rhat = rnew
@@ -135,27 +135,27 @@ needs N is U64
       # D4: multiply qhat*vn and subtract from un[j..j+n] (signed S128 borrow `k`)
       var k = LLVM::zero_extend[U64, S128](0_u64)
       var ii = 0_s64
-      while LLVM::signed_lt[S64](a: ii, b: n)
-        var p = LLVM::mul[U128](a: LLVM::zero_extend[U64, U128](qhat), b: LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](ii))))
+      while LLVM::signed_lt(a: ii, b: n)
+        var p = LLVM::mul(a: LLVM::zero_extend[U64, U128](qhat), b: LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](ii))))
         var plo = LLVM::int_truncate[U128, U64](p)
-        var phi = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned[U128](p, 64_u128))
-        var idx = LLVM::add[S64](a: ii, b: j)
-        var cur = if LLVM::int_eq[S64](a: idx, b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](idx))
-        var t = LLVM::sub[S128](a: LLVM::sub[S128](a: LLVM::zero_extend[U64, S128](cur), b: k), b: LLVM::zero_extend[U64, S128](plo))
+        var phi = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(p, 64_u128))
+        var idx = LLVM::add(a: ii, b: j)
+        var cur = if LLVM::int_eq(a: idx, b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](idx))
+        var t = LLVM::sub(a: LLVM::sub(a: LLVM::zero_extend[U64, S128](cur), b: k), b: LLVM::zero_extend[U64, S128](plo))
         var tlo = LLVM::int_truncate[S128, U64](t)
-        if LLVM::int_eq[S64](a: idx, b: mlen)
+        if LLVM::int_eq(a: idx, b: mlen)
           un_hi = tlo
         else
           LLVM::store_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](idx), tlo)
         # k = phi - arithmetic_shift_right(t, 64)
-        k = LLVM::sub[S128](a: LLVM::zero_extend[U64, S128](phi), b: LLVM::shift_right_signed[S128](t, 64_s128))
-        ii = LLVM::add[S64](a: ii, b: 1_s64)
+        k = LLVM::sub(a: LLVM::zero_extend[U64, S128](phi), b: LLVM::shift_right_signed(t, 64_s128))
+        ii = LLVM::add(a: ii, b: 1_s64)
       # final top limb: un[j+n] -= k
-      var topidx = LLVM::add[S64](a: j, b: n)
-      var curtop = if LLVM::int_eq[S64](a: topidx, b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](topidx))
-      var ttop = LLVM::sub[S128](a: LLVM::zero_extend[U64, S128](curtop), b: k)
+      var topidx = LLVM::add(a: j, b: n)
+      var curtop = if LLVM::int_eq(a: topidx, b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](topidx))
+      var ttop = LLVM::sub(a: LLVM::zero_extend[U64, S128](curtop), b: k)
       var ttoplo = LLVM::int_truncate[S128, U64](ttop)
-      if LLVM::int_eq[S64](a: topidx, b: mlen)
+      if LLVM::int_eq(a: topidx, b: mlen)
         un_hi = ttoplo
       else
         LLVM::store_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](topidx), ttoplo)
@@ -163,32 +163,32 @@ needs N is U64
       LLVM::store_element_ref[Array[U64, N], U64](qp, LLVM::reinterpret_bits[S64, U64](j), qhat)
 
       # D5/D6: if the subtraction went negative, qhat was 1 too big — add the divisor back
-      if LLVM::signed_lt[S128](a: ttop, b: LLVM::zero_extend[U64, S128](0_u64))
-        LLVM::store_element_ref[Array[U64, N], U64](qp, LLVM::reinterpret_bits[S64, U64](j), LLVM::sub[U64](a: qhat, b: 1_u64))
+      if LLVM::signed_lt(a: ttop, b: LLVM::zero_extend[U64, S128](0_u64))
+        LLVM::store_element_ref[Array[U64, N], U64](qp, LLVM::reinterpret_bits[S64, U64](j), LLVM::sub(a: qhat, b: 1_u64))
         var carry = 0_u64
         var ai = 0_s64
-        while LLVM::signed_lt[S64](a: ai, b: n)
-          var aidx = LLVM::add[S64](a: ai, b: j)
-          var acur = if LLVM::int_eq[S64](a: aidx, b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](aidx))
-          var sum = LLVM::add[U128](a: LLVM::add[U128](a: LLVM::zero_extend[U64, U128](acur), b: LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](ai)))), b: LLVM::zero_extend[U64, U128](carry))
-          if LLVM::int_eq[S64](a: aidx, b: mlen)
+        while LLVM::signed_lt(a: ai, b: n)
+          var aidx = LLVM::add(a: ai, b: j)
+          var acur = if LLVM::int_eq(a: aidx, b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](aidx))
+          var sum = LLVM::add(a: LLVM::add(a: LLVM::zero_extend[U64, U128](acur), b: LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, N], U64](vnp, LLVM::reinterpret_bits[S64, U64](ai)))), b: LLVM::zero_extend[U64, U128](carry))
+          if LLVM::int_eq(a: aidx, b: mlen)
             un_hi = LLVM::int_truncate[U128, U64](sum)
           else
             LLVM::store_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](aidx), LLVM::int_truncate[U128, U64](sum))
-          carry = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned[U128](sum, 64_u128))
-          ai = LLVM::add[S64](a: ai, b: 1_s64)
-        un_hi = LLVM::add[U64](a: un_hi, b: carry)
-      j = LLVM::sub[S64](a: j, b: 1_s64)
+          carry = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(sum, 64_u128))
+          ai = LLVM::add(a: ai, b: 1_s64)
+        un_hi = LLVM::add(a: un_hi, b: carry)
+      j = LLVM::sub(a: j, b: 1_s64)
 
     # ---- D8: denormalize the remainder (un >> s), low n limbs ----
     var ri = 0_s64
-    while LLVM::signed_lt[S64](a: ri, b: n)
-      var rlo = LLVM::shift_right_unsigned[U64](LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](ri)), su)
-      var rhi = if LLVM::signed_gt[S64](a: s, b: 0_s64) then LLVM::shift_left[U64](LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::add[S64](a: ri, b: 1_s64))), su_inv) else 0_u64
-      LLVM::store_element_ref[Array[U64, N], U64](rem, LLVM::reinterpret_bits[S64, U64](ri), LLVM::bit_or[U64](a: rlo, b: rhi))
-      ri = LLVM::add[S64](a: ri, b: 1_s64)
+    while LLVM::signed_lt(a: ri, b: n)
+      var rlo = LLVM::shift_right_unsigned(LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](ri)), su)
+      var rhi = if LLVM::signed_gt(a: s, b: 0_s64) then LLVM::shift_left(LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::add(a: ri, b: 1_s64))), su_inv) else 0_u64
+      LLVM::store_element_ref[Array[U64, N], U64](rem, LLVM::reinterpret_bits[S64, U64](ri), LLVM::bit_or(a: rlo, b: rhi))
+      ri = LLVM::add(a: ri, b: 1_s64)
     var rz = n
-    while LLVM::signed_lt[S64](a: rz, b: nl)
+    while LLVM::signed_lt(a: rz, b: nl)
       LLVM::store_element_ref[Array[U64, N], U64](rem, LLVM::reinterpret_bits[S64, U64](rz), 0_u64)
-      rz = LLVM::add[S64](a: rz, b: 1_s64)
+      rz = LLVM::add(a: rz, b: 1_s64)
   return q

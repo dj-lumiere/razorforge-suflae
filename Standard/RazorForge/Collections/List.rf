@@ -144,7 +144,7 @@ routine List[T].add_range(other: Referring[Iterable[T]])
   # TODO(fast-io): hoist capacity-reserve when `other` exposes a known count.
   # For now, fall back to per-element append so the routine type-checks while the
   # optimized path is being designed.
-  for value in other
+  each value in other
     me.add_last(value: value)
   return
 
@@ -386,7 +386,7 @@ needs T obeys Equatable
 routine List[T].represent() -> Text
   var result = "["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
     result = result + v.represent()
@@ -398,7 +398,7 @@ routine List[T].represent() -> Text
 routine List[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
     result = result + v.represent()

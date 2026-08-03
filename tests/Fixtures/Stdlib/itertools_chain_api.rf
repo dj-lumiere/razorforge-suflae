@@ -38,7 +38,7 @@ routine start()
   show(f"all x2>0: {src.select(transform: x => x * 2).all(predicate: x => x > 0_s64)}")
 
   # chain consumed by a for-loop terminal
-  for item in src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2)
+  each item in src.where(predicate: x => x % 2 == 0).select(transform: x => x * 2)
     show(f"  iter: {item}")
 
   show("DONE")

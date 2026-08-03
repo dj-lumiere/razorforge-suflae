@@ -48,7 +48,7 @@ routine cptr_none() -> CPtr
 ### :returns: The resulting `Bool` value.
 @readonly
 routine CPtr.is_none() -> Bool
-  return LLVM::int_eq[CPtr](me, cptr_none())
+  return LLVM::int_eq(me, cptr_none())
 
 ### Formats this pointer as its raw address.
 ### :returns: The resulting `Text` value.

@@ -17,7 +17,7 @@ routine start()
   show(f"last: {dq.last()}")
 
   # iteration in order
-  for x in dq
+  each x in dq
     show(f"  iter: {x}")
 
   # remove_first

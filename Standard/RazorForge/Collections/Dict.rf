@@ -445,7 +445,7 @@ routine Dict[K, V].copy() -> Dict[K, V]
 needs K obeys Copyable
 needs V obeys Copyable
   var result = Dict[K, V]()
-  for entry in me
+  each entry in me
     discard result.add(key: entry.key.copy(), value: entry.value.copy())
   return steal result
 
@@ -459,7 +459,7 @@ routine Dict[K, V].represent() -> Text
     return "{:}"
   var result = "{"
   var first = true
-  for entry in me
+  each entry in me
     if not first
       result = result + ", "
     result = result + entry.key.represent() + ": " + entry.value.represent()
@@ -471,7 +471,7 @@ routine Dict[K, V].represent() -> Text
 routine Dict[K, V].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
-  for entry in me
+  each entry in me
     if not first
       result = result + ", "
     result = result + entry.key.represent() + ": " + entry.value.represent()
@@ -510,6 +510,6 @@ needs V obeys Equatable
 routine Dict[K, V].serialize() -> SerialValue
 needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
-  for __e in me
+  each __e in me
     discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
   return SerialValue(steal __sv)

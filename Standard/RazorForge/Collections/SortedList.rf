@@ -377,7 +377,7 @@ routine SortedList[T].lower_bound(node: Referring[BTreeListNode[T]], value: T) -
   var lo = 0u64
   var hi = node.keys_count()
   while lo < hi
-    var mid = lo +% LLVM::unsigned_div[U64](hi -% lo, 2u64)
+    var mid = lo +% LLVM::unsigned_div(hi -% lo, 2u64)
     if node.keys_get(mid) < value
       lo = mid +% 1u64
     else
@@ -394,7 +394,7 @@ routine SortedList[T].upper_bound(node: Referring[BTreeListNode[T]], value: T) -
   var lo = 0u64
   var hi = node.keys_count()
   while lo < hi
-    var mid = lo +% LLVM::unsigned_div[U64](hi -% lo, 2u64)
+    var mid = lo +% LLVM::unsigned_div(hi -% lo, 2u64)
     if node.keys_get(mid) <= value
       lo = mid +% 1u64
     else
@@ -461,7 +461,7 @@ routine SortedList[T].insert_non_full(node: Controlling[BTreeListNode[T]], value
 routine SortedList[T].split_child(parent_node: Controlling[BTreeListNode[T]], child_idx: U64)
   danger
     var child = parent_node.children_get(child_idx).as_entity()
-    var mid = LLVM::unsigned_div[U64](B_LIST -% 1u64, 2u64)
+    var mid = LLVM::unsigned_div(B_LIST -% 1u64, 2u64)
 
     var new_node_ptr = BTreeListNode[T](is_leaf: child.is_leaf).hijack()
     var new_node = new_node_ptr.as_entity()
@@ -877,7 +877,7 @@ routine SortedListEmittable[T].emit!() -> T
 routine SortedList[T].represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
     result = result + v.represent()
@@ -889,7 +889,7 @@ routine SortedList[T].represent() -> Text
 routine SortedList[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
     result = result + v.represent()
@@ -917,6 +917,6 @@ routine SortedList[T].eq(other: Referring[SortedList[T]]) -> Bool
 routine SortedList[T].serialize() -> SerialValue
 needs T obeys Serializable
   var __sv = List[SerialValue]()
-  for __x in me
+  each __x in me
     __sv.add_last(value: __x.serialize())
   return SerialValue(steal __sv)

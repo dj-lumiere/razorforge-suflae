@@ -112,42 +112,42 @@ public sealed partial class SemanticVerifier
         _registry.ExitScope();
     }
 
-    private void AnalyzeForStatement(ForStatement forStmt)
+    private void AnalyzeEachStatement(EachStatement eachStmt)
     {
-        _registry.EnterScope(kind: ScopeKind.Loop, name: "for");
+        _registry.EnterScope(kind: ScopeKind.Loop, name: "each");
 
         // Analyze iterable expression
-        TypeSymbol iterableType = AnalyzeExpression(expression: forStmt.Iterable);
+        TypeSymbol iterableType = AnalyzeExpression(expression: eachStmt.Iterable);
 
         // Get element type from iterable
         TypeSymbol elementType =
-            GetIterableElementType(iterableType: iterableType, location: forStmt.Location);
+            GetIterableElementType(iterableType: iterableType, location: eachStmt.Location);
 
         // Handle either simple variable or destructuring pattern
-        if (forStmt.Variable != null)
+        if (eachStmt.Variable != null)
         {
             // Simple variable binding: for item in items
-            _registry.DeclareVariable(name: forStmt.Variable, type: elementType);
+            _registry.DeclareVariable(name: eachStmt.Variable, type: elementType);
         }
-        else if (forStmt.VariablePattern != null)
+        else if (eachStmt.VariablePattern != null)
         {
             // Destructuring pattern: for (index, item) in items.enumerate()
             if (elementType is TupleTypeInfo tupleType)
             {
                 // Check arity match
-                int bindingCount = forStmt.VariablePattern.Bindings.Count;
+                int bindingCount = eachStmt.VariablePattern.Bindings.Count;
                 if (bindingCount != tupleType.Arity)
                 {
                     ReportError(code: SemanticDiagnosticCode.DestructuringArityMismatch,
                         message:
                         $"Destructuring pattern has {bindingCount} bindings but tuple has {tupleType.Arity} elements.",
-                        location: forStmt.VariablePattern.Location);
+                        location: eachStmt.VariablePattern.Location);
                 }
 
                 // Declare each binding with its corresponding tuple element type
-                for (int i = 0; i < forStmt.VariablePattern.Bindings.Count; i++)
+                for (int i = 0; i < eachStmt.VariablePattern.Bindings.Count; i++)
                 {
-                    DestructuringBinding binding = forStmt.VariablePattern.Bindings[index: i];
+                    DestructuringBinding binding = eachStmt.VariablePattern.Bindings[index: i];
                     if (binding.BindingName != null)
                     {
                         TypeSymbol bindingType = i < tupleType.Arity
@@ -163,9 +163,9 @@ public sealed partial class SemanticVerifier
                 ReportError(code: SemanticDiagnosticCode.DestructuringArityMismatch,
                     message:
                     $"Cannot destructure non-tuple type '{elementType.Name}' in for loop.",
-                    location: forStmt.VariablePattern.Location);
+                    location: eachStmt.VariablePattern.Location);
                 // Still declare variables with error type so analysis can continue
-                foreach (DestructuringBinding binding in forStmt.VariablePattern.Bindings)
+                foreach (DestructuringBinding binding in eachStmt.VariablePattern.Bindings)
                 {
                     if (binding.BindingName != null)
                     {
@@ -177,7 +177,7 @@ public sealed partial class SemanticVerifier
         }
 
         // #22: Track active iteration source for migratable-during-iteration check
-        string? iterationSourceName = forStmt.Iterable is IdentifierExpression iterSource
+        string? iterationSourceName = eachStmt.Iterable is IdentifierExpression iterSource
             ? iterSource.Name
             : null;
 
@@ -187,7 +187,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Analyze loop body
-        AnalyzeStatement(statement: forStmt.Body);
+        AnalyzeStatement(statement: eachStmt.Body);
 
         if (iterationSourceName != null)
         {

@@ -304,12 +304,12 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                     : loopStmt with { Body = newBody };
             }
 
-            case ForStatement forStmt:
+            case EachStatement eachStmt:
             {
-                Statement newBody = LowerStatement(stmt: forStmt.Body);
-                return ReferenceEquals(newBody, forStmt.Body)
+                Statement newBody = LowerStatement(stmt: eachStmt.Body);
+                return ReferenceEquals(newBody, eachStmt.Body)
                     ? stmt
-                    : forStmt with { Body = newBody };
+                    : eachStmt with { Body = newBody };
             }
 
             case WhenStatement whenStmt:

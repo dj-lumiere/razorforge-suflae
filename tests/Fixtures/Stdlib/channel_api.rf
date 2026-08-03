@@ -17,7 +17,7 @@ routine start()
 
   var total = 0_s64
   var seen = 0_s64
-  for v in hop
+  each v in hop
     total = total + v
     seen = seen + 1
   show(f"count={seen} sum={total}")

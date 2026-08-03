@@ -187,7 +187,7 @@ internal sealed class LiteralLoweringPass
                 Statement body = LowerStatement(loop.Body);
                 return ReferenceEquals(body, loop.Body) ? stmt : loop with { Body = body };
             }
-            case ForStatement f:
+            case EachStatement f:
             {
                 Expression iter = LowerExpression(f.Iterable);
                 Statement body = LowerStatement(f.Body);

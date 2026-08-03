@@ -253,7 +253,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                     : null
             },
 
-            ForStatement fs => fs with
+            EachStatement fs => fs with
             {
                 Body = TransformBodyCore(body: fs.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly),
                 ElseBranch = fs.ElseBranch != null

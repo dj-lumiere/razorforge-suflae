@@ -18,7 +18,7 @@ namespace Compiler.Instantiation.Passes;
 ///
 /// <para>Lowered for-loop shape produced by CFLP (the discriminator):</para>
 /// <code>
-/// loop /*IsIteratorForLoop*/ {
+/// loop /*IsIteratorEachLoop*/ {
 ///   when _lf_iter_N.try_emit() {
 ///     is None -> break                              # plain for
 ///        (or:  { _lf_exhausted_N = true; break }    # for-else)
@@ -111,7 +111,7 @@ internal sealed class IteratorInlineLoweringPass
     {
         switch (stmt)
         {
-            case LoopStatement { IsIteratorForLoop: true } loop:
+            case LoopStatement { IsIteratorEachLoop: true } loop:
             {
                 Statement? inlined = TryInline(loop: loop);
                 if (inlined != null) return inlined;
@@ -314,7 +314,7 @@ internal sealed class IteratorInlineLoweringPass
         bool found = false;
         WalkStatements(stmt: stmt, visit: s =>
         {
-            if (s is LoopStatement or WhileStatement or ForStatement) found = true;
+            if (s is LoopStatement or WhileStatement or EachStatement) found = true;
         });
         return found;
     }
@@ -431,7 +431,7 @@ internal sealed class IteratorInlineLoweringPass
             // Loops must never appear (the gate excludes them); guard defensively.
             case LoopStatement:
             case WhileStatement:
-            case ForStatement:
+            case EachStatement:
                 // Should be unreachable — fall back to a plain clone rather than crash.
                 return CloneStatement(stmt: stmt, ctx: ctx);
 
@@ -733,7 +733,7 @@ internal sealed class IteratorInlineLoweringPass
             case LoopStatement l:
                 WalkStatements(stmt: l.Body, visit: visit);
                 break;
-            case ForStatement f:
+            case EachStatement f:
                 WalkStatements(stmt: f.Body, visit: visit);
                 if (f.ElseBranch != null) WalkStatements(stmt: f.ElseBranch, visit: visit);
                 break;

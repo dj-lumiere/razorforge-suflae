@@ -211,8 +211,8 @@ public partial class Parser
     /// Syntax: <c>for variable in iterable</c> or <c>for (a, b) in iterable</c> followed by body.
     /// Optional <c>else</c> block executes if loop completes without break.
     /// </summary>
-    /// <returns>A <see cref="ForStatement"/> AST node.</returns>
-    private ForStatement ParseForStatement()
+    /// <returns>A <see cref="EachStatement"/> AST node.</returns>
+    private EachStatement ParseEachStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -241,7 +241,7 @@ public partial class Parser
             elseBranch = ParseBody();
         }
 
-        return new ForStatement(Variable: variable,
+        return new EachStatement(Variable: variable,
             VariablePattern: variablePattern,
             Iterable: sequenceable,
             Body: body,

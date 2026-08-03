@@ -168,7 +168,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                     inheritedGenericConstraints: inheritedGenericConstraints,
                     includeMe: includeMe)
             },
-            ForStatement forStmt => RewriteFor(forStmt,
+            EachStatement eachStmt => RewriteEach(eachStmt,
                 scope: scope,
                 inheritedGenericParameters: inheritedGenericParameters,
                 inheritedGenericConstraints: inheritedGenericConstraints,
@@ -316,37 +316,37 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
         return block with { Statements = statements };
     }
 
-    private Statement RewriteFor(ForStatement forStmt,
+    private Statement RewriteEach(EachStatement eachStmt,
         HashSet<string> scope,
         List<string>? inheritedGenericParameters,
         List<GenericConstraintDeclaration>? inheritedGenericConstraints,
         bool includeMe)
     {
         var bodyScope = new HashSet<string>(scope, StringComparer.Ordinal);
-        if (forStmt.Variable != null)
+        if (eachStmt.Variable != null)
         {
-            bodyScope.Add(item: forStmt.Variable);
+            bodyScope.Add(item: eachStmt.Variable);
         }
 
-        foreach (string binding in GetPatternBindings(forStmt.VariablePattern))
+        foreach (string binding in GetPatternBindings(eachStmt.VariablePattern))
         {
             bodyScope.Add(item: binding);
         }
 
-        return forStmt with
+        return eachStmt with
         {
-            Iterable = RewriteExpression(forStmt.Iterable,
+            Iterable = RewriteExpression(eachStmt.Iterable,
                 scope: scope,
                 inheritedGenericParameters: inheritedGenericParameters,
                 inheritedGenericConstraints: inheritedGenericConstraints,
                 includeMe: includeMe),
-            Body = RewriteStatement(forStmt.Body,
+            Body = RewriteStatement(eachStmt.Body,
                 scope: bodyScope,
                 inheritedGenericParameters: inheritedGenericParameters,
                 inheritedGenericConstraints: inheritedGenericConstraints,
                 includeMe: includeMe),
-            ElseBranch = forStmt.ElseBranch != null
-                ? RewriteStatement(forStmt.ElseBranch,
+            ElseBranch = eachStmt.ElseBranch != null
+                ? RewriteStatement(eachStmt.ElseBranch,
                     scope: new HashSet<string>(scope, StringComparer.Ordinal),
                     inheritedGenericParameters: inheritedGenericParameters,
                     inheritedGenericConstraints: inheritedGenericConstraints,
@@ -1656,12 +1656,12 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             case LoopStatement loop:
                 CollectLocalCapturesInStatement(loop.Body, outerScope, parameterNames, captures);
                 break;
-            case ForStatement forStmt:
-                CollectLocalCapturesRecursive(forStmt.Iterable, outerScope, parameterNames, captures);
-                CollectLocalCapturesInStatement(forStmt.Body, outerScope, parameterNames, captures);
-                if (forStmt.ElseBranch != null)
+            case EachStatement eachStmt:
+                CollectLocalCapturesRecursive(eachStmt.Iterable, outerScope, parameterNames, captures);
+                CollectLocalCapturesInStatement(eachStmt.Body, outerScope, parameterNames, captures);
+                if (eachStmt.ElseBranch != null)
                 {
-                    CollectLocalCapturesInStatement(forStmt.ElseBranch, outerScope, parameterNames, captures);
+                    CollectLocalCapturesInStatement(eachStmt.ElseBranch, outerScope, parameterNames, captures);
                 }
                 break;
             case WhenStatement whenStmt:

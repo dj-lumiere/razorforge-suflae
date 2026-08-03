@@ -442,7 +442,7 @@ _ => GrammarDiagnosticCode.UnexpectedToken
                     case TokenType.If:
                     case TokenType.Unless:
                     case TokenType.While:
-                    case TokenType.For:
+                    case TokenType.Each:
                     case TokenType.Return:
                     case TokenType.Throw:
                     case TokenType.Pierce:

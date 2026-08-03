@@ -48,21 +48,21 @@ routine f256a_abs_mask() -> U256
 
 ### The infinity encoding `0x7FFFF << 236` for the given sign bit.
 routine f256a_inf(sign: U64) -> U256
-  var s = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
-  var e = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
-  return LLVM::bit_or[U256](a: s, b: e)
+  var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
+  var e = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
+  return LLVM::bit_or(a: s, b: e)
 
 ### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
 routine f256a_qnan() -> U256
-  var e = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
+  var e = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
   var q = LLVM::shift_left[U256](value: 1, bits: U256.to_width(s: 235_s64))
-  return LLVM::bit_or[U256](a: e, b: q)
+  return LLVM::bit_or(a: e, b: q)
 
 ### Sign-magnitude total-order key for comparison.
 routine f256a_order_key(bits: U256) -> U256
   if LLVM::int_ne[U256](a: LLVM::bit_and[U256](a: bits, b: f256a_sign_mask()), b: 0)
     return LLVM::bit_xor[U256](a: bits, b: LLVM::sub[U256](a: 0, b: 1))
-  return LLVM::bit_or[U256](a: bits, b: f256a_sign_mask())
+  return LLVM::bit_or(a: bits, b: f256a_sign_mask())
 
 # ============================================================================
 # Raw bit access
@@ -84,41 +84,41 @@ common routine F256.from_bits(bits: U256) -> F256
 routine F256(from: F128) -> F256
   var bits = from.to_bits()
   var sign = LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: bits, b: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 127_s64))), b: 0)
-  var e = LLVM::int_truncate[U128, U64](LLVM::bit_and[U128](a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: 112_s64)), b: LLVM::zero_extend[U64, U128](0x7FFF_u64)))
+  var e = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U128.to_width(s: 112_s64)), b: LLVM::zero_extend[U64, U128](0x7FFF_u64)))
   var f = LLVM::bit_and[U128](a: bits, b: LLVM::sub[U128](a: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 112_s64)), b: 1))
-  var s256 = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](if sign then 1_u64 else 0_u64), bits: U256.to_width(s: 255_s64))
+  var s256 = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](if sign then 1_u64 else 0_u64), bits: U256.to_width(s: 255_s64))
   # inf / nan: exponent all ones; carry the 112-bit payload up (quiet bit preserved).
-  if LLVM::int_eq[U64](a: e, b: 0x7FFF_u64)
-    var m = LLVM::shift_left[U256](value: LLVM::zero_extend[U128, U256](f), bits: U256.to_width(s: 124_s64))
-    var ew = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
-    return F256.from_bits(bits: LLVM::bit_or[U256](a: LLVM::bit_or[U256](a: s256, b: ew), b: m))
+  if LLVM::int_eq(a: e, b: 0x7FFF_u64)
+    var m = LLVM::shift_left(value: LLVM::zero_extend[U128, U256](f), bits: U256.to_width(s: 124_s64))
+    var ew = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](0x7FFFF_u64), bits: U256.to_width(s: 236_s64))
+    return F256.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: s256, b: ew), b: m))
   # signed zero.
   if LLVM::int_eq[U64](a: e, b: 0_u64) and LLVM::int_eq[U128](a: f, b: 0)
     return F256.from_bits(bits: s256)
   lateinit var e256: U64
   lateinit var mant: U128
-  if LLVM::int_eq[U64](a: e, b: 0_u64)
+  if LLVM::int_eq(a: e, b: 0_u64)
     # subnormal F128: value = f * 2^-16494; normalize so the implicit bit lands at bit 112.
-    var msb = LLVM::sub[U64](a: 127_u64, b: LLVM::int_truncate[U128, U64](LLVM::leading_zeros[U128](f)))
-    var shift = LLVM::sub[U64](a: 112_u64, b: msb)
+    var msb = LLVM::sub(a: 127_u64, b: LLVM::int_truncate[U128, U64](LLVM::leading_zeros(f)))
+    var shift = LLVM::sub(a: 112_u64, b: msb)
     mant = LLVM::bit_and[U128](a: LLVM::shift_left[U128](value: f, bits: U128.to_width(s: LLVM::reinterpret_bits[U64, S64](shift))), b: LLVM::sub[U128](a: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 112_s64)), b: 1))
     # F256 exponent bias is 262143 (19-bit IEEE). subnormal: biased = (msb - 16494) + 262143.
-    e256 = LLVM::add[U64](a: msb, b: 245649_u64)
+    e256 = LLVM::add(a: msb, b: 245649_u64)
   else
     mant = f
     # normal: biased = (e - 16383) + 262143 = e + 245760.
-    e256 = LLVM::add[U64](a: e, b: 245760_u64)
-  var ew = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](e256), bits: U256.to_width(s: 236_s64))
-  var mw = LLVM::shift_left[U256](value: LLVM::zero_extend[U128, U256](mant), bits: U256.to_width(s: 124_s64))
-  return F256.from_bits(bits: LLVM::bit_or[U256](a: LLVM::bit_or[U256](a: s256, b: ew), b: mw))
+    e256 = LLVM::add(a: e, b: 245760_u64)
+  var ew = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](e256), bits: U256.to_width(s: 236_s64))
+  var mw = LLVM::shift_left(value: LLVM::zero_extend[U128, U256](mant), bits: U256.to_width(s: 124_s64))
+  return F256.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: s256, b: ew), b: mw))
 
 ### Returns the raw biased exponent field (0..524287).
 routine F256.raw_exponent() -> U64
-  return LLVM::int_truncate[U256, U64](LLVM::bit_and[U256](a: LLVM::shift_right_unsigned[U256](me.to_bits(), U256.to_width(s: 236_s64)), b: LLVM::zero_extend[U64, U256](0x7FFFF_u64)))
+  return LLVM::int_truncate[U256, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(me.to_bits(), U256.to_width(s: 236_s64)), b: LLVM::zero_extend[U64, U256](0x7FFFF_u64)))
 
 ### Returns the raw 236-bit mantissa field (no implicit bit).
 routine F256.raw_mantissa() -> U256
-  return LLVM::bit_and[U256](a: me.to_bits(), b: f256a_mant_mask())
+  return LLVM::bit_and(a: me.to_bits(), b: f256a_mant_mask())
 
 # ============================================================================
 # Classification
@@ -177,7 +177,7 @@ routine F256.frac() -> F256
   if me.is_nan()
     return me
   if me.is_infinite()
-    return F256.from_bits(bits: LLVM::bit_and[U256](a: me.to_bits(), b: f256a_sign_mask()))
+    return F256.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: f256a_sign_mask()))
   return me - me.trunc()
 
 # ============================================================================
@@ -186,17 +186,17 @@ routine F256.frac() -> F256
 
 ### Returns the arithmetic negation (sign bit flipped).
 routine F256.neg() -> F256
-  return F256.from_bits(bits: LLVM::bit_xor[U256](a: me.to_bits(), b: f256a_sign_mask()))
+  return F256.from_bits(bits: LLVM::bit_xor(a: me.to_bits(), b: f256a_sign_mask()))
 
 ### Returns the absolute value (sign bit cleared).
 routine F256.abs() -> F256
-  return F256.from_bits(bits: LLVM::bit_and[U256](a: me.to_bits(), b: f256a_abs_mask()))
+  return F256.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: f256a_abs_mask()))
 
 ### Returns this magnitude carrying the sign of `sign`.
 routine F256.copysign(sign: F256) -> F256
-  var mag = LLVM::bit_and[U256](a: me.to_bits(), b: f256a_abs_mask())
-  var sgn = LLVM::bit_and[U256](a: sign.to_bits(), b: f256a_sign_mask())
-  return F256.from_bits(bits: LLVM::bit_or[U256](a: mag, b: sgn))
+  var mag = LLVM::bit_and(a: me.to_bits(), b: f256a_abs_mask())
+  var sgn = LLVM::bit_and(a: sign.to_bits(), b: f256a_sign_mask())
+  return F256.from_bits(bits: LLVM::bit_or(a: mag, b: sgn))
 
 # ============================================================================
 # Comparison (pure sign-magnitude bit logic)
@@ -208,7 +208,7 @@ routine F256.eq(you: F256) -> Bool
     return false
   if me.is_zero() and you.is_zero()
     return true
-  return LLVM::int_eq[U256](a: me.to_bits(), b: you.to_bits())
+  return LLVM::int_eq(a: me.to_bits(), b: you.to_bits())
 
 ### Compares this value with `you` under IEEE ordered semantics.
 routine F256.cmp(you: F256) -> ComparisonSign
@@ -218,9 +218,9 @@ routine F256.cmp(you: F256) -> ComparisonSign
     return SAME
   var ka = f256a_order_key(bits: me.to_bits())
   var kb = f256a_order_key(bits: you.to_bits())
-  if LLVM::unsigned_lt[U256](a: ka, b: kb)
+  if LLVM::unsigned_lt(a: ka, b: kb)
     return ME_SMALL
-  if LLVM::unsigned_gt[U256](a: ka, b: kb)
+  if LLVM::unsigned_gt(a: ka, b: kb)
     return ME_LARGE
   return SAME
 
@@ -232,8 +232,8 @@ routine F256.cmp(you: F256) -> ComparisonSign
 routine F256.to_uf() -> UnpackedFloat[U256, U512, 256]
   var bits = me.to_bits()
   var sign = LLVM::int_ne[U256](a: LLVM::bit_and[U256](a: bits, b: f256a_sign_mask()), b: 0)
-  var e = LLVM::int_truncate[U256, U64](LLVM::bit_and[U256](a: LLVM::shift_right_unsigned[U256](bits, U256.to_width(s: 236_s64)), b: LLVM::zero_extend[U64, U256](0x7FFFF_u64)))
-  var f = LLVM::bit_and[U256](a: bits, b: f256a_mant_mask())
+  var e = LLVM::int_truncate[U256, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U256.to_width(s: 236_s64)), b: LLVM::zero_extend[U64, U256](0x7FFFF_u64)))
+  var f = LLVM::bit_and(a: bits, b: f256a_mant_mask())
   if e == 0x7FFFF_u64
     if LLVM::int_ne[U256](a: f, b: 0)
       return UnpackedFloat[U256, U512, 256].nan()
@@ -241,34 +241,34 @@ routine F256.to_uf() -> UnpackedFloat[U256, U512, 256]
   if e == 0_u64 and LLVM::int_eq[U256](a: f, b: 0)
     return UnpackedFloat[U256, U512, 256].zero(sign: sign)
   if e == 0_u64
-    var msbf = LLVM::int_truncate[U256, S64](LLVM::sub[U256](a: LLVM::zero_extend[U64, U256](255_u64), b: LLVM::leading_zeros[U256](f)))
-    var shift = LLVM::sub[S64](a: 254_s64, b: msbf)
-    var mant = LLVM::shift_left[U256](value: f, bits: U256.to_width(s: shift))
-    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: LLVM::sub[S64](a: msbf, b: 262379_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
-  var sig = LLVM::bit_or[U256](a: f, b: f256a_implicit())
-  var mant = LLVM::shift_left[U256](value: sig, bits: U256.to_width(s: 18_s64))
-  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: LLVM::sub[S64](a: LLVM::reinterpret_bits[U64, S64](e), b: 262144_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+    var msbf = LLVM::int_truncate[U256, S64](LLVM::sub(a: LLVM::zero_extend[U64, U256](255_u64), b: LLVM::leading_zeros(f)))
+    var shift = LLVM::sub(a: 254_s64, b: msbf)
+    var mant = LLVM::shift_left(value: f, bits: U256.to_width(s: shift))
+    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: LLVM::sub(a: msbf, b: 262379_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+  var sig = LLVM::bit_or(a: f, b: f256a_implicit())
+  var mant = LLVM::shift_left(value: sig, bits: U256.to_width(s: 18_s64))
+  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 262144_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Packs the implicit-stripped significand and exponent into binary256 bits.
 routine f256a_pack(sign: U64, biased: U64, sig: U256) -> U256
-  var s = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
-  var e = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](biased), bits: U256.to_width(s: 236_s64))
-  var f = LLVM::bit_and[U256](a: sig, b: f256a_mant_mask())
-  return LLVM::bit_or[U256](a: LLVM::bit_or[U256](a: s, b: e), b: f)
+  var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
+  var e = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](biased), bits: U256.to_width(s: 236_s64))
+  var f = LLVM::bit_and(a: sig, b: f256a_mant_mask())
+  return LLVM::bit_or(a: LLVM::bit_or(a: s, b: e), b: f)
 
 ### Builds a subnormal binary256 encoding by shifting the significand down.
 routine f256a_finish_subnormal(sign: U64, sig: U256, under: S64) -> U256
-  var s = LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
-  if LLVM::signed_gt[S64](a: under, b: 236_s64)
+  var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64))
+  if LLVM::signed_gt(a: under, b: 236_s64)
     return s
-  var lost = LLVM::bit_and[U256](a: sig, b: U256.low_mask(n: under))
+  var lost = LLVM::bit_and(a: sig, b: U256.low_mask(n: under))
   var half = LLVM::shift_left[U256](value: 1, bits: U256.to_width(s: LLVM::sub[S64](a: under, b: 1_s64)))
-  var q = LLVM::shift_right_unsigned[U256](sig, U256.to_width(s: under))
-  if LLVM::unsigned_gt[U256](a: lost, b: half)
+  var q = LLVM::shift_right_unsigned(sig, U256.to_width(s: under))
+  if LLVM::unsigned_gt(a: lost, b: half)
     q = LLVM::add[U256](a: q, b: 1)
   elseif LLVM::int_eq[U256](a: lost, b: half) and LLVM::int_ne[U256](a: LLVM::bit_and[U256](a: q, b: 1), b: 0)
     q = LLVM::add[U256](a: q, b: 1)
-  return LLVM::bit_or[U256](a: s, b: q)
+  return LLVM::bit_or(a: s, b: q)
 
 ### Rounds any octuple engine value back to an `F256` (round-to-nearest-even).
 ### The mantissa shift is `W - 238` (18 for the 256-bit octuple engine).
@@ -281,23 +281,23 @@ routine UnpackedFloat[M, L, W].to_f256a() -> F256
   if me.isinf()
     return F256.from_bits(bits: f256a_inf(sign: sign))
   if me.iszero()
-    return F256.from_bits(bits: LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64)))
-  var biased = LLVM::add[S64](a: me.exp, b: 262144_s64)
-  var sh = LLVM::sub[S64](a: LLVM::reinterpret_bits[U64, S64](W), b: 238_s64)
-  var lost = LLVM::bit_and[M](a: me.mant, b: M.low_mask(n: sh))
+    return F256.from_bits(bits: LLVM::shift_left(value: LLVM::zero_extend[U64, U256](sign), bits: U256.to_width(s: 255_s64)))
+  var biased = LLVM::add(a: me.exp, b: 262144_s64)
+  var sh = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](W), b: 238_s64)
+  var lost = LLVM::bit_and(a: me.mant, b: M.low_mask(n: sh))
   var half = LLVM::shift_left[M](value: 1, bits: M.to_width(s: LLVM::sub[S64](a: sh, b: 1_s64)))
-  var sig = LLVM::int_truncate[L, U256](LLVM::zero_extend[M, L](LLVM::shift_right_unsigned[M](me.mant, M.to_width(s: sh))))
-  if LLVM::unsigned_gt[M](a: lost, b: half)
+  var sig = LLVM::int_truncate[L, U256](LLVM::zero_extend[M, L](LLVM::shift_right_unsigned(me.mant, M.to_width(s: sh))))
+  if LLVM::unsigned_gt(a: lost, b: half)
     sig = LLVM::add[U256](a: sig, b: 1)
   elseif LLVM::int_eq[M](a: lost, b: half) and LLVM::int_ne[U256](a: LLVM::bit_and[U256](a: sig, b: 1), b: 0)
     sig = LLVM::add[U256](a: sig, b: 1)
   if LLVM::int_ne[U256](a: LLVM::bit_and[U256](a: sig, b: LLVM::shift_left[U256](value: 1, bits: U256.to_width(s: 237_s64))), b: 0)
-    sig = LLVM::shift_right_unsigned[U256](sig, U256.to_width(s: 1_s64))
-    biased = LLVM::add[S64](a: biased, b: 1_s64)
-  if LLVM::signed_ge[S64](a: biased, b: 524287_s64)
+    sig = LLVM::shift_right_unsigned(sig, U256.to_width(s: 1_s64))
+    biased = LLVM::add(a: biased, b: 1_s64)
+  if LLVM::signed_ge(a: biased, b: 524287_s64)
     return F256.from_bits(bits: f256a_inf(sign: sign))
-  if LLVM::signed_lt[S64](a: biased, b: 1_s64)
-    return F256.from_bits(bits: f256a_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub[S64](a: 1_s64, b: biased)))
+  if LLVM::signed_lt(a: biased, b: 1_s64)
+    return F256.from_bits(bits: f256a_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub(a: 1_s64, b: biased)))
   return F256.from_bits(bits: f256a_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig))
 
 # ============================================================================
@@ -441,7 +441,7 @@ routine F256.exp10() -> F256
 routine F256.pow(you: F256) -> F256
   var one = UnpackedFloat[U256, U512, 256].from_s64(src: 1_s64).to_f256a()
   var poszero = F256.from_bits(bits: LLVM::zero_extend[U64, U256](0_u64))
-  var negzero = F256.from_bits(bits: LLVM::shift_left[U256](value: LLVM::zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 255_s64)))
+  var negzero = F256.from_bits(bits: LLVM::shift_left(value: LLVM::zero_extend[U64, U256](1_u64), bits: U256.to_width(s: 255_s64)))
   var posinf = F256.from_bits(bits: f256a_inf(sign: 0_u64))
   var neginf = F256.from_bits(bits: f256a_inf(sign: 1_u64))
   var negone = poszero - one
@@ -450,8 +450,8 @@ routine F256.pow(you: F256) -> F256
   var yo = you.to_uf()
   var yisint = yo.isint()
   var yisoddint = yisint and not yo.iseven()
-  var iseqone = LLVM::int_eq[U256](a: me.to_bits(), b: one.to_bits())
-  var iseqnegone = LLVM::int_eq[U256](a: me.to_bits(), b: negone.to_bits())
+  var iseqone = LLVM::int_eq(a: me.to_bits(), b: one.to_bits())
+  var iseqnegone = LLVM::int_eq(a: me.to_bits(), b: negone.to_bits())
   var xs = 0_u64
   if me.is_negative()
     xs = 1_u64
@@ -469,8 +469,8 @@ routine F256.pow(you: F256) -> F256
     return poszero
   if you.is_infinite() and iseqnegone
     return one
-  var absxlt1 = LLVM::unsigned_lt[U256](a: me.abs().to_bits(), b: one.to_bits())
-  var absxgt1 = LLVM::unsigned_gt[U256](a: me.abs().to_bits(), b: one.to_bits())
+  var absxlt1 = LLVM::unsigned_lt(a: me.abs().to_bits(), b: one.to_bits())
+  var absxgt1 = LLVM::unsigned_gt(a: me.abs().to_bits(), b: one.to_bits())
   if you.is_infinite() and you.is_negative() and absxlt1
     return posinf
   if you.is_infinite() and you.is_negative() and absxgt1
@@ -616,7 +616,7 @@ routine F256.modf() -> (F256, F256)
   if me.is_nan()
     return (me, me)
   if me.is_infinite()
-    return (me, F256.from_bits(bits: LLVM::bit_and[U256](a: me.to_bits(), b: f256a_sign_mask())))
+    return (me, F256.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: f256a_sign_mask())))
   var ip = me.trunc()
   return (ip, me - ip)
 

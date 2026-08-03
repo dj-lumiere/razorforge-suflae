@@ -16,7 +16,7 @@ routine start()
   show(f"sd['charlie']: {sd["charlie"]}")
 
   # iteration is sorted by key
-  for k in sd
+  each k in sd
     show(f"  key: {k}")
 
   # Rank access (O(log n) — named to signal cost; returns DictEntry[K, V])

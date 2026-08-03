@@ -19,7 +19,7 @@ suspended routine produce(out: Sender[S64], n: S64) -> S64
 
 suspended routine consume(inbox: Receiver[S64]) -> S64
   var total = 0_s64
-  for v in inbox
+  each v in inbox
     total = total + v
   return total
 

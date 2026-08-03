@@ -205,7 +205,7 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
     { Visit(e: node.Condition); Visit(s: node.Body); Visit(s: node.ElseBranch); return false; }
     public bool VisitLoopStatement(LoopStatement node)
     { Visit(s: node.Body); return false; }
-    public bool VisitForStatement(ForStatement node)
+    public bool VisitEachStatement(EachStatement node)
     { Visit(e: node.Iterable); Visit(s: node.Body); Visit(s: node.ElseBranch); return false; }
     public bool VisitBlockStatement(BlockStatement node)
     { VisitAll(xs: node.Statements); return false; }

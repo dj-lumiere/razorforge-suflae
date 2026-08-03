@@ -308,7 +308,7 @@ public class AccessBlockTests
         string source = """
                         routine test!()
                           using open_file!("data.txt") as file
-                            for line in file.lines()
+                            each line in file.lines()
                               if line.starts_with("#")
                                 continue
                               process_line(line)
@@ -326,7 +326,7 @@ public class AccessBlockTests
     {
         string source = """
                         routine process_files!(paths: List[Text])
-                          for path in paths
+                          each path in paths
                             using open_file!(path) as file
                               var content = file.read_all()
                               unless content.is_empty()
@@ -393,7 +393,7 @@ public class AccessBlockTests
 
                           using local.view() as l
                             using shared.claim!() as s
-                              for item in l.items
+                              each item in l.items
                                 s.add(item.clone())
 
                           using shared.inspect!() as r

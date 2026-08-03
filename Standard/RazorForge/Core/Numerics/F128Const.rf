@@ -1064,7 +1064,7 @@ preset RPITAB: Array[U64, 320] = [0x940a2227b7c17c51_u64, 0xe06e9afae8ab13fe_u64
 
 ### Returns byte `idx` (0..2559) of the packed 1/(2pi) table.
 routine rpitab_byte(idx: U64) -> U64
-  var wi = LLVM::shift_right_unsigned[U64](idx, 3_u64)
+  var wi = LLVM::shift_right_unsigned(idx, 3_u64)
   var w = RPITAB[wi]
-  var sh = LLVM::mul[U64](a: 8_u64, b: LLVM::bit_and[U64](a: idx, b: 7_u64))
+  var sh = LLVM::mul(a: 8_u64, b: LLVM::bit_and(a: idx, b: 7_u64))
   return LLVM::bit_and[U64](a: LLVM::shift_right_unsigned[U64](w, sh), b: 0xff_u64)

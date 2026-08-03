@@ -129,7 +129,7 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
         node.Body.Accept(visitor: this) ||
         (node.ElseBranch?.Accept(visitor: this) ?? false);
     public bool VisitLoopStatement(LoopStatement node) => node.Body.Accept(visitor: this);
-    public bool VisitForStatement(ForStatement node) =>
+    public bool VisitEachStatement(EachStatement node) =>
         node.Iterable.Accept(visitor: this) ||
         node.Body.Accept(visitor: this) ||
         (node.ElseBranch?.Accept(visitor: this) ?? false);

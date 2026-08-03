@@ -169,7 +169,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
                 return ReferenceEquals(body, loop.Body) ? loop : loop with { Body = body };
             }
 
-            case ForStatement f:
+            case EachStatement f:
             {
                 Statement body = ExpandStatement(stmt: f.Body, crashableTypes: crashableTypes);
                 Statement? elseB = f.ElseBranch != null

@@ -605,7 +605,7 @@ common routine BitList.from_u32(value: U32) -> BitList
 routine BitList.represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
     result = result + v.represent()
@@ -619,7 +619,7 @@ routine BitList.represent() -> Text
 routine BitList.diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
     result = result + v.represent()

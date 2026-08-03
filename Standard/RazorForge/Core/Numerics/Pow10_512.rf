@@ -10,26 +10,26 @@ secret preset POW10_512_LIMBS: Array[U64, 6408] = [0x3fface2bfcfc0f92_u64, 0x3df
 
 ### True iff k is inside the table range [-400, 400].
 routine f512_pow10_in_table(k: S64) -> Bool
-  return LLVM::signed_ge[S64](a: k, b: -400_s64) and LLVM::signed_le[S64](a: k, b: 400_s64)
+  return LLVM::signed_ge(a: k, b: -400_s64) and LLVM::signed_le(a: k, b: 400_s64)
 
 ### Correctly-rounded 10^k as F512 via table lookup (caller guards range).
 ### Limbs big-endian (h7 first). Index with a plain running pointer var (generic
 ### calls inside `[]` don't lower), rebuild U512 inline (no generic from_words8 call).
 routine f512_pow10_tbl(k: S64) -> F512
-  var p = LLVM::mul[U64](a: LLVM::reinterpret_bits[S64, U64](LLVM::add[S64](a: k, b: 400_s64)), b: 8_u64)
+  var p = LLVM::mul(a: LLVM::reinterpret_bits[S64, U64](LLVM::add(a: k, b: 400_s64)), b: 8_u64)
   var acc = LLVM::zero_extend[U64, U512](POW10_512_LIMBS[p])
-  p = LLVM::add[U64](a: p, b: 1_u64)
+  p = LLVM::add(a: p, b: 1_u64)
   acc = LLVM::bit_or[U512](a: LLVM::shift_left[U512](value: acc, bits: 64), b: LLVM::zero_extend[U64, U512](POW10_512_LIMBS[p]))
-  p = LLVM::add[U64](a: p, b: 1_u64)
+  p = LLVM::add(a: p, b: 1_u64)
   acc = LLVM::bit_or[U512](a: LLVM::shift_left[U512](value: acc, bits: 64), b: LLVM::zero_extend[U64, U512](POW10_512_LIMBS[p]))
-  p = LLVM::add[U64](a: p, b: 1_u64)
+  p = LLVM::add(a: p, b: 1_u64)
   acc = LLVM::bit_or[U512](a: LLVM::shift_left[U512](value: acc, bits: 64), b: LLVM::zero_extend[U64, U512](POW10_512_LIMBS[p]))
-  p = LLVM::add[U64](a: p, b: 1_u64)
+  p = LLVM::add(a: p, b: 1_u64)
   acc = LLVM::bit_or[U512](a: LLVM::shift_left[U512](value: acc, bits: 64), b: LLVM::zero_extend[U64, U512](POW10_512_LIMBS[p]))
-  p = LLVM::add[U64](a: p, b: 1_u64)
+  p = LLVM::add(a: p, b: 1_u64)
   acc = LLVM::bit_or[U512](a: LLVM::shift_left[U512](value: acc, bits: 64), b: LLVM::zero_extend[U64, U512](POW10_512_LIMBS[p]))
-  p = LLVM::add[U64](a: p, b: 1_u64)
+  p = LLVM::add(a: p, b: 1_u64)
   acc = LLVM::bit_or[U512](a: LLVM::shift_left[U512](value: acc, bits: 64), b: LLVM::zero_extend[U64, U512](POW10_512_LIMBS[p]))
-  p = LLVM::add[U64](a: p, b: 1_u64)
+  p = LLVM::add(a: p, b: 1_u64)
   acc = LLVM::bit_or[U512](a: LLVM::shift_left[U512](value: acc, bits: 64), b: LLVM::zero_extend[U64, U512](POW10_512_LIMBS[p]))
   return F512.from_bits(bits: acc)

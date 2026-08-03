@@ -13,7 +13,7 @@ record Bool obeys Equatable, ConstCompatible
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine Bool.eq(you: Bool) -> Bool
-  return LLVM::int_eq[Bool](me, you)
+  return LLVM::int_eq(me, you)
 
 # ============================================================================
 # Type Conversions

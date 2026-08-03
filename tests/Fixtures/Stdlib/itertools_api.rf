@@ -31,12 +31,12 @@ routine start()
 
   # enumerate -> List[Tuple[U64, T]]
   var labels: List[Text] = ["a", "b", "c"]
-  for pair in labels.enumerate()
+  each pair in labels.enumerate()
     show(f"  enum: {pair.item0} -> {pair.item1}")
 
   # zip
   var nums: List[S64] = [10, 20, 30]
-  for pair in labels.zip(other: nums)
+  each pair in labels.zip(other: nums)
     show(f"  zip: {pair.item0}={pair.item1}")
 
   # Terminals: any / all / get_count / first / last

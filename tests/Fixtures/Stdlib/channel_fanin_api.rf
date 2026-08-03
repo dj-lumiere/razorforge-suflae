@@ -24,7 +24,7 @@ suspended routine produce(out: Sender[S64], lo: S64, hi: S64) -> S64
 # Drains the channel until it closes, summing the values; parks cooperatively while empty.
 suspended routine consume(inbox: Receiver[S64]) -> S64
   var total = 0_s64
-  for v in inbox
+  each v in inbox
     total = total + v
   return total
 

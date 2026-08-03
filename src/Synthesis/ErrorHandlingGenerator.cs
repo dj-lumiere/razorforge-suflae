@@ -222,8 +222,8 @@ public sealed class ErrorHandlingGenerator
                 AnalyzeStatementRecursive(statement: whileStmt.Body, analysis: analysis);
                 break;
 
-            case ForStatement forStmt:
-                AnalyzeStatementRecursive(statement: forStmt.Body, analysis: analysis);
+            case EachStatement eachStmt:
+                AnalyzeStatementRecursive(statement: eachStmt.Body, analysis: analysis);
                 break;
 
             case WhenStatement whenStmt:

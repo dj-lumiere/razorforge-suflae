@@ -428,8 +428,8 @@ public sealed partial class SemanticVerifier
                 _registry.ExitScope();
                 break;
 
-            case ForStatement forStmt:
-                AnalyzeForStatement(forStmt: forStmt);
+            case EachStatement eachStmt:
+                AnalyzeEachStatement(eachStmt: eachStmt);
                 break;
 
             case WhenStatement whenStmt:

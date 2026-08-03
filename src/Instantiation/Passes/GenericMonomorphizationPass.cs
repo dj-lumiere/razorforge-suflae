@@ -1687,7 +1687,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             case LoopStatement loop:
                 ScanStatementForMethodGenericCalls(loop.Body);
                 break;
-            case ForStatement f:
+            case EachStatement f:
                 ScanExprForMethodGenericCalls(f.Iterable);
                 ScanStatementForMethodGenericCalls(f.Body);
                 break;
