@@ -702,6 +702,27 @@ routine LLVM::store_element_ref[Coll, T](ptr: Hijacked[Coll], index: U64, value:
 @llvm_ir("{result} = alloca {T}\nstore {T} zeroinitializer, ptr {prev}\n{result} = load {T}, ptr {prev}")
 routine LLVM::zero_value[T]() -> T
 
+# ============================================================================
+# SIMD Vector Operations (LLVM native `<N x T>` vector types)
+# ============================================================================
+
+### Extracts the scalar lane at `index` from a SIMD vector `vec`.
+### `V` is the vector type (LLVM `<N x T>`) and `T` is the element type.
+### :param vec: The source vector.
+### :param index: The zero-based lane to read.
+### :returns: The scalar element at that lane.
+@llvm_ir("{result} = extractelement {V} {vec}, i64 {index}")
+routine LLVM::extract_element[V, T](vec: V, index: U64) -> T
+
+### Returns a copy of `vec` with lane `index` set to `value` (SIMD `insertelement`).
+### `V` is the vector type (LLVM `<N x T>`) and `T` is the element type.
+### :param vec: The source vector.
+### :param value: The scalar to write into the lane.
+### :param index: The zero-based lane to overwrite.
+### :returns: The updated vector.
+@llvm_ir("{result} = insertelement {V} {vec}, {T} {value}, i64 {index}")
+routine LLVM::insert_element[V, T](vec: V, value: T, index: U64) -> V
+
 ### Returns whether two pointer-backed values refer to the same address.
 ### Intended for entity and crashable identity comparison (`===`).
 ### :param a: The left-hand reference.
