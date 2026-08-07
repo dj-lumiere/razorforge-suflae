@@ -1,0 +1,173 @@
+module Core
+
+import BuilderService
+
+### A growable struct-of-arrays (SoA) sequence of records: each field of the element type `T` is stored
+### in its OWN contiguous column buffer, rather than interleaving whole `T` values. Indexing copies a
+### whole `T` out (gathering one value from each column), matching `List[T]`'s value-out `getitem`, so the
+### surface is the same — the payoff is cache-friendly per-field scans and per-field bulk work.
+###
+### The element type must be `is SplittableType` (trivially destructible — its footprint reduces to
+### `@llvm` primitives / raw pointers with no custom store/destroy), so each column is a flat blittable
+### buffer that grows by reallocation without per-element lifecycle.
+###
+### Storage is realized by a decl-position `expand m in memvarof(T)`: one `Hijacked[${m.type}]` column per
+### field, materialized per concrete instantiation.
+###
+### :typeparam T: The record element type (must be `is SplittableType`).
+### :see: {List[T]} for the array-of-structs counterpart.
+entity SplitList[T] obeys Iterable[T], MutableIndexable[T], Sized, Container
+needs T is SplittableType
+relates SplitListEmittable[T] as Iter
+  expand m in memvarof(T)
+    ### One contiguous column buffer holding this field across every element.
+    secret ${m.name}: Hijacked[${m.type}]
+  ### The number of elements currently stored.
+  secret count: U64
+  ### The number of elements each column can hold without reallocating.
+  secret capacity: U64
+
+# Creators
+
+### Creates an empty split list. Heap-allocates the entity with every column null (`hijacked_none`) and
+### the counts zero via the `hollow[T]()` footprint-alloc primitive; the first `append` reserves the
+### backing column buffers.
+### :returns: An empty `SplitList[T]`.
+routine SplitList[T]() -> SplitList[T]
+  danger
+    return hollow[SplitList[T]]()
+
+# Core operations
+
+### Returns the number of elements currently stored.
+### :returns: The live element count.
+@readonly
+routine SplitList[T].count() -> U64
+  return me.count
+
+### Returns the number of elements each column can hold without reallocating.
+### :returns: The current per-column capacity.
+@readonly
+routine SplitList[T].capacity() -> U64
+  return me.capacity
+
+### Returns true if the list contains no elements.
+### :returns: `true` when `count()` is zero.
+@readonly
+routine SplitList[T].is_empty() -> Bool
+  return me.count == 0u64
+
+### Returns true if any element equals `value`. O(n): reconstructs each element from the columns and
+### compares by value.
+### :param value: The value to search for.
+### :returns: `true` if a matching element is present.
+@readonly
+routine SplitList[T].contains(value: Referring[T]) -> Bool
+needs T obeys Equatable
+  var i = 0u64
+  while i < me.count()
+    if me[i] == value
+      return true
+    i = i +% 1u64
+  return false
+
+### Grows every column buffer to hold at least `new_capacity` elements. A null column reallocates from
+### scratch (`rf_reallocate_dynamic` on a null address behaves as an allocation).
+### :param new_capacity: The per-column capacity to reserve.
+routine SplitList[T].reserve(new_capacity: U64)
+  if new_capacity > me.capacity
+    expand m in memvarof(T)
+      danger
+        var bytes = ${m.type}.data_size() * new_capacity
+        var ptr = rf_reallocate_dynamic(ptr: me.${m.name}.get_address(), size: bytes)
+        me.${m.name} = hijacked_from[${m.type}](ptr)
+    me.capacity = new_capacity
+  return
+
+### Appends `value` at the back, growing (doubling) every column when capacity is exhausted.
+### :param value: The element to append.
+routine SplitList[T].append(value: T)
+  if me.count >= me.capacity
+    var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
+    me.reserve(new_capacity: new_capacity)
+  expand m in memvarof(T)
+    danger
+      me.${m.name}.poke_at_offset(at: ${m.type}.data_size() * me.count, value: value.${m.name})
+  me.count = me.count +% 1u64
+  return
+
+### Returns the element at `index`, gathering one value from each column. Enables `list[i]`.
+### :param index: The zero-based element position.
+### :returns: The reconstructed element.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+@readonly
+routine SplitList[T].getitem!(index: U64) -> T
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  var result = blank[T]()
+  expand m in memvarof(T)
+    danger
+      result.${m.name} = me.${m.name}.peek_at_offset(offset: ${m.type}.data_size() * index)
+  return result
+
+### Overwrites the element at `index`, scattering each field into its column. Enables `list[i] = value`.
+### :param index: The zero-based element position.
+### :param value: The replacement element.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+routine SplitList[T].setitem!(index: U64, value: T)
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  expand m in memvarof(T)
+    danger
+      me.${m.name}.poke_at_offset(at: ${m.type}.data_size() * index, value: value.${m.name})
+  return
+
+### Frees every column buffer, then the entity itself. Elements are `is SplittableType` (trivially
+### destructible), so no per-element teardown is needed — only the raw column allocations are released.
+dangerous routine SplitList[T].destroy()
+  expand m in memvarof(T)
+    if not me.${m.name}.is_none()
+      me.${m.name}.invalidate()
+  me.hijack().invalidate()
+  return
+
+# Iteration
+
+### Returns a forward iterator over the elements, reconstructing each `T` from the columns in order.
+### The iterator BORROWS the column buffers (does not own them); mutating the list during iteration
+### is unsafe.
+### :returns: A `SplitListEmittable[T]` positioned at the first element.
+@readonly
+routine SplitList[T].iter() -> SplitListEmittable[T]
+  danger
+    var it = hollow[SplitListEmittable[T]]()
+    expand m in memvarof(T)
+      it.${m.name} = me.${m.name}
+    it.count = me.count
+    it.index = 0u64
+    return it
+
+### A forward iterator over a `SplitList[T]`: holds a borrowed alias of each column buffer plus the
+### captured count and current position. Emits whole `T` values gathered one field at a time.
+entity SplitListEmittable[T] obeys Emittable[T]
+needs T is SplittableType
+  expand m in memvarof(T)
+    ### Borrowed alias of the source list's column for this field.
+    secret ${m.name}: Hijacked[${m.type}]
+  ### Element count captured when the iterator was created.
+  secret count: U64
+  ### Current iteration position.
+  secret index: U64
+
+### Produces the next element and advances, or `absent`s when the sequence is exhausted.
+### :returns: The element at the current position.
+### :absent: The iterator has reached the end.
+routine SplitListEmittable[T].emit!() -> T
+  if me.index >= me.count
+    absent
+  var result = blank[T]()
+  expand m in memvarof(T)
+    danger
+      result.${m.name} = me.${m.name}.peek_at_offset(offset: ${m.type}.data_size() * me.index)
+  me.index = me.index +% 1u64
+  return result

@@ -112,7 +112,7 @@ routine MutableIndexable[T].pick!(rng: Modifying[Random]) -> T
 ### value from `rng` per element.
 ### Elements are moved (never copied), so lists of owned entities shuffle safely.
 ### :param rng: The generator to draw from, as a mutable borrow.
-routine List[T].shuffle(rng: Modifying[Random]) -> Blank
+routine List[T].shuffle(rng: Modifying[Random])
   var n = me.count()
   if n <= 1u64
     return

@@ -1,0 +1,284 @@
+module Core
+
+import BuilderService
+import Collections
+
+### The auto-derived default `represent()` for any record: `TypeName(field: value, …)`. Written as a
+### universal `@overridable routine T.represent()` — the compiler uses it as the represent for any
+### record that doesn't provide its own (a hand-written `T.represent` or a kind-specialized
+### `@override` takes precedence). Secret fields are hidden; each value renders via its own
+### `represent`. The field-walk is the comptime `expand` — this replaces the hand-written C# builder.
+@overridable
+routine T.represent() -> Text
+  var result = me.type_name() + "("
+  var first = true
+  expand m in memvarof(T)
+    if not m.is_secret
+      if not first
+        result = result + ", "
+      result = result + m.name + ": " + me.${m.name}.represent()
+      first = false
+  result = result + ")"
+  return result
+
+### Variant `represent()`: TYPE-dispatch on the live arm — `TypeName(payload_repr)`, or `TypeName(none)`
+### for the absent arm. The `@override needs T is VariantType` gate makes the wired synthesizer pick this
+### over the record default for a variant type. `expand m in armof(T)` generates one arm clause each;
+### the explicit `is None` clause covers the absent arm the payload expansion skips.
+@override
+routine T.represent() -> Text
+needs T is VariantType
+  when me
+    is None => return me.type_name() + "(none)"
+    expand m in armof(T)
+      is ${m.type} v => return me.type_name() + "(" + v.represent() + ")"
+
+### Variant `diagnose()`: `Module.Variant(type_id: <arm id>, <arm diagnose>)` — TAG-dispatch via
+### `armof`; the live arm's `m.type_id` (its stable type id) and the payload's `diagnose()`. The absent
+### `None` arm shows `(type_id: 0, none)`. (No `None`/void arms exist — `None` is the canonical empty
+### branch — so no bindingless-arm form is needed.)
+@override
+routine T.diagnose() -> Text
+needs T is VariantType
+  when me
+    is None => return me.full_type_name() + "(type_id: 0, none)"
+    expand m in armof(T)
+      is ${m.type} v => return me.full_type_name() + "(type_id: " + m.type_id.represent() + ", " + v.diagnose() + ")"
+
+### Choice `represent()`: VALUE-dispatch on the S32 discriminant via `caseof`, returning the bare case
+### name (`READ`). `S32(from: me)` reads the discriminant; `${c.value}` is each case's constant. The
+### walk is exhaustive (one case always matches), so the trailing `pierce` is unreachable.
+@override
+routine T.represent() -> Text
+needs T is ChoiceType
+  expand c in caseof(T)
+    if S32(from: me) == ${c.value}
+      return c.name
+  pierce LogicBreachedError()
+
+### Choice `diagnose()`: `Module.ChoiceName(id: <discriminant>, CaseName)`, matching the C# builder.
+@override
+routine T.diagnose() -> Text
+needs T is ChoiceType
+  expand c in caseof(T)
+    if S32(from: me) == ${c.value}
+      return me.full_type_name() + "(id: " + S32(from: me).represent() + ", " + c.name + ")"
+  pierce LogicBreachedError()
+
+### Flags `represent()`: the ON members joined by `" and "` (`READ and WRITE`), or `<none>` if the
+### bitmask is empty. A flags value is a COMBINATION, so `caseof` ACCUMULATES (no `when`): a SUBSET
+### test per member `(U64(from: me) & ${c.value}) != 0` appends its name.
+@override
+routine T.represent() -> Text
+needs T is FlagsType
+  var result = ""
+  var first = true
+  expand c in caseof(T)
+    if (U64(from: me) & ${c.value}) != 0u64
+      if first
+        result = c.name
+      else
+        result = result + " and " + c.name
+      first = false
+  if first
+    result = "<none>"
+  return result
+
+### Flags `diagnose()`: `Module.FlagsName(value: %<bits>, <members>)` — `<bits>` is LSB-first, one
+### digit per declared member in declaration order ('1' if set), matching the C# builder.
+@override
+routine T.diagnose() -> Text
+needs T is FlagsType
+  var result = ""
+  var first = true
+  var bits = "%"
+  expand c in caseof(T)
+    if (U64(from: me) & ${c.value}) != 0u64
+      if first
+        result = c.name
+      else
+        result = result + " and " + c.name
+      first = false
+      bits = bits + "1"
+    else
+      bits = bits + "0"
+  if first
+    result = "<none>"
+  return me.full_type_name() + "(value: " + bits + ", " + result + ")"
+
+### Tuple `represent()`: the SPECIAL tuple format `(v0, v1, …)` — no type name, no field names, each
+### element via its own `represent`. Distinct from the record `TypeName(field: value)` shape, hence the
+### `is TupleType` override.
+@override
+routine T.represent() -> Text
+needs T is TupleType
+  var result = "("
+  var first = true
+  expand m in memvarof(T)
+    if not first
+      result = result + ", "
+    result = result + me.${m.name}.represent()
+    first = false
+  return result + ")"
+
+### Tuple `diagnose()`: `Module.Tuple[…](v0, v1, …)` — the qualified type name prefixed onto the same
+### element walk (elements still render via `represent`, not `diagnose`, matching the C# builder).
+@override
+routine T.diagnose() -> Text
+needs T is TupleType
+  var result = me.full_type_name() + "("
+  var first = true
+  expand m in memvarof(T)
+    if not first
+      result = result + ", "
+    result = result + me.${m.name}.represent()
+    first = false
+  return result + ")"
+
+### The auto-derived default `diagnose()` for any record: `Module.TypeName(field: value, …)`. Uses the
+### fully-qualified name and shows ALL fields (secret ones prefixed `[secret] `); each value still
+### renders via `represent` (never `diagnose`) to avoid exponentially verbose nested output.
+@overridable
+routine T.diagnose() -> Text
+  var result = me.full_type_name() + "("
+  var first = true
+  expand m in memvarof(T)
+    if not first
+      result = result + ", "
+    if m.is_secret
+      result = result + "[secret] "
+    result = result + m.name + ": " + me.${m.name}.represent()
+    first = false
+  result = result + ")"
+  return result
+
+### The auto-derived default `eq()` for any record/entity/tuple: equal when every member variable is
+### equal. Written as the universal `@overridable routine T.eq()`; `ne` is derived from this by the
+### compiler (`return not me.eq(...)`). The comptime `expand` field-walk replaces the hand-written C#
+### builder — a zero-field type expands to no comparisons and returns `true`.
+@overridable
+routine T.eq(you: T) -> Bool
+  expand m in memvarof(T)
+    if me.${m.name} != you.${m.name}
+      return false
+  return true
+
+### The auto-derived default `cmp()` for any record/entity/tuple: lexicographic comparison in
+### declaration order, returning at the first non-`SAME` member. Written as the universal
+### `@overridable routine T.cmp()`; `lt`/`le`/`gt`/`ge` are derived from this by the compiler. A
+### zero-field type expands to no comparisons and returns `SAME`.
+@overridable
+routine T.cmp(you: T) -> ComparisonSign
+  expand m in memvarof(T)
+    if me.${m.name}.cmp(you: you.${m.name}) isnot SAME
+      return me.${m.name}.cmp(you: you.${m.name})
+  return SAME
+
+### The auto-derived fast `hash()` for any record/entity/tuple: XOR-fold each member variable's fast
+### hash. Seeded at `0` (the XOR identity), so a single-field type hashes to exactly that field's hash
+### and a zero-field type hashes to `0` — matching the hand-written C# builder. `expand` field-walk.
+@overridable
+routine T.hash() -> U64
+  var acc = 0u64
+  expand m in memvarof(T)
+    acc = acc.bitxor(you: me.${m.name}.hash())
+  return acc
+
+### The auto-derived keyed `hash(k0, k1)`: same XOR-fold, threading the seed keys through each member
+### variable's keyed hash.
+@overridable
+routine T.hash(k0: U64, k1: U64) -> U64
+  var acc = 0u64
+  expand m in memvarof(T)
+    acc = acc.bitxor(you: me.${m.name}.hash(k0: k0, k1: k1))
+  return acc
+
+### The auto-derived default `serialize()` for a composite record/entity: field-walk into a
+### `Dict[Text, SerialValue]` arm. Every non-routine member is lowered through its OWN `serialize()`
+### (scalars box their scalar arm, aggregates recurse, opaque @llvm leaves box `represent()` Text) —
+### that call resolves for every value/aggregate type, so no comptime capability gate is needed. The
+### ONE exception is a routine-typed member (entities may hold one — records can't, RF-S412): a
+### routine value has first-class `represent`/`diagnose` (its SIGNATURE, e.g. `Routine[(S32,), S32]`)
+### but no `serialize` (serializing code is meaningless), so the comptime `m.is_routine` gate boxes its
+### `represent()` Text instead. Keys are the field names in declaration order; `Dict` iteration is
+### insertion-ordered, so the output is stable.
+@overridable
+routine T.serialize() -> SerialValue
+  var __sv = Dict[Text, SerialValue]()
+  expand m in memvarof(T)
+    if m.is_routine
+      discard __sv.add(key: m.name, value: SerialValue(me.${m.name}.represent()))
+    else
+      discard __sv.add(key: m.name, value: me.${m.name}.serialize())
+  return SerialValue(steal __sv)
+
+### The auto-derived deep `copy()` (Copyable): forwards to `store` — a bitwise copy for a pure value
+### type, or the retaining store for a managed-leaf / retaining-field record. Same as the C# builder.
+@overridable
+routine T.copy() -> Me
+  return me.store()
+
+### Variant `copy()`: TAG-dispatch DEEP copy — reconstruct the live arm with a copied payload, so a
+### heap arm (a collection, a managed leaf) is NOT bitwise-aliased (which would double-free). `armof`
+### emits one clause per payload arm boxing `v.copy()` back into the variant via the arm constructor
+### `Me(from: …)`; None / borrow arms (borrow can't be a variant payload) fall to `else => return me`.
+@override
+routine T.copy() -> Me
+needs T is VariantType
+  when me
+    is None => return me
+    expand m in armof(T)
+      is ${m.type} v =>
+        return T(from: v.copy())
+    else => return me
+
+### The auto-derived `destroy()`: tear down each owned member (skipping inert ones — raw-pointer /
+### scalar / borrow fields whose `destroy` is a no-op and may not even be defined). Records/tuples stop
+### here (stack values); an ENTITY additionally frees its heap allocation via `hijack().invalidate()`,
+### mirroring a hand-written entity destructor. Variants (tag-dispatch) and @llvm leaves keep the C#
+### builder (the wiring gates on owner kind).
+@overridable
+routine T.destroy()
+  expand m in memvarof(T)
+    if not m.is_inert
+      me.${m.name}.destroy()
+  return
+
+@override
+routine T.destroy()
+needs T is EntityType
+  expand m in memvarof(T)
+    if not m.is_inert
+      me.${m.name}.destroy()
+  danger
+    me.hijack().invalidate()
+  return
+
+### Variant `destroy()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,
+### one arm live at a time). `armof` generates one `is ${m.type} v =>` clause per payload arm; the
+### inert-arm skip (`m.is_inert`) drops no-op teardowns; the explicit `is None` + `else` cover the
+### payload-less / void arms (nothing to destroy).
+@override
+routine T.destroy()
+needs T is VariantType
+  when me
+    is None => return
+    expand m in armof(T)
+      is ${m.type} v =>
+        if not m.is_inert
+          v.destroy()
+        return
+    else => return
+
+### The auto-derived `store()` (Storable — the shallow store / alias-safe verb): a shallow `var result
+### = me` (the compiler does NOT re-enter `store` on this self-copy — no recursion), then re-store each
+### member IN PLACE so a retaining field (a managed leaf like Text/Decimal, or a record owning one) gets
+### its refcount bumped on the copy — a bare bitwise alias would double-free at teardown. A pure value
+### field's `store` is itself `return me`, so this is a no-op for it. Replaces the C# reconstruction
+### `T(f: me.f.store(), …)` with a mutation walk — no creator arg-list needed.
+@overridable
+routine T.store() -> Me
+  var result = me
+  expand m in memvarof(T)
+    result.${m.name} = me.${m.name}.store()
+  return result

@@ -6,7 +6,7 @@ import BuilderService
 ### A `Result[T]` stores either a successful `T` payload or a crashable error
 ### payload inline. The full layout is codegen-controlled:
 ###   { U64 type_id, [max(sizeof(T), 8) x U8] payload }
-### `type_id == 0` is the Blank state with don't-care payload bytes.
+### `type_id == 0` is the None state with don't-care payload bytes.
 ### :typeparam T: The successful return value type.
 record Result[T]
   ### Identifies the stored payload type.
