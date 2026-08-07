@@ -108,7 +108,7 @@
           "match": "\\b(None)\\b"
         },
         {
-          "comment": "none value literal (absent value for Maybe/Lookup/Result[Blank]/variant-with-None)",
+          "comment": "none value literal (absent value for Maybe/Lookup/Result[None]/variant-with-None)",
           "name": "constant.language.null.sf",
           "match": "\\b(none)\\b"
         }
