@@ -130,6 +130,46 @@ public record VariableDeclaration(
 }
 
 /// <summary>
+/// One member-variable template inside a decl-position <c>expand</c>: <c>[secret] ${namesplice}: Type</c>
+/// where the name is a <c>${m.name}</c> / <c>${"prefix" + m.name}</c> splice and the type may carry a
+/// <c>${m.type}</c> splice. Materialized once per member of the concrete source type at instantiation.
+/// </summary>
+/// <param name="NamePrefix">The literal prefix before the field name (e.g. <c>"inner_"</c>), or "".</param>
+/// <param name="Type">The column type (may contain a <c>${m.type}</c> <see cref="TypeExpression.SpliceHandle"/>).</param>
+/// <param name="Visibility">Access modifier for the generated member variable.</param>
+/// <param name="Location">Source location information.</param>
+public record ExpandMemberTemplate(
+    string NamePrefix,
+    TypeExpression Type,
+    VisibilityModifier Visibility,
+    SourceLocation Location);
+
+/// <summary>
+/// A decl-position comptime member-generation directive inside a record/entity body:
+/// <c>expand m in memvarof(T)</c> followed by an indented block of <see cref="ExpandMemberTemplate"/>s.
+/// At instantiation (when the source type <c>T</c> is concrete) each template is materialized once per
+/// member of <c>T</c>, laying out struct-of-arrays column members (SplitArray/SplitList). Never survives
+/// to codegen — the generated <see cref="MemberVariableInfo"/> columns are appended to the concrete
+/// instance's member list by the type registry.
+/// </summary>
+/// <param name="HandleName">The per-member handle identifier (e.g. <c>m</c>).</param>
+/// <param name="SourceType">The type inside <c>memvarof(...)</c> — a generic param before instantiation.</param>
+/// <param name="Templates">The per-member column templates.</param>
+/// <param name="Location">Source location information.</param>
+public record ExpandMemberDeclaration(
+    string HandleName,
+    TypeExpression SourceType,
+    List<ExpandMemberTemplate> Templates,
+    SourceLocation Location) : Declaration(Location: Location)
+{
+    /// <inheritdoc/>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitExpandMemberDeclaration(node: this);
+    }
+}
+
+/// <summary>
 /// Function/routine declaration that defines executable code blocks.
 /// Represents both traditional functions and RazorForge "routines".
 /// </summary>
@@ -206,6 +246,23 @@ public record RoutineDeclaration(
     /// when two modules declared the same-named type. Parallel to <see cref="CallExpression.ResolvedRoutine"/>.
     /// </summary>
     public RoutineInfo? ResolvedInfo { get; set; }
+
+    /// <summary>
+    /// For a member routine (dotted name like <c>T.serialize</c> or <c>List[T].append</c>), the bare
+    /// owner segment BEFORE the type-args and the dot (<c>"T"</c>, <c>"List"</c>); null for a free
+    /// routine. Captured structurally by the parser from the separate owner/method tokens so consumers
+    /// (SA template detection, registration) never re-split <see cref="Name"/> with <c>IndexOf('.')</c>
+    /// — the name-canonicalization discipline: the dotted string is a rendering, these are the truth.
+    /// </summary>
+    public string? OwnerName { get; set; }
+
+    /// <summary>The method segment AFTER the final dot (<c>"serialize"</c>, <c>"append"</c>); null for
+    /// a free routine (whose method name is simply <see cref="Name"/>).</summary>
+    public string? MethodName { get; set; }
+
+    /// <summary>True when the owner carried type-args (<c>List[T].append</c>) — i.e. a real
+    /// generic-instance receiver, not a bare type-parameter placeholder like <c>T.serialize</c>.</summary>
+    public bool HasReceiverTypeArgs { get; set; }
 
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
@@ -572,19 +629,19 @@ public enum FailableVariant
     Lookup,
 
     /// <summary>
-    /// Compiler-generated check_ variant: wraps a failable routine to return Result[Blank].
-    /// throw -> error carrier, absent/return -> success zeroinitializer (Blank).
+    /// Compiler-generated check_ variant: wraps a failable routine to return Result[None].
+    /// throw -> error carrier, absent/return -> success zeroinitializer (None).
     /// </summary>
     Check,
 
     /// <summary>
-    /// Compiler-generated try_ variant for Blank-returning failable routines.
+    /// Compiler-generated try_ variant for None-returning failable routines.
     /// Returns Bool (i1): true = success, false = absent or throw.
     /// </summary>
     TryBool,
 
     /// <summary>
-    /// Compiler-generated try_ variant for non-Blank failable routines.
+    /// Compiler-generated try_ variant for non-None failable routines.
     /// Returns Maybe[T] carrier: absent/throw -> zeroinitializer (None), return value -> present.
     /// RoutineInfo.ReturnType is the full Maybe[T] type; codegen uses GetLLVMType directly.
     /// </summary>

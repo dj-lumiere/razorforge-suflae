@@ -88,6 +88,18 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
         return false;
     }
 
+    public bool VisitSpliceExpression(SpliceExpression node)
+    {
+        Visit(e: node.Inner);
+        return false;
+    }
+
+    public bool VisitSpliceMemberExpression(SpliceMemberExpression node)
+    {
+        Visit(e: node.Object);
+        return false;
+    }
+
     // ---- pass-throughs ----
     public bool VisitLiteralExpression(LiteralExpression node) => false;
     public bool VisitTypeExpression(TypeExpression node) => false;
@@ -205,6 +217,8 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
     { Visit(e: node.Condition); Visit(s: node.Body); Visit(s: node.ElseBranch); return false; }
     public bool VisitLoopStatement(LoopStatement node)
     { Visit(s: node.Body); return false; }
+    public bool VisitExpandStatement(ExpandStatement node)
+    { Visit(s: node.Body); return false; }
     public bool VisitEachStatement(EachStatement node)
     { Visit(e: node.Iterable); Visit(s: node.Body); Visit(s: node.ElseBranch); return false; }
     public bool VisitBlockStatement(BlockStatement node)
@@ -213,6 +227,7 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
     {
         Visit(e: node.Expression);
         foreach (var c in node.Clauses) { VisitPattern(p: c.Pattern); Visit(s: c.Body); }
+        if (node.ArmExpansion != null) Visit(s: node.ArmExpansion.Template.Body);
         return false;
     }
     public bool VisitDangerStatement(DangerStatement node)
@@ -225,6 +240,8 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
 
     public bool VisitVariableDeclaration(VariableDeclaration node)
     { Visit(e: node.Initializer); return false; }
+
+    public bool VisitExpandMemberDeclaration(ExpandMemberDeclaration node) => false;
 
     // Nested decls: don't recurse — they introduce their own scope and any `err`
     // reference inside them shadows / refers elsewhere.

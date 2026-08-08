@@ -108,18 +108,18 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a pattern represents a Blank check.
-    /// Blank is parsed as a regular type pattern.
+    /// Checks if a pattern represents a None check.
+    /// None is parsed as a regular type pattern.
     /// </summary>
-    private static bool IsBlankPattern(Pattern pattern)
+    private static bool IsNoneTypePattern(Pattern pattern)
     {
-        return pattern is TypePattern { Type.Name: "Blank" };
+        return pattern is TypePattern { Type.Name: "None" };
     }
 
     /// <summary>
     /// Checks if a pattern is the absent arm for a carrier type.
     /// Maybe[T] and Lookup[T] use `is None`. Result[T] has no absent state
-    /// (only Crashable | T); when T == Blank, success matches `is Blank` in value position.
+    /// (only Crashable | T); when T == None, success matches `is None` in value position.
     /// </summary>
     private static bool IsAbsentPattern(Pattern pattern, TypeSymbol carrierType)
     {
@@ -628,7 +628,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsAssignableTarget(Expression target)
     {
-        return target is IdentifierExpression or MemberExpression or IndexExpression;
+        // SpliceMemberExpression (`obj.${m.name}`) becomes a real member access at expansion, so it is
+        // an assignable target too — needed for decl-position expand column writes (`result.${m.name} = …`).
+        return target is IdentifierExpression or MemberExpression or IndexExpression
+            or SpliceMemberExpression;
     }
 
     /// <summary>

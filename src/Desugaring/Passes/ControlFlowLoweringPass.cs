@@ -156,6 +156,13 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
 
             case IfStatement ifs:
             {
+                // `if x is T p [and guard...] { then } [else]` binds `p` for the then-branch only.
+                // Desugar to a `when` so the whole binding/scope/codegen path is reused from
+                // when-clauses (the binding is then-branch-scoped for free). Non-binding `if`s
+                // (plain bool, `isnot`, `is T` without a name) fall through unchanged.
+                if (TryLowerIfPatternBinding(ifs: ifs, out Statement? whenStmt))
+                    return whenStmt!;
+
                 Statement then = LowerStatement(stmt: ifs.ThenStatement);
                 Statement? elseS = ifs.ElseStatement != null
                     ? LowerStatement(stmt: ifs.ElseStatement)
@@ -237,6 +244,90 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             : new BlockStatement(Statements: [guardBreak, loweredBody], Location: loc);
 
         return new LoopStatement(Body: loopBody, Location: loc);
+    }
+
+    /// <summary>
+    /// Lowers a binding <c>if</c> — <c>if x is T p [and g1 and g2 ...] { then } [else { alt }]</c> —
+    /// to a <c>when</c>:
+    /// <code>
+    /// when x {
+    ///   is T p [if g1 and g2 ...] -> then
+    ///   else -> alt          // empty block when there is no else
+    /// }
+    /// </code>
+    /// This reuses the when-clause machinery so the pattern binding <c>p</c> is scoped to the
+    /// then-branch only (SA declares it inside the clause scope; codegen materialises it via
+    /// <c>EmitSwitchArmBinding</c>). Returns false — leaving the <c>if</c> unchanged — unless the
+    /// condition's head is a non-negated <c>is</c>-pattern that introduces a binding. Guard operands
+    /// on the <c>and</c>-spine (which may reference the binding) become the arm guard; anything under
+    /// <c>or</c>/<c>not</c> never reaches here, so a binding never escapes into a negated branch.
+    /// </summary>
+    private bool TryLowerIfPatternBinding(IfStatement ifs, out Statement? result)
+    {
+        result = null;
+
+        // Walk the left spine of `and` collecting guard operands, until the head is reached.
+        // `x is T p and g1 and g2` parses left-assoc as `((x is T p and g1) and g2)`, so the
+        // rightmost guard is seen first — reverse to restore source order.
+        var guards = new List<Expression>();
+        Expression head = ifs.Condition;
+        while (head is BinaryExpression { Operator: BinaryOperator.And } andExpr)
+        {
+            guards.Add(item: andExpr.Right);
+            head = andExpr.Left;
+        }
+
+        if (head is not IsPatternExpression { IsNegated: false } ipe)
+            return false;
+
+        // Only a name-introducing pattern qualifies: `is T p` or a destructuring `is T (a, b)`.
+        // A bare `is T` (no binding) stays a plain boolean condition.
+        bool introducesBinding = ipe.Pattern is TypePattern { VariableName: not null }
+            or TypeDestructuringPattern;
+        if (!introducesBinding)
+            return false;
+
+        SourceLocation loc = ifs.Location;
+
+        Statement then = LowerStatement(stmt: ifs.ThenStatement);
+        Statement? elseS = ifs.ElseStatement != null
+            ? LowerStatement(stmt: ifs.ElseStatement)
+            : null;
+        // No else on the original `if` → the fall-through does nothing, but an empty block needs
+        // an explicit `pass` (RF-S211).
+        Statement elseBody = elseS ?? new BlockStatement(
+            Statements: [new PassStatement(Location: loc)], Location: loc);
+
+        // Guarded form `is T p and g1 and g2 ...`: put the guard test INSIDE the matched arm as a
+        // nested `if`, so the arm's binding (`p`) is materialised before the guard reads it. A
+        // when-clause `GuardPattern` would instead flatten to `(x is T) and guard`, evaluating the
+        // guard before `p` is bound — broken for guards that reference the binding. Guard failure
+        // runs the same else path as a type mismatch.
+        Statement matchBody = then;
+        if (guards.Count > 0)
+        {
+            guards.Reverse();
+            Expression guard = guards[index: 0];
+            for (int i = 1; i < guards.Count; i++)
+            {
+                guard = new BinaryExpression(
+                    Left: guard, Operator: BinaryOperator.And, Right: guards[index: i],
+                    Location: loc);
+            }
+            matchBody = new IfStatement(
+                Condition: guard, ThenStatement: then, ElseStatement: elseBody, Location: loc);
+        }
+
+        var matchClause = new WhenClause(Pattern: ipe.Pattern, Body: matchBody, Location: loc);
+        var elseClause = new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: loc),
+            Body: elseBody, Location: loc);
+
+        result = new WhenStatement(
+            Expression: ipe.Expression,
+            Clauses: [matchClause, elseClause],
+            Location: loc);
+        return true;
     }
 
     /// <summary>

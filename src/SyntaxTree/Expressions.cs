@@ -56,6 +56,16 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
     /// type — in-flight-ness is a per-expression production attribute, not a type identity.
     /// </summary>
     public bool IsInFlight { get; set; }
+
+    /// <summary>
+    /// When set, this read was flow-narrowed from a carrier/variant (<c>NarrowedFrom</c>) to a single
+    /// concrete arm/payload type (<see cref="ResolvedType"/>) — e.g. `x` used as `S64` inside the else
+    /// of `if x is None`, or as arm `B` inside the else of `if x is A` on a two-arm variant. SA sets
+    /// this on the narrowed <see cref="IdentifierExpression"/>; a postprocessing pass rewrites such
+    /// reads into a payload extraction (<see cref="CarrierPayloadExpression"/>). Null for ordinary
+    /// (non-narrowed) reads.
+    /// </summary>
+    public TypeInfo? NarrowedFrom { get; set; }
 }
 
 #endregion
@@ -196,7 +206,7 @@ public record DictLiteralExpression(
 /// <item>Single-element: (42,) - trailing comma required to distinguish from parenthesized expression</item>
 /// <item>Nested: (1, (2, 3)) - tuples can contain other tuples</item>
 /// </list>
-/// Note: Empty tuples () are not valid. Use Blank for unit type.
+/// Note: Empty tuples () are not valid. Use None for unit type.
 /// Access elements via .item0, .item1, etc.
 /// </remarks>
 public record TupleLiteralExpression(List<Expression> Elements, SourceLocation Location)
@@ -569,6 +579,53 @@ public record MemberExpression(Expression Object, string MemberName, SourceLocat
     }
 }
 
+/// <summary>The syntactic position a <c>${...}</c> splice appears in, fixing the kind its inner
+/// expression must fold to at monomorphization.</summary>
+public enum SpliceKind
+{
+    /// <summary>Member-selector position (<c>x.${...}</c>): the inner must fold to a field NAME (Text).</summary>
+    Selector,
+
+    /// <summary>Expression position (<c>${...}</c>): a general comptime value splice.</summary>
+    Value
+}
+
+/// <summary>
+/// A comptime splice <c>${expr}</c> in expression position. The inner expression is a projection
+/// of an <see cref="ExpandStatement"/> handle (e.g. <c>m.name</c>). Never survives monomorphization.
+/// </summary>
+/// <param name="Inner">The spliced projection expression.</param>
+/// <param name="RequiredKind">The kind the position demands (Selector → Text name).</param>
+/// <param name="Location">Source location information.</param>
+public record SpliceExpression(Expression Inner, SpliceKind RequiredKind, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitSpliceExpression(node: this);
+    }
+}
+
+/// <summary>
+/// A member access whose selector is a comptime splice: <c>x.${m.name}</c>. Kept structurally
+/// distinct from a plain <see cref="MemberExpression"/> so the monomorphizer knows to fold the
+/// splice to a concrete field name and rewrite this to a real member access — a plain
+/// <see cref="MemberExpression"/> is never touched by the expander.
+/// </summary>
+/// <param name="Object">The receiver whose field is selected.</param>
+/// <param name="Selector">The <c>${...}</c> splice that folds to the field name.</param>
+/// <param name="Location">Source location information.</param>
+public record SpliceMemberExpression(Expression Object, SpliceExpression Selector, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitSpliceMemberExpression(node: this);
+    }
+}
+
 /// <summary>
 /// Expression that conditionally accesses a member of an object if the object is not none.
 /// Represents the ?. operator for safe navigation / optional chaining.
@@ -834,7 +891,11 @@ public record TypeExpression(
     // Cross-language realm tag from a `Realm::Name` qualifier (e.g. `RF::Core.List`). "RF" = the
     // RazorForge/bare realm (the resolver skips Suflae's entity->Roamed lowering for it); null = the
     // ambient realm of the file. Only "RF" is wired for now (Suflae wrappers holding a bare RF entity).
-    string? Realm = null) : Expression(Location: Location)
+    string? Realm = null,
+    // Comptime type-position splice: when non-null this whole type IS the `${handle.type}` projection
+    // of an expand handle (e.g. `${m.type}` in `Array[${m.type}, N]`). At expansion it resolves to the
+    // current member/arm's static type. Null for an ordinary written type.
+    string? SpliceHandle = null) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

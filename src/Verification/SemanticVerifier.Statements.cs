@@ -76,6 +76,39 @@ public sealed partial class SemanticVerifier
 
     private void AnalyzeFunctionBody(RoutineDeclaration routine)
     {
+        // Opt-in-capability derive templates (`@overridable/@override routine T.eq/cmp()` with a
+        // bare generic-param owner) are comptime macros consumed ONLY by the wired per-type
+        // synthesizer (WiredRoutinePass.CloneUniversalDeriveBody → post-GMP lowering resolves the
+        // operators). Unlike represent/diagnose, they are NOT registered as live universal methods
+        // (see StdlibLoader.Registration), so no GMP instance relies on the template body being
+        // SA-annotated. Analyzing the raw template pre-monomorphization is meaningless and
+        // spuriously errors (unresolved `T`-typed `you:` param, splice `!=`, unknown `SAME`), so
+        // skip it. represent/diagnose stay analyzed — their registered universal instances need the
+        // SA annotation. Concrete-owner `@override`s (e.g. `MyType.eq`) resolve their owner normally.
+        // Structural owner/method (name-canonicalization): the parser split the dotted name into
+        // OwnerName + MethodName + HasReceiverTypeArgs, so we no longer re-parse the `Name` string.
+        // The template is a UNIVERSAL derive when its owner is a bare type-parameter placeholder — no
+        // receiver type-args (not `List[T].foo`) AND the owner name doesn't resolve to a real type
+        // (it's the `T` placeholder, not a concrete-owner `MyType.eq` override).
+        if (_currentType == null
+            && (routine.Annotations.Contains(item: "overridable")
+                || routine.Annotations.Contains(item: "override"))
+            && routine.MethodName is { } method
+            && routine.OwnerName is { } ownerName
+            && !routine.HasReceiverTypeArgs
+            && LookupTypeWithImports(name: ownerName) == null)
+        {
+            // Skip SA for an OPT-IN derive template. It isn't registered as a live universal method
+            // (see StdlibLoader.Registration), so its bare owner placeholder `T` is unbound during SA —
+            // `expand m in memvarof(T)`, a `you: T` param, etc. would spuriously error (RF-S100). The
+            // per-type body instead comes from the derive-template store via CloneUniversalDeriveBody,
+            // which unrolls the `expand` against the concrete type post-monomorph. The auto-conferred
+            // display derives (represent/diagnose) ARE registered universals → `T` is bound → they stay
+            // analyzed. Protocol-grounded via the wired catalog, not a per-method name list.
+            if (!Compiler.Resolution.WiredRoutineCatalog.IsAutoConferredDerive(method: method))
+                return;
+        }
+
         // A user-defined `$destroy` replaces the compiler-generated memory teardown (field
         // recursion + invalidate `me`), so the author owns freeing `me` and its fields. Require
         // `dangerous` so this opt-in to manual memory management is explicit at the declaration.
@@ -335,17 +368,17 @@ public sealed partial class SemanticVerifier
             _dangerBlockDepth = 0;
         }
 
-        // Infer Blank return type if no annotation was given and no return value was found.
+        // Infer None return type if no annotation was given and no return value was found.
         // null is a transient "not yet inferred" state — after body analysis it must be resolved.
-        routineInfo.ReturnType ??= _registry.LookupType(name: "Blank");
+        routineInfo.ReturnType ??= _registry.LookupType(name: "None");
 
         // Validate that all routines terminate explicitly on every path (#144).
-        // Blank-returning routines still require an explicit `return` — implicit fall-off
+        // None-returning routines still require an explicit `return` — implicit fall-off
         // is rejected so control-flow analysis remains uniform across return types.
         if (!StatementAlwaysTerminates(statement: routine.Body))
         {
             ReportError(code: SemanticDiagnosticCode.MissingReturn,
-                message: routineInfo.ReturnType is { IsBlank: false }
+                message: routineInfo.ReturnType is { IsNone: false }
                     ? $"Routine '{routine.Name}' has return type '{routineInfo.ReturnType.Name}' but not all code paths return a value."
                     : $"Routine '{routine.Name}' does not terminate on all paths. Add an explicit 'return' at the end.",
                 location: routine.Location);
@@ -430,6 +463,10 @@ public sealed partial class SemanticVerifier
 
             case EachStatement eachStmt:
                 AnalyzeEachStatement(eachStmt: eachStmt);
+                break;
+
+            case ExpandStatement expandStmt:
+                AnalyzeExpandStatement(expandStmt: expandStmt);
                 break;
 
             case WhenStatement whenStmt:
@@ -785,9 +822,9 @@ public sealed partial class SemanticVerifier
         // Note: UnhandledCrashableCall check moved to AnalyzeCallExpression to catch all contexts
         // (return values, assignments, nested expressions — not just expression statements)
 
-        // Check if this is a call expression with a non-Blank return value
+        // Check if this is a call expression with a non-None return value
         // If so, warn that the return value is unused (use 'discard' to explicitly ignore)
-        if (expr.Expression is CallExpression call && !exprType.IsBlank)
+        if (expr.Expression is CallExpression call && !exprType.IsNone)
         {
             // Get a readable name for the routine being called
             string routineName = call.Callee switch

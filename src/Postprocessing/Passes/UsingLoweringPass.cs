@@ -194,7 +194,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
             };
 
             bool returnsValue = enterMethod.ReturnType != null
-                && enterMethod.ReturnType.Name != "Blank";
+                && enterMethod.ReturnType.Name != "None";
 
             if (returnsValue)
             {

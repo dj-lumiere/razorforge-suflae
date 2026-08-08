@@ -744,6 +744,24 @@ public sealed partial class StdlibLoader
             Storage = routine.Storage
         };
 
+        // An OPT-IN-capability derive template (`@overridable/@override routine T.eq/cmp` with a
+        // bare-generic-param owner) must NOT become a live universal method: unlike represent/
+        // diagnose (conferred on ALL types), eq/cmp are opt-in, so a live `T.eq` would be
+        // force-instantiated by GMP for non-conforming types (or types whose fields lack ne/cmp,
+        // e.g. Integer's CPtr handle) → "declared but never defined" codegen crashes. The per-type
+        // body still comes from the derive-template store via WiredRoutinePass.CloneUniversalDeriveBody,
+        // so dropping the universal registration is safe.
+        // OPT-IN derive templates (capability conferred only via explicit conformance) must not become
+        // live universals. Classification is protocol-grounded in the wired catalog (auto-conferred =
+        // Representable/Diagnosable → represent/diagnose stay universal; everything else is opt-in) —
+        // no per-method name list. The GenericParameterTypeInfo owner already means a bare-`T` template.
+        bool isOptInDeriveTemplate = ownerType is GenericParameterTypeInfo
+            && !WiredRoutineCatalog.IsAutoConferredDerive(method: methodName)
+            && (routine.Annotations.Contains(item: "overridable")
+                || routine.Annotations.Contains(item: "override"));
+        if (isOptInDeriveTemplate)
+            return;
+
         // Pin the decl → info binding (see RoutineDeclaration.ResolvedInfo) so codegen reads it
         // directly rather than re-deriving the routine by module-blind name lookup.
         routine.ResolvedInfo = routineInfo;
@@ -825,8 +843,33 @@ public sealed partial class StdlibLoader
 
         // Build member variables list upfront (TypeInfo uses init properties with IReadOnlyList)
         var memberVariables = new List<MemberVariableInfo>();
+        // Decl-position `expand m in memvarof(T)` column templates. The stdlib registration path does NOT
+        // run TypeBodyResolver.ResolveRecordBody (user-program only), so resolve them HERE — otherwise a
+        // stdlib SoA type (SplitList) never gets its ExpandTemplates and ExpandSoAColumns materializes
+        // no columns (`me.${m.name}` → "member 'x' not found" at codegen).
+        var expandTemplates = new List<MemberExpandTemplateInfo>();
         foreach (SyntaxTree.Declaration member in record.Members)
         {
+            if (member is ExpandMemberDeclaration expandDecl)
+            {
+                foreach (ExpandMemberTemplate template in expandDecl.Templates)
+                {
+                    TypeInfo? columnType = ResolveSimpleType(registry: registry,
+                        typeExpr: template.Type,
+                        genericParams: record.GenericParameters,
+                        moduleName: moduleName);
+                    if (columnType != null)
+                    {
+                        expandTemplates.Add(item: new MemberExpandTemplateInfo(
+                            namePrefix: template.NamePrefix,
+                            sourceParamName: expandDecl.SourceType.Name,
+                            columnTypeTemplate: columnType,
+                            visibility: template.Visibility));
+                    }
+                }
+                continue;
+            }
+
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
                 TypeInfo? memberVariableType = ResolveSimpleType(registry: registry,
@@ -880,6 +923,10 @@ public sealed partial class StdlibLoader
             BackendType = ExtractLlvmAnnotation(annotations: record.Annotations),
             CarrierKind = inheritedCarrierKind
         };
+        if (expandTemplates.Count > 0)
+        {
+            typeInfo.ExpandTemplates = expandTemplates;
+        }
 
         // Back-fill Owner + Index now that typeInfo exists (Owner is needed for module access checks)
         typeInfo.MemberVariables = memberVariables
@@ -1000,8 +1047,31 @@ public sealed partial class StdlibLoader
 
         // Build member variables list upfront
         var memberVariables = new List<MemberVariableInfo>();
+        // Decl-position `expand m in memvarof(T)` columns (SoA entity, e.g. a growable SplitList) —
+        // resolved here because the stdlib path does NOT run TypeBodyResolver (see RegisterRecordType).
+        var expandTemplates = new List<MemberExpandTemplateInfo>();
         foreach (SyntaxTree.Declaration member in entity.Members)
         {
+            if (member is ExpandMemberDeclaration expandDecl)
+            {
+                foreach (ExpandMemberTemplate template in expandDecl.Templates)
+                {
+                    TypeInfo? columnType = ResolveSimpleType(registry: registry,
+                        typeExpr: template.Type,
+                        genericParams: entity.GenericParameters,
+                        moduleName: moduleName);
+                    if (columnType != null)
+                    {
+                        expandTemplates.Add(item: new MemberExpandTemplateInfo(
+                            namePrefix: template.NamePrefix,
+                            sourceParamName: expandDecl.SourceType.Name,
+                            columnTypeTemplate: columnType,
+                            visibility: template.Visibility));
+                    }
+                }
+                continue;
+            }
+
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
                 TypeInfo? memberVariableType = ResolveSimpleType(registry: registry,
@@ -1044,6 +1114,10 @@ public sealed partial class StdlibLoader
             GenericParameters = entity.GenericParameters,
             GenericConstraints = entity.GenericConstraints
         };
+        if (expandTemplates.Count > 0)
+        {
+            typeInfo.ExpandTemplates = expandTemplates;
+        }
 
         // Back-fill Owner + Index now that typeInfo exists (Owner is needed for module access checks)
         typeInfo.MemberVariables = memberVariables
@@ -1411,7 +1485,7 @@ public sealed partial class StdlibLoader
     /// <summary>
     /// Re-resolves routine signatures after all module types are registered.
     /// This repairs stdlib routines that were registered before a referenced return type or
-    /// parameter type became available and were later finalized to Blank/Error.
+    /// parameter type became available and were later finalized to None/Error.
     /// </summary>
     private static void ResolveRoutineSignatures(TypeRegistry registry, Program program,
         string moduleName)
@@ -1525,7 +1599,7 @@ public sealed partial class StdlibLoader
             bool missingReturn = hasDeclaredReturn &&
                                  (existingRoutine.ReturnType == null ||
                                   existingRoutine.ReturnType is ErrorTypeInfo ||
-                                  existingRoutine.ReturnType.Name == "Blank");
+                                  existingRoutine.ReturnType.Name == "None");
 
             if (!hasErrorParams && !missingReturn)
             {
@@ -1604,14 +1678,14 @@ public sealed partial class StdlibLoader
             });
 
             // For failable methods, also expose a `try_X` non-failable variant returning
-            // Maybe[T] (or Bool when T is Blank), so call sites typed against the bare
+            // Maybe[T] (or Bool when T is None), so call sites typed against the bare
             // protocol (e.g. for-loop desugaring's `iter.try_emit()` where `iter: Iterator[T]`)
             // can resolve. Mirrors ErrorHandlingGenerator.GenerateTryVariant's shape.
             if (isFailable)
             {
                 string tryName = "try_" + methodName.TrimStart(trimChar: '$');
                 TypeInfo? tryReturnType;
-                if (resolvedReturnType == null || resolvedReturnType.Name == "Blank")
+                if (resolvedReturnType == null || resolvedReturnType.Name == "None")
                 {
                     tryReturnType = registry.LookupType(name: "Bool");
                 }

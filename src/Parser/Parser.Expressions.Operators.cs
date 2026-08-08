@@ -469,6 +469,17 @@ public partial class Parser
                     }
                 }
 
+                // `None` carries no payload, so it binds nothing: reject a binding (`is None x`) or a
+                // destructuring (`is None (x, y)`) after it.
+                if (type.Name == "None" &&
+                    ((Check(type: TokenType.Identifier) && !IsKeywordToken(token: CurrentToken)) ||
+                     Check(type: TokenType.LeftParen)))
+                {
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                        message:
+                        "The 'None' pattern binds no value — remove the binding or destructuring after 'None'.");
+                }
+
                 // Check if this is a flags test chain: identifier followed by and/or/but
                 if (Check(type: TokenType.And) || Check(type: TokenType.Or) ||
                     Check(type: TokenType.But))

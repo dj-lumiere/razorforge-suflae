@@ -95,6 +95,42 @@ internal static class GenericAstRewriter
         public TypeRegistry? Registry { get; } = registry;
 
         /// <summary>
+        /// The active comptime <c>expand</c> handle name (e.g. <c>m</c>) while its body is being
+        /// unrolled for one member, or null outside any expand. When set, <c>m.name</c>/<c>m.id</c>
+        /// member accesses fold to literals and <c>x.${m.name}</c> splices become real member
+        /// accesses on <see cref="ActiveMemberName"/>. Save/restore around the loop for nesting.
+        /// </summary>
+        public string? ActiveExpandHandle { get; set; }
+
+        /// <summary>The current member's field name during expand unrolling.</summary>
+        public string? ActiveMemberName { get; set; }
+
+        /// <summary>The current member's 0-based ordinal during expand unrolling.</summary>
+        public long ActiveMemberIndex { get; set; }
+
+        /// <summary>The current member's static type during expand unrolling (for annotating the
+        /// unrolled member access so the chained call resolves).</summary>
+        public TypeInfo? ActiveMemberType { get; set; }
+
+        /// <summary>Whether the current member is secret-visibility during expand unrolling.</summary>
+        public bool ActiveMemberIsSecret { get; set; }
+
+        /// <summary>The current case's numeric constant during a <c>caseof</c> expand unrolling — a
+        /// choice's S32 discriminant or a flags member's U64 bit value — folded by <c>${c.value}</c>.</summary>
+        public long ActiveCaseValue { get; set; }
+
+        /// <summary>True while unrolling <c>caseof</c> over a FLAGS type (value is a U64 bit); false for
+        /// a choice (value is an S32 discriminant). Selects the literal type for <c>${c.value}</c>.</summary>
+        public bool ActiveCaseIsFlags { get; set; }
+
+        /// <summary>
+        /// Payload-binding name → concrete type while cloning an <c>armof</c> arm clause body, so a
+        /// reference to the bound payload (e.g. <c>x</c> in <c>is ${m.type} x => x.represent()</c>)
+        /// resolves to the arm's type. Cleared per arm.
+        /// </summary>
+        public Dictionary<string, TypeInfo> ActiveBindingTypes { get; } = new();
+
+        /// <summary>
         /// Map of parameter name to substituted TypeInfo for the routine being rewritten.
         /// Populated by <see cref="Rewrite"/> and the public <c>RewriteStatement</c>
         /// overloads that accept a routine. Used to backfill <c>IdentifierExpression.ResolvedType</c>
@@ -142,6 +178,15 @@ internal static class GenericAstRewriter
             // Direct generic parameter substitution: T -> S64
             if (original is GenericParameterTypeInfo gp)
             {
+                // `$Col` is the decl-position expand-column placeholder. In an EXPRESSION-position type
+                // splice — `hijacked_from[${m.type}]` / `blank[Hijacked[${m.type}]]` inside an
+                // `expand m in memvarof(T)` body — it must fold to the CURRENT member's concrete type,
+                // mirroring TypeRegistry.ExpandSoAColumns' decl-position substitution but driven here by
+                // the active expand unroll at monomorphization. Without this the `$Col` GenericParameter
+                // reaches codegen's GetLlvmType and trips the "all generic parameters must be substituted".
+                if (gp.Name == TypeModel.Symbols.MemberExpandTemplateInfo.ColumnPlaceholderName
+                    && ActiveMemberType != null)
+                    return ActiveMemberType;
                 if (TypeSubs.TryGetValue(key: gp.Name, value: out TypeInfo? direct))
                     return direct;
                 // Wrapper-forwarder rename fallback: the param carries the original inner-T
@@ -819,7 +864,37 @@ internal static class GenericAstRewriter
                        TypeArguments = null
                    },
 
+            // Comptime expand-handle capability probe: m.obeying(Protocol) -> folded Bool literal
+            // (the current member's type conformance), only inside an active expand unroll. Placed
+            // BEFORE the generic CallExpression clone so it never resolves as a real routine call.
+            CallExpression
+                {
+                    Callee: MemberExpression
+                    {
+                        Object: IdentifierExpression obeysHandle, MemberName: "obeying"
+                    }
+                } obeysCall
+                when ctx.ActiveExpandHandle != null &&
+                     obeysHandle.Name == ctx.ActiveExpandHandle
+                => FoldHandleObeys(call: obeysCall, ctx: ctx),
+
             CallExpression call => CloneCall(call, ctx),
+
+            // Comptime expand-handle projection: m.name / m.id -> folded literal (only inside an
+            // active expand unroll; a same-named local elsewhere is left to the generic arm below).
+            MemberExpression { Object: IdentifierExpression handleId } handleMember
+                when ctx.ActiveExpandHandle != null &&
+                     handleId.Name == ctx.ActiveExpandHandle &&
+                     handleMember.MemberName is "name" or "id" or "is_secret" or "is_routine"
+                         or "value" or "is_inert" or "type_id" or "type"
+                => FoldHandleProjection(projection: handleMember.MemberName, ctx: ctx,
+                    location: handleMember.Location),
+
+            // Comptime splice selector: x.${m.name} -> real member access on the current field.
+            SpliceMemberExpression sm => RewriteSpliceMember(sm: sm, ctx: ctx),
+
+            // Comptime splice in expression position: fold the inner projection.
+            SpliceExpression se => RewriteExpression(expr: se.Inner, ctx: ctx),
 
             MemberExpression me => CloneMember(me, ctx),
 
@@ -1019,6 +1094,15 @@ internal static class GenericAstRewriter
                 resolvedType = meReceiverType;
             }
 
+            // An `armof` arm payload binding (`x` in `is ${m.type} x => …`) has no SA annotation on
+            // the generic template — supply the concrete arm type so the chained call re-resolves.
+            if ((resolvedType is null or ErrorTypeInfo) &&
+                result is IdentifierExpression bindingRef &&
+                ctx.ActiveBindingTypes.TryGetValue(key: bindingRef.Name, value: out TypeInfo? bindType))
+            {
+                resolvedType = bindType;
+            }
+
             // Concretize a reference to a local whose type was re-inferred from a re-dispatched
             // initializer (see RewriteContext.LocalReinferredTypes). Guarded to only replace a stale
             // PROTOCOL type, so concrete-typed references are left untouched. This must run before the
@@ -1028,6 +1112,38 @@ internal static class GenericAstRewriter
                 ctx.LocalReinferredTypes.TryGetValue(key: localRef.Name, value: out TypeInfo? concreteLocal))
             {
                 resolvedType = concreteLocal;
+            }
+
+            // A `${m.name}` splice on a SoA CONTAINER (`me.${m.name}` where `me` is a `SplitArray[T,N]`)
+            // resolves to the COLUMN type (`Array[F32, N]`), which DIFFERS from the expand source's
+            // member type. RewriteSpliceMember computed that column type; the original splice node's own
+            // ResolvedType is a deferred ErrorType placeholder (SA can't resolve a splice pre-monomorph),
+            // so overwriting with it here would clobber the column type and leave a following
+            // `[index]`/`.count()` unable to resolve `$getitem`/`count` post-monomorph. Preserve the
+            // splice-computed type ONLY when the object is an SoA container (a type carrying decl-position
+            // `expand` templates). The derive-template case (`me` IS the walked record — NO ExpandTemplates)
+            // keeps the normal overwrite: its members' types must stay deferred so recursively-typed fields
+            // (`BTreeListNode[BTreeListNode[…]]`) don't spawn unbounded concrete instantiations.
+            if (expr is SpliceMemberExpression &&
+                result is MemberExpression spliceMember &&
+                result.ResolvedType is not (null or ErrorTypeInfo) &&
+                IsSoAContainerType(type: ResolveSpliceObjectType(obj: spliceMember.Object, ctx: ctx)))
+            {
+                resolvedType = result.ResolvedType;
+            }
+
+            // A folded comptime handle projection (`${m.type}` → RewriteExpression(`m.type`) yields a
+            // TYPEWISE IdentifierExpression carrying the concrete member type) must keep that concrete
+            // type: the original `m.type` MemberExpression and its wrapping SpliceExpression both carry a
+            // deferred `ErrorTypeInfo` placeholder (SA can't resolve a splice pre-monomorph), which would
+            // otherwise clobber it here — breaking a following `.data_size()`/`.type_id()` fold (the
+            // BuilderService pass reads the receiver's ResolvedType). Only fires when the rewrite genuinely
+            // produced a concrete type from an error placeholder, so real error nodes are untouched.
+            if (resolvedType is null or ErrorTypeInfo
+                && result.ResolvedType is not (null or ErrorTypeInfo)
+                && expr is SpliceExpression or MemberExpression { Object: IdentifierExpression })
+            {
+                resolvedType = result.ResolvedType;
             }
 
             result.ResolvedType = resolvedType;
@@ -1424,14 +1540,7 @@ internal static class GenericAstRewriter
                 Value = RewriteExpression(expr: becomes.Value, ctx: ctx)
             },
 
-            IfStatement ifs => ifs with
-            {
-                Condition = RewriteExpression(expr: ifs.Condition, ctx: ctx),
-                ThenStatement = RewriteStatement(stmt: ifs.ThenStatement, ctx: ctx),
-                ElseStatement = ifs.ElseStatement != null
-                    ? RewriteStatement(stmt: ifs.ElseStatement, ctx: ctx)
-                    : null
-            },
+            IfStatement ifs => RewriteIf(ifs: ifs, ctx: ctx),
 
             WhileStatement ws => ws with
             {
@@ -1452,6 +1561,13 @@ internal static class GenericAstRewriter
                     ? RewriteStatement(stmt: fs.ElseBranch, ctx: ctx)
                     : null
             },
+
+            // Comptime member-expansion: unroll the body once per member of the concrete source
+            // type. Never survives to codegen — replaced by a flat block of the per-member clones.
+            ExpandStatement expand => RewriteExpandStatement(expand: expand, ctx: ctx),
+
+            WhenStatement { ArmExpansion: not null } armWhen =>
+                RewriteWhenArmExpansion(ws: armWhen, ctx: ctx),
 
             WhenStatement ws => ws with
             {
@@ -1496,6 +1612,513 @@ internal static class GenericAstRewriter
             BreakStatement or ContinueStatement or PassStatement or AbsentStatement => stmt,
 
             _ => stmt
+        };
+    }
+
+    /// <summary>
+    /// Unrolls a comptime <c>expand m in memvarof(T)</c> loop at monomorphization: resolves the
+    /// concrete source type, then clones the body once per member variable with the handle
+    /// projections folded (<c>m.name</c>→Text literal, <c>m.id</c>→U64 literal) and the
+    /// <c>x.${m.name}</c> splices rewritten to real member accesses. The per-member clones are
+    /// flattened into one block (no per-iteration scope, so an outer accumulator var stays visible).
+    /// </summary>
+    private static Statement RewriteExpandStatement(ExpandStatement expand, RewriteContext ctx)
+    {
+        TypeInfo? source = ResolveExpandSource(sourceType: expand.SourceType, ctx: ctx);
+
+        // caseof(T): iterate a choice's cases (S32 discriminants) or a flags' members (U64 bit values),
+        // exposing c.name / c.id (ordinal) / c.value (the numeric constant, spliced via ${c.value}).
+        if (expand.SourceKind == ExpandSourceKind.Cases)
+            return RewriteCaseExpand(expand: expand, source: source, ctx: ctx);
+
+        // memvarof works over any field-carrying aggregate: records, tuples (a RecordTypeInfo
+        // subtype), and entities (their own MemberVariables list).
+        List<MemberVariableInfo>? members = source switch
+        {
+            RecordTypeInfo record => record.MemberVariables,
+            EntityTypeInfo entity => entity.MemberVariables,
+            _ => null
+        };
+
+        var outStmts = new List<Statement>();
+        if (members != null)
+        {
+            // Save/restore the active-member state so nested expands (later phases) don't clash.
+            string? prevHandle = ctx.ActiveExpandHandle;
+            string? prevName = ctx.ActiveMemberName;
+            long prevIndex = ctx.ActiveMemberIndex;
+            TypeInfo? prevType = ctx.ActiveMemberType;
+            bool prevSecret = ctx.ActiveMemberIsSecret;
+
+            ctx.ActiveExpandHandle = expand.HandleName;
+            foreach (MemberVariableInfo mv in members)
+            {
+                ctx.ActiveMemberName = mv.Name;
+                ctx.ActiveMemberIndex = mv.Index;
+                ctx.ActiveMemberType = mv.Type;
+                ctx.ActiveMemberIsSecret = mv.Visibility == VisibilityModifier.Secret;
+
+                Statement clone = RewriteStatement(stmt: expand.Body, ctx: ctx);
+                if (clone is BlockStatement block)
+                {
+                    outStmts.AddRange(collection: block.Statements);
+                }
+                else
+                {
+                    outStmts.Add(item: clone);
+                }
+            }
+
+            ctx.ActiveExpandHandle = prevHandle;
+            ctx.ActiveMemberName = prevName;
+            ctx.ActiveMemberIndex = prevIndex;
+            ctx.ActiveMemberType = prevType;
+            ctx.ActiveMemberIsSecret = prevSecret;
+        }
+
+        return new BlockStatement(Statements: outStmts, Location: expand.Location);
+    }
+
+    /// <summary>
+    /// Unrolls <c>expand c in caseof(T)</c>: one body clone per choice case / flags member, with
+    /// <c>c.name</c> (Text), <c>c.id</c> (ordinal) and <c>c.value</c> (the S32 discriminant / U64 bit)
+    /// folded to literals. A choice case's value is its computed discriminant; a flags member's value
+    /// is <c>1 &lt;&lt; bitPosition</c>.
+    /// </summary>
+    private static Statement RewriteCaseExpand(ExpandStatement expand, TypeInfo? source,
+        RewriteContext ctx)
+    {
+        List<(string Name, long Value)>? cases = source switch
+        {
+            ChoiceTypeInfo choice => choice.Cases
+                .Select(selector: c => (c.Name, (long)c.ComputedValue)).ToList(),
+            FlagsTypeInfo flags => flags.Members
+                .Select(selector: m => (m.Name, (long)(1UL << m.BitPosition))).ToList(),
+            _ => null
+        };
+
+        var outStmts = new List<Statement>();
+        if (cases != null)
+        {
+            string? prevHandle = ctx.ActiveExpandHandle;
+            string? prevName = ctx.ActiveMemberName;
+            long prevIndex = ctx.ActiveMemberIndex;
+            long prevCaseValue = ctx.ActiveCaseValue;
+            bool prevIsFlags = ctx.ActiveCaseIsFlags;
+
+            ctx.ActiveExpandHandle = expand.HandleName;
+            ctx.ActiveCaseIsFlags = source is FlagsTypeInfo;
+            long idx = 0;
+            foreach ((string caseName, long caseValue) in cases)
+            {
+                ctx.ActiveMemberName = caseName;
+                ctx.ActiveMemberIndex = idx++;
+                ctx.ActiveCaseValue = caseValue;
+
+                Statement clone = RewriteStatement(stmt: expand.Body, ctx: ctx);
+                if (clone is BlockStatement block)
+                    outStmts.AddRange(collection: block.Statements);
+                else
+                    outStmts.Add(item: clone);
+            }
+
+            ctx.ActiveExpandHandle = prevHandle;
+            ctx.ActiveMemberName = prevName;
+            ctx.ActiveMemberIndex = prevIndex;
+            ctx.ActiveCaseValue = prevCaseValue;
+            ctx.ActiveCaseIsFlags = prevIsFlags;
+        }
+
+        return new BlockStatement(Statements: outStmts, Location: expand.Location);
+    }
+
+    /// <summary>
+    /// Unrolls a comptime <c>when me</c> / <c>expand m in armof(T)</c> / <c>is ${m.type} x => …</c>
+    /// at monomorphization: resolves the concrete variant, then clones the template clause once per
+    /// arm with <c>${m.type}</c> folded to the arm type and the payload binding annotated. Payload-
+    /// less arms (None / None) are skipped for now — a template with a binding cannot serve them;
+    /// handling those is a follow-up (they need a bindingless arm form).
+    /// </summary>
+    private static Statement RewriteWhenArmExpansion(WhenStatement ws, RewriteContext ctx)
+    {
+        WhenArmExpansion arm = ws.ArmExpansion!;
+        Expression subject = RewriteExpression(expr: ws.Expression, ctx: ctx);
+        TypeInfo? source = ResolveExpandSource(sourceType: arm.SourceType, ctx: ctx);
+        string? binding = (arm.Template.Pattern as SpliceTypePattern)?.VariableName;
+        SourceLocation loc = arm.Template.Location;
+
+        // Explicit clauses written alongside the expand (e.g. `is None => …`) come first.
+        var clauses = ws.Clauses
+            .Select(selector: c => RewriteWhenClause(clause: c, ctx: ctx))
+            .ToList();
+        if (source is VariantTypeInfo variant)
+        {
+            string? prevHandle = ctx.ActiveExpandHandle;
+            string? prevName = ctx.ActiveMemberName;
+            long prevIndex = ctx.ActiveMemberIndex;
+            TypeInfo? prevType = ctx.ActiveMemberType;
+
+            ctx.ActiveExpandHandle = arm.HandleName;
+            foreach (VariantMemberInfo vm in variant.Members)
+            {
+                // Skip payload-less arms (see summary) — the template binds a payload.
+                if (vm.IsNone || vm.Type is null || vm.Type.Name == "None")
+                {
+                    continue;
+                }
+
+                ctx.ActiveMemberType = vm.Type;
+                ctx.ActiveMemberName = vm.Name;
+                ctx.ActiveMemberIndex = vm.TagValue;
+
+                var typeExpr = new TypeExpression(Name: vm.Type.Name, GenericArguments: null,
+                    Location: loc)
+                {
+                    ResolvedType = vm.Type
+                };
+                var pattern = new TypePattern(Type: typeExpr, VariableName: binding, Bindings: null,
+                    Location: loc);
+
+                if (binding != null)
+                {
+                    ctx.ActiveBindingTypes[key: binding] = vm.Type;
+                }
+
+                Statement body = RewriteStatement(stmt: arm.Template.Body, ctx: ctx);
+
+                if (binding != null)
+                {
+                    ctx.ActiveBindingTypes.Remove(key: binding);
+                }
+
+                clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: loc));
+            }
+
+            ctx.ActiveExpandHandle = prevHandle;
+            ctx.ActiveMemberName = prevName;
+            ctx.ActiveMemberIndex = prevIndex;
+            ctx.ActiveMemberType = prevType;
+        }
+
+        return new WhenStatement(Expression: subject, Clauses: clauses, Location: ws.Location,
+            ArmExpansion: null);
+    }
+
+    /// <summary>
+    /// Resolves the concrete <see cref="TypeInfo"/> that an <c>expand</c> loop iterates over. A
+    /// bare generic parameter (<c>T</c>) resolves through the type-substitution map; otherwise the
+    /// (string-substituted) name is looked up in the registry.
+    /// </summary>
+    private static TypeInfo? ResolveExpandSource(TypeExpression sourceType, RewriteContext ctx)
+    {
+        if (ctx.TypeSubs != null &&
+            ctx.TypeSubs.TryGetValue(key: sourceType.Name, value: out TypeInfo? bound))
+        {
+            return bound;
+        }
+
+        string name = ctx.StringSubs.TryGetValue(key: sourceType.Name, value: out string? sub)
+            ? sub
+            : sourceType.Name;
+        return ctx.Registry?.LookupType(name: name);
+    }
+
+    /// <summary>
+    /// Folds a comptime expand-handle projection to a literal: <c>m.name</c>→Text field name,
+    /// <c>m.id</c>→U64 ordinal.
+    /// </summary>
+    private static Expression FoldHandleProjection(string projection, RewriteContext ctx,
+        SourceLocation location)
+    {
+        if (projection == "name")
+        {
+            return new LiteralExpression(Value: ctx.ActiveMemberName ?? "",
+                LiteralType: TokenType.TextLiteral,
+                Location: location)
+            {
+                ResolvedType = ctx.Registry?.LookupType(name: "Text")
+            };
+        }
+
+        if (projection == "is_secret")
+        {
+            return new LiteralExpression(Value: ctx.ActiveMemberIsSecret,
+                LiteralType: ctx.ActiveMemberIsSecret ? TokenType.True : TokenType.False,
+                Location: location)
+            {
+                ResolvedType = ctx.Registry?.LookupType(name: "Bool")
+            };
+        }
+
+        if (projection == "value")
+        {
+            // caseof `c.value`: a choice's S32 discriminant or a flags member's U64 bit value.
+            return ctx.ActiveCaseIsFlags
+                ? new LiteralExpression(Value: (ulong)ctx.ActiveCaseValue,
+                    LiteralType: TokenType.U64Literal, Location: location)
+                {
+                    ResolvedType = ctx.Registry?.LookupType(name: "U64")
+                }
+                : new LiteralExpression(Value: ctx.ActiveCaseValue,
+                    LiteralType: TokenType.S32Literal, Location: location)
+                {
+                    ResolvedType = ctx.Registry?.LookupType(name: "S32")
+                };
+        }
+
+        if (projection == "type_id")
+        {
+            // The current arm/member type's stable type id (armof `m.type_id`), matching the C#
+            // `TypeIdHelper.ComputeTypeId(FullName)` used by variant `diagnose`.
+            ulong typeId = ctx.ActiveMemberType?.FullName is { } fn
+                ? Compiler.TypeIdHelper.ComputeTypeId(fullName: fn)
+                : 0UL;
+            return new LiteralExpression(Value: typeId,
+                LiteralType: TokenType.U64Literal, Location: location)
+            {
+                ResolvedType = ctx.Registry?.LookupType(name: "U64")
+            };
+        }
+
+        if (projection == "is_inert")
+        {
+            // "뒷끝 없다" — the member's type tears down to nothing (owns no entity / RC / managed leaf /
+            // raw pointer needing release): its `destroy` is a transitive no-op, and may not even be
+            // DEFINED (reachability prunes trivial destroys — e.g. `Hijacked[…].destroy`), so a derive
+            // must SKIP calling `.destroy()` on it, not just for size but for link-correctness.
+            bool inert = ctx.ActiveMemberType != null && ctx.Registry != null &&
+                         ctx.Registry.IsTriviallyDestructible(type: ctx.ActiveMemberType);
+            return new LiteralExpression(Value: inert,
+                LiteralType: inert ? TokenType.True : TokenType.False,
+                Location: location)
+            {
+                ResolvedType = ctx.Registry?.LookupType(name: "Bool")
+            };
+        }
+
+        if (projection == "type")
+        {
+            // `${m.type}` in EXPRESSION position folds to a TYPEWISE receiver: an identifier naming the
+            // concrete member/arm type, annotated with that type so a following static call
+            // (`.data_size()`, `.type_id()`, …) re-resolves as a universal method on it — exactly like a
+            // hand-written `S64.data_size()`. (In TYPE/pattern position `${m.type}` is a different node,
+            // TypeExpression.SpliceHandle / SpliceTypePattern, handled at parse/resolve time.)
+            TypeInfo? memberType = ctx.ActiveMemberType;
+            return new IdentifierExpression(
+                Name: memberType?.Name ?? "None",
+                Location: location)
+            {
+                ResolvedType = memberType
+            };
+        }
+
+        if (projection == "is_routine")
+        {
+            // A routine-typed member (only entities may hold one; records are barred by RF-S412) has
+            // neither `serialize` nor `represent`, so a derive skips it (boxes a `<routine>` placeholder).
+            bool isRoutine = ctx.ActiveMemberType is RoutineTypeInfo;
+            return new LiteralExpression(Value: isRoutine,
+                LiteralType: isRoutine ? TokenType.True : TokenType.False,
+                Location: location)
+            {
+                ResolvedType = ctx.Registry?.LookupType(name: "Bool")
+            };
+        }
+
+        // "id"
+        return new LiteralExpression(Value: (ulong)ctx.ActiveMemberIndex,
+            LiteralType: TokenType.U64Literal,
+            Location: location)
+        {
+            ResolvedType = ctx.Registry?.LookupType(name: "U64")
+        };
+    }
+
+    /// <summary>
+    /// Folds a comptime expand-handle capability probe <c>m.obeying(Protocol)</c> to a literal Bool:
+    /// does the CURRENT member's type conform to the named protocol? The argument must be a bare
+    /// protocol identifier. A derive template gates a per-field call on this (e.g. only call
+    /// <c>me.field.serialize()</c> when the field <c>m.obeying(Serializable)</c>, else fall back to
+    /// <c>represent</c>) — the enclosing <c>if</c> then comptime-prunes so the untaken branch (an
+    /// invalid call for this member) never reaches codegen (see <see cref="RewriteIf"/>).
+    /// </summary>
+    private static Expression FoldHandleObeys(CallExpression call, RewriteContext ctx)
+    {
+        string? protocolName =
+            call.Arguments is [IdentifierExpression protoId] ? protoId.Name : null;
+        bool obeys = protocolName != null && ctx.ActiveMemberType != null &&
+                     ctx.Registry != null &&
+                     ctx.Registry.DoesTypeObeyProtocol(type: ctx.ActiveMemberType,
+                         protocolName: protocolName);
+        return new LiteralExpression(Value: obeys,
+            LiteralType: obeys ? TokenType.True : TokenType.False,
+            Location: call.Location)
+        {
+            ResolvedType = ctx.Registry?.LookupType(name: "Bool")
+        };
+    }
+
+    /// <summary>
+    /// Rewrites an <c>if</c>, comptime-PRUNING it when — inside an active expand unroll — its condition
+    /// folded to a constant Bool (e.g. <c>if m.obeys(Serializable)</c>). Only the taken branch is
+    /// kept, so codegen never sees the dead branch, which may contain a call that is invalid for this
+    /// concrete member (e.g. <c>.serialize()</c> on a non-serializable field). Outside expand, or with
+    /// a non-constant condition, both branches are preserved as an ordinary runtime <c>if</c>.
+    /// </summary>
+    private static Statement RewriteIf(IfStatement ifs, RewriteContext ctx)
+    {
+        Expression cond = RewriteExpression(expr: ifs.Condition, ctx: ctx);
+
+        // A folded handle projection may be wrapped in `not` (e.g. `if not m.is_inert`); fold the
+        // negation so the constant-condition prune below still fires.
+        if (cond is UnaryExpression { Operator: UnaryOperator.Not, Operand: LiteralExpression { Value: bool inner } } negLit)
+            cond = new LiteralExpression(Value: !inner,
+                LiteralType: !inner ? TokenType.True : TokenType.False,
+                Location: negLit.Location) { ResolvedType = negLit.ResolvedType };
+
+        if (ctx.ActiveExpandHandle != null &&
+            cond is LiteralExpression { Value: bool taken })
+        {
+            Statement? branch = taken ? ifs.ThenStatement : ifs.ElseStatement;
+            return branch != null
+                ? RewriteStatement(stmt: branch, ctx: ctx)
+                : new BlockStatement(Statements: [], Location: ifs.Location);
+        }
+
+        return ifs with
+        {
+            Condition = cond,
+            ThenStatement = RewriteStatement(stmt: ifs.ThenStatement, ctx: ctx),
+            ElseStatement = ifs.ElseStatement != null
+                ? RewriteStatement(stmt: ifs.ElseStatement, ctx: ctx)
+                : null
+        };
+    }
+
+    /// <summary>
+    /// Rewrites a splice-selector member access (<c>x.${m.name}</c>) to a real member access on the
+    /// current member (<c>x.field</c>), annotated with the member's static type so the chained call
+    /// (e.g. <c>.represent()</c>) re-resolves against the concrete field type.
+    /// </summary>
+    private static Expression RewriteSpliceMember(SpliceMemberExpression sm, RewriteContext ctx)
+    {
+        Expression obj = RewriteExpression(expr: sm.Object, ctx: ctx);
+        string memberName = ctx.ActiveMemberName ?? "";
+
+        // Annotate with the ACTUAL member's type on the object's concrete type when it can be
+        // determined. This differs from the expand-source member type when the object is a CONTAINER
+        // whose members are derived from the source type — the SoA case: `me.x` on a `SplitArray[Point]`
+        // is the column `Array[F32, N]`, not the source field `F32`. For the common case (the object IS
+        // the expand source, e.g. `me` is the record being walked, or `result` is a fresh element), the
+        // lookup falls back to the source member type.
+        TypeInfo? objType = ResolveSpliceObjectType(obj: obj, ctx: ctx);
+        TypeInfo? memberType = LookupMemberType(type: objType, name: memberName)
+                               ?? ctx.ActiveMemberType;
+
+        var member = new MemberExpression(Object: obj,
+            MemberName: memberName,
+            Location: sm.Location)
+        {
+            ResolvedType = memberType
+        };
+        return member;
+    }
+
+    /// <summary>Best-effort concrete type of an expand splice's object (<c>me</c>, a param, or an
+    /// annotated expression), used to look up the real member a <c>${m.name}</c> splice targets.</summary>
+    private static TypeInfo? ResolveSpliceObjectType(Expression obj, RewriteContext ctx)
+    {
+        // `me` → the concrete owner type bound for this monomorphization.
+        if (obj is IdentifierExpression { Name: "me" })
+        {
+            if (ctx.ParamTypes.TryGetValue(key: "me", value: out TypeInfo? meParam))
+            {
+                return ConcretizeGenericDef(type: ctx.ResolveType(original: meParam) ?? meParam, ctx: ctx);
+            }
+            if (ctx.TypeSubs != null && ctx.TypeSubs.TryGetValue(key: "Me", value: out TypeInfo? meBound))
+            {
+                return ConcretizeGenericDef(type: meBound, ctx: ctx);
+            }
+        }
+        // A parameter reference whose type the context tracks.
+        if (obj is IdentifierExpression id &&
+            ctx.ParamTypes.TryGetValue(key: id.Name, value: out TypeInfo? paramType))
+        {
+            return ConcretizeGenericDef(type: ctx.ResolveType(original: paramType) ?? paramType, ctx: ctx);
+        }
+        // An SA-annotated object type, substituted to concrete.
+        if (obj.ResolvedType != null)
+        {
+            return ConcretizeGenericDef(
+                type: ctx.ResolveType(original: obj.ResolvedType) ?? obj.ResolvedType, ctx: ctx);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// If <paramref name="type"/> is still an unbound generic definition (e.g. the owner
+    /// <c>SplitArray[T, N]</c> of a method under monomorphization), materialize the concrete instance
+    /// by binding its parameters through the current type-substitution map. This is what surfaces the
+    /// decl-position expand columns (they live on the concrete instance, not the definition).
+    /// </summary>
+    private static TypeInfo? ConcretizeGenericDef(TypeInfo? type, RewriteContext ctx)
+    {
+        if (type == null || ctx.Registry == null || ctx.TypeSubs == null)
+        {
+            return type;
+        }
+        List<string>? genericParams = type switch
+        {
+            RecordTypeInfo { IsGenericDefinition: true } r => r.GenericParameters,
+            EntityTypeInfo { IsGenericDefinition: true } e => e.GenericParameters,
+            _ => null
+        };
+        if (genericParams is not { Count: > 0 })
+        {
+            return type;
+        }
+        var args = new List<TypeInfo>(capacity: genericParams.Count);
+        foreach (string p in genericParams)
+        {
+            if (!ctx.TypeSubs.TryGetValue(key: p, value: out TypeInfo? bound))
+            {
+                return type; // can't fully bind — leave as-is
+            }
+            args.Add(item: bound);
+        }
+        return ctx.Registry.GetOrCreateResolution(genericDef: type, typeArguments: args);
+    }
+
+    /// <summary>True when <paramref name="type"/> is a container declaring decl-position
+    /// <c>expand</c> (SoA) columns — its <c>${m.name}</c> members are generated column types
+    /// (<c>Array[F32, N]</c>) that diverge from the expand source's member types, so their
+    /// monomorph-computed type must be preserved rather than overwritten with the deferred splice
+    /// placeholder.</summary>
+    private static bool IsSoAContainerType(TypeInfo? type)
+    {
+        // A concrete instance (SplitArray[Point, 4]) carries the materialized columns in
+        // MemberVariables but NOT the ExpandTemplates list (those stay on the generic definition —
+        // ExpandSoAColumns reads them from the def), so also consult the GenericDefinition.
+        return type switch
+        {
+            RecordTypeInfo { ExpandTemplates.Count: > 0 } => true,
+            EntityTypeInfo { ExpandTemplates.Count: > 0 } => true,
+            RecordTypeInfo { GenericDefinition: RecordTypeInfo { ExpandTemplates.Count: > 0 } } => true,
+            EntityTypeInfo { GenericDefinition: EntityTypeInfo { ExpandTemplates.Count: > 0 } } => true,
+            _ => false
+        };
+    }
+
+    /// <summary>Looks up a member variable's type by name on a record/entity type, or null.</summary>
+    private static TypeInfo? LookupMemberType(TypeInfo? type, string name)
+    {
+        return type switch
+        {
+            RecordTypeInfo r => r.MemberVariables
+                .FirstOrDefault(predicate: mv => mv.Name == name)?.Type,
+            EntityTypeInfo e => e.MemberVariables
+                .FirstOrDefault(predicate: mv => mv.Name == name)?.Type,
+            _ => null
         };
     }
 

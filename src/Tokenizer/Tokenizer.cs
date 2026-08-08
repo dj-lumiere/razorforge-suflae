@@ -230,6 +230,13 @@ public partial class Tokenizer
             _keywords[key: "steal"] = TokenType.Steal;
             _keywords[key: "threaded"] = TokenType.Threaded;
             _keywords[key: "suspended"] = TokenType.Suspended;
+            // Comptime reflection is RF's model (monomorph unroll). Suflae's reflection is the
+            // runtime ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via
+            // wholesale Core reuse, so it never needs the `expand`/`memvarof` keywords itself.
+            _keywords[key: "expand"] = TokenType.Expand;
+            _keywords[key: "memvarof"] = TokenType.MemVarOf;
+            _keywords[key: "armof"] = TokenType.ArmOf;
+            _keywords[key: "caseof"] = TokenType.CaseOf;
         }
 
         // Numeric suffix map - shared between both languages except "j" default

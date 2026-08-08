@@ -56,6 +56,18 @@ public partial class Tokenizer
     {
         _hasTokenOnLine = true;
 
+        // Comptime splice open '${' — a SEPARATE structural token distinct from a bare '$' wired
+        // marker and a bare '{'. The main scan loop already consumed the '$' into _position, so
+        // Peek() is the char right after it. Emit '${' as a SpliceOpen token and consume the '{';
+        // the balanced closing '}' is an ordinary RightBrace matched by the parser. Guarded ahead
+        // of the '$'-wired branch below so `${m.name}` never mis-tokenizes as `$` + identifier.
+        if (_source[index: _tokenStart] == '$' && Peek() == '{')
+        {
+            Advance(); // consume '{'
+            AddToken(type: TokenType.SpliceOpen, text: "${");
+            return;
+        }
+
         // Wired member-routine marker: a leading '$' ($create, $store, $emit, …) is a SEPARATE
         // structural token — the parser records it as RoutineInfo.IsWiredMemberRoutine and keeps the
         // name bare. Emit the '$' as its own Dollar token, then re-anchor so the bare identifier that

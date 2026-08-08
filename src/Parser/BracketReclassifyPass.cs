@@ -180,6 +180,21 @@ internal static class BracketReclassifyPass
                     GenericArguments: null,
                     Location: expr.Location);
 
+            // A comptime type-position splice `${m.type}` as a (possibly nested) generic argument —
+            // e.g. `hijacked_from[${m.type}]` / `blank[Hijacked[${m.type}]]`. Bracket contents parse as
+            // EXPRESSIONS first, so the splice arrives as a SpliceExpression wrapping `m.type`; mirror
+            // ParseBaseType's `${m.type}` handling by producing the SpliceHandle TypeExpression the
+            // resolver expects (only `.type` is valid in a type position — other projections fall through
+            // to the resolver's diagnostic).
+            case SpliceExpression
+            {
+                Inner: MemberExpression { Object: IdentifierExpression spliceHandle, MemberName: "type" }
+            } se:
+                return new TypeExpression(Name: "$splice",
+                    GenericArguments: null,
+                    Location: se.Location,
+                    SpliceHandle: spliceHandle.Name);
+
             // A TypeExpression already (should not normally occur from bracket parsing) passes through.
             case TypeExpression te:
                 return te;

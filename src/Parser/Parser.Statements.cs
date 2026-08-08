@@ -249,6 +249,49 @@ public partial class Parser
             Location: location);
     }
 
+    /// <summary>
+    /// Parses a compile-time member-expansion loop.
+    /// Syntax (Phase 1): <c>expand m in memvarof(T)</c> followed by an indented body.
+    /// Unlike <c>each</c> there is no <c>else</c> clause — the loop is unrolled at monomorphization.
+    /// </summary>
+    /// <returns>An <see cref="ExpandStatement"/> AST node.</returns>
+    private ExpandStatement ParseExpandStatement()
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
+        Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand loop");
+
+        // Statement-position expand sources: `memvarof(T)` (record/entity/tuple fields) or `caseof(T)`
+        // (choice/flags cases). (`armof(T)` is parsed separately — it only appears inside a `when`.)
+        ExpandSourceKind sourceKind;
+        string sourceName;
+        if (Match(type: TokenType.CaseOf))
+        {
+            sourceKind = ExpandSourceKind.Cases;
+            sourceName = "caseof";
+        }
+        else
+        {
+            Consume(type: TokenType.MemVarOf,
+                errorMessage: "Expected 'memvarof' or 'caseof' after 'in' in expand loop");
+            sourceKind = ExpandSourceKind.MemberVariables;
+            sourceName = "memvarof";
+        }
+
+        Consume(type: TokenType.LeftParen, errorMessage: $"Expected '(' after '{sourceName}'");
+        TypeExpression sourceType = ParseType();
+        Consume(type: TokenType.RightParen, errorMessage: $"Expected ')' after {sourceName} type");
+
+        Statement body = ParseBody();
+
+        return new ExpandStatement(HandleName: handle,
+            SourceType: sourceType,
+            SourceKind: sourceKind,
+            Body: body,
+            Location: location);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // WHEN (PATTERN MATCHING)
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -340,6 +383,7 @@ public partial class Parser
         // ═══════════════════════════════════════════════════════════════════════════
 
         var clauses = new List<WhenClause>();
+        WhenArmExpansion? armExpansion = null;
 
         bool AtClauseEnd()
         {
@@ -351,6 +395,21 @@ public partial class Parser
             // Skip newlines and doc comments between clauses
             if (Match(TokenType.Newline, TokenType.DocComment))
             {
+                continue;
+            }
+
+            // Comptime arm-expansion: `expand m in armof(T)` generates one type-dispatch clause per
+            // variant arm at monomorphization. It may sit ALONGSIDE explicit clauses (e.g. an
+            // `is None => …` clause the payload-arm expansion doesn't cover) — at most one per `when`.
+            if (Check(type: TokenType.Expand))
+            {
+                if (armExpansion != null)
+                {
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                        message: "A 'when' may contain at most one 'expand' arm-expansion.");
+                }
+
+                armExpansion = ParseWhenArmExpansion();
                 continue;
             }
 
@@ -464,36 +523,7 @@ public partial class Parser
             // Arm body: either `=> expression` (single-line) or indented block
             // ─────────────────────────────────────────────────────────────────────
 
-            Statement body;
-            _inWhenClauseBody = true;
-            if (Match(type: TokenType.FatArrow))
-            {
-                // After =>, check for block form: => \n INDENT block DEDENT
-                if (Check(type: TokenType.Newline) && PeekToken(offset: 1)
-                       .Type == TokenType.Indent)
-                {
-                    Advance(); // consume newline
-                    body = ParseIndentedBlock();
-                }
-                else if (Match(type: TokenType.Pass))
-                {
-                    // Single-line pass: pattern => pass
-                    body = new PassStatement(Location: GetLocation());
-                }
-                else
-                {
-                    // Single-line form: pattern => statement (break, return, expression, etc.)
-                    body = ParseStatement();
-                }
-            }
-            else
-            {
-                Consume(type: TokenType.FatArrow,
-                    errorMessage: "Expected '=>' after when pattern");
-                body = ParseStatement();
-            }
-
-            _inWhenClauseBody = false;
+            Statement body = ParseWhenClauseBody();
 
             clauses.Add(
                 item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
@@ -513,7 +543,100 @@ public partial class Parser
                 message: "Expected dedent after when clauses");
         }
 
-        return new WhenStatement(Expression: expression, Clauses: clauses, Location: location);
+        return new WhenStatement(Expression: expression, Clauses: clauses, Location: location,
+            ArmExpansion: armExpansion);
+    }
+
+    /// <summary>
+    /// Parses a when-clause body: <c>=> statement</c>, <c>=> pass</c>, or <c>=>\n INDENT block</c>.
+    /// </summary>
+    private Statement ParseWhenClauseBody()
+    {
+        Statement body;
+        _inWhenClauseBody = true;
+        if (Match(type: TokenType.FatArrow))
+        {
+            // After =>, check for block form: => \n INDENT block DEDENT
+            if (Check(type: TokenType.Newline) && PeekToken(offset: 1).Type == TokenType.Indent)
+            {
+                Advance(); // consume newline
+                body = ParseIndentedBlock();
+            }
+            else if (Match(type: TokenType.Pass))
+            {
+                body = new PassStatement(Location: GetLocation());
+            }
+            else
+            {
+                body = ParseStatement();
+            }
+        }
+        else
+        {
+            Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after when pattern");
+            body = ParseStatement();
+        }
+
+        _inWhenClauseBody = false;
+        return body;
+    }
+
+    /// <summary>
+    /// Parses a comptime arm-expansion inside a <c>when</c>:
+    /// <c>expand m in armof(T)</c> then an indented template clause <c>is ${m.type} x => body</c>
+    /// (or payload-less <c>is ${m.type} => body</c>). Unrolled per variant arm at monomorphization.
+    /// </summary>
+    private WhenArmExpansion ParseWhenArmExpansion()
+    {
+        Consume(type: TokenType.Expand, errorMessage: "Expected 'expand'");
+        string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
+        Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand");
+        Consume(type: TokenType.ArmOf, errorMessage: "Expected 'armof' after 'in' in a when-expand");
+        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'armof'");
+        TypeExpression sourceType = ParseType();
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after armof type");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after armof(...)");
+
+        if (!Check(type: TokenType.Indent))
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIndentedBlock,
+                message: "Expected indented 'is ${...} => ...' clause after armof(...)");
+        }
+
+        ProcessIndentToken();
+        while (Match(TokenType.Newline, TokenType.DocComment)) { }
+
+        SourceLocation clauseLoc = GetLocation();
+        Consume(type: TokenType.Is,
+            errorMessage: "Expected 'is ${m.type} ...' clause in an armof-expand");
+        Consume(type: TokenType.SpliceOpen,
+            errorMessage: "Expected '${m.type}' type splice after 'is'");
+        // The splice inner must be the handle's `.type` projection; parsed and validated, then the
+        // optional payload binding follows.
+        SpliceExpression splice = ParseSplice(kind: SpliceKind.Value);
+        if (splice.Inner is not MemberExpression { Object: IdentifierExpression spliceHandle, MemberName: "type" }
+            || spliceHandle.Name != handle)
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                message: $"An armof-expand arm pattern must be 'is ${{{handle}.type}} ...'.");
+        }
+
+        string? binding = Check(type: TokenType.Identifier)
+            ? ConsumeIdentifier(errorMessage: "Expected payload binding name")
+            : null;
+        var pattern = new SpliceTypePattern(HandleName: handle, VariableName: binding,
+            Location: clauseLoc);
+
+        Statement body = ParseWhenClauseBody();
+        Match(TokenType.Comma, TokenType.Newline);
+
+        if (Check(type: TokenType.Dedent))
+        {
+            ProcessDedentTokens();
+        }
+
+        var template = new WhenClause(Pattern: pattern, Body: body, Location: clauseLoc);
+        return new WhenArmExpansion(HandleName: handle, SourceType: sourceType, Template: template);
     }
 
     /// <summary>
@@ -592,7 +715,8 @@ public partial class Parser
         {
             Advance(); // consume the '_'
             Pattern wildcardPattern = new WildcardPattern(Location: location);
-            return TryParseGuard(innerPattern: wildcardPattern, location: location);
+            return TryParseAndGuard(innerPattern: wildcardPattern, guardAllowed: true,
+                location: location);
         }
 
         // Type/Variant pattern: Type, Type varName, Choice.CASE, Variant.CASE varName, CASE, CASE (a, b)
@@ -641,45 +765,23 @@ public partial class Parser
                 VariableName: variableName,
                 Bindings: bindings,
                 Location: location);
-            return TryParseGuard(innerPattern: typePattern, location: location);
+            return TryParseAndGuard(innerPattern: typePattern,
+                guardAllowed: variableName != null || bindings != null, location: location);
         }
 
-        // Literal pattern: constants like 42, "hello", true, etc.
+        // Literal pattern: constants like 42, "hello", true, etc. No flags collision → guard allowed.
         Expression expr = ParsePrimary();
         if (expr is LiteralExpression literal)
         {
             Pattern litPattern = new LiteralPattern(Value: literal.Value,
                 LiteralType: literal.LiteralType,
                 Location: location);
-            return TryParseGuard(innerPattern: litPattern, location: location);
+            return TryParseAndGuard(innerPattern: litPattern, guardAllowed: true,
+                location: location);
         }
 
         // Otherwise, treat as expression pattern
         return new ExpressionPattern(Expression: expr, Location: location);
-    }
-
-    /// <summary>
-    /// Tries to parse a guard clause (if condition) after a pattern.
-    /// Syntax: <c>pattern if condition</c>
-    /// </summary>
-    /// <param name="innerPattern">The pattern before the guard.</param>
-    /// <param name="location">Source location of the pattern.</param>
-    /// <returns>A <see cref="GuardPattern"/> if guard is present, otherwise the original pattern.</returns>
-    private Pattern TryParseGuard(Pattern innerPattern, SourceLocation location)
-    {
-        if (Match(type: TokenType.If))
-        {
-            // Temporarily reset _inWhenClauseBody to allow full expression parsing for the guard.
-            // This is needed for nested when statements where the outer clause body flag would
-            // otherwise cause ParseEquality/ParseComparison to return early.
-            bool savedInWhenClauseBody = _inWhenClauseBody;
-            _inWhenClauseBody = false;
-            Expression guard = ParseExpression();
-            _inWhenClauseBody = savedInWhenClauseBody;
-            return new GuardPattern(InnerPattern: innerPattern, Guard: guard, Location: location);
-        }
-
-        return innerPattern;
     }
 
     /// <summary>
@@ -697,11 +799,22 @@ public partial class Parser
         {
             var noneType =
                 new TypeExpression(Name: "None", GenericArguments: null, Location: location);
+            // `None` carries no payload, so it binds nothing: reject a binding (`is None x`) or a
+            // destructuring (`is None (x, y)`) after it.
+            if ((Check(type: TokenType.Identifier) && !IsKeywordToken(token: CurrentToken)) ||
+                Check(type: TokenType.LeftParen))
+            {
+                throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                    message:
+                    "The 'None' pattern binds no value — remove the binding or destructuring after 'None'.");
+            }
+
             Pattern nonePattern = new TypePattern(Type: noneType,
                 VariableName: null,
                 Bindings: null,
                 Location: location);
-            return TryParseGuard(innerPattern: nonePattern, location: location);
+            // `is None` binds nothing, so it takes no `and`-guard (guards require a binding).
+            return nonePattern;
         }
 
         if (!Check(type: TokenType.Identifier))
@@ -769,7 +882,33 @@ public partial class Parser
             VariableName: variableName,
             Bindings: bindings,
             Location: location);
-        return TryParseGuard(innerPattern: typePattern, location: location);
+        return TryParseAndGuard(innerPattern: typePattern,
+            guardAllowed: variableName != null || bindings != null, location: location);
+    }
+
+    /// <summary>
+    /// Tries to parse an <c>and</c>-guard after a pattern: <c>is T n and &lt;guard&gt;</c>,
+    /// <c>== 0 and y &gt; 0</c>. The guard is any boolean expression and may reference the pattern's
+    /// binding (if any) or outer variables. <paramref name="guardAllowed"/> gates whether a guard is
+    /// syntactically unambiguous here: a bare type pattern (<c>is T</c> with no binding) is NOT
+    /// allowed a guard because <c>is T and …</c> collides with a flags-test chain
+    /// (<c>is FLAG_A and FLAG_B</c>); a bound type pattern, comparison, literal, or wildcard has no
+    /// such collision. <c>is None</c> takes no guard.
+    /// </summary>
+    private Pattern TryParseAndGuard(Pattern innerPattern, bool guardAllowed, SourceLocation location)
+    {
+        if (!guardAllowed || !Match(type: TokenType.And))
+        {
+            return innerPattern;
+        }
+
+        // Reset _inWhenClauseBody so ParseEquality/ParseComparison parse the full guard expression
+        // (needed for nested whens, where the clause-body flag would otherwise stop the parse early).
+        bool savedInWhenClauseBody = _inWhenClauseBody;
+        _inWhenClauseBody = false;
+        Expression guard = ParseExpression();
+        _inWhenClauseBody = savedInWhenClauseBody;
+        return new GuardPattern(InnerPattern: innerPattern, Guard: guard, Location: location);
     }
 
     /// <summary>
@@ -824,8 +963,10 @@ public partial class Parser
 
         _inWhenPatternContext = false;
 
+        // Comparison patterns (`< 0`, `== 5`) start with an operator, so `and` after the value is
+        // unambiguously a guard (no flags collision). The guard typically tests outer variables.
         var pattern = new ComparisonPattern(Operator: op, Value: value, Location: location);
-        return TryParseGuard(innerPattern: pattern, location: location);
+        return TryParseAndGuard(innerPattern: pattern, guardAllowed: true, location: location);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════

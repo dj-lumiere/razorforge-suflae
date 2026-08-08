@@ -192,7 +192,7 @@ public sealed partial class StdlibLoader
         }
 
         // Pass 2.1: Refresh any routine signatures that were still partially unresolved during
-        // initial registration and later collapsed to Blank via semantic finalization.
+        // initial registration and later collapsed to None via semantic finalization.
         foreach ((Program program, string _, string ns) in _corePrograms)
         {
             ResolveRoutineSignatures(registry: registry, program: program, moduleName: ns);
@@ -523,6 +523,18 @@ public sealed partial class StdlibLoader
         if (typeExpr == null)
         {
             return null;
+        }
+
+        // Comptime type-position splice `${m.type}` in a stdlib decl-position expand column template
+        // (e.g. `Hijacked[${m.type}]` in `SplitList[T]`). Resolve to the synthetic per-field placeholder,
+        // mirroring TypeResolver.ResolveTypeCore; the registry substitutes each concrete field's type at
+        // instantiation (ExpandSoAColumns). Without this the stdlib registration path — which does NOT go
+        // through TypeBodyResolver.ResolveExpandTemplates — never sees the splice, so a stdlib SoA type
+        // (SplitList) gets no columns.
+        if (typeExpr.SpliceHandle != null)
+        {
+            return new GenericParameterTypeInfo(
+                name: TypeModel.Symbols.MemberExpandTemplateInfo.ColumnPlaceholderName);
         }
 
         string typeName = typeExpr.Name;

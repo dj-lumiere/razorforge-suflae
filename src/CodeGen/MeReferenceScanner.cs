@@ -57,6 +57,9 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
             u.Value.Accept(visitor: this) ||
             (u.Index?.Accept(visitor: this) ?? false));
     public bool VisitMemberExpression(MemberExpression node) => node.Object.Accept(visitor: this);
+    public bool VisitSpliceExpression(SpliceExpression node) => node.Inner.Accept(visitor: this);
+    public bool VisitSpliceMemberExpression(SpliceMemberExpression node) =>
+        node.Object.Accept(visitor: this);
     public bool VisitOptionalMemberExpression(OptionalMemberExpression node) =>
         node.Object.Accept(visitor: this);
     public bool VisitIndexExpression(IndexExpression node) =>
@@ -129,6 +132,7 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
         node.Body.Accept(visitor: this) ||
         (node.ElseBranch?.Accept(visitor: this) ?? false);
     public bool VisitLoopStatement(LoopStatement node) => node.Body.Accept(visitor: this);
+    public bool VisitExpandStatement(ExpandStatement node) => node.Body.Accept(visitor: this);
     public bool VisitEachStatement(EachStatement node) =>
         node.Iterable.Accept(visitor: this) ||
         node.Body.Accept(visitor: this) ||
@@ -137,7 +141,8 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
     public bool VisitWhenStatement(WhenStatement node) =>
         node.Expression.Accept(visitor: this) ||
         node.Clauses.Any(predicate: c =>
-            ScanPattern(pattern: c.Pattern) || c.Body.Accept(visitor: this));
+            ScanPattern(pattern: c.Pattern) || c.Body.Accept(visitor: this)) ||
+        (node.ArmExpansion?.Template.Body.Accept(visitor: this) ?? false);
     public bool VisitDangerStatement(DangerStatement node) => node.Body.Accept(visitor: this);
     public bool VisitUsingStatement(UsingStatement node) =>
         node.Resource.Accept(visitor: this) || node.Body.Accept(visitor: this) ||
@@ -147,6 +152,9 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
 
     public bool VisitVariableDeclaration(VariableDeclaration node) =>
         node.Initializer?.Accept(visitor: this) ?? false;
+
+    // Decl-position expand carries only member-variable templates (no runtime `me` refs).
+    public bool VisitExpandMemberDeclaration(ExpandMemberDeclaration node) => false;
 
     // Nested declarations within a routine body do not capture the outer `me` —
     // any `me` reference inside them belongs to a different owner. Treat as no-hit.

@@ -1,0 +1,6 @@
+small:7
+big:250
+nonpos:-5
+long:hello
+short:hi
+none

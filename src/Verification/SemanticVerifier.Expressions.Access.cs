@@ -48,9 +48,83 @@ public sealed partial class SemanticVerifier
                (proto.GenericDefinition ?? proto).BareName == Compiler.Resolution.RuntimeContract.Referring;
     }
 
+    /// <summary>
+    /// Analyzes a comptime splice-selector member access (<c>x.${m.name}</c>). The receiver and
+    /// the selector splice are analyzed for real (surfacing mistakes in either), but the selected
+    /// field's concrete type is unknown until monomorphization, so this defers to
+    /// <see cref="ErrorTypeInfo"/> — the same cascade-suppressing deferral used for unresolved
+    /// generic-body expressions. The real "does this field have that member?" check runs on the
+    /// unrolled member access at instantiation.
+    /// </summary>
+    private TypeSymbol AnalyzeSpliceMemberExpression(SpliceMemberExpression spliceMember)
+    {
+        AnalyzeExpression(expression: spliceMember.Object);
+        AnalyzeExpression(expression: spliceMember.Selector);
+        return ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// Analyzes a comptime splice (<c>${expr}</c>). The inner projection is analyzed for real; a
+    /// selector-position splice must name a field (fold to <c>Text</c>). The splice's own value is
+    /// comptime-only, so it types as <see cref="ErrorTypeInfo"/> (deferred to monomorphization).
+    /// </summary>
+    private TypeSymbol AnalyzeSpliceExpression(SpliceExpression splice)
+    {
+        TypeSymbol innerType = AnalyzeExpression(expression: splice.Inner);
+        if (splice.RequiredKind == SpliceKind.Selector
+            && innerType is not ErrorTypeInfo
+            && innerType.Name != "Text")
+        {
+            ReportError(code: SemanticDiagnosticCode.MemberNotFound,
+                message:
+                "A member-selector splice 'x.${...}' must name a field: its inner expression has to be a Text name (e.g. 'm.name').",
+                location: splice.Location);
+        }
+
+        return ErrorTypeInfo.Instance;
+    }
+
     private TypeSymbol AnalyzeMemberExpression(MemberExpression member)
     {
         TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+        // Comptime `expand` handle projection: `m.name` (field name, Text), `m.id` (ordinal, U64).
+        // The handle is a sentinel; its projections type leniently so the expand body typechecks
+        // before monomorphization. Any other projection on the handle is a clear mistake.
+        if (objectType is ComptimeHandleTypeInfo)
+        {
+            switch (member.MemberName)
+            {
+                case "name":
+                    return _registry.LookupType(name: "Text") ?? ErrorTypeInfo.Instance;
+                case "id":
+                    return _registry.LookupType(name: "U64") ?? ErrorTypeInfo.Instance;
+                case "is_secret":
+                case "is_routine":
+                case "is_inert":
+                    return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+                case "value":
+                    // caseof `c.value` — a choice's S32 discriminant / a flags member's U64 bit. Only
+                    // ever spliced (`${c.value}`, deferred); type leniently as S32 for a bare reference.
+                    return _registry.LookupType(name: "S32") ?? ErrorTypeInfo.Instance;
+                case "type_id":
+                    // armof `m.type_id` — the arm type's stable id (U64), used by variant diagnose.
+                    return _registry.LookupType(name: "U64") ?? ErrorTypeInfo.Instance;
+                case "type":
+                    // `${m.type}` in EXPRESSION position — the member/arm type as a comptime typewise
+                    // receiver (e.g. `${m.type}.data_size()` / `.type_id()`, or a column-buffer size in a
+                    // SoA method). Deferred like the type/pattern-position splice: the real type only
+                    // exists at monomorphization, so a bare projection types leniently and the static
+                    // call on it is re-resolved on the folded concrete type post-monomorph.
+                    return ErrorTypeInfo.Instance;
+                default:
+                    ReportError(code: SemanticDiagnosticCode.MemberNotFound,
+                        message:
+                        $"Comptime expand handle has no projection '{member.MemberName}'. Available: 'name' (Text), 'id' (U64), 'is_secret'/'is_routine' (Bool), 'value' (caseof).",
+                        location: member.Location);
+                    return ErrorTypeInfo.Instance;
+            }
+        }
 
         // The receiver already failed to resolve (its own error was reported). A follow-on
         // "Type '<error>' does not have a member ..." is pure cascade noise — bail quietly.
@@ -123,7 +197,7 @@ public sealed partial class SemanticVerifier
                         location: member.Location);
                     ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
                     return innerMethod.ReturnType ??
-                           _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+                           _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
                 }
             }
         }
@@ -190,9 +264,9 @@ public sealed partial class SemanticVerifier
                     location: member.Location);
                 // Validate method access
                 ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
-                // Return type is Blank if not specified
+                // Return type is None if not specified
                 return innerMethod.ReturnType ??
-                       _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+                       _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
             }
         }
 

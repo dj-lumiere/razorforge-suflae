@@ -36,6 +36,9 @@ public sealed partial class SemanticVerifier
             UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
             CallExpression call => AnalyzeCallExpression(call: call, expectedType: expectedType),
             MemberExpression member => AnalyzeMemberExpression(member: member),
+            SpliceMemberExpression spliceMember => AnalyzeSpliceMemberExpression(
+                spliceMember: spliceMember),
+            SpliceExpression splice => AnalyzeSpliceExpression(splice: splice),
             OptionalMemberExpression optMember => AnalyzeOptionalMemberExpression(
                 optMember: optMember),
             IndexExpression index => AnalyzeIndexExpression(index: index),
@@ -214,8 +217,16 @@ public sealed partial class SemanticVerifier
                 return ErrorTypeInfo.Instance;
             }
 
-            // Check for type narrowing (e.g., after "unless x is None")
+            // Check for type narrowing (e.g., after "unless x is None", or `if x is A` on a variant).
             TypeSymbol? narrowed = _registry.GetNarrowedType(name: id.Name);
+            if (narrowed != null && narrowed.Name != varInfo.Type.Name &&
+                (IsCarrierType(type: varInfo.Type) || varInfo.Type is VariantTypeInfo))
+            {
+                // Flow-narrowed to a single arm/payload of a carrier or variant — mark this read so a
+                // postprocessing pass rewrites it into a payload extraction from the underlying value.
+                id.NarrowedFrom = varInfo.Type;
+            }
+
             return narrowed ?? varInfo.Type;
         }
 
@@ -895,7 +906,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Analyzes a compound assignment expression (e.g., a += b).
-    /// Dispatch order: (0) verify target is var, (1) try in-place wired ($iadd) -> Blank,
+    /// Dispatch order: (0) verify target is var, (1) try in-place wired ($iadd) -> None,
     /// (2) fallback to create-and-assign ($add), (3) error if neither exists.
     /// </summary>
     private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound) // NOSONAR S3776
@@ -1022,8 +1033,8 @@ public sealed partial class SemanticVerifier
                 _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMethod}");
             if (inPlaceRoutine != null)
             {
-                // In-place method found — returns Blank (modifies in-place)
-                return _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+                // In-place method found — returns None (modifies in-place)
+                return _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
             }
         }
 
@@ -1084,7 +1095,11 @@ public sealed partial class SemanticVerifier
         switch (unary.Operator)
         {
             case UnaryOperator.Not:
-                if (!IsBoolType(type: operandType))
+                // Suppress for an ErrorTypeInfo operand: either the operand already reported its own
+                // error (cascade), or it is a comptime splice deferred to monomorphization — e.g.
+                // `not me.${m.name}.is_none()` in an `expand` body, where the splice-member call is
+                // ErrorType pre-monomorph and the real Bool only exists per concrete field.
+                if (!IsBoolType(type: operandType) && operandType is not ErrorTypeInfo)
                 {
                     ReportError(code: SemanticDiagnosticCode.LogicalNotRequiresBool,
                         message: "Logical 'not' operator requires a boolean operand.",

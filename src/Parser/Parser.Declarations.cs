@@ -84,6 +84,100 @@ public partial class Parser
     }
 
     /// <summary>
+    /// Parses a decl-position <c>expand m in memvarof(T)</c> inside a record/entity body: an indented
+    /// block of member-variable column templates (<c>[secret] ${namesplice}: Type</c>) materialized once
+    /// per member of the concrete source type at instantiation. See <see cref="ExpandMemberDeclaration"/>.
+    /// </summary>
+    private ExpandMemberDeclaration ParseExpandMemberDeclaration()
+    {
+        SourceLocation location = GetLocation();
+        Consume(type: TokenType.Expand, errorMessage: "Expected 'expand'");
+        string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
+        Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand directive");
+        Consume(type: TokenType.MemVarOf,
+            errorMessage: "A decl-position expand only supports 'memvarof(T)'");
+        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'memvarof'");
+        TypeExpression sourceType = ParseType();
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after memvarof type");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after expand header");
+
+        var templates = new List<ExpandMemberTemplate>();
+        if (Check(type: TokenType.Indent))
+        {
+            ProcessIndentToken();
+            while (!Check(type: TokenType.Dedent) && !IsAtEnd)
+            {
+                if (Match(TokenType.Newline, TokenType.DocComment))
+                {
+                    continue;
+                }
+                templates.Add(item: ParseExpandMemberTemplate(handle: handle));
+            }
+            if (Check(type: TokenType.Dedent))
+            {
+                ProcessDedentTokens();
+            }
+            else if (!IsAtEnd)
+            {
+                throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                    message: "Expected dedent after expand body");
+            }
+        }
+
+        return new ExpandMemberDeclaration(HandleName: handle,
+            SourceType: sourceType,
+            Templates: templates,
+            Location: location);
+    }
+
+    /// <summary>
+    /// Parses one member-variable column template inside a decl-position expand:
+    /// <c>[secret|posted|open] ${ ["prefix" +] handle.name }: Type</c>. The name splice yields
+    /// <c>NamePrefix + fieldName</c>; the type may carry a <c>${handle.type}</c> splice.
+    /// </summary>
+    private ExpandMemberTemplate ParseExpandMemberTemplate(string handle)
+    {
+        SourceLocation loc = GetLocation();
+        (VisibilityModifier visibility, _) = ParseModifiers();
+
+        Consume(type: TokenType.SpliceOpen,
+            errorMessage: "Expected a '${...}' member-name splice in the expand body");
+
+        // Optional literal prefix: `${"inner_" + m.name}` — else bare `${m.name}`.
+        string prefix = "";
+        if (Check(type: TokenType.TextLiteral))
+        {
+            prefix = Advance().Text;
+            Consume(type: TokenType.Plus,
+                errorMessage: "Expected '+' after the name prefix in a '${...}' member-name splice");
+        }
+
+        string nameHandle = ConsumeIdentifier(errorMessage: "Expected the expand handle in '${...}' splice");
+        if (nameHandle != handle)
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: $"Expected the expand handle '{handle}' in '${{...}}', got '{nameHandle}'.");
+        }
+        Consume(type: TokenType.Dot, errorMessage: "Expected '.name' in the '${...}' member-name splice");
+        string proj = ConsumeIdentifier(errorMessage: "Expected 'name' after '.' in name splice");
+        if (proj != "name")
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: $"A member-name splice must be '${{{handle}.name}}', not '${{{handle}.{proj}}}'.");
+        }
+        Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' to close the '${...}' name splice");
+
+        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after the member-name splice");
+        TypeExpression type = ParseType();
+        ConsumeStatementTerminator();
+
+        return new ExpandMemberTemplate(NamePrefix: prefix,
+            Type: type,
+            Visibility: visibility,
+            Location: loc);
+    }
+
+    /// <summary>
     /// Parses a routine declaration.
     /// Syntax: <c>routine name(params) -&gt; ReturnType</c> followed by indented body.
     /// Supports generic parameters, slash-based module paths, failable routines (!), and inline constraints.
@@ -151,7 +245,10 @@ public partial class Parser
         {
             _routineNameWired = true;
         }
-        string name = ConsumeIdentifier(errorMessage: "Expected routine name");
+        // `None` (a keyword — the void type) is a legal routine owner: `routine None.represent()`.
+        string name = Match(type: TokenType.None)
+            ? "None"
+            : ConsumeIdentifier(errorMessage: "Expected routine name");
 
         List<string>? genericParams = null;
         // Serialized type-arg strings used to rebuild the routine name (e.g., "DictEntry[K, V]"),
@@ -206,9 +303,19 @@ public partial class Parser
         // ===============================================================================
         var nameSb = new System.Text.StringBuilder(name);
 
+        // Structural owner/method capture (name-canonicalization): the parser knows the owner base
+        // identifier (`name`) and each method segment as SEPARATE tokens; record them so consumers
+        // never re-split the concatenated `Name` string. `name` still holds the bare owner base here
+        // (it isn't reassigned to nameSb.ToString() until after this loop).
+        string? memberOwnerName = null;
+        string? memberMethodName = null;
+        bool memberHasReceiverTypeArgs = false;
+
         while (Match(type: TokenType.Dot))
         {
             string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
+            memberOwnerName ??= name;
+            memberMethodName = part;
 
             // If we parsed generic params before the dot, embed them in the name
             // This transforms: name="List", generics=["T"], part="append"
@@ -223,6 +330,7 @@ public partial class Parser
                 nameSb.Append(string.Join(separator: ", ", values: nameArgs));
                 nameSb.Append("].");
                 nameSb.Append(part);
+                memberHasReceiverTypeArgs = true; // owner carried type-args (List[T].append)
                 hasGenericParams = false; // Only add once
             }
             else
@@ -436,7 +544,12 @@ public partial class Parser
             Storage: storage,
             Async: asyncStatus,
             IsDangerous: isDangerous,
-            IsWiredMemberRoutine: _routineNameWired);
+            IsWiredMemberRoutine: _routineNameWired)
+        {
+            OwnerName = memberOwnerName,
+            MethodName = memberMethodName,
+            HasReceiverTypeArgs = memberHasReceiverTypeArgs
+        };
     }
 
     // Entity declaration parsing lives in Parser.Declarations.Types.cs.

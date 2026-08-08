@@ -139,11 +139,11 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string paramStr = ri.Parameters.Count == 0
             ? ""
             : string.Join(", ", ri.Parameters.Select(p => $"{p.Name}: {p.Type.FullName}"));
-        // null ReturnType on a RoutineInfo means the routine returns Blank but SA never ran
-        // on it (stdlib / synthesized routines). Show Blank rather than <ERROR>.
+        // null ReturnType on a RoutineInfo means the routine returns None but SA never ran
+        // on it (stdlib / synthesized routines). Show None rather than <ERROR>.
         string retStr = ri.ReturnType != null
             ? $" -> {ri.ReturnType.FullName}"
-            : " -> Blank";
+            : " -> None";
         string annotations = ri.DeclaredMutation == MutationCategory.Readonly
             ? "@readonly\n"
             : "";
@@ -595,6 +595,10 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         return $"{I}var {node.Name}{typeStr}{initStr}";
     }
 
+    /// <inheritdoc/>
+    public string VisitExpandMemberDeclaration(ExpandMemberDeclaration node) =>
+        $"{I}expand {node.HandleName} in memvarof({node.SourceType.Accept(this)})  #{node.Templates.Count} columns";
+
 
     /// <inheritdoc/>
     public string VisitAssignmentStatement(AssignmentStatement node) =>
@@ -711,6 +715,16 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
     /// <inheritdoc/>
     public string VisitEachStatement(EachStatement node) => $"{I}#EachStatement";
+
+    /// <inheritdoc/>
+    public string VisitExpandStatement(ExpandStatement node) => $"{I}#ExpandStatement";
+
+    /// <inheritdoc/>
+    public string VisitSpliceExpression(SpliceExpression node) => "${...}";
+
+    /// <inheritdoc/>
+    public string VisitSpliceMemberExpression(SpliceMemberExpression node) =>
+        $"{node.Object.Accept(visitor: this)}.${{...}}";
 
 
     /// <inheritdoc/>
@@ -874,7 +888,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         {
             string returnStr = sig.ReturnType != null
                 ? $" -> {sig.ReturnType.Accept(this)}"
-                : " -> Blank";
+                : " -> None";
             string paramsStr = string.Join(", ", sig.Parameters.Select(p =>
                 p.Type != null ? $"{p.Name}: {p.Type.Accept(this)}" : p.Name));
             sb.AppendLine($"{I}routine {sig.Name}({paramsStr}){returnStr}");

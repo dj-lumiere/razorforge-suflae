@@ -22,6 +22,10 @@ public class EntityTypeInfo : TypeInfo
     /// <summary>MemberVariables declared in this entity.</summary>
     public List<MemberVariableInfo> MemberVariables { get; set; } = [];
 
+    /// <summary>Decl-position <c>expand</c> column templates (SoA layout). Populated only on a generic
+    /// definition; the registry materializes one member per source-type field at instantiation.</summary>
+    public List<MemberExpandTemplateInfo> ExpandTemplates { get; set; } = [];
+
     /// <summary>Protocols this entity implements (obeys).</summary>
     public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 

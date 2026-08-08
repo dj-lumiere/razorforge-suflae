@@ -1,0 +1,144 @@
+module Tests/Stdlib/NarrowReadApi
+import IO/Console
+
+# Flow narrowing: a carrier/variant variable, once proven to be a single arm/payload, is usable
+# WITHOUT rebinding — the read extracts the payload. Arm exclusions accumulate down an if/elseif
+# chain, so the branch where exactly one arm remains narrows to it.
+
+variant Tri
+  S32
+  Text
+  None
+
+record Point
+  x: S32
+  y: S32
+
+variant Shape
+  Point
+  Text
+  None
+
+# A binding/destructuring chain desugars to `when`, so the narrowing also lives in when's else:
+# once the preceding arms are excluded and one remains, the subject narrows there too.
+routine describe(s: Shape) -> Text
+  if s is Text t
+    return f"text: {t}"
+  elseif s is None
+    return "shape none"
+  else
+    # s is provably Point — narrowed member access, no rebinding.
+    return f"point: {s.x},{s.y}"
+
+# when-arm then: the subject is narrowed to the arm inside the arm body, no rebinding.
+routine tag(s: Shape) -> Text
+  when s
+    is Point => return f"pt {s.x},{s.y}"
+    is Text  => return f"tx {s}"
+    else     => return "nil"
+
+# `isnot`: the else proves the arm, narrowing without a binding (guard-clause form).
+routine viaIsnot(s: Shape) -> Text
+  if s isnot Point
+    return "not-pt"
+  return f"isnot pt {s.x}"
+
+# Nested variant narrowing: Outer narrows to Inner, then to Inner's arm — payload extraction
+# chains through both levels (Outer -> Inner -> S32).
+variant Inner
+  S32
+  Text
+
+variant Outer
+  Inner
+  None
+
+routine peel(o: Outer) -> Text
+  if o is None
+    return "o-none"
+  if o is S32
+    return f"peel s32: {o}"
+  return f"peel text: {o}"
+
+# Stacked guard-clauses across nesting levels: `is None`→Inner, then `is Text`→S32.
+routine peel_guard(o: Outer) -> Text
+  if o is None
+    return "pg-none"
+  if o is Text
+    return "pg-text"
+  return f"pg s32: {o}"
+
+# Comparison patterns on a nested-narrowed subject: `o` is S32 here, so `when o { == 0 … }`
+# compares the extracted value.
+routine peel_cmp(o: Outer) -> Text
+  if o is None
+    return "pc-none"
+  if o is Text
+    return "pc-text"
+  when o
+    == 0 => return "pc zero"
+    < 0  => return "pc neg"
+    else => return "pc pos"
+
+# Literal patterns on a nested-narrowed subject (matched against constant values).
+routine peel_lit(o: Outer) -> Text
+  if o is None
+    return "pl-none"
+  if o is Text
+    return "pl-text"
+  when o
+    5 => return "pl five"
+    0 => return "pl zero"
+    else => return "pl other"
+
+routine start()
+  # Carrier: `m` narrowed to S64 in the else of `is None`.
+  var m: Maybe[S64] = 42_s64
+  if m is None
+    show("m none")
+  else
+    show(f"m value: {m}")
+
+  # Variant then-branch: `is S32` proves the arm, so `a` reads as S32.
+  var a: Tri = 7_s32
+  if a is S32
+    show(f"a s32: {a}")
+  else
+    show("a not s32")
+
+  # N-arm elseif chain: S32 then None excluded → the final else has only Text left, so `b`
+  # reads as Text without a rebinding.
+  var b: Tri = "hi"
+  if b is S32
+    show(f"b s32: {b}")
+  elseif b is None
+    show("b none")
+  else
+    show(f"b text: {b}")
+
+  # Destructuring/binding elseif chain → when-else narrowing to the one remaining arm.
+  var s: Shape = Point(x: 3_s32, y: 4_s32)
+  show(describe(s: s))
+
+  # when-arm then narrowing (subject usable as the arm inside the arm body).
+  var st: Shape = "hey"
+  show(tag(s: s))
+  show(tag(s: st))
+
+  # `isnot` narrowing (no binding).
+  show(viaIsnot(s: s))
+
+  # nested variant narrowing (Outer -> Inner -> arm).
+  var o: Outer = Inner(5_s32)
+  show(peel(o: o))
+
+  # nested guard-clause narrowing (two stacked early returns).
+  show(peel_guard(o: o))
+
+  # comparison pattern on a nested-narrowed subject.
+  show(peel_cmp(o: o))
+
+  # literal pattern on a nested-narrowed subject.
+  show(peel_lit(o: o))
+
+  return

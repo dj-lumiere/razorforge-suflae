@@ -1,0 +1,49 @@
+module Tests/Stdlib/IfIsBindingApi
+import IO/Console
+
+# `if x is T p` — C#-style type-test with a binding that is scoped to the then-branch only.
+# Desugars to a `when` arm, so the binding is materialised exactly where it is live.
+
+variant Shape
+  S32
+  Text
+  None
+
+# Bare binding: `p` is visible only inside the matched branch.
+routine describe(s: Shape) -> Text
+  if s is S32 n
+    return f"s32:{n}"
+  if s is Text t
+    return f"text:{t}"
+  return "none"
+
+# Guarded binding: `and <guard>` may reference the binding; guard failure falls through.
+routine classify(s: Shape) -> Text
+  if s is S32 n and 0 < n < 100
+    return f"small:{n}"
+  if s is S32 n and n >= 100
+    return f"big:{n}"
+  return "other"
+
+routine start()
+  var a: Shape = 7_s32
+  var b: Shape = "hi"
+  var c: Shape = none
+  var d: Shape = 250_s32
+
+  show(describe(s: a))
+  show(describe(s: b))
+  show(describe(s: c))
+
+  show(classify(s: a))
+  show(classify(s: d))
+  show(classify(s: c))
+
+  # else-branch: the binding is not in scope there.
+  if a is Text tt
+    show(f"unexpected:{tt}")
+  else
+    show("a-not-text")
+
+  show("DONE")
+  return

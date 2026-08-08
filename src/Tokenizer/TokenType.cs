@@ -395,6 +395,18 @@ public enum TokenType
     /// <summary>Each loop keyword</summary>
     Each,
 
+    /// <summary>Comptime member-expansion loop keyword (`expand m in memvarof(T)`)</summary>
+    Expand,
+
+    /// <summary>Comptime member-variable reflection source keyword (`memvarof(T)`)</summary>
+    MemVarOf,
+
+    /// <summary>Comptime variant-arm reflection source keyword (`armof(T)`)</summary>
+    ArmOf,
+
+    /// <summary>Comptime choice/flags-case reflection source keyword (`caseof(T)`)</summary>
+    CaseOf,
+
     /// <summary>Break statement keyword</summary>
     Break,
 
@@ -523,7 +535,7 @@ public enum TokenType
     /// <summary>`None` keyword — the absent-arm *type* (used in patterns: `is None`, and as variant member declaration).</summary>
     None,
 
-    /// <summary>`none` keyword — the absent *value* literal (only legal where the target type is Maybe[T] / Lookup[T] / Result[Blank] / a variant with a None arm).</summary>
+    /// <summary>`none` keyword — the absent *value* literal (only legal where the target type is Maybe[T] / Lookup[T] / Result[None] / a variant with a None arm).</summary>
     NoneValue,
 
     #endregion
@@ -749,6 +761,10 @@ public enum TokenType
     /// <summary>Wired member-routine marker prefix ($) — e.g. $create, $store. Structural: the
     /// parser records it as RoutineInfo.IsWiredMemberRoutine and keeps the name bare.</summary>
     Dollar,
+
+    /// <summary>Comptime splice open marker (`${`) — the balanced `}` is an ordinary RightBrace.
+    /// Distinct from a bare `$` (wired marker) and a bare `{`. Opens a `${expr}` comptime splice.</summary>
+    SpliceOpen,
 
     /// <summary>Force unwrap operator (!!)</summary>
     BangBang,

@@ -228,6 +228,17 @@ public sealed partial class TypeRegistry
     /// <summary>Methods on GenericParameterTypeInfo owners, indexed by method name for O(1) universal lookup.</summary>
     private readonly Dictionary<string, RoutineInfo> _universalMethods = new();
 
+    /// <summary>
+    /// Auto-derive templates: universal <c>@overridable routine T.method()</c> bodies, plus their
+    /// kind-specialized <c>@override … needs T is VariantType/ChoiceType/FlagsType/…</c> variants. Keyed by
+    /// method name → all candidate (routine + body) pairs. The wired-routine synthesizer picks the
+    /// most-specific kind-matching template per concrete type at SYNTHESIS time (one body per type,
+    /// so several same-signature templates coexist here without any registry/call-resolution clash).
+    /// </summary>
+    private readonly Dictionary<string,
+        List<(string OwnerParam, int Arity, List<SyntaxTree.GenericConstraintDeclaration> Gates,
+            SyntaxTree.Statement Body)>> _deriveTemplates = new();
+
     /// <summary>Generic routine resolutions cache.</summary>
     private readonly Dictionary<string, RoutineInfo> _routineResolutions = new();
 
@@ -1029,6 +1040,10 @@ public sealed partial class TypeRegistry
         }
 
         TypeInfo resolved = bestDef.CreateInstance(typeArguments: typeArguments);
+        // Decl-position expand: materialize struct-of-arrays column members from the generic def's
+        // templates (one per member of the concrete source type). Appends real member variables so the
+        // SoA layout falls out of ordinary record layout.
+        ExpandSoAColumns(genericDef: bestDef, resolved: resolved, typeArguments: typeArguments);
         _resolutions[key: fullKey] = resolved;
         // Short-name alias for backward-compatible lookups via LookupType("Hijacked[Byte]")
         if (fullKey != shortKey) _resolutions[key: shortKey] = resolved;
@@ -1068,6 +1083,80 @@ public sealed partial class TypeRegistry
         }
 
         return resolved;
+    }
+
+    /// <summary>
+    /// Materializes decl-position <c>expand</c> columns onto a freshly-created concrete instance: for
+    /// each column template on the generic definition, appends one member variable per member of the
+    /// concrete source type (<c>${m.name}</c> → the column name, <c>${m.type}</c> → the column element
+    /// type). The struct-of-arrays layout of <c>SplitArray[T, N]</c>/<c>SplitList[T]</c> then falls out
+    /// of ordinary record layout — no bespoke codegen.
+    /// </summary>
+    private static void ExpandSoAColumns(TypeInfo genericDef, TypeInfo resolved,
+        List<TypeInfo> typeArguments)
+    {
+        (List<MemberExpandTemplateInfo> templates, List<string>? genericParams) = genericDef switch
+        {
+            RecordTypeInfo r => (r.ExpandTemplates, r.GenericParameters),
+            EntityTypeInfo e => (e.ExpandTemplates, e.GenericParameters),
+            _ => ([], null)
+        };
+        if (templates.Count == 0 || genericParams == null)
+        {
+            return;
+        }
+
+        // Base substitution: each generic parameter -> its concrete argument.
+        var baseSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
+        for (int i = 0; i < genericParams.Count && i < typeArguments.Count; i++)
+        {
+            baseSubs[key: genericParams[index: i]] = typeArguments[index: i];
+        }
+
+        List<MemberVariableInfo> target = resolved switch
+        {
+            RecordTypeInfo r => r.MemberVariables,
+            EntityTypeInfo e => e.MemberVariables,
+            _ => null!
+        };
+        if (target == null)
+        {
+            return;
+        }
+
+        foreach (MemberExpandTemplateInfo template in templates)
+        {
+            // The concrete source type whose members become columns (the T in `memvarof(T)`).
+            if (!baseSubs.TryGetValue(key: template.SourceParamName, value: out TypeInfo? sourceType))
+            {
+                continue;
+            }
+            List<MemberVariableInfo> sourceMembers = sourceType switch
+            {
+                RecordTypeInfo r => r.MemberVariables,
+                EntityTypeInfo e => e.MemberVariables,
+                _ => []
+            };
+
+            foreach (MemberVariableInfo field in sourceMembers)
+            {
+                // Per-field substitution: the `${m.type}` placeholder binds to this field's type.
+                var subs = new Dictionary<string, TypeInfo>(dictionary: baseSubs,
+                    comparer: StringComparer.Ordinal)
+                {
+                    [key: MemberExpandTemplateInfo.ColumnPlaceholderName] = field.Type
+                };
+                TypeInfo columnType = RecordTypeInfo.SubstituteType(type: template.ColumnTypeTemplate,
+                    substitution: subs);
+                target.Add(item: new MemberVariableInfo(
+                    name: template.NamePrefix + field.Name, type: columnType)
+                {
+                    Visibility = template.Visibility,
+                    Index = target.Count,
+                    Owner = resolved
+                });
+            }
+        }
     }
 
     /// <summary>
@@ -1223,7 +1312,7 @@ public sealed partial class TypeRegistry
     /// Function types are cached by their signature.
     /// </summary>
     /// <param name="parameterTypes">The parameter types.</param>
-    /// <param name="returnType">The return type (null for Blank/void).</param>
+    /// <param name="returnType">The return type (null for None/void).</param>
     /// <param name="isFailable">Whether the function can throw/absent.</param>
     /// <returns>The cached or newly created function type.</returns>
     public RoutineTypeInfo GetOrCreateRoutineType(List<TypeInfo> parameterTypes,
@@ -1232,7 +1321,7 @@ public sealed partial class TypeRegistry
         // Build the signature key
         string paramList = string.Join(separator: ", ",
             values: parameterTypes.Select(selector: p => p.Name));
-        string returnName = returnType?.Name ?? "Blank";
+        string returnName = returnType?.Name ?? "None";
         string failableSuffix = isFailable
             ? "!"
             : "";
@@ -1359,6 +1448,32 @@ public sealed partial class TypeRegistry
                 OwnerType = newType,
                 Parameters = [],
                 ReturnType = u64Type,
+                IsFailable = false,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+        }
+
+        // Auto-register serialize if EVERY element is serializable — or a routine (the derive template
+        // boxes a routine element's signature via `represent`, routine values having no `serialize`).
+        // A tuple can hold otherwise-unserializable elements (unlike a record), so gate on the elements.
+        // Exclude generic-parameter elements (e.g. `Tuple[U64, T]`): the body clones per CONCRETE
+        // instantiation via monomorphization — synthesizing one for the unresolved `T` sends the
+        // template's `SerialValue(…)` constructor to codegen without lowering metadata (RF-S959).
+        TypeInfo? serialValueType = LookupType(name: "SerialValue");
+        if (serialValueType != null &&
+            elementTypes.All(predicate: et =>
+                et is not GenericParameterTypeInfo &&
+                (et is RoutineTypeInfo || LookupMethod(type: et, methodName: "serialize") != null)))
+        {
+            RegisterRoutine(routine: new RoutineInfo(name: "serialize")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [],
+                ReturnType = serialValueType,
                 IsFailable = false,
                 DeclaredMutation = MutationCategory.Readonly,
                 MutationCategory = MutationCategory.Readonly,
@@ -1507,7 +1622,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Returns true when a type argument is fully concrete — no GenericParameterTypeInfo,
-    /// ErrorTypeInfo, or Blank at any nesting depth.
+    /// ErrorTypeInfo, or None at any nesting depth.
     /// </summary>
     private static bool IsFullyConcrete(TypeInfo t)
     {
@@ -1517,7 +1632,7 @@ public sealed partial class TypeRegistry
         if (t is GenericParameterTypeInfo or ErrorTypeInfo or AssociatedProjectionTypeInfo
             or ProtocolSelfTypeInfo)
             return false;
-        if (t.IsBlank) return false;
+        if (t.IsNone) return false;
         // A generic definition has free type parameters (no TypeArguments, only GenericParameters).
         // Wrapper instances like Hijacked[BTreeDictNode[K,V]] must not be treated as fully concrete
         // since they still reference unresolved type params via the generic-def inner type.
@@ -1830,6 +1945,19 @@ public sealed partial class TypeRegistry
     public TypeInfo? GetNarrowedType(string name)
     {
         return _currentScope.GetNarrowedType(name: name);
+    }
+
+    /// <summary>Records a variant arm (by full type name) as excluded for a variable in the current
+    /// scope; accumulates down an if/elseif chain until a single arm remains.</summary>
+    public void ExcludeVariantArm(string name, string armFullName)
+    {
+        _currentScope.ExcludeArm(name: name, armFullName: armFullName);
+    }
+
+    /// <summary>Gets the variant arms excluded for a variable in the current scope chain.</summary>
+    public IReadOnlyCollection<string> GetExcludedVariantArms(string name)
+    {
+        return _currentScope.GetExcludedArms(name: name);
     }
 
     /// <summary>Suflae flow typing: marks a nullable entity reference proven non-none in the current scope.</summary>

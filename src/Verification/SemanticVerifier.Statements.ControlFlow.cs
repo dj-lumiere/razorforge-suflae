@@ -17,30 +17,42 @@ public sealed partial class SemanticVerifier
     {
         TypeSymbol conditionType = AnalyzeExpression(expression: ifStmt.Condition);
 
-        // Condition must be boolean
-        if (!IsBoolType(type: conditionType))
+        // Condition must be boolean. An ErrorTypeInfo condition is either a sub-expression that already
+        // reported its own error (piling "must be boolean" on top is pure cascade noise) OR a comptime
+        // splice deferred to monomorphization — e.g. `if me.${m.name}.is_none()` inside an `expand`, where
+        // the splice-member is ErrorType pre-monomorph and the real Bool only exists per concrete field.
+        // Either way, suppress the boolean check for ErrorType and let the deferred/errored path settle.
+        if (!IsBoolType(type: conditionType) && conditionType is not ErrorTypeInfo)
         {
             ReportError(code: SemanticDiagnosticCode.IfConditionNotBool,
                 message: $"If condition must be boolean, got '{conditionType.Name}'.",
                 location: ifStmt.Condition.Location);
         }
 
-        // Extract narrowing info from condition
+        // Extract narrowing info from condition: carrier/None (NarrowingInfo) + general user variant
+        // (VariantIsNarrowing, which accumulates arm exclusions down an if/elseif chain).
         NarrowingInfo? narrowing = TryExtractNarrowingFromCondition(condition: ifStmt.Condition);
+        VariantIsNarrowing? variantNarrowing = TryGetVariantIsNarrowing(condition: ifStmt.Condition);
 
         // Analyze then branch (with narrowing if applicable)
-        if (narrowing?.ThenBranchType != null || narrowing is { ThenNonNull: true })
+        if (narrowing?.ThenBranchType != null || narrowing is { ThenNonNull: true } ||
+            variantNarrowing != null)
         {
             _registry.EnterScope(kind: ScopeKind.Block, name: "if_then");
-            if (narrowing.ThenBranchType != null)
+            if (narrowing?.ThenBranchType != null)
             {
                 _registry.NarrowVariable(name: narrowing.VariableName,
                     narrowedType: narrowing.ThenBranchType);
             }
 
-            if (narrowing.ThenNonNull)
+            if (narrowing is { ThenNonNull: true })
             {
                 _registry.MarkVariableNonNull(name: narrowing.VariableName);
+            }
+
+            if (variantNarrowing != null)
+            {
+                ApplyVariantNarrowing(vn: variantNarrowing, conditionTrue: true);
             }
 
             AnalyzeStatement(statement: ifStmt.ThenStatement);
@@ -54,18 +66,24 @@ public sealed partial class SemanticVerifier
         // Analyze else branch if present (with inverse narrowing if applicable)
         if (ifStmt.ElseStatement != null)
         {
-            if (narrowing?.ElseBranchType != null || narrowing is { ElseNonNull: true })
+            if (narrowing?.ElseBranchType != null || narrowing is { ElseNonNull: true } ||
+                variantNarrowing != null)
             {
                 _registry.EnterScope(kind: ScopeKind.Block, name: "if_else");
-                if (narrowing.ElseBranchType != null)
+                if (narrowing?.ElseBranchType != null)
                 {
                     _registry.NarrowVariable(name: narrowing.VariableName,
                         narrowedType: narrowing.ElseBranchType);
                 }
 
-                if (narrowing.ElseNonNull)
+                if (narrowing is { ElseNonNull: true })
                 {
                     _registry.MarkVariableNonNull(name: narrowing.VariableName);
+                }
+
+                if (variantNarrowing != null)
+                {
+                    ApplyVariantNarrowing(vn: variantNarrowing, conditionTrue: false);
                 }
 
                 AnalyzeStatement(statement: ifStmt.ElseStatement);
@@ -91,6 +109,11 @@ public sealed partial class SemanticVerifier
             {
                 _registry.MarkVariableNonNull(name: narrowing.VariableName);
             }
+
+            if (variantNarrowing != null)
+            {
+                ApplyVariantNarrowing(vn: variantNarrowing, conditionTrue: false);
+            }
         }
     }
 
@@ -98,8 +121,9 @@ public sealed partial class SemanticVerifier
     {
         TypeSymbol conditionType = AnalyzeExpression(expression: whileStmt.Condition);
 
-        // Condition must be boolean
-        if (!IsBoolType(type: conditionType))
+        // Condition must be boolean (ErrorType suppressed as cascade / comptime-splice deferral — see
+        // AnalyzeIfStatement for the rationale).
+        if (!IsBoolType(type: conditionType) && conditionType is not ErrorTypeInfo)
         {
             ReportError(code: SemanticDiagnosticCode.WhileConditionNotBool,
                 message: $"While condition must be boolean, got '{conditionType.Name}'.",
@@ -109,6 +133,31 @@ public sealed partial class SemanticVerifier
         // Analyze loop body
         _registry.EnterScope(kind: ScopeKind.Loop, name: "while");
         AnalyzeStatement(statement: whileStmt.Body);
+        _registry.ExitScope();
+    }
+
+    /// <summary>
+    /// Analyzes a comptime <c>expand m in memvarof(T)</c> loop. Because the concrete members of
+    /// <c>T</c> are unknown until monomorphization, this does NOT unroll or fully type the body —
+    /// it only validates the template shape: the source type resolves, the handle <c>m</c> is
+    /// registered as a comptime-handle sentinel (so <c>m.name</c>/<c>m.id</c> and the splices type
+    /// leniently), and the body is analyzed once. The real per-member expansion and typecheck
+    /// happen in the generic AST rewriter at instantiation.
+    /// </summary>
+    private void AnalyzeExpandStatement(ExpandStatement expandStmt)
+    {
+        _registry.EnterScope(kind: ScopeKind.Loop, name: "expand");
+
+        // Resolve the source type for early error surfacing (a bare generic param resolves fine).
+        // The result is intentionally unused — no member walk happens before monomorphization.
+        ResolveType(typeExpr: expandStmt.SourceType);
+
+        // Register the per-part handle so `m`, `m.name`, `m.id` resolve leniently in the body.
+        _registry.DeclareVariable(name: expandStmt.HandleName,
+            type: ComptimeHandleTypeInfo.Instance);
+
+        AnalyzeStatement(statement: expandStmt.Body);
+
         _registry.ExitScope();
     }
 
@@ -201,6 +250,41 @@ public sealed partial class SemanticVerifier
     {
         TypeSymbol matchedType = AnalyzeExpression(expression: whenStmt.Expression);
 
+        // Comptime arm-expansion (`when me` / `expand m in armof(T)` / `is ${m.type} x => …`): the
+        // concrete arms are unknown until monomorphization. Validate the template leniently — the
+        // handle `m` and the payload binding type-check via deferral (ErrorTypeInfo) — plus any
+        // EXPLICIT clauses written alongside it (e.g. `is None => …`). Skip the exhaustiveness/order
+        // checks below, which don't apply until the arms are unrolled.
+        if (whenStmt.ArmExpansion is { } armExp)
+        {
+            // The subject type is the generic param (arms unknown pre-monomorph), so the explicit
+            // clauses' patterns (e.g. `is None`) can't be validated here — defer them. Declare any
+            // simple type-pattern binding leniently so its body still type-checks.
+            foreach (WhenClause clause in whenStmt.Clauses)
+            {
+                _registry.EnterScope(kind: ScopeKind.Block, name: "when-clause");
+                if (clause.Pattern is TypePattern { VariableName: { } explicitBind })
+                {
+                    _registry.DeclareVariable(name: explicitBind, type: ErrorTypeInfo.Instance);
+                }
+
+                AnalyzeStatement(statement: clause.Body);
+                _registry.ExitScope();
+            }
+
+            _registry.EnterScope(kind: ScopeKind.Block, name: "expand-arm");
+            _registry.DeclareVariable(name: armExp.HandleName,
+                type: ComptimeHandleTypeInfo.Instance);
+            if (armExp.Template.Pattern is SpliceTypePattern { VariableName: { } bindName })
+            {
+                _registry.DeclareVariable(name: bindName, type: ErrorTypeInfo.Instance);
+            }
+
+            AnalyzeStatement(statement: armExp.Template.Body);
+            _registry.ExitScope();
+            return;
+        }
+
         // #161: Mark Lookup variable as dismantled when targeted by 'when'
         if (whenStmt.Expression is IdentifierExpression whenTarget)
         {
@@ -239,7 +323,7 @@ public sealed partial class SemanticVerifier
 
         // Track handled patterns for narrowing the else clause
         bool handledNone = false;
-        bool handledBlank = false;
+        bool handledNoneValue = false;
         bool handledCrashable = false;
 
         // Suflae: `when` is for variants / carriers / values — not entity references. An entity
@@ -255,9 +339,37 @@ public sealed partial class SemanticVerifier
                 location: whenStmt.Expression.Location);
         }
 
+        // Variant subject narrowing: when the subject is a plain-variant VARIABLE, remember which
+        // arms the `is Arm` clauses cover so the else clause can exclude them and — if exactly one
+        // arm remains — narrow the subject to it (usable without rebinding). Excluding through the
+        // scope registry also composes with a nested `if x is …` in the else body.
+        string? whenVarName = (whenStmt.Expression as IdentifierExpression)?.Name;
+        VariantTypeInfo? whenVariant =
+            whenVarName != null && matchedType is VariantTypeInfo wv && !IsCarrierType(type: matchedType)
+                ? wv
+                : null;
+        var handledArms = new List<string>();
+
         foreach (WhenClause clause in whenStmt.Clauses)
         {
             _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");
+
+            // Variant subject narrowing for the else clause: exclude every arm the preceding clauses
+            // matched (else is always last, so the list is complete), then narrow the subject if a
+            // single arm is left. Excluding through the scope registry composes with a nested
+            // `if x is …` inside the else body. Runs before the body is analyzed.
+            if (whenVariant != null && whenVarName != null && clause.Pattern is ElsePattern)
+            {
+                foreach (string armName in handledArms)
+                    _registry.ExcludeVariantArm(name: whenVarName, armFullName: armName);
+                IReadOnlyCollection<string> excluded =
+                    _registry.GetExcludedVariantArms(name: whenVarName);
+                if (whenVariant.Members.Where(predicate: m => !excluded.Contains(m.Name))
+                        .ToList() is [{ Type: not null } sole])
+                {
+                    _registry.NarrowVariable(name: whenVarName, narrowedType: sole.Type);
+                }
+            }
 
             // Track which patterns are handled (before the else clause).
             // Maybe[T] and Lookup[T] absent state is matched by `is None`.
@@ -268,9 +380,9 @@ public sealed partial class SemanticVerifier
             {
                 handledNone = true;
             }
-            else if (carrierBase == "Result" && IsBlankPattern(pattern: clause.Pattern))
+            else if (carrierBase == "Result" && IsNoneTypePattern(pattern: clause.Pattern))
             {
-                handledBlank = true;
+                handledNoneValue = true;
             }
             else if (IsCrashablePattern(pattern: clause.Pattern))
             {
@@ -284,7 +396,7 @@ public sealed partial class SemanticVerifier
                     // Compute narrowed type for else clause binding
                     TypeSymbol? narrowedType = ComputeNarrowedType(type: matchedType,
                         eliminateNone: handledNone,
-                        eliminateBlank: handledBlank,
+                        eliminateNoneValue: handledNoneValue,
                         eliminateCrashable: handledCrashable);
 
                     if (narrowedType != null && elsePat.VariableName != null)
@@ -304,6 +416,28 @@ public sealed partial class SemanticVerifier
 
             // Analyze pattern and bind variables
             AnalyzePattern(pattern: clause.Pattern, matchedType: matchedType);
+
+            if (whenVariant != null && whenVarName != null)
+            {
+                // Record which variant arm this clause FULLY matched (unguarded, `is None` included)
+                // so the trailing else clause can exclude it.
+                if (ResolveVariantArm(pattern: clause.Pattern, variant: whenVariant) is
+                    { } matchedArm)
+                {
+                    handledArms.Add(item: matchedArm.Name);
+                }
+
+                // Narrow the subject to the matched arm inside THIS arm's body, so it's usable
+                // without rebinding (`is Point => me me.x`). Safe even for a guarded arm — the body
+                // only runs once the arm matched — so unwrap the guard to reach the arm.
+                Pattern armPattern =
+                    clause.Pattern is GuardPattern gp ? gp.InnerPattern : clause.Pattern;
+                if (ResolveVariantArm(pattern: armPattern, variant: whenVariant) is
+                    { Type: not null } bodyArm)
+                {
+                    _registry.NarrowVariable(name: whenVarName, narrowedType: bodyArm.Type);
+                }
+            }
 
             // Analyze clause body
             AnalyzeStatement(statement: clause.Body);
@@ -371,11 +505,11 @@ public sealed partial class SemanticVerifier
 
         if (ret.Value != null)
         {
-            // Bare `return` is normalized by BlankReturnNormalizationPass to `return Blank`
+            // Bare `return` is normalized by NoneReturnNormalizationPass to `return None`
             // with Location == ret.Location. Treat these as unreachable-path terminators:
             // skip the type check so exhaustive when-else blocks can end with bare `return`.
             bool isNormalizedBareReturn =
-                ret.Value is IdentifierExpression { Name: "Blank" } blankId &&
+                ret.Value is IdentifierExpression { Name: "None" } blankId &&
                 blankId.Location == ret.Location;
 
             // Pass expected return type for contextual literal inference
@@ -632,7 +766,7 @@ public sealed partial class SemanticVerifier
                 // LookupMethod handles generic fallback (Viewing[Point].enter -> Viewing.enter).
                 RoutineInfo? enterMethod =
                     _registry.LookupMethod(type: resourceType, methodName: "enter");
-                if (enterMethod?.ReturnType is { IsBlank: false } enterReturn)
+                if (enterMethod?.ReturnType is { IsNone: false } enterReturn)
                     boundType = enterReturn;
 
                 // A `fallback` branch drives a non-blocking acquisition — the resource must

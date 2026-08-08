@@ -185,6 +185,16 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the member expression</returns>
     T VisitMemberExpression(MemberExpression node);
 
+    /// <summary>Visits a comptime splice expression node (${expr})</summary>
+    /// <param name="node">The splice expression to visit</param>
+    /// <returns>Result of visiting the splice expression</returns>
+    T VisitSpliceExpression(SpliceExpression node);
+
+    /// <summary>Visits a splice-selector member access node (x.${...})</summary>
+    /// <param name="node">The splice member expression to visit</param>
+    /// <returns>Result of visiting the splice member expression</returns>
+    T VisitSpliceMemberExpression(SpliceMemberExpression node);
+
     /// <summary>Visits an optional member expression node (safe navigation like obj?.memberVar)</summary>
     /// <param name="node">The optional member expression to visit</param>
     /// <returns>Result of visiting the optional member expression</returns>
@@ -370,6 +380,11 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the for statement</returns>
     T VisitEachStatement(EachStatement node);
 
+    /// <summary>Visits a comptime member-expansion statement node (expand m in memvarof(T))</summary>
+    /// <param name="node">The expand statement to visit</param>
+    /// <returns>Result of visiting the expand statement</returns>
+    T VisitExpandStatement(ExpandStatement node);
+
     /// <summary>Visits a block statement node (grouped statements with lexical scope)</summary>
     /// <param name="node">The block statement to visit</param>
     /// <returns>Result of visiting the block statement</returns>
@@ -411,6 +426,11 @@ public interface ISyntaxTreeVisitor<T>
     /// <param name="node">The variable declaration to visit</param>
     /// <returns>Result of visiting the variable declaration</returns>
     T VisitVariableDeclaration(VariableDeclaration node);
+
+    /// <summary>Visits a decl-position expand member-generation directive.</summary>
+    /// <param name="node">The expand-member declaration to visit</param>
+    /// <returns>Result of visiting the expand-member declaration</returns>
+    T VisitExpandMemberDeclaration(ExpandMemberDeclaration node);
 
     /// <summary>Visits a function declaration node (routine/function definitions)</summary>
     /// <param name="node">The function declaration to visit</param>

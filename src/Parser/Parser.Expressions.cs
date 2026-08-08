@@ -28,9 +28,29 @@ public partial class Parser
     /// Overflow variants (+%=, +^=, etc.) and ??= expand to: <c>a +%= b</c> becomes <c>a = a +% b</c>.
     /// </summary>
     /// <returns>The parsed expression, possibly an assignment.</returns>
+    /// <summary>
+    /// Parses the inner expression of a comptime splice after the opening <c>${</c> has been
+    /// consumed, up to and including the closing <c>}</c>.
+    /// </summary>
+    /// <param name="kind">The required fold kind, fixed by the syntactic position.</param>
+    /// <returns>A <see cref="SpliceExpression"/> node.</returns>
+    private SpliceExpression ParseSplice(SpliceKind kind)
+    {
+        SourceLocation loc = GetLocation(token: PeekToken(offset: -1));
+        Expression inner = ParseExpression();
+        Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' to close '${...}' splice");
+        return new SpliceExpression(Inner: inner, RequiredKind: kind, Location: loc);
+    }
+
     private Expression ParsePrimary()
     {
         SourceLocation location = GetLocation();
+
+        // Comptime splice in expression position: ${expr}
+        if (Match(type: TokenType.SpliceOpen))
+        {
+            return ParseSplice(kind: SpliceKind.Value);
+        }
 
         // Boolean and none literals
         if (Match(type: TokenType.True))

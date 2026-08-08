@@ -1,0 +1,11 @@
+m value: 42
+a s32: 7
+b text: hi
+point: 3,4
+pt 3,4
+tx hey
+isnot pt 3
+peel s32: 5
+pg s32: 5
+pc pos
+pl five

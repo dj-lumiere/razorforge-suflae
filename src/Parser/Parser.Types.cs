@@ -22,6 +22,71 @@ public partial class Parser
     /// inference); moves are marked by `steal` at use sites.
     /// </remarks>
     /// <returns>A <see cref="TypeExpression"/> AST node.</returns>
+    /// <summary>The recognized compiler-classified type-KIND names, all carrying a <c>-Type</c>
+    /// suffix so a reader tells a kind-group membership (<c>is RecordType</c>) apart from a capability
+    /// (<c>obeys Serializable</c>) or an identity/const-generic (<c>N is U64</c>). Written as
+    /// <c>T is &lt;Name&gt;Type</c> in a constraint; the old <c>within &lt;Name&gt;</c> spelling and the
+    /// bare lowercase <c>is record</c>/<c>is variant</c> forms are gone — this is the single surface.</summary>
+    private static readonly Dictionary<string, ConstraintKind> TypeKindNames = new(StringComparer.Ordinal)
+    {
+        ["RoutineType"] = ConstraintKind.RoutineType,
+        ["TupleType"] = ConstraintKind.TupleType,
+        ["RecordType"] = ConstraintKind.ValueType,
+        ["ChoiceType"] = ConstraintKind.ChoiceType,
+        ["FlagsType"] = ConstraintKind.FlagsType,
+        ["VariantType"] = ConstraintKind.VariantType,
+        ["EntityType"] = ConstraintKind.ReferenceType,
+        ["CrashableType"] = ConstraintKind.Crashable,
+        ["ZeroMemvarType"] = ConstraintKind.ZeroMemvarType,
+        ["SplittableType"] = ConstraintKind.Splittable
+    };
+
+    /// <summary>Recognizes a <c>T is &lt;Name&gt;Type</c> type-kind constraint. When the identifier after
+    /// <c>is</c> is a known kind-group name, yields its <see cref="ConstraintKind"/>; otherwise the
+    /// <c>is</c> target is an identity / const-generic type (<c>N is U64</c>).</summary>
+    private static bool TryGetTypeKindConstraint(string name, out ConstraintKind kind) =>
+        TypeKindNames.TryGetValue(key: name, value: out kind);
+
+    private const string TypeKindNamesHint =
+        "RecordType, VariantType, EntityType, ChoiceType, FlagsType, TupleType, RoutineType, " +
+        "SplittableType, ZeroMemvarType, CrashableType";
+
+    /// <summary>Parses the target of an <c>is</c> generic constraint after the <c>is</c> keyword has
+    /// been consumed. A known <c>-Type</c> kind-group name (<c>is RecordType</c>) becomes a
+    /// compiler-classified kind constraint; any other type identifier (<c>N is U64</c>) is a
+    /// const-generic / identity constraint. Shared by the inline (<c>[T is …]</c>) and <c>needs</c> sites
+    /// so both accept exactly the same surface. NOTE: the runtime <c>is Crashable e</c> error-catch
+    /// PATTERN is a different parse site (expression position) and is unaffected.</summary>
+    private GenericConstraintDeclaration ParseIsConstraint(string paramName, SourceLocation location)
+    {
+        if (Check(type: TokenType.Identifier) &&
+            TryGetTypeKindConstraint(name: CurrentToken.Text, out ConstraintKind kind))
+        {
+            Advance();
+            return new GenericConstraintDeclaration(
+                ParameterName: paramName,
+                ConstraintType: kind,
+                ConstraintTypes: null,
+                Location: location);
+        }
+
+        if (Check(type: TokenType.Identifier))
+        {
+            // Const-generic / identity: `N is U64`. Validation is deferred to semantic analysis.
+            TypeExpression constType = ParseType();
+            return new GenericConstraintDeclaration(
+                ParameterName: paramName,
+                ConstraintType: ConstraintKind.ConstGeneric,
+                ConstraintTypes: [constType],
+                Location: location);
+        }
+
+        throw ThrowParseError(code: GrammarDiagnosticCode.InvalidConstraintKind,
+            message:
+            $"Expected a type-kind ({TypeKindNamesHint}) or a type after 'is' in a constraint. " +
+            "The lowercase 'is record'/'is variant' and 'within' forms were removed — use 'is RecordType' etc.");
+    }
+
     private TypeExpression ParseType()
     {
         TypeExpression baseType = ParseBaseType();
@@ -74,6 +139,36 @@ public partial class Parser
                     Location: location);
             }
             return new TypeExpression(Name: "Me", GenericArguments: null, Location: location);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 1b: None - the void / unit type (a keyword, so it can't be a bare Identifier below).
+        // `None` is the canonical name for "nothing" — both a type (void return / field) and the
+        // variant empty branch. It resolves to the zero-sized void type.
+        // ═══════════════════════════════════════════════════════════════════════════
+        if (Match(type: TokenType.None))
+        {
+            return new TypeExpression(Name: "None", GenericArguments: null, Location: location);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CASE 1c: `${m.type}` — a comptime type-position splice of an expand handle's member type.
+        // Used in decl-position expand column templates (e.g. `Array[${m.type}, N]`) and, later, in
+        // type-arg / pattern positions. Resolves to the current member's static type at expansion.
+        // ═══════════════════════════════════════════════════════════════════════════
+        if (Match(type: TokenType.SpliceOpen))
+        {
+            string handle = ConsumeIdentifier(errorMessage: "Expected an expand handle name in '${...}' type splice");
+            Consume(type: TokenType.Dot, errorMessage: "Expected '.type' in '${...}' type splice");
+            string projection = ConsumeIdentifier(errorMessage: "Expected 'type' after '.' in type splice");
+            if (projection != "type")
+            {
+                throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedToken,
+                    message: $"Only '${{{handle}.type}}' is valid in a type position, not '${{{handle}.{projection}}}'.");
+            }
+            Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' to close '${...}' type splice");
+            return new TypeExpression(Name: "$splice", GenericArguments: null, Location: location,
+                SpliceHandle: handle);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -364,79 +459,7 @@ public partial class Parser
             // Const generic: N is S32 (N is a build-time S32 value)
             else if (Match(type: TokenType.Is))
             {
-                if (Match(type: TokenType.Record))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
-                        ParameterName: paramName,
-                        ConstraintType: ConstraintKind.ValueType,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
-                else if (Match(type: TokenType.Entity))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
-                        ParameterName: paramName,
-                        ConstraintType: ConstraintKind.ReferenceType,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
-                else if (Match(type: TokenType.Routine))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
-                        ParameterName: paramName,
-                        ConstraintType: ConstraintKind.RoutineType,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
-                else if (Match(type: TokenType.Choice))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
-                        ParameterName: paramName,
-                        ConstraintType: ConstraintKind.ChoiceType,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
-                else if (Match(type: TokenType.Flags))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
-                        ParameterName: paramName,
-                        ConstraintType: ConstraintKind.FlagsType,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
-                else if (Match(type: TokenType.Variant))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
-                        ParameterName: paramName,
-                        ConstraintType: ConstraintKind.VariantType,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
-                else if (Match(type: TokenType.Crashable))
-                {
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
-                        ParameterName: paramName,
-                        ConstraintType: ConstraintKind.Crashable,
-                        ConstraintTypes: null,
-                        Location: location));
-                }
-                else if (Check(type: TokenType.Identifier))
-                {
-                    // Const generic constraint: N is Address
-                    // Type validation happens in semantic analysis, not parsing
-                    TypeExpression constType = ParseType();
-                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
-                        ParameterName: paramName,
-                        ConstraintType: ConstraintKind.ConstGeneric,
-                        ConstraintTypes: [constType],
-                        Location: location));
-                }
-                else
-                {
-                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidConstraintKind,
-                        message:
-                        "Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in inline constraint");
-                }
+                inlineConstraints.Add(item: ParseIsConstraint(paramName: paramName, location: location));
             }
             // ─────────────────────────────────────────────────────────────────────
             // CONSTRAINT TYPE 3: in - type equality (must be one of listed types)
@@ -577,80 +600,7 @@ public partial class Parser
                 }
                 else if (Match(type: TokenType.Is))
                 {
-                    // T is record/entity/routine/choice/variant or N is Address (const generic)
-                    if (Match(type: TokenType.Record))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(
-                            ParameterName: paramName,
-                            ConstraintType: ConstraintKind.ValueType,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
-                    else if (Match(type: TokenType.Entity))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(
-                            ParameterName: paramName,
-                            ConstraintType: ConstraintKind.ReferenceType,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
-                    else if (Match(type: TokenType.Routine))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(
-                            ParameterName: paramName,
-                            ConstraintType: ConstraintKind.RoutineType,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
-                    else if (Match(type: TokenType.Choice))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(
-                            ParameterName: paramName,
-                            ConstraintType: ConstraintKind.ChoiceType,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
-                    else if (Match(type: TokenType.Flags))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(
-                            ParameterName: paramName,
-                            ConstraintType: ConstraintKind.FlagsType,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
-                    else if (Match(type: TokenType.Variant))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(
-                            ParameterName: paramName,
-                            ConstraintType: ConstraintKind.VariantType,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
-                    else if (Match(type: TokenType.Crashable))
-                    {
-                        constraints.Add(item: new GenericConstraintDeclaration(
-                            ParameterName: paramName,
-                            ConstraintType: ConstraintKind.Crashable,
-                            ConstraintTypes: null,
-                            Location: location));
-                    }
-                    else if (Check(type: TokenType.Identifier))
-                    {
-                        // Const generic constraint: N is Address
-                        // Type validation happens in semantic analysis, not parsing
-                        TypeExpression constType = ParseType();
-                        constraints.Add(item: new GenericConstraintDeclaration(
-                            ParameterName: paramName,
-                            ConstraintType: ConstraintKind.ConstGeneric,
-                            ConstraintTypes: [constType],
-                            Location: location));
-                    }
-                    else
-                    {
-                        throw ThrowParseError(code: GrammarDiagnosticCode.InvalidConstraintKind,
-                            message:
-                            "Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', 'crashable', or type after 'is' in constraint");
-                    }
+                    constraints.Add(item: ParseIsConstraint(paramName: paramName, location: location));
                 }
                 else if (Match(type: TokenType.In))
                 {

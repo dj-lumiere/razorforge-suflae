@@ -446,6 +446,48 @@ public record EachStatement(
     }
 }
 
+/// <summary>The comptime source an <see cref="ExpandStatement"/> iterates over.</summary>
+public enum ExpandSourceKind
+{
+    /// <summary><c>memvarof(T)</c> — the member variables (fields) of a record, declaration order.</summary>
+    MemberVariables,
+
+    /// <summary><c>armof(T)</c> — the arms of a variant, tag order. Used inside a <c>when</c> to
+    /// generate one type-dispatch clause per arm.</summary>
+    Arms,
+
+    /// <summary><c>caseof(T)</c> — the cases of a choice (S32 discriminants) or the members of a flags
+    /// (U64 bit values), declaration order. The handle exposes <c>c.name</c>, <c>c.id</c> (ordinal) and
+    /// <c>c.value</c> (the case's numeric constant, spliced via <c>${c.value}</c>).</summary>
+    Cases
+}
+
+/// <summary>
+/// Compile-time member-expansion loop: <c>expand m in memvarof(T)</c>. Unlike the runtime
+/// <see cref="EachStatement"/>, this never survives to codegen — it is UNROLLED at monomorphization
+/// (once per member of the concrete <c>T</c>) by the generic AST rewriter, with the handle
+/// projections (<c>m.name</c>, <c>m.id</c>) folded to literals and <c>x.${m.name}</c> splices
+/// rewritten to real member accesses.
+/// </summary>
+/// <param name="HandleName">The per-part handle identifier (e.g. <c>m</c>).</param>
+/// <param name="SourceType">The type inside <c>memvarof(...)</c> (a generic param before monomorph).</param>
+/// <param name="SourceKind">Which reflection source is iterated (Phase 1: MemberVariables only).</param>
+/// <param name="Body">The loop body, cloned per part at monomorphization.</param>
+/// <param name="Location">Source location information.</param>
+public record ExpandStatement(
+    string HandleName,
+    TypeExpression SourceType,
+    ExpandSourceKind SourceKind,
+    Statement Body,
+    SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitExpandStatement(node: this);
+    }
+}
+
 /// <summary>
 /// Compound statement that groups multiple statements into a single logical unit.
 /// Represents block statements enclosed in braces that create new lexical scopes.
@@ -490,7 +532,11 @@ public record BlockStatement(List<Statement> Statements, SourceLocation Location
 public record WhenStatement(
     Expression Expression,
     List<WhenClause> Clauses,
-    SourceLocation Location) : Statement(Location: Location)
+    SourceLocation Location,
+    // Comptime arm-expansion: `when me` / `expand m in armof(T)` / `is ${m.type} x => …`. When set,
+    // the (initially empty) Clauses are UNROLLED from this template at monomorphization — one clause
+    // per variant arm, with `${m.type}` folded to the arm type. Null for an ordinary `when`.
+    WhenArmExpansion? ArmExpansion = null) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
@@ -510,6 +556,14 @@ public record WhenStatement(
 /// Guards provide additional filtering beyond structural pattern matching.
 /// </remarks>
 public record WhenClause(Pattern Pattern, Statement Body, SourceLocation Location);
+
+/// <summary>
+/// A comptime clause-template for <c>expand m in armof(T)</c> inside a <c>when</c>. Carries the
+/// handle name, the variant source type, and the single template clause (whose pattern is a
+/// <see cref="SpliceTypePattern"/>). Monomorphization unrolls this into one concrete
+/// <see cref="WhenClause"/> per arm.
+/// </summary>
+public record WhenArmExpansion(string HandleName, TypeExpression SourceType, WhenClause Template);
 
 /// <summary>
 /// Control flow statement that immediately exits the innermost loop.
@@ -624,6 +678,17 @@ public record TypePattern(
     TypeExpression Type,
     string? VariableName,
     List<DestructuringBinding>? Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// A comptime type-splice pattern: <c>is ${m.type} x</c> inside an <c>expand m in armof(T)</c>.
+/// The concrete arm type is unknown until monomorphization, where this is replaced by a
+/// <see cref="TypePattern"/> bound to the current arm's type. <see cref="VariableName"/> is null
+/// for a payload-less arm (<c>is ${m.type} =></c>).
+/// </summary>
+public record SpliceTypePattern(
+    string HandleName,
+    string? VariableName,
     SourceLocation Location) : Pattern(Location: Location);
 
 /// <summary>

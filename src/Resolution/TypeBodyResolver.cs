@@ -143,10 +143,17 @@ internal sealed class TypeBodyResolver
 
         // Collect member variables and other members
         var memberVariables = new List<MemberVariableInfo>();
+        var expandTemplates = new List<MemberExpandTemplateInfo>();
         int memberVariableIndex = 0;
 
         foreach (SyntaxTree.Declaration member in record.Members)
         {
+            if (member is ExpandMemberDeclaration expandDecl)
+            {
+                expandTemplates.AddRange(collection: ResolveExpandTemplates(expandDecl: expandDecl));
+                continue;
+            }
+
             if (member is VariableDeclaration memberVariable)
             {
                 // Resolve member variable type
@@ -201,8 +208,36 @@ internal sealed class TypeBodyResolver
                 memberVariables: memberVariables);
         }
 
+        // Stash decl-position expand column templates on the generic definition; the registry
+        // materializes them into concrete columns per source-type field at instantiation.
+        if (expandTemplates.Count > 0 && _sa._currentType is RecordTypeInfo recordDef)
+        {
+            recordDef.ExpandTemplates = expandTemplates;
+        }
+
         _sa._currentType = previousType;
         _sa._currentTypeMemberVariableNames = previousFieldNames;
+    }
+
+    /// <summary>
+    /// Resolves a decl-position <c>expand</c> directive into per-template
+    /// <see cref="MemberExpandTemplateInfo"/>. Each column type is resolved with the <c>${m.type}</c>
+    /// splice standing in for the synthetic per-field placeholder; the registry substitutes the real
+    /// field type at instantiation.
+    /// </summary>
+    private List<MemberExpandTemplateInfo> ResolveExpandTemplates(ExpandMemberDeclaration expandDecl)
+    {
+        var result = new List<MemberExpandTemplateInfo>();
+        foreach (ExpandMemberTemplate template in expandDecl.Templates)
+        {
+            TypeSymbol columnType = _typeResolver.ResolveType(typeExpr: template.Type);
+            result.Add(item: new MemberExpandTemplateInfo(
+                namePrefix: template.NamePrefix,
+                sourceParamName: expandDecl.SourceType.Name,
+                columnTypeTemplate: columnType,
+                visibility: template.Visibility));
+        }
+        return result;
     }
 
     private void ResolveEntityBody(EntityDeclaration entity) // NOSONAR S3776
@@ -246,10 +281,17 @@ internal sealed class TypeBodyResolver
 
         // Collect member variables and other members
         var memberVariables = new List<MemberVariableInfo>();
+        var expandTemplates = new List<MemberExpandTemplateInfo>();
         int memberVariableIndex = 0;
 
         foreach (SyntaxTree.Declaration member in entity.Members)
         {
+            if (member is ExpandMemberDeclaration expandDecl)
+            {
+                expandTemplates.AddRange(collection: ResolveExpandTemplates(expandDecl: expandDecl));
+                continue;
+            }
+
             if (member is VariableDeclaration memberVariable)
             {
                 TypeSymbol memberVariableType = memberVariable.Type != null
@@ -289,6 +331,11 @@ internal sealed class TypeBodyResolver
         {
             _sa._registry.UpdateEntityMemberVariables(entityName: _sa._currentType!.FullName,
                 memberVariables: memberVariables);
+        }
+
+        if (expandTemplates.Count > 0 && _sa._currentType is EntityTypeInfo entityDef)
+        {
+            entityDef.ExpandTemplates = expandTemplates;
         }
 
         _sa._currentType = previousType;

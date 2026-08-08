@@ -277,7 +277,18 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     // methods (e.g. WhereIterator[..].hijack, whose generic-def owner is `T`) that
                     // ProcessConcreteType never emits because they aren't owned by the receiver's
                     // generic definition.
-                    if (expr is CallExpression { ResolvedRoutine: { } rr }
+                    // A resolved routine reached from an emitted body — either a plain CallExpression or a
+                    // GenericMethodCallExpression (`hijacked_from[${m.type}]` folded to `hijacked_from[F32]`
+                    // via the `$Col` expand substitution: its concrete instance is discovered HERE, during
+                    // the expand unroll, so it post-dates RoutineReachabilityPass and would otherwise be
+                    // "declared but never defined"). Both node kinds carry a settable ResolvedRoutine.
+                    RoutineInfo? calledRoutine = expr switch
+                    {
+                        CallExpression { ResolvedRoutine: { } cr } => cr,
+                        GenericMethodCallExpression { ResolvedRoutine: { } gr } => gr,
+                        _ => null
+                    };
+                    if (calledRoutine is { } rr
                         && ctx.LiveRoutineKeys.Count > 0
                         && ctx.LiveRoutineKeys.Add(item: rr.RegistryKey))
                     {
@@ -289,6 +300,44 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                             registeredRoutine = true;
                         }
                         changed = true;
+                    }
+
+                    // An `obj[i]` access is still an IndexExpression in an emitted body (OperatorLoweringPass
+                    // on instantiated bodies only rewrites it to a `$getitem`/`$setitem` CallExpression
+                    // LATER, in GenericClosurePass, which runs AFTER this liveness pass). Its concrete
+                    // callee — e.g. `Array[F32, 4].getitem`/`.setitem` reached only through a SoA container's
+                    // monomorphized method `me.${m.name}[index]` — was never seen by RoutineReachabilityPass
+                    // and is left "declared but never defined" at codegen. Mark both index accessors live
+                    // here, mirroring the CallExpression callee handling above and the IndexExpression
+                    // discovery at ScanExprForMethodGenericCalls. (A read never calls `$setitem`, but
+                    // emitting the extra concrete accessor is harmless — codegen only calls the one it needs.)
+                    if (expr is IndexExpression { Object.ResolvedType: { } idxObjType } idxExpr
+                        && idxObjType is not GenericParameterTypeInfo
+                        && ctx.LiveRoutineKeys.Count > 0)
+                    {
+                        TypeInfo? idxType = idxExpr.Index.ResolvedType;
+                        foreach (string accessor in (ReadOnlySpan<string>)["getitem", "setitem"])
+                        {
+                            RoutineInfo? acc = (idxType != null
+                                ? ctx.Registry.LookupMethodOverload(type: idxObjType,
+                                      methodName: accessor, argTypes: [idxType])
+                                : null)
+                                ?? ctx.Registry.LookupMethod(type: idxObjType,
+                                    methodName: accessor, isFailable: true);
+                            if (acc is not { OwnerType: not { IsGenericDefinition: true } }
+                                || !ctx.LiveRoutineKeys.Add(item: acc.RegistryKey))
+                            {
+                                continue;
+                            }
+                            if (acc.GenericDefinition != null
+                                && !ctx.InstantiatedGenericBodies.ContainsKey(acc.RegistryKey)
+                                && !ctx.VariantBodies.ContainsKey(acc.RegistryKey))
+                            {
+                                ctx.Registry.RegisterRoutineResolution(resolvedMethod: acc);
+                                registeredRoutine = true;
+                            }
+                            changed = true;
+                        }
                     }
                 });
             }
@@ -627,6 +676,34 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 if (resolvedRoutine.OwnerType is { } resolvedOwner
                     && !RoutineApplicableToConcreteOwner(routine: resolvedRoutine, owner: resolvedOwner))
                 {
+                    continue;
+                }
+
+                // Routine types are structural — no per-type wired handler in WiredRoutinePass — so the
+                // universal represent/diagnose template would field-walk their (empty) member set into a
+                // bogus `Routine()`. Emit the SIGNATURE (the routine type's own name, e.g.
+                // `Routine[(S32,), S32]`) directly: no parens, no field walk. (serialize isn't a
+                // universal method, so routine serialize is handled where it's registered.)
+                if (resolvedRoutine.OwnerType is RoutineTypeInfo routineOwner
+                    && resolvedRoutine.Name is "represent" or "diagnose")
+                {
+                    var sigBody = new ReturnStatement(
+                        Value: new LiteralExpression(Value: routineOwner.Name,
+                            LiteralType: Tokenizer.TokenType.TextLiteral,
+                            Location: resolvedRoutine.Location)
+                        {
+                            ResolvedType = ctx.Registry.LookupType(name: "Text")
+                        },
+                        Location: resolvedRoutine.Location);
+                    ctx.InstantiatedGenericBodies[key: resolvedRoutine.RegistryKey] =
+                        new MonomorphizedBody(
+                            Ast: WrapInShellDecl(name: resolvedRoutine.Name, body: sigBody,
+                                info: resolvedRoutine),
+                            Info: resolvedRoutine,
+                            TypeSubs: new Dictionary<string, TypeInfo>(),
+                            VariantStatus: null,
+                            VariantInnerType: null,
+                            IsSynthesized: true);
                     continue;
                 }
 

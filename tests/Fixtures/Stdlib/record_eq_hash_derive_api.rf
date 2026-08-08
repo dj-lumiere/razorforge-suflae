@@ -1,0 +1,35 @@
+module Tests/Stdlib/RecordEqHashDeriveApi
+import IO/Console
+import Collections
+
+# A record that OPTS IN via `obeys Equatable, Hashable` now AUTO-DERIVES its `eq` (field-walk) and keyed
+# `hash(k0, k1)` — no hand-written body. `ne`/comparison operators follow via DerivedOperatorPass. This
+# lets a plain value record be compared (`==`), used as a `Set` element / `Dict` key, and satisfy the
+# `needs T obeys Equatable`/`Hashable` constraint of the collection methods (e.g. `contains`).
+
+record Point obeys Equatable, Hashable
+  x: S64
+  y: S64
+
+routine start()
+  var a = Point(x: 1_s64, y: 2_s64)
+  var b = Point(x: 1_s64, y: 2_s64)
+  var c = Point(x: 9_s64, y: 9_s64)
+
+  # Derived equality: equal by value, not identity.
+  show(f"eq: a==b={a == b} a==c={a == c} a!=c={a != c}")
+
+  # Derived keyed hash: equal values hash equal (deterministic), distinct values differ.
+  var ha = a.hash(k0: 7u64, k1: 11u64)
+  var hb = b.hash(k0: 7u64, k1: 11u64)
+  var hc = c.hash(k0: 7u64, k1: 11u64)
+  show(f"hash: a==b={ha == hb} a==c={ha == hc}")
+
+  # Record as a Set element (uses the derived hash + eq): the duplicate is deduped.
+  var s = Set[Point]()
+  discard s.add(value: Point(x: 1_s64, y: 2_s64))
+  discard s.add(value: Point(x: 3_s64, y: 4_s64))
+  discard s.add(value: Point(x: 1_s64, y: 2_s64))
+  show(f"set: count={s.count()} has12={s.contains(value: Point(x: 1_s64, y: 2_s64))} has99={s.contains(value: Point(x: 9_s64, y: 9_s64))}")
+  show("DONE")
+  return
