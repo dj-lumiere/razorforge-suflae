@@ -1438,7 +1438,7 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>Throws when a routine's forward declaration and emitted body disagree on type.</summary>
-    private void AssertDeclareDefineAgree(string name, string declLine, string defHeader)
+    private static void AssertDeclareDefineAgree(string name, string declLine, string defHeader)
     {
         string declSig = NormalizeFunctionSignature(header: declLine);
         string defSig = NormalizeFunctionSignature(header: defHeader);
@@ -1641,27 +1641,7 @@ public partial class LlvmCodeGenerator
             return header.Trim();
         }
 
-        // Depth-aware scan for the matching close paren of the parameter list.
-        int depth = 0;
-        int close = -1;
-        for (int i = open; i < header.Length; i++)
-        {
-            char c = header[index: i];
-            if (c == '(')
-            {
-                depth++;
-            }
-            else if (c == ')')
-            {
-                depth--;
-                if (depth == 0)
-                {
-                    close = i;
-                    break;
-                }
-            }
-        }
-
+        int close = FindMatchingParen(text: header, open: open);
         if (close < 0)
         {
             return header.Trim();
@@ -1674,13 +1654,47 @@ public partial class LlvmCodeGenerator
         string returnType = NormalizeTypeToken(token: returnSegment);
 
         // Parameter types: split on top-level commas, normalize each to its bare type.
-        string paramSegment = header[(open + 1)..close];
+        List<string> paramTypes = SplitAndNormalizeParams(paramSegment: header[(open + 1)..close]);
+
+        return $"{returnType}({string.Join(separator: ",", values: paramTypes)})";
+    }
+
+    /// <summary>
+    /// Returns the index of the paren that matches the <c>(</c> at <paramref name="open"/>, or
+    /// <c>-1</c> if unbalanced. Depth-aware so nested parens (e.g. <c>sret(...)</c>) don't confuse it.
+    /// </summary>
+    private static int FindMatchingParen(string text, int open)
+    {
+        int depth = 0;
+        for (int i = open; i < text.Length; i++)
+        {
+            char c = text[index: i];
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')' && --depth == 0)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Splits a parameter-list body on top-level commas and normalizes each entry to its bare type.
+    /// </summary>
+    private static List<string> SplitAndNormalizeParams(string paramSegment)
+    {
         var paramTypes = new List<string>();
-        depth = 0;
+        int depth = 0;
         int start = 0;
         for (int i = 0; i <= paramSegment.Length; i++)
         {
-            if (i == paramSegment.Length || (paramSegment[index: i] == ',' && depth == 0))
+            bool atBoundary = i == paramSegment.Length ||
+                (paramSegment[index: i] == ',' && depth == 0);
+            if (atBoundary)
             {
                 string raw = paramSegment[start..i].Trim();
                 if (raw.Length > 0)
@@ -1700,7 +1714,7 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        return $"{returnType}({string.Join(separator: ",", values: paramTypes)})";
+        return paramTypes;
     }
 
     /// <summary>
@@ -1711,55 +1725,16 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string NormalizeTypeToken(string token)
     {
-        token = token.Trim();
+        token = StripLeadingReturnAttributes(token: token.Trim());
         if (token.Length == 0)
         {
             return "";
         }
 
-        // Strip leading attribute/linkage words (these precede the return type). Parameter attributes
-        // follow the type, so they are dropped naturally by reading only the leading type below.
-        bool stripped = true;
-        while (stripped && token.Length > 0)
-        {
-            stripped = false;
-            int sp = token.IndexOf(value: ' ');
-            string firstWord = sp < 0 ? token : token[..sp];
-            if (ReturnAttributeWords.Contains(item: firstWord))
-            {
-                token = sp < 0 ? "" : token[(sp + 1)..].TrimStart();
-                stripped = true;
-            }
-        }
-
-        if (token.Length == 0)
-        {
-            return "";
-        }
-
-        // Read the leading balanced type.
         char first = token[index: 0];
         if (first is '{' or '[')
         {
-            char closeChar = first == '{' ? '}' : ']';
-            int depth = 0;
-            for (int i = 0; i < token.Length; i++)
-            {
-                if (token[index: i] == first)
-                {
-                    depth++;
-                }
-                else if (token[index: i] == closeChar)
-                {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        return token[..(i + 1)];
-                    }
-                }
-            }
-
-            return token;
+            return ReadBalancedType(token: token, openChar: first);
         }
 
         if (token.StartsWith(value: "%\"", comparisonType: StringComparison.Ordinal))
@@ -1780,6 +1755,50 @@ public partial class LlvmCodeGenerator
         }
 
         return token[..stop];
+    }
+
+    /// <summary>
+    /// Drops leading attribute/linkage words (these precede a return type). Parameter attributes
+    /// follow the type, so they are handled by reading only the leading type in the caller.
+    /// </summary>
+    private static string StripLeadingReturnAttributes(string token)
+    {
+        while (token.Length > 0)
+        {
+            int sp = token.IndexOf(value: ' ');
+            string firstWord = sp < 0 ? token : token[..sp];
+            if (!ReturnAttributeWords.Contains(item: firstWord))
+            {
+                break;
+            }
+
+            token = sp < 0 ? "" : token[(sp + 1)..].TrimStart();
+        }
+
+        return token;
+    }
+
+    /// <summary>
+    /// Reads the leading balanced struct (<c>{…}</c>) or array (<c>[…]</c>) type from
+    /// <paramref name="token"/>. Returns the whole token if the brackets are unbalanced.
+    /// </summary>
+    private static string ReadBalancedType(string token, char openChar)
+    {
+        char closeChar = openChar == '{' ? '}' : ']';
+        int depth = 0;
+        for (int i = 0; i < token.Length; i++)
+        {
+            if (token[index: i] == openChar)
+            {
+                depth++;
+            }
+            else if (token[index: i] == closeChar && --depth == 0)
+            {
+                return token[..(i + 1)];
+            }
+        }
+
+        return token;
     }
 
     /// <summary>
@@ -1804,7 +1823,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emits a line to a StringBuilder.
     /// </summary>
-    private void EmitLine(StringBuilder sb, string line)
+    private static void EmitLine(StringBuilder sb, string line)
     {
         sb.AppendLine(value: line);
     }
