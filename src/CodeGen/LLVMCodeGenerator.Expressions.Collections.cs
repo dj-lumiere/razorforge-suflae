@@ -122,6 +122,12 @@ public partial class LlvmCodeGenerator
 
         switch (baseName)
         {
+            // ACCEPTED codegen boundary case (not debt): Array[T,N] / BitArray[N] are fixed-size
+            // backend-native aggregates with no heap allocation and no stdlib create() body — they are
+            // pure `insertvalue` (element-per-slot for Array, LSB-packed bytes for BitArray). Building
+            // the constant aggregate is intrinsically a codegen concern, so these stay inline. The
+            // BitArray literal bit-packing shares PackBitArrayLiteralBytes with the preset path (D6).
+
             // Array[T, N]: inline array construction via insertvalue
             case "Array":
             {
@@ -141,36 +147,23 @@ public partial class LlvmCodeGenerator
 
                 return current;
             }
-            // BitArray[N]: inline bit-packed array construction
+            // BitArray[N]: inline bit-packed array construction. All-literal elements pack at
+            // compile time via the shared PackBitArrayLiteralBytes; a non-literal element falls
+            // back to the runtime bit-pack.
             case "BitArray":
             {
+                int[] bytes = PackBitArrayLiteralBytes(elements: arguments, out bool allLiteral);
+                if (!allLiteral)
+                    return EmitBitArrayRuntime(sb: sb, resolvedType: resolvedType,
+                        arguments: arguments);
+
                 string llvmType = GetLlvmType(type: resolvedType);
-                int bitCount = arguments.Count;
-                int byteCount = (bitCount + 7) / 8;
-
                 string current = "zeroinitializer";
-                for (int byteIdx = 0; byteIdx < byteCount; byteIdx++)
+                for (int byteIdx = 0; byteIdx < bytes.Length; byteIdx++)
                 {
-                    int byteVal = 0;
-                    bool allLiteral = true;
-                    for (int bitIdx = 0; bitIdx < 8 && byteIdx * 8 + bitIdx < bitCount; bitIdx++)
-                    {
-                        if (arguments[index: byteIdx * 8 + bitIdx] is LiteralExpression { Value: true })
-                            byteVal |= 1 << bitIdx;
-                        else
-                        {
-                            allLiteral = false;
-                            break;
-                        }
-                    }
-
-                    if (!allLiteral)
-                        return EmitBitArrayRuntime(sb: sb, resolvedType: resolvedType,
-                            arguments: arguments);
-
                     string next = NextTemp();
                     EmitLine(sb: sb,
-                        line: $"  {next} = insertvalue {llvmType} {current}, i8 {byteVal}, {byteIdx}");
+                        line: $"  {next} = insertvalue {llvmType} {current}, i8 {bytes[byteIdx]}, {byteIdx}");
                     current = next;
                 }
 

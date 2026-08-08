@@ -1090,8 +1090,11 @@ public partial class LlvmCodeGenerator
                 methodName: "notcontains"),
             BinaryOperator.Is => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "eq"),
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
-            BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),
-            BinaryOperator.Disobeys => EmitCompileTimeConstant(value: "false"),
+            // obeys/disobeys are folded to a compile-time Bool literal by ExpressionLoweringPass
+            // (SA validates the conformance and gates any error). They must never reach codegen.
+            BinaryOperator.Obeys or BinaryOperator.Disobeys => throw new InvalidOperationException(
+                $"BinaryExpression({binary.Operator}) must be folded to a Bool literal by " +
+                $"ExpressionLoweringPass before codegen (loc={binary.Location})"),
             // Flags types intentionally bypass method-call lowering for bitwise ops to avoid
             // infinite recursion in synthesized bitor/bitand bodies. They reach codegen
             // unlowered and are emitted as direct LLVM bitwise instructions on the underlying
@@ -1239,13 +1242,6 @@ public partial class LlvmCodeGenerator
         return result;
     }
 
-    /// <summary>
-    /// Emit compile time constant as part of this compiler phase.
-    /// </summary>
-    private static string EmitCompileTimeConstant(string value)
-    {
-        return value;
-    }
 
     /// <summary>
     /// Emit unary op as part of this compiler phase.

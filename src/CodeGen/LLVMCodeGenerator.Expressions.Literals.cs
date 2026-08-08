@@ -11,7 +11,12 @@ using TypeModel.Types;
 
 namespace Compiler.CodeGen;
 
-// TODO: This should be on the AST level with constructor.
+// D2 (DEFERRED): Text/Bytes literals still emit their backing arrays + carrier struct as constant
+// globals here rather than lowering to a `CreatorExpression` against the real stdlib Text/Bytes
+// `create`. Doing that fully requires D1's memberwise-create synthesis plus a compile-time
+// constant-aggregate argument path (the current stdlib `create` takes runtime args). As a partial
+// step, the carrier struct LAYOUT is now derived from the registered TypeInfo (BuildLiteralCarrierLayout)
+// instead of a hardcoded `{ ptr, i64, ptr }`. See the task report.
 /// <summary>
 /// Expression code generation for literals and scalar literal helpers.
 /// </summary>
@@ -91,35 +96,60 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Builds the <c>[(N+7)/8 x i8] [...]</c> constant initializer for a <c>BitArray[N]</c> preset by
-    /// packing 8 bool literals per byte (bit 0 = LSB), mirroring the inline literal bit-packing.
+    /// Packs a flat list of bool-literal elements into <c>(N+7)/8</c> bytes, LSB-first (bit 0 = element
+    /// 0 of each group of 8). Shared by both BitArray[N] emission sites — the compile-time preset
+    /// initializer (<see cref="BuildBitArrayPresetInitializer"/>) and the inline literal fast path in
+    /// <c>EmitCollectionLiteralConstructor</c>.
+    /// <para><paramref name="allLiteral"/> is set false as soon as a non-<c>true</c>/<c>false</c>-literal
+    /// element is seen; the inline site uses that to fall back to a runtime bit-pack, while the preset
+    /// site (which requires constant elements) treats it via <paramref name="onNonLiteral"/>.</para>
     /// </summary>
-    private static string BuildBitArrayPresetInitializer(string key, ListLiteralExpression list,
-        string arrLlvm)
+    private static int[] PackBitArrayLiteralBytes(IReadOnlyList<Expression> elements,
+        out bool allLiteral, Action<Expression>? onNonLiteral = null)
     {
-        int bitCount = list.Elements.Count;
-        if (bitCount == 0)
-            return "zeroinitializer";
-
+        allLiteral = true;
+        int bitCount = elements.Count;
         int byteCount = (bitCount + 7) / 8;
-        var parts = new List<string>(capacity: byteCount);
+        var bytes = new int[byteCount];
         for (int byteIdx = 0; byteIdx < byteCount; byteIdx++)
         {
             int byteVal = 0;
             for (int bitIdx = 0; bitIdx < 8 && byteIdx * 8 + bitIdx < bitCount; bitIdx++)
             {
-                Expression bit = list.Elements[index: byteIdx * 8 + bitIdx];
-                if (bit is not LiteralExpression { Value: bool b })
-                    throw new NotImplementedException(
-                        message:
-                        $"BitArray preset '{key}' element must be a bool literal; got {bit.GetType().Name}.");
-                if (b)
-                    byteVal |= 1 << bitIdx;
+                Expression bit = elements[index: byteIdx * 8 + bitIdx];
+                if (bit is LiteralExpression { Value: bool b })
+                {
+                    if (b) byteVal |= 1 << bitIdx;
+                }
+                else
+                {
+                    allLiteral = false;
+                    onNonLiteral?.Invoke(bit);
+                }
             }
 
-            parts.Add(item: $"i8 {byteVal}");
+            bytes[byteIdx] = byteVal;
         }
 
+        return bytes;
+    }
+
+    /// <summary>
+    /// Builds the <c>[(N+7)/8 x i8] [...]</c> constant initializer for a <c>BitArray[N]</c> preset by
+    /// packing 8 bool literals per byte (bit 0 = LSB) via the shared <see cref="PackBitArrayLiteralBytes"/>.
+    /// </summary>
+    private static string BuildBitArrayPresetInitializer(string key, ListLiteralExpression list,
+        string arrLlvm)
+    {
+        if (list.Elements.Count == 0)
+            return "zeroinitializer";
+
+        int[] bytes = PackBitArrayLiteralBytes(elements: list.Elements, out _,
+            onNonLiteral: bit => throw new NotImplementedException(
+                message:
+                $"BitArray preset '{key}' element must be a bool literal; got {bit.GetType().Name}."));
+
+        var parts = bytes.Select(selector: b => $"i8 {b}");
         return $"[{string.Join(separator: ", ", values: parts)}]";
     }
 
@@ -214,9 +244,39 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Emits a Bytes literal (b"...") as a constant Bytes entity.
-    /// Bytes is `entity Bytes { data: Hijacked[Byte], count: U64 }` — LLVM layout `{ ptr, i64 }`.
-    /// Returns a pointer to the Bytes struct.
+    /// D2 (partial): derives the LLVM field-type layout of a literal-backed carrier record
+    /// (<c>Text</c> / <c>Bytes</c>) from its registered <see cref="RecordTypeInfo"/> rather than
+    /// hardcoding <c>{ ptr, i64, ptr }</c>. Returns the joined field-type string (e.g.
+    /// <c>"ptr, i64, ptr"</c>) and the named struct type via <paramref name="structTypeName"/>.
+    /// <para>DEFERRED: the values themselves (data ptr / count / null ctrl) are still positionally
+    /// hand-built here and the backing arrays are emitted as constant globals — fully routing string/
+    /// bytes literals through the real stdlib <c>Text.create</c>/<c>Bytes.create</c> needs D1's
+    /// memberwise-create synthesis plus a compile-time constant-aggregate argument path, which the
+    /// current stdlib <c>create</c> (runtime-arg) does not accept. See the task report.</para>
+    /// </summary>
+    private string BuildLiteralCarrierLayout(string carrierName, int expectedFields,
+        out string structTypeName)
+    {
+        TypeInfo? carrier = _registry.LookupType(name: carrierName)
+            ?? _registry.LookupType(name: $"Core.{carrierName}");
+        if (carrier is RecordTypeInfo record && record.MemberVariables.Count == expectedFields)
+        {
+            structTypeName = GetRecordTypeName(record: record);
+            var fieldTypes = record.MemberVariables
+                .Select(selector: mv => GetFieldStorageLlvmType(type: mv.Type));
+            return string.Join(separator: ", ", values: fieldTypes);
+        }
+
+        // Fallback to the known physical layout when the type isn't registered yet (e.g. a bare
+        // literal-only compilation without the stdlib carrier loaded).
+        structTypeName = $"%Record.Core.{carrierName}";
+        return expectedFields == 3 ? "ptr, i64, ptr" : "ptr, i64";
+    }
+
+    /// <summary>
+    /// Emits a Bytes literal (b"...") as a constant Bytes record.
+    /// Bytes layout is derived from its registered fields (physically <c>{ ptr, i64, ptr }</c>:
+    /// data, count, ctrl). Returns the loaded record value.
     /// </summary>
     private string EmitBytesLiteral(StringBuilder sb, string value)
     {
@@ -247,18 +307,20 @@ public partial class LlvmCodeGenerator
                 line: $"{dataName} = private unnamed_addr constant [0 x i8] zeroinitializer");
         }
 
-        // Bytes record literal — must mirror the runtime layout
-        // `{ ptr data, i64 count, ptr ctrl }`. The `ctrl` slot is null for static
+        // Bytes record literal — layout derived from the registered Bytes fields
+        // (physically `{ ptr data, i64 count, ptr ctrl }`). The `ctrl` slot is null for static
         // literals; `store`/`destroy` treat null ctrl as a no-op so the literal
         // is never freed and refcount ops are skipped.
+        string bytesLayout = BuildLiteralCarrierLayout(carrierName: "Bytes", expectedFields: 3,
+            out string bytesStructType);
         EmitLine(sb: _globalDeclarations,
-            line: $"{constName} = private unnamed_addr constant {{ ptr, i64, ptr }} {{ ptr {dataName}, i64 {count}, ptr null }}");
+            line: $"{constName} = private unnamed_addr constant {{ {bytesLayout} }} {{ ptr {dataName}, i64 {count}, ptr null }}");
 
-        // Load the record value from the global. Bytes is now a value-typed
-        // record, so call sites expect the record by value, not a pointer. Use
-        // the named struct type so the SSA value matches the call signature.
+        // Load the record value from the global. Bytes is a value-typed record, so call
+        // sites expect the record by value, not a pointer. Use the named struct type so
+        // the SSA value matches the call signature.
         string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"{loaded} = load %Record.Core.Bytes, ptr {constName}");
+        EmitLine(sb: sb, line: $"{loaded} = load {bytesStructType}, ptr {constName}");
         return loaded;
     }
 
@@ -605,12 +667,14 @@ public partial class LlvmCodeGenerator
     private string EmitStringLiteral(StringBuilder sb, string value)
     {
         string constName = EmitStringLiteralGlobal(value: value);
-        // Load the record value from the global. Text is now a value-typed
-        // record, so call sites expect the record by value, not a pointer.
-        // Use the named struct type so the SSA value matches the call signature.
-        // The optimizer collapses redundant loads of the same global.
+        // Load the record value from the global. Text is a value-typed record, so call
+        // sites expect the record by value, not a pointer. Use the named struct type
+        // (derived from the registered Text fields) so the SSA value matches the call
+        // signature. The optimizer collapses redundant loads of the same global.
+        _ = BuildLiteralCarrierLayout(carrierName: "Text", expectedFields: 3,
+            out string textStructType);
         string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"{loaded} = load %Record.Core.Text, ptr {constName}");
+        EmitLine(sb: sb, line: $"{loaded} = load {textStructType}, ptr {constName}");
         return loaded;
     }
 
@@ -654,11 +718,13 @@ public partial class LlvmCodeGenerator
                 line: $"{dataName} = private unnamed_addr constant [0 x i32] zeroinitializer");
         }
 
-        // Layer 2: Text record payload `{ ptr data, i64 count, ptr ctrl }`.
-        // `ctrl` is null for static literals — store/destroy short-circuit on
-        // null and never free the literal or touch the refcount.
+        // Layer 2: Text record payload — layout derived from the registered Text fields
+        // (physically `{ ptr data, i64 count, ptr ctrl }`). `ctrl` is null for static literals —
+        // store/destroy short-circuit on null and never free the literal or touch the refcount.
+        string textLayout = BuildLiteralCarrierLayout(carrierName: "Text", expectedFields: 3,
+            out _);
         EmitLine(sb: _globalDeclarations,
-            line: $"{constName} = private unnamed_addr constant {{ ptr, i64, ptr }} {{ ptr {dataName}, i64 {count}, ptr null }}");
+            line: $"{constName} = private unnamed_addr constant {{ {textLayout} }} {{ ptr {dataName}, i64 {count}, ptr null }}");
 
         return constName;
     }

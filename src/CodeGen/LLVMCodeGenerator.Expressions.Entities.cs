@@ -944,26 +944,11 @@ public partial class LlvmCodeGenerator
         string typeName = GetEntityTypeName(entity: entity);
         string memberVariableType = GetLlvmType(type: memberVariable.Type);
 
-        // Auto-wrap non-Maybe values into Maybe when assigning to nullable member variables.
-        // Skip wrapping if: value is already a Maybe type, or value is zeroinitializer (None literal).
-        // Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1 (entity and record T, since C118).
-        if (IsMaybeType(type: memberVariable.Type) &&
-            !(valueType != null && IsMaybeType(type: valueType)) && value != "zeroinitializer")
-        {
-            string memberCarrierType = GetLlvmType(type: memberVariable.Type);
-            // All Maybe[T] types are { i1, ptr } (C118: entity T is also 2-field, not single-ptr).
-            string innerLlvm = memberVariable.Type.TypeArguments is { Count: 1 }
-                ? GetLlvmType(type: memberVariable.Type.TypeArguments[index: 0])
-                : "ptr";
-            // Maybe `present` (field 0) is a Bool, stored as i8.
-            string wrapped = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {wrapped} = insertvalue {memberCarrierType} zeroinitializer, i8 1, 0");
-            string wrapped2 = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {wrapped2} = insertvalue {memberCarrierType} {wrapped}, {innerLlvm} {value}, 1");
-            value = wrapped2;
-        }
+        // Maybe auto-wrap (bare `T` -> `Maybe[T]` on a nullable member store) is now an AST rewrite:
+        // ExpressionLoweringPass.TryWrapMemberMaybe boxes the value into a Maybe CreatorExpression
+        // before codegen, so the { i1, T } aggregate is built through the normal record-creator path
+        // rather than hand-emitted here (D3).
+        _ = valueType;
 
         // GEP to get member variable pointer
         string memberVariablePtr = NextTemp();

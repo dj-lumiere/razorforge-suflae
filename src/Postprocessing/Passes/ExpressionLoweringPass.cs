@@ -191,8 +191,14 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case AssignmentStatement asgn:
             {
                 var (hoisted, loweredVal) = LowerExpr(asgn.Value);
-                if (hoisted.Count == 0 && ReferenceEquals(loweredVal, asgn.Value)) return ([], stmt);
-                return (hoisted, asgn with { Value = loweredVal });
+                // Maybe auto-wrap on a member store: `me.field = x` where `field : Maybe[T]` and
+                // `x : T` boxes the bare value into `Maybe[T](present: true, value: x)` as a real
+                // CreatorExpression (codegen's record-creator path builds the { i1, T } aggregate),
+                // instead of codegen hand-building the insertvalue at the store site.
+                Expression effectiveVal =
+                    TryWrapMemberMaybe(target: asgn.Target, value: loweredVal) ?? loweredVal;
+                if (hoisted.Count == 0 && ReferenceEquals(effectiveVal, asgn.Value)) return ([], stmt);
+                return (hoisted, asgn with { Value = effectiveVal });
             }
 
             case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } decl:
@@ -385,6 +391,40 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             // a or b  ->  if a { _cif = true } else { _cif = b }
             case BinaryExpression { Operator: BinaryOperator.Or } boolOr:
                 return LowerBooleanOr(boolOr);
+
+            // -- Step 1h-2: obeys/disobeys -> compile-time Bool literal -------------
+            // `x obeys P` / `x disobeys P` are resolved during SA (which validates the
+            // conformance and gates any error). The result is a fixed compile-time constant:
+            // `obeys` is true, `disobeys` is false. Fold to a Bool literal here so codegen
+            // never has to synthesize the constant itself.
+            case BinaryExpression { Operator: BinaryOperator.Obeys or BinaryOperator.Disobeys } obeysBin:
+            {
+                bool obeysValue = obeysBin.Operator == BinaryOperator.Obeys;
+                return ([], new LiteralExpression(
+                    Value: obeysValue,
+                    LiteralType: obeysValue ? TokenType.True : TokenType.False,
+                    Location: obeysBin.Location)
+                    { ResolvedType = obeysBin.ResolvedType ?? ctx.Registry.LookupType(name: "Bool") });
+            }
+
+            // -- Step 1j: member-store Maybe auto-wrap on `me.field = x` -----------
+            // User assignments parse as BinaryExpression(Assign), not AssignmentStatement. When the
+            // LHS is a `Maybe[T]` member and the RHS is a bare `T`, box it into a Maybe creator here
+            // (the same wrap the AssignmentStatement path applies) so codegen never hand-builds the
+            // { i1, T } insertvalue at the store site.
+            case BinaryExpression { Operator: BinaryOperator.Assign } assignBin:
+            {
+                var (leftH, loweredLeft) = LowerExpr(assignBin.Left);
+                var (rightH, loweredRight) = LowerExpr(assignBin.Right);
+                Expression wrappedRight =
+                    TryWrapMemberMaybe(target: loweredLeft, value: loweredRight) ?? loweredRight;
+                var hoisted = Concat(leftH, rightH);
+                if (hoisted.Count == 0
+                    && ReferenceEquals(loweredLeft, assignBin.Left)
+                    && ReferenceEquals(wrappedRight, assignBin.Right))
+                    return ([], expr);
+                return (hoisted, assignBin with { Left = loweredLeft, Right = wrappedRight });
+            }
 
             // -- Recursive descent for all other node types ------------------------
 
@@ -1293,6 +1333,48 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             ConstructedType = targetType,
         };
         return maybeCreator;
+    }
+
+    /// <summary>
+    /// Member-store Maybe auto-wrap: when the assignment target is a <c>MemberExpression</c> whose
+    /// resolved field type is <c>Maybe[T]</c> and the value is a bare <c>T</c> (not already a Maybe,
+    /// not the <c>none</c> literal), box it into <c>Maybe[T](present: true, value: value)</c>. Returns
+    /// null otherwise. Mirrors <see cref="TryWrapCarrier"/> but keys off the target member's resolved
+    /// TypeInfo rather than a declared TypeExpression — replaces the hand-built { i1, T } insertvalue
+    /// that codegen used to emit at the member store (D3).
+    /// </summary>
+    private Expression? TryWrapMemberMaybe(Expression target, Expression value)
+    {
+        if (target is not MemberExpression member) return null;
+        TypeInfo? fieldType = member.ResolvedType;
+        if (fieldType is null || CarrierBaseName(fieldType) != "Maybe") return null;
+        if (fieldType.TypeArguments is not { Count: 1 }) return null;
+
+        // The `none` literal is Maybe's zero value — leave it as-is (codegen stores zeroinitializer).
+        if (value is LiteralExpression { LiteralType: TokenType.NoneValue }) return null;
+
+        // Already a Maybe carrier — no wrap.
+        TypeInfo? valueType = value.ResolvedType;
+        if (valueType != null && CarrierBaseName(valueType) == "Maybe") return null;
+
+        List<TypeExpression> typeArgs =
+            [TypeInfoToExpr(type: fieldType.TypeArguments[index: 0], loc: value.Location)];
+        var trueLit = new LiteralExpression(
+            Value: true, LiteralType: TokenType.True, Location: value.Location)
+            { ResolvedType = ctx.Registry.LookupType(name: "Bool") };
+        return new CreatorExpression(
+            TypeName: "Maybe",
+            TypeArguments: typeArgs,
+            MemberVariables:
+            [
+                (Resolution.RuntimeContract.Carrier.PresentField, trueLit),
+                (Resolution.RuntimeContract.Carrier.ValueField, value)
+            ],
+            Location: value.Location)
+        {
+            ResolvedType = fieldType,
+            ConstructedType = fieldType,
+        };
     }
 
     /// <summary>
