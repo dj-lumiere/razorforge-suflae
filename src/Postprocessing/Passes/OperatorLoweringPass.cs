@@ -378,6 +378,19 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                               methodName: "getitem", argTypes: [indexType])
                           ?? ctx.Registry.LookupMethod(type: targetType, methodName: "getitem")
                         : ctx.Registry.LookupMethod(type: targetType, methodName: "getitem");
+                    // Suflae container locals are `Roamed[Dict]`/`Roamed[List]` post-SA; the wrapper
+                    // has no `getitem`, so resolve against the UNWRAPPED inner container (exactly as the
+                    // membership/comparison branch does for `x in d`). RoamedProjectionLoweringPass then
+                    // projects the Roamed receiver to the inner value via `raw_inner()`.
+                    if (resolvedGetItem == null &&
+                        UnwrapRoamedInner(type: targetType) is { } innerTarget)
+                    {
+                        resolvedGetItem = indexType != null
+                            ? ctx.Registry.LookupMethodOverload(type: innerTarget,
+                                  methodName: "getitem", argTypes: [indexType])
+                              ?? ctx.Registry.LookupMethod(type: innerTarget, methodName: "getitem")
+                            : ctx.Registry.LookupMethod(type: innerTarget, methodName: "getitem");
+                    }
                     if (resolvedGetItem != null && indexType != null)
                     {
                         resolvedGetItem = ResolveMethodGenericRoutine(routine: resolvedGetItem,
@@ -1110,6 +1123,19 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     /// <c>getitem!(index: U64)</c> form. <c>BackIndex.resolve!</c> throws on out-of-range, so the
     /// bounds semantics match the old overload.
     /// </summary>
+    // The inner container type inside a `Roamed[E]` handle (either representation the pipeline
+    // produces), or null when the type is not an RC wrapper. Mirrors the membership/comparison branch's
+    // inner-type unwrap so the index (`d[i]`) getitem resolves against the bare container.
+    private static TypeInfo? UnwrapRoamedInner(TypeInfo? type) => type switch
+    {
+        WrapperTypeInfo w when Compiler.Resolution.TypeRegistry.GetRcWrapperBaseName(type: w) != null
+            => w.InnerType,
+        RecordTypeInfo { TypeArguments: { Count: >= 1 } ra } r
+            when Compiler.Resolution.TypeRegistry.GetRcWrapperBaseName(type: r) != null
+            => ra[index: 0],
+        _ => null
+    };
+
     private Expression BuildBackIndexResolve(Expression loweredObj, Expression backIndex,
         TypeInfo targetType, SourceLocation location)
     {

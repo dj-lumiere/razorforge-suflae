@@ -248,6 +248,19 @@ internal sealed class SuflaeEntityLoweringPass
                 return ReferenceEquals(obj, m.Object) ? m : m with { Object = obj };
             }
 
+            // `d[i]` on a Roamed container: recurse into the receiver so its identifier retypes to
+            // Roamed[E] (else the getitem receiver stays bare-typed and OperatorLoweringPass lowers it
+            // to `Dict.getitem` with the raw RoamController handle — RoamedProjectionLoweringPass then
+            // can't see it's Roamed and skips the `raw_inner()` projection, crashing at runtime).
+            case IndexExpression ix:
+            {
+                Expression o = LowerExpression(ix.Object);
+                Expression ii = LowerExpression(ix.Index);
+                return !ReferenceEquals(o, ix.Object) || !ReferenceEquals(ii, ix.Index)
+                    ? ix with { Object = o, Index = ii }
+                    : ix;
+            }
+
             // `x is None` / `x isnot None` on a nullable entity reference (`E?` = Roamed[E]): rewrite
             // to `x.is_none()` (negated -> `not x.is_none()`). Done HERE (before reachability) so the
             // Roamed[E].is_none() instance gets seeded/instantiated for the concrete entity; codegen has

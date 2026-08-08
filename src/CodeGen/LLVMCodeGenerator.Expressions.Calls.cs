@@ -848,34 +848,11 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Suflae `Roamed[E]` receiver transparency — the UNIFIED projection for Roamed handles.
-        // A Suflae local promoted to `Roamed[E]` (post-SA) reaches its inner value's methods through
-        // the wrapper: operator-lowered calls (`x in d` -> `d.contains(x)`, `d[i]` -> `d.getitem(i)`,
-        // `==`/`<`) and f-string `represent`/`diagnose` arrive here still holding the RoamController
-        // handle. `RoamedTransparency.Project` is the single decision point (shared with
-        // OperatorLoweringPass): it re-resolves a wrapper-shadowed display method to the inner's and
-        // reports whether the handle must be projected to the bare inner pointer via `raw_inner()`
-        // (bare-`me` inner method) or passed through (a Roamed-`me` inner method). Every call/index
-        // receiver flows here, so this one site covers the whole family; it is idempotent because an
-        // already-projected receiver is inner-typed (not Roamed) and Project returns null.
-        if (Resolution.RoamedTransparency.Project(receiverType: receiverType, method: method,
-                memberName: member.MemberName, registry: _registry) is { } roamProj)
-        {
-            // Re-resolve display/inner method (represent/diagnose shadowed by the wrapper → inner's).
-            method = roamProj.Method;
-            // A bare-`me` inner method needs the RoamController handle projected to the real inner
-            // pointer via `raw_inner()` (a Roamed-`me` inner method takes the handle directly).
-            if (roamProj.ProjectToInner
-                && _registry.LookupMethod(type: receiverType, methodName: Resolution.RuntimeContract.RoamedMethod.RawInner) is { } rawInner)
-            {
-                GenerateRoutineDeclaration(routine: rawInner);
-                string projected = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {projected} = call ptr @{MangleRoutineName(routine: rawInner)}(ptr {receiver})");
-                receiver = projected;
-                receiverType = roamProj.InnerType;
-            }
-        }
+        // Suflae `Roamed[E]` receiver transparency is now lowered to real AST nodes by
+        // RoamedProjectionLoweringPass (Phase 7): a bare-`me` inner method's receiver is rewritten to
+        // `receiver.raw_inner()` and a wrapper-shadowed represent/diagnose is re-resolved to the
+        // inner's routine (stamped on CallExpression.ResolvedRoutine). Codegen emits that call verbatim
+        // — no projection or re-resolution here.
 
         // Member-conversions (`obj.Text()`, `index.U64!()`) are handled above via the
         // TypeConstructor intercept using the SA-stamped `create`. Any DirectMemberRoutine that

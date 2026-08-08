@@ -39,6 +39,10 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new PatternLoweringPass(ctx).Run(program);
         new ExpressionLoweringPass(ctx).Run(program);
         new OperatorLoweringPass(ctx).Run(program);
+        // RoamedProjectionLoweringPass runs after OperatorLoweringPass and FStringLoweringPass so it
+        // sees the operator/f-string-lowered Roamed receiver calls; it rewrites the codegen-side
+        // raw_inner() projection into a real AST call (+ inner represent/diagnose re-resolution).
+        new RoamedProjectionLoweringPass(ctx).Run(program);
         new RecordCopyLoweringPass(ctx).Run(program);
         new BecomesLoweringPass(ctx).Run(program);
         new UsingLoweringPass(ctx).Run(program);
@@ -71,6 +75,9 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new ExpressionLoweringPass(ctx).RunOnVariantBodies();
         new FStringLoweringPass(ctx).RunOnVariantBodies();
         new OperatorLoweringPass(ctx).RunOnVariantBodies();
+        // See the per-program Run(): rewrite the Roamed raw_inner() projection into a real AST call
+        // after operator/f-string lowering so it is visible in synthesized variant bodies too.
+        new RoamedProjectionLoweringPass(ctx).RunOnVariantBodies();
         new RecordCopyLoweringPass(ctx).RunOnVariantBodies();
         new UsingLoweringPass(ctx).RunOnVariantBodies();
         // CallOverloadResolutionPass runs last so it sees all CallExpression nodes introduced
