@@ -30,7 +30,7 @@ relates SplitListEmittable[T] as Iter
 # Creators
 
 ### Creates an empty split list. Heap-allocates the entity with every column null (`hijacked_none`) and
-### the counts zero via the `hollow[T]()` footprint-alloc primitive; the first `append` reserves the
+### the counts zero via the `hollow[T]()` footprint-alloc primitive; the first `add_last` reserves the
 ### backing column buffers.
 ### :returns: An empty `SplitList[T]`.
 routine SplitList[T]() -> SplitList[T]
@@ -84,9 +84,9 @@ routine SplitList[T].reserve(new_capacity: U64)
     me.capacity = new_capacity
   return
 
-### Appends `value` at the back, growing (doubling) every column when capacity is exhausted.
-### :param value: The element to append.
-routine SplitList[T].append(value: T)
+### Adds `value` at the back, growing (doubling) every column when capacity is exhausted.
+### :param value: The element to add.
+routine SplitList[T].add_last(value: T)
   if me.count >= me.capacity
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
     me.reserve(new_capacity: new_capacity)

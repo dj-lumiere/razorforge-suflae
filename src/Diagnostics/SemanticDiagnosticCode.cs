@@ -221,6 +221,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Generic type argument(s) could not be inferred from the call; specify explicitly.</summary>
     CannotInferTypeArgument = 161,
 
+    /// <summary>Type is not trivially-destructible (Splittable) as required by a SoA constraint.</summary>
+    SplittableConstraintViolation = 162,
+
     /// <summary>Type parameter in constraint is not declared on the type or function.</summary>
     UnknownTypeParameterInConstraint = 163,
 
@@ -862,8 +865,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Bare entity in return position must use `T` rvalue mark.</summary>
     BareEntityReturnMissingRvalueMark = 803,
 
-    /// <summary>Blank cannot be used as a generic type argument (it has no value).</summary>
-    BlankAsTypeArgument = 805,
+    /// <summary>None cannot be used as a generic type argument (it has no value).</summary>
+    NoneAsTypeArgument = 805,
 
     /// <summary>A user-defined `$destroy` overrides the compiler's memory teardown, so it must be
     /// marked `dangerous` — the author takes responsibility for freeing `me` and its fields.</summary>

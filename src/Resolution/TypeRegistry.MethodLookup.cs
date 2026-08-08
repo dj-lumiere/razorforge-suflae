@@ -115,8 +115,13 @@ public sealed partial class TypeRegistry
             // routines are never replaced by a synthesized same-identity routine.
             if (keyExisted)
             {
+                // Identity also includes the Me-constraint set: several `needs Me is VariantType` /
+                // `obeys X`-gated protocol-default bodies share a RegistryKey (same signature) yet are
+                // DISTINCT overloads that must coexist so within-dispatch can pick the kind-matched
+                // one. Only a truly same-signature, same-constraint re-registration replaces in place.
                 int existingIdx = list.FindIndex(match: r =>
-                    r.IsFailable == routine.IsFailable && r.RegistryKey == registryKey);
+                    r.IsFailable == routine.IsFailable && r.RegistryKey == registryKey &&
+                    SameMeConstraintSet(a: r, b: routine));
                 if (existingIdx < 0)
                     list.Add(item: routine);
                 else if (!(!list[index: existingIdx].IsSynthesized && routine.IsSynthesized))
@@ -570,7 +575,203 @@ public sealed partial class TypeRegistry
     /// <param name="methodName">The name of the method to look up.</param>
     /// <returns>The routine info if found, null otherwise.</returns>
     /// <param name="isFailable">Whether this is failable.</param>
-    public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null)
+    /// <summary>
+    /// True when two routines carry the same set of <c>needs Me …</c> gate constraints (compared by
+    /// kind + constraint-type names, order-insensitive). Differently-gated same-signature protocol
+    /// defaults are DISTINCT overloads and must not dedup each other in the owner method list.
+    /// </summary>
+    private static bool SameMeConstraintSet(RoutineInfo a, RoutineInfo b)
+    {
+        static List<string> MeGates(RoutineInfo r) =>
+            (r.GenericConstraints ?? [])
+            .Where(predicate: c => c.ParameterName == "Me")
+            .Select(selector: c =>
+                $"{c.ConstraintType}:{string.Join(separator: ",", values: (c.ConstraintTypes ?? []).Select(selector: t => t.Name))}")
+            .OrderBy(keySelector: s => s, comparer: StringComparer.Ordinal)
+            .ToList();
+
+        List<string> ga = MeGates(r: a);
+        List<string> gb = MeGates(r: b);
+        return ga.Count == gb.Count && ga.SequenceEqual(second: gb);
+    }
+
+    /// <summary>
+    /// Picks the most-specific of several same-name candidate routines for a concrete implementer:
+    /// among those whose <c>needs Me …</c> constraints the implementer satisfies, the one with the
+    /// MOST such constraints wins (an unconstrained body is the least-specific fallback). Ties and
+    /// the no-satisfied-candidate case fall back to the first candidate.
+    /// </summary>
+    private RoutineInfo? SelectMostSpecificForImplementer(List<RoutineInfo> candidates,
+        TypeInfo implementer)
+    {
+        RoutineInfo? best = null;
+        int bestScore = -1;
+        foreach (RoutineInfo candidate in candidates)
+        {
+            List<GenericConstraintDeclaration> meConstraints =
+                candidate.GenericConstraints?
+                    .Where(predicate: c => c.ParameterName == "Me")
+                    .ToList() ?? [];
+            if (!meConstraints.All(predicate: c =>
+                    ImplementerSatisfiesConstraint(implementer: implementer, constraint: c)))
+            {
+                continue; // some Me-constraint is unmet — this body doesn't apply
+            }
+
+            if (meConstraints.Count > bestScore)
+            {
+                bestScore = meConstraints.Count;
+                best = candidate;
+            }
+        }
+
+        return best ?? candidates.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// True when a concrete implementer type satisfies a single <c>needs Me …</c> constraint used to
+    /// gate a protocol-default body (the kind constraints <c>is variant/choice/flags/record/entity</c>
+    /// plus <c>obeys P</c>).
+    /// </summary>
+    private bool ImplementerSatisfiesConstraint(TypeInfo implementer,
+        GenericConstraintDeclaration constraint)
+    {
+        switch (constraint.ConstraintType)
+        {
+            case ConstraintKind.VariantType:
+                return implementer is VariantTypeInfo;
+            case ConstraintKind.ChoiceType:
+                return implementer is ChoiceTypeInfo;
+            case ConstraintKind.FlagsType:
+                return implementer is FlagsTypeInfo;
+            case ConstraintKind.TupleType:
+                return implementer is TupleTypeInfo;
+            case ConstraintKind.RoutineType:
+                return implementer is RoutineTypeInfo;
+            case ConstraintKind.Crashable:
+                return implementer is CrashableTypeInfo;
+            case ConstraintKind.Splittable:
+                // The SoA footprint gate: the element type tears down trivially (only `@llvm`
+                // primitives + raw pointers, no custom store/destroy), so its columns are
+                // memcpy-movable with no per-element teardown.
+                return IsTriviallyDestructible(type: implementer);
+            case ConstraintKind.ZeroMemvarType:
+                // A field-less aggregate: an empty record, or a scalar kind (choice/flags carry no
+                // member variables). Its `memvarof` is empty, so the base field-walk is degenerate.
+                return implementer switch
+                {
+                    RecordTypeInfo r => r.MemberVariables.Count == 0,
+                    EntityTypeInfo e => e.MemberVariables.Count == 0,
+                    _ => false
+                };
+            case ConstraintKind.ReferenceType:
+                // `is EntityType` — a plain entity; a crashable is an entity subtype with its own
+                // more-specific `is CrashableType` gate, so exclude it here.
+                return implementer is EntityTypeInfo and not CrashableTypeInfo;
+            case ConstraintKind.ValueType:
+                // `is RecordType` — a plain value record; exclude the sum/enum/tuple record
+                // subtypes, which have their own more-specific kind gates.
+                return implementer is RecordTypeInfo
+                    and not (VariantTypeInfo or ChoiceTypeInfo or FlagsTypeInfo or TupleTypeInfo);
+            case ConstraintKind.Obeys:
+                return constraint.ConstraintTypes?.All(predicate: p =>
+                    TypeObeysProtocol(type: implementer, protocolName: p.Name)) ?? true;
+            default:
+                // Unknown/unsupported gate — treat as satisfied so it never wrongly excludes.
+                return true;
+        }
+    }
+
+    /// <summary>
+    /// Returns the universal derive-template routine registered as <c>routine T.name()</c> (owner is
+    /// a type-parameter placeholder), or null. Used by the wired-routine synthesizer to materialize a
+    /// type's <c>represent</c>/<c>diagnose</c> from the RazorForge <c>@overridable routine T.…</c>
+    /// template instead of building the body in C#.
+    /// </summary>
+    public RoutineInfo? GetUniversalMethod(string name)
+        => _universalMethods.TryGetValue(key: name, value: out RoutineInfo? m) ? m : null;
+
+    /// <summary>
+    /// Registers an auto-derive template captured directly from a stdlib <c>@overridable/@override
+    /// routine T.method()</c> declaration: the owner type-parameter name (<c>T</c>), the method's
+    /// kind gate constraints (<c>needs T is VariantType/…</c>), and its AST body. Several
+    /// same-signature templates coexist (distinguished by their gate set) because selection is
+    /// per-type at SYNTHESIS time — this store never goes through the signature-keyed registry.
+    /// </summary>
+    public void RegisterDeriveTemplate(string method, string ownerParam, int arity,
+        List<GenericConstraintDeclaration>? constraints, Statement body)
+    {
+        if (!_deriveTemplates.TryGetValue(key: method,
+                value: out List<(string, int, List<GenericConstraintDeclaration>, Statement)>? list))
+        {
+            list = [];
+            _deriveTemplates[key: method] = list;
+        }
+
+        List<GenericConstraintDeclaration> gates = DeriveKindGates(constraints: constraints);
+        string gateKey = DeriveGateKey(gates: gates);
+        // Dedup by (arity, gate set): several same-name templates coexist — kind-gated overrides
+        // (different gates) and, for `hash`, the fast `hash()` vs keyed `hash(k0, k1)` forms
+        // (different arity, same gates).
+        if (list.Any(predicate: e => e.Item2 == arity && DeriveGateKey(gates: e.Item3) == gateKey))
+            return; // already captured (re-run across passes)
+        list.Add(item: (ownerParam, arity, gates, body));
+    }
+
+    /// <summary>
+    /// Selects the most-specific auto-derive template for <paramref name="forType"/>: among the
+    /// candidates whose kind gates (<c>needs T is VariantType/…</c>) the type satisfies, the one
+    /// with the MOST gates wins; the unconstrained base is the fallback. Returns the owner
+    /// type-parameter name (for the T→type substitution) and the template body.
+    /// </summary>
+    public (string OwnerParam, Statement Body)? GetDeriveTemplate(string name, int arity,
+        TypeInfo forType)
+    {
+        if (!_deriveTemplates.TryGetValue(key: name,
+                value: out List<(string, int, List<GenericConstraintDeclaration>, Statement)>? list))
+            return null;
+
+        (string, Statement)? best = null;
+        int bestScore = -1;
+        foreach ((string ownerParam, int tArity, List<GenericConstraintDeclaration> gates,
+                     Statement body) in list)
+        {
+            if (tArity != arity)
+                continue;
+            if (!gates.All(predicate: g =>
+                    ImplementerSatisfiesConstraint(implementer: forType, constraint: g)))
+                continue;
+            if (gates.Count > bestScore)
+            {
+                bestScore = gates.Count;
+                best = (ownerParam, body);
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>The kind gate constraints (<c>is VariantType/choice/flags/…</c>) that drive
+    /// per-type derive selection. Obeys/other constraints are ignored for gating.</summary>
+    private static List<GenericConstraintDeclaration> DeriveKindGates(
+        List<GenericConstraintDeclaration>? constraints)
+        => (constraints ?? [])
+            .Where(predicate: c => c.ConstraintType is ConstraintKind.VariantType
+                or ConstraintKind.ChoiceType or ConstraintKind.FlagsType
+                or ConstraintKind.TupleType or ConstraintKind.ValueType
+                or ConstraintKind.ReferenceType or ConstraintKind.RoutineType
+                or ConstraintKind.Crashable or ConstraintKind.ZeroMemvarType
+                or ConstraintKind.Splittable)
+            .ToList();
+
+    private static string DeriveGateKey(List<GenericConstraintDeclaration> gates)
+        => string.Join(separator: "&",
+            values: gates
+                .Select(selector: c => c.ConstraintType.ToString())
+                .OrderBy(keySelector: s => s, comparer: StringComparer.Ordinal));
+
+    public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null,
+        TypeInfo? forImplementer = null)
     {
         // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) obey `Storable` but define no concrete
         // `$store` — their store-hook IS the refcount copy verb (retain/track/share/watch/roam). Redirect
@@ -606,9 +807,19 @@ public sealed partial class TypeRegistry
         // First check the type's own methods
         if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
         {
-            RoutineInfo? method = methods.FirstOrDefault(predicate: m =>
+            List<RoutineInfo> nameMatches = methods.Where(predicate: m =>
                 m.Name == methodName &&
-                (isFailable == null || m.IsFailable == isFailable));
+                (isFailable == null || m.IsFailable == isFailable)).ToList();
+
+            // `within`-dispatch: when a protocol declares several same-name default bodies gated by
+            // `needs Me is VariantType` / `is ChoiceType` / `obeys X`, pick the MOST-SPECIFIC one whose
+            // Me-constraints the concrete implementer satisfies (an unconstrained body is the least
+            // specific fallback). Only kicks in when resolving a protocol's defaults FOR a concrete
+            // implementer with >1 candidate — the single-candidate common path is unchanged.
+            RoutineInfo? method = nameMatches.Count > 1 && forImplementer != null
+                ? SelectMostSpecificForImplementer(candidates: nameMatches,
+                    implementer: forImplementer)
+                : nameMatches.FirstOrDefault();
             if (method != null)
             {
                 bool shouldNormalizeConcreteOwner =
@@ -720,7 +931,10 @@ public sealed partial class TypeRegistry
             {
                 foreach (var protocol in protocols)
                 {
-                    var res = LookupMethod(type: protocol, methodName: methodName);
+                    // Thread the concrete implementer so a protocol with several `needs`-gated
+                    // default bodies dispatches to the kind-matched one (within-dispatch).
+                    var res = LookupMethod(type: protocol, methodName: methodName,
+                        forImplementer: forImplementer ?? type);
                     if (res != null) return res;
                 }
             }
@@ -1416,15 +1630,15 @@ public sealed partial class TypeRegistry
         //   BuilderServiceInliningPass folds to literals; they have no body and must never reach codegen.
         // - Routines on generic-definition owner types: bodies are synthesised per concrete instance;
         //   emitting them for the definition produces [T]/[K,V] placeholders in LLVM.
-        // - Routines on Blank owners: Blank -> LLVM void, illegal as a parameter type.
+        // - Routines on None owners: None -> LLVM void, illegal as a parameter type.
         // - Routines on non-live concrete generic owner types: phantom instantiations.
         return all.Where(r =>
                       !r.Annotations.Contains(value: "innate") &&
                       (r.OwnerType == null ||
-                       (!r.OwnerType.IsBlank &&
+                       (!r.OwnerType.IsNone &&
                         !r.OwnerType.IsGenericDefinition &&
                         (r.OwnerType.TypeArguments == null ||
-                         r.OwnerType.TypeArguments.All(a => !a.IsBlank)) &&
+                         r.OwnerType.TypeArguments.All(a => !a.IsNone)) &&
                         IsConcreteTypeLive(r.OwnerType))));
     }
 
@@ -1526,7 +1740,7 @@ public sealed partial class TypeRegistry
 
         if (!type.IsGenericResolution ||
             type.TypeArguments is null ||
-            type.TypeArguments.Any(predicate: a => a is GenericParameterTypeInfo or ErrorTypeInfo || a.IsBlank))
+            type.TypeArguments.Any(predicate: a => a is GenericParameterTypeInfo or ErrorTypeInfo || a.IsNone))
             return [];
 
         if (_methodsForTypeCache.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? cached))
@@ -1680,7 +1894,7 @@ public sealed partial class TypeRegistry
     /// Whether a variant has at least one arm whose payload owns a real destructor — i.e. an arm type
     /// with a non-borrow <c>$destroy</c> (a heap entity/collection, a managed leaf like <c>Text</c>, or
     /// a record that transitively owns one). Such an arm double-frees on bitwise alias, so the variant
-    /// needs a synthesized deep <c>copy</c>. None/Blank/scalar arms are safe to bitwise-copy and are
+    /// needs a synthesized deep <c>copy</c>. None/None/scalar arms are safe to bitwise-copy and are
     /// ignored. Drives the variant branch of <see cref="GetLifecycle"/> and the copy/Copyable synthesis.
     /// </summary>
     public bool VariantHasDestructibleArm(VariantTypeInfo variant)
@@ -1756,6 +1970,13 @@ public sealed partial class TypeRegistry
     {
         // Borrow/view tier owns nothing — no teardown either way.
         if (IsBorrowTier(type: type))
+            return true;
+
+        // Raw-pointer wrapper `Hijacked[T]` is USER-MANAGED: the holder frees it explicitly via
+        // `invalidate()`. The compiler must NEVER auto-tear it down — its `$destroy` is a no-op, and
+        // auto-freeing a pointer the user also frees is a double-free. So it is trivially destructible
+        // (skipped by teardown). (`CPtr` is `@llvm("ptr")` and already trivial via HasDirectBackendType.)
+        if (type is WrapperTypeInfo && type.Name == RuntimeContract.Hijacked)
             return true;
 
         switch (type)

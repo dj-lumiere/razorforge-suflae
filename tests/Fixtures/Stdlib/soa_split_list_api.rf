@@ -1,0 +1,48 @@
+module Tests/Stdlib/SoaSplitListApi
+import IO/Console
+import Collections
+
+# Exercises the growable struct-of-arrays `SplitList[T]` (Standard/RazorForge/Collections/SplitList.rf):
+# each field of `Particle` lives in its own `Hijacked[fieldType]` column, grown by reallocation. Drives
+# append (past the initial capacity, forcing a grow), get, set, count — proving the decl-position `expand`
+# columns + `${m.type}` type-arg splices (`hijacked_from[${m.type}]`) + `${m.type}.data_size()` offsets all
+# work through a real reallocating collection.
+
+record Particle obeys Equatable
+  id: S64
+  mass: F32
+
+routine start()
+  var s = SplitList[Particle]()
+  show(f"empty: count={s.count()} cap={s.capacity()}")
+
+  var i = 0u64
+  while i < 6u64
+    s.add_last(value: Particle(id: i.S64(), mass: i.F32() + 0.5f32))
+    i = i + 1u64
+  show(f"filled: count={s.count()} cap={s.capacity()}")
+
+  # Indexing (MutableIndexable): read via `s[i]`, write via `s[i] = value`.
+  var p2 = s[2u64]
+  var p5 = s[5u64]
+  show(f"p2: id={p2.id} mass={p2.mass}")
+  show(f"p5: id={p5.id} mass={p5.mass}")
+
+  s[2u64] = Particle(id: 99_s64, mass: 9.5f32)
+  var p2b = s[2u64]
+  show(f"p2 after set: id={p2b.id} mass={p2b.mass}")
+
+  # Iterate: `each` walks the elements, reconstructing each `Particle` from the columns in order.
+  var id_sum = 0_s64
+  each p in s
+    id_sum = id_sum + p.id
+  show(f"id_sum={id_sum}")
+
+  # Membership (Container): compares reconstructed elements by value (Particle obeys Equatable).
+  var has99 = s.contains(value: Particle(id: 99_s64, mass: 9.5f32))
+  var has_missing = s.contains(value: Particle(id: 7_s64, mass: 0.0f32))
+  show(f"contains: has99={has99} missing={has_missing}")
+
+  # `s` is an entity — its column buffers + the entity itself are freed by scope-exit teardown.
+  show("DONE")
+  return

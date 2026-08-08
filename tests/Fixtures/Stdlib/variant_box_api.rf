@@ -1,0 +1,39 @@
+module Tests/Stdlib/VariantBoxApi
+import IO/Console
+
+# Call-site auto-wrap: an arm value passed to a VARIANT parameter is boxed into the variant
+# (the same rewrite `var x: Variant = arm` uses), including `none` and a nested variant arm.
+
+variant Inner
+  S32
+  Text
+
+variant Shape
+  Inner
+  Text
+  None
+
+routine tag(s: Shape) -> Text
+  when s
+    is Inner => return "inner"
+    is Text  => return "text"
+    else     => return "none"
+
+@positional
+routine ptag(s: Shape) -> Text
+  when s
+    is Inner => return "p-inner"
+    is Text  => return "p-text"
+    else     => return "p-none"
+
+routine start()
+  # text literal -> Text arm
+  show(tag(s: "hi"))
+  # none literal -> None arm
+  show(tag(s: none))
+  # a different variant (Inner) that is itself an arm of Shape
+  var i: Inner = 7_s32
+  show(tag(s: i))
+  # positional call with none
+  show(ptag(s: none))
+  return

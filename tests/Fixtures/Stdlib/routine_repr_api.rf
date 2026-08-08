@@ -1,0 +1,27 @@
+module Tests/Stdlib/RoutineReprApi
+import IO/Console
+
+# Routine values have first-class `represent`/`diagnose`: their SIGNATURE (the routine type's name).
+# `serialize` of a routine-typed member (entities may hold one; records can't, RF-S412) boxes that
+# same signature Text, since serializing code is meaningless but the signature is the useful view.
+
+routine inc(x: S32) -> S32
+  return x + 1s32
+
+routine combine(a: S32, b: S32) -> Bool
+  return a < b
+
+entity Callback
+  f: Routine[(S32,), S32]
+  n: S32
+
+routine start()
+  var f = inc
+  show(f.represent())
+  show(f"{f.diagnose()}")
+  var g = combine
+  show(g.represent())
+  var c = Callback(f: inc, n: 5s32)
+  show(f"{c.serialize()}")
+  show("DONE")
+  return

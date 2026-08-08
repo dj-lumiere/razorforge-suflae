@@ -1,0 +1,44 @@
+module Tests/Stdlib/VectorApi
+import IO/Console
+
+# Exercises Vector2D, Vector3D, Vector4D — F32 geometry vectors.
+routine start()
+  var a: Vector3D = Vector3D(x: 1.0_f32, y: 2.0_f32, z: 2.0_f32)
+  var b: Vector3D = Vector3D(x: 4.0_f32, y: 0.0_f32, z: 0.0_f32)
+
+  show(f"a: {a}")
+  show(f"b: {b}")
+
+  # Arithmetic
+  show(f"a + b: {a + b}")
+  show(f"a - b: {a - b}")
+  show(f"-a: {-a}")
+  show(f"a scaled 2: {a.scale(factor: 2.0_f32)}")
+
+  # Geometry
+  show(f"a dot b: {a.dot(you: b)}")
+  show(f"a cross b: {a.cross(you: b)}")
+  show(f"a length: {a.length()}")
+  show(f"a length_squared: {a.length_squared()}")
+  show(f"b normalized: {b.normalize()}")
+  show(f"a to b distance: {a.distance(you: b)}")
+  show(f"lerp a->b at 0.5: {a.lerp(you: b, t: 0.5_f32)}")
+
+  # Equality
+  var a2: Vector3D = Vector3D(x: 1.0_f32, y: 2.0_f32, z: 2.0_f32)
+  show(f"a == a2: {a == a2}")
+  show(f"a == b: {a == b}")
+
+  # Vector2D
+  var p: Vector2D = Vector2D(x: 3.0_f32, y: 4.0_f32)
+  show(f"p: {p}")
+  show(f"p length: {p.length()}")
+  show(f"p cross unit_y: {p.cross(you: VECTOR2D_UNIT_Y)}")
+
+  # Vector4D
+  var q: Vector4D = Vector4D(x: 1.0_f32, y: 2.0_f32, z: 3.0_f32, w: 4.0_f32)
+  show(f"q: {q}")
+  show(f"q dot q: {q.dot(you: q)}")
+
+  show("DONE")
+  return

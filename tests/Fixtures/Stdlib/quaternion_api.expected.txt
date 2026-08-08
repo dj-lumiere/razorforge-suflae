@@ -1,0 +1,16 @@
+identity: 1+0i+0j+0k
+qz norm: 1
+qz abs: 1
+rotate unit_x by 90deg z ~= unit_y: true
+qz * conj(qz): 1+0i+0j+0k
+qz reciprocal: 0.7071068+0i+0j-0.7071068k
+a: 1+2i+3j+4k
+a + b: 6+8i+10j+12k
+a * b: -60+12i+30j+24k
+a conjugate: 1-2i-3j-4k
+a == a2: true
+a == b: false
+slerp id->qz t=0: 1+0i+0j+0k
+q64 norm ~= 1: true
+q64 rotate unit_x ~= unit_y: true
+DONE

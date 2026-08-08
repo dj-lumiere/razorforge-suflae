@@ -426,7 +426,7 @@ public sealed partial class SemanticVerifier
                                     .Select(selector: p => p.Type)
                                     .ToList();
 
-        // Get return type (null means Blank/void)
+        // Get return type (null means None/void)
         TypeSymbol? returnType = routine.ReturnType;
 
         // Create or retrieve the cached routine type

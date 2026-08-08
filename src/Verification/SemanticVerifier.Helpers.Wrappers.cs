@@ -266,7 +266,7 @@ public sealed partial class SemanticVerifier
 
     private static bool IsTriviallyStorable(TypeSymbol type)
     {
-        if (type is ErrorTypeInfo or GenericParameterTypeInfo || type.IsBlank)
+        if (type is ErrorTypeInfo or GenericParameterTypeInfo || type.IsNone)
         {
             // Unknown / void types — be permissive so we do not double-report.
             return true;

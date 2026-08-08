@@ -1,0 +1,51 @@
+module Tests/Stdlib/QuaternionApi
+import IO/Console
+
+# Exercises Q32 and Q64 — quaternions over F32/F64.
+routine start()
+  # A 90-degree rotation about the z axis (π/2 radians).
+  var half_pi: F32 = 1.5707963_f32
+  var qz: Q32 = Q32.from_axis_angle(axis: VECTOR3D_UNIT_Z, angle: half_pi)
+
+  show(f"identity: {Q32_IDENTITY}")
+  show(f"qz norm: {qz.norm()}")
+  show(f"qz abs: {qz.abs()}")
+
+  # Rotating the x axis by 90 deg about z should land near +y = (0, 1, 0).
+  # Compare with a tolerance: the exact components carry sub-epsilon float noise
+  # (cos(pi/2) is ~6e-8, not 0) that is not bit-stable across platforms.
+  var rotated: Vector3D = qz.rotate(v: VECTOR3D_UNIT_X)
+  show(f"rotate unit_x by 90deg z ~= unit_y: {rotated.distance(you: VECTOR3D_UNIT_Y) < 0.0001_f32}")
+
+  # Hamilton product with the conjugate yields (approximately) the identity.
+  var qc: Q32 = qz * qz.conjugate()
+  show(f"qz * conj(qz): {qc}")
+
+  # Inverse of a unit quaternion equals its conjugate.
+  var inv: Q32 = qz.reciprocal()
+  show(f"qz reciprocal: {inv}")
+
+  # Arithmetic
+  var a: Q32 = Q32(w: 1.0_f32, x: 2.0_f32, y: 3.0_f32, z: 4.0_f32)
+  var b: Q32 = Q32(w: 5.0_f32, x: 6.0_f32, y: 7.0_f32, z: 8.0_f32)
+  show(f"a: {a}")
+  show(f"a + b: {a + b}")
+  show(f"a * b: {a * b}")
+  show(f"a conjugate: {a.conjugate()}")
+
+  # Equality
+  var a2: Q32 = Q32(w: 1.0_f32, x: 2.0_f32, y: 3.0_f32, z: 4.0_f32)
+  show(f"a == a2: {a == a2}")
+  show(f"a == b: {a == b}")
+
+  # slerp from identity to qz at t=0 and t=1 hits the endpoints.
+  show(f"slerp id->qz t=0: {Q32_IDENTITY.slerp(you: qz, t: 0.0_f32)}")
+
+  # Q64 widening and rotation.
+  var q64: Q64 = Q64(from: qz)
+  show(f"q64 norm ~= 1: {(q64.norm() - 1.0_f64).abs() < 0.0001_f64}")
+  var r64: Vector3D = q64.rotate(v: VECTOR3D_UNIT_X)
+  show(f"q64 rotate unit_x ~= unit_y: {r64.distance(you: VECTOR3D_UNIT_Y) < 0.0001_f32}")
+
+  show("DONE")
+  return

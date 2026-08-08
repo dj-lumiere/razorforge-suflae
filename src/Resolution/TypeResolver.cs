@@ -249,6 +249,15 @@ internal sealed class TypeResolver
 
     private TypeSymbol ResolveTypeCore(TypeExpression typeExpr) // NOSONAR S3776
     {
+        // Comptime type-position splice `${m.type}` in a decl-position expand column template: resolve
+        // to the synthetic per-field placeholder. The registry substitutes it with each concrete
+        // field's type when the SoA container is instantiated.
+        if (typeExpr.SpliceHandle != null)
+        {
+            return new GenericParameterTypeInfo(
+                name: TypeModel.Symbols.MemberExpandTemplateInfo.ColumnPlaceholderName);
+        }
+
         // Associated-type projection: `Me/Iter`, `S/Iter` (the parser flattens these into the
         // type name). Handled before the normal Me/lookup paths so the `/` segment-walk wins
         // over module-path resolution when the root is `Me` or an in-scope generic parameter.
@@ -482,20 +491,20 @@ internal sealed class TypeResolver
             return ErrorTypeInfo.Instance;
         }
 
-        // Reject Blank as a type argument except Result<Blank>.
-        // Lookup<Blank> is ambiguous in the type_id carrier model because Blank is also the absent sentinel.
+        // Reject None as a type argument except Result<None>.
+        // Lookup<None> is ambiguous in the type_id carrier model because None is also the absent sentinel.
         string? genericDefCarrierName = GetCarrierBaseName(type: genericDef);
         foreach (TypeSymbol arg in typeArgs)
         {
-            if (arg is not { Name: "Blank" } ||
+            if (arg is not { Name: "None" } ||
                 genericDefCarrierName is "Result")
             {
                 continue;
             }
 
-            _sa.ReportError(code: SemanticDiagnosticCode.BlankAsTypeArgument,
-                message: "'Blank' cannot be used as a type argument. " +
-                         "'Blank' is a unit type with no value.",
+            _sa.ReportError(code: SemanticDiagnosticCode.NoneAsTypeArgument,
+                message: "'None' cannot be used as a type argument. " +
+                         "'None' is a unit type with no value.",
                 location: typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }
@@ -622,7 +631,39 @@ internal sealed class TypeResolver
                         constraint: constraint,
                         location: location);
                     break;
+
+                case ConstraintKind.Splittable:
+                    ValidateSplittableConstraint(typeArg: typeArg,
+                        constraint: constraint,
+                        location: location);
+                    break;
             }
+        }
+    }
+
+    /// <summary>
+    /// Validates that a type argument satisfies a <c>is SplittableType</c> constraint — the element
+    /// type must tear down trivially (only <c>@llvm</c> primitives + raw pointers, no custom
+    /// store/destroy) so its member-variable columns are memcpy-movable. This is the eligibility
+    /// gate for the SoA collections <c>SplitArray[T, N]</c> / <c>SplitList[T]</c>.
+    /// </summary>
+    private void ValidateSplittableConstraint(TypeSymbol typeArg,
+        GenericConstraintDeclaration constraint, SourceLocation location)
+    {
+        // A yet-unbound generic parameter can't be checked here — the check re-runs on the concrete
+        // instantiation (SplitList[NonTrivial] fails there, SplitList[T] where T is SplittableType
+        // is provably fine because the outer constraint already gates T).
+        if (typeArg is GenericParameterTypeInfo)
+        {
+            return;
+        }
+
+        if (!_sa._registry.IsTriviallyDestructible(type: typeArg))
+        {
+            _sa.ReportError(code: SemanticDiagnosticCode.SplittableConstraintViolation,
+                message:
+                $"Type '{typeArg.Name}' is not Splittable (it has a non-trivial store/destroy) as required by constraint on '{constraint.ParameterName}'. SoA storage needs a trivially-destructible element.",
+                location: location);
         }
     }
 

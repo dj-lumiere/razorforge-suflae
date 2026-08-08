@@ -1,0 +1,8 @@
+empty: count=0 cap=0
+filled: count=6 cap=8
+p2: id=2 mass=2.5
+p5: id=5 mass=5.5
+p2 after set: id=99 mass=9.5
+id_sum=112
+contains: has99=true missing=false
+DONE

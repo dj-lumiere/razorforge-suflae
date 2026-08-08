@@ -187,6 +187,22 @@ public sealed partial class SemanticVerifier
                 if (!decl.Name.Contains('.'))
                     continue;
 
+                // Auto-derive template: `@overridable/@override routine T.method()`. Captured
+                // straight from the decl (owner param + kind gates + body), NOT via a resolved
+                // RoutineInfo — the owner is a type-parameter placeholder that doesn't resolve, and
+                // several same-signature kind-gated templates must coexist in the derive-template
+                // store, which the signature-keyed registry cannot hold.
+                if (decl.Annotations.Contains(item: "overridable")
+                    || decl.Annotations.Contains(item: "override"))
+                {
+                    int dot = decl.Name.IndexOf(value: '.');
+                    _registry.RegisterDeriveTemplate(method: decl.Name[(dot + 1)..],
+                        ownerParam: decl.Name[..dot],
+                        arity: decl.Parameters.Count,
+                        constraints: decl.GenericConstraints,
+                        body: decl.Body);
+                }
+
                 RoutineInfo? routineInfo = ResolveRoutineInfoForDeclaration(decl: decl, moduleName: module);
                 if (routineInfo == null) continue;
 
@@ -342,7 +358,7 @@ public sealed partial class SemanticVerifier
                 }
                 else
                 {
-                    // 0-parameter routine type: RoutineTypeInfo.BuildName renders "Blank".
+                    // 0-parameter routine type: RoutineTypeInfo.BuildName renders "None".
                     paramList = GetAstTypeName(typeExpr: paramTupleExpr);
                 }
 

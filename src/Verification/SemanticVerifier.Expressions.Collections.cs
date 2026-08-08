@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Compiler.Diagnostics;
+using Compiler.Tokenizer;
 using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;
@@ -393,11 +394,11 @@ public sealed partial class SemanticVerifier
             elementTypes.Add(item: elementType);
         }
 
-        // Empty tuples are not allowed - use Blank instead
+        // Empty tuples are not allowed - use None instead
         if (elementTypes.Count == 0)
         {
             ReportError(code: SemanticDiagnosticCode.UnknownType,
-                message: "Empty tuples are not allowed. Use 'Blank' for the unit type.",
+                message: "Empty tuples are not allowed. Use 'None' for the unit type.",
                 location: tuple.Location);
             return ErrorTypeInfo.Instance;
         }
@@ -435,6 +436,35 @@ public sealed partial class SemanticVerifier
             operandTypes.Add(item: AnalyzeExpression(expression: operand));
         }
 
+        // Bare unsuffixed integer literals default to S64; re-infer them against the chain's concrete
+        // integer operand so `0 < n < 100` (n: S32) conforms the literals to S32 instead of tripping
+        // RF-S060. A single pivot (the first non-literal fixed-width operand) covers the whole chain,
+        // so even `0 < 5 < n` conforms both literals. Mirrors the pairwise literal re-inference in
+        // AnalyzeBinaryExpression.
+        TypeSymbol? pivot = null;
+        for (int i = 0; i < chain.Operands.Count; i++)
+        {
+            if (!IsUnsuffixedIntegerLiteral(expr: chain.Operands[index: i]) &&
+                IsFixedWidthIntegerType(type: operandTypes[index: i]))
+            {
+                pivot = operandTypes[index: i];
+                break;
+            }
+        }
+
+        if (pivot != null)
+        {
+            for (int i = 0; i < chain.Operands.Count; i++)
+            {
+                if (IsUnsuffixedIntegerLiteral(expr: chain.Operands[index: i]) &&
+                    operandTypes[index: i].Name != pivot.Name)
+                {
+                    operandTypes[index: i] = AnalyzeExpression(
+                        expression: chain.Operands[index: i], expectedType: pivot);
+                }
+            }
+        }
+
         // Validate each comparison pair
         for (int i = 0; i < chain.Operators.Count; i++)
         {
@@ -447,6 +477,17 @@ public sealed partial class SemanticVerifier
         // Chained comparisons always return bool
         return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
     }
+
+    /// <summary>
+    /// True for a bare (unsuffixed) integer literal — one whose width is still contextually
+    /// inferable rather than pinned by a suffix. Such literals default to S64 when analyzed
+    /// without an expected type and must be re-inferred against a typed peer.
+    /// </summary>
+    private static bool IsUnsuffixedIntegerLiteral(Expression expr) =>
+        expr is LiteralExpression
+        {
+            LiteralType: TokenType.IntegerLiteral or TokenType.S64Literal or TokenType.UndecidedInteger
+        };
 
     private TypeSymbol AnalyzeBlockExpression(BlockExpression block)
     {

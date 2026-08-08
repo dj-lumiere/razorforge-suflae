@@ -26,6 +26,20 @@ public enum ConstraintKind
     /// <summary>Variant type constraint (where T is variant)</summary>
     VariantType,
 
+    /// <summary>Tuple type constraint (where T is TupleType)</summary>
+    TupleType,
+
+    /// <summary>Zero-member-variable constraint (where T is ZeroMemvarType) — a type whose
+    /// `memvarof` is empty: a field-less record, or a scalar kind (choice/flags) that carries no
+    /// member variables. Lets a derive specialize the degenerate empty-field-walk case.</summary>
+    ZeroMemvarType,
+
+    /// <summary>Splittable constraint (where T is SplittableType) — a trivially-destructible element
+    /// type whose footprint reduces to `@llvm` primitives + raw pointers with no custom store/destroy,
+    /// so its member-variable columns are memcpy-movable with no per-element teardown. The eligibility
+    /// gate for the SoA collections `SplitArray[T, N]` / `SplitList[T]`.</summary>
+    Splittable,
+
     /// <summary>Const generic type constraint (where N is Address)</summary>
     ConstGeneric,
 

@@ -167,7 +167,7 @@ public sealed class RoutineInfo
     /// </summary>
     public List<(string Name, TypeSymbol Type)>? ClosureCaptures { get; set; }
 
-    /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
+    /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always None or a concrete type.</summary>
     public TypeSymbol? ReturnType { get; set; }
 
     /// <summary>True if the source wrote the return type with the `T` rvalue mark

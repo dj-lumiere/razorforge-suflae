@@ -1,0 +1,46 @@
+module Tests/Stdlib/SimdVectorApi
+import IO/Console
+import Simd
+
+# Exercises the generic SIMD Vector[E, N] over F32 lanes (LLVM <N x float>).
+routine start()
+  # Build a 4-lane vector a = <1, 2, 3, 4> from a zero fill + per-lane writes
+  # through the `[]=` operator (in-place setitem!).
+  var a: Vector[F32, 4] = Vector[F32, 4](fill: 0.0_f32)
+  a[0u64] = 1.0_f32
+  a[1u64] = 2.0_f32
+  a[2u64] = 3.0_f32
+  a[3u64] = 4.0_f32
+
+  var b: Vector[F32, 4] = Vector[F32, 4](fill: 10.0_f32)
+
+  show(f"a: {a}")
+  show(f"b: {b}")
+  show(f"a count: {a.count()}")
+  show(f"a lane 2: {a[2u64]}")
+
+  # Elementwise arithmetic (lowers to <4 x float> ops).
+  show(f"a + b: {a + b}")
+  show(f"a - b: {a - b}")
+  show(f"a * b: {a * b}")
+  show(f"b / a: {b / a}")
+  show(f"-a: {-a}")
+  show(f"a scaled 2: {a.scale(factor: 2.0_f32)}")
+
+  # Reductions.
+  show(f"a sum: {a.sum()}")
+  show(f"a dot b: {a.dot(you: b)}")
+  show(f"a length_squared: {a.length_squared()}")
+
+  # Equality.
+  var a2: Vector[F32, 4] = a
+  show(f"a == a2: {a == a2}")
+  show(f"a == b: {a == b}")
+
+  # A different lane count instantiates a distinct LLVM vector type.
+  var c: Vector[F64, 2] = Vector[F64, 2](fill: 1.5_f64)
+  show(f"c (F64x2): {c}")
+  show(f"c sum: {c.sum()}")
+
+  show("DONE")
+  return
