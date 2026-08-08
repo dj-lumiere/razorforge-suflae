@@ -1629,9 +1629,7 @@ public partial class LlvmCodeGenerator
         // `count: 0` instead of the actual N. Substitute the const value before falling through.
         if (member.Object is IdentifierExpression constId
             && !_localVariables.ContainsKey(key: constId.Name)
-            && _typeSubstitutions != null
-            && _typeSubstitutions.TryGetValue(key: constId.Name, value: out TypeInfo? subType)
-            && subType is ConstGenericValueTypeInfo constVal)
+            && constId.ResolvedType is ConstGenericValueTypeInfo constVal)
         {
             return (constVal.Value.ToString(), ResolveConstGenericUnderlyingType(constVal: constVal));
         }

@@ -653,11 +653,9 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)
     {
-        // Const generic value: identifier retains its original param name (e.g., "N")
-        // Resolve via _typeSubstitutions to get the numeric value
-        if (_typeSubstitutions != null &&
-            _typeSubstitutions.TryGetValue(key: identifier.Name, value: out TypeInfo? subType) &&
-            subType is ConstGenericValueTypeInfo constVal)
+        // Const generic value: the monomorphizer baked the numeric value onto the identifier's
+        // ResolvedType (ConstGenericValueTypeInfo) — read it off the node, not a codegen-time map.
+        if (identifier.ResolvedType is ConstGenericValueTypeInfo constVal)
         {
             return constVal.Value.ToString();
         }

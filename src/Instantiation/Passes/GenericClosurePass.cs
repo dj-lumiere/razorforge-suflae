@@ -130,6 +130,11 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         new RcRetainLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
 
+        // Track-C tripwire (C1): after all instantiated-body lowering, assert every fully-concrete
+        // monomorphized body is free of residual generics. This replaces the codegen-time guards —
+        // a trip here means the rewriter is incomplete, not that codegen must substitute.
+        MonomorphizationCompletenessAssertionPass.Run(adapter.InstantiatedGenericBodies);
+
         ctx.VariantBodies.Clear();
         foreach ((string key, Statement body) in adapter.VariantBodies)
         {

@@ -284,6 +284,30 @@ internal static class GenericAstRewriter
                 }
             }
 
+            // Tuple (`Tuple[T, Bool]` -> `Tuple[U8, Bool]`): TupleTypeInfo is not an
+            // IsGenericResolution, so substitute each element type and rebuild. Without this a
+            // tuple carrying `T` in a CallExpression.ResolvedType survives into codegen.
+            if (original is TupleTypeInfo tuple)
+            {
+                bool anyChanged = false;
+                var newElems = new List<TypeInfo>(capacity: tuple.ElementTypes.Count);
+                foreach (TypeInfo elem in tuple.ElementTypes)
+                {
+                    TypeInfo? resolved = ResolveType(original: elem);
+                    if (resolved != null && !ReferenceEquals(objA: resolved, objB: elem))
+                    {
+                        newElems.Add(item: resolved);
+                        anyChanged = true;
+                    }
+                    else
+                    {
+                        newElems.Add(item: elem);
+                    }
+                }
+                if (anyChanged)
+                    return new TupleTypeInfo(elementTypes: newElems);
+            }
+
             return null;
         }
 
@@ -610,6 +634,56 @@ internal static class GenericAstRewriter
             return null;
         }
 
+        /// <summary>
+        /// Re-instantiates a method-level generic routine (e.g. <c>Hijacked[T].recast_as[U]</c>) from
+        /// its EXPLICIT rewritten type-argument expressions. The generic-def <c>recast_as</c> stays
+        /// bound after owner substitution because its <c>U</c> comes from the call's own
+        /// <c>[U]</c> type-argument, not from an operand type — so resolve those args to concrete
+        /// TypeInfos and materialize the concrete routine. Returns null when the routine is not a
+        /// method-generic definition or the args can't be fully resolved.
+        /// </summary>
+        public RoutineInfo? ResolveMethodGenericFromTypeArgs(RoutineInfo? routine,
+            IReadOnlyList<TypeExpression>? typeArgExprs)
+        {
+            if (Registry == null || routine == null || typeArgExprs is not { Count: > 0 })
+                return null;
+
+            // Resolve the explicit `[U]` type-argument expressions to concrete TypeInfos.
+            var explicitArgs = new List<TypeInfo>(capacity: typeArgExprs.Count);
+            foreach (TypeExpression te in typeArgExprs)
+            {
+                TypeInfo? arg = te.ResolvedType is { } rt and not ErrorTypeInfo
+                    ? ResolveType(original: rt) ?? rt
+                    : ResolveTypeExpression(typeExpr: te);
+                if (arg == null || arg is ErrorTypeInfo || HasGenericParam(arg))
+                    return null;
+                explicitArgs.Add(item: arg);
+            }
+
+            // Re-home the method on the CONCRETE owner first (so its owner is already bound), then
+            // bind its own method-generic params from the explicit args. LookupMethod on a concrete
+            // owner returns a form whose GenericParameters are just the method's own params (e.g.
+            // `[U]`), so CreateInstance keeps the concrete owner — unlike resolving the combined
+            // owner+method gen-def, which would leave the owner as `Hijacked[T]`.
+            RoutineInfo? ownerBound = routine.OwnerType is { IsGenericDefinition: false } concreteOwner
+                ? Registry.LookupMethod(type: concreteOwner, methodName: routine.Name,
+                    isFailable: routine.IsFailable)
+                : null;
+            RoutineInfo? target = ownerBound ?? routine.GenericDefinition ?? routine;
+            if (!target.IsGenericDefinition
+                || target.GenericParameters?.Count != explicitArgs.Count)
+                return null;
+            return Registry.GetOrCreateRoutineResolution(genericDef: target,
+                typeArguments: explicitArgs);
+        }
+
+        private static bool HasGenericParam(TypeInfo t)
+        {
+            if (t is GenericParameterTypeInfo) return true;
+            if (t is { IsGenericDefinition: true, GenericParameters.Count: > 0 }) return true;
+            return t.TypeArguments is { Count: > 0 } args && args.Any(a => HasGenericParam(t: a));
+        }
+
         public TypeInfo? ResolveTypeExpressionPublic(TypeExpression typeExpr) => ResolveTypeExpression(typeExpr);
 
         private TypeInfo? ResolveTypeExpression(TypeExpression typeExpr)
@@ -692,12 +766,18 @@ internal static class GenericAstRewriter
         var args = type.GenericArguments
                       ?.Select(selector: a => RewriteType(type: a, ctx: ctx))
                        .ToList();
-        if (name == type.Name && args == null && type.GenericArguments == null)
+        // The TypeExpression's own ResolvedType (SA-annotated on the generic-def AST) may still be a
+        // bare `T` / a generic resolution carrying `T`; substitute it so no generic parameter survives
+        // on a type-expression node (C1). Falls back to the original when there is nothing to resolve.
+        TypeInfo? resolvedType = ctx.ResolveType(original: type.ResolvedType) ?? type.ResolvedType;
+
+        if (name == type.Name && args == null && type.GenericArguments == null &&
+            ReferenceEquals(objA: resolvedType, objB: type.ResolvedType))
         {
             return type; // No change
         }
 
-        return type with { Name = name, GenericArguments = args };
+        return type with { Name = name, GenericArguments = args, ResolvedType = resolvedType };
     }
 
     /// <summary>
@@ -1057,8 +1137,10 @@ internal static class GenericAstRewriter
 
             IdentifierExpression identifier => identifier with { },
 
-            // Leaf nodes -> no children to rewrite
-            LiteralExpression => expr,
+            // Leaf nodes have no children, but their ResolvedType may still carry a generic
+            // parameter (e.g. `none : Maybe[Hijacked[BTreeListNode[T]]]`). Clone so the ResolvedType
+            // substitution block below runs (it is gated on a fresh reference).
+            LiteralExpression literal => literal with { },
 
             _ => expr // Unknown expression type -> return as-is
         };
@@ -1175,6 +1257,12 @@ internal static class GenericAstRewriter
                             callArgTypes: callArgTypes) ?? rewrittenRoutine;
                     }
 
+                    // A method-generic callee whose type param is supplied by an explicit
+                    // `.method[U]()` type-argument (e.g. `recast_as[T]`) stays generic after
+                    // owner/arg resolution — re-instantiate from the callee's rewritten type args.
+                    rewrittenRoutine = ReinstantiateMethodGenericCallee(
+                        call: call, resolved: rewrittenRoutine, ctx: ctx);
+
                     call.ResolvedRoutine = rewrittenRoutine ?? call.ResolvedRoutine;
                     break;
                 }
@@ -1193,9 +1281,11 @@ internal static class GenericAstRewriter
                         .Where(predicate: t => t != null)
                         .Cast<TypeInfo>()
                         .ToList();
-                    call.ResolvedRoutine = ctx.ResolveCallRoutine(call: call,
+                    RoutineInfo? plainResolved = ctx.ResolveCallRoutine(call: call,
                         expressionType: routineResultType,
                         callArgTypes: callArgTypes) ?? call.ResolvedRoutine;
+                    call.ResolvedRoutine = ReinstantiateMethodGenericCallee(
+                        call: call, resolved: plainResolved, ctx: ctx) ?? plainResolved;
                     break;
                 }
 
@@ -1236,9 +1326,20 @@ internal static class GenericAstRewriter
                         (expr is GenericMethodCallExpression originalGenericCall
                             ? originalGenericCall.ConstructedType
                             : null);
-                    genericCall.ResolvedRoutine =
+                    RoutineInfo? gcResolved =
                         ctx.ResolveRoutine(original: genericCall.ResolvedRoutine,
-                            expressionType: routineResultType) ?? genericCall.ResolvedRoutine;
+                            expressionType: routineResultType);
+                    // If the routine is a method-generic (`recast_as[U]`) whose `U` comes from the
+                    // explicit `[U]` type-argument, owner-based resolution can't concretize it —
+                    // re-instantiate from the (rewritten) explicit type-argument expressions.
+                    if (gcResolved is null or { IsGenericDefinition: true }
+                        or { OwnerType.IsGenericDefinition: true })
+                    {
+                        gcResolved = ctx.ResolveMethodGenericFromTypeArgs(
+                            routine: genericCall.ResolvedRoutine,
+                            typeArgExprs: genericCall.TypeArguments) ?? gcResolved;
+                    }
+                    genericCall.ResolvedRoutine = gcResolved ?? genericCall.ResolvedRoutine;
                     break;
             }
 
@@ -1256,6 +1357,51 @@ internal static class GenericAstRewriter
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// When a call's resolved routine is still a method-generic definition (its type param comes
+    /// from an explicit <c>.method[U]()</c> type-argument, not an operand), re-instantiate it from
+    /// the callee's rewritten type arguments. Returns <paramref name="resolved"/> unchanged when it
+    /// is already concrete or no explicit type arguments are available.
+    /// </summary>
+    private static RoutineInfo? ReinstantiateMethodGenericCallee(CallExpression call,
+        RoutineInfo? resolved, RewriteContext ctx)
+    {
+        if (!IsUnconcretizedMethodGeneric(routine: resolved))
+        {
+            return resolved;
+        }
+
+        IReadOnlyList<TypeExpression>? typeArgs = call.Callee switch
+        {
+            GenericMemberExpression gme => gme.TypeArguments,
+            _ => call.TypeArguments
+        };
+        return ctx.ResolveMethodGenericFromTypeArgs(routine: resolved ?? call.ResolvedRoutine,
+            typeArgExprs: typeArgs) ?? resolved;
+    }
+
+    /// <summary>
+    /// True when a resolved routine still needs its method-level type param bound from an explicit
+    /// call type-argument: a generic definition, owned by one, or (concrete-owner case like
+    /// <c>Hijacked[BTreeListNode[S64]].recast_as() -&gt; Hijacked[U]</c>) still carrying a generic
+    /// parameter in its return or parameter types.
+    /// </summary>
+    private static bool IsUnconcretizedMethodGeneric(RoutineInfo? routine)
+    {
+        if (routine is null or { IsGenericDefinition: true } or { OwnerType.IsGenericDefinition: true })
+            return routine != null;
+        if (routine.ReturnType != null && TypeHasGenericParam(routine.ReturnType))
+            return true;
+        return routine.Parameters.Any(p => p.Type != null && TypeHasGenericParam(p.Type));
+    }
+
+    private static bool TypeHasGenericParam(TypeInfo t)
+    {
+        if (t is GenericParameterTypeInfo) return true;
+        if (t is { IsGenericDefinition: true, GenericParameters.Count: > 0 }) return true;
+        return t.TypeArguments is { Count: > 0 } a && a.Any(x => TypeHasGenericParam(t: x));
     }
 
     private static CallExpression CloneCall(CallExpression call, RewriteContext ctx)

@@ -4,6 +4,7 @@ using Compiler.Postprocessing.Passes;
 using Compiler.Instantiation;
 using Compiler.Resolution;
 using SyntaxTree;
+using TypeModel.Symbols;
 using TypeModel.Types;
 
 namespace Compiler.Desugaring.Passes;
@@ -497,6 +498,12 @@ internal sealed class GenericCallLoweringPass
         // Only lower when SA has resolved the routine -> provides the concrete call target.
         if (gmc.ResolvedRoutine == null) return null;
 
+        // A method-generic call (`recast_as[T]`) whose ResolvedRoutine is still the generic-def
+        // (its type param comes from the explicit `[T]` arg, so owner substitution alone can't
+        // concretize it) must be re-instantiated from its now-concrete type arguments before it is
+        // baked into a plain CallExpression — otherwise codegen receives a generic-def callee.
+        gmc = gmc with { ResolvedRoutine = ConcretizeMethodGenericRoutine(gmc) };
+
         // Lower arguments first.
         var loweredArgs = new List<Expression>(capacity: gmc.Arguments.Count);
         foreach (Expression arg in gmc.Arguments)
@@ -565,6 +572,61 @@ internal sealed class GenericCallLoweringPass
             ResolvedType = gmc.ResolvedType,
             IsInFlight = gmc.IsInFlight
         };
+    }
+
+    /// <summary>
+    /// Re-instantiates a method-generic <c>ResolvedRoutine</c> from the call's explicit type
+    /// arguments when it is still a generic definition (or owned by one). Returns the original
+    /// routine when it is already concrete or the type args can't be resolved.
+    /// </summary>
+    private RoutineInfo? ConcretizeMethodGenericRoutine(GenericMethodCallExpression gmc)
+    {
+        RoutineInfo? routine = gmc.ResolvedRoutine;
+        if (!IsUnconcretizedMethodGeneric(routine))
+        {
+            return routine;
+        }
+        RoutineInfo genDef = routine!.GenericDefinition ?? routine;
+        if (!genDef.IsGenericDefinition || genDef.GenericParameters is not { Count: > 0 } gp
+            || gp.Count != gmc.TypeArguments.Count)
+        {
+            return routine;
+        }
+
+        var args = new List<TypeInfo>(capacity: gmc.TypeArguments.Count);
+        foreach (TypeExpression te in gmc.TypeArguments)
+        {
+            TypeInfo? arg = te.ResolvedType is { } rt and not ErrorTypeInfo
+                ? rt
+                : _registry.LookupType(name: te.Name);
+            if (arg == null || arg is ErrorTypeInfo || ContainsGenericParam(arg))
+                return routine;
+            args.Add(item: arg);
+        }
+        return _registry.GetOrCreateRoutineResolution(genericDef: genDef, typeArguments: args)
+               ?? routine;
+    }
+
+    /// <summary>
+    /// True when a resolved routine still needs its method-level type param bound from an explicit
+    /// call type-argument: it is a generic definition, is owned by one, OR (the concrete-owner case
+    /// like <c>Hijacked[BTreeListNode[S64]].recast_as() -&gt; Hijacked[U]</c>) still carries a
+    /// generic parameter in its return or parameter types.
+    /// </summary>
+    private static bool IsUnconcretizedMethodGeneric(RoutineInfo? routine)
+    {
+        if (routine is null or { IsGenericDefinition: true } or { OwnerType.IsGenericDefinition: true })
+            return routine != null;
+        if (routine.ReturnType != null && ContainsGenericParam(routine.ReturnType))
+            return true;
+        return routine.Parameters.Any(p => p.Type != null && ContainsGenericParam(p.Type));
+    }
+
+    private static bool ContainsGenericParam(TypeInfo t)
+    {
+        if (t is GenericParameterTypeInfo) return true;
+        if (t is { IsGenericDefinition: true, GenericParameters.Count: > 0 }) return true;
+        return t.TypeArguments is { Count: > 0 } a && a.Any(x => ContainsGenericParam(t: x));
     }
 
     /// <summary>

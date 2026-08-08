@@ -1146,7 +1146,9 @@ public partial class LlvmCodeGenerator
                             var newSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
                             for (int gi = 0; gi < gParams.Count; gi++)
                                 newSubs[key: gParams[index: gi]] = tArgs[index: gi];
-                            _typeSubstitutions = newSubs;
+                            // C5/C6 probe: the GenericAstRewriter call below already produces a fully
+                            // concrete body from newSubs — codegen needs no live substitution map.
+                            _typeSubstitutions = null;
                             try
                             {
                                 _generatedRoutineDefs.Add(item: monoFuncName);
@@ -1202,14 +1204,25 @@ public partial class LlvmCodeGenerator
                                 continue;
                             TypeInfo concreteInner = concreteWf.OwnerType!.TypeArguments![0];
                             var savedWfSubs = _typeSubstitutions;
-                            _typeSubstitutions = new Dictionary<string, TypeInfo>
+                            // C3: rewrite the shared wrapper-forwarder body to a fully concrete form
+                            // per inner type BEFORE emission (mirrors the non-wrapper synth loop
+                            // above), so codegen needs no live substitution map.
+                            var wfSubs = new Dictionary<string, TypeInfo>
                                 { [wrapperParamName] = concreteInner };
+                            _typeSubstitutions = null;
                             try
                             {
                                 _generatedRoutineDefs.Add(item: concreteFuncName);
                                 _generatedRoutines.Add(item: concreteFuncName);
+                                Statement rewrittenWfBody = GenericAstRewriter.RewriteStatement(
+                                    stmt: synthBodyAst,
+                                    subs: wfSubs.ToDictionary(kvp => kvp.Key,
+                                        kvp => kvp.Value.FullName),
+                                    typeSubs: wfSubs,
+                                    registry: _registry,
+                                    enclosingRoutine: concreteWf);
                                 EmitSynthesizedBodyFromAst(routine: concreteWf,
-                                    funcName: concreteFuncName, body: synthBodyAst);
+                                    funcName: concreteFuncName, body: rewrittenWfBody);
                             }
                             catch (Exception ex)
                             {
