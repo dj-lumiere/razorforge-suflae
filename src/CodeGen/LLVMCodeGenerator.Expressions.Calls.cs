@@ -626,30 +626,12 @@ public partial class LlvmCodeGenerator
             return EmitDynamicMemberFieldCall(sb: sb, member: member, arguments: arguments);
         }
 
-        // Intercept `<entity>.roam_trace_ref()` / `.roam_free_ref()` (cycle-collector hook intrinsics):
-        // materialize a closure over the receiver entity's synthesized `roam_trace_impl` /
-        // `roam_free_impl` — an unbound member-routine value (methods aren't referenceable in surface
-        // syntax, so the stdlib routine has a `cptr_none()` fallback body that this replaces). The
-        // receiver (`data.as_entity()`) is a pure reinterpret and is intentionally not emitted. The
-        // concrete entity type is available here (post-monomorphization), unlike in earlier passes
-        // where the receiver type is still the generic parameter. See v0.4.x-cycle-collector.md §9.3.
-        if ((member.MemberName == "roam_trace_ref" || member.MemberName == "roam_free_ref")
-            && arguments.Count == 0
-            && GetExpressionType(expr: member.Object) is EntityTypeInfo roamRecvEntity)
-        {
-            string implName = member.MemberName == "roam_trace_ref"
-                ? "roam_trace_impl"
-                : "roam_free_impl";
-            // Resolve through LookupMethod, not raw GetMethodsForType/GetOwnMethodsResolved: a generic
-            // entity resolution (e.g. List[Roamed[Node]]) keeps only its already-reachable methods in
-            // _routinesByOwner, so those raw views never surface the generic-def-registered
-            // roam_trace_impl and the closure would fall through to the cptr_none() fallback body
-            // (container trace_hook stays null → its held cycle is never collected). LookupMethod
-            // substitutes from the generic def, yielding the concrete monomorphized impl symbol.
-            RoutineInfo? impl = _registry.LookupMethod(type: roamRecvEntity, methodName: implName);
-            if (impl != null && impl.Parameters.Count == 0)
-                return EmitRoutineValueClosure(sb: sb, routine: impl);
-        }
+        // The cycle-collector hook intrinsics `<entity>.roam_trace_ref()` / `.roam_free_ref()` are
+        // lowered to an explicit routine-VALUE reference (an IdentifierExpression with a stamped
+        // ResolvedRoutine) by RoamHookRefLoweringPass, which runs post-monomorphization when the
+        // concrete entity type is known. Codegen therefore never sees the `roam_*_ref` member call —
+        // it materializes the closure through the pre-resolved-routine path in EmitIdentifier, with no
+        // LookupMethod of its own. See v0.4.x-cycle-collector.md §9.3.
 
         // Intercept var_name() -> inline the variable name from the receiver expression
         if (member.MemberName == "var_name" && arguments.Count == 0)
