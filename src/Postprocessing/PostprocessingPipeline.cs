@@ -43,6 +43,9 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // sees the operator/f-string-lowered Roamed receiver calls; it rewrites the codegen-side
         // raw_inner() projection into a real AST call (+ inner represent/diagnose re-resolution).
         new RoamedProjectionLoweringPass(ctx).Run(program);
+        // Moves the Stage 2b spawn-boundary `promote()` out of codegen into a real AST call: for each
+        // Roamed[T] argument of a suspended/threaded spawn, inserts `arg.promote()` before the spawn.
+        new RoamedSpawnPromotionLoweringPass(ctx).Run(program);
         new RecordCopyLoweringPass(ctx).Run(program);
         new BecomesLoweringPass(ctx).Run(program);
         new UsingLoweringPass(ctx).Run(program);
@@ -78,6 +81,9 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // See the per-program Run(): rewrite the Roamed raw_inner() projection into a real AST call
         // after operator/f-string lowering so it is visible in synthesized variant bodies too.
         new RoamedProjectionLoweringPass(ctx).RunOnVariantBodies();
+        // See per-program Run(): move the spawn-boundary promote() into a real AST call in
+        // synthesized variant bodies too.
+        new RoamedSpawnPromotionLoweringPass(ctx).RunOnVariantBodies();
         new RecordCopyLoweringPass(ctx).RunOnVariantBodies();
         new UsingLoweringPass(ctx).RunOnVariantBodies();
         // CallOverloadResolutionPass runs last so it sees all CallExpression nodes introduced

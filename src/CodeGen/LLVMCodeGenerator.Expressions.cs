@@ -397,34 +397,6 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Stage 2b: a <c>Roamed[T]</c> argument crossing a spawn boundary IS the escape event. Emits a
-    /// <c>promote()</c> on the handle BEFORE the task/coroutine is spawned — on the owner thread, so
-    /// the flip to ESCAPED (atomic refcount + armed reentrant lock) happens-before the callee (which
-    /// may run on another worker) ever touches it. Idempotent and value-preserving: <c>promote</c>
-    /// mutates the shared controller in place, so the handle pointer <paramref name="argValue"/> is
-    /// unchanged and the caller's sibling handles observe the flip too. No-op for non-<c>Roamed</c>.
-    /// </summary>
-    private void MaybePromoteRoamedSpawnArg(StringBuilder sb, string argValue, TypeInfo? paramType)
-    {
-        if (paramType is not RecordTypeInfo rec ||
-            GetGenericBaseName(type: rec) != Resolution.RuntimeContract.Roamed)
-        {
-            return;
-        }
-
-        RoutineInfo? promote = _registry.LookupMethod(type: rec, methodName: Resolution.RuntimeContract.RoamedMethod.Promote);
-        if (promote == null)
-        {
-            return;
-        }
-
-        GenerateRoutineDeclaration(routine: promote);
-        string mangled = MangleRoutineName(routine: promote);
-        string rcLlvm = GetParameterLlvmType(type: rec);
-        EmitLine(sb: sb, line: $"  call void @{mangled}({rcLlvm} {argValue})");
-    }
-
-    /// <summary>
     /// Lowers a <c>threaded routine foo(args)</c> call: boxes the arguments, creates an OS-thread
     /// task, and spawns it on the generated entry thunk. The expression value is the
     /// <c>rf_task*</c> handle (<c>Task[T]</c> lowers to <c>ptr</c>).
@@ -460,8 +432,6 @@ public partial class LlvmCodeGenerator
                 actualType: actual,
                 parameterType: routine.Parameters[index: i].Type,
                 callee: routine);
-            MaybePromoteRoamedSpawnArg(sb: sb, argValue: cv,
-                paramType: routine.Parameters[index: i].Type);
             values.Add(item: cv);
             types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
         }
@@ -552,8 +522,6 @@ public partial class LlvmCodeGenerator
                               ?? routine.Parameters[index: i].Type!;
             (string cv, string _) = CoerceCallArgumentToParameter(sb: sb, argValue: v,
                 actualType: actual, parameterType: routine.Parameters[index: i].Type, callee: routine);
-            MaybePromoteRoamedSpawnArg(sb: sb, argValue: cv,
-                paramType: routine.Parameters[index: i].Type);
             values.Add(item: cv);
             types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
         }
