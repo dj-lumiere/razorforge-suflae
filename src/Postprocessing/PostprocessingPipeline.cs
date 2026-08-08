@@ -51,6 +51,11 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // into a real AST call: one bump per RC field of a record copy, one roam per Roamed entity-
         // field write, inserted right after the store. Runs after RecordCopyLoweringPass (store).
         new RcRetainLoweringPass(ctx).Run(program);
+        // Moves the Roamed[E] access-lock bracket (lock_enter/lock_exit around a direct entity-field
+        // read/write) out of codegen into real AST calls: one enter before / one exit after each
+        // statement that touches a Roamed field. Runs after the other Roamed passes so field accesses
+        // are in final form.
+        new RoamedLockBracketLoweringPass(ctx).Run(program);
         new BecomesLoweringPass(ctx).Run(program);
         new UsingLoweringPass(ctx).Run(program);
         new LambdaLiftingPass(ctx).Run(program);
@@ -92,6 +97,9 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // See per-program Run(): move the RC-wrapper copy-verb bump into a real AST call in
         // synthesized variant bodies too.
         new RcRetainLoweringPass(ctx).RunOnVariantBodies();
+        // See per-program Run(): move the Roamed field-access lock bracket into real AST calls in
+        // synthesized variant bodies too.
+        new RoamedLockBracketLoweringPass(ctx).RunOnVariantBodies();
         new UsingLoweringPass(ctx).RunOnVariantBodies();
         // CallOverloadResolutionPass runs last so it sees all CallExpression nodes introduced
         // by FStringLoweringPass (represent/diagnose/add), OperatorLoweringPass (wired ops),

@@ -703,15 +703,9 @@ public partial class LlvmCodeGenerator
             else if (wrapperRecord.HasDirectBackendType &&
                 wrapBaseName == Resolution.RuntimeContract.Roamed)
             {
-                // Roamed[T] handle: project the WRITE through RoamController.data AND bracket it with
-                // the mode-checked lock so an ESCAPED object's field store is serialized (no-op LOCAL).
-                // Does the full write + early-returns.
-                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: Resolution.RuntimeContract.RoamedMethod.LockEnter);
-                if (enterM != null)
-                {
-                    GenerateRoutineDeclaration(routine: enterM);
-                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: enterM)}(ptr {target})");
-                }
+                // Roamed[T] handle: project the WRITE through RoamController.data. The access-lock
+                // bracket (lock_enter/lock_exit) is inserted as real AST calls around the enclosing
+                // statement by RoamedLockBracketLoweringPass — codegen just projects + stores here.
                 TypeInfo? controllerType = _registry.LookupType(
                     name: $"RoamController[{innerEntity.FullName}]")
                     ?? _registry.LookupType(name: $"Core.RoamController[{innerEntity.FullName}]");
@@ -720,12 +714,6 @@ public partial class LlvmCodeGenerator
                     : target;
                 EmitEntityMemberVariableWrite(sb: sb, entityPtr: roamEntPtr, entity: innerEntity,
                     memberVariableName: member.MemberName, value: value, valueType: valueType);
-                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: Resolution.RuntimeContract.RoamedMethod.LockExit);
-                if (exitM != null)
-                {
-                    GenerateRoutineDeclaration(routine: exitM);
-                    EmitLine(sb: sb, line: $"  call void @{MangleRoutineName(routine: exitM)}(ptr {target})");
-                }
                 return;
             }
             else if (wrapperRecord.HasDirectBackendType)
