@@ -681,7 +681,7 @@ internal sealed class AutoWiredRegistrationPass
         {
             WrapperTypeInfo w => w.Name,
             RecordTypeInfo { GenericDefinition: { } d } => d.Name,
-            _ => type.Name.Contains(value: '[') ? type.Name[..type.Name.IndexOf(value: '[')] : type.Name
+            _ => type.BareName
         };
         return WrapperForwardingPass.WrapperTypeNames.Contains(item: baseName);
     }

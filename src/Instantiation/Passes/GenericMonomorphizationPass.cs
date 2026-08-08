@@ -1350,9 +1350,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // falls back to a naive direct field access that reads the RC controller instead of the entity.
         if (type is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed, TypeArguments: [{ } roamedInner] })
             return FormatReceiverPatternAstName(type: roamedInner);
-        string baseName = type.Name;
-        int bracket = baseName.IndexOf(value: '[');
-        if (bracket >= 0) baseName = baseName[..bracket];
+        string baseName = TypeInfo.StripTypeArgs(name: type.Name);
         int dot = baseName.LastIndexOf(value: '.');
         if (dot >= 0) baseName = baseName[(dot + 1)..];
         if (type.TypeArguments is { Count: > 0 } args)
@@ -1603,11 +1601,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         return countOnlyMatch ?? firstMatch;
     }
 
-    private static string StripGenericSuffix(string typeName)
-    {
-        int bracket = typeName.IndexOf('[');
-        return bracket >= 0 ? typeName[..bracket] : typeName;
-    }
+    private static string StripGenericSuffix(string typeName) => TypeInfo.StripTypeArgs(name: typeName);
 
     /// <summary>Borrow/reference wrapper type names. A parameter declared with one of these
     /// (e.g. <c>from: Referring[FastSet[T]]</c>) reaches the AST as the bare inner type

@@ -241,9 +241,7 @@ public sealed partial class SemanticVerifier
             // under the bracketed-owner bucket (FullName = "Core.Iterable[Text]"). Try the
             // bracketed form first, falling back to the gen-def name. Both lookups can succeed
             // on different types: prefer the one that actually has the candidate method.
-            string bareLookupName = ownerTypeName.Contains('[')
-                ? ownerTypeName[..ownerTypeName.IndexOf('[')]
-                : ownerTypeName;
+            string bareLookupName = TypeInfo.StripTypeArgs(name: ownerTypeName);
 
             TypeSymbol? bareOwner = _registry.LookupType(name: bareLookupName);
             if (bareOwner == null)

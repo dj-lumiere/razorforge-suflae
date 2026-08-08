@@ -98,9 +98,7 @@ public static class RuntimeContractCheck
     {
         int dot = name.IndexOf(value: '.');
         string method = dot >= 0 ? name[(dot + 1)..] : name;
-        int bracket = method.IndexOf(value: '[');
-        if (bracket >= 0) method = method[..bracket];
-        return method;
+        return TypeInfo.StripTypeArgs(name: method);
     }
 
     private static HashSet<string> MemberVariableNames(TypeInfo type)

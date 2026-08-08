@@ -423,9 +423,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         {
             RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
             EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
-            _ => type.IsGenericResolution && type.Name.Contains(value: '[')
-                ? type.Name[..type.Name.IndexOf(value: '[')]
-                : type.Name
+            _ => type.IsGenericResolution ? type.BareName : type.Name
         };
         return new TypeExpression(
             Name: baseName,

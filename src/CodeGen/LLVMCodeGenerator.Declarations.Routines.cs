@@ -216,9 +216,7 @@ public partial class LlvmCodeGenerator
             int memberDot = baseName.IndexOf(value: '.');
             if (!string.IsNullOrEmpty(value: moduleContext) && memberDot > 0)
             {
-                string ownerSeg = baseName[..memberDot];
-                int obrk = ownerSeg.IndexOf(value: '[');
-                if (obrk > 0) ownerSeg = ownerSeg[..obrk];
+                string ownerSeg = TypeInfo.StripTypeArgs(name: baseName[..memberDot]);
                 TypeInfo? scopedOwner = _registry.LookupType(name: $"{moduleContext}.{ownerSeg}");
                 if (scopedOwner != null)
                 {
@@ -248,9 +246,7 @@ public partial class LlvmCodeGenerator
                     // when the AST name carries generic params (BaseName drops them), and a bare
                     // short-name lookup could otherwise bind this method's body to a same-named
                     // free/external routine of a DIFFERENT owner.
-                    string ownerPart = baseName[..dotIdx];
-                    int bracketIdx = ownerPart.IndexOf(value: '[');
-                    if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
+                    string ownerPart = TypeInfo.StripTypeArgs(name: baseName[..dotIdx]);
                     string shortName = baseName[(dotIdx + 1)..];
                     // MODULE-SCOPED owner resolution: prefer the emitting program's own module so two
                     // modules that each declare `record Box` bind this decl to the CORRECT `Mod.Box`.
@@ -310,9 +306,7 @@ public partial class LlvmCodeGenerator
                     int dotIdx = routine.Name.IndexOf(value: '.');
                     if (dotIdx > 0)
                     {
-                        string ownerPart = routine.Name[..dotIdx];
-                        int bracketIdx = ownerPart.IndexOf(value: '[');
-                        if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
+                        string ownerPart = TypeInfo.StripTypeArgs(name: routine.Name[..dotIdx]);
                         string shortName = routine.Name[(dotIdx + 1)..];
                         // Module-scoped owner (see the resolution above) so the overload is matched on
                         // THIS module's same-named type, not a first-wins cross-module one.
@@ -988,10 +982,9 @@ public partial class LlvmCodeGenerator
             {
                 // Name already embeds the (unsubstituted) args. Substitute literally inside it
                 // is brittle; fall back to per-arg recursion for the bracket portion.
-                int br = type.Name.IndexOf(value: '[');
                 baseName = string.IsNullOrEmpty(value: type.Module)
-                    ? type.Name.Substring(startIndex: 0, length: br)
-                    : $"{type.Module}.{type.Name.Substring(startIndex: 0, length: br)}";
+                    ? type.BareName
+                    : $"{type.Module}.{type.BareName}";
             }
             string joined = string.Join(separator: ", ",
                 values: args.Select(selector: a => MangleParamTypeFullName(

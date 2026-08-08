@@ -1387,7 +1387,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         {
             EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
             RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
-            _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
+            _ => type.BareName
         };
     }
 
@@ -2278,9 +2278,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         {
             RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
             EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
-            _ => type.IsGenericResolution && type.Name.Contains(value: '[')
-                ? type.Name[..type.Name.IndexOf(value: '[')]
-                : type.Name
+            _ => type.IsGenericResolution ? type.BareName : type.Name
         };
 
         List<TypeExpression>? args = type.TypeArguments is { Count: > 0 }

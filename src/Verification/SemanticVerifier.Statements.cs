@@ -141,9 +141,7 @@ public sealed partial class SemanticVerifier
 
             // Always strip generic params first (e.g., "Stack[T]" -> "Stack") to look up
             // the generic definition, not a resolution cache entry.
-            string lookupName = typeName.Contains(value: '[')
-                ? typeName[..typeName.IndexOf(value: '[')]
-                : typeName;
+            string lookupName = TypeInfo.StripTypeArgs(name: typeName);
             TypeSymbol? ownerType = LookupTypeWithImports(name: lookupName);
             // Protocol-extension decls like `Iterable[Text].join` should have `me` typed as the
             // bracketed owner so the body's `for part in me` resolves `part` from

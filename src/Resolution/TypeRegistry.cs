@@ -103,8 +103,7 @@ public sealed partial class TypeRegistry
         type.IsStdlibLazy = false;
         if (_gmpDiscoveryQueue == null || type is not (EntityTypeInfo or RecordTypeInfo) || !IsFullyConcrete(type))
             return;
-        int bracketIdx = type.Name.IndexOf('[');
-        string bareBaseName = bracketIdx >= 0 ? type.Name[..bracketIdx] : type.Name;
+        string bareBaseName = type.BareName;
         bool isSelfNesting = type.TypeArguments != null &&
                              type.TypeArguments.Any(arg => arg.FullName.Contains(bareBaseName));
         if (!isSelfNesting) _gmpDiscoveryQueue.Enqueue(type);
@@ -960,7 +959,7 @@ public sealed partial class TypeRegistry
                 // e.g., "Core.Hijacked[T]" -> strip to "Core.Hijacked" -> ends with ".Hijacked" ✓
                 if (key.Contains(value: '['))
                 {
-                    string keyBase = key[..key.IndexOf(value: '[')];
+                    string keyBase = TypeInfo.StripTypeArgs(name: key);
                     if (keyBase.EndsWith(value: suffix))
                     {
                         _typesByShortName[key: name] = value;
@@ -1073,8 +1072,7 @@ public sealed partial class TypeRegistry
             if (_gmpDiscoveryQueue != null && resolved is EntityTypeInfo or RecordTypeInfo &&
                 IsFullyConcrete(resolved))
             {
-                int bracketIdx = resolved.Name.IndexOf('[');
-                string bareBaseName = bracketIdx >= 0 ? resolved.Name[..bracketIdx] : resolved.Name;
+                string bareBaseName = resolved.BareName;
                 bool isSelfNesting = resolved.TypeArguments != null &&
                                      resolved.TypeArguments.Any(arg => arg.FullName.Contains(bareBaseName));
                 if (!isSelfNesting)

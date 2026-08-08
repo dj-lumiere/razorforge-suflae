@@ -69,8 +69,7 @@ public sealed class VariableInfo
     /// </summary>
     private static string BaseTypeName(string name)
     {
-        int bracket = name.IndexOf(value: '[');
-        string bare = bracket > 0 ? name[..bracket] : name;
+        string bare = TypeInfo.StripTypeArgs(name: name);
         int dot = bare.LastIndexOf(value: '.');
         return dot >= 0 ? bare[(dot + 1)..] : bare;
     }

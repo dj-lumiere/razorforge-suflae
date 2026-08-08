@@ -793,9 +793,8 @@ public sealed partial class TypeRegistry
         // to "no resolved method" warnings during generic monomorphization.
         if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
-            string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
-            int markerBracket = markerBase.IndexOf(value: '[');
-            if (markerBracket >= 0) markerBase = markerBase[..markerBracket];
+            string markerBase = TypeInfo.StripTypeArgs(
+                name: markerProto.GenericDefinition?.Name ?? markerProto.Name);
             if (markerBase is RuntimeContract.Referring or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMethod(type: markerArgs[index: 0],
@@ -924,8 +923,7 @@ public sealed partial class TypeRegistry
                 RecordTypeInfo r2 => r2.GenericDefinition?.Name ?? r2.Name,
                 _ => type.Name
             };
-            int recBracket = recBaseName.IndexOf(value: '[');
-            if (recBracket >= 0) recBaseName = recBaseName[..recBracket];
+            recBaseName = TypeInfo.StripTypeArgs(name: recBaseName);
             bool skipProtocols = recBaseName is RuntimeContract.Retained or RuntimeContract.Tracked;
             if (!skipProtocols)
             {
@@ -1034,9 +1032,8 @@ public sealed partial class TypeRegistry
         // protocol-dispatch stub on Referring that has no implementers registered.
         if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
-            string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
-            int markerBracket = markerBase.IndexOf(value: '[');
-            if (markerBracket >= 0) markerBase = markerBase[..markerBracket];
+            string markerBase = TypeInfo.StripTypeArgs(
+                name: markerProto.GenericDefinition?.Name ?? markerProto.Name);
             if (markerBase is RuntimeContract.Referring or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMethodOverload(type: markerArgs[index: 0],

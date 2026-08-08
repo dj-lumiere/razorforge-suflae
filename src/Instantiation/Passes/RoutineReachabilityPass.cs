@@ -787,7 +787,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
             RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
-            _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
+            _ => type.BareName
         };
     }
 

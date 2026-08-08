@@ -268,9 +268,7 @@ public sealed class RoutineInfo
         {
             return false;
         }
-        string fullName = proto.GenericDefinition?.Name ?? proto.Name;
-        int bracket = fullName.IndexOf(value: '[');
-        string baseName = bracket >= 0 ? fullName[..bracket] : fullName;
+        string baseName = (proto.GenericDefinition ?? proto).BareName;
         return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
     }
 

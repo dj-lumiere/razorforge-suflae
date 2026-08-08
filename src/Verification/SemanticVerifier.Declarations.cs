@@ -355,8 +355,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static string PresetCollectionBaseName(string name)
     {
-        int bracket = name.IndexOf(value: '[');
-        string bare = bracket > 0 ? name[..bracket] : name;
+        string bare = TypeInfo.StripTypeArgs(name: name);
         int dot = bare.LastIndexOf(value: '.');
         return dot >= 0 ? bare[(dot + 1)..] : bare;
     }
@@ -608,9 +607,7 @@ public sealed partial class SemanticVerifier
             // Always strip generic params first (e.g., "Stack[T]" -> "Stack") to look up
             // the generic definition, not a resolution cache entry.
             // TODO: Why is this handled here? This name parsing thing should have been parser's role.
-            string lookupName = typeName.Contains(value: '[')
-                ? typeName[..typeName.IndexOf(value: '[')]
-                : typeName;
+            string lookupName = TypeInfo.StripTypeArgs(name: typeName);
             ownerType = LookupTypeWithImports(name: lookupName);
         }
         else
@@ -623,9 +620,7 @@ public sealed partial class SemanticVerifier
             // old `T.create` spelling did. The trailing `!` (failable) is carried structurally
             // on routine.IsFailable, not in the name.
             // TODO: Why is this handled here? This name parsing thing should have been parser's role.
-            string ctorLookup = routine.Name.Contains(value: '[')
-                ? routine.Name[..routine.Name.IndexOf(value: '[')]
-                : routine.Name;
+            string ctorLookup = TypeInfo.StripTypeArgs(name: routine.Name);
             TypeSymbol? ctorOwner = LookupTypeWithImports(name: ctorLookup);
             if (ctorOwner is EntityTypeInfo or RecordTypeInfo or ChoiceTypeInfo
                 or FlagsTypeInfo or VariantTypeInfo or CrashableTypeInfo)

@@ -2623,9 +2623,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             WrapperTypeInfo w => w.Name,
             RecordTypeInfo { GenericDefinition: { } d } => d.Name,
-            _ => t.Name.Contains(value: '[')
-                ? t.Name[..t.Name.IndexOf(value: '[')]
-                : t.Name
+            _ => t.BareName
         };
         return baseName == Resolution.RuntimeContract.Roamed;
     }
@@ -2710,7 +2708,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             WrapperTypeInfo w => w.Name,
             RecordTypeInfo { GenericDefinition: { } d } => d.Name,
-            _ => t.Name.Contains(value: '[') ? t.Name[..t.Name.IndexOf(value: '[')] : t.Name
+            _ => t.BareName
         };
         return baseName == Resolution.RuntimeContract.Hijacked;
     }

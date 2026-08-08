@@ -912,10 +912,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static string BareTypeName(string typeName)
     {
-        int genericIndex = typeName.IndexOf(value: '[');
-        return genericIndex >= 0
-            ? typeName[..genericIndex]
-            : typeName;
+        return TypeInfo.StripTypeArgs(name: typeName);
     }
 
     /// <summary>Returns true if the type is the built-in <c>Bool</c> type.</summary>
@@ -1373,9 +1370,8 @@ public sealed partial class SemanticVerifier
         // implement Iterable structurally.
         if (iterableType is ProtocolTypeInfo iproto)
         {
-            string baseName = iproto.GenericDefinition?.Name ?? iproto.Name;
-            int br = baseName.IndexOf(value: '[');
-            if (br >= 0) baseName = baseName[..br];
+            string baseName = TypeInfo.StripTypeArgs(
+                name: iproto.GenericDefinition?.Name ?? iproto.Name);
             if (baseName == "Iterable" && iproto.TypeArguments is { Count: > 0 })
             {
                 return iproto.TypeArguments[index: 0];

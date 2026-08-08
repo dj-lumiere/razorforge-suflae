@@ -79,9 +79,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     {
         int lastDot = nameOrKey.LastIndexOf(value: '.');
         if (lastDot < 0) return "";
-        string owner = nameOrKey[..lastDot];
-        int br = owner.IndexOf(value: '[');
-        if (br >= 0) owner = owner[..br];
+        string owner = TypeInfo.StripTypeArgs(name: nameOrKey[..lastDot]);
         int od = owner.LastIndexOf(value: '.');
         return od >= 0 ? owner[(od + 1)..] : owner;
     }

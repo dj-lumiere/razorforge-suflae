@@ -83,10 +83,7 @@ public sealed partial class SemanticVerifier
 
     private static string GetTypeBaseName(TypeSymbol type)
     {
-        int bracket = type.Name.IndexOf(value: '[');
-        return bracket >= 0
-            ? type.Name[..bracket]
-            : type.Name;
+        return type.BareName;
     }
 
     private TypeSymbol AnalyzeListLiteralExpression(ListLiteralExpression list,
@@ -863,9 +860,7 @@ public sealed partial class SemanticVerifier
     /// <summary>Base (un-parameterized) name of a possibly-parameterized protocol type.</summary>
     private static string ProtocolBaseName(TypeSymbol type)
     {
-        string name = type.Name;
-        int bracket = name.IndexOf(value: '[');
-        return bracket >= 0 ? name[..bracket] : name;
+        return type.BareName;
     }
 
     /// <summary>

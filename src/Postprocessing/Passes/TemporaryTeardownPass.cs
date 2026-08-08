@@ -317,9 +317,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     {
         if (t is not RecordTypeInfo rec || rec.HasRCFields)
             return false;
-        string baseName = rec.Name;
-        int bracket = baseName.IndexOf(value: '[');
-        if (bracket >= 0) baseName = baseName[..bracket];
+        string baseName = TypeInfo.StripTypeArgs(name: rec.Name);
         if (RcWrapperBaseNames.Contains(item: baseName))
             return false;
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(t);

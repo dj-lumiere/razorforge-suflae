@@ -622,8 +622,7 @@ public sealed partial class StdlibLoader
             // reserved creator name "create" with that type as owner — mirroring the old
             // `T.create` registration so call-site construction resolves the creator. The
             // trailing `!` (failable) is carried structurally on routine.IsFailable.
-            int bracketIndex = routineName.IndexOf(value: '[');
-            string bareName = bracketIndex > 0 ? routineName[..bracketIndex] : routineName;
+            string bareName = TypeInfo.StripTypeArgs(name: routineName);
             TypeInfo? ctorOwner = registry.LookupType(name: bareName) ??
                                   registry.LookupType(name: $"{moduleName}.{bareName}");
             if (ctorOwner != null)
@@ -822,9 +821,7 @@ public sealed partial class StdlibLoader
                 .Where(predicate: m => m.Type != null)
                 .All(predicate: m =>
                 {
-                    string baseName = m.Type!.Name.Contains('[')
-                        ? m.Type.Name[..m.Type.Name.IndexOf('[')]
-                        : m.Type.Name;
+                    string baseName = TypeInfo.StripTypeArgs(name: m.Type!.Name);
                     return baseName is RuntimeContract.Hijacked or RuntimeContract.Viewing or RuntimeContract.Modifying
                         or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Shared or RuntimeContract.Watched;
                 });

@@ -1386,9 +1386,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             RecordTypeInfo { GenericDefinition: not null } record => record.GenericDefinition.Name,
             EntityTypeInfo { GenericDefinition: not null } entity => entity.GenericDefinition.Name,
             ProtocolTypeInfo { GenericDefinition: not null } protocol => protocol.GenericDefinition.Name,
-            _ => type.IsGenericResolution && type.Name.Contains('[')
-                ? type.Name[..type.Name.IndexOf('[')]
-                : type.Name
+            _ => type.IsGenericResolution ? type.BareName : type.Name
         };
 
         List<TypeExpression>? args = type.TypeArguments is { Count: > 0 }

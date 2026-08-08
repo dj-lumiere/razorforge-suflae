@@ -785,9 +785,7 @@ public partial class LlvmCodeGenerator
                             // lookup that could bind a same-named free/external routine of a
                             // different owner (which would emit this method's body under the
                             // wrong identity → "Unresolved generic method" at codegen).
-                            string ownerPart = routine.Name[..dotIdx];
-                            int bracketIdx = ownerPart.IndexOf(value: '[');
-                            if (bracketIdx > 0) ownerPart = ownerPart[..bracketIdx];
+                            string ownerPart = TypeInfo.StripTypeArgs(name: routine.Name[..dotIdx]);
                             string shortName = routine.Name[(dotIdx + 1)..];
                             TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
                             if (ownerType != null)

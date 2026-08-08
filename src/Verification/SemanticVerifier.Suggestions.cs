@@ -226,8 +226,7 @@ public sealed partial class SemanticVerifier
 
             // Owners are registered under bracketed generic-def names ("List[T]"),
             // receivers arrive as resolutions ("List[Core.S64]") — compare base names.
-            int ownerBracket = owner.Name.IndexOf(value: '[');
-            string ownerBase = ownerBracket > 0 ? owner.Name[..ownerBracket] : owner.Name;
+            string ownerBase = owner.BareName;
             bool ownerMatches = ReferenceEquals(objA: owner, objB: type) ||
                                 (genericDef != null &&
                                  ReferenceEquals(objA: owner, objB: genericDef)) ||

@@ -87,13 +87,19 @@ public abstract class TypeInfo
     }
 
     /// <summary>The bare name without any baked-in generic-arg suffix (e.g. "List" for "List[Core.S64]").</summary>
-    public string BareName
+    public string BareName => StripTypeArgs(name: Name);
+
+    /// <summary>
+    /// Drops the baked <c>[typeargs]</c> suffix from a type/routine name STRING (e.g. "List[Core.S64]"
+    /// → "List"). This is the ONE place the generic-arg suffix is parsed off a name; prefer the
+    /// structural <see cref="TypeArguments"/> / <see cref="BareName"/> over calling this. Use it only
+    /// for raw name/registry-key strings that have no live <see cref="TypeInfo"/> to read
+    /// <see cref="BareName"/> from — never re-implement <c>name.IndexOf('[')</c> inline.
+    /// </summary>
+    public static string StripTypeArgs(string name)
     {
-        get
-        {
-            int idx = Name.IndexOf(value: '[');
-            return idx >= 0 ? Name[..idx] : Name;
-        }
+        int idx = name.IndexOf(value: '[');
+        return idx >= 0 ? name[..idx] : name;
     }
 
     /// <summary>
