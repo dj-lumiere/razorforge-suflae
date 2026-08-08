@@ -257,16 +257,44 @@ public partial class LlvmCodeGenerator
             return EmitWrapperRecordConstruction(sb: sb, record: record, expr: expr);
         }
 
-        // Multi-member-variable record: build struct value by inserting each member.
+        // Multi-member-variable record: build the struct value. The CreatorExpression carries member
+        // values POSITIONALLY (already field-ordered by the SA/lowering that produced it), so field i
+        // takes MemberVariables[i] when present.
+        return EmitMemberwiseRecordStruct(sb: sb, record: record,
+            valueForField: (i, _) => i < expr.MemberVariables.Count
+                ? EmitExpression(sb: sb, expr: expr.MemberVariables[index: i].Value)
+                : null);
+    }
+
+    /// <summary>
+    /// The single memberwise record struct-builder shared by both construction overloads (the
+    /// <see cref="CreatorExpression"/> form and the positional/named <c>List&lt;Expression&gt;</c> form).
+    /// Walks the record's declared fields in layout order, emits each via
+    /// <paramref name="valueForField"/> (returning <c>null</c> leaves the field at its
+    /// zeroinitializer value), Bool-coerces to storage width, and chains <c>insertvalue</c>s.
+    ///
+    /// <para>ACCEPTED BOUNDARY (Track D1): construction is still built inline in codegen rather than
+    /// dispatched to a synthesized memberwise <c>create</c> routine. A full synthesis-pass move was
+    /// deferred because it is refcount-parity-critical: entity construction interleaves heap alloc,
+    /// per-field ownership CONSUMPTION (<c>ConsumeTransferredCallOwnership</c> / <c>…LocalOwnership</c>),
+    /// Roamed-field moves, and the retain bumps <c>RcRetainLoweringPass</c> inserts keyed off these exact
+    /// construction sites — plus variant/collection special construction. This helper only dedups the
+    /// value-record struct build (no ownership semantics), which is safe to unify.</para>
+    /// </summary>
+    private string EmitMemberwiseRecordStruct(StringBuilder sb, RecordTypeInfo record,
+        Func<int, MemberVariableInfo, string?> valueForField)
+    {
         string typeName = GetRecordTypeName(record: record);
         string result = "zeroinitializer";
-        for (int i = 0; i < expr.MemberVariables.Count && i < record.MemberVariables.Count; i++)
+        for (int i = 0; i < record.MemberVariables.Count; i++)
         {
-            string value = EmitExpression(sb: sb, expr: expr.MemberVariables[index: i].Value);
-            TypeInfo fieldType = record.MemberVariables[index: i].Type;
+            MemberVariableInfo field = record.MemberVariables[index: i];
+            string? value = valueForField(i, field);
+            if (value == null) continue;
+
             // Bool fields are stored as i8 in the aggregate — zext the i1 value to its storage form.
-            value = CoerceBoolToStorage(sb: sb, value: value, fieldType: fieldType);
-            string memberVariableType = GetFieldStorageLlvmType(type: fieldType);
+            value = CoerceBoolToStorage(sb: sb, value: value, fieldType: field.Type);
+            string memberVariableType = GetFieldStorageLlvmType(type: field.Type);
 
             string newResult = NextTemp();
             EmitLine(sb: sb,
@@ -349,34 +377,19 @@ public partial class LlvmCodeGenerator
             return argValue;
         }
 
-        // Multi-member-variable record: build struct value
-        string typeName = GetRecordTypeName(record: record);
-        string result = "zeroinitializer";
-        for (int i = 0; i < record.MemberVariables.Count; i++)
-        {
-            // Named arguments may be written in any order; bind each field to the argument whose
-            // name matches it (falling back to positional for unnamed args). Without this, a record
-            // literal/constructor written out of field-declaration order silently stored each value
-            // into the wrong field.
-            Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
-                fieldName: record.MemberVariables[index: i].Name, positionalIndex: i);
-            if (fieldArg == null)
-                continue;
-            Expression arg = fieldArg is NamedArgumentExpression named ? named.Value : fieldArg;
-            string value = EmitExpression(sb: sb, expr: arg);
-            TypeInfo fieldType = record.MemberVariables[index: i].Type;
-            // Bool fields are stored as i8 in the aggregate — zext the i1 value to its storage form.
-            value = CoerceBoolToStorage(sb: sb, value: value, fieldType: fieldType);
-            string memberVariableType = GetFieldStorageLlvmType(type: fieldType);
-
-            string newResult = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {newResult} = insertvalue {typeName} {result}, {memberVariableType} {value}, {i}");
-            result = newResult;
-        }
-
-        return result;
+        // Multi-member-variable record: build the struct value through the shared memberwise builder.
+        // Named arguments may be written in any order; bind each field to the argument whose name
+        // matches it (falling back to positional for unnamed args) so a record literal/constructor
+        // written out of field-declaration order stores each value into the correct field.
+        return EmitMemberwiseRecordStruct(sb: sb, record: record,
+            valueForField: (i, field) =>
+            {
+                Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
+                    fieldName: field.Name, positionalIndex: i);
+                if (fieldArg == null) return null;
+                Expression arg = fieldArg is NamedArgumentExpression named ? named.Value : fieldArg;
+                return EmitExpression(sb: sb, expr: arg);
+            });
     }
 
     /// <summary>

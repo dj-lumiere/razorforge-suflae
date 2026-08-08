@@ -1184,6 +1184,46 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         return new ReturnStatement(Value: call, Location: _synthLoc);
     }
 
+    /// <summary>
+    /// Builds: <c>return intrinsicName[reprType](a: me, b: you)</c> for a two-operand LLVM intrinsic
+    /// whose params are <c>a</c>/<c>b</c> and whose single type param is the operands' underlying
+    /// integer repr. Used for Flags <c>bitor</c>/<c>bitand</c>/<c>bitxor</c> (<c>bit_or</c>/<c>bit_and</c>/
+    /// <c>bit_xor</c> → the Flags i64 repr) and <c>eq</c>/<c>ne</c> (<c>int_eq</c>/<c>int_ne</c>). The
+    /// intrinsic is emitted directly (not via a surface operator), so OperatorLoweringPass never
+    /// recurses back into these bodies.
+    /// </summary>
+    private static ReturnStatement BuildLlvmBinaryIntrinsicCallBody(string intrinsicName,
+        TypeInfo ownerType, TypeInfo reprType, TypeInfo resultType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var youRef = new IdentifierExpression(Name: "you", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var typeArgRepr = new TypeExpression(Name: reprType.Name, GenericArguments: null,
+            Location: _synthLoc) { ResolvedType = reprType };
+        var call = new CallExpression(
+            Callee: new IdentifierExpression(Name: intrinsicName, Location: _synthLoc)
+            {
+                ResolvedType = resultType
+            },
+            Arguments:
+            [
+                new NamedArgumentExpression(Name: "a", Value: meRef, Location: _synthLoc),
+                new NamedArgumentExpression(Name: "b", Value: youRef, Location: _synthLoc)
+            ],
+            Location: _synthLoc)
+        {
+            ResolvedType = resultType,
+            LoweringKind = CallLoweringKind.LlvmIntrinsic,
+            TypeArguments = [typeArgRepr]
+        };
+        return new ReturnStatement(Value: call, Location: _synthLoc);
+    }
+
     //  keyed hash(k0, k1)
 
     /// <summary>
@@ -1780,10 +1820,28 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
-            case "eq":
-                ctx.VariantBodies[key: routine.RegistryKey] = BuildEqBodyNumeric(ownerType: flags,
-                    boolType: boolType,
-                    isChoice: false);
+            // eq/ne emit `int_eq`/`int_ne` on the underlying i64 repr directly (not `me == you`), so
+            // codegen needs no Flags cmp special-case and OperatorLoweringPass — which lowers `==` to
+            // `.eq()` — never recurses back into this body. ne is derived from eq by DerivedOperatorPass.
+            case "eq" when u64Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmBinaryIntrinsicCallBody(
+                    intrinsicName: "int_eq", ownerType: flags, reprType: u64Type,
+                    resultType: boolType);
+                break;
+
+            // Bitwise combinators via `bit_or`/`bit_and`/`bit_xor` on the i64 repr — no codegen
+            // Flags-bitwise special-case, no operator recursion.
+            case "bitor" when u64Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmBinaryIntrinsicCallBody(
+                    intrinsicName: "bit_or", ownerType: flags, reprType: u64Type, resultType: flags);
+                break;
+            case "bitand" when u64Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmBinaryIntrinsicCallBody(
+                    intrinsicName: "bit_and", ownerType: flags, reprType: u64Type, resultType: flags);
+                break;
+            case "bitxor" when u64Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmBinaryIntrinsicCallBody(
+                    intrinsicName: "bit_xor", ownerType: flags, reprType: u64Type, resultType: flags);
                 break;
 
             case HashMethodName when u64Type != null && routine.Parameters.Count == 0:

@@ -674,17 +674,11 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     }
                 }
 
-                // Flags types have no bitand/bitor/bitnot/eq/ne method bodies -> codegen handles
-                // them as direct LLVM instructions (bitwise or icmp eq/ne on the underlying i64).
-                // Skip method-call lowering so the BinaryExpression stays and codegen emits the
-                // instruction directly, avoiding infinite recursion in the generated eq/ne body.
-                if (receiverType is FlagsTypeInfo
-                    && methodName is "bitand" or "bitor" or "bitxor" or "eq" or "ne")
-                {
-                    return ReferenceEquals(left, bin.Left) && ReferenceEquals(right, bin.Right)
-                        ? expr
-                        : bin with { Left = left, Right = right };
-                }
+                // Flags bitand/bitor/bitxor/eq/ne ARE lowered to method calls: WiredRoutinePass
+                // synthesizes those bodies as @llvm_ir intrinsic calls on the underlying i64 repr
+                // (bit_or/bit_and/bit_xor/int_eq/int_ne), so lowering `a | b` to `a.bitor(b)` cannot
+                // recurse — the body uses the intrinsic, not the surface operator. (bitnot stays
+                // unlowered; its unary path below still passes through for codegen's EmitBitwiseNot.)
 
                 // Choice eq/ne bodies use BinaryOperator.Is (not Equal), so they never reach
                 // this point. No skip needed for choice types.

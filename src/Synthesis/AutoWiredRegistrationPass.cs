@@ -397,6 +397,20 @@ internal sealed class AutoWiredRegistrationPass
                             existingMethods: existingMethods);
                     }
 
+                    // Bitwise combinators (`a and b`/`a but b` lower to bitor/bitand; `bitxor` for
+                    // symmetry). WiredRoutinePass.HandleFlags synthesizes the bodies as @llvm_ir
+                    // intrinsic calls on the underlying i64 repr; OperatorLoweringPass then lowers
+                    // `BitwiseOr`/`BitwiseAnd`/`BitwiseXor` on a Flags receiver to these calls.
+                    foreach (string bitOp in new[] { "bitand", "bitor", "bitxor" })
+                    {
+                        MaybeRegisterWiredWithParam(owner: type,
+                            name: bitOp,
+                            paramName: "you",
+                            paramType: type,
+                            returnType: type,
+                            existingMethods: existingMethods);
+                    }
+
                     // Flags auto-derive Assignable (scalar bitset layout).
                     MaybeRegisterWired(owner: type,
                         name: "store",
