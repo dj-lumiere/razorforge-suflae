@@ -17,71 +17,6 @@ public partial class LlvmCodeGenerator
 {
     #region Type Mapping
 
-    /// <summary>
-    /// Gets the LLVM type name for a TypeInfo.
-    /// </summary>
-    /// <param name="type">The type to convert.</param>
-    /// <returns>The LLVM type string.</returns>
-    private TypeInfo ResolveTypeSubstitution(TypeInfo type) // NOSONAR S3776
-    {
-        if (_typeSubstitutions == null)
-        {
-            return type;
-        }
-
-        // Direct generic parameter substitution (e.g., K -> S64)
-        if (_typeSubstitutions.TryGetValue(key: type.Name, value: out TypeInfo? sub))
-        {
-            return sub;
-        }
-
-        // Wrapper-forwarder rename fallback: the disambiguated param carries the original
-        // inner-T name in `ForwarderOriginalName`. The substitution map is keyed by that
-        // original name (see BuildResolvedRoutineTypeSubstitutions + WrapperForwardingPass).
-        if (type is GenericParameterTypeInfo { ForwarderOriginalName: { } originalInnerName }
-            && _typeSubstitutions.TryGetValue(key: originalInnerName, value: out TypeInfo? renamed))
-        {
-            return renamed;
-        }
-
-        // Parameterized types with unresolved args (e.g., DictEntry[K, V] -> DictEntry[S64, Text])
-        if (type.TypeArguments is { Count: > 0 })
-        {
-            bool anyResolved = false;
-            var resolvedArgs = new List<TypeInfo>();
-            foreach (TypeInfo ta in type.TypeArguments)
-            {
-                TypeInfo resolved = ResolveTypeSubstitution(type: ta);
-                resolvedArgs.Add(item: resolved);
-                if (resolved != ta)
-                {
-                    anyResolved = true;
-                }
-            }
-
-            if (anyResolved)
-            {
-                TypeInfo? genericBase = GetGenericBase(type: type);
-                if (genericBase != null)
-                {
-                    return _registry.GetOrCreateResolution(genericDef: genericBase,
-                        typeArguments: resolvedArgs);
-                }
-
-                // WrapperTypeInfo (Retained[T], etc.) has no GenericDefinition ->
-                // look up the RecordTypeInfo definition by wrapper name.
-                if (type is WrapperTypeInfo)
-                {
-                    TypeInfo? wrapperRecordDef = _registry.LookupType(name: type.Name);
-                    if (wrapperRecordDef is { IsGenericDefinition: true })
-                        return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
-                            typeArguments: resolvedArgs);
-                }
-            }
-        }
-
-        return type;
-    }
 
     /// <summary>
     /// Gets the LLVM type needed by this compiler phase.
@@ -158,7 +93,6 @@ public partial class LlvmCodeGenerator
 
     private string GetLlvmType(TypeInfo type)
     {
-        type = ResolveTypeSubstitution(type: type);
         return type switch
         {
             // Records with @llvm annotation -> use backend type directly (skip generic definitions with template holes)
@@ -211,7 +145,7 @@ public partial class LlvmCodeGenerator
             // Unresolved generic parameter -> illegal in codegen. All type parameters must be
             // substituted by GenericMonomorphizationPass before the backend is entered.
             GenericParameterTypeInfo gp => throw new InvalidOperationException(
-                $"GenericParameterTypeInfo '{gp.Name}' reached GetLlvmType ??" +
+                $"GenericParameterTypeInfo '{gp.Name}' reached GetLlvmType [inRoutine={_currentEmittingRoutine?.FullName}] " +
                 "all generic parameters must be substituted before codegen entry. " +
                 "Check that GenericMonomorphizationPass ran and GenericAstRewriter " +
                 "annotated all expression ResolvedTypes."),
@@ -405,7 +339,6 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string GetParameterLlvmType(TypeInfo type)
     {
-        type = ResolveTypeSubstitution(type: type);
         return type switch
         {
             // Entities (and Crashable, an entity subclass) are always passed as pointers

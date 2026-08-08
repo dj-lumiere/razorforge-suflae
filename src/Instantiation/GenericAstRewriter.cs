@@ -284,6 +284,37 @@ internal static class GenericAstRewriter
                 }
             }
 
+            // Routine value type (`Routine[(T,), U]` -> `Routine[(S64,), S64]`): RoutineTypeInfo
+            // carries its parameter/return types in dedicated slots, NOT TypeArguments, so the
+            // generic-resolution branch above never reaches them. A chained iterator emitter stores
+            // its projection as `secret transform: Routine[(T,), U]`; the `me.transform(item)` call's
+            // indirect return type is read straight off this RoutineTypeInfo at codegen, so an
+            // unsubstituted `U` here reaches GetLlvmType. Resolve each slot recursively (handles
+            // nested generics/wrappers/tuples uniformly) and rebuild.
+            if (original is RoutineTypeInfo routineType)
+            {
+                bool anyRoutineChanged = false;
+                var newParams = new List<TypeInfo>(capacity: routineType.ParameterTypes.Count);
+                foreach (TypeInfo p in routineType.ParameterTypes)
+                {
+                    TypeInfo? resolved = ResolveType(original: p);
+                    newParams.Add(item: resolved != null && !ReferenceEquals(objA: resolved, objB: p)
+                        ? resolved
+                        : p);
+                    if (resolved != null && !ReferenceEquals(objA: resolved, objB: p))
+                        anyRoutineChanged = true;
+                }
+                TypeInfo? newReturn = routineType.ReturnType != null
+                    ? ResolveType(original: routineType.ReturnType)
+                    : null;
+                if (newReturn != null && !ReferenceEquals(objA: newReturn, objB: routineType.ReturnType))
+                    anyRoutineChanged = true;
+                if (anyRoutineChanged)
+                    return new RoutineTypeInfo(parameterTypes: newParams,
+                        returnType: newReturn ?? routineType.ReturnType)
+                    { IsFailable = routineType.IsFailable };
+            }
+
             // Tuple (`Tuple[T, Bool]` -> `Tuple[U8, Bool]`): TupleTypeInfo is not an
             // IsGenericResolution, so substitute each element type and rebuild. Without this a
             // tuple carrying `T` in a CallExpression.ResolvedType survives into codegen.
@@ -1317,6 +1348,19 @@ internal static class GenericAstRewriter
                         (expr is TypeConversionExpression originalConversion
                             ? originalConversion.ConstructedType
                             : null);
+                    break;
+
+                // A type-construction GMC (`WhereIterable[T, Me](...)`) carries a ConstructedType but
+                // NO ResolvedRoutine (it constructs via ConstructedType, not a routine call), so it
+                // must still have its ConstructedType concretized here — otherwise the generic-def
+                // struct name reaches codegen's GEP. Resolve it, falling back to the already-concrete
+                // ResolvedType when the bare def can't be resolved from this position.
+                case GenericMethodCallExpression { ResolvedRoutine: null } ctorCall
+                    when ctorCall.ConstructedType is { } ctorCt:
+                    ctorCall.ConstructedType = ctx.ResolveType(original: ctorCt)
+                        ?? (ctorCt.IsGenericResolution || ctorCt.IsGenericDefinition
+                            ? ctx.ResolveType(original: ctorCall.ResolvedType) ?? ctorCall.ResolvedType ?? ctorCt
+                            : ctorCt);
                     break;
 
                 case GenericMethodCallExpression { ResolvedRoutine: not null } genericCall:

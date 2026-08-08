@@ -435,26 +435,22 @@ public partial class LlvmCodeGenerator
     /// </summary>
     internal TypeInfo ApplyTypeSubstitutions(TypeInfo type)
     {
+        // Track C: GenericMonomorphizationPass now emits fully-concrete bodies, so codegen holds no
+        // live type-substitution map — every generic parameter is already resolved before emission.
+        // The only remaining work here is normalizing a WrapperTypeInfo (Hijacked[S64]) to its real
+        // RecordTypeInfo so LLVM name mangling uses the module-qualified record name.
         if (type is WrapperTypeInfo wrapper)
         {
             TypeInfo? wrapperRecordDef = _registry.LookupType(name: wrapper.Name);
             if (wrapperRecordDef is { IsGenericDefinition: true } &&
                 wrapper.TypeArguments is { Count: > 0 })
             {
-                var resolvedArgs = _typeSubstitutions != null
-                    ? wrapper.TypeArguments
-                               .Select(selector: a => SubstituteTypeParams(type: a,
-                                   substitutions: _typeSubstitutions))
-                               .ToList()
-                    : [.. wrapper.TypeArguments];
                 return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
-                    typeArguments: resolvedArgs);
+                    typeArguments: [.. wrapper.TypeArguments]);
             }
         }
 
-        if (_typeSubstitutions == null) return type;
-
-        return SubstituteTypeParams(type: type, substitutions: _typeSubstitutions);
+        return type;
     }
 
     /// <summary>

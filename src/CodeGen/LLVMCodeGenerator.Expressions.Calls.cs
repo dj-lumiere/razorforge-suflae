@@ -448,47 +448,11 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Inside monomorphized bodies, an unresolved generic parameter on a non-generic
-        // routine's expected parameter type indicates the pipeline failed to substitute.
-        // Plain wrapper coercions (e.g. Text → Referring[Text]) are not pipeline bugs.
-        if (_typeSubstitutions != null && routine is { GenericDefinition: null, IsGenericDefinition: false } && argValues.Count > 0 && routine.Parameters.Count > 0)
-        {
-            TypeInfo? expectedType = routine.Parameters[index: 0].Type;
-            if (expectedType != null)
-            {
-                expectedType = ApplyTypeSubstitutions(type: expectedType);
-            }
-
-            if (expectedType != null && ContainsGenericParameter(type: expectedType))
-            {
-                RoutineInfo? genericOverload = _registry.LookupGenericOverload(name: routine.Name);
-                if (genericOverload?.GenericParameters is { Count: > 0 })
-                {
-                    throw new InvalidOperationException(
-                        $"Generic free-function resolution for '{genericOverload.BaseName}' reached LLVM codegen. " +
-                        "Resolve it during semantic analysis/instantiation.");
-                }
-            }
-        }
-
         // Build the call
         string mangledName = routine != null
             ? MangleRoutineName(routine: routine)
             : DecorateRoutineSymbolName(baseName: SanitizeLlvmName(name: functionName),
                 isFailable: isFailableCallSyntax);
-
-        if (_typeSubstitutions != null && routine?.OwnerType is { IsGenericDefinition: true })
-        {
-            string subsDump = string.Join(", ",
-                _typeSubstitutions.Select(kv => $"{kv.Key}->{kv.Value.FullName}"));
-            string tyArgs = typeArguments == null
-                ? "<null>"
-                : string.Join(",", typeArguments.Select(t => t.Name));
-            throw new InvalidOperationException(
-                $"Generic owner routine '{routine.OwnerType.FullName}.{routine.Name}' reached LLVM codegen. " +
-                $"Resolve the concrete owner during instantiation. " +
-                $"[functionName={functionName}, typeArgs=[{tyArgs}], subs={{{subsDump}}}, inRoutine={_currentEmittingRoutine?.Name}]");
-        }
 
         // Ensure the function is declared (generates 'declare' and tracks in _generatedRoutines)
         if (routine != null)

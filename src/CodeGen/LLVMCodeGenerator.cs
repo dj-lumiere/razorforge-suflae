@@ -242,9 +242,6 @@ public partial class LlvmCodeGenerator
     /// <summary>Tracks alloca names already emitted for the current function to prevent duplicates.</summary>
     private readonly HashSet<string> _emittedAllocaNames = [];
 
-    /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" -> Character).</summary>
-    private Dictionary<string, TypeInfo>? _typeSubstitutions;
-
     /// <summary>Target platform configuration (triple, data layout, page size, etc.).</summary>
     private readonly TargetConfig _target;
 
@@ -1037,8 +1034,6 @@ public partial class LlvmCodeGenerator
                     && !_referencedKeys.Contains(item: body.Info.RegistryKey))
                     continue;
 
-                var savedSubs = _typeSubstitutions;
-                _typeSubstitutions = body.TypeSubs;
                 try
                 {
                     if (body.IsSynthesized)
@@ -1066,10 +1061,6 @@ public partial class LlvmCodeGenerator
                         $"Warning: Instantiated generic codegen failed for '{instFuncName}': {ex.Message}");
                     _generatedRoutineDefs.Remove(item: instFuncName);
                     _generatedRoutines.Remove(item: instFuncName);
-                }
-                finally
-                {
-                    _typeSubstitutions = savedSubs;
                 }
             }
 
@@ -1110,7 +1101,7 @@ public partial class LlvmCodeGenerator
                     // diagnose, hash, eq for generic types like ListEmitter[T], List[T]).
                     // For each live concrete instantiation of this owner, lookup the substituted
                     // method (LookupMethod normalizes generic-def methods onto concrete owners),
-                    // set up _typeSubstitutions, and emit one body per concrete owner.
+                    // rewrite the shared body to a fully concrete form, and emit one per owner.
                     if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: null }
                         && synthInfo.OwnerType.GenericParameters is { Count: > 0 } gParams)
                     {
@@ -1142,13 +1133,11 @@ public partial class LlvmCodeGenerator
                                 continue;
                             string monoFuncName = MangleRoutineName(routine: concreteMethod);
                             if (_generatedRoutineDefs.Contains(item: monoFuncName)) continue;
-                            var savedMonoSubs = _typeSubstitutions;
                             var newSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
                             for (int gi = 0; gi < gParams.Count; gi++)
                                 newSubs[key: gParams[index: gi]] = tArgs[index: gi];
-                            // C5/C6 probe: the GenericAstRewriter call below already produces a fully
-                            // concrete body from newSubs — codegen needs no live substitution map.
-                            _typeSubstitutions = null;
+                            // The GenericAstRewriter call below already produces a fully concrete body
+                            // from newSubs — codegen needs no live substitution map.
                             try
                             {
                                 _generatedRoutineDefs.Add(item: monoFuncName);
@@ -1180,10 +1169,6 @@ public partial class LlvmCodeGenerator
                                 _generatedRoutineDefs.Remove(item: monoFuncName);
                                 _generatedRoutines.Remove(item: monoFuncName);
                             }
-                            finally
-                            {
-                                _typeSubstitutions = savedMonoSubs;
-                            }
                         }
                     }
                     if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: not null } &&
@@ -1203,13 +1188,11 @@ public partial class LlvmCodeGenerator
                             if (_generatedRoutineDefs.Contains(item: concreteFuncName))
                                 continue;
                             TypeInfo concreteInner = concreteWf.OwnerType!.TypeArguments![0];
-                            var savedWfSubs = _typeSubstitutions;
-                            // C3: rewrite the shared wrapper-forwarder body to a fully concrete form
+                            // Rewrite the shared wrapper-forwarder body to a fully concrete form
                             // per inner type BEFORE emission (mirrors the non-wrapper synth loop
                             // above), so codegen needs no live substitution map.
                             var wfSubs = new Dictionary<string, TypeInfo>
                                 { [wrapperParamName] = concreteInner };
-                            _typeSubstitutions = null;
                             try
                             {
                                 _generatedRoutineDefs.Add(item: concreteFuncName);
@@ -1231,10 +1214,6 @@ public partial class LlvmCodeGenerator
                                     $"Warning: Wrapper forwarder codegen failed for '{concreteFuncName}': {ex.Message}");
                                 _generatedRoutineDefs.Remove(item: concreteFuncName);
                                 _generatedRoutines.Remove(item: concreteFuncName);
-                            }
-                            finally
-                            {
-                                _typeSubstitutions = savedWfSubs;
                             }
                         }
                     }

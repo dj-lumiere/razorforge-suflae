@@ -114,6 +114,17 @@ internal static class MonomorphizationCompletenessAssertionPass
     private static bool ContainsGenericParameter(TypeInfo type)
     {
         if (type is GenericParameterTypeInfo) return true;
+        // RoutineTypeInfo (`Routine[(T,), U]`) and TupleTypeInfo (`Tuple[T, Bool]`) carry their
+        // component types in dedicated slots, NOT TypeArguments, so the recursion below would miss a
+        // residual param nested inside them. A chained iterator emitter stores its projection as
+        // `secret transform: Routine[(T,), U]`; `me.transform(item)`'s indirect return type is read
+        // straight off that RoutineTypeInfo at codegen — an unsubstituted `U` there would slip past
+        // C1 and only surface as a GetLlvmType crash. Recurse both slot kinds explicitly.
+        if (type is RoutineTypeInfo rt)
+            return rt.ParameterTypes.Any(p => ContainsGenericParameter(type: p))
+                   || (rt.ReturnType != null && ContainsGenericParameter(type: rt.ReturnType));
+        if (type is TupleTypeInfo tuple)
+            return tuple.ElementTypes.Any(e => ContainsGenericParameter(type: e));
         return type.TypeArguments is { Count: > 0 } args &&
                args.Any(a => ContainsGenericParameter(type: a));
     }
