@@ -303,11 +303,8 @@ public partial class LlvmCodeGenerator
                     // So it would silently fall back to the first-registered overload, ignoring the
                     // arg types we just computed. LookupMethodOverload collects the owner type's
                     // member candidates and matches positionally by arg type instead.
-                    int dotIdx = routine.Name.IndexOf(value: '.');
-                    if (dotIdx > 0)
+                    if (routine.OwnerName is { } ownerPart && routine.MethodName is { } shortName)
                     {
-                        string ownerPart = TypeInfo.StripTypeArgs(name: routine.Name[..dotIdx]);
-                        string shortName = routine.Name[(dotIdx + 1)..];
                         // Module-scoped owner (see the resolution above) so the overload is matched on
                         // THIS module's same-named type, not a first-wins cross-module one.
                         TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)

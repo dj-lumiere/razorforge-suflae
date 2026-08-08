@@ -596,19 +596,16 @@ public sealed partial class SemanticVerifier
         // TODO: Why is this handled here? This name parsing thing should have been parser's role.
         else if (routine.Name.Contains(value: '.'))
         {
-            // Member routine syntax: "Type.routine" or "Type[T].routine"
-            // Extract type name and routine name separately
-            int dotIndex = routine.Name.IndexOf(value: '.');
-            string typeName = routine.Name[..dotIndex];
-            routineName = routine.Name[(dotIndex + 1)..]; // Just the routine name
+            // Member routine syntax: "Type.routine" or "Type[T].routine". The parser already split
+            // the owner base (args-stripped) and method into structured fields — read them instead of
+            // re-parsing the concatenated Name (name-canonicalization).
+            routineName = routine.MethodName!;
 
             kind = RoutineKind.MemberRoutine;
 
-            // Always strip generic params first (e.g., "Stack[T]" -> "Stack") to look up
-            // the generic definition, not a resolution cache entry.
-            // TODO: Why is this handled here? This name parsing thing should have been parser's role.
-            string lookupName = TypeInfo.StripTypeArgs(name: typeName);
-            ownerType = LookupTypeWithImports(name: lookupName);
+            // OwnerName is the bare owner base (e.g. "Stack" for "Stack[T].push") — already the
+            // generic-definition key, so no generic-param strip needed here.
+            ownerType = LookupTypeWithImports(name: routine.OwnerName!);
         }
         else
         {

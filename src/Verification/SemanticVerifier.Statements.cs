@@ -135,14 +135,13 @@ public sealed partial class SemanticVerifier
         {
             // Extension method syntax (e.g., "List[T].add_last"):
             // Resolve OwnerType to get canonical name, then append method name
+            // Method + args-stripped owner base come from the parser's structural fields; `typeName`
+            // (owner WITH type-args) is still needed for the bracketed protocol-extension lookup below,
+            // and only that string form carries the args, so it stays reconstructed from Name.
             int dotIndex = routine.Name.IndexOf(value: '.');
             string typeName = routine.Name[..dotIndex];
-            string methodName = routine.Name[(dotIndex + 1)..];
-
-            // Always strip generic params first (e.g., "Stack[T]" -> "Stack") to look up
-            // the generic definition, not a resolution cache entry.
-            string lookupName = TypeInfo.StripTypeArgs(name: typeName);
-            TypeSymbol? ownerType = LookupTypeWithImports(name: lookupName);
+            string methodName = routine.MethodName!;
+            TypeSymbol? ownerType = LookupTypeWithImports(name: routine.OwnerName!);
             // Protocol-extension decls like `Iterable[Text].join` should have `me` typed as the
             // bracketed owner so the body's `for part in me` resolves `part` from
             // Iterable[Text]'s try_emit() return. Without this, `me` is the bare gen-def
@@ -302,11 +301,9 @@ public sealed partial class SemanticVerifier
         // Tolerates registration/verification key mismatches for overloaded extension methods
         // and concrete generic specializations. Prefer matching IsFailable to disambiguate
         // overloads that share a base name but differ on '!'.
-        if (routineInfo == null && routine.Name.Contains(value: '.'))
+        if (routineInfo == null && routine.MethodName is { } lastMethodName)
         {
-            int dot = routine.Name.LastIndexOf(value: '.');
-            string methodName = routine.Name[(dot + 1)..];
-            routineInfo = _registry.LookupAnyByMethodName(methodName: methodName,
+            routineInfo = _registry.LookupAnyByMethodName(methodName: lastMethodName,
                 isFailable: routine.IsFailable);
         }
 

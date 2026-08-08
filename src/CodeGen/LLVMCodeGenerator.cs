@@ -775,18 +775,14 @@ public partial class LlvmCodeGenerator
 
                     if (routineInfo == null)
                     {
-                        int dotIdx = routine.Name.IndexOf(value: '.');
-                        if (dotIdx > 0)
+                        if (routine.OwnerName is { } ownerPart && routine.MethodName is { } shortName)
                         {
-                            // Member declaration (e.g. "UnpackedFloat[M, L, W].cbrt"). The
-                            // owner-qualified LookupRoutine above can miss when the AST name
-                            // carries generic params (BaseName drops them). Resolve scoped to
-                            // the owner type FIRST — never fall through to a bare short-name
-                            // lookup that could bind a same-named free/external routine of a
-                            // different owner (which would emit this method's body under the
-                            // wrong identity → "Unresolved generic method" at codegen).
-                            string ownerPart = TypeInfo.StripTypeArgs(name: routine.Name[..dotIdx]);
-                            string shortName = routine.Name[(dotIdx + 1)..];
+                            // Member declaration (e.g. "UnpackedFloat[M, L, W].cbrt"). Resolve scoped
+                            // to the owner type FIRST — never fall through to a bare short-name lookup
+                            // that could bind a same-named free/external routine of a different owner
+                            // (which would emit this method's body under the wrong identity →
+                            // "Unresolved generic method" at codegen). OwnerName is the args-stripped
+                            // owner base (structural, from the parser).
                             TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
                             if (ownerType != null)
                             {
