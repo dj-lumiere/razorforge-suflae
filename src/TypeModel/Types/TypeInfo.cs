@@ -32,8 +32,8 @@ public abstract class TypeInfo
     /// <summary>Whether this is a resolved generic type.</summary>
     public bool IsGenericResolution => TypeArguments is { Count: > 0 };
 
-    /// <summary>Whether this is the Blank (unit/void) type.</summary>
-    public bool IsBlank => Name == "Blank";
+    /// <summary>Whether this is the None (unit/void) type.</summary>
+    public bool IsNone => Name == "None";
 
     /// <summary>
     /// True for types whose implicit/synthesized default constructor produces an

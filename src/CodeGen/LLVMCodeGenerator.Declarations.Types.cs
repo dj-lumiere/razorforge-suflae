@@ -164,7 +164,7 @@ public partial class LlvmCodeGenerator
         // The stdlib record's declared fields (type_id + data_address) are ignored
         // here: codegen owns the carrier layout, so the success T or crashable ptr
         // is stored inline (like Maybe[T] and VariantTypeInfo). type_id == 0 is the
-        // Blank/None state with don't-care payload bytes.
+        // None/None state with don't-care payload bytes.
         if (record.CarrierKind is CarrierKind.Result or CarrierKind.Lookup
             && record.TypeArguments is { Count: 1 } resOrLkpArgs)
         {

@@ -61,7 +61,7 @@ needs T is EntityType
   secret buffered: Bool
   ### Address of the compiler-generated per-type trace function for `T` (visits `T`'s `Roamed`
   ### fields). `cptr_none()` = no trace wired yet / `T` has no `Roamed` fields (cannot form a cycle).
-  ### Called as `fn(controller_address)`; reinterprets and `rf_cc_visit_child`s each `Roamed` field.
+  ### Called as `fn(controller_address)`; reinterprets and `rf_cyclic_visit_child`s each `Roamed` field.
   secret trace_hook: CPtr
   ### Address of the compiler-generated per-type free function for `T`. Called as
   ### `fn(controller_address)` when the collector reaps a white (garbage) node: runs the managed
@@ -109,7 +109,7 @@ routine RoamController[T].release()
         # first drop its roots entry so the collector never dereferences this freed controller. (Reading
         # `buffered` on the escaped path is racy in principle; safe under Stage-1 single-thread collection.)
         if me.buffered
-          C::rf_cc_roots_remove(ptr: me.hijack().get_address())
+          C::rf_cyclic_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
         me.destroy()
       else
@@ -118,7 +118,7 @@ routine RoamController[T].release()
       me.count = me.count - 1
       if me.count == 0_u64
         if me.buffered
-          C::rf_cc_roots_remove(ptr: me.hijack().get_address())
+          C::rf_cyclic_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
         me.destroy()
       else
@@ -137,9 +137,9 @@ dangerous routine RoamController[T].mark_cycle_candidate()
     return
   me.buffered = true
   me.color = RoamColor.PURPLE
-  C::rf_cc_add_candidate(obj: me.hijack().get_address())
+  C::rf_cyclic_add_candidate(obj: me.hijack().get_address())
   # Auto-collect once the candidate set crosses the threshold (guarded against re-entry).
-  if C::rf_cc_should_collect()
+  if C::rf_cyclic_should_collect()
     cc_collect()
   return
 
@@ -244,12 +244,12 @@ dangerous routine RoamController[T].promote_reachable()
   # Snapshot THIS node's child controllers before recursing — tracing fills a shared native scratch that
   # a nested promote would clobber (same discipline as the collector's `cc_children`).
   var kids = List[Address]()
-  C::rf_cc_scratch_reset()
-  C::rf_cc_trace_into_scratch(trace_hook: me.trace_hook.get_address(), controller: me.data.get_address())
-  var n = C::rf_cc_scratch_count()
+  C::rf_cyclic_scratch_reset()
+  C::rf_cyclic_trace_into_scratch(trace_hook: me.trace_hook.get_address(), controller: me.data.get_address())
+  var n = C::rf_cyclic_scratch_count()
   var i = 0_u64
   while i < n
-    kids.add_last(value: C::rf_cc_scratch_at(i: i))
+    kids.add_last(value: C::rf_cyclic_scratch_at(i: i))
     i = i + 1_u64
   var j = 0_u64
   while j < kids.count()

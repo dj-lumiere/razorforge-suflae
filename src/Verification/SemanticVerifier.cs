@@ -1253,7 +1253,7 @@ public sealed partial class SemanticVerifier
         // Phase 5.5 global: compute type liveness — mark which concrete generic instances are
         // actually reachable from routine signatures.  Must run before Phase 4 synthesis so that
         // WiredRoutinePass and GMP only operate on live types, preventing phantom instantiations
-        // (e.g. BTreeListNode[Blank]) from reaching codegen.
+        // (e.g. BTreeListNode[None]) from reaching codegen.
         new TypeLivenessPass(registry: _registry).Run();
         Mark(label: "Phase 5.5 global -> TypeLivenessPass");
 
@@ -1423,14 +1423,14 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Phase 6: Sets ReturnType = Blank for every routine still carrying null after all analysis.
+    /// Phase 6: Sets ReturnType = None for every routine still carrying null after all analysis.
     /// Null is a transient "not yet inferred" state. Stdlib routines without a return type
     /// annotation never go through AnalyzeFunctionBody, so they keep null permanently unless
     /// this pass runs.
     /// </summary>
     private void FinalizeReturnTypes()
     {
-        TypeSymbol? blank = _registry.LookupType(name: "Blank");
+        TypeSymbol? blank = _registry.LookupType(name: "None");
         if (blank == null)
         {
             return;

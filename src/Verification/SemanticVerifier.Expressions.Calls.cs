@@ -15,7 +15,7 @@ public sealed partial class SemanticVerifier
 {
     private const string StartRoutineName = "start";
     private const string UseWhenHint = "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).";
-    private const string BlankMemberName = "Blank";
+    private const string NoneTypeName = "None";
     private const string ModifyMethodName = "modify";
     private const string InspectMethodName = "inspect";
 
@@ -247,9 +247,12 @@ public sealed partial class SemanticVerifier
                         Expression argExpr = call.Arguments[index: i] is NamedArgumentExpression nax
                             ? nax.Value
                             : call.Arguments[index: i];
-                        TypeSymbol at = AnalyzeExpression(expression: argExpr);
-                        if (at == ErrorTypeInfo.Instance) continue;
                         TypeSymbol pt = routine.Parameters[index: i].Type;
+                        // Pass the parameter type as the expected type so a context-dependent arg
+                        // (`none`, a bare literal) resolves here instead of prematurely erroring —
+                        // AnalyzeCallArguments re-checks with the correct per-binding type afterwards.
+                        TypeSymbol at = AnalyzeExpression(expression: argExpr, expectedType: pt);
+                        if (at == ErrorTypeInfo.Instance) continue;
                         if (at.FullName != pt.FullName && !IsAssignableTo(source: at, target: pt))
                         {
                             anyMismatch = true;
@@ -606,9 +609,9 @@ public sealed partial class SemanticVerifier
                     ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                         location: call.Location);
 
-                    // Return type is Blank if not specified (routines without explicit return type return Blank)
+                    // Return type is None if not specified (routines without explicit return type return None)
                     TypeSymbol returnType = routine.ReturnType ??
-                                            _registry.LookupType(name: BlankMemberName) ??
+                                            _registry.LookupType(name: NoneTypeName) ??
                                             ErrorTypeInfo.Instance;
                     call.IsInFlight = routine.IsInFlightReturn;
 
@@ -924,7 +927,7 @@ public sealed partial class SemanticVerifier
                         location: call.Location);
 
                     TypeSymbol returnType = routine.ReturnType ??
-                                            _registry.LookupType(name: BlankMemberName) ??
+                                            _registry.LookupType(name: NoneTypeName) ??
                                             ErrorTypeInfo.Instance;
                     call.IsInFlight = routine.IsInFlightReturn;
                     return returnType;
@@ -965,6 +968,25 @@ public sealed partial class SemanticVerifier
                 }
 
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+                // Comptime expand-handle capability probe: `m.obeying(SomeProtocol)` -> Bool, folded at
+                // monomorphization to the member type's conformance. The argument is a PROTOCOL name
+                // (a type/protocol identifier, not a runtime value), so short-circuit before normal
+                // argument analysis. The handle types leniently so an expand body typechecks before
+                // monomorphization; any other call on it is a clear mistake.
+                if (objectType is ComptimeHandleTypeInfo)
+                {
+                    if (member.MemberName == "obeying"
+                        && call.Arguments is [IdentifierExpression])
+                        return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+
+                    ReportError(code: SemanticDiagnosticCode.MemberNotFound,
+                        message:
+                        $"Comptime expand handle has no call '{member.MemberName}(...)'. " +
+                        "Available: 'obeying(Protocol)' -> Bool.",
+                        location: call.Location);
+                    return ErrorTypeInfo.Instance;
+                }
 
                 // $iter / $refer / $control are dunder-private to their protocols — only the
                 // corresponding lowering passes may emit them (for-loop → $iter; argument
@@ -1462,7 +1484,7 @@ public sealed partial class SemanticVerifier
                     ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                         location: call.Location);
 
-                    // Return type is Blank if not specified
+                    // Return type is None if not specified
                     TypeSymbol? callReturnType = method.ReturnType;
                     if (callReturnType != null)
                     {
@@ -1536,7 +1558,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     TypeSymbol returnType = callReturnType ??
-                                            _registry.LookupType(name: BlankMemberName) ??
+                                            _registry.LookupType(name: NoneTypeName) ??
                                             ErrorTypeInfo.Instance;
                     call.IsInFlight = method.IsInFlightReturn;
                     return returnType;
@@ -1733,7 +1755,7 @@ public sealed partial class SemanticVerifier
         // the call's result type is the routine's return type, not the routine type itself.
         if (calleeType is RoutineTypeInfo routineType)
         {
-            return routineType.ReturnType ?? _registry.LookupType(name: BlankMemberName) ?? ErrorTypeInfo.Instance;
+            return routineType.ReturnType ?? _registry.LookupType(name: NoneTypeName) ?? ErrorTypeInfo.Instance;
         }
 
         return calleeType;
@@ -1817,7 +1839,7 @@ public sealed partial class SemanticVerifier
         ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
         TypeSymbol returnType = routine.ReturnType ??
-                                _registry.LookupType(name: BlankMemberName) ??
+                                _registry.LookupType(name: NoneTypeName) ??
                                 ErrorTypeInfo.Instance;
         call.IsInFlight = routine.IsInFlightReturn;
 

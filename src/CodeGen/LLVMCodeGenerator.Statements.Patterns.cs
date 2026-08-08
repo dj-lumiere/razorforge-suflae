@@ -283,7 +283,7 @@ public partial class LlvmCodeGenerator
     /// <list type="bullet">
     /// <item>Variant subjects: <see cref="TypePattern"/> -> <see cref="VariantMemberInfo.TagValue"/></item>
     /// <item>Result/Lookup subjects: <see cref="TypePattern"/> -> FNV-1a type_id of the named type;
-    /// "Blank" -> 0.</item>
+    /// "None" -> 0.</item>
     /// <item><see cref="NonePattern"/> -> None member tag (variant) or 0 (Lookup absent).</item>
     /// </list>
     /// </summary>
@@ -330,7 +330,7 @@ public partial class LlvmCodeGenerator
 
         switch (pattern)
         {
-            case TypePattern { Type.Name: "Blank" }:
+            case TypePattern { Type.Name: "None" }:
             case NonePattern: // Lookup absent state
                 tagLiteral = "0";
                 return true;
@@ -374,7 +374,7 @@ public partial class LlvmCodeGenerator
                 if (subjectType is VariantTypeInfo variant)
                 {
                     VariantMemberInfo? member = variant.FindMember(type: targetType);
-                    if (member?.Type == null) break; // None/Blank: no payload
+                    if (member?.Type == null) break; // None/None: no payload
 
                     string variantTypeName = GetVariantTypeName(variant: variant);
                     string payloadPtr = NextTemp();
@@ -820,7 +820,7 @@ public partial class LlvmCodeGenerator
             }
 
             // Result/Lookup carrier layout: { i64 (type_id), i64 (address) }
-            // type_id == 0 -> ABSENT (Blank), ComputeTypeId(T) -> VALID, ComputeTypeId(Error) -> ERROR
+            // type_id == 0 -> ABSENT (None), ComputeTypeId(T) -> VALID, ComputeTypeId(Error) -> ERROR
             // CrashablePattern matches the ERROR case: tag != 0 &&-> tag != ComputeTypeId(valueType)
             string tagPtr = NextTemp();
             string tag = NextTemp();
@@ -1023,13 +1023,13 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Returns true if this pattern represents the "absent" arm for the given carrier type.
-    /// Maybe -> NonePattern or TypePattern(None); Result/Lookup -> TypePattern(Blank).
+    /// Maybe -> NonePattern or TypePattern(None); Result/Lookup -> TypePattern(None).
     /// </summary>
     private static bool IsAbsentPatternForCarrier(Pattern pattern, TypeInfo? carrierType) =>
         GetCarrierBaseName(type: carrierType) switch
         {
             "Maybe" => pattern is NonePattern or TypePattern { Type.Name: "None" },
-            "Result" or "Lookup" => pattern is TypePattern { Type.Name: "Blank" },
+            "Result" or "Lookup" => pattern is TypePattern { Type.Name: "None" },
             _ => false
         };
 

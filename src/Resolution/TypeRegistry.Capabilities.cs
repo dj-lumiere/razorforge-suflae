@@ -100,7 +100,7 @@ public sealed partial class TypeRegistry
     {
         // Generic parameters, error / blank types pass through — they're either further
         // substituted downstream or already a no-op.
-        if (type is GenericParameterTypeInfo or ErrorTypeInfo || type.IsBlank) return true;
+        if (type is GenericParameterTypeInfo or ErrorTypeInfo || type.IsNone) return true;
 
         // No backend-type shortcut: scalar primitives still define `$eq`/`$hash` explicitly
         // (see Core/Numerics/*.rf) and will be picked up by the LookupMethod fallback below.
@@ -202,6 +202,31 @@ public sealed partial class TypeRegistry
         // Substring check is safe: LLVM type syntax uses "ptr" only as a literal type
         // token; no primitive scalar contains the substring (i8, i64, f32, [N x T], etc.).
         return layout.Contains(value: "ptr", comparisonType: StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Public conformance probe by protocol NAME — backs the comptime <c>m.obeys(Protocol)</c> expand
+    /// projection. Returns true when <paramref name="type"/> either DECLARES the protocol (walks
+    /// <c>ImplementedProtocols</c> transitively) OR STRUCTURALLY satisfies it by supplying a concrete
+    /// (non-abstract) impl of every method the protocol requires. The structural arm matters for
+    /// synthesized capabilities that aren't spelled as an explicit <c>obeys</c>: e.g. every
+    /// Record/Entity/Variant gets a synthesized <c>serialize()</c>, so a scalar field like <c>S32</c>
+    /// satisfies <c>Serializable</c> (it has the method) even though it lists only numeric protocols.
+    /// A positive result therefore guarantees the protocol's wired method resolves to a real body —
+    /// safe for a derive template to gate a <c>me.field.serialize()</c> call on (else fall back to
+    /// <c>represent</c>), and the comptime-if prune then drops the untaken branch before codegen.
+    /// </summary>
+    public bool DoesTypeObeyProtocol(TypeInfo type, string protocolName)
+    {
+        if (TypeObeysProtocol(type: type, protocolName: protocolName)) return true;
+
+        // Structural satisfaction: the type has a concrete impl of every method the protocol declares.
+        if (LookupType(name: protocolName) is not ProtocolTypeInfo proto) return false;
+        List<RoutineInfo> required = GetMethodsForType(type: proto)
+                                    .Where(predicate: m => m.OwnerType is ProtocolTypeInfo)
+                                    .ToList();
+        return required.Count > 0 && required.All(predicate: m =>
+            LookupMethod(type: type, methodName: m.Name) is { OwnerType: not ProtocolTypeInfo });
     }
 
     private bool TypeObeysProtocol(TypeInfo type, string protocolName) // NOSONAR S3776

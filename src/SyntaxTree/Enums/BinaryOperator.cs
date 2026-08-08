@@ -350,7 +350,7 @@ public static class BinaryOperatorExtensions
         /// <summary>
         /// Gets the in-place wired method name for compound assignment dispatch.
         /// Returns null if the operator has no in-place variant (overflow, comparison, etc.).
-        /// In-place methods modify the receiver and return Blank.
+        /// In-place methods modify the receiver and return None.
         /// </summary>
         public string? GetInPlaceMethodName()
         {

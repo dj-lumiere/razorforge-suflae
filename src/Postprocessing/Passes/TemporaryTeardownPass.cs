@@ -60,7 +60,7 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
 {
-    private readonly TypeInfo? _blankType = ctx.Registry.LookupType(name: "Blank");
+    private readonly TypeInfo? _blankType = ctx.Registry.LookupType(name: "None");
     private int _counter;
 
     /// <summary>The reference primitives whose result is a borrow of a referent owned elsewhere —
@@ -459,7 +459,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// <summary>True when a call result MAY be a borrow/view pointing into the receiver, so freeing
     /// the receiver after the call could dangle it. Borrow/view wrappers and unknown/abstract results
     /// are treated as possibly-aliasing; scalars, value/RC records, RC wrappers, entities, and
-    /// <c>Blank</c> are independent of an RC-record receiver and safe.</summary>
+    /// <c>None</c> are independent of an RC-record receiver and safe.</summary>
     private static bool ResultMayAliasReceiver(TypeInfo? resultType) =>
         resultType switch
         {

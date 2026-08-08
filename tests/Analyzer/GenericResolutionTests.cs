@@ -20,9 +20,9 @@ public class GenericResolutionTests
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericVoidMethod_ReturnsBlank()
+    public void Analyze_GenericVoidMethod_ReturnsNone()
     {
-        // S191: Calling a void method on a generic resolution should return Blank, not <error>
+        // S191: Calling a void method on a generic resolution should return None, not <error>
         string source = """
                         record Box[T]
                           value: T
@@ -448,12 +448,12 @@ public class GenericResolutionTests
         // P1: Protocol method with generic parameter type should substitute correctly
         string source = """
                         protocol Acceptor[T]
-                          routine Me.accept(item: T) -> Blank
+                          routine Me.accept(item: T) -> None
 
                         record S32Acceptor obeys Acceptor[S32]
                           count: S32
 
-                        routine S32Acceptor.accept(item: S32) -> Blank
+                        routine S32Acceptor.accept(item: S32) -> None
                           return
 
                         routine test()

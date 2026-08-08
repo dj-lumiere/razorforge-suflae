@@ -135,6 +135,18 @@ dangerous routine Hijacked[T].poke_at_offset(at: ByteSize, value: T)
   me.offset(bytes: at).poke(value: value)
   return
 
+### Cycle-collector container hook: reports every element of this `count`-length buffer to the
+### collector so container-held objects are visible to cycle collection. `cyclic_visit` is a
+### universal `@overridable` no-op that only `Roamed[T]` overrides, so this walk needs no per-element
+### branching — a buffer of values visits nothing, a buffer of `Roamed` handles reports each one.
+### :param count: The number of live elements in the buffer.
+dangerous routine Hijacked[T].cyclic_trace_buffer(count: U64)
+  var i = 0u64
+  while i < count
+    me.peek_at_offset(offset: T.data_size() * i).cyclic_visit()
+    i = i +% 1u64
+  return
+
 ### Deallocates the memory at this pointer's address.
 dangerous routine Hijacked[T].invalidate()
   C::rf_invalidate(me.address())

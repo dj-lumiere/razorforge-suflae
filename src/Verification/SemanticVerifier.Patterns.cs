@@ -59,6 +59,13 @@ public sealed partial class SemanticVerifier
                         || IsMaybeType(type: matchedType)
                         || GetCarrierBaseName(type: matchedType) == "Lookup"
                         || matchedType is VariantTypeInfo
+                        // A `Result[None]` (void-success crashable) is matched on its None success arm
+                        // by `is None` — Ok(None) | Crashable. None is the void success value.
+                        // Only valid when the success type argument is itself None — `Result[S32]`'s
+                        // success arm is S32, so `is None` there is still a mismatch.
+                        || matchedType is CrashableTypeInfo
+                        || (GetCarrierBaseName(type: matchedType) == "Result"
+                            && matchedType is RecordTypeInfo { TypeArguments: [{ Name: "None" }, ..] })
                         // Suflae: a nullable entity reference (`E?`) is a Roamed[E] handle that may be a
                         // null/none handle, so `is None` / `isnot None` is a legal none-check on it.
                         || (_registry.Language == Language.Suflae
@@ -525,7 +532,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Carrier types (Maybe<T>, Result<T>, Lookup<T>) can be matched against any
-        // type/protocol — their inner value, Crashable errors, None/Blank are all valid arms.
+        // type/protocol — their inner value, Crashable errors, None/None are all valid arms.
         if (IsCarrierType(type: matchedType))
         {
             return true;

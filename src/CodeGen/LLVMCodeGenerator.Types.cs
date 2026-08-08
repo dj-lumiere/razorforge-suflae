@@ -126,11 +126,11 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// The LLVM type for STORING a value of <paramref name="type"/> (an alloca, a struct field, a
-    /// by-value parameter). Identical to <see cref="GetLlvmType"/> except for <c>Blank</c>: Blank is
+    /// by-value parameter). Identical to <see cref="GetLlvmType"/> except for <c>None</c>: None is
     /// <c>@llvm("void")</c>, and <c>void</c> is illegal as a value (you cannot <c>alloca void</c> or
-    /// put a <c>void</c> field in a struct). A stored Blank is the empty record <c>{}</c> — a real
+    /// put a <c>void</c> field in a struct). A stored None is the empty record <c>{}</c> — a real
     /// zero-size value. Direct routine RETURNS keep using <see cref="GetLlvmType"/> (so void-returning
-    /// routines stay <c>void</c>); only Blank-as-a-VALUE uses this.
+    /// routines stay <c>void</c>); only None-as-a-VALUE uses this.
     /// </summary>
     private string GetValueLlvmType(TypeInfo type)
     {

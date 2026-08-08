@@ -582,6 +582,43 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
                             methodName: methodName, isFailable: true);
                     }
+
+                    // Suflae wraps container locals as `Roamed[Dict]` / `Roamed[Set]` post-SA. A
+                    // membership/comparison operator lowers to `receiver.contains(x)` / `.eq(x)` HERE in
+                    // Phase 7 — after the wrapper-forwarder pass has frozen — so the method is unresolved
+                    // on the wrapper. Resolve it against the UNWRAPPED inner type (exactly as SA did for
+                    // an explicit `d.count()` while `d` was still the bare container before promotion) and
+                    // stamp the inner method; codegen projects the Roamed receiver to the inner value for
+                    // `me`, same as every other inner-method call on a Roamed container.
+                    // The Roamed handle reaches here in EITHER representation the pipeline produces: a
+                    // WrapperTypeInfo (SuflaeEntityLoweringPass.WrapInRoam) or a RecordTypeInfo (resolver-
+                    // built). Extract the inner container type from whichever it is.
+                    TypeInfo? innerRecv = receiverType switch
+                    {
+                        WrapperTypeInfo w
+                            when Compiler.Resolution.TypeRegistry.GetRcWrapperBaseName(type: w) != null
+                            => w.InnerType,
+                        RecordTypeInfo r
+                            when Compiler.Resolution.TypeRegistry.GetRcWrapperBaseName(type: r) != null
+                                 && r.TypeArguments is { Count: >= 1 } ra
+                            => ra[index: 0],
+                        _ => null
+                    };
+                    if (resolvedMethod == null && innerRecv != null)
+                    {
+                        resolvedMethod = argType != null
+                            ? ctx.Registry.LookupMethodOverload(type: innerRecv,
+                                methodName: methodName, argTypes: [argType])
+                            : null;
+                        resolvedMethod ??= ctx.Registry.LookupMethod(type: innerRecv, methodName: methodName);
+                        resolvedMethod ??= ctx.Registry.LookupMethod(type: innerRecv,
+                            methodName: methodName, isFailable: true);
+                        // NOTE: the Roamed receiver is NOT projected here. Resolving the inner method is
+                        // enough — codegen's unified receiver projection (EmitMemberRoutineCall) wraps the
+                        // Roamed handle in `raw_inner()` for every bare-`me` inner method uniformly, so the
+                        // operator-lowered call, an index `d[i]`, and an explicit `d.count()` all funnel
+                        // through the one projection site.
+                    }
                 }
 
                 // Mixed fixed-width integer comparisons have no direct cross-width overloads in the

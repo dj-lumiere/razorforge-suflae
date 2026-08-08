@@ -36,7 +36,7 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 {
-    private readonly TypeInfo? _blankType = ctx.Registry.LookupType(name: "Blank");
+    private readonly TypeInfo? _blankType = ctx.Registry.LookupType(name: "None");
     private int _spillCounter;
 
     /// <summary>A live owned binding: its name, type, and resolved <c>$destroy</c> routine.

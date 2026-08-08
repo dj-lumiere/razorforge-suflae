@@ -868,7 +868,7 @@ public class CompilerPipelineLoweringTests
     public void Analyze_StdlibVariantBodies_AttachConstructorMetadata()
     {
         string source = """
-                        routine test() -> Blank
+                        routine test() -> None
                           return
                         """;
 
@@ -1045,7 +1045,7 @@ public class CompilerPipelineLoweringTests
     public void BackendEntryValidator_RejectsResidualIndexWithoutConcreteType()
     {
         string source = """
-                        routine test() -> Blank
+                        routine test() -> None
                           return
                         """;
 

@@ -159,7 +159,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
     /// <summary>
     /// Maps a <see cref="GeneratedVariant"/> to its <see cref="ErrorHandlingVariantKind"/>,
-    /// including distinguishing the TryBool case (Blank-returning try_ variant).
+    /// including distinguishing the TryBool case (None-returning try_ variant).
     /// </summary>
     private static ErrorHandlingVariantKind DetermineVariantKind(GeneratedVariant variant)
     {

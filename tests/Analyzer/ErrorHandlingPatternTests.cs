@@ -83,12 +83,12 @@ public class ErrorHandlingPatternTests
     /// Verifies semantic analysis behavior for lookup uses blank absent arm without pattern mismatch errors.
     /// </summary>
     [Fact]
-    public void Analyze_LookupUsesBlankAbsentArm_NoPatternMismatch()
+    public void Analyze_LookupUsesNoneAbsentArm_NoPatternMismatch()
     {
         string source = """
                         routine test(value: Lookup[S32])
                           when value
-                            is Blank => pass
+                            is None => pass
                             is Crashable err => pass
                             else v => pass
                           return
@@ -105,13 +105,13 @@ public class ErrorHandlingPatternTests
     /// Verifies semantic analysis behavior for result blank uses blank value arm without pattern mismatch errors.
     /// </summary>
     [Fact]
-    public void Analyze_ResultBlankUsesBlankValueArm_NoPatternMismatch()
+    public void Analyze_ResultNoneUsesNoneValueArm_NoPatternMismatch()
     {
         string source = """
-                        routine test(value: Result[Blank])
+                        routine test(value: Result[None])
                           when value
                             is Crashable err => pass
-                            is Blank => pass
+                            is None => pass
                           return
                         """;
 

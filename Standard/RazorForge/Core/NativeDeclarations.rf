@@ -84,47 +84,47 @@ routine C::rf_current_task_id() -> U64
 ### Cycle collector (Bacon-Rajan) — the SOLE entry point. A {Roamed} strong-decrement that leaves the
 ### count > 0 reports the controller here as a possible cycle root (RF dedups via `buffered` first).
 ### See internal-wiki/v0.4.x-cycle-collector.md.
-dangerous routine C::rf_cc_add_candidate(obj: Address)
+dangerous routine C::rf_cyclic_add_candidate(obj: Address)
 ### Number of candidate controllers currently in the roots buffer.
-dangerous routine C::rf_cc_roots_count() -> U64
+dangerous routine C::rf_cyclic_roots_count() -> U64
 ### The i-th candidate controller in the roots buffer (`Address(0)` if out of range).
-dangerous routine C::rf_cc_roots_at(i: U64) -> Address
+dangerous routine C::rf_cyclic_roots_at(i: U64) -> Address
 ### Empties the roots buffer (after a CollectCycles pass consumes it).
-dangerous routine C::rf_cc_roots_clear()
+dangerous routine C::rf_cyclic_roots_clear()
 ### Drops the first `n` (processed) candidates, keeping any appended after the pass snapshotted `n`
 ### (e.g. a candidate reported by a finalizer during reap). Prevents dropping late arrivals.
-dangerous routine C::rf_cc_roots_remove_front(n: U64)
+dangerous routine C::rf_cyclic_roots_remove_front(n: U64)
 ### Drops one candidate about to be freed — a buffered controller reaching count 0 is freed eagerly, so
 ### its roots entry must go first or the collector would dereference freed memory.
-dangerous routine C::rf_cc_roots_remove(ptr: Address)
+dangerous routine C::rf_cyclic_roots_remove(ptr: Address)
 ### Resets the scratch buffer before tracing one controller's children.
-dangerous routine C::rf_cc_scratch_reset()
+dangerous routine C::rf_cyclic_scratch_reset()
 ### Number of children collected into the scratch buffer by the last trace.
-dangerous routine C::rf_cc_scratch_count() -> U64
+dangerous routine C::rf_cyclic_scratch_count() -> U64
 ### The i-th child controller in the scratch buffer (`Address(0)` if out of range).
-dangerous routine C::rf_cc_scratch_at(i: U64) -> Address
+dangerous routine C::rf_cyclic_scratch_at(i: U64) -> Address
 ### Called by a compiler-generated per-type trace, once per {Roamed} field, with its controller.
-dangerous routine C::rf_cc_visit_child(child_ctrl: Address)
+dangerous routine C::rf_cyclic_visit_child(child_ctrl: Address)
 ### Pushes a collected white controller onto the deferred-free (reap) buffer.
-dangerous routine C::rf_cc_reap_push(ctrl: Address)
+dangerous routine C::rf_cyclic_reap_push(ctrl: Address)
 ### Number of controllers awaiting deferred free in the reap buffer.
-dangerous routine C::rf_cc_reap_count() -> U64
+dangerous routine C::rf_cyclic_reap_count() -> U64
 ### The i-th controller in the reap buffer (`Address(0)` if out of range).
-dangerous routine C::rf_cc_reap_at(i: U64) -> Address
+dangerous routine C::rf_cyclic_reap_at(i: U64) -> Address
 ### Empties the reap buffer.
-dangerous routine C::rf_cc_reap_clear()
+dangerous routine C::rf_cyclic_reap_clear()
 ### The sole trace indirect-call site: runs the per-type trace hook over a controller, filling scratch
 ### with its child controllers.
-dangerous routine C::rf_cc_trace_into_scratch(trace_hook: Address, controller: Address)
+dangerous routine C::rf_cyclic_trace_into_scratch(trace_hook: Address, controller: Address)
 ### The free indirect-call site: runs the per-type free hook over a white (garbage) controller —
 ### type-correct entity `destroy` then controller free.
-dangerous routine C::rf_cc_invoke_free(free_hook: Address, controller: Address)
+dangerous routine C::rf_cyclic_invoke_free(free_hook: Address, controller: Address)
 ### Whether a collection pass should run now (candidate set reached the threshold, none in progress).
-dangerous routine C::rf_cc_should_collect() -> Bool
+dangerous routine C::rf_cyclic_should_collect() -> Bool
 ### Marks a collection pass in progress (guards against re-entrant auto-triggering).
-dangerous routine C::rf_cc_enter_collect()
+dangerous routine C::rf_cyclic_enter_collect()
 ### Marks the collection pass finished.
-dangerous routine C::rf_cc_exit_collect()
+dangerous routine C::rf_cyclic_exit_collect()
 
 # ============================================================================
 # Stackful coroutine substrate (v0.2.0 — single coroutine, no scheduler).

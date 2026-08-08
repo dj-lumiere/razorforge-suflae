@@ -10,41 +10,41 @@ using static TestHelpers;
 /// </summary>
 public class TypeProhibitionTests
 {
-    #region Blank as Type Argument (rejected)
+    #region None as Type Argument (rejected)
     /// <summary>
     /// Verifies semantic analysis behavior for blank nullable and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_BlankNullable_ReportsError()
+    public void Analyze_NoneNullable_ReportsError()
     {
-        // Blank? desugars to Maybe<Blank>, which is prohibited
+        // None? desugars to Maybe<None>, which is prohibited
         string source = """
-                        routine foo(x: Blank?)
+                        routine foo(x: None?)
                           pass
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+            filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for explicit maybe blank and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_ExplicitMaybeBlank_ReportsError()
+    public void Analyze_ExplicitMaybeNone_ReportsError()
     {
         string source = """
-                        routine bar() -> Maybe[Blank]
+                        routine bar() -> Maybe[None]
                           absent
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+            filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
 
     #endregion
@@ -65,61 +65,61 @@ public class TypeProhibitionTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+            filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for blank direct type without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_BlankDirectType_NoErrors()
+    public void Analyze_NoneDirectType_NoErrors()
     {
-        // Blank as a direct type (not wrapped in a generic) is fine
+        // None as a direct type (not wrapped in a generic) is fine
         string source = """
-                        routine foo() -> Blank
+                        routine foo() -> None
                           pass
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+            filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for result blank without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_ResultBlank_NoErrors()
+    public void Analyze_ResultNone_NoErrors()
     {
-        // Result<Blank> is allowed for failable void routines
+        // Result<None> is allowed for failable void routines
         string source = """
-                        routine foo(x: Result[Blank])
+                        routine foo(x: Result[None])
                           pass
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+            filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for lookup blank and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_LookupBlank_ReportsError()
+    public void Analyze_LookupNone_ReportsError()
     {
-        // Lookup<Blank> is ambiguous: Blank is also the absent sentinel in the type_id carrier.
+        // Lookup<None> is ambiguous: None is also the absent sentinel in the type_id carrier.
         string source = """
-                        routine foo(x: Lookup[Blank])
+                        routine foo(x: Lookup[None])
                           pass
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+            filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
 
     #endregion
@@ -179,7 +179,7 @@ public class TypeProhibitionTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+            filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
 
     /// <summary>

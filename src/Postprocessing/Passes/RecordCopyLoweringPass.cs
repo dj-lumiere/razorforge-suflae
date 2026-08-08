@@ -63,6 +63,16 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         return cut >= 0 ? tail[..cut] : tail;
     }
 
+    // The bare method/routine name a call resolves to (for store-primitive detection). Mirrors
+    // ScopeTeardownLoweringPass.CalleeName so the copy pass and the teardown pass agree on which calls
+    // are store primitives.
+    private static string? CalleeName(Expression callee) => callee switch
+    {
+        MemberExpression m => m.MemberName,
+        IdentifierExpression id => id.Name,
+        _ => null
+    };
+
     // The OWNER type's base name of a `Owner.method` routine name/key (strips generic args + module path):
     // `Core.Roamed[Main.Box].roam` -> `Roamed`. Empty for a free routine.
     private static string OwnerBase(string nameOrKey)
@@ -465,10 +475,20 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             case CallExpression call:
             {
                 bool changed = false;
+                // A store primitive (poke / store / store_element_ref) MOVES its argument into raw
+                // storage — ScopeTeardownLoweringPass already marks that argument as moved (never torn
+                // down). Injecting a retaining copy here would double-count: the copy is written into
+                // memory while the un-released source keeps its own reference, leaking one ref per store
+                // (e.g. List.add_last's `poke(value)` chain roamed the element TWICE — once for poke's
+                // param, once for the inner `LLVM::store` arg — with neither released, so a cycle held
+                // through a container never reaches its cycle-internal refcount and cc_collect can't
+                // reap it). Pass store-primitive args through untouched to keep copy==teardown.
+                bool isStorePrimitive = CalleeName(call.Callee) is { } cn
+                    && Resolution.RuntimeContract.StorePrimitives.Contains(item: cn);
                 var args = new List<Expression>(capacity: call.Arguments.Count);
                 foreach (Expression arg in call.Arguments)
                 {
-                    Expression s = LowerArgument(arg: arg);
+                    Expression s = isStorePrimitive ? arg : LowerArgument(arg: arg);
                     args.Add(item: s);
                     if (!ReferenceEquals(s, arg)) changed = true;
                 }
@@ -515,10 +535,15 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             case GenericMethodCallExpression gmc:
             {
                 bool changed = false;
+                // Store-primitive move semantics (see the CallExpression case) — e.g. poke lowers to
+                // `LLVM::store[T](me, value)`, a generic method call whose `value` arg is moved into
+                // memory and must NOT be retain-copied here.
+                bool isStorePrimitiveG = CalleeName(gmc.Object) is { } gcn
+                    && Resolution.RuntimeContract.StorePrimitives.Contains(item: gcn);
                 var args = new List<Expression>(capacity: gmc.Arguments.Count);
                 foreach (Expression arg in gmc.Arguments)
                 {
-                    Expression s = LowerArgument(arg: arg);
+                    Expression s = isStorePrimitiveG ? arg : LowerArgument(arg: arg);
                     args.Add(item: s);
                     if (!ReferenceEquals(s, arg)) changed = true;
                 }

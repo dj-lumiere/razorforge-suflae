@@ -36,6 +36,12 @@ public sealed class Scope
     /// lands in the enclosing scope and persists.</summary>
     private readonly Dictionary<string, bool> _nullabilityFacts = new();
 
+    /// <summary>Variant arms proven EXCLUDED for a variable in this scope (by full type name), e.g.
+    /// inside the else of `if x is A` on a variant. Accumulates down an if/elseif chain: once every
+    /// arm but one is excluded, the variable narrows to that single remaining arm. A scope's set is
+    /// self-contained (seeded with the inherited exclusions when first written).</summary>
+    private readonly Dictionary<string, HashSet<string>> _excludedArms = new();
+
     /// <summary>For type scopes, the associated type.</summary>
     public TypeSymbol? AssociatedType { get; init; }
 
@@ -101,6 +107,31 @@ public sealed class Scope
         return _typeNarrowings.TryGetValue(key: name, value: out TypeSymbol? type)
             ? type
             : Parent?.GetNarrowedType(name: name);
+    }
+
+    /// <summary>
+    /// Records a variant arm (by full type name) as excluded for a variable in this scope, seeding
+    /// from the inherited exclusions so the local set is self-contained for nested lookups.
+    /// </summary>
+    public void ExcludeArm(string name, string armFullName)
+    {
+        if (!_excludedArms.TryGetValue(key: name, value: out HashSet<string>? set))
+        {
+            set = new HashSet<string>(collection: GetExcludedArms(name: name));
+            _excludedArms[key: name] = set;
+        }
+
+        set.Add(item: armFullName);
+    }
+
+    /// <summary>
+    /// Gets the arms excluded for a variable, searching this scope then parent scopes.
+    /// </summary>
+    public IReadOnlyCollection<string> GetExcludedArms(string name)
+    {
+        return _excludedArms.TryGetValue(key: name, value: out HashSet<string>? set)
+            ? set
+            : Parent?.GetExcludedArms(name: name) ?? System.Array.Empty<string>();
     }
 
     /// <summary>

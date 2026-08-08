@@ -7,9 +7,9 @@ namespace Compiler.Desugaring.Passes;
 /// D-AST-0: Normalizes null return types and bare return statements.
 /// <list type="bullet">
 ///   <item><see cref="RoutineDeclaration"/> with <c>ReturnType == null</c> (no <c>-&gt;</c> written)
-///         -> <c>ReturnType = TypeExpression("Blank")</c>.</item>
+///         -> <c>ReturnType = TypeExpression("None")</c>.</item>
 ///   <item><see cref="ReturnStatement"/> with <c>Value == null</c> (bare <c>return</c>)
-///         -> <c>Value = IdentifierExpression("Blank")</c>.</item>
+///         -> <c>Value = IdentifierExpression("None")</c>.</item>
 /// </list>
 /// After this pass, <c>null</c> in either position is a genuine unresolved error.
 /// Runs as the very first pass in <see cref="DesugaringPipeline.Run"/>.
@@ -17,7 +17,7 @@ namespace Compiler.Desugaring.Passes;
 /// or <see cref="VariantReturnStatement"/> (null Value = FromAbsent, semantically meaningful).
 /// </summary>
 #pragma warning disable CS9113
-internal sealed class BlankReturnNormalizationPass(DesugaringContext _)
+internal sealed class NoneReturnNormalizationPass(DesugaringContext _)
 #pragma warning restore CS9113
 {
     public void Run(Program program)
@@ -65,7 +65,7 @@ internal sealed class BlankReturnNormalizationPass(DesugaringContext _)
     private RoutineDeclaration NormalizeRoutine(RoutineDeclaration r)
     {
         TypeExpression? returnType = r.ReturnType
-            ?? new TypeExpression(Name: "Blank", GenericArguments: null, Location: r.Location);
+            ?? new TypeExpression(Name: "None", GenericArguments: null, Location: r.Location);
         Statement body = NormalizeStatement(stmt: r.Body);
         if (ReferenceEquals(returnType, r.ReturnType) && ReferenceEquals(body, r.Body))
             return r;
@@ -79,7 +79,7 @@ internal sealed class BlankReturnNormalizationPass(DesugaringContext _)
             case ReturnStatement { Value: null } ret:
                 return ret with
                 {
-                    Value = new IdentifierExpression(Name: "Blank", Location: ret.Location)
+                    Value = new IdentifierExpression(Name: "None", Location: ret.Location)
                 };
 
             case BlockStatement b:

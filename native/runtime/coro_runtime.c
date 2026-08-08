@@ -409,10 +409,10 @@ uint64_t rf_current_task_id(void)
 //               CollectCycles pass walks). Dedup is the RF side's job (the controller `buffered`
 //               flag); here we only append.
 //   - scratch : the children of ONE controller, filled by a per-type trace hook (which calls
-//               rf_cc_visit_child for each Roamed field) and drained by RF.
+//               rf_cyclic_visit_child for each Roamed field) and drained by RF.
 //   - reap    : the white (garbage) controllers CollectWhite gathers, freed after the walk.
 //
-// A trace/free hook is invoked through rf_cc_invoke_hook (the closure ABI — see there); every other
+// A trace/free hook is invoked through rf_cyclic_invoke_hook (the closure ABI — see there); every other
 // collector operation reads controller fields by name on the RF side, so the algorithm is
 // layout-drift-proof.
 //
@@ -420,17 +420,17 @@ uint64_t rf_current_task_id(void)
 // internal-wiki/v0.4.x-cycle-collector.md §5). These buffers are plain process-global arrays with no
 // lock; concurrent collection across schedulers is a deferred decision.
 
-typedef struct rf_cc_buffer {
+typedef struct rf_cyclic_buffer {
     void** items;
     uint64_t count;
     uint64_t capacity;
-} rf_cc_buffer;
+} rf_cyclic_buffer;
 
-static rf_cc_buffer g_cc_roots = {0};
-static rf_cc_buffer g_cc_scratch = {0};
-static rf_cc_buffer g_cc_reap = {0};
+static rf_cyclic_buffer g_cc_roots = {0};
+static rf_cyclic_buffer g_cc_scratch = {0};
+static rf_cyclic_buffer g_cc_reap = {0};
 
-static void rf_cc_buffer_push(rf_cc_buffer* buf, void* item)
+static void rf_cyclic_buffer_push(rf_cyclic_buffer* buf, void* item)
 {
     if (buf->count == buf->capacity) {
         uint64_t new_cap = buf->capacity == 0 ? 16 : buf->capacity * 2;
@@ -449,22 +449,22 @@ static void rf_cc_buffer_push(rf_cc_buffer* buf, void* item)
 // RoamController.mark_cycle_candidate when a strong decrement leaves the count > 0 (a possible cycle
 // root). Appends to the roots buffer; the RF side guards duplicates via the controller `buffered`
 // flag before calling here.
-void rf_cc_add_candidate(void* obj)
+void rf_cyclic_add_candidate(void* obj)
 {
-    rf_cc_buffer_push(&g_cc_roots, obj);
+    rf_cyclic_buffer_push(&g_cc_roots, obj);
 }
 
 // roots-buffer accessors — the RF CollectCycles pass walks the candidate set through these.
-uint64_t rf_cc_roots_count(void) { return g_cc_roots.count; }
-void* rf_cc_roots_at(uint64_t i) { return i < g_cc_roots.count ? g_cc_roots.items[i] : NULL; }
-void rf_cc_roots_clear(void) { g_cc_roots.count = 0; }
+uint64_t rf_cyclic_roots_count(void) { return g_cc_roots.count; }
+void* rf_cyclic_roots_at(uint64_t i) { return i < g_cc_roots.count ? g_cc_roots.items[i] : NULL; }
+void rf_cyclic_roots_clear(void) { g_cc_roots.count = 0; }
 
-// Removes the first n candidates (those a pass snapshotted and processed via rf_cc_roots_at(0..n)),
+// Removes the first n candidates (those a pass snapshotted and processed via rf_cyclic_roots_at(0..n)),
 // keeping any appended AFTER the snapshot — e.g. a candidate reported by a finalizer-triggered release
 // during the reap phase. cc_collect uses this instead of a blanket clear so such late arrivals are not
 // dropped (they'd be buffered=true yet absent from roots → never re-collected). Manual shift (no
 // <string.h> memmove dependency).
-void rf_cc_roots_remove_front(uint64_t n)
+void rf_cyclic_roots_remove_front(uint64_t n)
 {
     if (n >= g_cc_roots.count) {
         g_cc_roots.count = 0;
@@ -483,7 +483,7 @@ void rf_cc_roots_remove_front(uint64_t n)
 // (roots is threshold-bounded), swap-with-last for O(1) removal (candidate order is irrelevant). Order
 // is unaffected during a pass: MarkRoots snapshots and processes roots[0..n] without triggering
 // releases, so any removal here happens outside that index walk.
-void rf_cc_roots_remove(void* ptr)
+void rf_cyclic_roots_remove(void* ptr)
 {
     for (uint64_t i = 0; i < g_cc_roots.count; i++) {
         if (g_cc_roots.items[i] == ptr) {
@@ -495,26 +495,26 @@ void rf_cc_roots_remove(void* ptr)
 }
 
 // scratch protocol — get one controller's children:
-//   rf_cc_scratch_reset(); rf_cc_trace_into_scratch(trace_hook, controller);
-//   for i in 0..rf_cc_scratch_count(): rf_cc_scratch_at(i)   // child controller pointers
-void rf_cc_scratch_reset(void) { g_cc_scratch.count = 0; }
-uint64_t rf_cc_scratch_count(void) { return g_cc_scratch.count; }
-void* rf_cc_scratch_at(uint64_t i) { return i < g_cc_scratch.count ? g_cc_scratch.items[i] : NULL; }
+//   rf_cyclic_scratch_reset(); rf_cyclic_trace_into_scratch(trace_hook, controller);
+//   for i in 0..rf_cyclic_scratch_count(): rf_cyclic_scratch_at(i)   // child controller pointers
+void rf_cyclic_scratch_reset(void) { g_cc_scratch.count = 0; }
+uint64_t rf_cyclic_scratch_count(void) { return g_cc_scratch.count; }
+void* rf_cyclic_scratch_at(uint64_t i) { return i < g_cc_scratch.count ? g_cc_scratch.items[i] : NULL; }
 
 // Called by a per-type trace hook, once per Roamed-typed field, with that field's controller pointer.
 // Appends to the scratch buffer the current trace is filling.
-void rf_cc_visit_child(void* child_ctrl)
+void rf_cyclic_visit_child(void* child_ctrl)
 {
-    rf_cc_buffer_push(&g_cc_scratch, child_ctrl);
+    rf_cyclic_buffer_push(&g_cc_scratch, child_ctrl);
 }
 
 // reap = the white (garbage) controllers CollectWhite gathers; freeing is deferred to after the walk
 // (freeing mid-traversal would dangle the roots/child lists). Separate from scratch, which the trace
 // reuses during the same walk.
-void rf_cc_reap_push(void* ctrl) { rf_cc_buffer_push(&g_cc_reap, ctrl); }
-uint64_t rf_cc_reap_count(void) { return g_cc_reap.count; }
-void* rf_cc_reap_at(uint64_t i) { return i < g_cc_reap.count ? g_cc_reap.items[i] : NULL; }
-void rf_cc_reap_clear(void) { g_cc_reap.count = 0; }
+void rf_cyclic_reap_push(void* ctrl) { rf_cyclic_buffer_push(&g_cc_reap, ctrl); }
+uint64_t rf_cyclic_reap_count(void) { return g_cc_reap.count; }
+void* rf_cyclic_reap_at(uint64_t i) { return i < g_cc_reap.count ? g_cc_reap.items[i] : NULL; }
+void rf_cyclic_reap_clear(void) { g_cc_reap.count = 0; }
 
 // Auto-collection trigger: run a cycle-collection pass once the candidate (roots) set grows past a
 // threshold (a candidate-set heuristic — CPython's "tracked object" style). Default 128, overridable
@@ -523,7 +523,7 @@ void rf_cc_reap_clear(void) { g_cc_reap.count = 0; }
 static uint64_t g_cc_threshold = 0;   // 0 = not yet resolved (lazy, from env on first check)
 static int g_cc_collecting = 0;
 
-static uint64_t rf_cc_get_threshold(void)
+static uint64_t rf_cyclic_get_threshold(void)
 {
     if (g_cc_threshold == 0) {
         g_cc_threshold = 128;
@@ -540,19 +540,19 @@ static uint64_t rf_cc_get_threshold(void)
 
 // True when a collection pass should run now: the candidate set reached the threshold and no pass is
 // already in progress. The RF side (RoamController.mark_cycle_candidate) polls this after buffering.
-int rf_cc_should_collect(void) { return !g_cc_collecting && g_cc_roots.count >= rf_cc_get_threshold(); }
+int rf_cyclic_should_collect(void) { return !g_cc_collecting && g_cc_roots.count >= rf_cyclic_get_threshold(); }
 
 // Bracket a collection pass so a nested candidate report cannot re-trigger one (CycleCollector.cc_collect
 // calls these around the three passes).
-void rf_cc_enter_collect(void) { g_cc_collecting = 1; }
-void rf_cc_exit_collect(void) { g_cc_collecting = 0; }
+void rf_cyclic_enter_collect(void) { g_cc_collecting = 1; }
+void rf_cyclic_exit_collect(void) { g_cc_collecting = 0; }
 
 // An RF routine reference stored in a CPtr is a CLOSURE VALUE: a heap box whose first word is the
 // vthunk pointer `void(*)(void* closure, <args>)`, followed by any captured variables. The hooks the
 // collector calls (trace / free) take one arg, so the vthunk is `void(void* closure, void* arg)`. To
 // invoke a hook we load the vthunk from the box and pass the box back as the closure receiver. A NULL
 // box means "no hook" (a type with no Roamed fields, or an unwired controller) — a no-op.
-static void rf_cc_invoke_hook(void* closure, void* arg)
+static void rf_cyclic_invoke_hook(void* closure, void* arg)
 {
     if (closure == NULL) {
         return;
@@ -562,18 +562,18 @@ static void rf_cc_invoke_hook(void* closure, void* arg)
 }
 
 // The SOLE indirect-call site for tracing. Invokes a controller's trace hook, passing the CONTROLLER
-// address; the trace reaches the managed entity's Roamed fields and calls rf_cc_visit_child for each,
+// address; the trace reaches the managed entity's Roamed fields and calls rf_cyclic_visit_child for each,
 // so on return the scratch buffer holds this controller's child controllers.
-void rf_cc_trace_into_scratch(void* trace_hook, void* controller)
+void rf_cyclic_trace_into_scratch(void* trace_hook, void* controller)
 {
-    rf_cc_invoke_hook(trace_hook, controller);
+    rf_cyclic_invoke_hook(trace_hook, controller);
 }
 
 // Indirect-call site for reaping a white (garbage) node. Invokes a controller's free hook over the
 // CONTROLLER address: it runs the managed entity's type-correct $destroy then frees the controller.
-void rf_cc_invoke_free(void* free_hook, void* controller)
+void rf_cyclic_invoke_free(void* free_hook, void* controller)
 {
-    rf_cc_invoke_hook(free_hook, controller);
+    rf_cyclic_invoke_hook(free_hook, controller);
 }
 
 /* ---- Cooperative cancellation request (structured concurrency) ---------------------------- */

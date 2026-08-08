@@ -159,7 +159,11 @@ public partial class Parser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        string name = ConsumeIdentifier(errorMessage: "Expected record name");
+        // `None` is a keyword (the void type / variant empty branch) but is a legal record name — the
+        // void unit type is declared `record None`.
+        string name = Match(type: TokenType.None)
+            ? "None"
+            : ConsumeIdentifier(errorMessage: "Expected record name");
 
         // Generic parameters with inline constraints
         List<string>? genericParams = null;

@@ -373,7 +373,7 @@ internal sealed class WrapperForwardingPass
             isFailable: innerMethod.IsFailable,
             parameters: innerMethod.Parameters,
             hasReturnValue: innerMethod.ReturnType != null &&
-                innerMethod.ReturnType.Name != "Blank",
+                innerMethod.ReturnType.Name != "None",
             dataFieldName: dataFieldName,
             innerIsEntity: innerType is EntityTypeInfo);
 

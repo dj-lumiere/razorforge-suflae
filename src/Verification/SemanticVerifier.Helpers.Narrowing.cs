@@ -24,6 +24,96 @@ public sealed partial class SemanticVerifier
         public bool ElseNonNull { get; init; }
     }
 
+    /// <summary>A general-variant `x is A` / `x isnot A` test on a variant variable — the seed for
+    /// arm-exclusion narrowing (`if x is A {} elseif x is B {} else { /* x is C */ }`).</summary>
+    private sealed record VariantIsNarrowing(
+        string VarName, VariantTypeInfo Variant, VariantMemberInfo Arm, bool Negated);
+
+    /// <summary>
+    /// Recognizes a `variable is Arm` / `variable isnot Arm` condition where <c>variable</c> has a
+    /// user variant type and <c>Arm</c> is one of its arms. Returns null otherwise (carriers, None,
+    /// non-variant subjects, non-identifier subjects are handled elsewhere / not narrowed here).
+    /// </summary>
+    private VariantIsNarrowing? TryGetVariantIsNarrowing(Expression condition)
+    {
+        if (condition is not IsPatternExpression
+            {
+                Expression: IdentifierExpression id, Pattern: TypePattern tp
+            } isPat)
+        {
+            return null;
+        }
+
+        // Use the CURRENT type — the already-narrowed type if the variable was narrowed by an
+        // enclosing check, else its declared type. This lets nested narrowing compose: after
+        // `if o is None` narrows `o` (Outer) to its sole remaining arm `Inner`, a further
+        // `if o is S32` matches against `Inner`'s arms. Skip carriers (own narrowing path).
+        TypeInfo? subjectType = _registry.GetNarrowedType(name: id.Name)
+            ?? _registry.LookupVariable(name: id.Name)?.Type;
+        if (subjectType is not VariantTypeInfo variant || IsCarrierType(type: variant))
+        {
+            return null;
+        }
+
+        VariantMemberInfo? arm = ResolveVariantArm(pattern: isPat.Pattern, variant: variant);
+        return arm == null
+            ? null
+            : new VariantIsNarrowing(VarName: id.Name, Variant: variant, Arm: arm,
+                Negated: isPat.IsNegated);
+    }
+
+    /// <summary>
+    /// Resolves the variant arm a pattern FULLY matches (`is Arm`, `is Arm x`, `is Arm (a, b)`, or
+    /// `is None`) to its <see cref="VariantMemberInfo"/> — by RESOLVED TYPE identity via
+    /// <see cref="VariantTypeInfo.FindMember"/>, NOT by parsing the type name — or null when the
+    /// pattern is not a single-arm match. A <see cref="GuardPattern"/> returns null on purpose: a
+    /// guarded arm does not fully cover its arm (the guard may be false), so it must not exclude it.
+    /// </summary>
+    private VariantMemberInfo? ResolveVariantArm(Pattern pattern, VariantTypeInfo variant)
+    {
+        // `is None` matches the payload-less None arm.
+        if (IsNonePattern(pattern: pattern))
+            return variant.Members.FirstOrDefault(predicate: m => m.IsNone);
+
+        TypeExpression? armExpr = pattern switch
+        {
+            TypePattern tp => tp.Type,
+            TypeDestructuringPattern td => td.Type,
+            _ => null // GuardPattern / ElsePattern / comparison / literal → not a full arm match
+        };
+        if (armExpr == null) return null;
+
+        TypeInfo? armType = armExpr.ResolvedType ?? _registry.LookupType(name: armExpr.Name);
+        return armType == null ? null : variant.FindMember(type: armType);
+    }
+
+    /// <summary>
+    /// Applies variant arm narrowing to the CURRENT scope for one branch of an `if`.
+    /// <paramref name="conditionTrue"/> is true in the then-branch (condition holds) and false in the
+    /// else-branch. When the arm is proven present, narrows the variable to the arm's payload type;
+    /// when proven absent, excludes the arm and — if exactly one arm now remains — narrows to it.
+    /// None arms carry no payload, so narrowing to None is skipped (nothing to extract).
+    /// </summary>
+    private void ApplyVariantNarrowing(VariantIsNarrowing vn, bool conditionTrue)
+    {
+        bool armPresent = conditionTrue ? !vn.Negated : vn.Negated;
+
+        if (armPresent)
+        {
+            if (vn.Arm.Type != null)
+                _registry.NarrowVariable(name: vn.VarName, narrowedType: vn.Arm.Type);
+            return;
+        }
+
+        _registry.ExcludeVariantArm(name: vn.VarName, armFullName: vn.Arm.Name);
+        IReadOnlyCollection<string> excluded = _registry.GetExcludedVariantArms(name: vn.VarName);
+        List<VariantMemberInfo> remaining = vn.Variant.Members
+            .Where(predicate: m => !excluded.Contains(m.Name))
+            .ToList();
+        if (remaining is [{ Type: not null } sole])
+            _registry.NarrowVariable(name: vn.VarName, narrowedType: sole.Type);
+    }
+
     /// <summary>
     /// Attempts to extract type narrowing information from a condition expression.
     /// Handles patterns like "x is None", "x isnot None", "Not(x is None)".
@@ -100,17 +190,17 @@ public sealed partial class SemanticVerifier
         string? carrierBase = GetCarrierBaseName(type: varType);
         bool carrierUsesNoneForAbsent = carrierBase is "Maybe" or "Lookup";
         bool eliminateNone = carrierUsesNoneForAbsent && IsNonePattern(pattern: isPat.Pattern);
-        bool eliminateBlank = carrierBase == "Result" && IsBlankPattern(pattern: isPat.Pattern);
+        bool eliminateNoneValue = carrierBase == "Result" && IsNoneTypePattern(pattern: isPat.Pattern);
         bool eliminateCrashable = IsCrashablePattern(pattern: isPat.Pattern);
 
-        if (!eliminateNone && !eliminateBlank && !eliminateCrashable)
+        if (!eliminateNone && !eliminateNoneValue && !eliminateCrashable)
         {
             return null;
         }
 
         TypeSymbol? narrowedType = ComputeNarrowedType(type: varType,
             eliminateNone: eliminateNone,
-            eliminateBlank: eliminateBlank,
+            eliminateNoneValue: eliminateNoneValue,
             eliminateCrashable: eliminateCrashable);
 
         if (narrowedType == null)
@@ -156,7 +246,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     /// <returns>The narrowed type, or null if narrowing is not possible.</returns>
     private static TypeSymbol? ComputeNarrowedType(TypeSymbol type, bool eliminateNone,
-        bool eliminateBlank,
+        bool eliminateNoneValue,
         bool eliminateCrashable)
     {
         string? baseName = GetCarrierBaseName(type: type);
@@ -202,6 +292,14 @@ public sealed partial class SemanticVerifier
             IfStatement { ElseStatement: not null } ifStmt =>
                 StatementAlwaysTerminates(statement: ifStmt.ThenStatement) &&
                 StatementAlwaysTerminates(statement: ifStmt.ElseStatement),
+            // A comptime arm-expansion `when` is provably exhaustive: `expand … armof(T)` covers
+            // every payload arm and any explicit clauses (e.g. `is None =>`) cover the rest. It
+            // terminates iff every explicit clause body AND the arm template body terminate.
+            WhenStatement { ArmExpansion: { } armExp } armWhen =>
+                armWhen.Clauses.All(predicate: c =>
+                    StatementAlwaysTerminates(statement: c.Body)) &&
+                StatementAlwaysTerminates(statement: armExp.Template.Body),
+
             WhenStatement whenStmt => whenStmt.Clauses.Count > 0 &&
                                       (_exhaustiveWhens.Contains(item: whenStmt) ||
                                        whenStmt.Clauses.Any(predicate: c =>

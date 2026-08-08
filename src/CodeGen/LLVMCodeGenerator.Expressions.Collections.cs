@@ -241,7 +241,7 @@ public partial class LlvmCodeGenerator
                 }
 
                 bool returnsVoid = resolvedAdd.Routine.ReturnType == null ||
-                                   resolvedAdd.Routine.ReturnType.Name == "Blank";
+                                   resolvedAdd.Routine.ReturnType.Name == "None";
                 if (returnsVoid)
                 {
                     EmitLine(sb: sb,

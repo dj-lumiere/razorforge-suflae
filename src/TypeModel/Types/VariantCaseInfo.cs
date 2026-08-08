@@ -6,7 +6,7 @@ namespace TypeModel.Types;
 /// Information about a single member in a type-based variant.
 /// Members are either real types (S64, Text, etc.) or the None state (zero-sized, no payload).
 /// </summary>
-// TODO: Blank is no payload state and it is real payload, and type=null should not be the zero sized no payload state
+// TODO: None is no payload state and it is real payload, and type=null should not be the zero sized no payload state
 public sealed class VariantMemberInfo
 {
     /// <summary>The member type, or null for the None state.</summary>

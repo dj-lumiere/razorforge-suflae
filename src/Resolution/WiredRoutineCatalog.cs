@@ -65,6 +65,8 @@ public enum WiredKind
     Lifecycle,
     /// <summary>Display and diagnostic formatting ($represent, $diagnose).</summary>
     Display,
+    /// <summary>Cycle-collector visit hook (cyclic_visit) — universal no-op, Roamed overrides.</summary>
+    CycleTrace,
     /// <summary>Hash computation ($hash, $fast_hash).</summary>
     Hash,
     /// <summary>Value copy ($store).</summary>
@@ -154,6 +156,10 @@ public static class WiredRoutineCatalog
         // ---- Display / hash ----
         new() { Name = "represent", Kind = WiredKind.Display, Views = Cap | Known | Seed, Protocols = ["Representable"] },
         new() { Name = "diagnose",  Kind = WiredKind.Display, Views = Cap | Known | Seed, Protocols = ["Diagnosable"] },
+        // Cycle-collector visit hook: a universal `@overridable` no-op auto-conferred on EVERY type
+        // (like represent/diagnose), so a generic container buffer-walk can call `element.cyclic_visit()`
+        // uniformly. `Roamed[T].cyclic_visit` (hand-written) overrides it to report the controller.
+        new() { Name = "cyclic_visit", Kind = WiredKind.CycleTrace, Views = Cap | Known | Seed, Protocols = ["CycleTraceable"] },
         new() { Name = "hash",      Kind = WiredKind.Hash,    Views = Cap | Known | Seed, Protocols = ["Hashable"] },
         new() { Name = "fast_hash", Kind = WiredKind.Hash,    Views = Cap,                Protocols = ["FastHashable"] },
 
@@ -296,6 +302,33 @@ public static class WiredRoutineCatalog
         _byName.TryGetValue(key: name, value: out WiredEntry? e) &&
         e.Kind is WiredKind.Lifecycle or WiredKind.Copy;
 
+    /// <summary>Protocols whose derived capability is conferred on EVERY type: <c>Representable</c>
+    /// (<c>represent</c>) and <c>Diagnosable</c> (<c>diagnose</c>) are structurally satisfied by all
+    /// types, so <c>AutoWiredRegistrationPass</c> registers their methods on every type. A universal
+    /// derive template for one of these IS a live universal method and stays SA-analyzed.</summary>
+    private static readonly HashSet<string> _autoConferredProtocols =
+        new(comparer: StringComparer.Ordinal) { "Representable", "Diagnosable", "CycleTraceable" };
+
+    /// <summary>
+    /// True when the universal derive method <paramref name="method"/> (from an
+    /// <c>@overridable/@override routine T.&lt;method&gt;()</c> template) is auto-conferred on EVERY
+    /// type — i.e. backed solely by an auto-conferred protocol (<c>Representable</c>/<c>Diagnosable</c>).
+    /// Such a template is registered as a live universal method and its body is SA-analyzed.
+    /// <para>
+    /// The complement — <c>!IsAutoConferredDerive</c> — is the OPT-IN derive predicate used by the
+    /// registration/verification layers: a derive whose capability is conferred only via explicit
+    /// protocol conformance (Equatable/Comparable/Hashable/Serializable/…, or any future opt-in
+    /// capability) must NOT become a live universal (it would be force-instantiated for non-conformers)
+    /// and its raw pre-monomorph body must not be SA-analyzed — the per-type body comes from the
+    /// derive-template store via <c>WiredRoutinePass.CloneUniversalDeriveBody</c> instead. This is
+    /// protocol-grounded (no per-method name list): a method absent from the catalog, or backed by a
+    /// non-auto-conferred protocol, is opt-in by default.
+    /// </para>
+    /// </summary>
+    public static bool IsAutoConferredDerive(string method) =>
+        _byName.TryGetValue(key: method, value: out WiredEntry? e) && e.Protocols.Count > 0 &&
+        e.Protocols.All(predicate: p => _autoConferredProtocols.Contains(item: p));
+
 #if DEBUG
     // One-time consistency self-check (Debug builds only): every projection must reproduce the
     // historical hard-coded list EXACTLY. Runs on first access to the catalog (its static init).
@@ -361,7 +394,8 @@ public static class WiredRoutineCatalog
             ["notcontains"] = ("Container", "contains"), ["getitem"] = ("Indexable", "getitem"),
             ["setitem"] = ("MutableIndexable", "setitem"), ["iter"] = ("Iterable", "iter"),
             ["emit"] = ("Emittable", "emit"), ["represent"] = ("Representable", "represent"),
-            ["diagnose"] = ("Diagnosable", "diagnose"), ["add"] = ("Addable", "add"),
+            ["diagnose"] = ("Diagnosable", "diagnose"),
+            ["cyclic_visit"] = ("CycleTraceable", "cyclic_visit"), ["add"] = ("Addable", "add"),
             ["sub"] = ("Subtractable", "sub"), ["mul"] = ("Multiplicable", "mul"),
             ["truediv"] = ("Divisible", "truediv"), ["floordiv"] = ("FloorDivisible", "floordiv"),
             ["mod"] = ("FloorDivisible", "floordiv"), ["pow"] = ("Exponentiable", "pow"),
@@ -397,7 +431,7 @@ public static class WiredRoutineCatalog
         "bitand", "bitor", "bitxor", "ashl", "ashr", "lshl", "lshr",
         "neg", "bitnot", "unwrap", "unwrap_or", "contains", "notcontains",
         "iter", "emit", "getitem", "setitem", "enter", "exit", "destroy",
-        "represent", "diagnose", "hash",
+        "represent", "diagnose", "cyclic_visit", "hash",
         "iadd", "isub", "imul", "itruediv", "ifloordiv", "imod", "ipow",
         "ibitand", "ibitor", "ibitxor", "iashl", "iashr", "ilshl", "ilshr",
     ];
@@ -428,7 +462,7 @@ public static class WiredRoutineCatalog
     private static readonly string[] _legacyReachabilitySeed =
     [
         "from_literal",
-        "represent", "diagnose", "hash", "store", "copy", "eq", "ne", "cmp", "lt", "le", "gt", "ge",
+        "represent", "diagnose", "cyclic_visit", "hash", "store", "copy", "eq", "ne", "cmp", "lt", "le", "gt", "ge",
         "contains", "notcontains", "iter", "emit", "try_emit",
         "add", "sub", "mul", "truediv", "floordiv", "mod", "pow", "neg",
         "add_wrap", "sub_wrap", "mul_wrap", "pow_wrap",

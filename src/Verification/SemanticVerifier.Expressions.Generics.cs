@@ -224,7 +224,7 @@ public sealed partial class SemanticVerifier
 
             if (method.ReturnType == null)
             {
-                return _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+                return _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
             }
 
             TypeSymbol returnType = method.ReturnType;
@@ -329,6 +329,13 @@ public sealed partial class SemanticVerifier
                 // generated try_/check_ variant bodies.
                 Dictionary<string, TypeSymbol>? typeSubs = null;
                 IReadOnlyList<ParameterInfo> declParams = routine.Parameters;
+                // Set when the routine is fully monomorphized below (line ~353). Its ReturnType is then
+                // already the substituted form, so the typeSubs re-substitution further down MUST be
+                // skipped — re-applying `{T → arg}` to the already-substituted return DOUBLE-WRAPS when a
+                // type arg is itself generic in a param of the SAME NAME (`blank[Box[T]]()`: blank's `T`
+                // collides with the caller's `T`, so the inner `T` of the resolved `Box[T]` gets
+                // re-substituted → `Box[Box[T]]`, RF-S301).
+                bool routineMonomorphized = false;
                 if (routine.IsGenericDefinition)
                 {
                     if (routine.GenericParameters == null ||
@@ -352,6 +359,7 @@ public sealed partial class SemanticVerifier
 
                     routine = _registry.GetOrCreateRoutineResolution(genericDef: routine,
                         typeArguments: typeArgs.ToList());
+                    routineMonomorphized = true;
                 }
 
                 generic.ResolvedRoutine = routine;
@@ -376,10 +384,16 @@ public sealed partial class SemanticVerifier
 
                 if (routine.ReturnType == null)
                 {
-                    return _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+                    return _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
                 }
 
                 TypeInfo returnType = routine.ReturnType;
+
+                // Already monomorphized above → ReturnType is final; re-substituting would double-wrap.
+                if (routineMonomorphized)
+                {
+                    return returnType;
+                }
 
                 // Explicit type arguments: substitute them through the whole return type
                 // (bare T, nested Hijacked[T], tuples, …) in one general pass.

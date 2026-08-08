@@ -448,7 +448,7 @@ internal sealed class IteratorInlineLoweringPass
         SourceLocation loc)
     {
         Expression value = retValue != null ? CloneExpression(expr: retValue, ctx: ctx)
-            : new IdentifierExpression(Name: "Blank", Location: loc);
+            : new IdentifierExpression(Name: "None", Location: loc);
 
         // Simple variable / discard: bind `var <loopvar> = value` (unless discard, where CFLP used a
         // null else-var name — nothing to bind).

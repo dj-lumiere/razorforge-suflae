@@ -27,7 +27,7 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 {
-    private const string BlankMemberName = "Blank";
+    private const string NoneTypeName = "None";
     private const string TypeIdFieldName = "type_id";
 
     private int _tempCount;
@@ -298,6 +298,42 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         switch (expr)
         {
+            // -- Step 0: flow-narrowed read ---------------------------------------
+            // `x` narrowed to a single arm/payload of a carrier/variant (SA set NarrowedFrom =
+            // declared aggregate, ResolvedType = the arm). Rewrite the read into a payload extraction
+            // from the full underlying value so codegen loads the arm, not the whole aggregate.
+            case IdentifierExpression { NarrowedFrom: not null } narrowedId:
+            {
+                TypeInfo declared = narrowedId.NarrowedFrom!;
+                TypeInfo target = narrowedId.ResolvedType!;
+                SourceLocation nloc = narrowedId.Location;
+
+                Expression rawRead()
+                    => new IdentifierExpression(Name: narrowedId.Name, Location: nloc)
+                        { ResolvedType = declared };
+
+                CarrierPayloadExpression extractStep(Expression carrier, TypeInfo step)
+                    => new CarrierPayloadExpression(
+                        Carrier: carrier, ConcreteType: TypeInfoToExpr(type: step, loc: nloc),
+                        Location: nloc) { ResolvedType = step };
+
+                // Non-carrier variant: extract along the arm path — which may be NESTED, e.g. an
+                // `Outer` narrowed to `Inner` then to `Inner`'s arm `S32` yields Outer -> Inner -> S32
+                // (each level a field-1 payload load).
+                if (declared is VariantTypeInfo variant &&
+                    !IsMaybeRecord(type: declared) && !IsResultOrLookup(type: declared) &&
+                    FindVariantArmPath(from: variant, target: target) is { } path)
+                {
+                    Expression acc = rawRead();
+                    foreach (TypeInfo step in path)
+                        acc = extractStep(carrier: acc, step: step);
+                    return ([], acc);
+                }
+
+                // Carrier (Maybe/Result/Lookup): single-level payload extraction.
+                return ([], extractStep(carrier: rawRead(), step: target));
+            }
+
             // -- Step 1a: chained comparisons -------------------------------------
             // Multi-comparison chains (a <= b <= c) are lowered to pairwise comparisons
             // joined by And. The And must then be further lowered to ConditionalExpression.
@@ -328,7 +364,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case BinaryExpression { Operator: BinaryOperator.And or BinaryOperator.But, Left.ResolvedType: FlagsTypeInfo } flagsBin:
                 return LowerFlagsCombination(flagsBin);
 
-            // -- Step 1f: carrier absence checks (is None / is Blank) -------------
+            // -- Step 1f: carrier absence checks (is None / is None) -------------
             case IsPatternExpression ipe:
                 return LowerIsPatternExpression(ipe);
 
@@ -385,6 +421,11 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
                 var args = new List<Expression>(capacity: call.Arguments.Count);
                 bool argsChanged = false;
+                // Auto-wrap an arm value passed to a VARIANT parameter (`tag(s: 9_s32)` where `tag`
+                // takes a `Shape`) — the same rewrite the declaration auto-wrap uses, keyed on the
+                // resolved routine's parameter type. Positional args map by index, named by name.
+                RoutineInfo? callRoutine = call.ResolvedRoutine;
+                int posArgIdx = 0;
                 foreach (Expression arg in call.Arguments)
                 {
                     // Preserve NamedArgumentExpression wrappers -- codegen uses arg names to detect
@@ -394,9 +435,13 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     {
                         var (h, loweredValue) = LowerExpr(namedArg.Value);
                         hoisted.AddRange(h);
-                        Expression loweredNamed = ReferenceEquals(loweredValue, namedArg.Value)
+                        TypeInfo? paramType = callRoutine?.Parameters
+                            .FirstOrDefault(predicate: p => p.Name == namedArg.Name)?.Type;
+                        Expression wrappedValue =
+                            TryWrapVariantArm(targetType: paramType, init: loweredValue) ?? loweredValue;
+                        Expression loweredNamed = ReferenceEquals(wrappedValue, namedArg.Value)
                             ? namedArg
-                            : namedArg with { Value = loweredValue };
+                            : namedArg with { Value = wrappedValue };
                         args.Add(loweredNamed);
                         if (!ReferenceEquals(loweredNamed, arg)) argsChanged = true;
                     }
@@ -404,9 +449,17 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     {
                         var (h, lowered) = LowerExpr(arg);
                         hoisted.AddRange(h);
-                        args.Add(lowered);
-                        if (!ReferenceEquals(lowered, arg)) argsChanged = true;
+                        TypeInfo? paramType =
+                            callRoutine != null && posArgIdx < callRoutine.Parameters.Count
+                                ? callRoutine.Parameters[index: posArgIdx].Type
+                                : null;
+                        Expression wrapped =
+                            TryWrapVariantArm(targetType: paramType, init: lowered) ?? lowered;
+                        args.Add(wrapped);
+                        if (!ReferenceEquals(wrapped, arg)) argsChanged = true;
                     }
+
+                    posArgIdx++;
                 }
 
                 // Variant construction via the call form: `Inner(7_s32)` / `Inner(none)`. SA leaves
@@ -1209,44 +1262,9 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
         // Variant auto-wrap: `var x: Number = 42_s64` where Number has an S64 arm
         // becomes a CreatorExpression that codegen routes through EmitVariantConstruction.
-        // Skip when init's type IS the variant (passthrough) or is a generic def for it.
-        if (targetType is VariantTypeInfo variant)
-        {
-            // Passthrough only when init IS the same variant. A DIFFERENT variant that is an arm of
-            // the target (e.g. `var o: Outer = Inner(...)` where Outer has an Inner arm) must still be
-            // wrapped — otherwise an inner-variant value is stored straight into the outer slot.
-            if (initType.FullName == variant.FullName) return null;
-
-            // `var x: Variant = none` → wrap as the variant's None arm if it has one.
-            if (init is LiteralExpression { LiteralType: TokenType.NoneValue })
-            {
-                VariantMemberInfo? noneArm = variant.Members.FirstOrDefault(m => m.IsNone);
-                if (noneArm is null) return null;
-                return new CreatorExpression(
-                    TypeName: variant.Name,
-                    TypeArguments: null,
-                    MemberVariables: [("None", init)],
-                    Location: init.Location)
-                {
-                    ResolvedType = variant,
-                    ConstructedType = variant,
-                };
-            }
-
-            VariantMemberInfo? member = FindVariantMember(variant, initType);
-            if (member is null) return null;
-            string memberName = member.IsNone ? "None" : member.Type!.Name;
-            var creator = new CreatorExpression(
-                TypeName: variant.Name,
-                TypeArguments: null,
-                MemberVariables: [(memberName, init)],
-                Location: init.Location)
-            {
-                ResolvedType = variant,
-                ConstructedType = variant,
-            };
-            return creator;
-        }
+        if (TryWrapVariantArm(targetType: targetType, init: init) is { } wrapped)
+            return wrapped;
+        if (targetType is VariantTypeInfo) return null; // variant target, but not a wrappable arm
 
         string carrierName = LastNameSegment(varType.Name);
         // Only Maybe handled at this stage. Result/Lookup payloads need TypeLayoutPass
@@ -1276,6 +1294,43 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         };
         return maybeCreator;
     }
+
+    /// <summary>
+    /// Wraps a value of a variant ARM into a variant construction when the target type is that
+    /// variant (an <c>S32</c> value into a <c>Shape</c> param/slot, <c>none</c> into a variant that
+    /// has a None arm). Returns null when the target isn't a variant, the value already IS the
+    /// variant (passthrough — including a different variant that is itself an arm must still wrap),
+    /// or it matches no arm. Shared by the declaration auto-wrap and the call-argument auto-wrap.
+    /// </summary>
+    private Expression? TryWrapVariantArm(TypeInfo? targetType, Expression init)
+    {
+        if (targetType is not VariantTypeInfo variant) return null;
+
+        // `= none` / `f(none)` → the variant's None arm if it has one.
+        if (init is LiteralExpression { LiteralType: TokenType.NoneValue })
+        {
+            return variant.Members.Any(predicate: m => m.IsNone)
+                ? MakeVariantArmCreator(variant: variant, armName: "None", init: init)
+                : null;
+        }
+
+        TypeInfo? initType = init.ResolvedType;
+        if (initType is null || initType.FullName == variant.FullName) return null;
+
+        VariantMemberInfo? member = FindVariantMember(variant: variant, initType: initType);
+        return member is null
+            ? null
+            : MakeVariantArmCreator(variant: variant,
+                armName: member.IsNone ? "None" : member.Type!.Name, init: init);
+    }
+
+    private static CreatorExpression MakeVariantArmCreator(VariantTypeInfo variant, string armName,
+        Expression init)
+        => new(TypeName: variant.Name, TypeArguments: null,
+            MemberVariables: [(armName, init)], Location: init.Location)
+        {
+            ResolvedType = variant, ConstructedType = variant
+        };
 
     private static VariantMemberInfo? FindVariantMember(VariantTypeInfo variant, TypeInfo initType)
     {
@@ -1380,7 +1435,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// <c>type_id</c> field comparison:
     /// <c>x is S64</c> -> <c>x.type_id == FNV("S64")</c>,
     /// <c>x isnot S64</c> -> <c>x.type_id != FNV("S64")</c>.
-    /// Blank maps to tag 0.  Falls through for unresolved right-hand types.
+    /// None maps to tag 0.  Falls through for unresolved right-hand types.
     /// </summary>
     private (List<Statement> Hoisted, Expression Expr) LowerVariantIsExpression(BinaryExpression bin)
     {
@@ -1402,7 +1457,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (typeName == null) return (leftH, bin with { Left = loweredLeft });
 
         ulong typeId;
-        if (typeName is BlankMemberName or "None")
+        if (typeName is NoneTypeName or "None")
         {
             typeId = 0;
         }
@@ -1560,12 +1615,12 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// 1f. Lowers <c>x is None</c> / <c>x is Blank</c> / their negated forms for carriers:
+    /// 1f. Lowers <c>x is None</c> / <c>x is None</c> / their negated forms for carriers:
     /// <list type="bullet">
     ///   <item><c>Maybe[T record] is None</c>  ->  <c>not x.present</c></item>
     ///   <item><c>Maybe[T record] isnot None</c>  ->  <c>x.present</c></item>
-    ///   <item><c>Lookup[T] is Blank</c>  ->  <c>x.type_id == 0_u64</c></item>
-    ///   <item><c>Lookup[T] isnot Blank</c>  ->  <c>x.type_id != 0_u64</c></item>
+    ///   <item><c>Lookup[T] is None</c>  ->  <c>x.type_id == 0_u64</c></item>
+    ///   <item><c>Lookup[T] isnot None</c>  ->  <c>x.type_id != 0_u64</c></item>
     /// </list>
     /// <c>Maybe[T entity]</c> absence checks are NOT lowered here (require Snatched null compare);
     /// they fall through unchanged for <c>EmitIsPattern</c> in codegen.
@@ -1662,7 +1717,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         TypeInfo? operandType = ipe.Expression.ResolvedType;
         bool isNoneCheck = ipe.Pattern is NonePattern or TypePattern { Type.Name: "None" };
-        bool isBlankCheck = ipe.Pattern is TypePattern { Type.Name: BlankMemberName };
+        bool isNoneTypeCheck = ipe.Pattern is TypePattern { Type.Name: NoneTypeName };
 
         // Lower the operand expression first.
         var (hoisted, loweredExpr) = LowerExpr(ipe.Expression);
@@ -1689,8 +1744,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             return (hoisted, loweredNot);
         }
 
-        // Result/Lookup: x is Blank -> x.type_id == 0_u64; x isnot Blank -> x.type_id != 0_u64
-        if (isBlankCheck && IsResultOrLookup(operandType))
+        // Result/Lookup: x is None -> x.type_id == 0_u64; x isnot None -> x.type_id != 0_u64
+        if (isNoneTypeCheck && IsResultOrLookup(operandType))
         {
             var typeIdAccess = new MemberExpression(
                 Object: loweredExpr, MemberName: TypeIdFieldName, Location: ipe.Location)
@@ -1714,8 +1769,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         {
             TypeInfo? targetType = tp.Type.ResolvedType
                 ?? ctx.Registry.LookupType(name: tp.Type.Name);
-            // Blank: type_id == 0
-            if (tp.Type.Name == BlankMemberName || targetType?.Name == BlankMemberName)
+            // None: type_id == 0
+            if (tp.Type.Name == NoneTypeName || targetType?.Name == NoneTypeName)
             {
                 var typeIdAccess = new MemberExpression(
                     Object: loweredExpr, MemberName: TypeIdFieldName, Location: ipe.Location)
@@ -1921,7 +1976,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     ///   var _car_N = a
     ///   var _qq_N: T
     ///   when _car_N
-    ///     is None/Blank -> _qq_N = b
+    ///     is None/None -> _qq_N = b
     ///     else v        -> _qq_N = v
     ///   // replacement: _qq_N
     /// </code>
@@ -1957,7 +2012,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         Expression qqRef = MakeRef(qqName, valueType, loc);
         Expression valRef = MakeRef(valName, valueType, loc);
 
-        // None/Blank clause: prepend any hoisting from the right operand, then assign.
+        // None/None clause: prepend any hoisting from the right operand, then assign.
         var noneBody = new List<Statement>(capacity: rightH.Count + 1);
         noneBody.AddRange(rightH);
         noneBody.Add(new AssignmentStatement(Target: qqRef, Value: loweredRight, Location: loc));
@@ -1987,7 +2042,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     ///   var _car_N = a
     ///   var _om_N: Maybe[PropType]
     ///   when _car_N
-    ///     is None/Blank -> _om_N = None   (zeroinitializer via IdentifierExpression("None"))
+    ///     is None/None -> _om_N = None   (zeroinitializer via IdentifierExpression("None"))
     ///     else v        -> _om_N = v.prop  (auto-wrapped if needed by codegen)
     ///   // replacement: _om_N
     /// </code>
@@ -2153,6 +2208,29 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         return true;
     }
 
+    /// <summary>
+    /// Finds the chain of variant arm types leading from <paramref name="from"/> to
+    /// <paramref name="target"/> — <c>[target]</c> when it is a direct arm, or the nested path
+    /// (e.g. <c>[Inner, S32]</c> for an <c>Outer</c> whose <c>Inner</c> arm holds <c>S32</c>).
+    /// Returns null when unreachable. Arms are distinct types, so the path is unique.
+    /// </summary>
+    private static List<TypeInfo>? FindVariantArmPath(VariantTypeInfo from, TypeInfo target)
+    {
+        foreach (VariantMemberInfo member in from.Members)
+        {
+            if (member.Type is not { } armType) continue;
+            if (armType.Name == target.Name) return [armType];
+            if (armType is VariantTypeInfo sub && FindVariantArmPath(from: sub, target: target) is
+                { } rest)
+            {
+                rest.Insert(index: 0, item: armType);
+                return rest;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Returns true if the type is <c>Result[T]</c> or <c>Lookup[T]</c>.</summary>
     private static bool IsResultOrLookup(TypeInfo? type)
     {
@@ -2167,7 +2245,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// Returns the appropriate absence pattern for the carrier:
-    /// <c>NonePattern</c> for Maybe[T], <c>TypePattern("Blank")</c> for Result/Lookup.
+    /// <c>NonePattern</c> for Maybe[T], <c>TypePattern("None")</c> for Result/Lookup.
     /// </summary>
     private static Pattern MakeAbsencePattern(TypeInfo? carrierType, SourceLocation loc)
     {
@@ -2181,9 +2259,9 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (baseName == "Maybe")
             return new NonePattern(Location: loc);
 
-        // Result, Lookup, or unknown -- use Blank type pattern
+        // Result, Lookup, or unknown -- use None type pattern
         return new TypePattern(
-            Type: new TypeExpression(Name: BlankMemberName, GenericArguments: null, Location: loc),
+            Type: new TypeExpression(Name: NoneTypeName, GenericArguments: null, Location: loc),
             VariableName: null,
             Bindings: null,
             Location: loc);

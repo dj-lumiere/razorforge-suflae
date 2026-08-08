@@ -48,7 +48,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para>Lowerable patterns (Result/Lookup and user variant subjects):</para>
 /// <list type="bullet">
-/// <item><see cref="TypePattern"/> <c>Blank</c> -> <c>subject.type_id == 0</c>.</item>
+/// <item><see cref="TypePattern"/> <c>None</c> -> <c>subject.type_id == 0</c>.</item>
 /// <item><see cref="TypePattern"/> T -> <c>subject.type_id == FNV-1a(T.FullName)</c>,
 /// optional binding -> <see cref="CarrierPayloadExpression"/>.</item>
 /// <item><see cref="ElsePattern"/> with binding on Result/Lookup -> <see cref="CarrierPayloadExpression"/>.</item>
@@ -330,8 +330,8 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             int seenCrashablePatterns = loweredClauses.Count(
                 c => c.Pattern is TypePattern { Type.ResolvedType: CrashableTypeInfo });
             bool crashableCovered = seenCrashablePatterns >= totalCrashable;
-            // Lookup has a Blank state; Result does not. Result narrows on crashable coverage
-            // alone; Lookup additionally requires the Blank arm.
+            // Lookup has a None state; Result does not. Result narrows on crashable coverage
+            // alone; Lookup additionally requires the None arm.
             if (IsResultType(subjectType))
             {
                 isElseNarrowed = crashableCovered;
@@ -359,28 +359,36 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         for (int i = loweredClauses.Count - 1; i >= 0; i--)
         {
             WhenClause clause = loweredClauses[index: i];
+
+            // GuardPattern: materialise the inner binding BEFORE testing the guard, so a guard that
+            // references the binding (`is T n and n > 0`) sees it. Both an inner-pattern mismatch and
+            // a failed guard fall through to the same next-clause `chain`. A flat `(inner and guard)`
+            // condition would instead evaluate the guard before the binding is in scope.
+            if (clause.Pattern is GuardPattern gp)
+            {
+                (Expression? innerCond, Statement? innerBinding) =
+                    GetPatternCondition(pattern: gp.InnerPattern, subject: subject,
+                        subjectType: subjectType, isElseNarrowed: isElseNarrowed);
+
+                Statement guardIf = new IfStatement(
+                    Condition: gp.Guard,
+                    ThenStatement: clause.Body,
+                    ElseStatement: chain,
+                    Location: loc);
+                Statement innerThen = PrependBinding(binding: innerBinding, body: guardIf, loc: loc);
+
+                chain = innerCond == null
+                    ? innerThen
+                    : new IfStatement(Condition: innerCond, ThenStatement: innerThen,
+                        ElseStatement: chain, Location: loc);
+                continue;
+            }
+
             (Expression? cond, Statement? binding) =
                 GetPatternCondition(pattern: clause.Pattern, subject: subject,
                     subjectType: subjectType, isElseNarrowed: isElseNarrowed);
 
-            Statement body = clause.Body;
-            if (binding != null)
-            {
-                // Prepend binding(s) inside the branch body.
-                // GenerateDestructuringBindings returns a BlockStatement when there are multiple
-                // bindings -> flatten those into the outer block so they share scope with the body.
-                if (binding is BlockStatement multiBindBlock)
-                {
-                    var stmts = new List<Statement>(capacity: multiBindBlock.Statements.Count + 1);
-                    stmts.AddRange(multiBindBlock.Statements);
-                    stmts.Add(item: body);
-                    body = new BlockStatement(Statements: stmts, Location: loc);
-                }
-                else
-                {
-                    body = new BlockStatement(Statements: [binding, body], Location: loc);
-                }
-            }
+            Statement body = PrependBinding(binding: binding, body: clause.Body, loc: loc);
 
             if (cond == null)
             {
@@ -402,6 +410,25 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         if (hoisted.Count == 0) return result;
         hoisted.Add(item: result);
         return new BlockStatement(Statements: hoisted, Location: loc);
+    }
+
+    /// <summary>
+    /// Prepends a pattern's binding statement(s) to a branch body so they share its scope.
+    /// A multi-binding <see cref="BlockStatement"/> (from destructuring) is flattened in.
+    /// Returns <paramref name="body"/> unchanged when there is no binding.
+    /// </summary>
+    private static Statement PrependBinding(Statement? binding, Statement body, SourceLocation loc)
+    {
+        if (binding == null) return body;
+        if (binding is BlockStatement multiBindBlock)
+        {
+            var stmts = new List<Statement>(capacity: multiBindBlock.Statements.Count + 1);
+            stmts.AddRange(collection: multiBindBlock.Statements);
+            stmts.Add(item: body);
+            return new BlockStatement(Statements: stmts, Location: loc);
+        }
+
+        return new BlockStatement(Statements: [binding, body], Location: loc);
     }
 
     // -----------------------------------------------------------------------------
@@ -575,7 +602,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                              && isElseNarrowed)
                     {
                         // Result/Lookup: truly narrowed-to-T else arm -> extract payload.
-                        // Only when all non-T arms (Blank + all Crashable types) are handled.
+                        // Only when all non-T arms (None + all Crashable types) are handled.
                         TypeInfo innerType = subjectType.TypeArguments[0];
                         bindValue = MakeCarrierPayload(subject: subject, innerType: innerType,
                             loc: loc);
@@ -803,7 +830,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    /// <summary>Builds <c>subject.type_id == 0_u64</c> for a Blank/absent check on Result/Lookup.</summary>
+    /// <summary>Builds <c>subject.type_id == 0_u64</c> for a None/absent check on Result/Lookup.</summary>
     private static BinaryExpression MakeTypeIdIsZero(Expression subject, SourceLocation loc,
         TypeInfo? boolType, TypeInfo? u64Type)
     {

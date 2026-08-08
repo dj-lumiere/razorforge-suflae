@@ -71,7 +71,7 @@ routine run_demo!() -> S64
   show(f"sum after shuffle: {total}")
   return total
 
-routine start() -> Blank
+routine start()
   when try_run_demo()
     is None => show("demo produced no value")
     else result => show(f"demo checksum: {result}")

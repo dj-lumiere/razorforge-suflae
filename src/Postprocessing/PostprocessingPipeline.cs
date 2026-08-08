@@ -30,7 +30,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // OLP runs after ELP so chained comparisons are already split into BinaryExpressions.
         new PatternLoweringPass(ctx).Run(program);
         new ExpressionLoweringPass(ctx).Run(program);
-        // ExpressionLoweringPass synthesizes WhenStatements with NonePattern / TypePattern("Blank")
+        // ExpressionLoweringPass synthesizes WhenStatements with NonePattern / TypePattern("None")
         // when lowering `??` and `?.` (see MakeAbsencePattern in ExpressionLoweringPass). Those
         // would-be-lowered patterns are inserted AFTER the first PatternLoweringPass run, so
         // re-run PLP here to fold them into the if/else chains codegen expects. The second PLP
@@ -64,7 +64,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // ExpressionLowering to correctly lower And/Or in the resulting if-conditions.
         new PatternLoweringPass(ctx).RunOnVariantBodies();
         new ExpressionLoweringPass(ctx).RunOnVariantBodies();
-        // Second pass to fold NonePattern/Blank-TypePattern WhenStatements that
+        // Second pass to fold NonePattern/None-TypePattern WhenStatements that
         // ExpressionLoweringPass synthesized for `??` / `?.`. PLP's lowering may
         // introduce UnaryExpression(Not), so re-run ELP afterwards.
         new PatternLoweringPass(ctx).RunOnVariantBodies();

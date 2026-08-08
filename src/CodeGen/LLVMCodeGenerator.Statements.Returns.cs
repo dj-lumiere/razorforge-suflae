@@ -31,7 +31,7 @@ public partial class LlvmCodeGenerator
             : "void";
         if (earlyType == "void")
         {
-            EmitBlankExpressionReturn(sb: sb);
+            EmitNoneExpressionReturn(sb: sb);
             return;
         }
 
@@ -106,8 +106,8 @@ public partial class LlvmCodeGenerator
         }
     }
 
-    // For check_/try_ variant wrappers with Blank (void) return, emit success carrier.
-    private void EmitBlankExpressionReturn(StringBuilder sb)
+    // For check_/try_ variant wrappers with None (void) return, emit success carrier.
+    private void EmitNoneExpressionReturn(StringBuilder sb)
     {
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: null);
@@ -272,14 +272,14 @@ public partial class LlvmCodeGenerator
         if (_traceCurrentRoutine)
             EmitLine(sb: sb, line: TracePop);
 
-        bool isBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
+        bool isNone = variantRet.Value is IdentifierExpression { Name: "None" };
 
         if (isCrashable)
         {
             EmitExpression(sb: sb, expr: variantRet.Value!);
             EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
         }
-        else if (variantRet.Value == null || isBlank)
+        else if (variantRet.Value == null || isNone)
         {
             // Maybe `present` (field 0) is a Bool, stored as i8.
             string v0 = NextTemp();
@@ -414,9 +414,9 @@ public partial class LlvmCodeGenerator
                                   _localEntityVars.Any(predicate: e => e.Name == retId.Name)
             ? retId.Name
             : null;
-        bool isBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
+        bool isNone = variantRet.Value is IdentifierExpression { Name: "None" };
 
-        if (variantRet.Value == null || isBlank)
+        if (variantRet.Value == null || isNone)
         {
             EmitRcRecordCleanup(sb: sb);
             EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
@@ -457,7 +457,7 @@ public partial class LlvmCodeGenerator
             line: $"  {tagPtr} = getelementptr {carrier}, ptr {carrierSlot}, i32 0, i32 0");
         EmitLine(sb: sb, line: $"  store i64 {typeId}, ptr {tagPtr}");
 
-        // Empty payload = no value to store (Blank, empty crashable) — distinguished from
+        // Empty payload = no value to store (None, empty crashable) — distinguished from
         // primitive @llvm-annotated records (S64, U64, Bool) which have no member variables
         // but DO carry a value via their BackendType.
         bool isEmptyRecord = payloadType is RecordTypeInfo

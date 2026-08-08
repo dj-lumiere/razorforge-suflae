@@ -342,6 +342,35 @@ internal sealed class SuflaeEntityLoweringPass
                     : lowered;
             }
 
+            // A generic-instance construction like `List[Node]()` stays a GenericMethodCallExpression
+            // through codegen (the explicit `[T]` args keep it out of CallExpression form), so it must
+            // be promoted here too — else a bare SF container never gets a RoamController and cycle
+            // collection reads its raw buffer as a controller and crashes. Mirror the CallExpression
+            // construction path: recurse args, retain Roamed-field args, then `.roam()` (promote).
+            case GenericMethodCallExpression gmce:
+            {
+                var gArgs = new List<Expression>(capacity: gmce.Arguments.Count);
+                bool gChanged = false;
+                foreach (Expression a in gmce.Arguments)
+                {
+                    Expression na = LowerExpression(a);
+                    gArgs.Add(na);
+                    if (!ReferenceEquals(na, a)) gChanged = true;
+                }
+
+                if (gmce.ResolvedType is EntityTypeInfo)
+                {
+                    for (int k = 0; k < gArgs.Count; k++) gArgs[k] = RetainConstructionArg(gArgs[k]);
+                    gChanged = true;
+                }
+
+                GenericMethodCallExpression loweredG =
+                    gChanged ? gmce with { Arguments = gArgs } : gmce;
+                return gmce.ResolvedType is EntityTypeInfo gEntity
+                    ? WrapInRoam(inner: loweredG, entity: gEntity)
+                    : loweredG;
+            }
+
             // f-string: recurse into each embedded `{ expr }` so entity references inside it retype
             // (else e.g. `f"{b.size}"` reads `b` as a bare entity — actually the RoamController — and
             // returns the refcount instead of the field).

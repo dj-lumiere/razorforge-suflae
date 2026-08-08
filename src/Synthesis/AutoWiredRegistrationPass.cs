@@ -38,7 +38,7 @@ internal sealed class AutoWiredRegistrationPass
         TypeSymbol? u64Type = _registry.LookupType(name: "U64");
         TypeSymbol? s64Type = _registry.LookupType(name: "S64");
         TypeSymbol? byteSizeType = _registry.LookupType(name: "ByteSize");
-        TypeSymbol? blankType = _registry.LookupType(name: "Blank");
+        TypeSymbol? noneType = _registry.LookupType(name: "None");
         // SerialValue backs the auto-derived `serialize()` (Serializable). Registered only on the
         // aggregate categories that `obey Serializable` (Record/Entity/Variant), mirroring how their
         // WiredRoutinePass bodies are synthesized — promise==body (see [[serializable-serialvalue-impl]]).
@@ -111,9 +111,9 @@ internal sealed class AutoWiredRegistrationPass
             // delegates to the controller, so they're excluded here. The generated body is a
             // no-op for now (full field-recursion + invalidate-me lands with the codegen
             // unification); registering it lets explicit `me.field.destroy()` calls resolve.
-            if (blankType != null && !IsWrapperType(type: type))
+            if (noneType != null && !IsWrapperType(type: type))
             {
-                MaybeRegisterDestroy(owner: type, blankType: blankType,
+                MaybeRegisterDestroy(owner: type, noneType: noneType,
                     existingMethods: existingMethods);
             }
 
@@ -121,11 +121,11 @@ internal sealed class AutoWiredRegistrationPass
             // (visits its Roamed fields) and `$roam_free_impl()` (tears down non-Roamed fields + frees
             // the entity). Only entities can be Roamed[T] (RoamController needs `T is EntityType`).
             // Bodies are synthesized by WiredRoutinePass; unused ones are dead-code-eliminated.
-            if (blankType != null && type.Category == TypeCategory.Entity && !IsWrapperType(type: type))
+            if (noneType != null && type.Category == TypeCategory.Entity && !IsWrapperType(type: type))
             {
-                MaybeRegisterRoamHook(owner: type, name: "roam_trace_impl", blankType: blankType,
+                MaybeRegisterRoamHook(owner: type, name: "roam_trace_impl", noneType: noneType,
                     existingMethods: existingMethods);
-                MaybeRegisterRoamHook(owner: type, name: "roam_free_impl", blankType: blankType,
+                MaybeRegisterRoamHook(owner: type, name: "roam_free_impl", noneType: noneType,
                     existingMethods: existingMethods);
             }
 
@@ -146,8 +146,8 @@ internal sealed class AutoWiredRegistrationPass
             switch (type.Category)
             {
                 case TypeCategory.Record:
-                    // Blank maps to LLVM void — it cannot appear as a parameter type.
-                    // Skip comparison/hash/copy stubs; two Blanks are trivially equal.
+                    // None maps to LLVM void — it cannot appear as a parameter type.
+                    // Skip comparison/hash/copy stubs; two Nones are trivially equal.
                     // Wrapper types (Retained, Viewing, etc.) are transparent forwarders —
                     // WrapperForwardingPass lazily synthesizes their $hash/$eq/$cmp from the inner T.
                     // Don't register field-based stubs here: for zero-field wrappers (T)
@@ -174,17 +174,41 @@ internal sealed class AutoWiredRegistrationPass
                     // `$store` is registered for any Storable-obeyer (incl. Copyable types, which obey
                     // Storable transitively). Deep `copy` is Copyable-ONLY — Storable-only raw-pointer
                     // types (Hijacked/CPtr) can bitwise-`$store` but have no meaningful deep copy.
-                    if (!type.IsBlank && !isWrapper &&
+                    if (!type.IsNone && !isWrapper &&
                         ObeysProtocol(type: type, protocolName: "Storable"))
                     {
                         MaybeRegisterWired(owner: type, name: "store",
                             returnType: type, existingMethods: existingMethods);
                     }
-                    if (!type.IsBlank && !isWrapper &&
+                    if (!type.IsNone && !isWrapper &&
                         ObeysProtocol(type: type, protocolName: "Copyable"))
                     {
                         MaybeRegisterWired(owner: type, name: "copy",
                             returnType: type, existingMethods: existingMethods);
+                    }
+
+                    // A record that OPTS IN via `obeys Equatable` / `Hashable` gets a field-walk `eq` /
+                    // `hash` (template-derived in WiredRoutinePass; `ne`/comparison operators follow via
+                    // DerivedOperatorPass). This is OPT-IN, NOT the auto-for-all-records the 2026-06-14
+                    // decision (above) rejected — that decision's concern (field-delegated eq is fragile /
+                    // semantically wrong for opaque/container records) is answered by the author's explicit
+                    // `obeys`, while a plain value record can now satisfy `List[T].contains`/`Set[T]`/… whose
+                    // constraint is `needs T obeys Equatable`. Wrappers are excluded (their eq/hash forward
+                    // from the inner T via WrapperForwardingPass).
+                    if (!type.IsNone && !isWrapper && boolType != null &&
+                        ObeysProtocol(type: type, protocolName: EquatableProtocolName))
+                    {
+                        MaybeRegisterWiredWithParam(owner: type, name: "eq", paramName: "you",
+                            paramType: type, returnType: boolType, existingMethods: existingMethods);
+                    }
+                    // `Hashable` requires ONLY the keyed `hash(k0, k1)` (what Set/Dict use); there is no
+                    // 0-arg `hash()` on value types (scalars supply only the keyed form), so field-walking
+                    // a 0-arg field hash would be undefined. Register just the keyed hash.
+                    if (!type.IsNone && !isWrapper && u64Type != null &&
+                        ObeysProtocol(type: type, protocolName: "Hashable"))
+                    {
+                        MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
+                            existingMethods: existingMethods);
                     }
 
                     break;
@@ -559,9 +583,9 @@ internal sealed class AutoWiredRegistrationPass
 
         // `$destroy` as a universal method too — so `v.destroy()` resolves on a generic `T`
         // (e.g. element teardown loops in `List[T].destroy`).
-        if (blankType != null)
+        if (noneType != null)
         {
-            MaybeRegisterDestroy(owner: tParam, blankType: blankType,
+            MaybeRegisterDestroy(owner: tParam, noneType: noneType,
                 existingMethods: universalExisting);
         }
     }
@@ -596,7 +620,7 @@ internal sealed class AutoWiredRegistrationPass
     /// Marked <c>dangerous</c>: calling it (explicitly or overriding it) is manual memory
     /// management. The body is synthesized by <see cref="WiredRoutinePass"/>.
     /// </summary>
-    private void MaybeRegisterDestroy(TypeSymbol owner, TypeSymbol blankType,
+    private void MaybeRegisterDestroy(TypeSymbol owner, TypeSymbol noneType,
         List<RoutineInfo> existingMethods)
     {
         if (existingMethods.Any(predicate: m => m.Name == "destroy"))
@@ -609,7 +633,7 @@ internal sealed class AutoWiredRegistrationPass
             Kind = RoutineKind.MemberRoutine,
             OwnerType = owner,
             Parameters = [],
-            ReturnType = blankType,
+            ReturnType = noneType,
             IsFailable = false,
             IsDangerous = true,
             DeclaredMutation = MutationCategory.Readonly,
@@ -624,7 +648,7 @@ internal sealed class AutoWiredRegistrationPass
     /// not already user-defined. Marked <c>dangerous</c> (raw controller/pointer work). No params,
     /// void return; the body is synthesized by <see cref="WiredRoutinePass"/>.
     /// </summary>
-    private void MaybeRegisterRoamHook(TypeSymbol owner, string name, TypeSymbol blankType,
+    private void MaybeRegisterRoamHook(TypeSymbol owner, string name, TypeSymbol noneType,
         List<RoutineInfo> existingMethods)
     {
         if (existingMethods.Any(predicate: m => m.Name == name))
@@ -637,7 +661,7 @@ internal sealed class AutoWiredRegistrationPass
             Kind = RoutineKind.MemberRoutine,
             OwnerType = owner,
             Parameters = [],
-            ReturnType = blankType,
+            ReturnType = noneType,
             IsFailable = false,
             IsDangerous = true,
             DeclaredMutation = MutationCategory.Readonly,
@@ -849,7 +873,7 @@ internal sealed class AutoWiredRegistrationPass
     {
         // Treat generic parameters and error / blank types as permissive (the constraint
         // either narrows them later or they're already a no-op).
-        if (type is GenericParameterTypeInfo or ErrorTypeInfo || type.IsBlank) return true;
+        if (type is GenericParameterTypeInfo or ErrorTypeInfo || type.IsNone) return true;
 
         // @llvm-backed records (numeric primitives, Bool, Character, Byte, Hijacked[T])
         // get equality from the underlying IR instruction.

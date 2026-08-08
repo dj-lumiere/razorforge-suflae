@@ -14,7 +14,7 @@ public sealed class DesugaringPipeline(DesugaringContext ctx)
     /// <summary>
     /// Phase 3 per-file passes. Order:
     /// <list type="number">
-    ///   <item><see cref="BlankReturnNormalizationPass"/> — fills null return types and bare returns with <c>Blank</c>.</item>
+    ///   <item><see cref="NoneReturnNormalizationPass"/> — fills null return types and bare returns with <c>None</c>.</item>
     ///   <item><see cref="PresetInliningPass"/> — substitutes preset identifiers with literal values.</item>
     ///   <item><see cref="ControlFlowLoweringPass"/> — lowers for-loops and while to loop+if primitives.</item>
     ///   <item><see cref="GenericCallLoweringPass"/> — lowers <c>GenericMethodCallExpression</c> to <c>CallExpression</c>.</item>
@@ -22,7 +22,7 @@ public sealed class DesugaringPipeline(DesugaringContext ctx)
     /// </summary>
     public void Run(Program program)
     {
-        new BlankReturnNormalizationPass(ctx).Run(program);
+        new NoneReturnNormalizationPass(ctx).Run(program);
         new PresetInliningPass(ctx).Run(program);
         new ControlFlowLoweringPass(ctx).Run(program);
         new GenericCallLoweringPass(ctx).Run(program);
@@ -56,7 +56,7 @@ public sealed class DesugaringPipeline(DesugaringContext ctx)
         // Phase 3 on stdlib programs (bypassed per-file desugaring since pre-loaded by StdlibLoader).
         foreach ((Program program, _, _) in ctx.Registry.StdlibPrograms)
         {
-            new BlankReturnNormalizationPass(ctx).Run(program);
+            new NoneReturnNormalizationPass(ctx).Run(program);
             new PresetInliningPass(ctx).Run(program);
             new ControlFlowLoweringPass(ctx).Run(program);
             new GenericCallLoweringPass(ctx).Run(program);

@@ -102,9 +102,9 @@ public partial class LlvmCodeGenerator
             : "void";
         if (routine.FailableVariant == FailableVariant.Lookup)
         {
-            // Lookup[Blank] degenerates to Result[Blank]: a Blank value payload makes the
+            // Lookup[None] degenerates to Result[None]: a None value payload makes the
             // "found vs not-found" distinction meaningless, so use the Result carrier instead.
-            returnType = routine.ReturnType?.IsBlank == true
+            returnType = routine.ReturnType?.IsNone == true
                 ? GetResultCarrierLlvmType(valueType: routine.ReturnType!)
                 : GetLookupCarrierLlvmType(valueType: routine.ReturnType!);
         }
@@ -341,6 +341,16 @@ public partial class LlvmCodeGenerator
             return; // Skip generic definitions, unresolved routines, and generic-param-owner routines
         }
 
+        // Skip a protocol-extension routine's own template body (owner is a protocol, `Me` abstract):
+        // it is never emitted directly — ProtocolDefaultImplLoweringPass clones a concrete copy per
+        // implementer. The declaration loop already skips protocol-owned routines; this mirrors that
+        // for the user-program definition path, and in particular keeps an uninstantiated comptime
+        // `expand` (which only unrolls once `Me` is concrete) from reaching codegen.
+        if (routineInfo.OwnerType is ProtocolTypeInfo)
+        {
+            return;
+        }
+
         if (routineInfo.Parameters.Any(predicate: p => ContainsGenericParameter(type: p.Type)) ||
             routineInfo.ReturnType != null && ContainsGenericParameter(type: routineInfo.ReturnType) ||
             routineInfo.OwnerType != null && ContainsGenericParameter(type: routineInfo.OwnerType))
@@ -391,7 +401,7 @@ public partial class LlvmCodeGenerator
         }
 
         // For methods, add implicit 'me' parameter first
-        // Skip 'me' for $create routines (static factories), common (type-level) routines, and void/Blank owner types
+        // Skip 'me' for $create routines (static factories), common (type-level) routines, and void/None owner types
         bool isCreator = IsCreatorRoutine(routine: routineInfo);
         if (routineInfo.OwnerType != null && !isCreator && !routineInfo.IsCommon)
         {
@@ -597,7 +607,7 @@ public partial class LlvmCodeGenerator
             else
             {
                 string meType = GetParameterLlvmType(type: routine.OwnerType);
-                // Skip alloca/store for void me (Blank owner type — unit type, no data)
+                // Skip alloca/store for void me (None owner type — unit type, no data)
                 if (meType != "void")
                 {
                     EmitEntryAlloca(llvmName: "%me.addr", llvmType: meType);
@@ -740,7 +750,7 @@ public partial class LlvmCodeGenerator
             : "void";
         if (retType == "void")
         {
-            // For check_/try_ variant wrappers with Blank return type, emit the success
+            // For check_/try_ variant wrappers with None return type, emit the success
             // carrier instead of ret void — the define header uses the carrier type.
             switch (routine.FailableVariant)
             {
@@ -1122,8 +1132,11 @@ public partial class LlvmCodeGenerator
     {
         // Struct record: no @llvm backend -> storage-backed -> by-ref.
         RecordTypeInfo { HasDirectBackendType: false } => true,
-        // @llvm record: by-ref iff the backend is an aggregate ([N x T]); scalars stay by-value.
-        RecordTypeInfo { HasDirectBackendType: true, BackendType: { } bt } => bt.StartsWith(value: '['),
+        // @llvm record: by-ref iff the backend is an aggregate — an array `[N x T]` or a SIMD
+        // vector `<N x E>`. Both are always accessed through a load/store (never fed to an
+        // intrinsic as a bare SSA value like a scalar `i64`), and both need in-place `setitem!`
+        // to reach the caller's storage. Scalar backends (`i64`, `i1`, `ptr`, ...) stay by-value.
+        RecordTypeInfo { HasDirectBackendType: true, BackendType: { } bt } => bt.StartsWith(value: '[') || bt.StartsWith(value: '<'),
         _ => false
     };
 

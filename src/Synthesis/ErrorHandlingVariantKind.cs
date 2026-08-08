@@ -8,7 +8,7 @@ public enum ErrorHandlingVariantKind
     /// <summary>try_ variant - returns Maybe&lt;T&gt;, errors become None.</summary>
     Try,
 
-    /// <summary>try_ variant for Blank-returning routines - returns Bool (true=success, false=error/absent).</summary>
+    /// <summary>try_ variant for None-returning routines - returns Bool (true=success, false=error/absent).</summary>
     TryBool,
 
     /// <summary>check_ variant - returns Result&lt;T&gt;, preserves error info.</summary>

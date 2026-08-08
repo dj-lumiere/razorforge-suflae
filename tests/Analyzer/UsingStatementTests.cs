@@ -44,7 +44,7 @@ public class UsingStatementTests
     [Fact]
     public void Analyze_ResourceWithVoidEnterExit_BindsResourceType()
     {
-        // When $enter returns Blank (void), the bound variable should have the resource type
+        // When $enter returns None (void), the bound variable should have the resource type
         string source = """
                         record Lock obeys Enterable
                           id: S32
