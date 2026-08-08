@@ -194,22 +194,22 @@ routine T.hash(k0: U64, k1: U64) -> U64
   return acc
 
 ### The auto-derived default `serialize()` for a composite record/entity: field-walk into a
-### `Dict[Text, SerialValue]` arm. Every non-routine member is lowered through its OWN `serialize()`
-### (scalars box their scalar arm, aggregates recurse, opaque @llvm leaves box `represent()` Text) —
-### that call resolves for every value/aggregate type, so no comptime capability gate is needed. The
-### ONE exception is a routine-typed member (entities may hold one — records can't, RF-S412): a
-### routine value has first-class `represent`/`diagnose` (its SIGNATURE, e.g. `Routine[(S32,), S32]`)
-### but no `serialize` (serializing code is meaningless), so the comptime `m.is_routine` gate boxes its
-### `represent()` Text instead. Keys are the field names in declaration order; `Dict` iteration is
-### insertion-ordered, so the output is stable.
+### `Dict[Text, SerialValue]` arm. A member whose type obeys `Serializable` (scalars box their scalar
+### arm, aggregate records/entities/variants recurse) is lowered through its OWN `serialize()`. Every
+### OTHER member type has no `serialize` and boxes its `represent()` Text instead: a routine-typed
+### member (entities may hold one — records can't, RF-S412) whose serialized code is meaningless, an
+### enum-like `choice`/`flags` (Diagnosable but not Serializable — e.g. BuilderService's `Visibility`),
+### and any opaque @llvm leaf. The comptime `m.obeying(Serializable)` gate prunes to exactly one arm per
+### member at monomorph, so codegen never sees a `.serialize()` on a type that has none. Keys are the
+### field names in declaration order; `Dict` iteration is insertion-ordered, so the output is stable.
 @overridable
 routine T.serialize() -> SerialValue
   var __sv = Dict[Text, SerialValue]()
   expand m in memvarof(T)
-    if m.is_routine
-      discard __sv.add(key: m.name, value: SerialValue(me.${m.name}.represent()))
-    else
+    if m.obeying(Serializable)
       discard __sv.add(key: m.name, value: me.${m.name}.serialize())
+    else
+      discard __sv.add(key: m.name, value: SerialValue(me.${m.name}.represent()))
   return SerialValue(steal __sv)
 
 ### The auto-derived deep `copy()` (Copyable): forwards to `store` — a bitwise copy for a pure value
@@ -273,12 +273,15 @@ needs T is VariantType
 ### The auto-derived `store()` (Storable — the shallow store / alias-safe verb): a shallow `var result
 ### = me` (the compiler does NOT re-enter `store` on this self-copy — no recursion), then re-store each
 ### member IN PLACE so a retaining field (a managed leaf like Text/Decimal, or a record owning one) gets
-### its refcount bumped on the copy — a bare bitwise alias would double-free at teardown. A pure value
-### field's `store` is itself `return me`, so this is a no-op for it. Replaces the C# reconstruction
-### `T(f: me.f.store(), …)` with a mutation walk — no creator arg-list needed.
+### its refcount bumped on the copy — a bare bitwise alias would double-free at teardown. Only members
+### that actually carry a retaining `store` are re-stored (`m.is_retaining`); a pure value field, or an
+### @llvm-backed aggregate like `Array[T, N]` that has NO `store` at all, is left as the shallow bitwise
+### copy — emitting `me.field.store()` on it would call a store that does not exist. Replaces the C#
+### reconstruction `T(f: me.f.store(), …)` with a mutation walk — no creator arg-list needed.
 @overridable
 routine T.store() -> Me
   var result = me
   expand m in memvarof(T)
-    result.${m.name} = me.${m.name}.store()
+    if m.is_retaining
+      result.${m.name} = me.${m.name}.store()
   return result

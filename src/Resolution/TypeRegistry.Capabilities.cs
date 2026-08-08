@@ -221,12 +221,41 @@ public sealed partial class TypeRegistry
         if (TypeObeysProtocol(type: type, protocolName: protocolName)) return true;
 
         // Structural satisfaction: the type has a concrete impl of every method the protocol declares.
+        // The required names come from the protocol's OWN declared Methods (plus those it inherits from
+        // parent protocols), NOT from GetMethodsForType(...).Where(OwnerType is ProtocolTypeInfo) — the
+        // latter can be empty for a protocol whose sole method was substituted onto a non-protocol owner
+        // (e.g. Serializable's `serialize`), which then wrongly reported EVERY structural implementer as
+        // NON-conforming. That masked itself for records/entities that obey via a declared bundle
+        // (RecordType/EntityType), but broke a type like `List[Text]` that carries a conditionally-
+        // available `serialize` without declaring Serializable — its derived `serialize()` field-walk
+        // then boxed `represent()` instead of recursing (the json_encode `tags` regression).
         if (LookupType(name: protocolName) is not ProtocolTypeInfo proto) return false;
-        List<RoutineInfo> required = GetMethodsForType(type: proto)
-                                    .Where(predicate: m => m.OwnerType is ProtocolTypeInfo)
-                                    .ToList();
-        return required.Count > 0 && required.All(predicate: m =>
-            LookupMethod(type: type, methodName: m.Name) is { OwnerType: not ProtocolTypeInfo });
+        HashSet<string> requiredNames = CollectProtocolMethodNames(proto: proto);
+        return requiredNames.Count > 0 && requiredNames.All(predicate: name =>
+            LookupMethod(type: type, methodName: name) is { OwnerType: not ProtocolTypeInfo });
+    }
+
+    /// <summary>
+    /// The set of method names a protocol requires an implementer to provide — its own declared
+    /// <see cref="ProtocolTypeInfo.Methods"/> plus every name inherited from its parent protocols
+    /// (transitively). Used by the structural-conformance path of <see cref="DoesTypeObeyProtocol"/>.
+    /// </summary>
+    private static HashSet<string> CollectProtocolMethodNames(ProtocolTypeInfo proto)
+    {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var stack = new Stack<ProtocolTypeInfo>();
+        stack.Push(item: proto);
+        while (stack.Count > 0)
+        {
+            ProtocolTypeInfo current = stack.Pop();
+            if (!seen.Add(item: current.Name)) continue;
+            foreach (ProtocolMethodInfo m in current.Methods)
+                names.Add(item: m.Name);
+            foreach (ProtocolTypeInfo parent in current.ParentProtocols)
+                stack.Push(item: parent);
+        }
+        return names;
     }
 
     private bool TypeObeysProtocol(TypeInfo type, string protocolName) // NOSONAR S3776

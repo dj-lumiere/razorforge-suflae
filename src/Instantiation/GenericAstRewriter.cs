@@ -995,7 +995,7 @@ internal static class GenericAstRewriter
                 when ctx.ActiveExpandHandle != null &&
                      handleId.Name == ctx.ActiveExpandHandle &&
                      handleMember.MemberName is "name" or "id" or "is_secret" or "is_routine"
-                         or "value" or "is_inert" or "type_id" or "type"
+                         or "value" or "is_inert" or "is_retaining" or "type_id" or "type"
                 => FoldHandleProjection(projection: handleMember.MemberName, ctx: ctx,
                     location: handleMember.Location),
 
@@ -2078,6 +2078,26 @@ internal static class GenericAstRewriter
                          ctx.Registry.IsTriviallyDestructible(type: ctx.ActiveMemberType);
             return new LiteralExpression(Value: inert,
                 LiteralType: inert ? TokenType.True : TokenType.False,
+                Location: location)
+            {
+                ResolvedType = ctx.Registry?.LookupType(name: "Bool")
+            };
+        }
+
+        if (projection == "is_retaining")
+        {
+            // The member's type has a RETAINING copy hook — a resolvable `store` (the managed-leaf
+            // refcount bump, e.g. Text/Decimal, or a record owning one). A bitwise alias of such a
+            // member would double-free at teardown, so the derived `store` must re-store it. Every
+            // OTHER member (a pure value, or an @llvm-backed aggregate like `Array[T, N]` that has NO
+            // `store` at all — even when its `destroy` walks elements) is copied bitwise and MUST be
+            // skipped: emitting `me.field.store()` on it would call a `store` that does not exist
+            // (the RoutineTrace `Array[RoutineRecord, 10]` codegen failure). This is the store-side
+            // dual of `is_inert` (which keys off destructibility, the wrong axis for a copy).
+            bool retaining = ctx.ActiveMemberType != null && ctx.Registry != null &&
+                             ctx.Registry.GetLifecycle(type: ctx.ActiveMemberType).Store is not null;
+            return new LiteralExpression(Value: retaining,
+                LiteralType: retaining ? TokenType.True : TokenType.False,
                 Location: location)
             {
                 ResolvedType = ctx.Registry?.LookupType(name: "Bool")

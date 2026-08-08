@@ -50,14 +50,6 @@ public partial class LlvmCodeGenerator
     private HashSet<string> _liveRoutineKeys = new(comparer: StringComparer.Ordinal);
 
     /// <summary>
-    /// RegistryKeys of routines that can transitively reach a coroutine suspend point
-    /// (<see cref="Verification.MaySuspendAnalysis"/>). Only these get 5b-2 cancellation
-    /// instrumentation (cf_push/cf_pop). Empty for any program that never reaches a suspend
-    /// primitive — so non-coroutine code emits identically to before.
-    /// </summary>
-    private HashSet<string> _maySuspendRoutineKeys = new(comparer: StringComparer.Ordinal);
-
-    /// <summary>
     /// RegistryKeys of routines actually REFERENCED while emitting a routine body (the transitive
     /// closure from the user entry points). Codegen gates body definitions on this set so a routine
     /// is emitted only if some emitted body calls it — pruning every routine nothing references
@@ -350,7 +342,7 @@ public partial class LlvmCodeGenerator
             _liveOwnerTypeNames = new HashSet<string>(collection: liveOwnerTypeNames,
                 comparer: StringComparer.Ordinal);
         if (maySuspendRoutineKeys is { Count: > 0 })
-            _maySuspendRoutineKeys = new HashSet<string>(collection: maySuspendRoutineKeys,
+            new HashSet<string>(collection: maySuspendRoutineKeys,
                 comparer: StringComparer.Ordinal);
         _buildMode = buildMode;
         _pointerBitWidth = _target.PointerBitWidth;
@@ -990,16 +982,10 @@ public partial class LlvmCodeGenerator
                         continue;
                     }
 
-                    try
-                    {
-                        GenerateRoutineDefinition(routine: routine, preResolvedInfo: routineInfo);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.Error.WriteLine(
-                            value:
-                            $"Warning: Stdlib codegen failed for '{routine.Name}': {ex.Message}");
-                    }
+                    // No swallow: a body reaching codegen must be fully resolved by SA / lowering /
+                    // monomorphization. A failure here is an upstream contract violation and MUST be
+                    // loud (mirrors MonomorphizationCompletenessAssertionPass), not a silent warning.
+                    GenerateRoutineDefinition(routine: routine, preResolvedInfo: routineInfo);
                 }
             }
 
@@ -1013,33 +999,25 @@ public partial class LlvmCodeGenerator
                     && !_referencedKeys.Contains(item: body.Info.RegistryKey))
                     continue;
 
-                try
+                // No swallow (see Phase A): a monomorphized body that fails codegen is an upstream
+                // resolution bug — fail loudly rather than dropping the definition (which would only
+                // resurface downstream as an "undefined symbol" linker error).
+                if (body.IsSynthesized)
                 {
-                    if (body.IsSynthesized)
+                    // Empty-body sentinel — pure IR-level synthesis not yet wired; skip.
+                    if (body.Ast.Body is BlockStatement { Statements.Count: 0 })
                     {
-                        // Empty-body sentinel — pure IR-level synthesis not yet wired; skip.
-                        if (body.Ast.Body is BlockStatement { Statements.Count: 0 })
-                        {
-                            continue;
-                        }
+                        continue;
+                    }
 
-                        _generatedRoutineDefs.Add(item: instFuncName);
-                        _generatedRoutines.Add(item: instFuncName);
-                        EmitSynthesizedBodyFromAst(routine: body.Info, funcName: instFuncName,
-                            body: body.Ast.Body);
-                    }
-                    else
-                    {
-                        GenerateRoutineDefinition(routine: body.Ast, preResolvedInfo: body.Info);
-                    }
+                    _generatedRoutineDefs.Add(item: instFuncName);
+                    _generatedRoutines.Add(item: instFuncName);
+                    EmitSynthesizedBodyFromAst(routine: body.Info, funcName: instFuncName,
+                        body: body.Ast.Body);
                 }
-                catch (Exception ex)
+                else
                 {
-                    Console.Error.WriteLine(
-                        value:
-                        $"Warning: Instantiated generic codegen failed for '{instFuncName}': {ex.Message}");
-                    _generatedRoutineDefs.Remove(item: instFuncName);
-                    _generatedRoutines.Remove(item: instFuncName);
+                    GenerateRoutineDefinition(routine: body.Ast, preResolvedInfo: body.Info);
                 }
             }
 
@@ -1116,38 +1094,30 @@ public partial class LlvmCodeGenerator
                             for (int gi = 0; gi < gParams.Count; gi++)
                                 newSubs[key: gParams[index: gi]] = tArgs[index: gi];
                             // The GenericAstRewriter call below already produces a fully concrete body
-                            // from newSubs — codegen needs no live substitution map.
-                            try
-                            {
-                                _generatedRoutineDefs.Add(item: monoFuncName);
-                                _generatedRoutines.Add(item: monoFuncName);
-                                // Rewrite the shared generic-def body per concrete owner BEFORE
-                                // emission. The raw AST is shared across every instantiation, so
-                                // BuilderServiceInliningPass had to defer folding its BuilderService
-                                // constants (me.type_name() in synthesized represent/diagnose).
-                                // GenericAstRewriter deep-clones, substitutes the type params, folds
-                                // those constants against the concrete owner (same fold logic as the
-                                // inlining pass), and re-resolves routine bindings — emitting the
-                                // unrewritten body instead fails with unresolved-call errors.
-                                var monoStringSubs = newSubs.ToDictionary(
-                                    keySelector: kvp => kvp.Key,
-                                    elementSelector: kvp => kvp.Value.FullName);
-                                Statement rewrittenSynthBody = GenericAstRewriter.RewriteStatement(
-                                    stmt: synthBodyAst,
-                                    subs: monoStringSubs,
-                                    typeSubs: newSubs,
-                                    registry: _registry,
-                                    enclosingRoutine: concreteMethod);
-                                EmitSynthesizedBodyFromAst(routine: concreteMethod,
-                                    funcName: monoFuncName, body: rewrittenSynthBody);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.Error.WriteLine(value:
-                                    $"Warning: Phase C monomorphized synth codegen failed for '{monoFuncName}': {ex.Message}");
-                                _generatedRoutineDefs.Remove(item: monoFuncName);
-                                _generatedRoutines.Remove(item: monoFuncName);
-                            }
+                            // from newSubs — codegen needs no live substitution map. No swallow (see
+                            // Phase A): a failure here is an upstream monomorph/resolution bug and must
+                            // be loud, not a dropped definition.
+                            _generatedRoutineDefs.Add(item: monoFuncName);
+                            _generatedRoutines.Add(item: monoFuncName);
+                            // Rewrite the shared generic-def body per concrete owner BEFORE
+                            // emission. The raw AST is shared across every instantiation, so
+                            // BuilderServiceInliningPass had to defer folding its BuilderService
+                            // constants (me.type_name() in synthesized represent/diagnose).
+                            // GenericAstRewriter deep-clones, substitutes the type params, folds
+                            // those constants against the concrete owner (same fold logic as the
+                            // inlining pass), and re-resolves routine bindings — emitting the
+                            // unrewritten body instead fails with unresolved-call errors.
+                            var monoStringSubs = newSubs.ToDictionary(
+                                keySelector: kvp => kvp.Key,
+                                elementSelector: kvp => kvp.Value.FullName);
+                            Statement rewrittenSynthBody = GenericAstRewriter.RewriteStatement(
+                                stmt: synthBodyAst,
+                                subs: monoStringSubs,
+                                typeSubs: newSubs,
+                                registry: _registry,
+                                enclosingRoutine: concreteMethod);
+                            EmitSynthesizedBodyFromAst(routine: concreteMethod,
+                                funcName: monoFuncName, body: rewrittenSynthBody);
                         }
                     }
                     if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: not null } &&
@@ -1172,28 +1142,19 @@ public partial class LlvmCodeGenerator
                             // above), so codegen needs no live substitution map.
                             var wfSubs = new Dictionary<string, TypeInfo>
                                 { [wrapperParamName] = concreteInner };
-                            try
-                            {
-                                _generatedRoutineDefs.Add(item: concreteFuncName);
-                                _generatedRoutines.Add(item: concreteFuncName);
-                                Statement rewrittenWfBody = GenericAstRewriter.RewriteStatement(
-                                    stmt: synthBodyAst,
-                                    subs: wfSubs.ToDictionary(kvp => kvp.Key,
-                                        kvp => kvp.Value.FullName),
-                                    typeSubs: wfSubs,
-                                    registry: _registry,
-                                    enclosingRoutine: concreteWf);
-                                EmitSynthesizedBodyFromAst(routine: concreteWf,
-                                    funcName: concreteFuncName, body: rewrittenWfBody);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.Error.WriteLine(
-                                    value:
-                                    $"Warning: Wrapper forwarder codegen failed for '{concreteFuncName}': {ex.Message}");
-                                _generatedRoutineDefs.Remove(item: concreteFuncName);
-                                _generatedRoutines.Remove(item: concreteFuncName);
-                            }
+                            // No swallow (see Phase A): a wrapper-forwarder body that fails codegen is
+                            // an upstream resolution bug — fail loudly, don't drop the definition.
+                            _generatedRoutineDefs.Add(item: concreteFuncName);
+                            _generatedRoutines.Add(item: concreteFuncName);
+                            Statement rewrittenWfBody = GenericAstRewriter.RewriteStatement(
+                                stmt: synthBodyAst,
+                                subs: wfSubs.ToDictionary(kvp => kvp.Key,
+                                    kvp => kvp.Value.FullName),
+                                typeSubs: wfSubs,
+                                registry: _registry,
+                                enclosingRoutine: concreteWf);
+                            EmitSynthesizedBodyFromAst(routine: concreteWf,
+                                funcName: concreteFuncName, body: rewrittenWfBody);
                         }
                     }
                     continue;
@@ -1202,19 +1163,11 @@ public partial class LlvmCodeGenerator
                 if (_generatedRoutineDefs.Contains(item: synthFuncName)) continue;
                 _generatedRoutineDefs.Add(item: synthFuncName);
                 _generatedRoutines.Add(item: synthFuncName);
-                try
-                {
-                    EmitSynthesizedBodyFromAst(routine: synthInfo, funcName: synthFuncName,
-                        body: synthBodyAst);
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine(
-                        value:
-                        $"Warning: Synthesized body codegen failed for '{key}': {ex.Message}");
-                    _generatedRoutineDefs.Remove(item: synthFuncName);
-                    _generatedRoutines.Remove(item: synthFuncName);
-                }
+                // No swallow (see Phase A): a synthesized body that fails codegen is an upstream
+                // synthesis/resolution bug and MUST be loud, not a dropped definition (which would only
+                // resurface as a downstream "undefined symbol" linker error).
+                EmitSynthesizedBodyFromAst(routine: synthInfo, funcName: synthFuncName,
+                    body: synthBodyAst);
             }
 
             iterations++;
