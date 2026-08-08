@@ -76,16 +76,14 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
 
-            // Roamed[T] field: take a strong ref (COPY semantics — the constructor arg keeps its own
-            // reference; the caller skips consuming it). Mirrors the reassignment path
-            // (EmitEntityMemberVariableWrite). Null/none values retain as a no-op (null-safe), so the
-            // zero-init caller (a $create prologue) is unaffected.
-            if (memberVariable.Type is RecordTypeInfo roamedField
-                && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed)
-            {
-                EmitRetainedVarRetain(sb: sb, llvmAddr: memberVariablePtr,
-                    recordType: (RecordTypeInfo)memberVariable.Type);
-            }
+            // Roamed[T] field: MOVE the argument's reference into the field — NO retain here. In Suflae,
+            // SuflaeEntityLoweringPass.RetainConstructionArg has already turned every construction arg
+            // into an OWNED rvalue (a `.roam()` copy of a borrowed handle, or a fresh promote like
+            // `List().roam()`), so the field simply takes ownership of that one reference. Retaining
+            // again would double-count: the borrow path leaves the `.roam()` temp unreleased, and the
+            // fresh-promote path (an inlined single-use local, which TemporaryTeardownPass deliberately
+            // does not free as a construction arg) leaks its promote — either way the controller count
+            // never collapses to the cycle-internal state and cycle collection can't reap it.
         }
 
         return rawPtr;
@@ -148,13 +146,13 @@ public partial class LlvmCodeGenerator
     /// Emits construction of a variant value from the implicit auto-wrap rewrite
     /// (e.g. <c>var a: Number = 42_s64</c> becomes <c>Number(S64: 42_s64)</c> at AST level).
     /// The CreatorExpression carries one MemberVariable whose Name matches a variant member's
-    /// type name (or "Blank"/"None" for the zero-tag). Emits:
+    /// type name (or "None"/"None" for the zero-tag). Emits:
     /// <code>
     ///   %tmp = alloca %Variant.X
     ///   %tag_ptr = getelementptr %Variant.X, ptr %tmp, i32 0, i32 0
     ///   store i64 &lt;FNV-1a(member.FullName)&gt;, ptr %tag_ptr
     ///   %pay_ptr = getelementptr %Variant.X, ptr %tmp, i32 0, i32 1
-    ///   store &lt;val_ty&gt; %val, ptr %pay_ptr     ; skipped for the None/Blank arm
+    ///   store &lt;val_ty&gt; %val, ptr %pay_ptr     ; skipped for the None/None arm
     ///   %result = load %Variant.X, ptr %tmp
     /// </code>
     /// </summary>
@@ -176,7 +174,7 @@ public partial class LlvmCodeGenerator
         string slot = NextTemp();
         EmitLine(sb: sb, line: $"  {slot} = alloca {variantLlvm}");
 
-        // type_id = FNV-1a(member.Type.FullName); 0 for None/Blank.
+        // type_id = FNV-1a(member.Type.FullName); 0 for None/None.
         ulong typeId = member.IsNone
             ? 0UL
             : TypeIdHelper.ComputeTypeId(fullName: member.Type!.FullName);
@@ -185,14 +183,14 @@ public partial class LlvmCodeGenerator
             line: $"  {tagPtr} = getelementptr {variantLlvm}, ptr {slot}, i32 0, i32 0");
         EmitLine(sb: sb, line: $"  store i64 {typeId}, ptr {tagPtr}");
 
-        // Blank arm (or any zero-sized payload type) carries no storable value — only the
+        // None arm (or any zero-sized payload type) carries no storable value — only the
         // tag matters. Skip both value emission and the payload store. The user-level form
-        // `Blank()` parses as a CreatorExpression but has nothing to construct; treating it
-        // as a pure marker mirrors how the Blank type behaves elsewhere.
-        bool isBlankArm = member.IsNone
+        // `None()` parses as a CreatorExpression but has nothing to construct; treating it
+        // as a pure marker mirrors how the None type behaves elsewhere.
+        bool isNoneArm = member.IsNone
             || (member.Type is not null
-                && (member.Type.Name == "Blank" || member.Type.FullName.EndsWith(value: ".Blank")));
-        if (!isBlankArm)
+                && (member.Type.Name == "None" || member.Type.FullName.EndsWith(value: ".None")));
+        if (!isNoneArm)
         {
             string val = EmitExpression(sb: sb, expr: valueExpr);
             string valLlvm = GetLlvmType(type: valueExpr.ResolvedType ?? member.Type!);
@@ -232,20 +230,13 @@ public partial class LlvmCodeGenerator
 
         // Field initializers with `steal` transfer ownership from local entity vars into
         // the new entity. Drop the source locals from the cleanup set so the function-exit
-        // rf_invalidate pass doesn't free the same allocation now held by the field.
-        // Roamed[T] fields are the exception: they use COPY semantics (EmitEntityAllocation retains the
-        // stored value), so their arg is NOT moved — it keeps its own reference and tears down normally.
-        // Consuming it here would drop a ref the field just retained → underflow.
+        // rf_invalidate pass doesn't free the same allocation now held by the field. Roamed[T] fields
+        // now MOVE too (EmitEntityAllocation no longer retains them): their arg is an owned rvalue
+        // (`.roam()` / fresh promote), so consuming is a no-op for the rvalue shape and correctly drops
+        // any bare source local — matching every other moved field.
         foreach ((string fieldName, Expression fieldExpr) in expr.MemberVariables)
         {
-            MemberVariableInfo? fieldInfo = entity.MemberVariables
-                .FirstOrDefault(predicate: mv => mv.Name == fieldName);
-            bool isRoamedField = fieldInfo?.Type is RecordTypeInfo roamedFieldInfo
-                && GetGenericBaseName(type: roamedFieldInfo) == Resolution.RuntimeContract.Roamed;
-            if (!isRoamedField)
-            {
-                ConsumeTransferredLocalOwnership(expr: fieldExpr);
-            }
+            ConsumeTransferredLocalOwnership(expr: fieldExpr);
         }
 
         // Allocate and initialize
@@ -420,9 +411,11 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: sb, line: $"  {entityPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
 
         // Initialize fields. Named arguments may be written in any order; bind each field to the
-        // argument whose name matches it (falling back to positional for unnamed args).
-        // Roamed[T] fields use COPY semantics: retain the stored value and DON'T consume the arg (it
-        // keeps its own reference). Every other field keeps move/steal semantics — consumed below.
+        // argument whose name matches it (falling back to positional for unnamed args). Every field —
+        // including a Roamed[T] one — MOVES its argument's reference into the field (no retain). In
+        // Suflae, RetainConstructionArg has already made the arg an OWNED rvalue (a `.roam()` copy of a
+        // borrow, or a fresh promote), so the field takes ownership of that single reference; retaining
+        // again would double-count and defeat cycle collection (see EmitEntityAllocation).
         var argsToConsume = new List<Expression>();
         for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
@@ -438,17 +431,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {fieldPtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {i}");
             EmitLine(sb: sb, line: $"  store {fieldType} {value}, ptr {fieldPtr}");
-
-            if (field.Type is RecordTypeInfo roamedField
-                && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed)
-            {
-                EmitRetainedVarRetain(sb: sb, llvmAddr: fieldPtr,
-                    recordType: (RecordTypeInfo)field.Type);
-            }
-            else
-            {
-                argsToConsume.Add(item: fieldArg);
-            }
+            argsToConsume.Add(item: fieldArg);
         }
 
         // Field initializers with `steal` transfer ownership from local entity vars into
@@ -652,7 +635,7 @@ public partial class LlvmCodeGenerator
                 // Project the read through the controller's `data` field AND bracket it with the
                 // mode-checked lock (lock_enter/lock_exit) so an ESCAPED object's field touch is
                 // serialized — a no-op while LOCAL. Does the full read + early-returns.
-                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_enter");
+                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: Resolution.RuntimeContract.RoamedMethod.LockEnter);
                 if (enterM != null)
                 {
                     GenerateRoutineDeclaration(routine: enterM);
@@ -665,7 +648,7 @@ public partial class LlvmCodeGenerator
                     ? EmitEntityMemberVariableRead(sb: sb, entityPtr: target, entity: controllerEntity, memberVariableName: "data")
                     : target;
                 string roamLoaded = EmitEntityMemberVariableRead(sb: sb, entityPtr: roamEntPtr, entity: innerEntity, memberVariableName: memberName);
-                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_exit");
+                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: Resolution.RuntimeContract.RoamedMethod.LockExit);
                 if (exitM != null)
                 {
                     GenerateRoutineDeclaration(routine: exitM);

@@ -121,50 +121,28 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             // walks the real call expressions and emits exactly the destructors that are used — no
             // hand-seeding, and no `$eq`→`$notcontains` cascade from marking types live abstractly.
 
-            // The copy verb (`retain`/`track`) IS still seeded: codegen calls it implicitly on
-            // RC-wrapper var bindings (and on PLP-synthesized ElsePattern bindings over
-            // Maybe[Wrapper[T]] that appear after Phase 6 reachability runs), with no AST call for
-            // reachability to walk. Seed per concrete wrapper so the body gets monomorphized.
-            string ownerBase = type switch
-            {
-                RecordTypeInfo { GenericDefinition: { } d } => d.Name,
-                EntityTypeInfo { GenericDefinition: { } d } => d.Name,
-                WrapperTypeInfo w => w.Name,
-                _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
-            };
-            if (ownerBase is RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Roamed)
-            {
-                string copyVerb = ownerBase switch
-                {
-                    RuntimeContract.Retained => RuntimeContract.RefCount.Retain,
-                    RuntimeContract.Tracked => RuntimeContract.RefCount.Track,
-                    _ => RuntimeContract.RefCount.Roam
-                };
-                RoutineInfo? copy = ctx.Registry.LookupMethod(type: type, methodName: copyVerb);
-                if (copy != null) EnqueueCallee(callee: copy);
+            // Unified teardown needs NO `$destroy` seeding here either: ScopeTeardownLoweringPass
+            // inserts the `local.destroy()` calls before this pass, so reachability walks the real
+            // call expressions.
 
-                // Roamed additionally: codegen inserts `promote()` (spawn boundaries, Stage 2b) and
-                // `lock_enter`/`lock_exit` (direct field access, Stage 2c) with NO AST call for
-                // reachability to walk — seed them so their bodies are monomorphized per concrete
-                // Roamed[T] (else "declared+called but never defined"). Bodies pull in the
-                // RoamController chain transitively.
-                if (ownerBase == RuntimeContract.Roamed)
-                {
-                    foreach (string codegenInserted in new[] { "promote", "lock_enter", "lock_exit" })
-                    {
-                        RoutineInfo? m = ctx.Registry.LookupMethod(type: type, methodName: codegenInserted);
-                        if (m != null) EnqueueCallee(callee: m);
-                    }
+            // Implicit codegen-inserted callees (RC-wrapper copy verb; Roamed promote/lock_enter/
+            // lock_exit/raw_inner; the inner value's display routines reached via Roamed transparency)
+            // have NO AST call for reachability to walk. Their single source of truth — shared with
+            // the matching codegen insertion sites — is ImplicitCallContract, so the two sides can't
+            // drift into the "declared+called but never defined" over-prune crash.
+            foreach ((TypeInfo owner, string methodName) in ImplicitCallContract.ForLiveType(liveType: type))
+                EnqueueMethodIfPresent(owner: owner, methodName: methodName);
 
-                    // A Roamed FAILABLE forwarder synthesizes `when inner.check_m() { is Crashable e ->
-                    // throw e; ... }`; that re-throw needs Crashable.crash_message on the throw path, but
-                    // the synthesized when-body's ThrowStatement isn't walked for it here. Seed it directly.
-                    if (ctx.Registry.LookupType(name: "Crashable") is { } crashTy &&
-                        ctx.Registry.LookupMethod(type: crashTy, methodName: RuntimeContract.CrashMessage) is { } cm)
-                    {
-                        EnqueueCallee(callee: cm);
-                    }
-                }
+            // A Roamed FAILABLE forwarder synthesizes `when inner.check_m() { is Crashable e ->
+            // throw e; ... }`; that re-throw needs Crashable.crash_message on the throw path, but the
+            // synthesized when-body's ThrowStatement isn't walked for it here. NOT an implicit codegen
+            // insertion (the call lives in a synthesized AST body reachability just doesn't reach), so
+            // it stays outside the contract.
+            if (IsRoamedType(type: type) &&
+                ctx.Registry.LookupType(name: "Crashable") is { } crashTy &&
+                ctx.Registry.LookupMethod(type: crashTy, methodName: RuntimeContract.CrashMessage) is { } cm)
+            {
+                EnqueueCallee(callee: cm);
             }
 
             // FStringLoweringPass synthesizes `<diagnose>.replace(old:..., new:...)` for
@@ -561,6 +539,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: methodName);
         if (routine != null) EnqueueCallee(callee: routine);
     }
+
+    /// <summary>True if <paramref name="type"/> is a (resolved or generic-def) <c>Roamed[T]</c>.
+    /// Uses the canonical structured base-name classifier — no ad-hoc name parsing.</summary>
+    private static bool IsRoamedType(TypeInfo type) =>
+        TypeRegistry.GetRcWrapperBaseName(type: type) == RuntimeContract.Roamed;
 
     /// <summary>
     /// Enqueues the <paramref name="methodName"/> overload whose parameter list matches a single
@@ -1343,8 +1326,13 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             recv = sub;
         if (recv is not EntityTypeInfo ent) return;
         string implName = callee.Name == "roam_trace_ref" ? "roam_trace_impl" : "roam_free_impl";
-        RoutineInfo? impl = ctx.Registry.GetMethodsForType(type: ent)
-            .FirstOrDefault(predicate: r => r.Name == implName && r.Parameters.Count == 0);
+        // Resolve through LookupMethod (not GetOwnMethodsResolved): for a generic entity resolution
+        // like List[Roamed[Node]] the resolution's own table holds only already-reachable methods, so
+        // GetOwnMethodsResolved short-circuits on it and never surfaces the generic-def-registered
+        // roam_trace_impl — the impl would never be enqueued, leaving the container's trace_hook wired
+        // to cptr_none() and its held cycle uncollectable. LookupMethod substitutes from the generic
+        // def; EnqueueCallee then monomorphizes the body into the resolution's table.
+        RoutineInfo? impl = ctx.Registry.LookupMethod(type: ent, methodName: implName);
         if (impl != null) EnqueueCallee(callee: impl);
     }
 

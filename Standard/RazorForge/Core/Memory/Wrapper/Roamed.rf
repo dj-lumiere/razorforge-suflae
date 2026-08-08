@@ -14,13 +14,17 @@ import BuilderService
 ### and break escaped-mode serialization. Real access goes through compiler-inserted `lock_enter` /
 ### `lock_exit` wrapping (Stage 2). The `borrow()` here is a Stage-1 test hatch only.
 ###
-### **Stage 1 (this file): manually driven.** `.roam()` / `.promote()` / `lock_enter()` are called by
-### hand; the compiler does not yet auto-insert them. The cycle collector
-### (`Core/Memory/CycleCollector.rf`) is a COMPLETE Bacon-Rajan trial-deletion recycler — it is just
-### Stage-1 manually driven: hooks are wired by hand and `cc_collect` is called explicitly, so cycles
-### are reclaimed only where the collector is actually run (they are NOT auto-collected yet, but the
-### collector is not a stub). `Roamed` is a plain record, not yet registered as an RC wrapper in
-### RuntimeContract.
+### **Insertion is compiler-driven in Suflae.** `Roamed` IS registered as an RC wrapper
+### (`RuntimeContract.RcWrapperBaseNames` / `RcCopyVerb`); the aliasing `roam()`, spawn-boundary
+### `promote()`, and field-access `lock_enter()`/`lock_exit()` are auto-inserted — `roam` by
+### `SuflaeEntityLoweringPass` on entity bindings, `promote`/`lock_enter`/`lock_exit` by codegen
+### (Stage 2b/2c). Reachability seeds these via `ImplicitCallContract` (they have no surface AST call).
+### In pure RazorForge the same handles are driven explicitly (see `roamed_cycle_api.rf`: `.roam()` /
+### `.raw_inner()` by hand). Display is TRANSPARENT: `Roamed` declares no `represent`/`diagnose` —
+### codegen's `RoamedTransparency` re-resolves `f"{roamed}"` to the inner value's.
+### The cycle collector (`Core/Memory/CycleCollector.rf`) is a COMPLETE Bacon-Rajan trial-deletion
+### recycler; its trace hooks are auto-synthesized, but `cc_collect` is still invoked explicitly
+### (no auto-scheduling yet), so cycles are reclaimed only where the collector is actually run.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
 record Roamed[T]
@@ -131,9 +135,9 @@ routine Roamed[T].strong_count() -> U64
 ### `roam_trace_impl` calls this for each `Roamed` field of an entity, so the collector sees the
 ### object graph's strong edges. A none handle owns no edge and is skipped. Runs inside the (dangerous)
 ### synthesized trace, so no `danger` here.
-dangerous routine Roamed[T].cc_visit_self()
+dangerous routine Roamed[T].cyclic_visit()
   if me.controller_address() != 0_addr
-    C::rf_cc_visit_child(child_ctrl: me.controller_address())
+    C::rf_cyclic_visit_child(child_ctrl: me.controller_address())
   return
 
 ### The address of the underlying {RoamController[T]} — the collector's currency and a Stage-1 test
@@ -156,21 +160,10 @@ dangerous routine Roamed[T].raw_inner() -> T
 # Display (opaque — the inner value is reachable only through the lock in real use)
 # ============================================================================
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
-@readonly
-routine Roamed[T].represent() -> Text
-  danger
-    return me.type_name()
-
-### Returns the diagnostic representation of this value.
-### :returns: The resulting `Text` value.
-@readonly
-routine Roamed[T].diagnose() -> Text
-  danger
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
-    var rc = ctrl.strong_count()
-    return me.type_name() + "(holding: " + rc.represent() + ", escaped: " + ctrl.is_escaped().represent() + ")"
+# `represent`/`diagnose` are intentionally NOT declared on `Roamed[T]`: the wrapper is display-
+# transparent, so codegen's `RoamedTransparency.Project` re-resolves `f"{roamed}"` / `roamed.diagnose()`
+# to the INNER value's display routine (never showing "Roamed[...]"). Declaring them here would shadow
+# the inner and reintroduce the opaque-wrapper rendering.
 
 dangerous routine Roamed[T].destroy()
   me.release()

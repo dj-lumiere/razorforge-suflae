@@ -1,0 +1,19 @@
+module Tests/StdlibSf/EntityReprApi
+import IO/Console
+
+# SF twin of Stdlib/entity_repr_api.rf. The `Point` local lowers to `Roamed[Point]`, but `f"{p}"`
+# must ALWAYS read the inner entity — the shared snapshot locks SF-Roamed render == RF-bare render.
+entity Point
+  x: S64
+  y: S64
+
+routine start()
+  var p = Point(x: 3, y: 4)
+  show(f"p: {p}")
+  show(f"fields: {p.x}, {p.y}")
+
+  var q = Point(x: -5, y: 42)
+  show(f"q: {q}")
+
+  show("DONE")
+  return

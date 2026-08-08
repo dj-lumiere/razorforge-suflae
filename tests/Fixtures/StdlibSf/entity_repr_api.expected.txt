@@ -1,0 +1,4 @@
+p: Point(x: 3, y: 4)
+fields: 3, 4
+q: Point(x: -5, y: 42)
+DONE

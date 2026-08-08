@@ -283,7 +283,7 @@ public partial class LlvmCodeGenerator
 
         string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
 
-        // Blank initializer: the expression (e.g. a Blank-returning call) ran for its side effects
+        // None initializer: the expression (e.g. a None-returning call) ran for its side effects
         // but produces no value — `void` carries nothing. Store the unit `{}` into the {} alloca.
         if (GetLlvmType(type: varType) == "void")
         {
@@ -711,7 +711,7 @@ public partial class LlvmCodeGenerator
                 // Roamed[T] handle: project the WRITE through RoamController.data AND bracket it with
                 // the mode-checked lock so an ESCAPED object's field store is serialized (no-op LOCAL).
                 // Does the full write + early-returns.
-                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_enter");
+                RoutineInfo? enterM = _registry.LookupMethod(type: wrapperRecord, methodName: Resolution.RuntimeContract.RoamedMethod.LockEnter);
                 if (enterM != null)
                 {
                     GenerateRoutineDeclaration(routine: enterM);
@@ -725,7 +725,7 @@ public partial class LlvmCodeGenerator
                     : target;
                 EmitEntityMemberVariableWrite(sb: sb, entityPtr: roamEntPtr, entity: innerEntity,
                     memberVariableName: member.MemberName, value: value, valueType: valueType);
-                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: "lock_exit");
+                RoutineInfo? exitM = _registry.LookupMethod(type: wrapperRecord, methodName: Resolution.RuntimeContract.RoamedMethod.LockExit);
                 if (exitM != null)
                 {
                     GenerateRoutineDeclaration(routine: exitM);

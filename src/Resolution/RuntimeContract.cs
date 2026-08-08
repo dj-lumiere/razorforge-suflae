@@ -73,6 +73,32 @@ public static class RuntimeContract
         public const string Roam = "roam";
     }
 
+    /// <summary><c>Roamed[T]</c> methods that codegen inserts implicitly (no surface AST call),
+    /// so RoutineReachabilityPass must anticipate them via the ImplicitCallContract.</summary>
+    /// <remarks>Sites: LLVMCodeGenerator (promote at spawn boundary, lock_enter/lock_exit around
+    /// direct field access, raw_inner for display-transparency projection) mirrored by
+    /// ImplicitCallContract.ForLiveType — keep both bound to these constants, never bare literals.</remarks>
+    public static class RoamedMethod
+    {
+        /// <summary>Spawn-boundary promotion of a single-thread handle to a shareable one.</summary>
+        public const string Promote = "promote";
+        /// <summary>Acquire the roam lock before a direct member-variable read.</summary>
+        public const string LockEnter = "lock_enter";
+        /// <summary>Release the roam lock after a direct member-variable read.</summary>
+        public const string LockExit = "lock_exit";
+        /// <summary>Project the Roamed handle to the bare inner entity pointer.</summary>
+        public const string RawInner = "raw_inner";
+    }
+
+    /// <summary>The auto-derived display routines emitted for every type.</summary>
+    public static class Display
+    {
+        /// <summary>User-facing textual form (simple type name).</summary>
+        public const string Represent = "represent";
+        /// <summary>Diagnostic textual form (module-qualified, all fields).</summary>
+        public const string Diagnose = "diagnose";
+    }
+
     /// <summary>Carrier record field names on <c>Maybe[T]</c>/<c>Result[T]</c>.</summary>
     /// <remarks>Sites: ExpressionLoweringPass (tuple synthesis), PatternLoweringPass, ErrorHandlingVariantPass,
     /// LLVMCodeGenerator.Statements (field lookup).</remarks>

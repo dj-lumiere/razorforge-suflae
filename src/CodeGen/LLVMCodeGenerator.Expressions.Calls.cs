@@ -676,9 +676,14 @@ public partial class LlvmCodeGenerator
             string implName = member.MemberName == "roam_trace_ref"
                 ? "roam_trace_impl"
                 : "roam_free_impl";
-            RoutineInfo? impl = _registry.GetMethodsForType(type: roamRecvEntity)
-                .FirstOrDefault(predicate: m => m.Name == implName && m.Parameters.Count == 0);
-            if (impl != null)
+            // Resolve through LookupMethod, not raw GetMethodsForType/GetOwnMethodsResolved: a generic
+            // entity resolution (e.g. List[Roamed[Node]]) keeps only its already-reachable methods in
+            // _routinesByOwner, so those raw views never surface the generic-def-registered
+            // roam_trace_impl and the closure would fall through to the cptr_none() fallback body
+            // (container trace_hook stays null → its held cycle is never collected). LookupMethod
+            // substitutes from the generic def, yielding the concrete monomorphized impl symbol.
+            RoutineInfo? impl = _registry.LookupMethod(type: roamRecvEntity, methodName: implName);
+            if (impl != null && impl.Parameters.Count == 0)
                 return EmitRoutineValueClosure(sb: sb, routine: impl);
         }
 
@@ -840,6 +845,35 @@ public partial class LlvmCodeGenerator
                     entityPtr: receiver,
                     entity: ctrlEntity,
                     memberVariableName: "data");
+            }
+        }
+
+        // Suflae `Roamed[E]` receiver transparency — the UNIFIED projection for Roamed handles.
+        // A Suflae local promoted to `Roamed[E]` (post-SA) reaches its inner value's methods through
+        // the wrapper: operator-lowered calls (`x in d` -> `d.contains(x)`, `d[i]` -> `d.getitem(i)`,
+        // `==`/`<`) and f-string `represent`/`diagnose` arrive here still holding the RoamController
+        // handle. `RoamedTransparency.Project` is the single decision point (shared with
+        // OperatorLoweringPass): it re-resolves a wrapper-shadowed display method to the inner's and
+        // reports whether the handle must be projected to the bare inner pointer via `raw_inner()`
+        // (bare-`me` inner method) or passed through (a Roamed-`me` inner method). Every call/index
+        // receiver flows here, so this one site covers the whole family; it is idempotent because an
+        // already-projected receiver is inner-typed (not Roamed) and Project returns null.
+        if (Resolution.RoamedTransparency.Project(receiverType: receiverType, method: method,
+                memberName: member.MemberName, registry: _registry) is { } roamProj)
+        {
+            // Re-resolve display/inner method (represent/diagnose shadowed by the wrapper → inner's).
+            method = roamProj.Method;
+            // A bare-`me` inner method needs the RoamController handle projected to the real inner
+            // pointer via `raw_inner()` (a Roamed-`me` inner method takes the handle directly).
+            if (roamProj.ProjectToInner
+                && _registry.LookupMethod(type: receiverType, methodName: Resolution.RuntimeContract.RoamedMethod.RawInner) is { } rawInner)
+            {
+                GenerateRoutineDeclaration(routine: rawInner);
+                string projected = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {projected} = call ptr @{MangleRoutineName(routine: rawInner)}(ptr {receiver})");
+                receiver = projected;
+                receiverType = roamProj.InnerType;
             }
         }
 
@@ -1483,6 +1517,20 @@ public partial class LlvmCodeGenerator
         RoutineInfo? resolvedRoutine, List<Expression> arguments,
         List<TypeExpression>? typeArguments, TypeInfo? resolvedReturnType)
     {
+        // `hollow[T]()` — the entity-footprint alloc primitive (@innate, bodyless). Heap-allocate the
+        // concrete entity's STRUCT footprint zeroed, exactly like a `$create` prologue with no args, so a
+        // SoA entity (SplitList) starts with null columns + zero counts. Only entity return types are
+        // valid; a non-entity `hollow` is a stdlib authoring error.
+        if (functionName == "hollow" || functionName.EndsWith(value: ".hollow", comparisonType: StringComparison.Ordinal))
+        {
+            if (resolvedReturnType is not EntityTypeInfo hollowEntity)
+            {
+                throw new InvalidOperationException(
+                    $"hollow[T]() requires an entity type argument, got '{resolvedReturnType?.FullName ?? "<null>"}'.");
+            }
+            return EmitEntityAllocation(sb: sb, entity: hollowEntity);
+        }
+
         if (resolvedRoutine == null && typeArguments is { Count: > 0 })
         {
             RoutineInfo? intrinsicRoutine =

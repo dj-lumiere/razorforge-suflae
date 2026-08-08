@@ -412,7 +412,7 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        RoutineInfo? promote = _registry.LookupMethod(type: rec, methodName: "promote");
+        RoutineInfo? promote = _registry.LookupMethod(type: rec, methodName: Resolution.RuntimeContract.RoamedMethod.Promote);
         if (promote == null)
         {
             return;
@@ -1359,7 +1359,11 @@ public partial class LlvmCodeGenerator
         string carrierVal = EmitExpression(sb: sb, expr: payload.Carrier);
 
         TypeInfo carrierType = payload.Carrier.ResolvedType!;
-        string carrierLlvmType = GetCarrierLlvmType(type: carrierType);
+        // Both a Result/Lookup/Maybe carrier and a general user variant store their payload at field 1
+        // ({ tag/flag, payload }); pick the right aggregate LLVM type for each.
+        string carrierLlvmType = carrierType is VariantTypeInfo variant && !IsCarrierType(type: carrierType)
+            ? GetVariantTypeName(variant: variant)
+            : GetCarrierLlvmType(type: carrierType);
 
         string spillAddr = NextTemp();
         EmitLine(sb: sb, line: $"  {spillAddr} = alloca {carrierLlvmType}");
