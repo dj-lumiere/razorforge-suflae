@@ -1031,6 +1031,23 @@ internal partial class Program
                 Timing = saTiming,
                 EntryModule = entryModule
             };
+            // dump-ast dumps the EXACT AST that LLVM codegen consumes — captured immediately BEFORE
+            // Generate(), after all desugaring/monomorphization + the final CancellationInstrumentation
+            // mutation. Codegen is a pure translator, so this snapshot fully defines its input.
+            if (dumpAst)
+            {
+                string astPath = Path.ChangeExtension(path: entryFile, extension: ".rf.desugared");
+                string astText = new RfSyntaxTreePrinter().PrintMultiProgram(
+                    programs: userPrograms,
+                    synthesizedBodies: result.SynthesizedBodies,
+                    registry: result.Registry,
+                    stdlibPrograms: stdlibPrograms,
+                    instantiatedGenericBodies: result.InstantiatedGenericBodies);
+                File.WriteAllText(path: astPath, contents: astText);
+                if (showBuildStages)
+                    Console.WriteLine(value: $"Codegen-input AST written to: {astPath}");
+            }
+
             string llvmIr = generator.Generate();
             if (showBuildStages)
                 Console.Error.WriteLine(value: $"Routines emitted: {generator.EmittedRoutineCount}");
@@ -1040,21 +1057,6 @@ internal partial class Program
             File.WriteAllText(path: outPath, contents: llvmIr);
             if (showBuildStages)
                 Console.WriteLine(value: $"LLVM IR written to: {outPath}");
-
-            if (dumpAst)
-            {
-                string astPath = Path.ChangeExtension(path: outPath, extension: ".rf.desugared");
-                var printer = new RfSyntaxTreePrinter();
-                string astText = printer.PrintMultiProgram(
-                    programs: userPrograms,
-                    synthesizedBodies: result.SynthesizedBodies,
-                    registry: result.Registry,
-                    stdlibPrograms: stdlibPrograms,
-                    instantiatedGenericBodies: result.InstantiatedGenericBodies);
-                File.WriteAllText(path: astPath, contents: astText);
-                if (showBuildStages)
-                    Console.WriteLine(value: $"Desugared AST written to: {astPath}");
-            }
 
             if (showBuildStages)
             {
