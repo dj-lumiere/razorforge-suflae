@@ -558,7 +558,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Resolves the type argument from semantic compiler state.
     /// </summary>
-    private TypeInfo? ResolveTypeArgument(TypeExpression ta) // NOSONAR S3776
+    private TypeInfo? ResolveTypeArgument(TypeExpression ta)
     {
         if (ta.ResolvedType is { } resolvedType and not ErrorTypeInfo)
         {
@@ -580,36 +580,45 @@ public partial class LlvmCodeGenerator
             return tupleType;
         }
 
-        if (ta.GenericArguments is { Count: > 0 })
+        TypeInfo? genericInstance = ResolveGenericInstanceTypeArgument(ta: ta);
+        if (genericInstance != null)
         {
-            TypeInfo? baseType = _registry.LookupType(name: ta.Name);
-            if (baseType != null)
-            {
-                var innerArgs = new List<TypeInfo>();
-                foreach (TypeExpression innerTa in ta.GenericArguments)
-                {
-                    TypeInfo? innerResolved = ResolveTypeArgument(ta: innerTa);
-                    if (innerResolved != null)
-                    {
-                        innerArgs.Add(item: innerResolved);
-                    }
-                }
+            return genericInstance;
+        }
 
-                if (innerArgs.Count == (baseType.GenericParameters?.Count ?? 0))
-                {
-                    return _registry.GetOrCreateResolution(genericDef: baseType,
-                        typeArguments: innerArgs);
-                }
+        return LookupTypeInCurrentModule(name: ta.Name) ?? _registry.LookupType(name: ta.Name);
+    }
+
+    /// <summary>
+    /// Resolves a generic-instance type argument (e.g. <c>List[S64]</c>): looks up the base type,
+    /// recursively resolves its inner arguments, and instantiates it when the arity matches.
+    /// </summary>
+    private TypeInfo? ResolveGenericInstanceTypeArgument(TypeExpression ta)
+    {
+        if (ta.GenericArguments is not { Count: > 0 } genericArguments)
+        {
+            return null;
+        }
+
+        TypeInfo? baseType = _registry.LookupType(name: ta.Name);
+        if (baseType == null)
+        {
+            return null;
+        }
+
+        var innerArgs = new List<TypeInfo>();
+        foreach (TypeExpression innerTa in genericArguments)
+        {
+            TypeInfo? innerResolved = ResolveTypeArgument(ta: innerTa);
+            if (innerResolved != null)
+            {
+                innerArgs.Add(item: innerResolved);
             }
         }
 
-        TypeInfo? fromModule = LookupTypeInCurrentModule(name: ta.Name);
-        if (fromModule != null)
-        {
-            return fromModule;
-        }
-
-        return _registry.LookupType(name: ta.Name);
+        return innerArgs.Count == (baseType.GenericParameters?.Count ?? 0)
+            ? _registry.GetOrCreateResolution(genericDef: baseType, typeArguments: innerArgs)
+            : null;
     }
 
     /// <summary>
@@ -715,7 +724,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Gets the return type of an index expression by looking up getitem on the target type.
     /// </summary>
-    private TypeInfo? GetIndexReturnType(IndexExpression index) // NOSONAR S3776
+    private TypeInfo? GetIndexReturnType(IndexExpression index)
     {
         TypeInfo? targetType = GetExpressionType(expr: index.Object);
         if (targetType == null)
@@ -735,52 +744,59 @@ public partial class LlvmCodeGenerator
             return null;
         }
 
-        TypeInfo returnType = getItem.ReturnType;
-        List<string>? ownerGenericParams = null;
-        if (lookupType.TypeArguments is { Count: > 0 })
+        if (lookupType.TypeArguments is not { Count: > 0 } typeArgs)
         {
-            TypeInfo? lookupGenericDef = lookupType switch
-            {
-                RecordTypeInfo { IsGenericResolution: true } r => r.GenericDefinition,
-                EntityTypeInfo { IsGenericResolution: true } e => e.GenericDefinition,
-                ProtocolTypeInfo { IsGenericResolution: true } p => p.GenericDefinition,
-                _ => null
-            };
-            ownerGenericParams = lookupGenericDef?.GenericParameters ??
-                                 getItem.OwnerType?.GenericParameters;
+            return getItem.ReturnType;
         }
 
-        if (lookupType.TypeArguments is { Count: > 0 } && ownerGenericParams is { Count: > 0 })
+        List<string>? ownerGenericParams = ResolveOwnerGenericParams(lookupType: lookupType,
+            getItem: getItem);
+        return ownerGenericParams is { Count: > 0 }
+            ? SubstituteIndexReturnType(returnType: getItem.ReturnType,
+                ownerGenericParams: ownerGenericParams, typeArgs: typeArgs)
+            : getItem.ReturnType;
+    }
+
+    /// <summary>Resolves the owner generic-parameter names for a generic-resolution index target.</summary>
+    private static List<string>? ResolveOwnerGenericParams(TypeInfo lookupType, RoutineInfo getItem)
+    {
+        TypeInfo? lookupGenericDef = lookupType switch
         {
-            for (int i = 0; i < ownerGenericParams.Count && i < lookupType.TypeArguments.Count; i++)
-            {
-                if (returnType.Name == ownerGenericParams[index: i])
-                {
-                    return lookupType.TypeArguments[index: i];
-                }
-            }
+            RecordTypeInfo { IsGenericResolution: true } r => r.GenericDefinition,
+            EntityTypeInfo { IsGenericResolution: true } e => e.GenericDefinition,
+            ProtocolTypeInfo { IsGenericResolution: true } p => p.GenericDefinition,
+            _ => null
+        };
+        return lookupGenericDef?.GenericParameters ?? getItem.OwnerType?.GenericParameters;
+    }
 
-            var substitutions = new Dictionary<string, TypeInfo>();
-            for (int i = 0; i < ownerGenericParams.Count && i < lookupType.TypeArguments.Count; i++)
+    /// <summary>
+    /// Substitutes the index target's type arguments into <c>getitem</c>'s return type — a direct
+    /// param match returns the arg verbatim, otherwise a full type-parameter substitution is applied.
+    /// </summary>
+    private TypeInfo SubstituteIndexReturnType(TypeInfo returnType,
+        List<string> ownerGenericParams, List<TypeInfo> typeArgs)
+    {
+        var substitutions = new Dictionary<string, TypeInfo>();
+        for (int i = 0; i < ownerGenericParams.Count && i < typeArgs.Count; i++)
+        {
+            if (returnType.Name == ownerGenericParams[index: i])
             {
-                substitutions[key: ownerGenericParams[index: i]] =
-                    lookupType.TypeArguments[index: i];
+                return typeArgs[index: i];
             }
-
-            if (substitutions.Count > 0)
-            {
-                returnType = ApplyTypeSubstitutions(type: SubstituteTypeParams(type: returnType,
-                    substitutions: substitutions));
-            }
+            substitutions[key: ownerGenericParams[index: i]] = typeArgs[index: i];
         }
 
-        return returnType;
+        return substitutions.Count > 0
+            ? ApplyTypeSubstitutions(type: SubstituteTypeParams(type: returnType,
+                substitutions: substitutions))
+            : returnType;
     }
 
     /// <summary>
     /// Gets the return type of a call expression.
     /// </summary>
-    private TypeInfo? GetCallReturnType(CallExpression call) // NOSONAR S3776
+    private TypeInfo? GetCallReturnType(CallExpression call)
     {
         // The emitted `call` targets ResolvedRoutine, and its LLVM return type is
         // GetLlvmType(ResolvedRoutine.ReturnType). So a FULLY CONCRETE resolved return type is
@@ -822,10 +838,16 @@ public partial class LlvmCodeGenerator
                 return fallback;
         }
 
-        // SA must set ResolvedRoutine or ConstructedType on every call before backend entry.
-        // Report the ACTUAL annotation values: a call can carry a non-null ResolvedRoutine and
-        // still land here when its return type never became concrete (e.g. a generic-def
-        // resolution whose ReturnType still contains a type parameter).
+        throw UnresolvedCallReturnType(call: call);
+    }
+
+    /// <summary>
+    /// Builds the diagnostic thrown when a call reaches the backend with no concrete SA-resolved
+    /// return type. Reports the ACTUAL annotation values (a call can carry a non-null ResolvedRoutine
+    /// yet still land here when its return type never became concrete).
+    /// </summary>
+    private InvalidOperationException UnresolvedCallReturnType(CallExpression call)
+    {
         string calleeDesc = call.Callee switch
         {
             MemberExpression m => $"{m.Object.GetType().Name}.{m.MemberName}",
@@ -838,7 +860,7 @@ public partial class LlvmCodeGenerator
         string resolvedRoutineDesc = call.ResolvedRoutine is { } rr
             ? $"{rr.FullName} -> {rr.ReturnType?.FullName ?? "<null>"}"
             : "<null>";
-        throw new InvalidOperationException(
+        return new InvalidOperationException(
             $"CallExpression '{calleeDesc}' has no concrete SA-resolved return type " +
             $"(ResolvedRoutine={resolvedRoutineDesc}, " +
             $"ConstructedType={call.ConstructedType?.FullName ?? "<null>"}, " +

@@ -635,51 +635,53 @@ public partial class LlvmCodeGenerator
     /// Handles both direct substitution (T -> Point) and nested resolution (Viewing[T] -> Viewing[Point]).
     /// </summary>
     private TypeInfo SubstituteGenericParamInType(TypeInfo type, string paramName,
-        TypeInfo concreteType) // NOSONAR S3776
+        TypeInfo concreteType)
     {
         if (type.Name == paramName || type is GenericParameterTypeInfo gp && gp.Name == paramName)
         {
             return concreteType;
         }
 
-        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        if (type is not { IsGenericResolution: true, TypeArguments: not null })
         {
-            bool anyChanged = false;
-            var substitutedArgs = new List<TypeInfo>();
-            foreach (TypeInfo arg in type.TypeArguments)
-            {
-                TypeInfo substituted = SubstituteGenericParamInType(type: arg,
-                    paramName: paramName,
-                    concreteType: concreteType);
-                substitutedArgs.Add(item: substituted);
-                if (!ReferenceEquals(objA: substituted, objB: arg))
-                {
-                    anyChanged = true;
-                }
-            }
-
-            if (anyChanged)
-            {
-                TypeInfo? genericBase = GetGenericBase(type: type);
-                if (genericBase != null)
-                {
-                    return _registry.GetOrCreateResolution(genericDef: genericBase,
-                        typeArguments: substitutedArgs);
-                }
-
-                if (type is WrapperTypeInfo)
-                {
-                    TypeInfo? wrapperRecordDef = _registry.LookupType(name: type.Name);
-                    if (wrapperRecordDef is { IsGenericDefinition: true })
-                    {
-                        return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
-                            typeArguments: substitutedArgs);
-                    }
-                }
-            }
+            return type;
         }
 
-        return type;
+        bool anyChanged = false;
+        var substitutedArgs = new List<TypeInfo>();
+        foreach (TypeInfo arg in type.TypeArguments)
+        {
+            TypeInfo substituted = SubstituteGenericParamInType(type: arg,
+                paramName: paramName, concreteType: concreteType);
+            substitutedArgs.Add(item: substituted);
+            anyChanged |= !ReferenceEquals(objA: substituted, objB: arg);
+        }
+
+        return anyChanged
+            ? RebuildResolutionWithArgs(type: type, substitutedArgs: substitutedArgs) ?? type
+            : type;
+    }
+
+    /// <summary>
+    /// Rebuilds a generic-resolution (or wrapper) type with substituted type arguments, resolving
+    /// its generic base (or the wrapper's generic-definition record). Returns null if no base found.
+    /// </summary>
+    private TypeInfo? RebuildResolutionWithArgs(TypeInfo type, List<TypeInfo> substitutedArgs)
+    {
+        TypeInfo? genericBase = GetGenericBase(type: type);
+        if (genericBase != null)
+        {
+            return _registry.GetOrCreateResolution(genericDef: genericBase,
+                typeArguments: substitutedArgs);
+        }
+
+        if (type is WrapperTypeInfo &&
+            _registry.LookupType(name: type.Name) is { IsGenericDefinition: true } wrapperRecordDef)
+        {
+            return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
+                typeArguments: substitutedArgs);
+        }
+        return null;
     }
 
     /// <summary>

@@ -198,178 +198,16 @@ public partial class LlvmCodeGenerator
     {
         // The binding attached at registration is authoritative — it is the exact RoutineInfo this
         // declaration was registered as, so it needs no name re-parsing or module-blind owner lookup.
-        RoutineInfo? routineInfo = preResolvedInfo ?? routine.ResolvedInfo;
+        RoutineInfo? routineInfo = preResolvedInfo ?? routine.ResolvedInfo
+            ?? ResolveRoutineInfoForDefinition(routine: routine, moduleContext: moduleContext);
 
-        if (routineInfo == null)
-        {
-            // Look up the routine info from the registry
-            // For module-qualified names like "Console.show", the registry key may be
-            // "IO.show" (module.name). Try full AST name first, then short name lookup.
-            string baseName = routine.Name;
-
-            // MEMBER decl in a known module: resolve OWNER-SCOPED to this module FIRST. A bare
-            // `LookupRoutine("Box.destroy")` returns a first-wins entry, so when two modules each
-            // declare `record Box` with a `destroy`/0-param method, this module's body would be
-            // emitted under the OTHER module's symbol — leaving this module's symbol undefined (the
-            // module-scoped-type over-prune). The overload block below only rescues >0-param methods;
-            // 0-param ones (`destroy()`, `bump()`) must be pinned here, before the bare lookup.
-            int memberDot = baseName.IndexOf(value: '.');
-            if (!string.IsNullOrEmpty(value: moduleContext) && memberDot > 0)
-            {
-                string ownerSeg = TypeInfo.StripTypeArgs(name: baseName[..memberDot]);
-                TypeInfo? scopedOwner = _registry.LookupType(name: $"{moduleContext}.{ownerSeg}");
-                if (scopedOwner != null)
-                {
-                    routineInfo = _registry.LookupMethod(type: scopedOwner,
-                        methodName: baseName[(memberDot + 1)..]);
-                }
-            }
-
-            routineInfo ??= _registry.LookupRoutine(fullName: baseName);
-            // Module-level routine (no dot): prefer the module-qualified key so that two modules'
-            // same-named routines (e.g. each of several imported test modules with a `start`) each
-            // bind to their OWN RoutineInfo. Without this, the bare LookupRoutineByName fallback
-            // below returns a first-wins entry and this module's body is emitted under another
-            // module's symbol.
-            if (routineInfo == null && !string.IsNullOrEmpty(value: moduleContext) &&
-                !baseName.Contains(value: '.'))
-            {
-                routineInfo = _registry.LookupRoutine(fullName: $"{moduleContext}.{baseName}");
-            }
-            if (routineInfo == null)
-            {
-                int dotIdx = baseName.IndexOf(value: '.');
-                if (dotIdx > 0)
-                {
-                    // Member declaration (e.g. "UnpackedFloat[M, L, W].cbrt"). Resolve scoped
-                    // to the owner type FIRST: the owner-qualified LookupRoutine above can miss
-                    // when the AST name carries generic params (BaseName drops them), and a bare
-                    // short-name lookup could otherwise bind this method's body to a same-named
-                    // free/external routine of a DIFFERENT owner.
-                    string ownerPart = TypeInfo.StripTypeArgs(name: baseName[..dotIdx]);
-                    string shortName = baseName[(dotIdx + 1)..];
-                    // MODULE-SCOPED owner resolution: prefer the emitting program's own module so two
-                    // modules that each declare `record Box` bind this decl to the CORRECT `Mod.Box`.
-                    // A bare `LookupType("Box")` returns a first-wins entry, emitting this module's body
-                    // under the other module's symbol (leaving THIS module's symbol undefined — the
-                    // module-scoped-type over-prune the harness caught).
-                    TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
-                        ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
-                        : null) ?? _registry.LookupType(name: ownerPart);
-                    if (ownerType != null)
-                        routineInfo = _registry.LookupMethod(type: ownerType, methodName: shortName);
-                    routineInfo ??= _registry.LookupRoutine(fullName: shortName) ??
-                                    _registry.LookupRoutineByName(name: shortName);
-                }
-                else
-                {
-                    // No dot — try short name fallback (e.g., "show" -> finds "IO.show")
-                    routineInfo = _registry.LookupRoutineByName(name: baseName);
-                }
-            }
-
-            // For overloaded routines, resolve the specific overload matching this AST
-            if (routineInfo != null && routine.Parameters.Count > 0)
-            {
-                var astParamTypes = new List<TypeInfo>();
-                foreach (Parameter param in routine.Parameters)
-                {
-                    if (param.Type != null)
-                    {
-                        string typeName = param.Type.Name;
-                        if (param.Type.GenericArguments is { Count: > 0 })
-                        {
-                            typeName =
-                                $"{typeName}[{string.Join(separator: ", ", values: param.Type.GenericArguments.Select(selector: a => a.Name))}]";
-                        }
-
-                        TypeInfo? t = _registry.LookupType(name: typeName);
-                        if (t != null)
-                        {
-                            astParamTypes.Add(item: t);
-                        }
-                    }
-                }
-
-                if (astParamTypes.Count == routine.Parameters.Count)
-                {
-                    RoutineInfo? overload = null;
-
-                    // Member declaration (Owner.method): disambiguate OWNER-SCOPED. The base-name
-                    // path below fails here — routineInfo.BaseName for a member routine is the bare
-                    // "F64.create" (no module prefix), but overloads register under
-                    // "Core.F64.create#…", and LookupRoutineOverload's Core-prefix fallback is
-                    // disabled whenever the base name contains a '.' (which member names always do).
-                    // So it would silently fall back to the first-registered overload, ignoring the
-                    // arg types we just computed. LookupMethodOverload collects the owner type's
-                    // member candidates and matches positionally by arg type instead.
-                    if (routine.OwnerName is { } ownerPart && routine.MethodName is { } shortName)
-                    {
-                        // Module-scoped owner (see the resolution above) so the overload is matched on
-                        // THIS module's same-named type, not a first-wins cross-module one.
-                        TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
-                            ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
-                            : null) ?? _registry.LookupType(name: ownerPart);
-                        if (ownerType != null)
-                            overload = _registry.LookupMethodOverload(type: ownerType,
-                                methodName: shortName, argTypes: astParamTypes);
-                    }
-
-                    overload ??=
-                        _registry.LookupRoutineOverload(baseName: routineInfo.BaseName,
-                            argTypes: astParamTypes);
-                    if (overload != null)
-                    {
-                        routineInfo = overload;
-                    }
-                }
-            }
-        }
-
-        if (routineInfo == null || routineInfo.IsGenericDefinition ||
-            routineInfo.OwnerType is GenericParameterTypeInfo)
-        {
-            return; // Skip generic definitions, unresolved routines, and generic-param-owner routines
-        }
-
-        // Skip a protocol-extension routine's own template body (owner is a protocol, `Me` abstract):
-        // it is never emitted directly — ProtocolDefaultImplLoweringPass clones a concrete copy per
-        // implementer. The declaration loop already skips protocol-owned routines; this mirrors that
-        // for the user-program definition path, and in particular keeps an uninstantiated comptime
-        // `expand` (which only unrolls once `Me` is concrete) from reaching codegen.
-        if (routineInfo.OwnerType is ProtocolTypeInfo)
+        if (ShouldSkipRoutineDefinition(routineInfo: routineInfo))
         {
             return;
         }
 
-        if (routineInfo.Parameters.Any(predicate: p => ContainsGenericParameter(type: p.Type)) ||
-            routineInfo.ReturnType != null && ContainsGenericParameter(type: routineInfo.ReturnType) ||
-            routineInfo.OwnerType != null && ContainsGenericParameter(type: routineInfo.OwnerType))
-        {
-            return;
-        }
-
-        // Skip routines with error types in their signature
-        if (HasErrorTypes(routine: routineInfo))
-        {
-            return;
-        }
-
-        // Reachability gate: when LiveRoutineKeys is populated, skip routines not reachable
-        // from program entry points. Otherwise codegen emits every module-level routine
-        // (including unreached helpers) and any callee they reference must also be defined,
-        // producing spurious linker errors for stdlib methods the program never actually uses.
-        // Lifted lambdas are exempted: LambdaLiftingPass runs in Phase 7, after reachability
-        // in Phase 6, so their keys aren't in the live set even when referenced by address
-        // from a reachable enclosing routine.
-        if (_liveRoutineKeys.Count > 0
-            && !_liveRoutineKeys.Contains(item: routineInfo.RegistryKey)
-            && !routineInfo.IsLambda)
-        {
-            return;
-        }
-
-        string funcName = nameOverride ?? MangleRoutineName(routine: routineInfo);
+        RoutineInfo info = routineInfo!;
+        string funcName = nameOverride ?? MangleRoutineName(routine: info);
 
         // Skip if already generated (prevents duplicates between user program and stdlib)
         if (!_generatedRoutineDefs.Add(item: funcName))
@@ -380,72 +218,9 @@ public partial class LlvmCodeGenerator
         // Also mark as generated in declarations set to prevent declare/define conflicts
         _generatedRoutines.Add(item: funcName);
 
-        // Build parameter list with names
-        var paramList = new List<string>();
-
-        // Closure ABI: every lifted lambda receives its closure object as a hidden leading
-        // `ptr %__cl` parameter (uniform whether or not it captures), so indirect calls through a
-        // Routine value can always pass the closure. The body's prologue loads captures from it.
-        if (routineInfo.IsLambda)
-        {
-            paramList.Add(item: "ptr %__cl");
-        }
-
-        // For methods, add implicit 'me' parameter first
-        // Skip 'me' for create routines (static factories), common (type-level) routines, and void/None owner types
-        bool isCreator = IsCreatorRoutine(routine: routineInfo);
-        if (routineInfo.OwnerType != null && !isCreator && !routineInfo.IsCommon)
-        {
-            string meParam = GetImplicitMeParameterDeclaration(routine: routineInfo,
-                includeName: true);
-            if (!meParam.StartsWith(value: "void", comparisonType: StringComparison.Ordinal))
-            {
-                paramList.Add(item: meParam);
-            }
-        }
-
-        // Add explicit parameters
-        // Sanitize names that conflict with LLVM's reserved block label "entry"
-        paramList.AddRange(collection:
-            from param in routineInfo.Parameters
-            let byRefThreadArg = IsByRefThreadArg(routine: routineInfo, param: param)
-            // ABI-Indirect struct value arg: arrives as `ptr byval(%T)` — a pointer to the callee's
-            // private copy. Like a by-ref thread arg, `%<name>.addr` doubles as the struct's lvalue
-            // address so the prologue skips the alloca/store copy (the byval copy already exists).
-            let byval = !byRefThreadArg && ParameterPassedByval(routine: routineInfo, paramType: param.Type)
-            // ABI-Coerce small struct value arg: arrives as an integer register value (`%<name>`);
-            // the prologue reconstructs the struct into `%<name>.addr`. Plain value name (not .addr).
-            let coerce = !byRefThreadArg && !byval
-                ? ParameterCoerceType(routine: routineInfo, paramType: param.Type)
-                : null
-            let paramType = byRefThreadArg ? "ptr"
-                : byval ? $"ptr byval({GetLlvmType(type: param.Type)})"
-                : coerce ?? GetParameterLlvmType(type: param.Type)
-            let paramAttrs = byRefThreadArg || byval || coerce != null
-                ? string.Empty
-                : GetExplicitParameterAttributes(type: param.Type)
-            let emittedName = byRefThreadArg || byval ? $"{param.Name}.addr"
-                : param.Name == "entry" ? "entry_" : param.Name
-            select string.IsNullOrEmpty(paramAttrs)
-                ? $"{paramType} %{emittedName}"
-                : $"{paramType} {paramAttrs} %{emittedName}");
-
-        // Get return type
-        string returnType = routineInfo.ReturnType != null
-            ? GetLlvmType(type: routineInfo.ReturnType)
-            : "void";
-        if (routineInfo.FailableVariant == FailableVariant.Lookup)
-        {
-            returnType = GetLookupCarrierLlvmType(valueType: routineInfo.ReturnType!);
-        }
-        else if (routineInfo.FailableVariant == FailableVariant.Check)
-        {
-            returnType = GetResultCarrierLlvmType(valueType: routineInfo.ReturnType!);
-        }
-        else if (routineInfo.FailableVariant == FailableVariant.TryBool)
-        {
-            returnType = "i1";
-        }
+        bool isCreator = IsCreatorRoutine(routine: info);
+        List<string> paramList = BuildDefinitionParameterList(info: info);
+        string returnType = ComputeDefinitionReturnType(info: info);
 
         // Struct returns classified Indirect by the ABI are returned through a hidden sret pointer:
         // prepend `ptr sret(%T) %sret` and make the header return void; every `return` in the body
@@ -453,10 +228,10 @@ public partial class LlvmCodeGenerator
         // emission, so set it before GenerateRoutineBody and restore after.
         bool prevReturnViaSret = _currentReturnViaSret;
         string? prevReturnCoerce = _currentReturnCoerceType;
-        _currentReturnViaSret = ReturnsViaSret(routine: routineInfo);
+        _currentReturnViaSret = ReturnsViaSret(routine: info);
         // Phase 2: a small struct return is coerced to an integer register form; the header returns
         // that type and every `return` reinterprets the struct into it (see EmitReturn).
-        _currentReturnCoerceType = _currentReturnViaSret ? null : ReturnCoerceType(routine: routineInfo);
+        _currentReturnCoerceType = _currentReturnViaSret ? null : ReturnCoerceType(routine: info);
         if (_currentReturnViaSret)
         {
             paramList.Insert(index: 0, item: $"ptr sret({returnType}) %sret");
@@ -467,33 +242,10 @@ public partial class LlvmCodeGenerator
         int savedLength = _functionDefinitions.Length;
         int savedTempCounter = _tempCounter;
 
-        bool isInline = routineInfo.Annotations.Contains(value: "inline");
-        string headerReturnType = _currentReturnViaSret ? "void"
-            : _currentReturnCoerceType ?? returnType;
-        string returnPrefix =
-            !_currentReturnViaSret && isCreator && returnType == "ptr" ? "noalias " : "";
-        // Compiler-synthesized routines (lifecycle destroy/store/copy, derived operators, wrapper
-        // forwarding, variant-arm constructors, try_/check_ variants, …) are only ever referenced
-        // within this whole-program module, so give them `internal` linkage: LLVM's GlobalDCE can then
-        // strip the ones that end up uncalled (e.g. a no-op destroy) and inline+eliminate single-use
-        // helpers. The runtime never unwinds (no invoke/landingpad/personality is ever emitted), so
-        // they are also `nounwind`. main / start / user routines and extern `declare`s are untouched.
-        bool isCompilerGenerated = routineInfo.IsSynthesized || routineInfo.IsWiredMemberRoutine;
-        string linkagePrefix = isCompilerGenerated ? "internal " : "";
-        string funcAttrs = isInline ? " alwaysinline" : "";
-        if (isCompilerGenerated)
-            funcAttrs += " nounwind";
-        // `@no_optimize` emits `noinline optnone` — a per-routine optimization barrier for routines
-        // that an LLVM backend pass miscompiles. Currently the softfloat gamma cores (F128.lgamma/
-        // tgamma_unchecked + UnpackedFloat.lgamma_core + f512_lgamma_core): LLVM 21's InstCombine
-        // miscompiles them at -O2+ (found via opt -opt-bisect-limit; -O0 is correct). The routine
-        // runs unoptimized but correct; see the memory note on the pending proper IR-dodge fix.
-        if (routineInfo.Annotations.Contains(value: "no_optimize"))
-            funcAttrs += " noinline optnone";
-        string defineHeader =
-            $"define {linkagePrefix}{returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
+        string defineHeader = BuildDefineHeader(info: info, funcName: funcName,
+            parameters: parameters, returnType: returnType, isCreator: isCreator);
         _generatedRoutineDefHeaders[key: funcName] = defineHeader;
-        RecordDebugSubprogram(funcName: funcName, location: routineInfo.Location);
+        RecordDebugSubprogram(funcName: funcName, location: info.Location);
         _currentDbgLoc = null; // reset the Layer-2 location cursor at each routine boundary
         EmitLine(sb: _functionDefinitions, line: defineHeader);
         EmitLine(sb: _functionDefinitions, line: "entry:");
@@ -501,30 +253,7 @@ public partial class LlvmCodeGenerator
 
         try
         {
-            // Stub routines (no AST body — e.g. BuilderService.page_size() declared without a
-            // body) get their synthesized body from WiredRoutinePass via _synthesizedBodies.
-            // Without this, codegen falls through GenerateRoutineBody on a null AST and emits
-            // an empty function returning zero/null — every page_size() call returns 0,
-            // every target_os() returns null ptr, and `show(f"target_os: {os}")` AVs in
-            // CStr.create(from: null).
-            Statement effectiveBody = routine.Body;
-            // Stub routines (declared without a body, like BuilderService.page_size()) get
-            // their synthesized body from WiredRoutinePass via _synthesizedBodies. The parser
-            // produces an empty BlockStatement for missing bodies, so check both null and empty.
-            bool isStubBody = effectiveBody is null
-                || effectiveBody is BlockStatement { Statements.Count: 0 };
-            if (isStubBody
-                && _synthesizedBodies.TryGetValue(key: routineInfo.RegistryKey,
-                    value: out Statement? synthStub))
-            {
-                effectiveBody = synthStub;
-            }
-            if (effectiveBody != null)
-            {
-                GenerateRoutineBody(sb: bodyBuilder, body: effectiveBody, routine: routineInfo);
-            }
-            _functionDefinitions.Append(value: _currentRoutineEntryAllocas);
-            _functionDefinitions.Append(value: bodyBuilder);
+            EmitDefinitionBody(routine: routine, info: info, bodyBuilder: bodyBuilder);
         }
         catch
         {
@@ -546,10 +275,334 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Resolves the <see cref="RoutineInfo"/> for a routine definition from the registry when the
+    /// declaration carries no authoritative binding. Prefers module-scoped owner resolution so two
+    /// modules that each declare a same-named type/routine each bind to their own symbol.
+    /// </summary>
+    private RoutineInfo? ResolveRoutineInfoForDefinition(RoutineDeclaration routine,
+        string? moduleContext)
+    {
+        string baseName = routine.Name;
+        RoutineInfo? routineInfo = LookupScopedMemberRoutine(baseName: baseName,
+            moduleContext: moduleContext);
+
+        routineInfo ??= _registry.LookupRoutine(fullName: baseName);
+        // Module-level routine (no dot): prefer the module-qualified key so that two modules'
+        // same-named routines each bind to their OWN RoutineInfo.
+        if (routineInfo == null && !string.IsNullOrEmpty(value: moduleContext) &&
+            !baseName.Contains(value: '.'))
+        {
+            routineInfo = _registry.LookupRoutine(fullName: $"{moduleContext}.{baseName}");
+        }
+        routineInfo ??= LookupUnqualifiedRoutine(baseName: baseName, moduleContext: moduleContext);
+
+        return ResolveDefinitionOverload(routine: routine, moduleContext: moduleContext,
+            routineInfo: routineInfo);
+    }
+
+    /// <summary>
+    /// Owner-scoped member lookup pinned to <paramref name="moduleContext"/>. A bare
+    /// <c>LookupRoutine("Box.destroy")</c> returns a first-wins entry, so a 0-param method on a
+    /// same-named type in another module would otherwise be emitted under the wrong symbol.
+    /// </summary>
+    private RoutineInfo? LookupScopedMemberRoutine(string baseName, string? moduleContext)
+    {
+        int memberDot = baseName.IndexOf(value: '.');
+        if (string.IsNullOrEmpty(value: moduleContext) || memberDot <= 0)
+        {
+            return null;
+        }
+
+        string ownerSeg = TypeInfo.StripTypeArgs(name: baseName[..memberDot]);
+        TypeInfo? scopedOwner = _registry.LookupType(name: $"{moduleContext}.{ownerSeg}");
+        return scopedOwner == null
+            ? null
+            : _registry.LookupMethod(type: scopedOwner, methodName: baseName[(memberDot + 1)..]);
+    }
+
+    /// <summary>
+    /// Fallback lookup when the earlier module-scoped and full-name lookups miss. For a member name
+    /// (with a dot) resolves owner-scoped first; otherwise uses the short-name registry fallback.
+    /// </summary>
+    private RoutineInfo? LookupUnqualifiedRoutine(string baseName, string? moduleContext)
+    {
+        int dotIdx = baseName.IndexOf(value: '.');
+        if (dotIdx <= 0)
+        {
+            // No dot — try short name fallback (e.g., "show" -> finds "IO.show")
+            return _registry.LookupRoutineByName(name: baseName);
+        }
+
+        // Member declaration (e.g. "UnpackedFloat[M, L, W].cbrt"). Resolve scoped to the owner
+        // type FIRST so a bare short-name lookup does not bind to a same-named routine of another
+        // owner.
+        string ownerPart = TypeInfo.StripTypeArgs(name: baseName[..dotIdx]);
+        string shortName = baseName[(dotIdx + 1)..];
+        TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
+            ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
+            : null) ?? _registry.LookupType(name: ownerPart);
+        RoutineInfo? routineInfo = ownerType != null
+            ? _registry.LookupMethod(type: ownerType, methodName: shortName)
+            : null;
+        return routineInfo ?? _registry.LookupRoutine(fullName: shortName) ??
+            _registry.LookupRoutineByName(name: shortName);
+    }
+
+    /// <summary>
+    /// For an overloaded routine, resolves the specific overload matching this AST's parameter
+    /// types (owner-scoped first for member declarations), returning the more specific match.
+    /// </summary>
+    private RoutineInfo? ResolveDefinitionOverload(RoutineDeclaration routine,
+        string? moduleContext, RoutineInfo? routineInfo)
+    {
+        if (routineInfo == null || routine.Parameters.Count == 0)
+        {
+            return routineInfo;
+        }
+
+        List<TypeInfo> astParamTypes = ResolveAstParameterTypes(routine: routine);
+        if (astParamTypes.Count != routine.Parameters.Count)
+        {
+            return routineInfo;
+        }
+
+        RoutineInfo? overload = ResolveScopedMethodOverload(routine: routine,
+            moduleContext: moduleContext, astParamTypes: astParamTypes);
+        overload ??= _registry.LookupRoutineOverload(baseName: routineInfo.BaseName,
+            argTypes: astParamTypes);
+        return overload ?? routineInfo;
+    }
+
+    /// <summary>
+    /// Resolves each AST parameter's declared type to a registered <see cref="TypeInfo"/>.
+    /// </summary>
+    private List<TypeInfo> ResolveAstParameterTypes(RoutineDeclaration routine)
+    {
+        var astParamTypes = new List<TypeInfo>();
+        foreach (Parameter param in routine.Parameters)
+        {
+            if (param.Type == null)
+            {
+                continue;
+            }
+
+            string typeName = param.Type.Name;
+            if (param.Type.GenericArguments is { Count: > 0 } genArgs)
+            {
+                typeName =
+                    $"{typeName}[{string.Join(separator: ", ", values: genArgs.Select(selector: a => a.Name))}]";
+            }
+
+            TypeInfo? t = _registry.LookupType(name: typeName);
+            if (t != null)
+            {
+                astParamTypes.Add(item: t);
+            }
+        }
+        return astParamTypes;
+    }
+
+    /// <summary>
+    /// Owner-scoped overload disambiguation for a member declaration. The base-name overload path
+    /// misses here because member base names always contain a '.', which disables the Core-prefix
+    /// fallback — so collect the owner type's candidates and match positionally by arg type.
+    /// </summary>
+    private RoutineInfo? ResolveScopedMethodOverload(RoutineDeclaration routine,
+        string? moduleContext, List<TypeInfo> astParamTypes)
+    {
+        if (routine.OwnerName is not { } ownerPart || routine.MethodName is not { } shortName)
+        {
+            return null;
+        }
+
+        TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
+            ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
+            : null) ?? _registry.LookupType(name: ownerPart);
+        return ownerType == null
+            ? null
+            : _registry.LookupMethodOverload(type: ownerType, methodName: shortName,
+                argTypes: astParamTypes);
+    }
+
+    /// <summary>
+    /// Gate deciding whether a routine definition must be skipped: unresolved / generic-definition /
+    /// generic-param-owner / protocol-owned / unresolved-generic-signature / error-typed routines,
+    /// and routines pruned out by the reachability set.
+    /// </summary>
+    private bool ShouldSkipRoutineDefinition(RoutineInfo? routineInfo)
+    {
+        if (routineInfo == null || routineInfo.IsGenericDefinition ||
+            routineInfo.OwnerType is GenericParameterTypeInfo)
+        {
+            return true; // generic definitions, unresolved routines, generic-param-owner routines
+        }
+
+        // A protocol-extension routine's own template body is never emitted directly —
+        // ProtocolDefaultImplLoweringPass clones a concrete copy per implementer.
+        if (routineInfo.OwnerType is ProtocolTypeInfo)
+        {
+            return true;
+        }
+
+        if (routineInfo.Parameters.Any(predicate: p => ContainsGenericParameter(type: p.Type)) ||
+            routineInfo.ReturnType != null && ContainsGenericParameter(type: routineInfo.ReturnType) ||
+            routineInfo.OwnerType != null && ContainsGenericParameter(type: routineInfo.OwnerType))
+        {
+            return true;
+        }
+
+        if (HasErrorTypes(routine: routineInfo))
+        {
+            return true;
+        }
+
+        // Reachability gate: when LiveRoutineKeys is populated, skip routines not reachable from
+        // program entry points. Lifted lambdas are exempt — LambdaLiftingPass runs after
+        // reachability, so their keys aren't in the live set even when referenced by address.
+        return _liveRoutineKeys.Count > 0
+            && !_liveRoutineKeys.Contains(item: routineInfo.RegistryKey)
+            && !routineInfo.IsLambda;
+    }
+
+    /// <summary>
+    /// Builds the LLVM parameter list (with names) for a routine definition: the hidden closure
+    /// pointer for lambdas, the implicit <c>me</c> receiver for methods, and each explicit
+    /// parameter in its ABI form (by-ref thread arg / byval / coerce / plain value).
+    /// </summary>
+    private List<string> BuildDefinitionParameterList(RoutineInfo info)
+    {
+        var paramList = new List<string>();
+
+        // Closure ABI: every lifted lambda receives its closure object as a hidden leading
+        // `ptr %__cl` parameter, so indirect calls through a Routine value can always pass it.
+        if (info.IsLambda)
+        {
+            paramList.Add(item: "ptr %__cl");
+        }
+
+        // For methods, add implicit 'me' parameter first (skip create factories, common routines,
+        // and void/None owner types).
+        if (info.OwnerType != null && !IsCreatorRoutine(routine: info) && !info.IsCommon)
+        {
+            string meParam = GetImplicitMeParameterDeclaration(routine: info, includeName: true);
+            if (!meParam.StartsWith(value: "void", comparisonType: StringComparison.Ordinal))
+            {
+                paramList.Add(item: meParam);
+            }
+        }
+
+        // Add explicit parameters (sanitize names that conflict with the reserved "entry" label).
+        paramList.AddRange(collection:
+            from param in info.Parameters
+            select FormatDefinitionParameter(info: info, param: param));
+        return paramList;
+    }
+
+    /// <summary>
+    /// Formats a single explicit parameter into its LLVM declaration form, resolving the ABI
+    /// passing mode (by-ref thread arg, ABI-Indirect byval, ABI-Coerce integer, or plain value).
+    /// </summary>
+    private string FormatDefinitionParameter(RoutineInfo info, ParameterInfo param)
+    {
+        bool byRefThreadArg = IsByRefThreadArg(routine: info, param: param);
+        // ABI-Indirect struct value arg: arrives as `ptr byval(%T)` — a pointer to the callee's
+        // private copy, doubling as the struct's lvalue address.
+        bool byval = !byRefThreadArg && ParameterPassedByval(routine: info, paramType: param.Type);
+        // ABI-Coerce small struct value arg: arrives as an integer register value.
+        string? coerce = !byRefThreadArg && !byval
+            ? ParameterCoerceType(routine: info, paramType: param.Type)
+            : null;
+        string paramType = byRefThreadArg ? "ptr"
+            : byval ? $"ptr byval({GetLlvmType(type: param.Type)})"
+            : coerce ?? GetParameterLlvmType(type: param.Type);
+        string paramAttrs = byRefThreadArg || byval || coerce != null
+            ? string.Empty
+            : GetExplicitParameterAttributes(type: param.Type);
+        string emittedName = byRefThreadArg || byval ? $"{param.Name}.addr"
+            : param.Name == "entry" ? "entry_" : param.Name;
+        return string.IsNullOrEmpty(paramAttrs)
+            ? $"{paramType} %{emittedName}"
+            : $"{paramType} {paramAttrs} %{emittedName}";
+    }
+
+    /// <summary>
+    /// Computes the LLVM return type for a routine definition, applying the failable-variant carrier
+    /// (Lookup / Check / TryBool) forms.
+    /// </summary>
+    private string ComputeDefinitionReturnType(RoutineInfo info)
+    {
+        return info.FailableVariant switch
+        {
+            FailableVariant.Lookup => GetLookupCarrierLlvmType(valueType: info.ReturnType!),
+            FailableVariant.Check => GetResultCarrierLlvmType(valueType: info.ReturnType!),
+            FailableVariant.TryBool => "i1",
+            _ => info.ReturnType != null ? GetLlvmType(type: info.ReturnType) : "void"
+        };
+    }
+
+    /// <summary>
+    /// Assembles the <c>define …</c> header line: linkage/return prefixes, header return type
+    /// (void for sret, coerced type otherwise) and per-routine attributes (inline / nounwind /
+    /// no_optimize). Reads <see cref="_currentReturnViaSret"/> / <see cref="_currentReturnCoerceType"/>.
+    /// </summary>
+    private string BuildDefineHeader(RoutineInfo info, string funcName, string parameters,
+        string returnType, bool isCreator)
+    {
+        string headerReturnType = _currentReturnViaSret ? "void"
+            : _currentReturnCoerceType ?? returnType;
+        string returnPrefix =
+            !_currentReturnViaSret && isCreator && returnType == "ptr" ? "noalias " : "";
+        // Compiler-synthesized routines are only ever referenced within this whole-program module,
+        // so give them `internal` linkage (GlobalDCE can strip uncalled ones) + `nounwind` (the
+        // runtime never unwinds). main / start / user routines and extern `declare`s are untouched.
+        bool isCompilerGenerated = info.IsSynthesized || info.IsWiredMemberRoutine;
+        string linkagePrefix = isCompilerGenerated ? "internal " : "";
+        string funcAttrs = info.Annotations.Contains(value: "inline") ? " alwaysinline" : "";
+        if (isCompilerGenerated)
+        {
+            funcAttrs += " nounwind";
+        }
+        // `@no_optimize` emits `noinline optnone` — a per-routine optimization barrier for the
+        // softfloat gamma cores that LLVM 21's InstCombine miscompiles at -O2+.
+        if (info.Annotations.Contains(value: "no_optimize"))
+        {
+            funcAttrs += " noinline optnone";
+        }
+        return
+            $"define {linkagePrefix}{returnPrefix}{headerReturnType} @{funcName}({parameters}){funcAttrs} {{";
+    }
+
+    /// <summary>
+    /// Emits the routine body (or its synthesized stub body) into <paramref name="bodyBuilder"/> and
+    /// appends the entry allocas + body to the function-definitions buffer.
+    /// </summary>
+    private void EmitDefinitionBody(RoutineDeclaration routine, RoutineInfo info,
+        StringBuilder bodyBuilder)
+    {
+        // Stub routines (declared without a body, e.g. BuilderService.page_size()) get their
+        // synthesized body from WiredRoutinePass via _synthesizedBodies. The parser produces an
+        // empty BlockStatement for missing bodies, so check both null and empty.
+        Statement? effectiveBody = routine.Body;
+        bool isStubBody = effectiveBody is null
+            || effectiveBody is BlockStatement { Statements.Count: 0 };
+        if (isStubBody
+            && _synthesizedBodies.TryGetValue(key: info.RegistryKey, value: out Statement? synthStub))
+        {
+            effectiveBody = synthStub;
+        }
+        if (effectiveBody != null)
+        {
+            GenerateRoutineBody(sb: bodyBuilder, body: effectiveBody, routine: info);
+        }
+        _functionDefinitions.Append(value: _currentRoutineEntryAllocas);
+        _functionDefinitions.Append(value: bodyBuilder);
+    }
+
+    /// <summary>
     /// Generates code for a function body.
     /// Emits statements and ensures proper termination.
     /// </summary>
-    private void GenerateRoutineBody(StringBuilder sb, Statement body, RoutineInfo routine) // NOSONAR S3776
+    private void GenerateRoutineBody(StringBuilder sb, Statement body, RoutineInfo routine)
     {
         // Mark that we are emitting a body: every routine declared (referenced) from here on is a
         // real callee of an emitted routine, so it must itself be emitted. Save/restore in case a
@@ -558,7 +611,39 @@ public partial class LlvmCodeGenerator
         _emittingRoutineBody = true;
         try
         {
-        // Clear local variables for this function
+            EmitRoutineBodyInner(sb: sb, body: body, routine: routine);
+        }
+        finally
+        {
+            _emittingRoutineBody = prevEmittingBody;
+        }
+    }
+
+    /// <summary>
+    /// Resets per-routine state, binds <c>me</c> + parameters + closure captures, pushes a stack
+    /// trace frame, emits the body statements and — if control falls off the end — the terminating
+    /// zero-return / cleanup.
+    /// </summary>
+    private void EmitRoutineBodyInner(StringBuilder sb, Statement body, RoutineInfo routine)
+    {
+        ResetPerRoutineState(routine: routine);
+        BindImplicitMeReceiver(sb: sb, body: body, routine: routine);
+        RegisterParametersAsLocals(sb: sb, routine: routine);
+        EmitClosurePrologue(sb: sb, routine: routine);
+        EmitTracePush(sb: sb, routine: routine);
+
+        // Emit the body statements — returns true if the block ends with a terminator
+        if (EmitStatement(sb: sb, stmt: body))
+        {
+            return;
+        }
+
+        EmitFallthroughReturn(sb: sb, routine: routine);
+    }
+
+    /// <summary>Clears per-routine tracking sets and sets the current-routine context fields.</summary>
+    private void ResetPerRoutineState(RoutineInfo routine)
+    {
         _localVariables.Clear();
         _localVarLlvmNames.Clear();
         _varNameCounts.Clear();
@@ -575,212 +660,225 @@ public partial class LlvmCodeGenerator
 
         // Track current routine for source_routine() / source_module() injection
         _currentEmittingRoutine = routine;
+    }
 
-        // Register implicit 'me' parameter for methods (skip for create static factories and common routines)
+    /// <summary>
+    /// Binds the implicit <c>me</c> local for a method, or — for an entity <c>create</c> that
+    /// references <c>me</c> — allocates the entity at entry and binds <c>me</c> to the fresh pointer.
+    /// </summary>
+    private void BindImplicitMeReceiver(StringBuilder sb, Statement body, RoutineInfo routine)
+    {
+        // Register implicit 'me' for methods (skip create static factories and common routines).
         if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine) && !routine.IsCommon)
         {
-            // A Suflae entity member routine receives `me` as the `Roamed[E]` handle (SF slice 2 sets
-            // MeType), so bind the local to that handle type — otherwise `me.field` codegen sees the
-            // bare entity and reads the RC controller's refcount instead of dereferencing the handle.
-            // Gated to a Roamed MeType so the specialized-receiver MeType path (List[Agent[V]]) is
-            // untouched. The LLVM param type is a `ptr` for both, so only the tracked type changes.
-            TypeInfo meLocalType =
-                routine.MeType is RecordTypeInfo { GenericDefinition.Name: Resolution.RuntimeContract.Roamed }
-                    ? routine.MeType
-                    : routine.OwnerType;
-            if (IsByRefMeReceiver(routine: routine))
-            {
-                // Struct-record `me` is passed by reference: %me.addr IS the function parameter
-                // (the caller's storage pointer). No alloca/store — mutations and address-taking
-                // (hijack/get_address) reach the caller's variable directly.
-                _localVariables[key: "me"] = meLocalType;
-            }
-            else
-            {
-                string meType = GetParameterLlvmType(type: routine.OwnerType);
-                // Skip alloca/store for void me (None owner type — unit type, no data)
-                if (meType != "void")
-                {
-                    EmitEntryAlloca(llvmName: "%me.addr", llvmType: meType);
-                    EmitLine(sb: sb, line: $"  store {meType} %me, ptr %me.addr");
-                }
-
-                _localVariables[key: "me"] = meLocalType;
-            }
+            BindMethodMeReceiver(sb: sb, routine: routine);
+            return;
         }
-        // Entity create that references `me`: allocate the entity at routine entry, bind
-        // `me` to the fresh pointer, and let the body mutate via `me.field = …` / `return me`.
-        // Canonical `return Type(field: …)` create routines that never touch `me` skip this.
-        else if (routine.OwnerType is EntityTypeInfo creatorEntity &&
-                 IsCreatorRoutine(routine: routine) &&
-                 MeReferenceScanner.Scan(body: body))
+
+        // Entity create that references `me`: allocate the entity at routine entry, bind `me` to the
+        // fresh pointer, and let the body mutate via `me.field = …` / `return me`. Canonical
+        // `return Type(field: …)` creates that never touch `me` skip this.
+        if (routine.OwnerType is EntityTypeInfo creatorEntity &&
+            IsCreatorRoutine(routine: routine) &&
+            MeReferenceScanner.Scan(body: body))
         {
             string mePtr = EmitEntityAllocation(sb: sb, entity: creatorEntity);
             EmitEntryAlloca(llvmName: "%me.addr", llvmType: "ptr");
             EmitLine(sb: sb, line: $"  store ptr {mePtr}, ptr %me.addr");
             _localVariables[key: "me"] = routine.OwnerType;
         }
+    }
 
-        // Register parameters as local variables
+    /// <summary>Binds <c>me</c> for a method receiver (by-ref, void, or value-copy forms).</summary>
+    private void BindMethodMeReceiver(StringBuilder sb, RoutineInfo routine)
+    {
+        // A Suflae entity member routine receives `me` as the `Roamed[E]` handle (SF slice 2 sets
+        // MeType), so bind the local to that handle type — otherwise `me.field` codegen sees the
+        // bare entity and reads the RC controller's refcount instead of dereferencing the handle.
+        // Gated to a Roamed MeType so the specialized-receiver MeType path (List[Agent[V]]) is
+        // untouched. The LLVM param type is a `ptr` for both, so only the tracked type changes.
+        TypeInfo meLocalType =
+            routine.MeType is RecordTypeInfo { GenericDefinition.Name: Resolution.RuntimeContract.Roamed }
+                ? routine.MeType
+                : routine.OwnerType!;
+
+        // Struct-record `me` passed by reference: %me.addr IS the function parameter (the caller's
+        // storage pointer). No alloca/store — mutations and address-taking reach it directly.
+        if (IsByRefMeReceiver(routine: routine))
+        {
+            _localVariables[key: "me"] = meLocalType;
+            return;
+        }
+
+        string meType = GetParameterLlvmType(type: routine.OwnerType!);
+        // Skip alloca/store for void me (None owner type — unit type, no data)
+        if (meType != "void")
+        {
+            EmitEntryAlloca(llvmName: "%me.addr", llvmType: meType);
+            EmitLine(sb: sb, line: $"  store {meType} %me, ptr %me.addr");
+        }
+        _localVariables[key: "me"] = meLocalType;
+    }
+
+    /// <summary>Registers each parameter as a local variable, emitting its entry alloca/store.</summary>
+    private void RegisterParametersAsLocals(StringBuilder sb, RoutineInfo routine)
+    {
         foreach (ParameterInfo param in routine.Parameters)
         {
-            // By-ref struct-record thread arg: `%<name>.addr` IS the parameter (a pointer to the
-            // spawner's cell), exactly like a by-ref `me`. No alloca/store — field/method access
-            // resolves through the address and reaches the shared cell directly.
-            if (IsByRefThreadArg(routine: routine, param: param))
-            {
-                _localVariables[key: param.Name] = param.Type;
-                continue;
-            }
+            RegisterParameterAsLocal(sb: sb, routine: routine, param: param);
+        }
+    }
 
-            // ABI-Indirect (byval) struct value param: `%<name>.addr` IS the pointer to the callee's
-            // private copy the backend materialized — no alloca/store, field access reads/writes
-            // through it directly (mirrors the by-ref thread-arg path, but value-semantic).
-            if (ParameterPassedByval(routine: routine, paramType: param.Type))
-            {
-                _localVariables[key: param.Name] = param.Type;
-                continue;
-            }
-
-            // Use "entry_" instead of "entry" to avoid conflict with the entry: block label
-            string emittedParamName = param.Name == "entry" ? "entry_" : param.Name;
-            string paramPtr = $"%{param.Name}.addr";
-
-            // ABI-Coerce small struct value param: the parameter arrives as an integer register
-            // value. Allocate a slot of the ABI type (≥ the struct), store the register value into
-            // it, and bind `%<name>.addr` to it — field access then reads the struct out (the slot is
-            // large enough). No managed-entity teardown applies (records only).
-            string? coerceType = ParameterCoerceType(routine: routine, paramType: param.Type);
-            if (coerceType != null)
-            {
-                EmitEntryAlloca(llvmName: paramPtr, llvmType: coerceType);
-                EmitLine(sb: sb,
-                    line: $"  store {coerceType} %{emittedParamName}, ptr {paramPtr}");
-                _localVariables[key: param.Name] = param.Type;
-                continue;
-            }
-
-            // Parameters are passed as value, create a local copy
-            string llvmType = GetLlvmType(type: param.Type);
-            EmitEntryAlloca(llvmName: paramPtr, llvmType: llvmType);
-            EmitLine(sb: sb,
-                line: $"  store {llvmType} %{emittedParamName}, ptr {paramPtr}");
+    /// <summary>Registers a single parameter as a local variable per its ABI passing mode.</summary>
+    private void RegisterParameterAsLocal(StringBuilder sb, RoutineInfo routine, ParameterInfo param)
+    {
+        // By-ref struct-record thread arg / ABI-Indirect byval param: `%<name>.addr` IS the
+        // parameter (a pointer to the caller's / callee's copy). No alloca/store — field/method
+        // access resolves through the address directly.
+        if (IsByRefThreadArg(routine: routine, param: param) ||
+            ParameterPassedByval(routine: routine, paramType: param.Type))
+        {
             _localVariables[key: param.Name] = param.Type;
-
-            // A bound-entity parameter is a consuming parameter: ownership was transferred in
-            // via `steal` at the call site (SA requires the verb — see the BareEntityAssignment
-            // check in AnalyzeCallArguments), so this routine is the new sole owner and must tear
-            // it down at scope exit, exactly like a local entity `var`. Borrows arrive as
-            // Referring/Controlling/Viewing/Modifying wrappers (RecordTypeInfo), never as bare
-            // EntityTypeInfo, so they are correctly excluded. If the body re-transfers ownership
-            // (`steal r` into a call/field), ConsumeTransferredLocalOwnership removes it from this
-            // set by name, preventing a double-free.
-            if (param.Type is EntityTypeInfo)
-            {
-                _localEntityVars.Add(item: (param.Name, paramPtr));
-            }
+            return;
         }
 
-        // Closure prologue: load each captured value out of the closure object (the hidden `%__cl`
-        // parameter) into a local so the body references it as an ordinary variable. The closure
-        // layout is `{ ptr fn, capture0, capture1, ... }`; captures start at field index 1.
-        if (routine.IsLambda && routine.ClosureCaptures is { Count: > 0 } closureCaptures)
+        // Use "entry_" instead of "entry" to avoid conflict with the entry: block label
+        string emittedParamName = param.Name == "entry" ? "entry_" : param.Name;
+        string paramPtr = $"%{param.Name}.addr";
+
+        // ABI-Coerce small struct value param: the parameter arrives as an integer register value.
+        // Allocate a slot of the ABI type (≥ the struct), store the register value into it, and bind
+        // `%<name>.addr` to it — field access then reads the struct out. (records only)
+        string? coerceType = ParameterCoerceType(routine: routine, paramType: param.Type);
+        string storeType = coerceType ?? GetLlvmType(type: param.Type);
+        EmitEntryAlloca(llvmName: paramPtr, llvmType: storeType);
+        EmitLine(sb: sb, line: $"  store {storeType} %{emittedParamName}, ptr {paramPtr}");
+        _localVariables[key: param.Name] = param.Type;
+
+        // A bound-entity parameter is a consuming parameter: ownership was transferred in via
+        // `steal` at the call site, so this routine is the new sole owner and must tear it down at
+        // scope exit, exactly like a local entity `var`. Borrows arrive as wrappers (RecordTypeInfo),
+        // never bare EntityTypeInfo, so they are correctly excluded. (ABI-Coerce is records only, so
+        // never an entity — the coerce branch never reaches here.)
+        if (coerceType == null && param.Type is EntityTypeInfo)
         {
-            string clStruct = ClosureStructName(lambda: routine);
-            for (int i = 0; i < closureCaptures.Count; i++)
-            {
-                (string capName, TypeInfo capType) = closureCaptures[index: i];
-                string capLlvm = GetLlvmType(type: capType);
-                string capPtr = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {capPtr} = getelementptr {clStruct}, ptr %__cl, i32 0, i32 {i + 1}");
-                string capVal = NextTemp();
-                EmitLine(sb: sb, line: $"  {capVal} = load {capLlvm}, ptr {capPtr}");
-                string capAddr = $"%{capName}.addr";
-                EmitEntryAlloca(llvmName: capAddr, llvmType: capLlvm);
-                EmitLine(sb: sb, line: $"  store {capLlvm} {capVal}, ptr {capAddr}");
-                _localVariables[key: capName] = capType;
-            }
+            _localEntityVars.Add(item: (param.Name, paramPtr));
         }
+    }
 
-        // Emit stack trace push.
-        // Synthesized routines have no source location and no user-visible name — skip them.
-        // In Release, also skip @inline routines (implementation helpers that add noise).
-        bool isInline = routine.Annotations.Contains(value: "inline");
-        _traceCurrentRoutine = ShouldEmitTrace &&
-                               !routine.IsSynthesized &&
-                               !(_buildMode is RfBuildMode.Release && isInline);
-        if (_traceCurrentRoutine)
-        {
-            string paramTypes = string.Join(separator: ", ",
-                values: routine.Parameters.Select(selector: p => p.Type.FullName));
-            string failable = routine.IsFailable ? "!" : "";
-            string routineName = $"{routine.BaseName}{failable}({paramTypes})";
-            string fileName = routine.Location?.FileName ?? "";
-            int line = routine.Location?.Line ?? 0;
-            int col = routine.Location?.Column ?? 0;
-            string routineCStr = EmitCStringConstant(value: routineName);
-            string fileCStr = EmitCStringConstant(value: fileName);
-            EmitLine(sb: sb,
-                line: $"  call void @_rf_trace_push(ptr {routineCStr}, ptr {fileCStr}, i32 {line}, i32 {col})");
-        }
-
-        // Emit the body statements — returns true if the block ends with a terminator
-        bool terminated = EmitStatement(sb: sb, stmt: body);
-        if (terminated)
+    /// <summary>
+    /// Closure prologue: loads each captured value out of the closure object (the hidden `%__cl`
+    /// parameter) into a local. The closure layout is `{ ptr fn, capture0, … }`; captures start at 1.
+    /// </summary>
+    private void EmitClosurePrologue(StringBuilder sb, RoutineInfo routine)
+    {
+        if (!routine.IsLambda || routine.ClosureCaptures is not { Count: > 0 } closureCaptures)
         {
             return;
         }
 
+        string clStruct = ClosureStructName(lambda: routine);
+        for (int i = 0; i < closureCaptures.Count; i++)
+        {
+            (string capName, TypeInfo capType) = closureCaptures[index: i];
+            string capLlvm = GetLlvmType(type: capType);
+            string capPtr = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {capPtr} = getelementptr {clStruct}, ptr %__cl, i32 0, i32 {i + 1}");
+            string capVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {capVal} = load {capLlvm}, ptr {capPtr}");
+            string capAddr = $"%{capName}.addr";
+            EmitEntryAlloca(llvmName: capAddr, llvmType: capLlvm);
+            EmitLine(sb: sb, line: $"  store {capLlvm} {capVal}, ptr {capAddr}");
+            _localVariables[key: capName] = capType;
+        }
+    }
+
+    /// <summary>
+    /// Emits the stack-trace push (and records whether to emit the matching pop). Synthesized
+    /// routines, and @inline helpers in Release, are skipped.
+    /// </summary>
+    private void EmitTracePush(StringBuilder sb, RoutineInfo routine)
+    {
+        bool isInline = routine.Annotations.Contains(value: "inline");
+        _traceCurrentRoutine = ShouldEmitTrace &&
+                               !routine.IsSynthesized &&
+                               !(_buildMode is RfBuildMode.Release && isInline);
+        if (!_traceCurrentRoutine)
+        {
+            return;
+        }
+
+        string paramTypes = string.Join(separator: ", ",
+            values: routine.Parameters.Select(selector: p => p.Type.FullName));
+        string failable = routine.IsFailable ? "!" : "";
+        string routineName = $"{routine.BaseName}{failable}({paramTypes})";
+        string fileName = routine.Location?.FileName ?? "";
+        int line = routine.Location?.Line ?? 0;
+        int col = routine.Location?.Column ?? 0;
+        string routineCStr = EmitCStringConstant(value: routineName);
+        string fileCStr = EmitCStringConstant(value: fileName);
+        EmitLine(sb: sb,
+            line: $"  call void @_rf_trace_push(ptr {routineCStr}, ptr {fileCStr}, i32 {line}, i32 {col})");
+    }
+
+    /// <summary>
+    /// Emits the implicit terminator when the body falls off the end: RC/entity cleanup, the trace
+    /// pop, and a zero-value return in the routine's ABI return form (void / sret / coerced / value).
+    /// </summary>
+    private void EmitFallthroughReturn(StringBuilder sb, RoutineInfo routine)
+    {
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
+        {
             EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+        }
+
         string retType = routine.ReturnType != null
             ? GetLlvmType(type: routine.ReturnType)
             : "void";
         if (retType == "void")
         {
-            // For check_/try_ variant wrappers with None return type, emit the success
-            // carrier instead of ret void — the define header uses the carrier type.
-            switch (routine.FailableVariant)
-            {
-                case FailableVariant.Check:
-                {
-                    string carrier = GetResultCarrierLlvmType(valueType: routine.ReturnType!);
-                    EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
-                    break;
-                }
-                case FailableVariant.TryBool:
-                    EmitLine(sb: sb, line: "  ret i1 false");
-                    break;
-                default:
-                    EmitLine(sb: sb, line: "  ret void");
-                    break;
-            }
+            EmitVoidFallthroughReturn(sb: sb, routine: routine);
+            return;
         }
-        else if (_currentReturnViaSret)
+        if (_currentReturnViaSret)
         {
             // Indirect (sret) return: the header is void, so store the zero struct through the
-            // hidden %sret pointer and return void (matches the by-value path's zero fallthrough).
+            // hidden %sret pointer and return void.
             string zeroValue = GetZeroValue(type: routine.ReturnType!);
             EmitLine(sb: sb, line: $"  store {retType} {zeroValue}, ptr %sret");
             EmitLine(sb: sb, line: "  ret void");
+            return;
         }
-        else if (_currentReturnCoerceType != null)
+        if (_currentReturnCoerceType != null)
         {
             // Coerced (Phase 2) return: the header returns the ABI integer type; zero fills it.
             EmitLine(sb: sb, line: $"  ret {_currentReturnCoerceType} zeroinitializer");
+            return;
         }
-        else
+        EmitLine(sb: sb, line: $"  ret {retType} {GetZeroValue(type: routine.ReturnType!)}");
+    }
+
+    /// <summary>
+    /// Emits the fallthrough return for a void return type — the failable-variant carrier form for
+    /// check_/try_ wrappers, or plain <c>ret void</c>.
+    /// </summary>
+    private void EmitVoidFallthroughReturn(StringBuilder sb, RoutineInfo routine)
+    {
+        switch (routine.FailableVariant)
         {
-            string zeroValue = GetZeroValue(type: routine.ReturnType!);
-            EmitLine(sb: sb, line: $"  ret {retType} {zeroValue}");
-        }
-        }
-        finally
-        {
-            _emittingRoutineBody = prevEmittingBody;
+            case FailableVariant.Check:
+                string carrier = GetResultCarrierLlvmType(valueType: routine.ReturnType!);
+                EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
+                break;
+            case FailableVariant.TryBool:
+                EmitLine(sb: sb, line: "  ret i1 false");
+                break;
+            default:
+                EmitLine(sb: sb, line: "  ret void");
+                break;
         }
     }
 

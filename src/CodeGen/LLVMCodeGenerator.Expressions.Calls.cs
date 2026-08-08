@@ -1522,66 +1522,87 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private RoutineInfo? ResolveInitialFreeCallRoutine(string functionName,
         bool isFailableCallSyntax, RoutineInfo? resolvedRoutine,
-        List<TypeExpression>? typeArguments, List<Expression> arguments) // NOSONAR S3776
+        List<TypeExpression>? typeArguments, List<Expression> arguments)
     {
         RoutineInfo? routine = resolvedRoutine ??
                                _registry.LookupRoutine(fullName: functionName,
                                    isFailable: isFailableCallSyntax) ??
                                _registry.LookupRoutineByName(name: functionName,
                                    isFailable: isFailableCallSyntax);
-
-        if (routine is { OwnerType: null, IsGenericDefinition: true } &&
-            typeArguments is { Count: > 0 })
+        if (routine == null || typeArguments is not { Count: > 0 })
         {
-            var resolvedRoutineArgs = typeArguments
-                                     .Select(selector: ta => ResolveTypeExpression(typeExpr: ta))
-                                     .Where(predicate: t => t != null)
-                                     .Cast<TypeInfo>()
-                                     .ToList();
+            return routine;
+        }
 
-            if (routine.GenericParameters?.Count == resolvedRoutineArgs.Count)
+        routine = ResolveGenericFreeRoutine(routine: routine, typeArguments: typeArguments);
+        return RebindGenericOwnerCreator(routine: routine, typeArguments: typeArguments,
+            arguments: arguments);
+    }
+
+    /// <summary>
+    /// Instantiates a generic free routine (no owner) from explicit type arguments when the arity
+    /// matches; otherwise returns it unchanged.
+    /// </summary>
+    private RoutineInfo ResolveGenericFreeRoutine(RoutineInfo routine,
+        List<TypeExpression> typeArguments)
+    {
+        if (routine is not { OwnerType: null, IsGenericDefinition: true })
+        {
+            return routine;
+        }
+
+        List<TypeInfo> resolvedRoutineArgs = ResolveTypeExpressionsNonNull(typeArguments);
+        return routine.GenericParameters?.Count == resolvedRoutineArgs.Count
+            ? _registry.GetOrCreateRoutineResolution(genericDef: routine,
+                typeArguments: resolvedRoutineArgs)
+            : routine;
+    }
+
+    /// <summary>
+    /// Rebinds a <c>create</c> on a generic-definition owner to the concrete owner's matching
+    /// constructor overload (instantiated from explicit type arguments); otherwise unchanged.
+    /// </summary>
+    private RoutineInfo RebindGenericOwnerCreator(RoutineInfo routine,
+        List<TypeExpression> typeArguments, List<Expression> arguments)
+    {
+        if (routine is not { Name: CreateMethodName, OwnerType: { IsGenericDefinition: true } genOwner })
+        {
+            return routine;
+        }
+
+        List<TypeInfo> resolvedOwnerArgs = ResolveTypeExpressionsNonNull(typeArguments);
+        if (resolvedOwnerArgs.Count != typeArguments.Count)
+        {
+            return routine;
+        }
+
+        TypeInfo concreteOwner = _registry.GetOrCreateResolution(genericDef: genOwner,
+            typeArguments: resolvedOwnerArgs);
+        var ctorArgTypes = new List<TypeInfo>();
+        foreach (Expression arg in arguments)
+        {
+            TypeInfo? type = GetExpressionType(expr: arg);
+            if (type != null)
             {
-                routine = _registry.GetOrCreateRoutineResolution(genericDef: routine,
-                    typeArguments: resolvedRoutineArgs);
+                ctorArgTypes.Add(item: type);
             }
         }
 
-        if (routine is { Name: CreateMethodName, OwnerType: { IsGenericDefinition: true } genOwner } &&
-            typeArguments is { Count: > 0 })
-        {
-            var resolvedOwnerArgs = typeArguments
-                                   .Select(selector: ta => ResolveTypeExpression(typeExpr: ta))
-                                   .Where(predicate: t => t != null)
-                                   .Cast<TypeInfo>()
-                                   .ToList();
-            if (resolvedOwnerArgs.Count == typeArguments.Count)
-            {
-                TypeInfo concreteOwner = _registry.GetOrCreateResolution(genericDef: genOwner,
-                    typeArguments: resolvedOwnerArgs);
-                var ctorArgTypes = new List<TypeInfo>();
-                foreach (Expression arg in arguments)
-                {
-                    TypeInfo? type = GetExpressionType(expr: arg);
-                    if (type != null)
-                    {
-                        ctorArgTypes.Add(item: type);
-                    }
-                }
+        RoutineInfo? rebound = _registry.LookupMethodOverload(type: concreteOwner,
+                                   methodName: CreateMethodName, argTypes: ctorArgTypes) ??
+                               _registry.LookupMethod(type: concreteOwner,
+                                   methodName: CreateMethodName, isFailable: routine.IsFailable);
+        return rebound ?? routine;
+    }
 
-                RoutineInfo? rebound = _registry.LookupMethodOverload(type: concreteOwner,
-                                           methodName: CreateMethodName,
-                                           argTypes: ctorArgTypes) ??
-                                       _registry.LookupMethod(type: concreteOwner,
-                                           methodName: CreateMethodName,
-                                           isFailable: routine.IsFailable);
-                if (rebound != null)
-                {
-                    routine = rebound;
-                }
-            }
-        }
-
-        return routine;
+    /// <summary>Resolves each type expression to a TypeInfo, dropping any that fail to resolve.</summary>
+    private List<TypeInfo> ResolveTypeExpressionsNonNull(List<TypeExpression> typeArguments)
+    {
+        return typeArguments
+            .Select(selector: ta => ResolveTypeExpression(typeExpr: ta))
+            .Where(predicate: t => t != null)
+            .Cast<TypeInfo>()
+            .ToList();
     }
 
     private (string Receiver, TypeInfo? ReceiverType) ResolveMemberRoutineCallReceiver(StringBuilder sb,
@@ -1650,7 +1671,7 @@ public partial class LlvmCodeGenerator
     /// the entity ptr (already a pointer) as the GEP base; record-rooted chains use the
     /// root alloca's address.
     /// </summary>
-    private string EmitLvalueAddress(StringBuilder sb, Expression expr) // NOSONAR S3776
+    private string EmitLvalueAddress(StringBuilder sb, Expression expr)
     {
         switch (expr)
         {
@@ -1658,94 +1679,106 @@ public partial class LlvmCodeGenerator
                 // `f(name: lvalue)` — the address of the named argument is the address of its value.
                 return EmitLvalueAddress(sb: sb, expr: named.Value);
             case IdentifierExpression id:
-            {
-                // Aggregate (Array[T,N]) preset: its storage IS the shared `@preset.*` constant
-                // global, so its address is the global symbol — the by-ref `me` receiver and any
-                // `.hijack()` read in place from there (no per-use copy).
-                if (ResolveAggregatePreset(name: id.Name) is { } aggregatePreset)
-                    return EmitOrGetPresetGlobal(preset: aggregatePreset);
-
-                if (!_localVariables.ContainsKey(key: id.Name))
-                {
-                    throw new InvalidOperationException(
-                        message:
-                        $"Cannot take address of '{id.Name}' — not a local variable or " +
-                        $"parameter. Bind it to a `var` first.");
-                }
-                string llvmName =
-                    _localVarLlvmNames.TryGetValue(key: id.Name, value: out string? unique)
-                        ? unique
-                        : id.Name;
-                return $"%{llvmName}.addr";
-            }
+                return EmitIdentifierLvalueAddress(id: id);
             case MemberExpression member:
-            {
-                TypeInfo? parentType = GetExpressionType(expr: member.Object);
-                if (parentType == null)
-                {
-                    throw new InvalidOperationException(
-                        message:
-                        $"Cannot determine type of parent expression for '.{member.MemberName}' " +
-                        "in address-of chain.");
-                }
-
-                // Resolve the field index and base pointer. For record parents this includes the
-                // stale-carrier-shell refresh: some cached generic resolutions (e.g. a Maybe[Text]
-                // pre-registered before Maybe's body was resolved) arrive with empty MemberVariables,
-                // so we repopulate from the generic definition — exactly like the value-read path in
-                // EmitRecordMemberVariableRead, keeping address-of and reads on the same field offsets.
-                // Entity/crashable parents are already ptr values; records recurse for their storage.
-                int fieldIndex = -1;
-                string? parentLlvmType = null;
-                string? basePtr = null;
-                switch (parentType)
-                {
-                    case RecordTypeInfo recordParent:
-                        fieldIndex = ResolveRecordFieldIndex(record: recordParent,
-                            memberVariableName: member.MemberName);
-                        if (fieldIndex >= 0)
-                        {
-                            basePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
-                            parentLlvmType = GetRecordTypeName(record: recordParent);
-                        }
-                        break;
-                    case CrashableTypeInfo crashableParent:
-                        fieldIndex = IndexOfMemberVariable(
-                            memberVariables: crashableParent.MemberVariables, name: member.MemberName);
-                        if (fieldIndex >= 0)
-                        {
-                            basePtr = EmitExpression(sb: sb, expr: member.Object);
-                            parentLlvmType = GetCrashableTypeName(crashable: crashableParent);
-                        }
-                        break;
-                    case EntityTypeInfo entityParent:
-                        fieldIndex = IndexOfMemberVariable(
-                            memberVariables: entityParent.MemberVariables, name: member.MemberName);
-                        if (fieldIndex >= 0)
-                        {
-                            basePtr = EmitExpression(sb: sb, expr: member.Object);
-                            parentLlvmType = GetEntityTypeName(entity: entityParent);
-                        }
-                        break;
-                }
-
-                if (fieldIndex < 0 || basePtr == null || parentLlvmType == null)
-                {
-                    // Not a stored field at a known offset (a genuine rvalue member chain, or a parent
-                    // kind with no struct fields): materialize the value and address the temporary.
-                    return EmitSpillToTempAddress(sb: sb, expr: expr);
-                }
-
-                string fieldPtr = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {fieldPtr} = getelementptr {parentLlvmType}, ptr {basePtr}, i32 0, i32 {fieldIndex}");
-                return fieldPtr;
-            }
+                return EmitMemberLvalueAddress(sb: sb, member: member, expr: expr);
             default:
                 // Rvalue receiver (call result, constructor, literal, …): no stable storage exists,
                 // so spill the value to a temp and return its address. Lets a by-ref record method
                 // (or get_address/hijack) take the address of a temporary.
                 return EmitSpillToTempAddress(sb: sb, expr: expr);
+        }
+    }
+
+    /// <summary>Address of a named local/parameter — or an aggregate preset's <c>@preset.*</c> global.</summary>
+    private string EmitIdentifierLvalueAddress(IdentifierExpression id)
+    {
+        // Aggregate (Array[T,N]) preset: its storage IS the shared `@preset.*` constant global, so
+        // its address is the global symbol — the by-ref `me` receiver and `.hijack()` read in place.
+        if (ResolveAggregatePreset(name: id.Name) is { } aggregatePreset)
+        {
+            return EmitOrGetPresetGlobal(preset: aggregatePreset);
+        }
+
+        if (!_localVariables.ContainsKey(key: id.Name))
+        {
+            throw new InvalidOperationException(
+                message:
+                $"Cannot take address of '{id.Name}' — not a local variable or " +
+                $"parameter. Bind it to a `var` first.");
+        }
+        string llvmName = _localVarLlvmNames.TryGetValue(key: id.Name, value: out string? unique)
+            ? unique
+            : id.Name;
+        return $"%{llvmName}.addr";
+    }
+
+    /// <summary>
+    /// Address of a member-access chain: resolves the field index + base pointer for a record /
+    /// crashable / entity parent and emits a <c>getelementptr</c>, or spills to a temp when the
+    /// member is a genuine rvalue chain with no known field offset.
+    /// </summary>
+    private string EmitMemberLvalueAddress(StringBuilder sb, MemberExpression member, Expression expr)
+    {
+        TypeInfo? parentType = GetExpressionType(expr: member.Object);
+        if (parentType == null)
+        {
+            throw new InvalidOperationException(
+                message:
+                $"Cannot determine type of parent expression for '.{member.MemberName}' " +
+                "in address-of chain.");
+        }
+
+        (int fieldIndex, string? parentLlvmType, string? basePtr) =
+            ResolveMemberFieldLocation(sb: sb, member: member, parentType: parentType);
+
+        if (fieldIndex < 0 || basePtr == null || parentLlvmType == null)
+        {
+            // Not a stored field at a known offset (a genuine rvalue member chain, or a parent kind
+            // with no struct fields): materialize the value and address the temporary.
+            return EmitSpillToTempAddress(sb: sb, expr: expr);
+        }
+
+        string fieldPtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {fieldPtr} = getelementptr {parentLlvmType}, ptr {basePtr}, i32 0, i32 {fieldIndex}");
+        return fieldPtr;
+    }
+
+    /// <summary>
+    /// Resolves the (field index, parent LLVM type name, base pointer) for a member access. Record
+    /// parents recurse for their storage address (and get the stale-carrier-shell refresh);
+    /// entity/crashable parents are already ptr values. Returns index -1 when the member isn't a
+    /// stored field.
+    /// </summary>
+    private (int FieldIndex, string? ParentLlvmType, string? BasePtr) ResolveMemberFieldLocation(
+        StringBuilder sb, MemberExpression member, TypeInfo parentType)
+    {
+        switch (parentType)
+        {
+            case RecordTypeInfo recordParent:
+                int recIdx = ResolveRecordFieldIndex(record: recordParent,
+                    memberVariableName: member.MemberName);
+                return recIdx < 0
+                    ? (-1, null, null)
+                    : (recIdx, GetRecordTypeName(record: recordParent),
+                        EmitLvalueAddress(sb: sb, expr: member.Object));
+            case CrashableTypeInfo crashableParent:
+                int crIdx = IndexOfMemberVariable(
+                    memberVariables: crashableParent.MemberVariables, name: member.MemberName);
+                return crIdx < 0
+                    ? (-1, null, null)
+                    : (crIdx, GetCrashableTypeName(crashable: crashableParent),
+                        EmitExpression(sb: sb, expr: member.Object));
+            case EntityTypeInfo entityParent:
+                int enIdx = IndexOfMemberVariable(
+                    memberVariables: entityParent.MemberVariables, name: member.MemberName);
+                return enIdx < 0
+                    ? (-1, null, null)
+                    : (enIdx, GetEntityTypeName(entity: entityParent),
+                        EmitExpression(sb: sb, expr: member.Object));
+            default:
+                return (-1, null, null);
         }
     }
 

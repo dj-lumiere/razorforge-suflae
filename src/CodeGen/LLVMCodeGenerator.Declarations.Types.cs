@@ -13,36 +13,10 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
-    private void GenerateEntityType(EntityTypeInfo entity) // NOSONAR S3776
+    private void GenerateEntityType(EntityTypeInfo entity)
     {
         string typeName = RawEntityTypeName(entity: entity);
-
-        // For generic resolutions with stale empty member variables (created before the generic
-        // definition's members were populated), re-create from the now-complete definition.
-        if (entity is
-            {
-                IsGenericResolution: true, MemberVariables.Count: 0,
-                GenericDefinition: { MemberVariables.Count: > 0 } genDef,
-                TypeArguments: not null
-            })
-        {
-            var refreshed =
-                genDef.CreateInstance(typeArguments: entity.TypeArguments) as EntityTypeInfo;
-            if (refreshed is { MemberVariables.Count: > 0 })
-            {
-                entity = refreshed;
-            }
-        }
-
-        if (entity.MemberVariables.Count == 0 && !TryRebuildEntityMembersFromAst(entity: entity))
-        {
-            TypeInfo? refreshed = _registry.LookupType(name: entity.FullName) ??
-                                  _registry.LookupType(name: entity.Name);
-            if (refreshed is EntityTypeInfo { MemberVariables.Count: > 0 } resolvedEntity)
-            {
-                entity = resolvedEntity;
-            }
-        }
+        entity = RefreshEntityMembers(entity: entity);
 
         // Skip if already generated
         if (!_generatedTypes.Add(item: typeName))
@@ -53,41 +27,76 @@ public partial class LlvmCodeGenerator
         // Recursively ensure struct types for member variable types are defined
         EnsureMemberVariableTypesGenerated(memberVariables: entity.MemberVariables);
 
-        // Build the struct type
-        var memberVariableTypes = new List<string>();
-        foreach (MemberVariableInfo memberVariable in entity.MemberVariables)
-        {
-            string memberVariableType = GetLlvmType(type: memberVariable.Type);
-            memberVariableTypes.Add(item: memberVariableType);
-        }
+        // Empty struct needs at least a dummy byte for addressability.
+        string decl = BuildStructTypeDeclaration(typeName: typeName,
+            memberVariables: entity.MemberVariables,
+            fieldTypeSelector: mv => GetLlvmType(type: mv.Type),
+            emptyBody: "{ i8 }");
+        _typeDeclarationsEntity[key: typeName] = decl;
+    }
 
-        var decl = new StringBuilder();
-        // Handle empty entities (no member variables)
-        if (memberVariableTypes.Count == 0)
-        {
-            // Empty struct needs at least a dummy byte for addressability
-            decl.AppendLine(value: $"{typeName} = type {{ i8 }}");
-        }
-        else
-        {
-            string memberVars = string.Join(separator: ", ", values: memberVariableTypes);
-            decl.AppendLine(value: $"{typeName} = type {{ {memberVars} }}");
-        }
-
-        // Add member variable comment for documentation
-        if (entity.MemberVariables.Count > 0)
-        {
-            decl.Append(handler: $"; {typeName} member variables: ");
-            for (int i = 0; i < entity.MemberVariables.Count; i++)
+    /// <summary>
+    /// Refreshes an entity's member variables when a generic resolution was created before its
+    /// definition's members were populated — re-creating from the definition, rebuilding from the
+    /// AST, or re-looking-up from the registry.
+    /// </summary>
+    private EntityTypeInfo RefreshEntityMembers(EntityTypeInfo entity)
+    {
+        if (entity is
             {
-                if (i > 0) decl.Append(value: ", ");
-                decl.Append(handler: $"{i}={entity.MemberVariables[index: i].Name}");
+                IsGenericResolution: true, MemberVariables.Count: 0,
+                GenericDefinition: { MemberVariables.Count: > 0 } genDef,
+                TypeArguments: not null
             }
-
-            decl.AppendLine();
+            && genDef.CreateInstance(typeArguments: entity.TypeArguments)
+                is EntityTypeInfo { MemberVariables.Count: > 0 } refreshed)
+        {
+            entity = refreshed;
         }
 
-        _typeDeclarationsEntity[key: typeName] = decl.ToString();
+        if (entity.MemberVariables.Count == 0 && !TryRebuildEntityMembersFromAst(entity: entity))
+        {
+            TypeInfo? relookup = _registry.LookupType(name: entity.FullName) ??
+                                 _registry.LookupType(name: entity.Name);
+            if (relookup is EntityTypeInfo { MemberVariables.Count: > 0 } resolvedEntity)
+            {
+                entity = resolvedEntity;
+            }
+        }
+        return entity;
+    }
+
+    /// <summary>
+    /// Builds an LLVM struct type declaration line plus its documentation comment mapping field
+    /// index to member-variable name. <paramref name="emptyBody"/> is the struct body used when the
+    /// type has no members (e.g. <c>{ i8 }</c> for entities, <c>{ }</c> for records).
+    /// </summary>
+    private static string BuildStructTypeDeclaration(string typeName,
+        List<MemberVariableInfo> memberVariables,
+        Func<MemberVariableInfo, string> fieldTypeSelector, string emptyBody)
+    {
+        var decl = new StringBuilder();
+        if (memberVariables.Count == 0)
+        {
+            decl.AppendLine(value: $"{typeName} = type {emptyBody}");
+            return decl.ToString();
+        }
+
+        string memberVars = string.Join(separator: ", ",
+            values: memberVariables.Select(selector: fieldTypeSelector));
+        decl.AppendLine(value: $"{typeName} = type {{ {memberVars} }}");
+
+        decl.Append(handler: $"; {typeName} member variables: ");
+        for (int i = 0; i < memberVariables.Count; i++)
+        {
+            if (i > 0)
+            {
+                decl.Append(value: ", ");
+            }
+            decl.Append(handler: $"{i}={memberVariables[index: i].Name}");
+        }
+        decl.AppendLine();
+        return decl.ToString();
     }
 
     /// <summary>
@@ -131,22 +140,13 @@ public partial class LlvmCodeGenerator
     /// Single-member-variable wrappers are unwrapped to their underlying intrinsic.
     /// </summary>
     /// <param name="record">The record type info.</param>
-    private void GenerateRecordType(RecordTypeInfo record) // NOSONAR S3776
+    private void GenerateRecordType(RecordTypeInfo record)
     {
-        // Backend-annotated records don't need struct types
-        if (record.HasDirectBackendType)
-        {
-            return;
-        }
-
+        // Backend-annotated records don't need struct types.
         // Skip generic definitions and any type whose type arguments still contain unresolved
-        // generic parameters. Such types produce invalid IR (e.g. { [{N} x {T}] }). This guard
-        // fires both during GenerateTypeDeclarations and when called as a side-effect from body
-        // emission, so it is defence-in-depth against partially-concrete types leaking through.
-        if (record.IsGenericDefinition ||
-            record.TypeArguments?.Any(predicate: t =>
-                ContainsGenericParameter(t) || t is ErrorTypeInfo ||
-                ContainsAbstractProjection(t)) == true)
+        // generic parameters (they produce invalid IR). Defence-in-depth: this runs both from
+        // GenerateTypeDeclarations and as a body-emission side-effect.
+        if (ShouldSkipRecordTypeGeneration(record: record))
         {
             return;
         }
@@ -159,81 +159,75 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        // Result[T] / Lookup[T] use a codegen-owned inline-payload layout:
-        //   { i64 type_id, [max(sizeof(T), 8) x i8] payload }
-        // The stdlib record's declared fields (type_id + data_address) are ignored
-        // here: codegen owns the carrier layout, so the success T or crashable ptr
-        // is stored inline (like Maybe[T] and VariantTypeInfo). type_id == 0 is the
-        // None/None state with don't-care payload bytes.
+        // Result[T] / Lookup[T] use a codegen-owned inline-payload layout.
         if (record.CarrierKind is CarrierKind.Result or CarrierKind.Lookup
             && record.TypeArguments is { Count: 1 } resOrLkpArgs)
         {
-            TypeInfo innerT = resOrLkpArgs[index: 0];
-            EnsureTypeGenerated(type: innerT, visited: new HashSet<string>());
-            int payloadBytes = Math.Max(val1: GetTypeSize(type: innerT), val2: 8);
-            var rlDecl = new StringBuilder();
-            rlDecl.AppendLine(
-                value: $"{typeName} = type {{ i64, [{payloadBytes} x i8] }}");
-            rlDecl.AppendLine(
-                handler:
-                $"; {typeName} carrier: 0=type_id, 1=payload[{payloadBytes}]");
-            _typeDeclarationsRecord[key: typeName] = rlDecl.ToString();
+            _typeDeclarationsRecord[key: typeName] =
+                BuildCarrierTypeDeclaration(typeName: typeName, innerT: resOrLkpArgs[index: 0]);
             return;
         }
 
-        // For generic resolutions with stale empty member variables, re-create from the definition
-        if (record is
-            {
-                IsGenericResolution: true, MemberVariables.Count: 0,
-                GenericDefinition: { MemberVariables.Count: > 0 } genDef,
-                TypeArguments: not null
-            })
-        {
-            var refreshed =
-                genDef.CreateInstance(typeArguments: record.TypeArguments) as RecordTypeInfo;
-            if (refreshed is { MemberVariables.Count: > 0 })
-            {
-                record = refreshed;
-            }
-        }
+        record = RefreshRecordMembers(record: record);
 
         // Recursively ensure struct types for member variable types are defined
         EnsureMemberVariableTypesGenerated(memberVariables: record.MemberVariables);
 
         // Build the struct type. Bool fields use their i8 STORAGE type (not i1) — see
         // GetFieldStorageLlvmType.
-        var memberVariableTypes = new List<string>();
-        foreach (MemberVariableInfo memberVariable in record.MemberVariables)
-        {
-            memberVariableTypes.Add(item: GetFieldStorageLlvmType(type: memberVariable.Type));
-        }
+        _typeDeclarationsRecord[key: typeName] = BuildStructTypeDeclaration(typeName: typeName,
+            memberVariables: record.MemberVariables,
+            fieldTypeSelector: mv => GetFieldStorageLlvmType(type: mv.Type),
+            emptyBody: "{ }");
+    }
 
-        var decl = new StringBuilder();
-        // Handle empty records
-        if (memberVariableTypes.Count == 0)
-        {
-            decl.AppendLine(value: $"{typeName} = type {{ }}");
-        }
-        else
-        {
-            string memberVars = string.Join(separator: ", ", values: memberVariableTypes);
-            decl.AppendLine(value: $"{typeName} = type {{ {memberVars} }}");
-        }
+    /// <summary>
+    /// Whether a record needs no struct type generated: backend-annotated types and generic
+    /// definitions / partially-concrete resolutions (whose layout would be invalid IR).
+    /// </summary>
+    private bool ShouldSkipRecordTypeGeneration(RecordTypeInfo record)
+    {
+        return record.HasDirectBackendType ||
+            record.IsGenericDefinition ||
+            record.TypeArguments?.Any(predicate: t =>
+                ContainsGenericParameter(t) || t is ErrorTypeInfo ||
+                ContainsAbstractProjection(t)) == true;
+    }
 
-        // Add member variable comment
-        if (record.MemberVariables.Count > 0)
-        {
-            decl.Append(handler: $"; {typeName} member variables: ");
-            for (int i = 0; i < record.MemberVariables.Count; i++)
+    /// <summary>
+    /// Builds the codegen-owned inline-payload carrier layout for Result[T] / Lookup[T]:
+    /// <c>{ i64 type_id, [max(sizeof(T), 8) x i8] payload }</c>. The stdlib record's declared fields
+    /// are ignored — codegen owns the layout, storing the success T / crashable ptr inline. type_id
+    /// == 0 is the None/absent state with don't-care payload bytes.
+    /// </summary>
+    private string BuildCarrierTypeDeclaration(string typeName, TypeInfo innerT)
+    {
+        EnsureTypeGenerated(type: innerT, visited: new HashSet<string>());
+        int payloadBytes = Math.Max(val1: GetTypeSize(type: innerT), val2: 8);
+        var rlDecl = new StringBuilder();
+        rlDecl.AppendLine(value: $"{typeName} = type {{ i64, [{payloadBytes} x i8] }}");
+        rlDecl.AppendLine(handler: $"; {typeName} carrier: 0=type_id, 1=payload[{payloadBytes}]");
+        return rlDecl.ToString();
+    }
+
+    /// <summary>
+    /// Refreshes a record's member variables when a generic resolution was created before its
+    /// definition's members were populated — re-creating from the definition.
+    /// </summary>
+    private static RecordTypeInfo RefreshRecordMembers(RecordTypeInfo record)
+    {
+        if (record is
             {
-                if (i > 0) decl.Append(value: ", ");
-                decl.Append(handler: $"{i}={record.MemberVariables[index: i].Name}");
+                IsGenericResolution: true, MemberVariables.Count: 0,
+                GenericDefinition: { MemberVariables.Count: > 0 } genDef,
+                TypeArguments: not null
             }
-
-            decl.AppendLine();
+            && genDef.CreateInstance(typeArguments: record.TypeArguments)
+                is RecordTypeInfo { MemberVariables.Count: > 0 } refreshed)
+        {
+            return refreshed;
         }
-
-        _typeDeclarationsRecord[key: typeName] = decl.ToString();
+        return record;
     }
 
     /// <summary>

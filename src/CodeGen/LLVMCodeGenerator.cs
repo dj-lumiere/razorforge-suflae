@@ -490,66 +490,30 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Generates LLVM type declarations for all types in the registry.
     /// </summary>
-    private void GenerateTypeDeclarations() // NOSONAR S3776
+    private void GenerateTypeDeclarations()
     {
         // When reachability ran (real builds), SKIP the broad registry type sweep entirely: every
         // struct that emitted code uses is generated on-demand — records & variants via GetLlvmType,
         // entities & crashables via Get{Entity,Crashable}TypeName at their alloc/access/size sites,
-        // and nested by-value (record/variant) field types recursively via EnsureTypeGenerated.
-        // Entity/crashable fields are `ptr`, so the broad sweep only ADDS dead reference types. The
-        // no-reachability config (some unit tests build the generator without RoutineReachabilityPass)
-        // still needs the full sweep.
+        // and nested by-value field types recursively via EnsureTypeGenerated. The no-reachability
+        // config (unit tests without RoutineReachabilityPass) still needs the full sweep.
         if (_liveRoutineKeys.Count != 0)
-            return;
-
-        // Generate entity types (reference types, heap-allocated)
-        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity))
         {
-            if (type is EntityTypeInfo { IsGenericDefinition: false } entity)
-            {
-                // Skip resolutions with unresolved generic parameters at any depth
-                // (e.g., List[BTreeSetNode[T]] where T is nested inside a type argument)
-                if (entity.TypeArguments != null &&
-                    entity.TypeArguments.Any(predicate: ContainsGenericParameter))
-                {
-                    continue;
-                }
-
-                GenerateEntityType(entity: entity);
-            }
+            return;
         }
+
+        GenerateEntityTypeDeclarations();
 
         // Generate crashable types (always entity semantics — heap-allocated error types)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Crashable))
         {
             if (type is CrashableTypeInfo crashable)
-                GenerateCrashableType(crashable: crashable);
-        }
-
-        // Generate record types (value types). When reachability ran (real builds), SKIP this broad
-        // emission: GetLlvmType -> EnsureRecordTypeDeclared emits each record on first use, so only
-        // records actually referenced by emitted code get a struct definition — pruning dead record
-        // types. (Entities/crashables/variants stay broad: crashables are used opaquely in size GEPs
-        // and variants are passed by value, neither of which auto-generates their struct.) The
-        // no-reachability config (unit tests) falls back to emitting every record.
-        if (_liveRoutineKeys.Count == 0)
-        {
-            foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
             {
-                if (type is RecordTypeInfo { IsGenericDefinition: false } record)
-                {
-                    if (record.TypeArguments != null &&
-                        record.TypeArguments.Any(predicate: t =>
-                            ContainsGenericParameter(t) || t is ErrorTypeInfo ||
-                            ContainsAbstractProjection(t)))
-                    {
-                        continue;
-                    }
-
-                    GenerateRecordType(record: record);
-                }
+                GenerateCrashableType(crashable: crashable);
             }
         }
+
+        GenerateRecordTypeDeclarations();
 
         // Generate variant types (tagged unions -> tag + payload record)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Variant))
@@ -557,6 +521,36 @@ public partial class LlvmCodeGenerator
             if (type is VariantTypeInfo { IsGenericDefinition: false } variant)
             {
                 GenerateVariantType(variant: variant);
+            }
+        }
+    }
+
+    /// <summary>Generates struct types for all concrete entity resolutions in the registry.</summary>
+    private void GenerateEntityTypeDeclarations()
+    {
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity))
+        {
+            // Skip resolutions with unresolved generic parameters at any depth (e.g.
+            // List[BTreeSetNode[T]] where T is nested inside a type argument).
+            if (type is EntityTypeInfo { IsGenericDefinition: false } entity &&
+                entity.TypeArguments?.Any(predicate: ContainsGenericParameter) != true)
+            {
+                GenerateEntityType(entity: entity);
+            }
+        }
+    }
+
+    /// <summary>Generates struct types for all concrete record resolutions in the registry.</summary>
+    private void GenerateRecordTypeDeclarations()
+    {
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
+        {
+            if (type is RecordTypeInfo { IsGenericDefinition: false } record &&
+                record.TypeArguments?.Any(predicate: t =>
+                    ContainsGenericParameter(t) || t is ErrorTypeInfo ||
+                    ContainsAbstractProjection(t)) != true)
+            {
+                GenerateRecordType(record: record);
             }
         }
     }
@@ -617,25 +611,27 @@ public partial class LlvmCodeGenerator
     /// Only emits 'declare' for external routines that don't have bodies.
     /// Routines with bodies (user program and stdlib) are handled by GenerateRoutineDefinitions().
     /// </summary>
-    private void GenerateRoutineDeclarations() // NOSONAR S3776
+    private void GenerateRoutineDeclarations()
     {
         // Build set of routine names that have bodies (in user programs or stdlib)
-        var routinesWithBodies = new HashSet<string>();
+        HashSet<string> routinesWithBodies = CollectRoutinesWithBodies();
 
-        // User program routines
-        foreach ((Program userProgram, string _, string _) in _userPrograms)
+        foreach (RoutineInfo routine in _registry.GetAllRoutines())
         {
-            foreach (ISyntaxTreeNode decl in userProgram.Declarations)
+            if (!ShouldSkipRoutineDeclaration(routine: routine,
+                    routinesWithBodies: routinesWithBodies))
             {
-                if (decl is RoutineDeclaration routine)
-                {
-                    routinesWithBodies.Add(item: routine.Name);
-                }
+                // Only emit 'declare' for truly external routines
+                GenerateRoutineDeclaration(routine: routine);
             }
         }
+    }
 
-        // Stdlib routines with bodies
-        foreach ((Program program, string _, string _) in _stdlibPrograms)
+    /// <summary>Collects the names of routines that have bodies (user program + stdlib).</summary>
+    private HashSet<string> CollectRoutinesWithBodies()
+    {
+        var routinesWithBodies = new HashSet<string>();
+        foreach ((Program program, string _, string _) in _userPrograms.Concat(second: _stdlibPrograms))
         {
             foreach (ISyntaxTreeNode decl in program.Declarations)
             {
@@ -645,54 +641,37 @@ public partial class LlvmCodeGenerator
                 }
             }
         }
+        return routinesWithBodies;
+    }
 
-        foreach (RoutineInfo routine in _registry.GetAllRoutines())
+    /// <summary>
+    /// Whether a routine needs no external <c>declare</c>: generic definitions / unresolved-type /
+    /// generic-owner / synthesized / protocol-abstract routines, and non-extern routines that have
+    /// an emitted body. C-externs are always declared (they never have an RF body and their bare
+    /// symbol can collide with a same-named RF wrapper overload).
+    /// </summary>
+    private static bool ShouldSkipRoutineDeclaration(RoutineInfo routine,
+        HashSet<string> routinesWithBodies)
+    {
+        if (routine.IsGenericDefinition || HasErrorTypes(routine: routine) ||
+            routine.OwnerType is { IsGenericDefinition: true } or GenericParameterTypeInfo ||
+            routine.IsSynthesized || routine.OwnerType is ProtocolTypeInfo)
         {
-            // Skip generic definitions, routines with unresolved types,
-            // and methods on generic owner types (e.g., Dict[K,V].count)
-            if (routine.IsGenericDefinition || HasErrorTypes(routine: routine) ||
-                routine.OwnerType is { IsGenericDefinition: true } ||
-                routine.OwnerType is GenericParameterTypeInfo)
-            {
-                continue;
-            }
-
-            // Skip synthesized routines (they will be emitted as 'define' by GenerateSynthesizedRoutines)
-            if (routine.IsSynthesized)
-            {
-                continue;
-            }
-
-            // Skip abstract protocol methods — they are never called directly; concrete
-            // implementations are reached only through runtime dispatch stubs.
-            if (routine.OwnerType is ProtocolTypeInfo)
-            {
-                continue;
-            }
-
-            // A C-extern routine (e.g. `external("C") rf_allocate_dynamic`) emits under its raw C
-            // symbol and always needs a `declare` — it never has an RF body. Its bare name can
-            // collide with a same-named RF wrapper overload (e.g. `rf_allocate_dynamic(ByteSize)`,
-            // which mangles to a distinct `Core.rf_allocate_dynamic(Core.ByteSize)` symbol). The
-            // body-name skip below would then wrongly drop the C-extern's declaration, producing
-            // `use of undefined value @rf_allocate_dynamic` at opt time when only the raw form is
-            // called. Declare C-externs unconditionally (declarations dedupe by symbol name).
-            bool isCExtern = routine.CallingConvention == "C";
-
-            // Skip routines that have bodies (they will be emitted as 'define' in GenerateFunctionDefinitions)
-            string fullName = routine.OwnerType != null
-                ? $"{routine.OwnerType.Name}.{routine.Name}"
-                : routine.Name;
-            if (!isCExtern &&
-                (routinesWithBodies.Contains(item: routine.Name) ||
-                 routinesWithBodies.Contains(item: fullName)))
-            {
-                continue;
-            }
-
-            // Only emit 'declare' for truly external routines
-            GenerateRoutineDeclaration(routine: routine);
+            return true;
         }
+
+        // C-externs are declared unconditionally (declarations dedupe by symbol name).
+        if (routine.CallingConvention == "C")
+        {
+            return false;
+        }
+
+        // Skip routines that have bodies (emitted as 'define' in GenerateRoutineDefinitions).
+        string fullName = routine.OwnerType != null
+            ? $"{routine.OwnerType.Name}.{routine.Name}"
+            : routine.Name;
+        return routinesWithBodies.Contains(item: routine.Name) ||
+               routinesWithBodies.Contains(item: fullName);
     }
 
     /// <summary>
@@ -1336,7 +1315,7 @@ public partial class LlvmCodeGenerator
     /// Builds the final output by combining all sections.
     /// </summary>
     /// <returns>The complete LLVM IR module.</returns>
-    private string BuildOutput() // NOSONAR S3776
+    private string BuildOutput()
     {
         var output = new StringBuilder();
 
@@ -1347,28 +1326,7 @@ public partial class LlvmCodeGenerator
         output.AppendLine(handler: $"target triple = \"{_targetTriple}\"");
         output.AppendLine();
 
-        // Type declarations — record -> choice -> variant -> entity -> crashable, each sorted by name
-        bool anyTypes = _typeDeclarationsRecord.Count > 0 || _typeDeclarationsVariant.Count > 0 ||
-                        _typeDeclarationsEntity.Count > 0 || _typeDeclarationsCrashable.Count > 0 ||
-                        _typeDeclarationsClosure.Count > 0;
-        if (anyTypes)
-        {
-            output.AppendLine(value: "; Type declarations");
-
-            void EmitTypeSection(string header, SortedDictionary<string, string> bucket)
-            {
-                if (bucket.Count == 0) return;
-                output.AppendLine(handler: $"; -- {header} --");
-                foreach (string decl in bucket.Values) output.Append(value: decl);
-            }
-
-            EmitTypeSection(header: "records", bucket: _typeDeclarationsRecord);
-            EmitTypeSection(header: "variants", bucket: _typeDeclarationsVariant);
-            EmitTypeSection(header: "entities", bucket: _typeDeclarationsEntity);
-            EmitTypeSection(header: "crashables", bucket: _typeDeclarationsCrashable);
-            EmitTypeSection(header: "closures", bucket: _typeDeclarationsClosure);
-            output.AppendLine();
-        }
+        AppendTypeDeclarations(output: output);
 
         // Global declarations
         if (_globalDeclarations.Length > 0)
@@ -1385,133 +1343,12 @@ public partial class LlvmCodeGenerator
             output.Append(value: _functionDeclarations);
         }
 
-        // RF function forward declarations — skip any that now have definitions.
-        // A symbol with BOTH a declare and a define is an RF routine (C externs are declare-only,
-        // never defined), so the two MUST describe the same function type. If they diverge, codegen
-        // computed the signature two different ways — an internal bug that LLVM would otherwise only
-        // flag downstream as a cryptic "call argument type mismatch". Assert the invariant here.
-        foreach ((string name, string line) in _rfRoutineDeclarations)
-        {
-            if (!_generatedRoutineDefs.Contains(item: name))
-            {
-                output.AppendLine(value: line);
-                continue;
-            }
-
-            // Define wins (the declare is dropped); first verify the pair agrees.
-            if (_generatedRoutineDefHeaders.TryGetValue(key: name, value: out string? defHeader))
-            {
-                string declSig = NormalizeFunctionSignature(header: line);
-                string defSig = NormalizeFunctionSignature(header: defHeader);
-                if (declSig != defSig)
-                {
-                    throw new InvalidOperationException(
-                        message:
-                        $"Codegen bug: declare/define signature mismatch for @{name}.\n" +
-                        $"  declare: {declSig}  ({line.Trim()})\n" +
-                        $"  define : {defSig}  ({defHeader.Trim()})\n" +
-                        "The forward declaration and the emitted body disagree on the function type. " +
-                        "This is an internal compiler error — the conversion/mangling path that built " +
-                        "the declare differs from the one that built the define.");
-                }
-            }
-        }
+        AppendRfForwardDeclarations(output: output);
 
         // Inline shadow-stack helpers (only when tracing is on)
         if (ShouldEmitTrace)
         {
-            output.AppendLine(value: "; Shadow stack (inline — no DLL call)");
-            // 32-entry ring (power-of-2) — index masked with AND, no branch needed in push.
-            // The printer clamps to the actual depth so only valid frames are shown.
-            output.AppendLine(
-                value:
-                "@_rf_trace_stack = thread_local global [32 x { ptr, ptr, i32, i32 }] zeroinitializer");
-            output.AppendLine(value: "@_rf_trace_depth = thread_local global i32 0");
-            output.AppendLine();
-            // push helper — branchless: mask index to [0,31] with AND
-            output.AppendLine(
-                value:
-                "define private void @_rf_trace_push(ptr %r, ptr %f, i32 %ln, i32 %col) alwaysinline {");
-            output.AppendLine(value: EntryLabel);
-            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
-            output.AppendLine(value: "  %idx32 = and i32 %d, 31");
-            output.AppendLine(value: "  %idx = zext i32 %idx32 to i64");
-            output.AppendLine(
-                value:
-                "  %slot = getelementptr inbounds [32 x { ptr, ptr, i32, i32 }], ptr @_rf_trace_stack, i64 0, i64 %idx");
-            output.AppendLine(
-                value:
-                "  %p0 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 0");
-            output.AppendLine(value: "  store ptr %r, ptr %p0");
-            output.AppendLine(
-                value:
-                "  %p1 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 1");
-            output.AppendLine(value: "  store ptr %f, ptr %p1");
-            output.AppendLine(
-                value:
-                "  %p2 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 2");
-            output.AppendLine(value: "  store i32 %ln, ptr %p2");
-            output.AppendLine(
-                value:
-                "  %p3 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 3");
-            output.AppendLine(value: "  store i32 %col, ptr %p3");
-            output.AppendLine(value: "  %nd = add i32 %d, 1");
-            output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
-            output.AppendLine(value: RetVoidInstruction);
-            output.AppendLine(value: "}");
-            output.AppendLine();
-            // pop helper — branchless: depth is always > 0 when pop is called (paired with push)
-            output.AppendLine(value: "define private void @_rf_trace_pop() alwaysinline {");
-            output.AppendLine(value: EntryLabel);
-            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
-            output.AppendLine(value: "  %nd = add i32 %d, -1");
-            output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
-            output.AppendLine(value: RetVoidInstruction);
-            output.AppendLine(value: "}");
-            output.AppendLine();
-            // update-loc helper — overwrites the line/col of the current (topmost) frame.
-            // Codegen emits a call to this before each call expression so the stack trace
-            // reflects the source line where the call originates, not just the enclosing
-            // routine's declaration line. Skip when depth == 0 (no current frame yet —
-            // happens during the entry routine's own setup before its trace_push fires).
-            output.AppendLine(
-                value:
-                "define private void @_rf_trace_update_loc(i32 %ln, i32 %col) alwaysinline {");
-            output.AppendLine(value: EntryLabel);
-            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
-            output.AppendLine(value: "  %has = icmp ugt i32 %d, 0");
-            output.AppendLine(value: "  br i1 %has, label %do_update, label %skip");
-            output.AppendLine(value: "do_update:");
-            output.AppendLine(value: "  %top = sub i32 %d, 1");
-            output.AppendLine(value: "  %top32 = and i32 %top, 31");
-            output.AppendLine(value: "  %top64 = zext i32 %top32 to i64");
-            output.AppendLine(
-                value:
-                "  %slot = getelementptr inbounds [32 x { ptr, ptr, i32, i32 }], ptr @_rf_trace_stack, i64 0, i64 %top64");
-            output.AppendLine(
-                value:
-                "  %p2 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 2");
-            output.AppendLine(value: "  store i32 %ln, ptr %p2");
-            output.AppendLine(
-                value:
-                "  %p3 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 3");
-            output.AppendLine(value: "  store i32 %col, ptr %p3");
-            output.AppendLine(value: "  br label %skip");
-            output.AppendLine(value: "skip:");
-            output.AppendLine(value: RetVoidInstruction);
-            output.AppendLine(value: "}");
-            output.AppendLine();
-            // printer helper — passes exe TLS data to the DLL
-            output.AppendLine(value: "declare void @rf_print_shadow_stack_data(ptr, i32)");
-            output.AppendLine(value: "define private void @_rf_print_trace_stack() {");
-            output.AppendLine(value: EntryLabel);
-            output.AppendLine(value: "  %depth = load i32, ptr @_rf_trace_depth");
-            output.AppendLine(
-                value:
-                "  call void @rf_print_shadow_stack_data(ptr @_rf_trace_stack, i32 %depth)");
-            output.AppendLine(value: RetVoidInstruction);
-            output.AppendLine(value: "}");
-            output.AppendLine();
+            AppendShadowStackHelpers(output: output);
         }
 
         // Auxiliary helper definitions
@@ -1528,54 +1365,7 @@ public partial class LlvmCodeGenerator
             output.Append(value: _functionDefinitions);
         }
 
-        // Emit main() entry point that calls the module's start() routine. The mangled symbol is
-        // `"[independent(, crashable)] <module.>start()"` — attributes are in the bracket prefix and
-        // the name is the bare module-qualified `start` with an (always-empty) labeled param list.
-        static bool IsStartSymbol(string f) =>
-            f.EndsWith(value: ".start()\"") || f.EndsWith(value: " start()\"");
-
-        // Prefer the ENTRY module's own start. `_generatedRoutineDefs` is a hash set (unordered),
-        // so a bare FirstOrDefault would pick an arbitrary `.start` when several imported modules
-        // each define one (e.g. a test harness importing many modules) — non-deterministically
-        // making the wrong module's start the program entry. The first user program is the entry
-        // (manifest executable module); its start is the intended entry point.
-        // The program entry is the manifest executable module's start — NOT an arbitrary `.start`.
-        // With several imported modules each defining `start` (e.g. a test harness), selecting by
-        // name alone is ambiguous, so the entry module is passed in explicitly. Fall back to a
-        // lone start only when no entry module is set (single-module program).
-        string? startFunc = null;
-        if (!string.IsNullOrEmpty(value: EntryModule))
-        {
-            // Match `"[independent(, …)] {EntryModule}.start()"` regardless of the attribute prefix.
-            startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
-                f.EndsWith(value: $"{EntryModule}.start()\""));
-        }
-        startFunc ??= _generatedRoutineDefs.SingleOrDefault(predicate: IsStartSymbol);
-        if (startFunc != null)
-        {
-            // Select trace mode: 2=shadow (debug+release), 1=platform (hardware faults only), 0=none (release-time/space)
-            int traceMode = _buildMode switch
-            {
-                RfBuildMode.Debug or RfBuildMode.Release => 2,
-                _ => 0
-            };
-
-            output.AppendLine(value: "declare void @__rf_set_trace_mode(i32)");
-            if (ShouldEmitTrace)
-                output.AppendLine(value: "declare void @rf_set_stack_printer(ptr)");
-            output.AppendLine();
-            output.AppendLine(value: "; Entry point");
-            output.AppendLine(value: "define i32 @main(i32 %argc, ptr %argv) {");
-            output.AppendLine(value: EntryLabel);
-            output.AppendLine(value: "  call void @rf_runtime_init()");
-            output.AppendLine(handler: $"  call void @__rf_set_trace_mode(i32 {traceMode})");
-            if (ShouldEmitTrace)
-                output.AppendLine(
-                    value: "  call void @rf_set_stack_printer(ptr @_rf_print_trace_stack)");
-            output.AppendLine(handler: $"  call void @{startFunc}()");
-            output.AppendLine(value: "  ret i32 0");
-            output.AppendLine(value: "}");
-        }
+        AppendMainEntryPoint(output: output);
 
         // Normalize to Unix line endings (clang/LLVM requires LF, not CRLF)
         var normalized = output.ToString()
@@ -1585,6 +1375,240 @@ public partial class LlvmCodeGenerator
         // headers). Both are text post-passes that append their own metadata block; DI numbers itself
         // above TBAA's fixed !0..!22. ApplyDebugInfo is a no-op outside debug builds.
         return ApplyDebugInfo(ApplyTbaa(normalized));
+    }
+
+    /// <summary>
+    /// Appends the type-declaration block (record -> variant -> entity -> crashable -> closure, each
+    /// bucket already name-sorted), skipping empty buckets and the header when no types exist.
+    /// </summary>
+    private void AppendTypeDeclarations(StringBuilder output)
+    {
+        bool anyTypes = _typeDeclarationsRecord.Count > 0 || _typeDeclarationsVariant.Count > 0 ||
+                        _typeDeclarationsEntity.Count > 0 || _typeDeclarationsCrashable.Count > 0 ||
+                        _typeDeclarationsClosure.Count > 0;
+        if (!anyTypes)
+        {
+            return;
+        }
+
+        output.AppendLine(value: "; Type declarations");
+
+        void EmitTypeSection(string header, SortedDictionary<string, string> bucket)
+        {
+            if (bucket.Count == 0)
+            {
+                return;
+            }
+            output.AppendLine(handler: $"; -- {header} --");
+            foreach (string decl in bucket.Values)
+            {
+                output.Append(value: decl);
+            }
+        }
+
+        EmitTypeSection(header: "records", bucket: _typeDeclarationsRecord);
+        EmitTypeSection(header: "variants", bucket: _typeDeclarationsVariant);
+        EmitTypeSection(header: "entities", bucket: _typeDeclarationsEntity);
+        EmitTypeSection(header: "crashables", bucket: _typeDeclarationsCrashable);
+        EmitTypeSection(header: "closures", bucket: _typeDeclarationsClosure);
+        output.AppendLine();
+    }
+
+    /// <summary>
+    /// Appends the RF function forward declarations, skipping any symbol that now has a definition
+    /// (define wins). A symbol with BOTH a declare and a define is an RF routine, so the two MUST
+    /// describe the same function type — the signatures are asserted equal before the declare is
+    /// dropped (a mismatch is an internal codegen bug).
+    /// </summary>
+    private void AppendRfForwardDeclarations(StringBuilder output)
+    {
+        foreach ((string name, string line) in _rfRoutineDeclarations)
+        {
+            if (!_generatedRoutineDefs.Contains(item: name))
+            {
+                output.AppendLine(value: line);
+                continue;
+            }
+
+            if (_generatedRoutineDefHeaders.TryGetValue(key: name, value: out string? defHeader))
+            {
+                AssertDeclareDefineAgree(name: name, declLine: line, defHeader: defHeader);
+            }
+        }
+    }
+
+    /// <summary>Throws when a routine's forward declaration and emitted body disagree on type.</summary>
+    private void AssertDeclareDefineAgree(string name, string declLine, string defHeader)
+    {
+        string declSig = NormalizeFunctionSignature(header: declLine);
+        string defSig = NormalizeFunctionSignature(header: defHeader);
+        if (declSig == defSig)
+        {
+            return;
+        }
+        throw new InvalidOperationException(
+            message:
+            $"Codegen bug: declare/define signature mismatch for @{name}.\n" +
+            $"  declare: {declSig}  ({declLine.Trim()})\n" +
+            $"  define : {defSig}  ({defHeader.Trim()})\n" +
+            "The forward declaration and the emitted body disagree on the function type. " +
+            "This is an internal compiler error — the conversion/mangling path that built " +
+            "the declare differs from the one that built the define.");
+    }
+
+    /// <summary>
+    /// Appends the inline shadow-stack helpers (push/pop/update-loc/print). A 32-entry power-of-2
+    /// ring; indices mask with AND so push/pop stay branchless. Only emitted when tracing is on.
+    /// </summary>
+    private static void AppendShadowStackHelpers(StringBuilder output)
+    {
+        output.AppendLine(value: "; Shadow stack (inline — no DLL call)");
+        output.AppendLine(
+            value:
+            "@_rf_trace_stack = thread_local global [32 x { ptr, ptr, i32, i32 }] zeroinitializer");
+        output.AppendLine(value: "@_rf_trace_depth = thread_local global i32 0");
+        output.AppendLine();
+        // push helper — branchless: mask index to [0,31] with AND
+        output.AppendLine(
+            value:
+            "define private void @_rf_trace_push(ptr %r, ptr %f, i32 %ln, i32 %col) alwaysinline {");
+        output.AppendLine(value: EntryLabel);
+        output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+        output.AppendLine(value: "  %idx32 = and i32 %d, 31");
+        output.AppendLine(value: "  %idx = zext i32 %idx32 to i64");
+        output.AppendLine(
+            value:
+            "  %slot = getelementptr inbounds [32 x { ptr, ptr, i32, i32 }], ptr @_rf_trace_stack, i64 0, i64 %idx");
+        output.AppendLine(
+            value:
+            "  %p0 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 0");
+        output.AppendLine(value: "  store ptr %r, ptr %p0");
+        output.AppendLine(
+            value:
+            "  %p1 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 1");
+        output.AppendLine(value: "  store ptr %f, ptr %p1");
+        output.AppendLine(
+            value:
+            "  %p2 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 2");
+        output.AppendLine(value: "  store i32 %ln, ptr %p2");
+        output.AppendLine(
+            value:
+            "  %p3 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 3");
+        output.AppendLine(value: "  store i32 %col, ptr %p3");
+        output.AppendLine(value: "  %nd = add i32 %d, 1");
+        output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
+        output.AppendLine(value: RetVoidInstruction);
+        output.AppendLine(value: "}");
+        output.AppendLine();
+        // pop helper — branchless: depth is always > 0 when pop is called (paired with push)
+        output.AppendLine(value: "define private void @_rf_trace_pop() alwaysinline {");
+        output.AppendLine(value: EntryLabel);
+        output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+        output.AppendLine(value: "  %nd = add i32 %d, -1");
+        output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
+        output.AppendLine(value: RetVoidInstruction);
+        output.AppendLine(value: "}");
+        output.AppendLine();
+        // update-loc helper — overwrites the line/col of the current (topmost) frame. Emitted before
+        // each call so the trace reflects the call's source line. Skip when depth == 0 (no frame yet).
+        output.AppendLine(
+            value:
+            "define private void @_rf_trace_update_loc(i32 %ln, i32 %col) alwaysinline {");
+        output.AppendLine(value: EntryLabel);
+        output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+        output.AppendLine(value: "  %has = icmp ugt i32 %d, 0");
+        output.AppendLine(value: "  br i1 %has, label %do_update, label %skip");
+        output.AppendLine(value: "do_update:");
+        output.AppendLine(value: "  %top = sub i32 %d, 1");
+        output.AppendLine(value: "  %top32 = and i32 %top, 31");
+        output.AppendLine(value: "  %top64 = zext i32 %top32 to i64");
+        output.AppendLine(
+            value:
+            "  %slot = getelementptr inbounds [32 x { ptr, ptr, i32, i32 }], ptr @_rf_trace_stack, i64 0, i64 %top64");
+        output.AppendLine(
+            value:
+            "  %p2 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 2");
+        output.AppendLine(value: "  store i32 %ln, ptr %p2");
+        output.AppendLine(
+            value:
+            "  %p3 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 3");
+        output.AppendLine(value: "  store i32 %col, ptr %p3");
+        output.AppendLine(value: "  br label %skip");
+        output.AppendLine(value: "skip:");
+        output.AppendLine(value: RetVoidInstruction);
+        output.AppendLine(value: "}");
+        output.AppendLine();
+        // printer helper — passes exe TLS data to the DLL
+        output.AppendLine(value: "declare void @rf_print_shadow_stack_data(ptr, i32)");
+        output.AppendLine(value: "define private void @_rf_print_trace_stack() {");
+        output.AppendLine(value: EntryLabel);
+        output.AppendLine(value: "  %depth = load i32, ptr @_rf_trace_depth");
+        output.AppendLine(
+            value:
+            "  call void @rf_print_shadow_stack_data(ptr @_rf_trace_stack, i32 %depth)");
+        output.AppendLine(value: RetVoidInstruction);
+        output.AppendLine(value: "}");
+        output.AppendLine();
+    }
+
+    /// <summary>
+    /// Appends the <c>main()</c> entry point that inits the runtime, sets the trace mode, and calls
+    /// the entry module's <c>start()</c>. No-op when no start symbol is found.
+    /// </summary>
+    private void AppendMainEntryPoint(StringBuilder output)
+    {
+        string? startFunc = ResolveEntryStartSymbol();
+        if (startFunc == null)
+        {
+            return;
+        }
+
+        // Trace mode: 2=shadow (debug+release), 0=none (release-time/space).
+        int traceMode = _buildMode switch
+        {
+            RfBuildMode.Debug or RfBuildMode.Release => 2,
+            _ => 0
+        };
+
+        output.AppendLine(value: "declare void @__rf_set_trace_mode(i32)");
+        if (ShouldEmitTrace)
+        {
+            output.AppendLine(value: "declare void @rf_set_stack_printer(ptr)");
+        }
+        output.AppendLine();
+        output.AppendLine(value: "; Entry point");
+        output.AppendLine(value: "define i32 @main(i32 %argc, ptr %argv) {");
+        output.AppendLine(value: EntryLabel);
+        output.AppendLine(value: "  call void @rf_runtime_init()");
+        output.AppendLine(handler: $"  call void @__rf_set_trace_mode(i32 {traceMode})");
+        if (ShouldEmitTrace)
+        {
+            output.AppendLine(
+                value: "  call void @rf_set_stack_printer(ptr @_rf_print_trace_stack)");
+        }
+        output.AppendLine(handler: $"  call void @{startFunc}()");
+        output.AppendLine(value: "  ret i32 0");
+        output.AppendLine(value: "}");
+    }
+
+    /// <summary>
+    /// Resolves the program-entry <c>start</c> symbol: the entry module's own start (matched by the
+    /// module-qualified suffix regardless of attribute prefix), falling back to a lone start symbol
+    /// only when no entry module is set. `_generatedRoutineDefs` is unordered, so selecting by name
+    /// alone would non-deterministically pick the wrong module's start when several define one.
+    /// </summary>
+    private string? ResolveEntryStartSymbol()
+    {
+        static bool IsStartSymbol(string f) =>
+            f.EndsWith(value: ".start()\"") || f.EndsWith(value: " start()\"");
+
+        string? startFunc = null;
+        if (!string.IsNullOrEmpty(value: EntryModule))
+        {
+            startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
+                f.EndsWith(value: $"{EntryModule}.start()\""));
+        }
+        return startFunc ?? _generatedRoutineDefs.SingleOrDefault(predicate: IsStartSymbol);
     }
 
     #endregion

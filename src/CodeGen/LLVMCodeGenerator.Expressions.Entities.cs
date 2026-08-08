@@ -249,73 +249,16 @@ public partial class LlvmCodeGenerator
     /// Generates code to construct a record (value type).
     /// </summary>
     private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record,
-        CreatorExpression expr) // NOSONAR S3776
+        CreatorExpression expr)
     {
         // Backend-annotated or single-member-variable wrapper: just return the inner value.
-        // BUT: only when there's no explicit `create(from: argType)` overload — those have
-        // real conversion bodies (e.g. `CStr.create(from: Referring[Text])` UTF-8-encodes a
-        // Text into bytes). Passing the Text entity ptr through as if it were a CStr ptr
-        // skips the conversion and `rf_console_show` ends up dumping the entity struct as
-        // bytes, producing garbled output for every non-Text `show(value: T)` callsite.
-        if (record.HasDirectBackendType &&
-            expr.MemberVariables.Count <= 1)
+        if (record.HasDirectBackendType && expr.MemberVariables.Count <= 1)
         {
-            if (expr.MemberVariables.Count == 0)
-                return GetZeroValue(type: record);
-
-            TypeInfo? argType = GetExpressionType(expr: expr.MemberVariables[index: 0].Value);
-
-            // Narrow case: when the wrapper has a `pass` body (0 declared fields) and the
-            // arg is an entity type (heap-allocated reference), the wrapper construction is
-            // a real conversion, not a representation passthrough. Example:
-            // `CStr(from: text)` where text is the Text entity ptr — must call
-            // `CStr.create(from: Referring[Text])` to UTF-8-encode the codepoints. Without
-            // this dispatch the passthrough returns the entity ptr and `rf_console_show`
-            // dumps raw entity-struct bytes.
-            if (argType is EntityTypeInfo &&
-                record.MemberVariables.Count == 0 &&
-                argType.FullName != record.FullName)
-            {
-                var argTypes = new List<TypeInfo> { argType };
-                RoutineInfo? createOverload = _registry.LookupRoutineOverload(
-                    baseName: $"{record.FullName}.create",
-                    argTypes: argTypes);
-                if (createOverload is { OwnerType: not null })
-                {
-                    string argVal = EmitExpression(sb: sb, expr: expr.MemberVariables[index: 0].Value);
-                    string paramLlvm = GetLlvmType(type: createOverload.Parameters[index: 0].Type);
-                    string retLlvm = GetLlvmType(type: record);
-                    string mangled = MangleRoutineName(routine: createOverload);
-                    string tmp = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {tmp} = call {retLlvm} @{mangled}({paramLlvm} {argVal})");
-                    return tmp;
-                }
-            }
-
-            string argValue = EmitExpression(sb: sb, expr: expr.MemberVariables[index: 0].Value);
-            if (record.HasDirectBackendType)
-            {
-                string targetLlvm = GetLlvmType(type: record);
-                string argLlvm = argType != null
-                    ? GetLlvmType(type: argType)
-                    : targetLlvm;
-                if (argLlvm != targetLlvm)
-                {
-                    return EmitBackendScalarCast(sb: sb,
-                        value: argValue,
-                        sourceType: argType,
-                        targetType: record);
-                }
-            }
-
-            return argValue;
+            return EmitWrapperRecordConstruction(sb: sb, record: record, expr: expr);
         }
 
-        // Multi-member-variable record: build struct value
+        // Multi-member-variable record: build struct value by inserting each member.
         string typeName = GetRecordTypeName(record: record);
-
-        // Start with zeroinitializer and insert each member variable
         string result = "zeroinitializer";
         for (int i = 0; i < expr.MemberVariables.Count && i < record.MemberVariables.Count; i++)
         {
@@ -333,6 +276,47 @@ public partial class LlvmCodeGenerator
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Emits construction of a backend-annotated / single-member wrapper record: a zero value for an
+    /// empty construction, a real <c>create(from:)</c> conversion call for an entity-arg wrapper, or
+    /// an inner-value passthrough (with a scalar cast when the arg's LLVM type differs).
+    /// </summary>
+    private string EmitWrapperRecordConstruction(StringBuilder sb, RecordTypeInfo record,
+        CreatorExpression expr)
+    {
+        if (expr.MemberVariables.Count == 0)
+        {
+            return GetZeroValue(type: record);
+        }
+
+        Expression argExpr = expr.MemberVariables[index: 0].Value;
+        TypeInfo? argType = GetExpressionType(expr: argExpr);
+
+        // An entity-arg wrapper with a `pass` body (0 declared fields) is a real conversion, not a
+        // passthrough. Example: `CStr(from: text)` must call `CStr.create(from: Referring[Text])` to
+        // UTF-8-encode — otherwise `rf_console_show` dumps raw entity-struct bytes.
+        if (argType is EntityTypeInfo && record.MemberVariables.Count == 0 &&
+            argType.FullName != record.FullName &&
+            _registry.LookupRoutineOverload(baseName: $"{record.FullName}.create",
+                argTypes: [argType]) is { OwnerType: not null } createOverload)
+        {
+            string argVal = EmitExpression(sb: sb, expr: argExpr);
+            string paramLlvm = GetLlvmType(type: createOverload.Parameters[index: 0].Type);
+            string retLlvm = GetLlvmType(type: record);
+            string mangled = MangleRoutineName(routine: createOverload);
+            string tmp = NextTemp();
+            EmitLine(sb: sb, line: $"  {tmp} = call {retLlvm} @{mangled}({paramLlvm} {argVal})");
+            return tmp;
+        }
+
+        string argValue = EmitExpression(sb: sb, expr: argExpr);
+        string targetLlvm = GetLlvmType(type: record);
+        string argLlvm = argType != null ? GetLlvmType(type: argType) : targetLlvm;
+        return argLlvm != targetLlvm
+            ? EmitBackendScalarCast(sb: sb, value: argValue, sourceType: argType, targetType: record)
+            : argValue;
     }
 
 /// <summary>

@@ -147,46 +147,16 @@ public partial class LlvmCodeGenerator
     /// Emits code for a variable declaration.
     /// Creates stack allocation and optionally stores initial value.
     /// </summary>
-    private void EmitVariableDeclaration(StringBuilder sb, VariableDeclaration varDecl) // NOSONAR S3776
+    private void EmitVariableDeclaration(StringBuilder sb, VariableDeclaration varDecl)
     {
         // Determine the type
-        TypeInfo? varType = ResolveVariableDeclType(varDecl: varDecl);
-
-        if (varType == null)
-        {
-            string typeText = "<null>";
-            if (varDecl.Type != null)
-            {
-                typeText = varDecl.Type.Name;
-                if (varDecl.Type.GenericArguments is { Count: > 0 } args)
-                {
-                    typeText += $"[{string.Join(", ", args.Select(a => a.Name))}]";
-                }
-            }
-
-            string initializerText = varDecl.Initializer?.GetType()
-                                            .Name ?? "<null>";
-            throw new InvalidOperationException(
-                message:
-                $"Cannot determine type for variable '{varDecl.Name}' (declared type: {typeText}, initializer: {initializerText})");
-        }
+        TypeInfo? varType = ResolveVariableDeclType(varDecl: varDecl)
+            ?? throw UndeterminableVariableType(varDecl: varDecl);
 
         string llvmType = GetValueLlvmType(type: varType);
 
         // Generate unique LLVM name for this variable (handles shadowing/redeclaration)
-        string uniqueName;
-        if (_varNameCounts.TryGetValue(key: varDecl.Name, value: out int count))
-        {
-            _varNameCounts[key: varDecl.Name] = count + 1;
-            uniqueName = $"{varDecl.Name}.{count + 1}";
-        }
-        else
-        {
-            _varNameCounts[key: varDecl.Name] = 1;
-            uniqueName = varDecl.Name;
-        }
-
-        // Allocate stack space
+        string uniqueName = NextUniqueLocalName(name: varDecl.Name);
         string varPtr = $"%{uniqueName}.addr";
         EmitEntryAlloca(llvmName: varPtr, llvmType: llvmType);
 
@@ -194,126 +164,29 @@ public partial class LlvmCodeGenerator
         _localVariables[key: varDecl.Name] = varType;
         _localVarLlvmNames[key: varDecl.Name] = uniqueName;
 
-        switch (varType)
-        {
-            // Track entity variables for automatic cleanup at return points.
-            // Tracked when initialized via constructor (actual heap allocation) or as a
-            // lateinit placeholder (allocated below, create not run).
-            case EntityTypeInfo when IsEntityConstructorCall(expr: varDecl.Initializer) ||
-                                     (varDecl.IsLateInit && varDecl.Initializer == null):
-                _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
-                // Zero-init the alloca in the entry block: if the declaration sits inside a
-                // conditional that doesn't execute on the active path, the alloca still exists
-                // and the function-level cleanup walks it. Without zero-init the load returns
-                // uninitialized stack memory → rf_invalidate frees a garbage pointer → heap
-                // corruption. rf_invalidate is null-safe so zero-init makes the cleanup a no-op.
-                EmitLine(sb: _currentRoutineEntryAllocas, line: $"  store ptr null, ptr {varPtr}");
-                break;
-            // Track record variables with RC wrapper fields for retain/release
-            case RecordTypeInfo { HasRCFields: true } rcRecord:
-                _localRcRecordVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcRecord));
-                break;
-        }
-
-        // Track variables whose type IS an RC wrapper (Retained[T], Shared[T], etc.)
-        if (varType is RecordTypeInfo rcWrapRecord &&
-            GetGenericBaseName(type: rcWrapRecord) is { } rcWrapBase &&
-            RcWrapperBaseNames.Contains(item: rcWrapBase))
-        {
-            _localRetainedVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcWrapRecord));
-
-            // Zero-init the alloca: if the declaration sits inside a conditional (e.g.
-            // a `when`-arm binding `else r => ...`) that doesn't execute on the active
-            // path, the alloca still exists and the function-level cleanup walks it.
-            // Without zero-init, release() loads garbage and dereferences a junk
-            // controller pointer → AV. RC wrappers are @llvm("ptr"), so null is a
-            // safe sentinel and EmitRetainedVarRelease null-checks before releasing.
-            EmitLine(sb: _currentRoutineEntryAllocas,
-                line: $"  store {GetLlvmType(type: rcWrapRecord)} zeroinitializer, ptr {varPtr}");
-
-            // Move semantics: if the initializer is entity.retain(), the RC wrapper
-            // now manages the entity's lifetime. Remove it from scope-exit entity cleanup to prevent
-            // double-free (rc.release() already frees the entity when count reaches zero).
-            if (varDecl.Initializer is CallExpression
-                {
-                    Callee: MemberExpression
-                    {
-                        MemberName: var rcMoveVerb,
-                        Object: IdentifierExpression { Name: var srcEntityName }
-                    }
-                }
-                && rcMoveVerb is Resolution.RuntimeContract.RefCount.Retain
-                    or Resolution.RuntimeContract.RefCount.Roam)
-            {
-                _localEntityVars.RemoveAll(match: e => e.Name == srcEntityName);
-            }
-        }
+        TrackVariableForCleanup(varDecl: varDecl, varType: varType, varPtr: varPtr,
+            uniqueName: uniqueName);
 
         // Store initial value if present
         if (varDecl.Initializer == null)
         {
-            // `lateinit var x: T` — eager allocation, late initialization. Entities get a
-            // real heap block (create not run, no field stores) so the binding is
-            // immediately valid and borrowable, and scope teardown frees a real allocation.
-            // The block must come from the calloc-backed rf_allocate_dynamic (NOT the
-            // _uninit variant): destroy runs on the placeholder (scope exit, and on
-            // reassignment) and walks its fields — zeroed fields are null-safe to free,
-            // garbage fields are wild pointers. Value types are stored zeroed for the same
-            // reason (RC-field release walks). Zeroed contents are teardown armor, not a
-            // language guarantee — reading before assignment yields meaningless values.
-            if (varDecl.IsLateInit)
-            {
-                if (varType is EntityTypeInfo lateInitEntity)
-                {
-                    int blockSize = lateInitEntity.HeapBlockSize(pointerSize: _pointerSizeBytes);
-                    string placeholder = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {placeholder} = call ptr @rf_allocate_dynamic(i64 {blockSize})");
-                    EmitLine(sb: sb, line: $"  store ptr {placeholder}, ptr {varPtr}");
-                }
-                else
-                {
-                    EmitLine(sb: sb,
-                        line: $"  store {llvmType} {GetZeroValue(type: varType)}, ptr {varPtr}");
-                }
-            }
-
+            EmitLateInitPlaceholder(sb: sb, varDecl: varDecl, varType: varType, llvmType: llvmType,
+                varPtr: varPtr);
             return;
         }
 
         string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
 
-        // None initializer: the expression (e.g. a None-returning call) ran for its side effects
-        // but produces no value — `void` carries nothing. Store the unit `{}` into the {} alloca.
+        // None initializer: the expression ran for its side effects but produces no value — `void`
+        // carries nothing. Store the unit `{}` into the {} alloca.
         if (GetLlvmType(type: varType) == "void")
         {
             EmitLine(sb: sb, line: $"  store {{}} zeroinitializer, ptr {varPtr}");
             return;
         }
 
-        // When the declaration has an explicit type annotation, the initializer may have a
-        // different LLVM type (e.g., var e: U32 = exp where exp: S128 -> trunc i128 to i32).
-        // Emit an inline type cast so the store type always matches the alloca type.
-        if (varDecl.Type != null)
-        {
-            TypeInfo? initType = GetExpressionType(expr: varDecl.Initializer);
-            if (initType != null)
-            {
-                string initLlvm = GetLlvmType(type: initType);
-                // Primitive cast applies only between scalar @llvm-annotated records
-                // (e.g. S128 -> U32). For aggregates (carriers like Maybe[T], variants,
-                // multi-field records) the LLVM struct shape is identical on both sides
-                // — no cast needed, and EmitPrimitiveCast would crash on the struct name.
-                bool initIsScalar = initType is RecordTypeInfo { HasDirectBackendType: true };
-                bool varIsScalar = varType is RecordTypeInfo { HasDirectBackendType: true };
-                if (initLlvm != llvmType && initIsScalar && varIsScalar)
-                    value = EmitPrimitiveCast(sb: sb,
-                        value: value,
-                        fromLlvm: initLlvm,
-                        toLlvm: llvmType);
-            }
-        }
-
+        value = CoerceInitializerToDeclaredType(sb: sb, varDecl: varDecl, varType: varType,
+            llvmType: llvmType, value: value);
         EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
 
         // NOTE: the per-RC-field retain on an initial RC-field-record copy is now an explicit AST call
@@ -329,6 +202,156 @@ public partial class LlvmCodeGenerator
         // injecting a spurious retain → strong 1→2 → double-free at scope exit. Removed.
 
         ConsumeTransferredLocalOwnership(expr: varDecl.Initializer);
+    }
+
+    /// <summary>Builds the diagnostic thrown when a variable's type cannot be determined.</summary>
+    private static InvalidOperationException UndeterminableVariableType(VariableDeclaration varDecl)
+    {
+        string typeText = "<null>";
+        if (varDecl.Type != null)
+        {
+            typeText = varDecl.Type.Name;
+            if (varDecl.Type.GenericArguments is { Count: > 0 } args)
+            {
+                typeText += $"[{string.Join(", ", args.Select(a => a.Name))}]";
+            }
+        }
+        string initializerText = varDecl.Initializer?.GetType().Name ?? "<null>";
+        return new InvalidOperationException(
+            message:
+            $"Cannot determine type for variable '{varDecl.Name}' (declared type: {typeText}, initializer: {initializerText})");
+    }
+
+    /// <summary>Generates a unique LLVM local name for <paramref name="name"/>, handling shadowing.</summary>
+    private string NextUniqueLocalName(string name)
+    {
+        if (_varNameCounts.TryGetValue(key: name, value: out int count))
+        {
+            _varNameCounts[key: name] = count + 1;
+            return $"{name}.{count + 1}";
+        }
+        _varNameCounts[key: name] = 1;
+        return name;
+    }
+
+    /// <summary>
+    /// Registers the variable in the scope-exit cleanup sets: bare entities, records with RC fields,
+    /// and RC-wrapper-typed variables (which also zero-init their alloca and drop moved-from owners).
+    /// </summary>
+    private void TrackVariableForCleanup(VariableDeclaration varDecl, TypeInfo varType,
+        string varPtr, string uniqueName)
+    {
+        switch (varType)
+        {
+            // Track entity variables for automatic cleanup at return points. Tracked when
+            // initialized via constructor (heap allocation) or as a lateinit placeholder.
+            case EntityTypeInfo when IsEntityConstructorCall(expr: varDecl.Initializer) ||
+                                     (varDecl.IsLateInit && varDecl.Initializer == null):
+                _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
+                // Zero-init the alloca: a declaration inside a not-taken conditional still has its
+                // alloca walked by function-level cleanup — zero-init makes rf_invalidate a no-op.
+                EmitLine(sb: _currentRoutineEntryAllocas, line: $"  store ptr null, ptr {varPtr}");
+                break;
+            // Track record variables with RC wrapper fields for retain/release
+            case RecordTypeInfo { HasRCFields: true } rcRecord:
+                _localRcRecordVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcRecord));
+                break;
+        }
+
+        if (varType is RecordTypeInfo rcWrapRecord &&
+            GetGenericBaseName(type: rcWrapRecord) is { } rcWrapBase &&
+            RcWrapperBaseNames.Contains(item: rcWrapBase))
+        {
+            TrackRcWrapperVariable(varDecl: varDecl, rcWrapRecord: rcWrapRecord, varPtr: varPtr,
+                uniqueName: uniqueName);
+        }
+    }
+
+    /// <summary>
+    /// Tracks a variable whose type IS an RC wrapper (Retained[T], Shared[T], …): registers it for
+    /// release, zero-inits the alloca, and drops the moved-from entity from cleanup on a retain/roam.
+    /// </summary>
+    private void TrackRcWrapperVariable(VariableDeclaration varDecl, RecordTypeInfo rcWrapRecord,
+        string varPtr, string uniqueName)
+    {
+        _localRetainedVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcWrapRecord));
+
+        // Zero-init the alloca: a declaration inside a not-taken conditional still has its alloca
+        // walked by function-level cleanup, and release() would load garbage. null is a safe
+        // sentinel (RC wrappers are @llvm("ptr")) and EmitRetainedVarRelease null-checks first.
+        EmitLine(sb: _currentRoutineEntryAllocas,
+            line: $"  store {GetLlvmType(type: rcWrapRecord)} zeroinitializer, ptr {varPtr}");
+
+        // Move semantics: if the initializer is entity.retain()/roam(), the RC wrapper now manages
+        // the entity's lifetime — remove it from scope-exit entity cleanup to prevent double-free.
+        if (varDecl.Initializer is CallExpression
+            {
+                Callee: MemberExpression
+                {
+                    MemberName: var rcMoveVerb,
+                    Object: IdentifierExpression { Name: var srcEntityName }
+                }
+            }
+            && rcMoveVerb is Resolution.RuntimeContract.RefCount.Retain
+                or Resolution.RuntimeContract.RefCount.Roam)
+        {
+            _localEntityVars.RemoveAll(match: e => e.Name == srcEntityName);
+        }
+    }
+
+    /// <summary>
+    /// Emits the eager allocation for a <c>lateinit var</c> with no initializer: a real heap block
+    /// for entities (so the binding is immediately valid/borrowable and teardown frees a real
+    /// allocation), or a zeroed value slot otherwise. No-op for a non-lateinit uninitialized decl.
+    /// </summary>
+    private void EmitLateInitPlaceholder(StringBuilder sb, VariableDeclaration varDecl,
+        TypeInfo varType, string llvmType, string varPtr)
+    {
+        if (!varDecl.IsLateInit)
+        {
+            return;
+        }
+
+        // The block must be calloc-backed (rf_allocate_dynamic, NOT _uninit): destroy runs on the
+        // placeholder and walks its fields — zeroed fields are null-safe to free, garbage fields are
+        // wild pointers. Zeroed contents are teardown armor, not a language guarantee.
+        if (varType is EntityTypeInfo lateInitEntity)
+        {
+            int blockSize = lateInitEntity.HeapBlockSize(pointerSize: _pointerSizeBytes);
+            string placeholder = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {placeholder} = call ptr @rf_allocate_dynamic(i64 {blockSize})");
+            EmitLine(sb: sb, line: $"  store ptr {placeholder}, ptr {varPtr}");
+            return;
+        }
+        EmitLine(sb: sb, line: $"  store {llvmType} {GetZeroValue(type: varType)}, ptr {varPtr}");
+    }
+
+    /// <summary>
+    /// When the declaration has an explicit type annotation, emits an inline primitive cast so the
+    /// stored value's LLVM type matches the alloca type (e.g. <c>var e: U32 = s128Expr</c> truncs).
+    /// Only applies between scalar @llvm-annotated records; aggregates share shape and need no cast.
+    /// </summary>
+    private string CoerceInitializerToDeclaredType(StringBuilder sb, VariableDeclaration varDecl,
+        TypeInfo varType, string llvmType, string value)
+    {
+        if (varDecl.Type == null)
+        {
+            return value;
+        }
+
+        TypeInfo? initType = GetExpressionType(expr: varDecl.Initializer!);
+        if (initType == null)
+        {
+            return value;
+        }
+
+        string initLlvm = GetLlvmType(type: initType);
+        bool initIsScalar = initType is RecordTypeInfo { HasDirectBackendType: true };
+        bool varIsScalar = varType is RecordTypeInfo { HasDirectBackendType: true };
+        return initLlvm != llvmType && initIsScalar && varIsScalar
+            ? EmitPrimitiveCast(sb: sb, value: value, fromLlvm: initLlvm, toLlvm: llvmType)
+            : value;
     }
 
     /// <summary>
@@ -763,81 +786,30 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emits a store to an indexed location.
     /// </summary>
-    private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, Expression rhs) // NOSONAR S3776
+    private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, Expression rhs)
     {
         // TODO: Record setitem is a hack and should be following setitem member routine.
-        // TODO: Also, the setitem routine should be just called through anyway and handled not in here.
+        // TODO: Also, the setitem routine should be just called through anyway and handled not here.
         TypeInfo? targetType = GetExpressionType(expr: index.Object);
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
         RoutineInfo? setItem = LookupSetItemMethod(index: index);
 
-        // Wrapper-record detection: if the resolved setitem's value-param type doesn't match
-        // the target's last type-argument, the lookup unwrapped through a wrapper (e.g.
-        // Owned[List[S64]] -> inner List[S64].setitem!(i64)). The inline mangled-name path
-        // would emit a call to the wrapper's symbol which doesn't exist, so escape to the
-        // standard method-dispatch path that handles wrapper forwarding correctly.
-        // Skip when the last type-arg is a const-generic value (e.g. BitArray[N] where N=8),
-        // since const-generic owners are never wrapper forwarders.
-        bool isWrapperForwardingSetItem =
-            setItem is { Parameters.Count: >= 2 } &&
-            targetType?.TypeArguments is [not ConstGenericValueTypeInfo] &&
-            setItem.Parameters[^1].Type.FullName != targetType.TypeArguments[^1].FullName;
-
         // Record setitem!: the receiver must be the alloca pointer so mutations persist in the
         // caller's frame. EmitMemberRoutineCall evaluates the receiver as a loaded value, which would
         // discard writes -> so keep the pointer-based dispatch inline for this case.
-        if (setItem != null && targetType is RecordTypeInfo &&
-            setItem.Name.Contains(value: "setitem") &&
-            !isWrapperForwardingSetItem &&
-            (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
+        if (IsInlineRecordSetItem(setItem: setItem, targetType: targetType))
         {
-            string value = EmitExpression(sb: sb, expr: rhs);
-            // The receiver must be the storage address so the element write persists in the
-            // caller's frame. EmitLvalueAddress recurses through arbitrary lvalue chains
-            // (`coll[i] = x`, `a.b[i] = x`, `me.inner[i] = x`), replacing the old bare-local-only path.
-            string receiver = EmitLvalueAddress(sb: sb, expr: index.Object);
-            string indexValue = EmitExpression(sb: sb, expr: index.Index);
-            TypeInfo? indexType = GetExpressionType(expr: index.Index);
-
-            string mangledName = MangleRoutineName(routine: setItem);
-
-            GenerateRoutineDeclaration(routine: setItem);
-
-            string indexLlvm = indexType != null
-                ? GetLlvmType(type: indexType)
-                : "i64";
-            string valueLlvm;
-            // Prefer the resolved setitem's value param type — that's what the call signature
-            // actually expects. Only fall back to TypeArguments[^1] when the param is still an
-            // unresolved generic parameter (rare; should not happen for IsGenericResolution targets).
-            // Falling through to TypeArguments[^1] is wrong for single-arg wrappers like
-            // Owned[List[S64]], where the last type-arg is List[S64], not the element type S64.
-            if (setItem.Parameters is [.., _, { Type: not GenericParameterTypeInfo }])
-            {
-                valueLlvm = GetLlvmType(type: setItem.Parameters[^1].Type);
-            }
-            else if (targetType.TypeArguments is { Count: > 0 })
-            {
-                valueLlvm = GetLlvmType(type: targetType.TypeArguments[^1]);
-            }
-            else
-            {
-                valueLlvm = "i64";
-            }
-
-            EmitLine(sb: sb,
-                line:
-                $"  call void @{mangledName}(ptr {receiver}, {indexLlvm} {indexValue}, {valueLlvm} {value})");
+            EmitInlineRecordSetItem(sb: sb, index: index, rhs: rhs, setItem: setItem!,
+                targetType: targetType!);
             return;
         }
 
         // Entity/generic dispatch: synthesize `obj.setitem[!](index, rhs)` and delegate to
-        // EmitMemberRoutineCall. This reuses the full owner-level + method-level generic monomorphization
-        // machinery (e.g. BitList.setitem![I] -> BitList.setitem![S64]) without duplicating it.
-        // OperatorLoweringPass annotates `index.ResolvedSetItem` with the method-generic-resolved
-        // routine; prefer it over a fresh lookup so codegen bypasses the generic-definition guard.
+        // EmitMemberRoutineCall, reusing the owner-/method-level generic monomorphization machinery.
+        // OperatorLoweringPass annotates `index.ResolvedSetItem`; prefer it over a fresh lookup so
+        // codegen bypasses the generic-definition guard.
         RoutineInfo? dispatchSetItem = index.ResolvedSetItem ?? setItem;
         if (dispatchSetItem != null)
         {
@@ -854,7 +826,82 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        // Fallback: raw GEP + store for pointer/contiguous-memory types with no setitem
+        EmitRawIndexStore(sb: sb, index: index, rhs: rhs, targetType: targetType);
+    }
+
+    /// <summary>
+    /// Whether an index assignment should use the inline pointer-based record <c>setitem</c> path
+    /// (a resolved record setitem that isn't a wrapper forwarder and is concretely instantiable).
+    /// </summary>
+    private static bool IsInlineRecordSetItem(RoutineInfo? setItem, TypeInfo? targetType)
+    {
+        if (setItem == null || targetType is not RecordTypeInfo ||
+            !setItem.Name.Contains(value: "setitem") ||
+            (setItem.IsGenericDefinition && !targetType.IsGenericResolution))
+        {
+            return false;
+        }
+
+        // Wrapper-record detection: if the resolved setitem's value-param type doesn't match the
+        // target's last type-argument, the lookup unwrapped through a wrapper (e.g.
+        // Owned[List[S64]] -> inner List[S64].setitem!(i64)) — that symbol doesn't exist inline, so
+        // escape to the standard method-dispatch path. Skipped for const-generic owners (never
+        // wrapper forwarders).
+        bool isWrapperForwardingSetItem =
+            setItem.Parameters.Count >= 2 &&
+            targetType.TypeArguments is [not ConstGenericValueTypeInfo] &&
+            setItem.Parameters[^1].Type.FullName != targetType.TypeArguments[^1].FullName;
+        return !isWrapperForwardingSetItem;
+    }
+
+    /// <summary>Emits the inline pointer-based record <c>setitem</c> call (receiver = lvalue address).</summary>
+    private void EmitInlineRecordSetItem(StringBuilder sb, IndexExpression index, Expression rhs,
+        RoutineInfo setItem, TypeInfo targetType)
+    {
+        string value = EmitExpression(sb: sb, expr: rhs);
+        // The receiver must be the storage address so the element write persists in the caller's
+        // frame. EmitLvalueAddress recurses through arbitrary lvalue chains (`coll[i]`, `a.b[i]`, …).
+        string receiver = EmitLvalueAddress(sb: sb, expr: index.Object);
+        string indexValue = EmitExpression(sb: sb, expr: index.Index);
+        TypeInfo? indexType = GetExpressionType(expr: index.Index);
+
+        string mangledName = MangleRoutineName(routine: setItem);
+        GenerateRoutineDeclaration(routine: setItem);
+
+        string indexLlvm = indexType != null ? GetLlvmType(type: indexType) : "i64";
+        string valueLlvm = ResolveSetItemValueLlvm(setItem: setItem, targetType: targetType);
+        EmitLine(sb: sb,
+            line:
+            $"  call void @{mangledName}(ptr {receiver}, {indexLlvm} {indexValue}, {valueLlvm} {value})");
+    }
+
+    /// <summary>
+    /// Resolves the LLVM type of a record <c>setitem</c>'s value parameter — preferring the resolved
+    /// param type, falling back to the target's last type-argument only when the param is still an
+    /// unresolved generic parameter.
+    /// </summary>
+    private string ResolveSetItemValueLlvm(RoutineInfo setItem, TypeInfo targetType)
+    {
+        if (setItem.Parameters is [.., _, { Type: not GenericParameterTypeInfo }])
+        {
+            return GetLlvmType(type: setItem.Parameters[^1].Type);
+        }
+        // Wrong for single-arg wrappers like Owned[List[S64]] (last type-arg is List[S64], not S64),
+        // but those take the wrapper-forwarding path — this only fires for unresolved generic params.
+        if (targetType.TypeArguments is { Count: > 0 })
+        {
+            return GetLlvmType(type: targetType.TypeArguments[^1]);
+        }
+        return "i64";
+    }
+
+    /// <summary>
+    /// Fallback index store: raw GEP + store for pointer/contiguous-memory types with no
+    /// <c>setitem</c> method.
+    /// </summary>
+    private void EmitRawIndexStore(StringBuilder sb, IndexExpression index, Expression rhs,
+        TypeInfo? targetType)
+    {
         string rawValue = EmitExpression(sb: sb, expr: rhs);
         string target = EmitExpression(sb: sb, expr: index.Object);
         string idxVal = EmitExpression(sb: sb, expr: index.Index);

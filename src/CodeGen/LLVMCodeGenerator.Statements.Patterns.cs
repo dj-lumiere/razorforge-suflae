@@ -287,69 +287,81 @@ public partial class LlvmCodeGenerator
     /// <item><see cref="NonePattern"/> -> None member tag (variant) or 0 (Lookup absent).</item>
     /// </list>
     /// </summary>
-    private bool TryGetSwitchTagValue(Pattern pattern, TypeInfo subjectType, out string tagLiteral) // NOSONAR S3776
+    private bool TryGetSwitchTagValue(Pattern pattern, TypeInfo subjectType, out string tagLiteral)
     {
         tagLiteral = "0";
 
-        // -----------------------------------------------------------------------------
         if (subjectType is VariantTypeInfo variantType)
         {
-            switch (pattern)
-            {
-                case TypePattern tp:
-                {
-                    TypeInfo? targetType = tp.Type.ResolvedType ??
-                                           _registry.LookupType(name: tp.Type.Name);
-                    VariantMemberInfo? member = targetType?.Name == "None"
-                        ?
-                        variantType.Members.FirstOrDefault(predicate: m => m.IsNone)
-                        : targetType != null
-                            ? variantType.FindMember(type: targetType)
-                            : null;
-                    if (member == null) return false;
-                    tagLiteral = member.TagValue.ToString();
-                    return true;
-                }
+            return TryGetVariantSwitchTag(pattern: pattern, variantType: variantType,
+                tagLiteral: out tagLiteral);
+        }
 
-                case NonePattern:
-                {
-                    VariantMemberInfo? noneMember =
-                        variantType.Members.FirstOrDefault(predicate: m => m.IsNone);
-                    if (noneMember == null) return false;
-                    tagLiteral = noneMember.TagValue.ToString();
-                    return true;
-                }
-            }
-
+        if (!IsCarrierType(type: subjectType) || IsMaybeType(type: subjectType))
+        {
             return false;
         }
 
-        // -----------------------------------------------------------------------------
-        if (!IsCarrierType(type: subjectType) || IsMaybeType(type: subjectType))
-            return false;
+        return TryGetCarrierSwitchTag(pattern: pattern, tagLiteral: out tagLiteral);
+    }
 
+    /// <summary>Resolves a variant subject's arm tag for a TypePattern / NonePattern.</summary>
+    private bool TryGetVariantSwitchTag(Pattern pattern, VariantTypeInfo variantType,
+        out string tagLiteral)
+    {
+        tagLiteral = "0";
+        VariantMemberInfo? member = pattern switch
+        {
+            TypePattern tp => ResolveVariantMemberForTypePattern(tp: tp, variantType: variantType),
+            NonePattern => variantType.Members.FirstOrDefault(predicate: m => m.IsNone),
+            _ => null
+        };
+        if (member == null)
+        {
+            return false;
+        }
+        tagLiteral = member.TagValue.ToString();
+        return true;
+    }
+
+    /// <summary>Resolves the variant member a TypePattern selects (None arm or a payload arm).</summary>
+    private VariantMemberInfo? ResolveVariantMemberForTypePattern(TypePattern tp,
+        VariantTypeInfo variantType)
+    {
+        TypeInfo? targetType = tp.Type.ResolvedType ?? _registry.LookupType(name: tp.Type.Name);
+        if (targetType?.Name == "None")
+        {
+            return variantType.Members.FirstOrDefault(predicate: m => m.IsNone);
+        }
+        return targetType != null ? variantType.FindMember(type: targetType) : null;
+    }
+
+    /// <summary>Resolves a Result/Lookup carrier subject's tag (0 for None/absent, else type_id).</summary>
+    private bool TryGetCarrierSwitchTag(Pattern pattern, out string tagLiteral)
+    {
+        tagLiteral = "0";
         switch (pattern)
         {
             case TypePattern { Type.Name: "None" }:
             case NonePattern: // Lookup absent state
-                tagLiteral = "0";
                 return true;
 
             case TypePattern tp:
-            {
                 TypeInfo? targetType =
                     tp.Type.ResolvedType ?? _registry.LookupType(name: tp.Type.Name);
-                if (targetType == null) return false;
+                if (targetType == null)
+                {
+                    return false;
+                }
                 ulong hash = TypeIdHelper.ComputeTypeId(fullName: targetType.FullName);
                 // LLVM switch uses the same bit pattern; sign doesn't matter for equality
                 tagLiteral = unchecked((long)hash).ToString();
                 return true;
-            }
 
-            // CrashablePattern: range check (tag != 0 &&-> tag != validId) -> not a single arm
+            default:
+                // CrashablePattern: range check (tag != 0 && tag != validId) -> not a single arm
+                return false;
         }
-
-        return false;
     }
 
     /// <summary>
@@ -577,54 +589,16 @@ public partial class LlvmCodeGenerator
     /// Emits code for literal pattern matching with correct type comparison.
     /// </summary>
     private void EmitLiteralPatternMatch(StringBuilder sb, string subject, LiteralPattern lit,
-        string matchLabel, string failLabel, TypeInfo? subjectType) // NOSONAR S3776
+        string matchLabel, string failLabel, TypeInfo? subjectType)
     {
         string litValue = lit.Value?.ToString() ?? "0";
         string result = NextTemp();
-
-        // Determine LLVM type and comparison from the literal's token type
-        string llvmType = lit.LiteralType switch
-        {
-            TokenType.S8Literal => "i8",
-            TokenType.S16Literal => "i16",
-            TokenType.S32Literal => "i32",
-            TokenType.S64Literal => "i64",
-            TokenType.S128Literal => "i128",
-            TokenType.S256Literal => "i256",
-            TokenType.U8Literal => "i8",
-            TokenType.U16Literal => "i16",
-            TokenType.U32Literal => "i32",
-            TokenType.U64Literal => "i64",
-            TokenType.U128Literal => "i128",
-            TokenType.U256Literal => "i256",
-            TokenType.F16Literal => "half",
-            TokenType.F32Literal => "float",
-            TokenType.F64Literal => "double",
-            // F128 carries its bits as i128 (never LLVM fp128); literal patterns
-            // compare bit patterns with icmp. Note the IEEE edge divergence:
-            // a NaN pattern matches a bit-identical NaN, and -0.0 != +0.0.
-            TokenType.F128Literal => "i128",
-            TokenType.True or TokenType.False => "i1",
-            _ => subjectType != null
-                ? GetLlvmType(type: subjectType)
-                : "i64"
-        };
+        string llvmType = LiteralPatternLlvmType(lit: lit, subjectType: subjectType);
 
         bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
-        bool isText = lit.LiteralType == TokenType.TextLiteral;
-
-        if (isText)
+        if (lit.LiteralType == TokenType.TextLiteral)
         {
-            // Text comparison via Text.eq(me, other) Bool (i1)
-            TypeInfo? textType = _registry.LookupType(name: "Text");
-            RoutineInfo? textEq = textType != null
-                ? _registry.LookupMethod(type: textType, methodName: "eq")
-                : null;
-            string eqFuncName = textEq != null
-                ? MangleRoutineName(routine: textEq)
-                : "Text_eq";
-            EmitLine(sb: sb,
-                line: $"  {result} = call i1 @{eqFuncName}(ptr {subject}, ptr {litValue})");
+            EmitTextEqCompare(sb: sb, result: result, subject: subject, litValue: litValue);
         }
         else if (isFloat)
         {
@@ -640,15 +614,46 @@ public partial class LlvmCodeGenerator
         {
             if (lit.Value is bool b)
             {
-                litValue = b
-                    ? "true"
-                    : "false";
+                litValue = b ? "true" : "false";
             }
-
             EmitLine(sb: sb, line: $"  {result} = icmp eq {llvmType} {subject}, {litValue}");
         }
 
         EmitLine(sb: sb, line: $"  br i1 {result}, label %{matchLabel}, label %{failLabel}");
+    }
+
+    /// <summary>Maps a literal pattern's token type to its LLVM comparison type.</summary>
+    private string LiteralPatternLlvmType(LiteralPattern lit, TypeInfo? subjectType)
+    {
+        return lit.LiteralType switch
+        {
+            TokenType.S8Literal or TokenType.U8Literal => "i8",
+            TokenType.S16Literal or TokenType.U16Literal => "i16",
+            TokenType.S32Literal or TokenType.U32Literal => "i32",
+            TokenType.S64Literal or TokenType.U64Literal => "i64",
+            TokenType.S128Literal or TokenType.U128Literal => "i128",
+            TokenType.S256Literal or TokenType.U256Literal => "i256",
+            TokenType.F16Literal => "half",
+            TokenType.F32Literal => "float",
+            TokenType.F64Literal => "double",
+            // F128 carries its bits as i128 (never LLVM fp128); literal patterns compare bit
+            // patterns with icmp. IEEE edge divergence: a NaN pattern matches a bit-identical NaN.
+            TokenType.F128Literal => "i128",
+            TokenType.True or TokenType.False => "i1",
+            _ => subjectType != null ? GetLlvmType(type: subjectType) : "i64"
+        };
+    }
+
+    /// <summary>Emits a Text equality comparison via <c>Text.eq(me, other) -> Bool (i1)</c>.</summary>
+    private void EmitTextEqCompare(StringBuilder sb, string result, string subject, string litValue)
+    {
+        TypeInfo? textType = _registry.LookupType(name: "Text");
+        RoutineInfo? textEq = textType != null
+            ? _registry.LookupMethod(type: textType, methodName: "eq")
+            : null;
+        string eqFuncName = textEq != null ? MangleRoutineName(routine: textEq) : "Text_eq";
+        EmitLine(sb: sb,
+            line: $"  {result} = call i1 @{eqFuncName}(ptr {subject}, ptr {litValue})");
     }
 
     /// <summary>
@@ -677,117 +682,47 @@ public partial class LlvmCodeGenerator
     /// Emits code for type pattern matching.
     /// </summary>
     private void EmitTypePatternMatch(StringBuilder sb, string subject, TypePattern typePattern,
-        string matchLabel, string failLabel, TypeInfo? subjectType) // NOSONAR S3776
+        string matchLabel, string failLabel, TypeInfo? subjectType)
     {
         // Resolve the target type
         TypeInfo? targetType = _registry.LookupType(name: typePattern.Type.Name);
 
-        // "is Crashable [varName]" on a Result/Lookup carrier -> delegate to crashable matching logic.
-        // The generic carrier tag check (icmp eq tag, ComputeTypeId("Crashable")) never matches
-        // real error types -> we need the "tag != 0 &&-> tag != ComputeTypeId(T)" range check instead.
+        // "is Crashable [varName]" on a Result/Lookup carrier -> delegate to crashable matching:
+        // the generic carrier tag check never matches real error types, so it needs the
+        // "tag != 0 && tag != ComputeTypeId(T)" range check instead.
         if (subjectType != null && IsCarrierType(type: subjectType) &&
             !IsMaybeType(type: subjectType) && typePattern.Type.Name == "Crashable")
         {
-            var crashableProxy = new CrashablePattern(ErrorType: null,
-                VariableName: typePattern.VariableName,
-                Location: typePattern.Location);
-            EmitCrashablePatternMatch(sb: sb,
-                subject: subject,
-                crashable: crashableProxy,
-                matchLabel: matchLabel,
-                failLabel: failLabel,
-                subjectType: subjectType);
+            EmitCrashablePatternMatch(sb: sb, subject: subject,
+                crashable: new CrashablePattern(ErrorType: null,
+                    VariableName: typePattern.VariableName, Location: typePattern.Location),
+                matchLabel: matchLabel, failLabel: failLabel, subjectType: subjectType);
             return;
         }
 
-        // Choice subjects: `is Color.RED` compares the i32 value against the case's
-        // computed integer. ChoiceTypeInfo is a RecordTypeInfo subclass, so this must
-        // run before the generic record/entity handling below (which would otherwise
-        // optimistically emit an unconditional match).
+        // Choice subjects: `is Color.RED` compares the i32 value against the case's computed
+        // integer. ChoiceTypeInfo is a RecordTypeInfo subclass, so this must run before the generic
+        // record/entity handling below (which would otherwise optimistically match).
         if (subjectType is ChoiceTypeInfo choiceSubject)
         {
-            string caseName = typePattern.Type.Name;
-            int dotIndex = caseName.LastIndexOf(value: '.');
-            if (dotIndex >= 0)
-                caseName = caseName[(dotIndex + 1)..];
-
-            ChoiceCaseInfo? matchedCase =
-                choiceSubject.Cases.FirstOrDefault(predicate: c => c.Name == caseName);
-            if (matchedCase != null)
-            {
-                string choiceLlvm = GetLlvmType(type: choiceSubject);
-                string cmp = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {cmp} = icmp eq {choiceLlvm} {subject}, {matchedCase.ComputedValue}");
-                EmitLine(sb: sb,
-                    line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-            }
-            else
-            {
-                EmitLine(sb: sb, line: $"  br label %{failLabel}");
-            }
-
+            EmitChoiceTypePatternMatch(sb: sb, subject: subject, typePattern: typePattern,
+                choiceSubject: choiceSubject, matchLabel: matchLabel, failLabel: failLabel);
             return;
         }
 
         // Determine the actual target label -> if we need to bind, use an extraction block
         bool needsBind = typePattern.VariableName != null && targetType != null;
-        string branchTarget = needsBind
-            ? NextLabel(prefix: "type_bind")
-            : matchLabel;
+        string branchTarget = needsBind ? NextLabel(prefix: "type_bind") : matchLabel;
 
         if (subjectType is VariantTypeInfo variant && targetType != null)
         {
-            // For variants, check if any member matches the target type
-            VariantMemberInfo? matchedMember = null;
-
-            // Check for None state
-            if (targetType.Name == "None")
-            {
-                matchedMember = variant.Members.FirstOrDefault(predicate: m => m.IsNone);
-            }
-            else
-            {
-                matchedMember = variant.FindMember(type: targetType);
-            }
-
-            if (matchedMember != null)
-            {
-                string tagPtr = NextTemp();
-                string tag = NextTemp();
-                string variantTypeName = GetVariantTypeName(variant: variant);
-                EmitLine(sb: sb,
-                    line:
-                    $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
-                EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
-                string cmp = NextTemp();
-                EmitLine(sb: sb, line: $"  {cmp} = icmp eq i64 {tag}, {matchedMember.TagValue}");
-                EmitLine(sb: sb,
-                    line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
-            }
-            else
-            {
-                EmitLine(sb: sb, line: $"  br label %{failLabel}");
-            }
+            EmitVariantTypePatternMatch(sb: sb, subject: subject, variant: variant,
+                targetType: targetType, branchTarget: branchTarget, failLabel: failLabel);
         }
         else
         {
-            // For entities, compare vtable pointer or type tag
-            if (subjectType != null && targetType != null && subjectType.Name == targetType.Name)
-            {
-                EmitLine(sb: sb, line: $"  br label %{branchTarget}");
-            }
-            else if (subjectType is EntityTypeInfo && targetType is EntityTypeInfo &&
-                     subjectType.Name != targetType.Name)
-            {
-                // Known incompatible entity types -> cannot match
-                EmitLine(sb: sb, line: $"  br label %{failLabel}");
-            }
-            else
-            {
-                // Cannot determine at compile time -> fall through to match (optimistic)
-                EmitLine(sb: sb, line: $"  br label %{branchTarget}");
-            }
+            EmitEntityTypePatternMatch(sb: sb, subjectType: subjectType, targetType: targetType,
+                branchTarget: branchTarget, failLabel: failLabel);
         }
 
         // Bind to variable if specified -> emit alloca+store in a dedicated block
@@ -801,6 +736,75 @@ public partial class LlvmCodeGenerator
             _localVariables[key: typePattern.VariableName!] = targetType!;
             EmitLine(sb: sb, line: $"  br label %{matchLabel}");
         }
+    }
+
+    /// <summary>Emits a choice-case type pattern (`is Color.RED`) as an integer value comparison.</summary>
+    private void EmitChoiceTypePatternMatch(StringBuilder sb, string subject, TypePattern typePattern,
+        ChoiceTypeInfo choiceSubject, string matchLabel, string failLabel)
+    {
+        string caseName = typePattern.Type.Name;
+        int dotIndex = caseName.LastIndexOf(value: '.');
+        if (dotIndex >= 0)
+        {
+            caseName = caseName[(dotIndex + 1)..];
+        }
+
+        ChoiceCaseInfo? matchedCase =
+            choiceSubject.Cases.FirstOrDefault(predicate: c => c.Name == caseName);
+        if (matchedCase == null)
+        {
+            EmitLine(sb: sb, line: $"  br label %{failLabel}");
+            return;
+        }
+
+        string choiceLlvm = GetLlvmType(type: choiceSubject);
+        string cmp = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {cmp} = icmp eq {choiceLlvm} {subject}, {matchedCase.ComputedValue}");
+        EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
+    }
+
+    /// <summary>Emits a variant type pattern as an arm-tag comparison against the matched member.</summary>
+    private void EmitVariantTypePatternMatch(StringBuilder sb, string subject,
+        VariantTypeInfo variant, TypeInfo targetType, string branchTarget, string failLabel)
+    {
+        VariantMemberInfo? matchedMember = targetType.Name == "None"
+            ? variant.Members.FirstOrDefault(predicate: m => m.IsNone)
+            : variant.FindMember(type: targetType);
+        if (matchedMember == null)
+        {
+            EmitLine(sb: sb, line: $"  br label %{failLabel}");
+            return;
+        }
+
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        string variantTypeName = GetVariantTypeName(variant: variant);
+        EmitLine(sb: sb,
+            line: $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
+        EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+        string cmp = NextTemp();
+        EmitLine(sb: sb, line: $"  {cmp} = icmp eq i64 {tag}, {matchedMember.TagValue}");
+        EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
+    }
+
+    /// <summary>
+    /// Emits an entity/record type pattern: an unconditional match on same-named types, a fail on
+    /// known-incompatible entity types, and an optimistic match when undecidable at compile time.
+    /// </summary>
+    private void EmitEntityTypePatternMatch(StringBuilder sb, TypeInfo? subjectType,
+        TypeInfo? targetType, string branchTarget, string failLabel)
+    {
+        // Known incompatible entity types -> cannot match
+        if (subjectType is EntityTypeInfo && targetType is EntityTypeInfo &&
+            subjectType.Name != targetType.Name)
+        {
+            EmitLine(sb: sb, line: $"  br label %{failLabel}");
+            return;
+        }
+
+        // Same-named types match; otherwise fall through optimistically (undecidable at compile time).
+        EmitLine(sb: sb, line: $"  br label %{branchTarget}");
     }
 
     /// <summary>

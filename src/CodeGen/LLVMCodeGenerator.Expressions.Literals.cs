@@ -332,7 +332,7 @@ public partial class LlvmCodeGenerator
     /// Converts a prefixed literal (0x hex, 0b binary, 0o octal) to decimal for LLVM IR.
     /// Hex floats (containing '.' or 'p') are passed through for EmitFloatLiteral.
     /// </summary>
-    private static string ConvertPrefixedToDecimal(string value) // NOSONAR S3776
+    private static string ConvertPrefixedToDecimal(string value)
     {
         // A leading sign may be baked into signed wide literals (S128/S256); strip it, convert the
         // magnitude, and re-apply it so `-0x…` becomes a valid signed decimal rather than `-0x…`.
@@ -344,56 +344,74 @@ public partial class LlvmCodeGenerator
             magnitude = magnitude[1..];
         }
 
-        if (magnitude.Length > 2)
+        if (magnitude.Length <= 2)
         {
-            int numericBase = 0;
-            if (magnitude.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase))
-            {
-                // Don't convert hex floats — they go through EmitFloatLiteral.
-                if (magnitude.IndexOfAny(anyOf: ['.', 'p', 'P'], startIndex: 2) >= 0)
-                {
-                    return value;
-                }
-
-                numericBase = 16;
-            }
-            else if (magnitude.StartsWith(value: "0b", comparisonType: StringComparison.OrdinalIgnoreCase))
-            {
-                numericBase = 2;
-            }
-            else if (magnitude.StartsWith(value: "0o", comparisonType: StringComparison.OrdinalIgnoreCase))
-            {
-                numericBase = 8;
-            }
-
-            // Accumulate via BigInteger so wide (U128/U256/...) base-prefixed literals convert to
-            // their full decimal value — a ulong/Convert.ToUInt64 path overflows past 64 bits and
-            // would leave the raw `0x…` string in the IR, which LLVM rejects ("constant bigger than
-            // 64 bits"). Decimal literals pass straight through.
-            if (numericBase != 0)
-            {
-                var acc = System.Numerics.BigInteger.Zero;
-                foreach (char c in magnitude.AsSpan(start: 2))
-                {
-                    int digit = char.ToLowerInvariant(c: c) switch
-                    {
-                        >= '0' and <= '9' => c - '0',
-                        >= 'a' and <= 'f' => char.ToLowerInvariant(c: c) - 'a' + 10,
-                        _ => -1
-                    };
-                    if (digit < 0 || digit >= numericBase)
-                    {
-                        return value; // malformed digit — leave as-is
-                    }
-
-                    acc = acc * numericBase + digit;
-                }
-
-                return sign + acc.ToString();
-            }
+            return value;
         }
 
-        return value;
+        // Don't convert hex floats — they go through EmitFloatLiteral.
+        if (magnitude.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+            magnitude.IndexOfAny(anyOf: ['.', 'p', 'P'], startIndex: 2) >= 0)
+        {
+            return value;
+        }
+
+        int numericBase = DetectNumericBase(magnitude: magnitude);
+        if (numericBase == 0)
+        {
+            return value;
+        }
+
+        // Accumulate via BigInteger so wide (U128/U256/...) base-prefixed literals convert to their
+        // full decimal value — a ulong path overflows past 64 bits and would leave the raw `0x…`
+        // string in the IR, which LLVM rejects. Decimal literals pass straight through.
+        return TryAccumulateBigInteger(magnitude: magnitude, numericBase: numericBase,
+            out System.Numerics.BigInteger acc)
+            ? sign + acc.ToString()
+            : value;
+    }
+
+    /// <summary>Returns the radix for a base-prefixed magnitude (0x/0b/0o), or 0 if unprefixed.</summary>
+    private static int DetectNumericBase(string magnitude)
+    {
+        if (magnitude.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase))
+        {
+            return 16;
+        }
+        if (magnitude.StartsWith(value: "0b", comparisonType: StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+        if (magnitude.StartsWith(value: "0o", comparisonType: StringComparison.OrdinalIgnoreCase))
+        {
+            return 8;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Accumulates the digits of <paramref name="magnitude"/> (after its 2-char prefix) in the given
+    /// radix; returns false if any digit is invalid for the radix.
+    /// </summary>
+    private static bool TryAccumulateBigInteger(string magnitude, int numericBase,
+        out System.Numerics.BigInteger acc)
+    {
+        acc = System.Numerics.BigInteger.Zero;
+        foreach (char c in magnitude.AsSpan(start: 2))
+        {
+            int digit = char.ToLowerInvariant(c: c) switch
+            {
+                >= '0' and <= '9' => c - '0',
+                >= 'a' and <= 'f' => char.ToLowerInvariant(c: c) - 'a' + 10,
+                _ => -1
+            };
+            if (digit < 0 || digit >= numericBase)
+            {
+                return false; // malformed digit — leave as-is
+            }
+            acc = acc * numericBase + digit;
+        }
+        return true;
     }
 
     /// <summary>
@@ -523,7 +541,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) 2^(exponent).
     /// </summary>
-    private static bool TryParseHexFloat(string value, out double result) // NOSONAR S3776
+    private static bool TryParseHexFloat(string value, out double result)
     {
         result = 0;
         if (!value.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase) ||
@@ -540,58 +558,56 @@ public partial class LlvmCodeGenerator
         }
 
         string mantissaStr = body[..pIndex];
-        string exponentStr = body[(pIndex + 1)..];
-
-        if (!int.TryParse(s: exponentStr, result: out int exponent))
+        if (!int.TryParse(s: body[(pIndex + 1)..], result: out int exponent) ||
+            !TryParseHexMantissa(mantissaStr: mantissaStr, out double mantissa))
         {
             return false;
         }
 
-        double mantissa = 0;
+        result = Math.ScaleB(x: mantissa, n: exponent);
+        return !double.IsNaN(d: result) && !double.IsInfinity(d: result);
+    }
+
+    /// <summary>
+    /// Parses the hex mantissa of a C99 hex float — either a whole hex integer or an
+    /// <c>int.frac</c> form (fractional digits scaled by successive powers of 1/16).
+    /// </summary>
+    private static bool TryParseHexMantissa(string mantissaStr, out double mantissa)
+    {
+        mantissa = 0;
         int dotIndex = mantissaStr.IndexOf(value: '.');
-
-        if (dotIndex >= 0)
+        if (dotIndex < 0)
         {
-            string intPart = mantissaStr[..dotIndex];
-            string fracPart = mantissaStr[(dotIndex + 1)..];
-
-            if (intPart.Length > 0 && ulong.TryParse(s: intPart,
-                    style: NumberStyles.HexNumber,
-                    provider: null,
-                    result: out ulong intVal))
-            {
-                mantissa = intVal;
-            }
-
-            double scale = 1.0 / 16;
-            foreach (char c in fracPart)
-            {
-                int digit = c switch
-                {
-                    >= '0' and <= '9' => c - '0',
-                    >= 'a' and <= 'f' => c - 'a' + 10,
-                    >= 'A' and <= 'F' => c - 'A' + 10,
-                    _ => 0
-                };
-                mantissa += digit * scale;
-                scale /= 16;
-            }
-        }
-        else
-        {
-            if (!ulong.TryParse(s: mantissaStr,
-                    style: NumberStyles.HexNumber,
-                    provider: null,
-                    result: out ulong intVal))
+            if (!ulong.TryParse(s: mantissaStr, style: NumberStyles.HexNumber,
+                    provider: null, result: out ulong intOnly))
             {
                 return false;
             }
+            mantissa = intOnly;
+            return true;
+        }
 
+        string intPart = mantissaStr[..dotIndex];
+        if (intPart.Length > 0 && ulong.TryParse(s: intPart, style: NumberStyles.HexNumber,
+                provider: null, result: out ulong intVal))
+        {
             mantissa = intVal;
         }
 
-        result = Math.ScaleB(x: mantissa, n: exponent);
-        return !double.IsNaN(d: result) && !double.IsInfinity(d: result);
+        double scale = 1.0 / 16;
+        foreach (char c in mantissaStr[(dotIndex + 1)..])
+        {
+            int digit = c switch
+            {
+                >= '0' and <= '9' => c - '0',
+                >= 'a' and <= 'f' => c - 'a' + 10,
+                >= 'A' and <= 'F' => c - 'A' + 10,
+                _ => 0
+            };
+            mantissa += digit * scale;
+            scale /= 16;
+        }
+        return true;
     }
 
     /// <summary>

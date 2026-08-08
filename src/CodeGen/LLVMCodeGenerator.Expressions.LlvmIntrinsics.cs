@@ -82,34 +82,27 @@ public partial class LlvmCodeGenerator
     /// and contains a known param-name token is treated as an arithmetic expression.
     /// </summary>
     private static string ResolveArithmeticHoles(string template, RoutineInfo method,
-        List<string> llvmTypeArgs) // NOSONAR S3776
+        List<string> llvmTypeArgs)
     {
-        if (!template.Contains(value: '{')) return template;
+        if (!template.Contains(value: '{'))
+        {
+            return template;
+        }
 
         List<string>? genericParameters =
             method.GenericParameters ?? method.GenericDefinition?.GenericParameters;
-        if (genericParameters is not { Count: > 0 }) return template;
-
-        // Build map of param name → numeric value. Prefer the routine's resolved
-        // TypeArguments (so ConstGenericValueTypeInfo.Value is exact); fall back to parsing
-        // llvmTypeArgs strings for direct numeric overrides.
-        var paramValues = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
-        List<TypeInfo>? routineTypeArgs = method.TypeArguments;
-        for (int i = 0; i < genericParameters.Count; i++)
+        if (genericParameters is not { Count: > 0 })
         {
-            if (routineTypeArgs is { } rta && i < rta.Count
-                && rta[index: i] is ConstGenericValueTypeInfo constVal)
-            {
-                paramValues[key: genericParameters[index: i]] = constVal.Value;
-                continue;
-            }
-            if (i < llvmTypeArgs.Count
-                && long.TryParse(s: llvmTypeArgs[index: i], result: out long v))
-            {
-                paramValues[key: genericParameters[index: i]] = v;
-            }
+            return template;
         }
-        if (paramValues.Count == 0) return template;
+
+        Dictionary<string, long> paramValues = BuildConstParamValues(
+            genericParameters: genericParameters, routineTypeArgs: method.TypeArguments,
+            llvmTypeArgs: llvmTypeArgs);
+        if (paramValues.Count == 0)
+        {
+            return template;
+        }
 
         var sb = new StringBuilder(capacity: template.Length);
         int pos = 0;
@@ -128,30 +121,61 @@ public partial class LlvmCodeGenerator
                 sb.Append(value: template, startIndex: open, count: template.Length - open);
                 break;
             }
-            string hole = template[(open + 1)..close];
-            // Only evaluate when the hole references at least one known param. This guards
-            // against non-arithmetic holes (LLVM doesn't actually use unmatched `{...}`,
-            // but be conservative).
-            if (paramValues.Keys.Any(predicate: p => hole.Contains(value: p)))
-            {
-                try
-                {
-                    long val = RecordTypeInfo.EvaluateConstExprPublic(expr: hole,
-                        paramValues: paramValues);
-                    sb.Append(value: val);
-                }
-                catch
-                {
-                    sb.Append(value: template, startIndex: open, count: close - open + 1);
-                }
-            }
-            else
-            {
-                sb.Append(value: template, startIndex: open, count: close - open + 1);
-            }
+            AppendResolvedHole(sb: sb, template: template, open: open, close: close,
+                paramValues: paramValues);
             pos = close + 1;
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds a param-name → numeric-value map. Prefers the routine's resolved TypeArguments (so
+    /// ConstGenericValueTypeInfo.Value is exact), falling back to parsing llvmTypeArgs strings.
+    /// </summary>
+    private static Dictionary<string, long> BuildConstParamValues(List<string> genericParameters,
+        List<TypeInfo>? routineTypeArgs, List<string> llvmTypeArgs)
+    {
+        var paramValues = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
+        for (int i = 0; i < genericParameters.Count; i++)
+        {
+            if (routineTypeArgs is { } rta && i < rta.Count
+                && rta[index: i] is ConstGenericValueTypeInfo constVal)
+            {
+                paramValues[key: genericParameters[index: i]] = constVal.Value;
+                continue;
+            }
+            if (i < llvmTypeArgs.Count
+                && long.TryParse(s: llvmTypeArgs[index: i], result: out long v))
+            {
+                paramValues[key: genericParameters[index: i]] = v;
+            }
+        }
+        return paramValues;
+    }
+
+    /// <summary>
+    /// Appends a single template hole to <paramref name="sb"/>: the evaluated const-expression value
+    /// when the hole references a known param, or the verbatim <c>{…}</c> text otherwise. Only holes
+    /// naming a known param are evaluated (a conservative guard against non-arithmetic braces).
+    /// </summary>
+    private static void AppendResolvedHole(StringBuilder sb, string template, int open, int close,
+        Dictionary<string, long> paramValues)
+    {
+        string hole = template[(open + 1)..close];
+        if (!paramValues.Keys.Any(predicate: p => hole.Contains(value: p)))
+        {
+            sb.Append(value: template, startIndex: open, count: close - open + 1);
+            return;
+        }
+        try
+        {
+            long val = RecordTypeInfo.EvaluateConstExprPublic(expr: hole, paramValues: paramValues);
+            sb.Append(value: val);
+        }
+        catch
+        {
+            sb.Append(value: template, startIndex: open, count: close - open + 1);
+        }
     }
 
     private List<string> InferLlvmIntrinsicTypeArguments(RoutineInfo routine,
@@ -224,7 +248,7 @@ public partial class LlvmCodeGenerator
             : GetLlvmType(type: type);
 
     private static void InferGenericBindings(TypeInfo pattern, TypeInfo concrete,
-        Dictionary<string, TypeInfo> inferred) // NOSONAR S3776
+        Dictionary<string, TypeInfo> inferred)
     {
         if (pattern is GenericParameterTypeInfo genericParam)
         {
@@ -234,45 +258,46 @@ public partial class LlvmCodeGenerator
 
         if (pattern is RoutineTypeInfo patternRoutine && concrete is RoutineTypeInfo concreteRoutine)
         {
-            for (int i = 0;
-                 i < patternRoutine.ParameterTypes.Count && i < concreteRoutine.ParameterTypes.Count;
-                 i++)
-            {
-                InferGenericBindings(pattern: patternRoutine.ParameterTypes[i],
-                    concrete: concreteRoutine.ParameterTypes[i],
-                    inferred: inferred);
-            }
-
-            if (patternRoutine.ReturnType != null && concreteRoutine.ReturnType != null)
-            {
-                InferGenericBindings(pattern: patternRoutine.ReturnType,
-                    concrete: concreteRoutine.ReturnType,
-                    inferred: inferred);
-            }
+            InferRoutineBindings(patternRoutine: patternRoutine,
+                concreteRoutine: concreteRoutine, inferred: inferred);
             return;
         }
 
         if (pattern is TupleTypeInfo patternTuple && concrete is TupleTypeInfo concreteTuple)
         {
-            for (int i = 0; i < patternTuple.ElementTypes.Count && i < concreteTuple.ElementTypes.Count; i++)
-            {
-                InferGenericBindings(pattern: patternTuple.ElementTypes[i],
-                    concrete: concreteTuple.ElementTypes[i],
-                    inferred: inferred);
-            }
+            InferPairwiseBindings(patterns: patternTuple.ElementTypes,
+                concretes: concreteTuple.ElementTypes, inferred: inferred);
             return;
         }
 
-        if (pattern.TypeArguments is not { Count: > 0 } || concrete.TypeArguments is not { Count: > 0 })
+        if (pattern.TypeArguments is { Count: > 0 } patternArgs &&
+            concrete.TypeArguments is { Count: > 0 } concreteArgs)
         {
-            return;
-        }
-
-        for (int i = 0; i < pattern.TypeArguments.Count && i < concrete.TypeArguments.Count; i++)
-        {
-            InferGenericBindings(pattern: pattern.TypeArguments[i],
-                concrete: concrete.TypeArguments[i],
+            InferPairwiseBindings(patterns: patternArgs, concretes: concreteArgs,
                 inferred: inferred);
+        }
+    }
+
+    /// <summary>Infers generic bindings from a routine pattern's parameter + return types.</summary>
+    private static void InferRoutineBindings(RoutineTypeInfo patternRoutine,
+        RoutineTypeInfo concreteRoutine, Dictionary<string, TypeInfo> inferred)
+    {
+        InferPairwiseBindings(patterns: patternRoutine.ParameterTypes,
+            concretes: concreteRoutine.ParameterTypes, inferred: inferred);
+        if (patternRoutine.ReturnType != null && concreteRoutine.ReturnType != null)
+        {
+            InferGenericBindings(pattern: patternRoutine.ReturnType,
+                concrete: concreteRoutine.ReturnType, inferred: inferred);
+        }
+    }
+
+    /// <summary>Infers generic bindings pairwise across two positionally-aligned type lists.</summary>
+    private static void InferPairwiseBindings(IReadOnlyList<TypeInfo> patterns,
+        IReadOnlyList<TypeInfo> concretes, Dictionary<string, TypeInfo> inferred)
+    {
+        for (int i = 0; i < patterns.Count && i < concretes.Count; i++)
+        {
+            InferGenericBindings(pattern: patterns[i], concrete: concretes[i], inferred: inferred);
         }
     }
 
@@ -530,7 +555,7 @@ public partial class LlvmCodeGenerator
     /// Resolves a <see cref="TypeExpression"/> to its LLVM type string,
     /// applying active type substitutions and registry lookups.
     /// </summary>
-    private string ResolveTypeExpressionToLlvm(TypeExpression typeExpr) // NOSONAR S3776
+    private string ResolveTypeExpressionToLlvm(TypeExpression typeExpr)
     {
         if (typeExpr.ResolvedType is { } resolvedType and not ErrorTypeInfo)
         {
@@ -540,30 +565,43 @@ public partial class LlvmCodeGenerator
         var type = _registry.LookupType(name: typeExpr.Name);
         if (type != null)
         {
-            if (type.IsGenericDefinition && typeExpr.GenericArguments is { Count: > 0 })
-            {
-                string fullName =
-                    $"{typeExpr.Name}[{string.Join(separator: ", ", values: typeExpr.GenericArguments.Select(selector: g => g.Name))}]";
-                var fullType = _registry.LookupType(name: fullName);
-                if (fullType != null) return GetLlvmType(type: fullType);
-
-                var resolvedArgs = new List<TypeInfo>();
-                foreach (TypeExpression ga in typeExpr.GenericArguments)
-                {
-                    var r = ResolveTypeArgument(ta: ga);
-                    if (r != null) resolvedArgs.Add(r);
-                }
-                if (resolvedArgs.Count == type.GenericParameters!.Count)
-                    return GetLlvmType(type: _registry.GetOrCreateResolution(
-                        genericDef: type, typeArguments: resolvedArgs));
-            }
-            return GetLlvmType(type: type);
+            return type.IsGenericDefinition && typeExpr.GenericArguments is { Count: > 0 }
+                ? ResolveGenericDefinitionLlvm(typeExpr: typeExpr, genericDef: type)
+                : GetLlvmType(type: type);
         }
 
         type = LookupTypeInCurrentModule(name: typeExpr.Name);
-        if (type != null) return GetLlvmType(type: type);
+        return type != null ? GetLlvmType(type: type) : typeExpr.Name;
+    }
 
-        return typeExpr.Name;
+    /// <summary>
+    /// Resolves a generic-definition type expression (e.g. <c>List[S64]</c>) to its LLVM type —
+    /// preferring a registered full-name instance, else resolving the arguments and instantiating.
+    /// Falls back to the bare generic-definition LLVM type when the arity doesn't match.
+    /// </summary>
+    private string ResolveGenericDefinitionLlvm(TypeExpression typeExpr, TypeInfo genericDef)
+    {
+        string fullName =
+            $"{typeExpr.Name}[{string.Join(separator: ", ", values: typeExpr.GenericArguments!.Select(selector: g => g.Name))}]";
+        var fullType = _registry.LookupType(name: fullName);
+        if (fullType != null)
+        {
+            return GetLlvmType(type: fullType);
+        }
+
+        var resolvedArgs = new List<TypeInfo>();
+        foreach (TypeExpression ga in typeExpr.GenericArguments!)
+        {
+            var r = ResolveTypeArgument(ta: ga);
+            if (r != null)
+            {
+                resolvedArgs.Add(r);
+            }
+        }
+        return resolvedArgs.Count == genericDef.GenericParameters!.Count
+            ? GetLlvmType(type: _registry.GetOrCreateResolution(
+                genericDef: genericDef, typeArguments: resolvedArgs))
+            : GetLlvmType(type: genericDef);
     }
 
     /// <summary>
