@@ -47,6 +47,10 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // Roamed[T] argument of a suspended/threaded spawn, inserts `arg.promote()` before the spawn.
         new RoamedSpawnPromotionLoweringPass(ctx).Run(program);
         new RecordCopyLoweringPass(ctx).Run(program);
+        // Moves the implicit RC-wrapper copy-verb bump (retain/track/share/watch/roam) out of codegen
+        // into a real AST call: one bump per RC field of a record copy, one roam per Roamed entity-
+        // field write, inserted right after the store. Runs after RecordCopyLoweringPass (store).
+        new RcRetainLoweringPass(ctx).Run(program);
         new BecomesLoweringPass(ctx).Run(program);
         new UsingLoweringPass(ctx).Run(program);
         new LambdaLiftingPass(ctx).Run(program);
@@ -85,6 +89,9 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // synthesized variant bodies too.
         new RoamedSpawnPromotionLoweringPass(ctx).RunOnVariantBodies();
         new RecordCopyLoweringPass(ctx).RunOnVariantBodies();
+        // See per-program Run(): move the RC-wrapper copy-verb bump into a real AST call in
+        // synthesized variant bodies too.
+        new RcRetainLoweringPass(ctx).RunOnVariantBodies();
         new UsingLoweringPass(ctx).RunOnVariantBodies();
         // CallOverloadResolutionPass runs last so it sees all CallExpression nodes introduced
         // by FStringLoweringPass (represent/diagnose/add), OperatorLoweringPass (wired ops),

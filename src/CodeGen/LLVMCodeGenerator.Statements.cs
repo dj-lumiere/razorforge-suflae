@@ -316,11 +316,8 @@ public partial class LlvmCodeGenerator
 
         EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
 
-        // Retain RC fields on initial copy
-        if (varType is RecordTypeInfo { HasRCFields: true } rcRecordInit)
-        {
-            EmitRcRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordInit);
-        }
+        // NOTE: the per-RC-field retain on an initial RC-field-record copy is now an explicit AST call
+        // inserted by RcRetainLoweringPass (Phase 7) — codegen no longer bumps refcounts itself.
 
         // NOTE: no codegen strong-count bump for RC wrapper var bindings. Copying a Retained[T]/
         // Tracked[T] handle requires an explicit verb (`.retain()`/`.track()`) — implicit copy
@@ -559,11 +556,9 @@ public partial class LlvmCodeGenerator
 
         EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
 
-        // Retain new value's RC fields
-        if (varType is RecordTypeInfo { HasRCFields: true } rcRecordNew)
-        {
-            EmitRcRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordNew);
-        }
+        // NOTE: the per-RC-field retain on an RC-field-record reassignment is now an explicit AST call
+        // inserted by RcRetainLoweringPass (Phase 7). The old-value RELEASE above stays in codegen
+        // (reassignment-overwrite is not a scope exit, so teardown lowering does not cover it).
 
         // NOTE: no codegen strong-count bump for RC wrapper reassignment. Same reasoning as the
         // var-binding site — implicit copy of a Retained/Tracked handle is a compile error, so the
@@ -918,40 +913,10 @@ public partial class LlvmCodeGenerator
     private static readonly HashSet<string> RcWrapperBaseNames =
         [Resolution.RuntimeContract.Retained, Resolution.RuntimeContract.Tracked, Resolution.RuntimeContract.Shared, Resolution.RuntimeContract.Watched, Resolution.RuntimeContract.Roamed];
 
-    /// <summary>
-    /// Emits retain calls for all RC wrapper fields in a record.
-    /// Called when a record with RC fields is copied into a new variable.
-    /// </summary>
-    private void EmitRcRecordRetain(StringBuilder sb, string llvmAddr, RecordTypeInfo recordType)
-    {
-        string llvmType = GetLlvmType(type: recordType);
-        string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
-
-        foreach (MemberVariableInfo field in recordType.MemberVariables)
-        {
-            if (field.Type is not WrapperTypeInfo w || !RcWrapperBaseNames.Contains(item: w.Name))
-            {
-                continue;
-            }
-
-            string fieldVal = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
-
-            RoutineInfo? retainMethod = _registry.LookupMethod(type: w, methodName: Resolution.RuntimeContract.RefCount.Retain);
-            if (retainMethod == null)
-            {
-                continue;
-            }
-
-            GenerateRoutineDeclaration(routine: retainMethod);
-            string mangled = MangleRoutineName(routine: retainMethod);
-            string fieldLlvm = GetParameterLlvmType(type: w);
-            EmitLine(sb: sb,
-                line: $"  {NextTemp()} = call {fieldLlvm} @{mangled}({fieldLlvm} {fieldVal})");
-        }
-    }
+    // NOTE: the per-RC-field retain-on-copy (formerly EmitRcRecordRetain) is now an explicit AST call
+    // inserted by RcRetainLoweringPass (Phase 7) — codegen no longer bumps refcounts itself. The
+    // matching per-field RELEASE (EmitRcRecordRelease below) stays in codegen (scope-exit teardown is
+    // AST-lowered separately, but reassignment-overwrite release is not).
 
     /// <summary>
     /// Emits release calls for all RC wrapper fields in a record.
@@ -1037,34 +1002,10 @@ public partial class LlvmCodeGenerator
             ? verb
             : null;
 
-    /// <summary>
-    /// Bumps the count for an RC wrapper variable by calling its copy verb.
-    /// Retained → retain (strong), Tracked → track (weak). Other wrappers skip.
-    /// </summary>
-    private void EmitRetainedVarRetain(StringBuilder sb, string llvmAddr,
-        RecordTypeInfo recordType)
-    {
-        if (GetGenericBaseName(type: recordType) is not { } baseName ||
-            RcCopyVerb(wrapperBase: baseName) is not { } verb)
-        {
-            return;
-        }
-
-        RoutineInfo? copyMethod = _registry.LookupMethod(type: recordType, methodName: verb);
-        if (copyMethod == null)
-        {
-            return;
-        }
-
-        string llvmType = GetLlvmType(type: recordType);
-        string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
-
-        GenerateRoutineDeclaration(routine: copyMethod);
-        string mangled = MangleRoutineName(routine: copyMethod);
-        string rcLlvm = GetParameterLlvmType(type: recordType);
-        EmitLine(sb: sb, line: $"  {NextTemp()} = call {rcLlvm} @{mangled}({rcLlvm} {loaded})");
-    }
+    // NOTE: the RC-wrapper copy-verb bump for a Roamed entity-field write (formerly
+    // EmitRetainedVarRetain) is now an explicit `field.roam()` AST call inserted by
+    // RcRetainLoweringPass (Phase 7). The release-old side (EmitRetainedVarRelease below) stays in
+    // codegen (reassignment-overwrite is not a scope exit).
 
     /// <summary>
     /// Tears down an RC wrapper variable at scope exit by calling its <c>destroy()</c> (which

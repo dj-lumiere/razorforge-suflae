@@ -1005,11 +1005,10 @@ public partial class LlvmCodeGenerator
         // Store the value
         EmitLine(sb: sb, line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
 
-        if (isRoamedField)
-        {
-            EmitRetainedVarRetain(sb: sb, llvmAddr: memberVariablePtr,
-                recordType: (RecordTypeInfo)memberVariable.Type);
-        }
+        // NOTE: the retain-new `roam()` on the stored handle is now an explicit AST call inserted by
+        // RcRetainLoweringPass (Phase 7). The release-old above stays in codegen (reassignment-
+        // overwrite is not a scope exit). `isRoamedField` still gates the release side.
+        _ = isRoamedField;
     }
 
     /// <summary>
