@@ -84,7 +84,8 @@ public static class ManifestLoader
         if (root.TryGetValue(key: "target", value: out object? targetObj) &&
             targetObj is TomlTable targetTable)
         {
-            manifest.Target = ParseBuildTarget(table: targetTable, moduleIndex: moduleIndex);
+            manifest.Target = ParseBuildTarget(table: targetTable, moduleIndex: moduleIndex,
+                manifestDir: manifestDir);
         }
         else
         {
@@ -159,7 +160,7 @@ public static class ManifestLoader
     }
 
     private static BuildTarget ParseBuildTarget(TomlTable table,
-        Dictionary<string, string>? moduleIndex)
+        Dictionary<string, string>? moduleIndex, string manifestDir)
     {
         var target = new BuildTarget();
         if (moduleIndex != null)
@@ -216,6 +217,23 @@ public static class ManifestLoader
             return target;
         }
 
+        // File-based executable (the standard): `executable = "foo.rf"` / a path to an rf/sf file runs
+        // that single file directly (module inferred from its path — no `module` declaration needed).
+        if (LooksLikeSourceFile(name: target.Executable))
+        {
+            string filePath = Path.IsPathRooted(path: target.Executable)
+                ? target.Executable
+                : Path.GetFullPath(path: Path.Combine(path1: manifestDir, path2: target.Executable));
+            if (!File.Exists(path: filePath))
+            {
+                throw new InvalidOperationException(
+                    message: $"{ManifestFileName}: executable file '{target.Executable}' not found at {filePath}.");
+            }
+
+            target.Executable = filePath;
+            return target;
+        }
+
         if (!moduleIndex.TryGetValue(key: target.Executable, value: out string? resolvedFile))
         {
             string available = moduleIndex.Count > 0
@@ -230,6 +248,12 @@ public static class ManifestLoader
         target.Executable = resolvedFile;
         return target;
     }
+
+    /// <summary>True when the manifest <c>executable</c> value names a source FILE (.rf/.sf) rather
+    /// than a module — file-based single-file execution is the standard entry form.</summary>
+    private static bool LooksLikeSourceFile(string name) =>
+        name.EndsWith(value: ".rf", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+        name.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase);
 
     private static string ReadRequiredString(TomlTable table, string key, string context)
     {
