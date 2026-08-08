@@ -250,29 +250,16 @@ public sealed partial class SemanticVerifier
             // The first lookup above used the generic-def-normalized owner
             // (`Core.List[T].create`), so it missed. Resolve the concrete owner
             // type from the routine name and rebuild the canonical key.
-            if (routineInfo == null && routine.Name.Contains(value: '.'))
+            if (routineInfo == null && routine.HasReceiverTypeArgs
+                && routine.ReceiverType is { } ownerExpr && routine.MethodName is { } mName)
             {
-                int dotIdx = routine.Name.IndexOf(value: '.');
-                string ownerExprText = routine.Name[..dotIdx];
-                string mName = routine.Name[(dotIdx + 1)..];
-                if (ownerExprText.Contains(value: '['))
+                // Structured receiver from the parser (was: re-parse the owner substring of Name).
+                TypeSymbol resolvedOwner = ResolveType(typeExpr: ownerExpr);
+                if (resolvedOwner is not ErrorTypeInfo)
                 {
-                    TypeExpression? ownerExpr =
-                        ParseTypeExpressionString(text: ownerExprText,
-                                                  location: routine.Location);
-                    if (ownerExpr != null)
-                    {
-                        TypeSymbol resolvedOwner = ResolveType(typeExpr: ownerExpr);
-                        if (resolvedOwner is not ErrorTypeInfo)
-                        {
-                            string ownerIdentity =
-                                RoutineInfo.GetTypeIdentity(type: resolvedOwner);
-                            string concreteKey =
-                                $"{ownerIdentity}.{mName}#{paramSig}";
-                            routineInfo =
-                                _registry.LookupRoutine(fullName: concreteKey);
-                        }
-                    }
+                    string ownerIdentity = RoutineInfo.GetTypeIdentity(type: resolvedOwner);
+                    string concreteKey = $"{ownerIdentity}.{mName}#{paramSig}";
+                    routineInfo = _registry.LookupRoutine(fullName: concreteKey);
                 }
             }
         }

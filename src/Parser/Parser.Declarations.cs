@@ -254,6 +254,7 @@ public partial class Parser
         // Serialized type-arg strings used to rebuild the routine name (e.g., "DictEntry[K, V]"),
         // distinct from genericParams which holds the leaf identifiers that are bound (e.g., K, V).
         List<string>? receiverTypeArgStrings = null;
+        List<TypeExpression>? receiverArgExprs = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
         bool hasGenericParams = false;
 
@@ -267,15 +268,18 @@ public partial class Parser
                 // — e.g., for `List[DictEntry[K, V]]` → bind K and V, not "DictEntry".
                 var typeArgStrings = new List<string>();
                 var leafParams = new List<string>();
+                var typeArgExprs = new List<TypeExpression>();
                 do
                 {
                     TypeExpression typeArg = ParseTypeOrConstGeneric();
                     typeArgStrings.Add(item: SerializeTypeExpression(type: typeArg));
+                    typeArgExprs.Add(item: typeArg);
                     CollectLeafGenericParams(type: typeArg, into: leafParams);
                 } while (Match(type: TokenType.Comma));
 
                 genericParams = leafParams;
                 receiverTypeArgStrings = typeArgStrings;
+                receiverArgExprs = typeArgExprs;
                 hasGenericParams = true;
                 Consume(type: TokenType.RightBracket,
                     errorMessage: ExpectedRightBracketAfterGenericParameters);
@@ -287,6 +291,12 @@ public partial class Parser
                 genericParams = result.genericParams;
                 inlineConstraints = result.inlineConstraints;
                 hasGenericParams = true;
+                // Receiver args as structured type expressions (each param name is a named type,
+                // e.g. `List[T]` → [T]); mirrors ParseTypeExpressionString on the serialized owner.
+                receiverArgExprs = result.genericParams
+                   .Select(selector: p => new TypeExpression(Name: p, GenericArguments: null,
+                        Location: GetLocation()))
+                   .ToList();
 
                 Consume(type: TokenType.RightBracket,
                     errorMessage: ExpectedRightBracketAfterGenericParameters);
@@ -548,7 +558,11 @@ public partial class Parser
         {
             OwnerName = memberOwnerName,
             MethodName = memberMethodName,
-            HasReceiverTypeArgs = memberHasReceiverTypeArgs
+            HasReceiverTypeArgs = memberHasReceiverTypeArgs,
+            ReceiverType = memberOwnerName != null
+                ? new TypeExpression(Name: memberOwnerName, GenericArguments: receiverArgExprs,
+                    Location: location)
+                : null
         };
     }
 

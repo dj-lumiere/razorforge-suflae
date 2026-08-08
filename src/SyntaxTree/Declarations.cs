@@ -264,6 +264,13 @@ public record RoutineDeclaration(
     /// generic-instance receiver, not a bare type-parameter placeholder like <c>T.serialize</c>.</summary>
     public bool HasReceiverTypeArgs { get; set; }
 
+    /// <summary>The receiver as a STRUCTURED type expression (<c>List[T]</c>, <c>Iterable[Text]</c>),
+    /// captured by the parser instead of being serialized into <see cref="Name"/> and re-parsed by
+    /// consumers via <c>ParseTypeExpressionString</c>. Null for a free routine or a bare
+    /// type-parameter receiver (<c>T.serialize</c>). Name-canonicalization: prefer this over slicing
+    /// the owner substring out of <see cref="Name"/>.</summary>
+    public TypeExpression? ReceiverType { get; set; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
