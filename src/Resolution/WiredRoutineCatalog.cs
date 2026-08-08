@@ -33,56 +33,56 @@ public enum WiredView
 /// <summary>Coarse classification of a wired routine, used by generation/lifecycle policy.</summary>
 public enum WiredKind
 {
-    /// <summary>Object creation ($create, $from_literal).</summary>
+    /// <summary>Object creation (create, from_literal).</summary>
     Creator,
-    /// <summary>Equality and ordering ($eq, $cmp, etc.).</summary>
+    /// <summary>Equality and ordering (eq, cmp, etc.).</summary>
     Comparison,
-    /// <summary>Checked arithmetic ($add, $sub, $mul, $div, $mod, $floordiv, $pow).</summary>
+    /// <summary>Checked arithmetic (add, sub, mul, div, mod, floordiv, pow).</summary>
     Arithmetic,
-    /// <summary>Wrapping arithmetic variants ($add%, $sub%, $mul%).</summary>
+    /// <summary>Wrapping arithmetic variants (add%, sub%, mul%).</summary>
     ArithmeticWrap,
-    /// <summary>Clamping arithmetic variants ($add|, $sub|, $mul|).</summary>
+    /// <summary>Clamping arithmetic variants (add|, sub|, mul|).</summary>
     ArithmeticClamp,
-    /// <summary>Unchecked arithmetic variants ($add!, $sub!, $mul!).</summary>
+    /// <summary>Unchecked arithmetic variants (add!, sub!, mul!).</summary>
     ArithmeticUnchecked,
-    /// <summary>Bitwise operations ($and, $or, $xor, $not).</summary>
+    /// <summary>Bitwise operations (and, or, xor, not).</summary>
     Bitwise,
-    /// <summary>Bit-shift operations ($shl, $shr).</summary>
+    /// <summary>Bit-shift operations (shl, shr).</summary>
     Shift,
-    /// <summary>Unary prefix operations ($neg).</summary>
+    /// <summary>Unary prefix operations (neg).</summary>
     Unary,
-    /// <summary>Carrier unwrap ($unwrap_or, $unwrap).</summary>
+    /// <summary>Carrier unwrap (unwrap_or, unwrap).</summary>
     Unwrap,
-    /// <summary>Container membership ($contains, $notcontains).</summary>
+    /// <summary>Container membership (contains, notcontains).</summary>
     Container,
-    /// <summary>Iteration protocol ($iter, $emit).</summary>
+    /// <summary>Iteration protocol (iter, emit).</summary>
     Iteration,
-    /// <summary>Indexing protocol ($getitem, $setitem).</summary>
+    /// <summary>Indexing protocol (getitem, setitem).</summary>
     Indexing,
-    /// <summary>Context/scope protocol ($enter, $exit).</summary>
+    /// <summary>Context/scope protocol (enter, exit).</summary>
     Context,
-    /// <summary>Object lifecycle ($destroy).</summary>
+    /// <summary>Object lifecycle (destroy).</summary>
     Lifecycle,
-    /// <summary>Display and diagnostic formatting ($represent, $diagnose).</summary>
+    /// <summary>Display and diagnostic formatting (represent, diagnose).</summary>
     Display,
     /// <summary>Cycle-collector visit hook (cyclic_visit) — universal no-op, Roamed overrides.</summary>
     CycleTrace,
-    /// <summary>Hash computation ($hash, $fast_hash).</summary>
+    /// <summary>Hash computation (hash, fast_hash).</summary>
     Hash,
-    /// <summary>Value copy ($store).</summary>
+    /// <summary>Value copy (store).</summary>
     Copy,
-    /// <summary>In-place arithmetic assignment ($iadd, $isub, etc.).</summary>
+    /// <summary>In-place arithmetic assignment (iadd, isub, etc.).</summary>
     InPlaceArithmetic,
-    /// <summary>In-place bitwise assignment ($iand, $ior, $ixor).</summary>
+    /// <summary>In-place bitwise assignment (iand, ior, ixor).</summary>
     InPlaceBitwise,
-    /// <summary>In-place shift assignment ($ishl, $ishr).</summary>
+    /// <summary>In-place shift assignment (ishl, ishr).</summary>
     InPlaceShift
 }
 
-/// <summary>One wired-routine concept (keyed by its bare canonical name, e.g. <c>$getitem</c>).</summary>
+/// <summary>One wired-routine concept (keyed by its bare canonical name, e.g. <c>getitem</c>).</summary>
 public sealed class WiredEntry
 {
-    /// <summary>The bare canonical wired name (e.g. <c>$getitem</c>). Never includes a <c>!</c> suffix; failability is tracked by <see cref="Failable"/>.</summary>
+    /// <summary>The bare canonical wired name (e.g. <c>getitem</c>). Never includes a <c>!</c> suffix; failability is tracked by <see cref="Failable"/>.</summary>
     public required string Name { get; init; }
     /// <summary>Coarse classification used by generation and lifecycle policy.</summary>
     public required WiredKind Kind { get; init; }
@@ -91,21 +91,21 @@ public sealed class WiredEntry
 
     /// <summary>The protocols that materialise this routine. <c>[0]</c> is the primary/canonical
     /// protocol used by capability gating; the full list is the <see cref="WiredView.ProtocolDecl"/>
-    /// requirement set. Empty when the routine is not protocol-bound (e.g. <c>$store</c> is keyed on
+    /// requirement set. Empty when the routine is not protocol-bound (e.g. <c>store</c> is keyed on
     /// Assignable for capability but not declared via a protocol-operator).</summary>
     public IReadOnlyList<string> Protocols { get; init; } = [];
 
     /// <summary>The canonical wired routine the capability gate looks up on the owner. Defaults to
     /// <see cref="Name"/>; overridden for derived operators that share a base
-    /// (e.g. <c>$ne</c>→<c>$eq</c>, <c>$lt</c>→<c>$cmp</c>, <c>$mod</c>→<c>$floordiv</c>).</summary>
+    /// (e.g. <c>ne</c>→<c>eq</c>, <c>lt</c>→<c>cmp</c>, <c>mod</c>→<c>floordiv</c>).</summary>
     public string? CapabilityWiredOverride { get; init; }
 
     /// <summary>True for routines that must be emitted for every live owner regardless of call-site
-    /// reachability — the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$store</c>).</summary>
+    /// reachability — the unified-teardown lifecycle routines (<c>destroy</c>/<c>store</c>).</summary>
     public bool AlwaysLive { get; init; }
 
     /// <summary>True when this routine carries the failable `!` marker. Failability is a PROPERTY —
-    /// the `!` is never part of the name, key, or symbol (see <c>$getitem</c>/<c>$setitem</c>/<c>$emit</c>).
+    /// the `!` is never part of the name, key, or symbol (see <c>getitem</c>/<c>setitem</c>/<c>emit</c>).
     /// Lookups resolve by the bare name and compare this property; they never key on a banged string.</summary>
     public bool Failable { get; init; }
 
@@ -144,7 +144,7 @@ public static class WiredRoutineCatalog
         new() { Name = "destroy", Kind = WiredKind.Lifecycle, Views = Known, AlwaysLive = true },
         new() { Name = "store",    Kind = WiredKind.Copy, Views = Cap | Seed,
                 Protocols = ["Storable"], AlwaysLive = true },
-        // Deep `copy` (Copyable). Like `$store`, it is INJECTED during postprocessing (the record/
+        // Deep `copy` (Copyable). Like `store`, it is INJECTED during postprocessing (the record/
         // collection/variant deep-copy point in RecordCopyLoweringPass) — after reachability has run —
         // so it must be AlwaysLive to bypass the GMP reachability gate and Seed to be marked live per
         // concrete owner. Cap gates it on `Copyable`: only owners whose element/arm types are copyable
@@ -163,7 +163,7 @@ public static class WiredRoutineCatalog
         new() { Name = "hash",      Kind = WiredKind.Hash,    Views = Cap | Known | Seed, Protocols = ["Hashable"] },
         new() { Name = "fast_hash", Kind = WiredKind.Hash,    Views = Cap,                Protocols = ["FastHashable"] },
 
-        // ---- Comparison ($cmp family shares the $cmp body; $ne shares $eq) ----
+        // ---- Comparison (cmp family shares the cmp body; ne shares eq) ----
         new() { Name = "eq",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Equatable"] },
         new() { Name = "ne",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Equatable"], CapabilityWiredOverride = "eq" },
         new() { Name = "cmp", Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Comparable"] },
@@ -217,19 +217,19 @@ public static class WiredRoutineCatalog
         new() { Name = "mod_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedFloorDivisible"], CapabilityWiredOverride = "floordiv_unchecked" },
         new() { Name = "pow_unchecked",      Kind = WiredKind.ArithmeticUnchecked, Views = Cap | Seed, Protocols = ["UncheckedExponentiable"] },
 
-        // ---- Bitwise (the $bitand body covers and/or/xor) ----
+        // ---- Bitwise (the bitand body covers and/or/xor) ----
         new() { Name = "bitand", Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "bitand" },
         new() { Name = "bitor",  Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "bitand" },
         new() { Name = "bitxor", Kind = WiredKind.Bitwise, Views = Cap | Known | Proto | Seed, Protocols = ["Bitwiseable"], CapabilityWiredOverride = "bitand" },
         new() { Name = "bitnot", Kind = WiredKind.Unary,   Views = Cap | Known | Proto | Seed, Protocols = ["Invertible"] },
 
-        // ---- Shift (the $ashl body covers all four) ----
+        // ---- Shift (the ashl body covers all four) ----
         new() { Name = "ashl", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "ashl" },
         new() { Name = "ashr", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "ashl" },
         new() { Name = "lshl", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "ashl" },
         new() { Name = "lshr", Kind = WiredKind.Shift, Views = Cap | Known | Proto | Seed, Protocols = ["Shiftable"], CapabilityWiredOverride = "ashl" },
 
-        // ---- In-place arithmetic ($imod shares $ifloordiv) ----
+        // ---- In-place arithmetic (imod shares ifloordiv) ----
         new() { Name = "iadd",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceAddable"] },
         new() { Name = "isub",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceSubtractable"] },
         new() { Name = "imul",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceMultiplicable"] },
@@ -238,12 +238,12 @@ public static class WiredRoutineCatalog
         new() { Name = "imod",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceFloorDivisible"], CapabilityWiredOverride = "ifloordiv" },
         new() { Name = "ipow",      Kind = WiredKind.InPlaceArithmetic, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceExponentiable"] },
 
-        // ---- In-place bitwise ($ibitor/$ibitxor share $ibitand) ----
+        // ---- In-place bitwise (ibitor/ibitxor share ibitand) ----
         new() { Name = "ibitand", Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "ibitand" },
         new() { Name = "ibitor",  Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "ibitand" },
         new() { Name = "ibitxor", Kind = WiredKind.InPlaceBitwise, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceBitwiseable"], CapabilityWiredOverride = "ibitand" },
 
-        // ---- In-place shift ($iashr/$ilshl/$ilshr share $iashl) ----
+        // ---- In-place shift (iashr/ilshl/ilshr share iashl) ----
         new() { Name = "iashl", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "iashl" },
         new() { Name = "iashr", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "iashl" },
         new() { Name = "ilshl", Kind = WiredKind.InPlaceShift, Views = Cap | Known | Proto | Seed, Protocols = ["InPlaceShiftable"], CapabilityWiredOverride = "iashl" },
@@ -297,7 +297,7 @@ public static class WiredRoutineCatalog
     /// <summary>Looks up a wired entry by its bare canonical name. Returns false when the name is not wired.</summary>
     public static bool TryGet(string name, out WiredEntry entry) => _byName.TryGetValue(key: name, value: out entry!);
 
-    /// <summary>Returns true when <paramref name="name"/> is a lifecycle-category wired routine (<c>$destroy</c> or <c>$store</c>).</summary>
+    /// <summary>Returns true when <paramref name="name"/> is a lifecycle-category wired routine (<c>destroy</c> or <c>store</c>).</summary>
     public static bool IsLifecycle(string name) =>
         _byName.TryGetValue(key: name, value: out WiredEntry? e) &&
         e.Kind is WiredKind.Lifecycle or WiredKind.Copy;

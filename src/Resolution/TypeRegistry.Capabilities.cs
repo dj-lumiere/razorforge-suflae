@@ -16,7 +16,7 @@ namespace Compiler.Resolution;
 /// routine families whose body has a built-in constraint surface that the registered
 /// implementation can't satisfy for every instantiation — e.g. `Array[T, N].eq`
 /// declares `needs T obeys Equatable`, so `Array[X, 64]` should NOT carry an
-/// `$eq` symbol because `X` is not equatable.
+/// `eq` symbol because `X` is not equatable.
 ///
 /// Results are cached per FullName + protocol for the lifetime of the registry.
 /// Cache entries are conservative — when the cache cannot decide (incomplete type
@@ -70,13 +70,13 @@ public sealed partial class TypeRegistry
         return HasCapability(type: type, protocol: entry.Protocol, wiredName: entry.WiredName);
     }
 
-    /// <summary>Returns true if the type implements <c>Equatable</c> ($eq).</summary>
+    /// <summary>Returns true if the type implements <c>Equatable</c> (eq).</summary>
     public bool TypeHasEquality(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "eq");
-    /// <summary>Returns true if the type implements <c>Containable</c> ($contains).</summary>
+    /// <summary>Returns true if the type implements <c>Containable</c> (contains).</summary>
     public bool TypeHasContainment(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: ContainsMethodName);
-    /// <summary>Returns true if the type implements <c>Hashable</c> ($hash).</summary>
+    /// <summary>Returns true if the type implements <c>Hashable</c> (hash).</summary>
     public bool TypeHasHashing(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "hash");
-    /// <summary>Returns true if the type implements <c>Comparable</c> ($cmp).</summary>
+    /// <summary>Returns true if the type implements <c>Comparable</c> (cmp).</summary>
     public bool TypeHasComparison(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "cmp");
 
     private bool HasCapability(TypeInfo type, string protocol, string wiredName)
@@ -102,7 +102,7 @@ public sealed partial class TypeRegistry
         // substituted downstream or already a no-op.
         if (type is GenericParameterTypeInfo or ErrorTypeInfo || type.IsNone) return true;
 
-        // No backend-type shortcut: scalar primitives still define `$eq`/`$hash` explicitly
+        // No backend-type shortcut: scalar primitives still define `eq`/`hash` explicitly
         // (see Core/Numerics/*.rf) and will be picked up by the LookupMethod fallback below.
         // The shortcut used to fire on every `@llvm("…")`-backed record — including aggregate-
         // backed records like `Array[T, N]` (`@llvm("[{N} x {T}]")`) — which masked the
@@ -156,7 +156,7 @@ public sealed partial class TypeRegistry
 
         // Direct support: type has a CONCRETE impl of the method (explicit or synthesised).
         // A lookup that resolves to the ABSTRACT protocol method (e.g. `Equatable.eq` for a
-        // plain record that neither defines `$eq` nor obeys Equatable) does NOT count — it has no
+        // plain record that neither defines `eq` nor obeys Equatable) does NOT count — it has no
         // body, so reporting capability here would let callers emit a call to the unimplemented
         // abstract symbol (LINKERR). Genuine conformance is established by the TypeObeysProtocol
         // check below (concrete impl) or by obeying the protocol.
@@ -182,7 +182,7 @@ public sealed partial class TypeRegistry
     ///   <item><description>Generic parameters: false (decision deferred to instantiation).</description></item>
     /// </list>
     /// Raw-pointer types like <c>Hijacked[T]</c> and <c>CPtr</c> are ptr-shaped and
-    /// therefore must opt in manually with a trivial <c>$store() -> Me  return me</c>.
+    /// therefore must opt in manually with a trivial <c>store() -> Me  return me</c>.
     /// </summary>
     public bool CanAutoDeriveAssignable(TypeInfo type)
     {

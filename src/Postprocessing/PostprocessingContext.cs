@@ -32,7 +32,7 @@ public sealed class PostprocessingContext
     public Dictionary<string, Statement> VariantBodies { get; }
 
     /// <summary>
-    /// AST bodies for compiler-generated derived operator routines ($ne, $lt, $le, $gt, $ge, $notcontains),
+    /// AST bodies for compiler-generated derived operator routines (ne, lt, le, gt, ge, notcontains),
     /// keyed by RoutineInfo.RegistryKey. Written by Phase 2.6 DerivedOperatorPass.
     /// Phase 7 CallOverloadResolutionPass runs on these to classify all CallExpression nodes.
     /// </summary>

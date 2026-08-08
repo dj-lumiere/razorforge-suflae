@@ -40,7 +40,7 @@ public sealed class ErrorHandlingGenerator
 
     /// <summary>
     /// Generates a variant name for an original routine.
-    /// Strips the leading '$' from wired routine names so that "emit" -> "try_emit" (not "try_$emit").
+    /// Strips the leading '$' from wired routine names so that "emit" -> "try_emit" (not "try_emit").
     /// </summary>
     /// <param name="prefix">The variant prefix (try, check, lookup).</param>
     /// <param name="original">The original routine.</param>

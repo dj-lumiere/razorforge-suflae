@@ -14,7 +14,7 @@ namespace TypeModel.Types;
 // sharing MemberVariables / ImplementedProtocols / AssociatedTypeBindings / GenericDefinition. Variant
 // arm data lives in Members. NOTE: any codegen/lifecycle switch that handles RecordTypeInfo must place
 // a `case VariantTypeInfo` FIRST where variant semantics differ (tag+payload layout, not record fields)
-// — a missing Variant case silently treats a variant as a record (wrong copy/$diagnose/serialize).
+// — a missing Variant case silently treats a variant as a record (wrong copy/diagnose/serialize).
 public sealed class VariantTypeInfo : RecordTypeInfo
 {
     /// <inheritdoc/>

@@ -87,7 +87,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Live concrete owner type FullNames from RoutineReachabilityPass. Used to drive Phase C
-    /// monomorphization of synthesized routines (try_emit, $represent, $diagnose) for generic owners.
+    /// monomorphization of synthesized routines (try_emit, represent, diagnose) for generic owners.
     /// </summary>
     private HashSet<string> _liveOwnerTypeNames = new(comparer: StringComparer.Ordinal);
 
@@ -799,7 +799,7 @@ public partial class LlvmCodeGenerator
                         }
                     }
 
-                    // For overloaded routines (e.g., $create), try to find the
+                    // For overloaded routines (e.g., create), try to find the
                     // specific overload matching this AST declaration's parameter types.
                     // This includes 0-arg overloads — LookupRoutine returns an arbitrary
                     // overload, so we must disambiguate for all param counts. Skipped when
@@ -1074,8 +1074,8 @@ public partial class LlvmCodeGenerator
             }
 
             // Phase C: Emit synthesized variant bodies (try_/check_/lookup_ and derived operators).
-            // Gate on the live-routine set: a synthesized $ne body for a dead type would call a
-            // dead $eq, leaving the linker hanging on the dead $eq symbol.
+            // Gate on the live-routine set: a synthesized ne body for a dead type would call a
+            // dead eq, leaving the linker hanging on the dead eq symbol.
             foreach ((string key, Statement synthBodyAst) in _synthesizedBodies)
             {
                 RoutineInfo? synthInfo = _registry.LookupRoutine(fullName: key);
@@ -1093,21 +1093,21 @@ public partial class LlvmCodeGenerator
                     && !_referencedKeys.Contains(item: synthInfo.RegistryKey))
                     continue;
                 // Skip routines whose owner type still has unresolved generic parameters
-                // (e.g. $represent/$hash on DictEntry[K, V] — the generic definition).
+                // (e.g. represent/hash on DictEntry[K, V] — the generic definition).
                 // IsGenericDefinition only covers routines with their own type params (like
                 // hijacked_from[T]); owner-generic types need a separate guard.
                 if (synthInfo.OwnerType != null && ContainsGenericParameter(synthInfo.OwnerType))
                     continue;
                 // Skip derived operators on generic owner types (e.g. ArrayIterator.ne).
                 // GMP monomorphizes these into InstantiatedGenericBodies (Phase B); emitting the
-                // generic-def version here would call a non-existent generic $eq/$contains.
+                // generic-def version here would call a non-existent generic eq/contains.
                 // Exception: synthesized wrapper forwarder bodies (T.key_get, etc.) are
                 // anchored on the generic-def owner by design. For each concrete resolution,
                 // emit the body with the wrapper's type parameter substituted.
                 if (synthInfo.OwnerType?.IsGenericDefinition == true)
                 {
-                    // Non-wrapper synthesized bodies on generic-def owners (try_emit, $represent,
-                    // $diagnose, $hash, $eq for generic types like ListEmitter[T], List[T]).
+                    // Non-wrapper synthesized bodies on generic-def owners (try_emit, represent,
+                    // diagnose, hash, eq for generic types like ListEmitter[T], List[T]).
                     // For each live concrete instantiation of this owner, lookup the substituted
                     // method (LookupMethod normalizes generic-def methods onto concrete owners),
                     // set up _typeSubstitutions, and emit one body per concrete owner.
@@ -1154,7 +1154,7 @@ public partial class LlvmCodeGenerator
                                 // Rewrite the shared generic-def body per concrete owner BEFORE
                                 // emission. The raw AST is shared across every instantiation, so
                                 // BuilderServiceInliningPass had to defer folding its BuilderService
-                                // constants (me.type_name() in synthesized $represent/$diagnose).
+                                // constants (me.type_name() in synthesized represent/diagnose).
                                 // GenericAstRewriter deep-clones, substitutes the type params, folds
                                 // those constants against the concrete owner (same fold logic as the
                                 // inlining pass), and re-resolves routine bindings — emitting the

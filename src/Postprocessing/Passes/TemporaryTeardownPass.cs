@@ -17,27 +17,27 @@ namespace Compiler.Postprocessing.Passes;
 /// <c>Text</c> (an RC-record holding a heap buffer), <c>.count()</c> borrows it, and the <c>Text</c>
 /// is then dropped on the floor — never destroyed. Inside a hot loop that leaks one buffer per
 /// iteration. This pass spills such a temporary into a synthetic block-scoped local and emits its
-/// <c>$destroy()</c> at end-of-statement, so the buffer is freed each time the statement runs.</para>
+/// <c>destroy()</c> at end-of-statement, so the buffer is freed each time the statement runs.</para>
 ///
 /// <para><b>Why a separate, late pass.</b> <see cref="ScopeTeardownLoweringPass"/> runs before
 /// reachability and before user-code Phase 7 lowering — at that point a <c>var u = when … =>
 /// x.represent().count()</c> is still a <c>when</c>-<i>expression</i>, so the producing call is
 /// buried in conditional arms with no statement to attach teardown to. This pass runs AFTER Phase 7
-/// (when→if already lowered, so arms are real blocks) and emits its own <c>$destroy</c> calls;
-/// codegen's emit-on-demand picks up the referenced concrete <c>$destroy</c>.</para>
+/// (when→if already lowered, so arms are real blocks) and emits its own <c>destroy</c> calls;
+/// codegen's emit-on-demand picks up the referenced concrete <c>destroy</c>.</para>
 ///
 /// <para><b>What is spilled (deliberately narrow — correctness over coverage, never a double-free).</b>
 /// Exactly one shape: the <b>receiver of a method call where (a) the receiver is a fresh RC-record
 /// producer and (b) the call result is not a borrow/view wrapper</b> (so it cannot alias the
 /// receiver). <c>retain</c>/<c>track</c> verbs (which consume the receiver) are excluded. This covers
 /// both <c>x.represent().count()</c> (scalar result) and the intermediate <c>Text</c> of a
-/// concatenation chain <c>a + "-" + b</c> (each <c>$add</c> result is the receiver of the next).</para>
+/// concatenation chain <c>a + "-" + b</c> (each <c>add</c> result is the receiver of the next).</para>
 ///
-/// <para><b>Why this is safe.</b> An RC-record <c>$destroy</c> releases a <i>refcounted</i>
+/// <para><b>Why this is safe.</b> An RC-record <c>destroy</c> releases a <i>refcounted</i>
 /// controller, so a balanced release is harmless. A method's record/RC-record return is always
 /// <i>independent</i> of the receiver — freshly allocated (string concat builds a new buffer) or a
 /// retaining +1 copy (<see cref="ScopeTeardownLoweringPass"/>'s sibling RecordCopyLoweringPass injects
-/// <c>$store</c> on <c>me</c>/lvalue returns) — so freeing the receiver leaves the result valid. The
+/// <c>store</c> on <c>me</c>/lvalue returns) — so freeing the receiver leaves the result valid. The
 /// only alias hazard is a borrow/view result pointing into the receiver, which the guard excludes.</para>
 ///
 /// <para>Crucially NOT spilled (each a real double-free / leak-vs-crash hazard): call
@@ -51,7 +51,7 @@ namespace Compiler.Postprocessing.Passes;
 /// reachability and before user-code Phase 7 lowering — at that point a <c>var u = when … =>
 /// x.represent().count()</c> is still a <c>when</c>-expression with the producing call buried in
 /// conditional arms. This pass runs AFTER Phase 7 (when→if lowered, arms are real blocks) and emits
-/// its own <c>$destroy</c> calls; codegen's emit-on-demand resolves the concrete <c>$destroy</c>.</para>
+/// its own <c>destroy</c> calls; codegen's emit-on-demand resolves the concrete <c>destroy</c>.</para>
 ///
 /// <para><b>Known limitations</b> (leak preserved, never a crash): argument-position temporaries,
 /// non-scalar-returning chains, entity temporaries, bare field-access objects, and owned temporaries
@@ -268,7 +268,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// record), the overwrite must first release the old value or it leaks — the dominant cost in
     /// string-building loops (<c>s = s + part</c>). The new RHS is already an independent owned value
     /// (RecordCopyLoweringPass, which has already run, turned any lvalue source into a fresh
-    /// <c>$store</c>; computed results are fresh), so the rewrite is:
+    /// <c>store</c>; computed results are fresh), so the rewrite is:
     /// <code>var __rv = RHS ; target.destroy() ; target = __rv</code>
     /// computing RHS (which may read the old target) BEFORE the destroy. For other targets the old
     /// value is released elsewhere (entities by ScopeTeardownLoweringPass; HasRCFields / RC-wrapper
@@ -309,7 +309,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         RuntimeContract.RcWrapperBaseNames;
 
     /// <summary>True for a managed-leaf record target whose old value codegen does NOT release on
-    /// reassignment: a record with a retaining <c>$store</c> (Text/Decimal, or one carrying such a
+    /// reassignment: a record with a retaining <c>store</c> (Text/Decimal, or one carrying such a
     /// field) that is neither a <c>HasRCFields</c> record nor an RC wrapper (both released by
     /// codegen). Scalars (no retaining copy) and entities (handled by ScopeTeardownLoweringPass) are
     /// excluded.</summary>
@@ -347,7 +347,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // cannot be a borrow/view aliasing it. An RC-record receiver is safe to free even when
                 // the result is another owned value: a method's RC-record/record return is always
                 // independent of the receiver — fresh (e.g. string concat allocates a new buffer) or a
-                // retaining +1 copy (RecordCopyLoweringPass injects $store on lvalue/`me` returns) — so
+                // retaining +1 copy (RecordCopyLoweringPass injects store on lvalue/`me` returns) — so
                 // the controller refcount stays balanced. The only hazard is a borrow/view result
                 // (Viewing/Modifying/…) pointing into the receiver, which the guard excludes.
                 if (!receiverConsumed && IsSpillableProducer(newRecv)
@@ -432,7 +432,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     }
 
     /// <summary>True for a fresh owned heap producer worth tearing down: a call/creator whose result
-    /// is an entity or RC-record with a real (non-borrow) <c>$destroy</c>, excluding view-verb
+    /// is an entity or RC-record with a real (non-borrow) <c>destroy</c>, excluding view-verb
     /// producers (which yield a borrow of a referent owned elsewhere).</summary>
     private bool IsSpillableProducer(Expression e)
     {
@@ -446,11 +446,11 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(t);
         if (lc.IsBorrow || lc.Destroy is null)
             return false;
-        // Only HEAP-owning RECORDS are spilled: a managed leaf with a retaining $store (Text/Decimal)
-        // or a record carrying RC-wrapper fields. Their $destroy releases a refcounted controller, so
+        // Only HEAP-owning RECORDS are spilled: a managed leaf with a retaining store (Text/Decimal)
+        // or a record carrying RC-wrapper fields. Their destroy releases a refcounted controller, so
         // an extra balanced release is always safe. Entities are deliberately excluded for now (their
         // single-owner lifetime and fluent `me` returns are trickier to prove alias-free); plain value
-        // records / scalars have a no-op $destroy and would only bloat the IR.
+        // records / scalars have a no-op destroy and would only bloat the IR.
         return t is RecordTypeInfo rec && (lc.Store != null || rec.HasRCFields);
     }
 

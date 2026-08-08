@@ -1117,7 +1117,7 @@ internal static class GenericAstRewriter
             // member type. RewriteSpliceMember computed that column type; the original splice node's own
             // ResolvedType is a deferred ErrorType placeholder (SA can't resolve a splice pre-monomorph),
             // so overwriting with it here would clobber the column type and leave a following
-            // `[index]`/`.count()` unable to resolve `$getitem`/`count` post-monomorph. Preserve the
+            // `[index]`/`.count()` unable to resolve `getitem`/`count` post-monomorph. Preserve the
             // splice-computed type ONLY when the object is an SoA container (a type carrying decl-position
             // `expand` templates). The derive-template case (`me` IS the walked record — NO ExpandTemplates)
             // keeps the normal overwrite: its members' types must stay deferred so recursively-typed fields
@@ -1243,7 +1243,7 @@ internal static class GenericAstRewriter
             }
 
             // Stdlib bodies are processed by SA on the generic definition, so some
-            // intermediate call expressions (e.g. me.address() inside $cmp or $diagnose)
+            // intermediate call expressions (e.g. me.address() inside cmp or diagnose)
             // may arrive with ResolvedType=null when the SA annotation on the generic
             // body's call was not preserved through cloning.  If GMP resolved the routine
             // after the switch, propagate its ReturnType so downstream chained calls
@@ -1425,7 +1425,7 @@ internal static class GenericAstRewriter
         {
             // A protocol-owned method is abstract (no body) — after monomorphization the call must
             // re-dispatch to the concrete implementer (e.g. Iterator[S64].try_emit, resolved via a
-            // constrained generic param's $iter, must rebind to RangeIterator[S64].try_emit).
+            // constrained generic param's iter, must rebind to RangeIterator[S64].try_emit).
             return true;
         }
 

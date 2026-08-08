@@ -570,7 +570,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine with 2+ parameters requires named arguments at call site.</summary>
     NamedArgumentRequired = 510,
 
-    /// <summary>A user `$create` may not take exactly the type's field-name set — that signature
+    /// <summary>A user `create` may not take exactly the type's field-name set — that signature
     /// is the built-in memberwise constructor and cannot be overridden.</summary>
     AllFieldsCreatorReserved = 511,
 
@@ -650,10 +650,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Lambda captures variable without declaring it in 'given' clause.</summary>
     LambdaCaptureWithoutGiven = 610,
 
-    /// <summary>A `using ... fallback` target must have `$try_enter` (non-blocking acquisition).</summary>
+    /// <summary>A `using ... fallback` target must have `try_enter` (non-blocking acquisition).</summary>
     UsingFallbackRequiresTryEnter = 611,
 
-    /// <summary>Using target must have $enter/$exit for resource management.</summary>
+    /// <summary>Using target must have enter/exit for resource management.</summary>
     UsingTargetMissingEnterExit = 612,
 
     /// <summary>Using-bound token cannot escape the using block scope.</summary>
@@ -868,7 +868,7 @@ public enum SemanticDiagnosticCode
     /// <summary>None cannot be used as a generic type argument (it has no value).</summary>
     NoneAsTypeArgument = 805,
 
-    /// <summary>A user-defined `$destroy` overrides the compiler's memory teardown, so it must be
+    /// <summary>A user-defined `destroy` overrides the compiler's memory teardown, so it must be
     /// marked `dangerous` — the author takes responsibility for freeing `me` and its fields.</summary>
     DestroyMustBeDangerous = 807,
 

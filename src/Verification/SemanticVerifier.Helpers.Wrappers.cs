@@ -299,7 +299,7 @@ public sealed partial class SemanticVerifier
 
         if (implemented != null)
         {
-            // Either capability qualifies: `Storable` (can `$store`) or `Copyable` (deep copy, which
+            // Either capability qualifies: `Storable` (can `store`) or `Copyable` (deep copy, which
             // obeys Storable). The auto-derive adds `Copyable` directly (not `Storable`), so this direct
             // name check must accept both.
             return implemented.Any(predicate: p => p.Name is "Storable" or "Copyable");

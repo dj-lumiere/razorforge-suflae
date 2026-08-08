@@ -68,7 +68,7 @@ public partial class Tokenizer
             return;
         }
 
-        // Wired member-routine marker: a leading '$' ($create, $store, $emit, …) is a SEPARATE
+        // Wired member-routine marker: a leading '$' (create, store, emit, …) is a SEPARATE
         // structural token — the parser records it as RoutineInfo.IsWiredMemberRoutine and keeps the
         // name bare. Emit the '$' as its own Dollar token, then re-anchor so the bare identifier that
         // follows scans and emits on its own. (The main scan loop already consumed the '$' into

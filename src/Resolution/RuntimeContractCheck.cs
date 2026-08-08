@@ -18,7 +18,7 @@ namespace Compiler.Resolution;
 /// <para>Scope mirrors <see cref="RuntimeContract"/>: it checks the declared-in-stdlib routine names
 /// (<see cref="RuntimeContract.StdlibRoutineContracts"/>), the wrapper TYPE names
 /// (<see cref="RuntimeContract.WrapperTypes"/>), and the <c>Maybe</c> carrier fields. It deliberately
-/// does NOT check compiler-generated / intrinsic names (<c>try_emit</c>, <c>$refer</c>/<c>$control</c>,
+/// does NOT check compiler-generated / intrinsic names (<c>try_emit</c>, <c>refer</c>/<c>control</c>,
 /// BuilderService/<c>data_size</c>) or the native <c>rf_*</c> externs (link-checked C-ABI).</para>
 /// </summary>
 public static class RuntimeContractCheck

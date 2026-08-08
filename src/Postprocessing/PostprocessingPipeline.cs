@@ -22,7 +22,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         StructuralLoweringPass.Run(program);
         new FStringLoweringPass(ctx).Run(program);
         new CrashableExpansionPass(ctx).Run(program);
-        // CallOverloadResolutionPass runs after FStringLoweringPass so that the $represent/$diagnose
+        // CallOverloadResolutionPass runs after FStringLoweringPass so that the represent/diagnose
         // calls it synthesizes are visible and can be classified before reaching codegen.
         new CallOverloadResolutionPass(ctx).Run(program);
         // PatternLowering before ExpressionLowering: PLP introduces UnaryExpression(Not)
@@ -74,9 +74,9 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new RecordCopyLoweringPass(ctx).RunOnVariantBodies();
         new UsingLoweringPass(ctx).RunOnVariantBodies();
         // CallOverloadResolutionPass runs last so it sees all CallExpression nodes introduced
-        // by FStringLoweringPass ($represent/$diagnose/$add), OperatorLoweringPass (wired ops),
-        // and RecordCopyLoweringPass ($store). Also classifies synthesized derived-operator bodies
-        // ($ne/$lt/$le/$gt/$ge/$notcontains) which bypass per-program Run() entirely.
+        // by FStringLoweringPass (represent/diagnose/add), OperatorLoweringPass (wired ops),
+        // and RecordCopyLoweringPass (store). Also classifies synthesized derived-operator bodies
+        // (ne/lt/le/gt/ge/notcontains) which bypass per-program Run() entirely.
         new CallOverloadResolutionPass(ctx).RunOnVariantBodies();
         new CallOverloadResolutionPass(ctx).RunOnSynthesizedBodies();
 

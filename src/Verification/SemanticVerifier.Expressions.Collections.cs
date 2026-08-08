@@ -90,7 +90,7 @@ public sealed partial class SemanticVerifier
         TypeSymbol? expectedType = null)
     {
         // Collection literals are entity rvalues — value-in-flight produced by a fresh
-        // `$create + add_last` sequence. Mark for the auto-bind rule (rvalue T → bound T).
+        // `create + add_last` sequence. Mark for the auto-bind rule (rvalue T → bound T).
         list.IsInFlight = true;
         // Extract expected element type from list-shaped expected types.
         TypeSymbol? expectedElementType = null;
@@ -510,7 +510,7 @@ public sealed partial class SemanticVerifier
             // here rather than producing a broken lowered AST.
             ReportError(code: SemanticDiagnosticCode.WithBaseNotAssignable,
                 message: $"'with' expression base of type '{baseType.Name}' must obey 'Storable'. " +
-                         "Add 'obeys Storable' and define '$store() -> Me', or reconstruct the value explicitly.",
+                         "Add 'obeys Storable' and define 'store() -> Me', or reconstruct the value explicitly.",
                 location: with.Location);
         }
 

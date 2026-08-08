@@ -622,7 +622,7 @@ public partial class LlvmCodeGenerator
                 : null;
             string eqFuncName = textEq != null
                 ? MangleRoutineName(routine: textEq)
-                : "Text$_eq";
+                : "Text_eq";
             EmitLine(sb: sb,
                 line: $"  {result} = call i1 @{eqFuncName}(ptr {subject}, ptr {litValue})");
         }

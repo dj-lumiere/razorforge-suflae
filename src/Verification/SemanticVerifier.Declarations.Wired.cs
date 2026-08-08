@@ -186,7 +186,7 @@ public sealed partial class SemanticVerifier
     #region Phase 2.6: Derived Operator Generation
 
     /// <summary>
-    /// Generates derived comparison operators from $eq and $cmp routines.
+    /// Generates derived comparison operators from eq and cmp routines.
     /// </summary>
     private void GenerateDerivedOperators()
     {

@@ -236,11 +236,11 @@ internal sealed class SignatureResolver
             }
         }
 
-        // S511: a user `$create` may not occupy the all-fields memberwise signature — i.e. take
+        // S511: a user `create` may not occupy the all-fields memberwise signature — i.e. take
         // exactly the type's fields by BOTH name AND type. That shape is the built-in memberwise
         // constructor and cannot be overridden. The match is by TYPE, not just name: a
         // parsing/validating constructor that reuses a field name with a DIFFERENT type
-        // (e.g. `$create(tag: S32)` for field `tag: S64`) is allowed and routes normally.
+        // (e.g. `create(tag: S32)` for field `tag: S64`) is allowed and routes normally.
         // The synthesized memberwise creator is registered elsewhere (AutoWiredRegistrationPass),
         // so it never reaches here.
         if (pending.RoutineName is "create" or "create!")
@@ -259,7 +259,7 @@ internal sealed class SignatureResolver
             {
                 _sa.ReportError(code: SemanticDiagnosticCode.AllFieldsCreatorReserved,
                     message:
-                    $"'$create' cannot take exactly the fields ({string.Join(separator: ", ", values: fields.Select(selector: f => $"{f.Name}: {f.Type.Name}"))}) " +
+                    $"'create' cannot take exactly the fields ({string.Join(separator: ", ", values: fields.Select(selector: f => $"{f.Name}: {f.Type.Name}"))}) " +
                     $"of '{refreshedOwnerType!.Name}' — that signature is the built-in memberwise constructor and " +
                     "cannot be overridden. Use a distinct parameter shape (different names or types) or " +
                     "`secret` fields with a named constructor.",
@@ -278,7 +278,7 @@ internal sealed class SignatureResolver
         }
 
         // SF entity RETURN types resolve to `Roamed[E]` via the ResolveType choke point, so `return me`
-        // (me is `Roamed[E]` via MeType below) yields a retained handle to the SAME controller. `$create`
+        // (me is `Roamed[E]` via MeType below) yields a retained handle to the SAME controller. `create`
         // returns the raw entity it builds; its return goes through the memberwise-synthesis path (not
         // this ResolveType call), so no explicit carve-out is needed here.
         TypeSymbol? returnType = routine.ReturnType != null
@@ -370,7 +370,7 @@ internal sealed class SignatureResolver
 
         // SF slice 2: `me` of a USER entity member routine is the `Roamed[E]` handle (not bare `E`), so
         // `me.field` routes through the Roamed access machinery and `return me` type-matches the now
-        // `Roamed[E]` return. Creators ($create/$create!) keep bare `me` — they build the raw entity
+        // `Roamed[E]` return. Creators (create/create!) keep bare `me` — they build the raw entity
         // before any controller exists. A specialized `meType` (generic receiver) takes precedence.
         if (sfUserEntity && meType == null
             && pending.Kind == RoutineKind.MemberRoutine
@@ -441,10 +441,10 @@ internal sealed class SignatureResolver
             return;
         }
 
-        // NOTE: a wired `$X` and a plain `X` share the canonical bare name `X`. The truly-conflicting
-        // case — SAME signature (e.g. redundant `$add(you:T)` + `add(you:T)`) — is already caught by the
+        // NOTE: a wired `X` and a plain `X` share the canonical bare name `X`. The truly-conflicting
+        // case — SAME signature (e.g. redundant `add(you:T)` + `add(you:T)`) — is already caught by the
         // RegistryKey duplicate check above (RF-S406). DIFFERENT-signature pairs (e.g. `hash()` +
-        // `$hash(k0,k1)`) are legitimate distinct routines and MUST coexist, so no extra guard is added.
+        // `hash(k0,k1)`) are legitimate distinct routines and MUST coexist, so no extra guard is added.
 
         // Constructor divergent-duplicate guard (mainly for the stdlib path; user cross-file dups are
         // already RF-S406 above): hash the body so RegisterRoutine distinguishes identical from
@@ -658,8 +658,8 @@ internal sealed class SignatureResolver
 
         // Bare `obeys Indexable` without type args: treat the protocol's generic parameters
         // as inferred-from-impl. We record the first binding we see for each param and check
-        // subsequent positions for consistency, so $getitem(key: S64)/$setitem(key: S64) is
-        // accepted but $getitem(key: S64)/$setitem(key: Text) is not.
+        // subsequent positions for consistency, so getitem(key: S64)/setitem(key: S64) is
+        // accepted but getitem(key: S64)/setitem(key: Text) is not.
         List<string>? inferableParams = null;
         if (substitution == null)
         {
@@ -673,7 +673,7 @@ internal sealed class SignatureResolver
 
         // Failability is COVARIANT: a NON-failable implementation may satisfy a FAILABLE (`!`)
         // protocol requirement — never failing is a stronger contract than may-fail, so it is always
-        // a safe substitute (a `using` resource whose `$enter!` can fail is satisfied by a `$enter`
+        // a safe substitute (a `using` resource whose `enter!` can fail is satisfied by a `enter`
         // that never does). The REVERSE is unsound: a failable implementation cannot satisfy a
         // non-failable requirement, because its failures would escape unhandled at call sites that
         // assume the method cannot fail.
@@ -838,7 +838,7 @@ internal sealed class SignatureResolver
 
     /// <summary>
     /// Validates that a type obeys the required protocol when defining operator methods.
-    /// For example, defining $add requires the type to obey Addable.
+    /// For example, defining add requires the type to obey Addable.
     /// </summary>
     private void ValidateOperatorProtocolConformance(RoutineInfo routineInfo,
         SourceLocation? location)
@@ -849,7 +849,7 @@ internal sealed class SignatureResolver
             return;
         }
 
-        // Only WIRED operator methods ($add, $sub, …) require the operator protocol. A plain user
+        // Only WIRED operator methods (add, sub, …) require the operator protocol. A plain user
         // routine that merely shares the bare name (e.g. `routine Counter.add(n)`) is NOT an operator
         // and must not be forced to obey Addable — the name alone no longer distinguishes them, so
         // gate on the structural wired attribute.
@@ -882,7 +882,7 @@ internal sealed class SignatureResolver
                 ? $"'{requiredProtocols[0]}'"
                 : string.Join(separator: " or ", values: requiredProtocols.Select(selector: p => $"'{p}'"));
             // Render the wired sigil ('$') the user actually wrote — the canonical Name is bare, but the
-            // `$` remains surface syntax, so the diagnostic must name the operator as `$add`, not `add`.
+            // `$` remains surface syntax, so the diagnostic must name the operator as `add`, not `add`.
             string displayName = routineInfo.IsWiredMemberRoutine
                 ? $"${routineInfo.Name}"
                 : routineInfo.Name;

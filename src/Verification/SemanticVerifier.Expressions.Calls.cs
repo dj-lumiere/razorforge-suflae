@@ -109,13 +109,13 @@ public sealed partial class SemanticVerifier
                 }
 
                 // Wired routines ($-prefixed) cannot be called directly by user code, except
-                // $represent and $diagnose which are composable for custom display implementations.
+                // represent and diagnose which are composable for custom display implementations.
                 if (callName.StartsWith(value: '$')
                     && callName != "represent" && callName != "diagnose")
                 {
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
                         message: $"Wired routine '{callName}' cannot be called directly. " +
-                                 "Use the corresponding language construct instead (e.g., '==' for $eq, 'each' for $iter).",
+                                 "Use the corresponding language construct instead (e.g., '==' for eq, 'each' for iter).",
                         location: call.Location);
                     return ErrorTypeInfo.Instance;
                 }
@@ -450,7 +450,7 @@ public sealed partial class SemanticVerifier
                         // enforces for ordinary calls, but the creator path analyzes args separately and
                         // used to bypass it. Without this, `Bytes(from_list: raw)` (raw a bare List entity)
                         // slips through un-stolen; the callee owns and tears down the param while the
-                        // caller still owns `raw` → double-free once the param type's `$destroy` is
+                        // caller still owns `raw` → double-free once the param type's `destroy` is
                         // materialized. Verb-wrapped args (`steal x`, `x.copy()`) are Steal/Call nodes, not
                         // Identifier/Member, so they are excluded automatically.
                         if (_registry.Language == Language.RazorForge)
@@ -490,11 +490,11 @@ public sealed partial class SemanticVerifier
                             : ClassifyConstruction(type: callableType,
                                 isCollectionLiteral: call.IsCollectionLiteral);
 
-                        // `Type(...)` written *inside* Type's own `$create` only needs the
-                        // inline base case when it resolves back to the SAME `$create` we are
+                        // `Type(...)` written *inside* Type's own `create` only needs the
+                        // inline base case when it resolves back to the SAME `create` we are
                         // compiling — that is the genuine self-recursion to break. A call to a
                         // *different* overload (e.g. `F128(from: hi)` resolving to
-                        // `$create(from: U64)` inside `$create(from: U128)`) is an ordinary
+                        // `create(from: U64)` inside `create(from: U128)`) is an ordinary
                         // conversion and must keep its resolved routine; otherwise codegen is left
                         // to guess and, for bit-carrier types like F128, mis-lowers it to a raw
                         // `sext`/reinterpret of the integer into the i128 IEEE carrier.
@@ -505,9 +505,9 @@ public sealed partial class SemanticVerifier
                                 || currentCreate.OwnerType.Name == callableType.Name)
                             && ReferenceEquals(objA: creator, objB: currentCreate);
 
-                        // Route through a *user-declared* `$create` so its body/side-effects run.
+                        // Route through a *user-declared* `create` so its body/side-effects run.
                         // The synthesized memberwise creator (IsSynthesized) is pure field-init and
-                        // is left to inline construction in codegen. A user `$create` whose params
+                        // is left to inline construction in codegen. A user `create` whose params
                         // match the fields only by name but differ by type (e.g.
                         // `Resource.create(tag: S32)` over field `tag: S64`) is the real
                         // constructor and is selected by arg type via LookupMethodOverload above.
@@ -702,7 +702,7 @@ public sealed partial class SemanticVerifier
                         ctorPosIdx++;
                     }
 
-                    // C95: Try $create overload match first
+                    // C95: Try create overload match first
                     // e.g., BitList(capacity: 32u64) -> BitList.create(capacity: U64)
                     // e.g., BitList(32u64) -> BitList.create(capacity: U64) instead of collection literal
                     if (call.Arguments.Count > 0)
@@ -725,11 +725,11 @@ public sealed partial class SemanticVerifier
                             return creator.ReturnType ?? type;
                         }
 
-                        // Entity types can only be constructed via $create — no fallback
+                        // Entity types can only be constructed via create — no fallback
                         if (type is EntityTypeInfo)
                         {
                             ReportError(code: SemanticDiagnosticCode.TypeNotCallable,
-                                message: $"No matching '$create' overload found for entity type '{type.Name}' " +
+                                message: $"No matching 'create' overload found for entity type '{type.Name}' " +
                                          $"with {argTypes.Count} argument(s).",
                                 location: call.Location);
                         }
@@ -988,12 +988,12 @@ public sealed partial class SemanticVerifier
                     return ErrorTypeInfo.Instance;
                 }
 
-                // $iter / $refer / $control are dunder-private to their protocols — only the
-                // corresponding lowering passes may emit them (for-loop → $iter; argument
-                // coercion → $refer/$control). Forbidding user calls prevents storing the
+                // iter / refer / control are dunder-private to their protocols — only the
+                // corresponding lowering passes may emit them (for-loop → iter; argument
+                // coercion → refer/control). Forbidding user calls prevents storing the
                 // result in a variable, which would let a borrow / iterator outlive its source.
                 // Stdlib is exempt — its iterator implementations and wrapper bodies chain these
-                // dunders directly (e.g., `me.source.iter()`, wrapper `$refer` forwarders).
+                // dunders directly (e.g., `me.source.iter()`, wrapper `refer` forwarders).
                 if ((member.MemberName == "iter"
                      || member.MemberName == "refer"
                      || member.MemberName == "control")
@@ -1327,7 +1327,7 @@ public sealed partial class SemanticVerifier
                         }
                     }
 
-                    // #68: Real-to-Complex promotion — only $add/$sub allow float↔complex cross-type
+                    // #68: Real-to-Complex promotion — only add/sub allow float↔complex cross-type
                     if (IsOperatorWired(name: member.MemberName) &&
                         member.MemberName is not ("add" or "sub" or "iadd" or "isub") &&
                         call.Arguments.Count > 0 && method.Parameters.Count > 0)
@@ -1600,7 +1600,7 @@ public sealed partial class SemanticVerifier
                     // to match the object type (e.g., Text -> S32.create!(from_text: Text)).
                     // Note: parser strips '!' from routine names — IsFailable is a separate flag.
                     // Always look up "create" and check IsFailable on the result.
-                    // $create is owner-scoped, so LookupMethodOverload (not LookupRoutineOverload)
+                    // create is owner-scoped, so LookupMethodOverload (not LookupRoutineOverload)
                     // is the right entry point — the latter only indexes free functions.
                     RoutineInfo? creator =
                         _registry.LookupMethodOverload(type: targetType,
@@ -1629,7 +1629,7 @@ public sealed partial class SemanticVerifier
                             ReportError(code: SemanticDiagnosticCode.MethodChainMultiArg,
                                 message:
                                 $"Method-chain constructor '{potentialTypeName}' requires exactly one non-'me' parameter, " +
-                                $"but '$create' has {nonMeParams.Count}.",
+                                $"but 'create' has {nonMeParams.Count}.",
                                 location: call.Location);
                             return ErrorTypeInfo.Instance;
                         }
@@ -1647,8 +1647,8 @@ public sealed partial class SemanticVerifier
 
                         // Type-check the object expression against the constructor parameter.
                         // We only reach the failure branch when LookupMethodOverload found no
-                        // $create overload accepting objectType and the fallback above returned
-                        // an arbitrary overload (e.g. $create(from: S8)). Report the real problem
+                        // create overload accepting objectType and the fallback above returned
+                        // an arbitrary overload (e.g. create(from: S8)). Report the real problem
                         // — the missing conversion routine — rather than a misleading mismatch
                         // against that arbitrary overload's parameter type.
                         if (!IsAssignableTo(source: objectType,

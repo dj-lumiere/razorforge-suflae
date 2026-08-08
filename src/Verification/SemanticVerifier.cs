@@ -203,7 +203,7 @@ public sealed partial class SemanticVerifier
         _implicitProtocolConformances = [];
 
     /// <summary>
-    /// AST bodies synthesized for derived operators ($ne, $lt, $le, $gt, $ge, $notcontains).
+    /// AST bodies synthesized for derived operators (ne, lt, le, gt, ge, notcontains).
     /// Keyed by RoutineInfo.RegistryKey. Analyzed in Phase 5 via AnalyzeSynthesizedBodies().
     /// </summary>
     private readonly Dictionary<string, (RoutineInfo Routine, Statement Body)> _synthesizedBodies =
@@ -451,8 +451,8 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Phase 3: Generate synthesized wired routines and derived operators.
-    /// Structural routines ($represent/$hash/$eq/$diagnose) remain as IsSynthesized stubs.
-    /// Derived operators ($ne/$lt/$le/$gt/$ge/$notcontains) have real AST bodies stored in _synthesizedBodies.
+    /// Structural routines (represent/hash/eq/diagnose) remain as IsSynthesized stubs.
+    /// Derived operators (ne/lt/le/gt/ge/notcontains) have real AST bodies stored in _synthesizedBodies.
     /// </summary>
     private void RunPhase3Synthesis(Program program)
     {
@@ -521,7 +521,7 @@ public sealed partial class SemanticVerifier
         // could not see these because they did not yet exist in the registry.
         // Re-run AutoRegisterWiredRoutines first so user variants (registered in Phase 3
         // per-file via PreRegisterUserVariants, AFTER the Phase 3 global AutoRegister sweep)
-        // get their $represent/$diagnose stubs registered before WiredRoutinePass synthesizes
+        // get their represent/diagnose stubs registered before WiredRoutinePass synthesizes
         // bodies. MaybeRegisterWired is idempotent on existing methods.
         AutoRegisterWiredRoutines();
         var lateCtx = new DesugaringContext(registry: _registry,
@@ -569,7 +569,7 @@ public sealed partial class SemanticVerifier
 
         // Rewrite Referring[T]/Controlling[T] params to inner T before reachability so
         // the resulting RegistryKeys / mangled names captured downstream match codegen.
-        // Call-site $refer/$control coercion was already injected during SA argument binding.
+        // Call-site refer/control coercion was already injected during SA argument binding.
         // Pass mergedVariantBodies (not _variantBodies) so the dict used by reachability/GMP
         // gets re-keyed to the post-mutation form.
         var markerCtx = new PostprocessingContext(registry: _registry,
@@ -582,7 +582,7 @@ public sealed partial class SemanticVerifier
 
         // Suflae only: lower `entity E` bindings to a `Roamed[E]` biased-RC backing. MUST run BEFORE
         // scope-teardown below so teardown inserts `Roamed.destroy` (→ release → cycle-collector
-        // chain) for entity locals instead of a bare-entity `$destroy` (which double-frees an alias
+        // chain) for entity locals instead of a bare-entity `destroy` (which double-frees an alias
         // and never reaches the RC/cc machinery). Also before reachability, so the roam/promote/lock/
         // cc hooks seed off the live `Roamed` wrapper type. No-op for RazorForge.
         {
@@ -592,7 +592,7 @@ public sealed partial class SemanticVerifier
                 suflaeEntityPass.Run(program: program);
         }
 
-        // Insert scope-exit `$destroy()` calls BEFORE reachability (so the calls drive liveness —
+        // Insert scope-exit `destroy()` calls BEFORE reachability (so the calls drive liveness —
         // no manual seeding needed) and BEFORE the marker pass (so Referring[T]/Controlling[T]
         // params are still protocol-typed and excluded as access types, not yet stripped to the
         // inner entity). Generic bodies are processed here too, then monomorphized with the calls.
@@ -605,7 +605,7 @@ public sealed partial class SemanticVerifier
 
         // Tear down owned RVALUE temporaries (heap-owning receiver/discarded producers) that the
         // binding-only ScopeTeardownLoweringPass cannot see. Runs AFTER teardown so it never
-        // double-frees the temps' bindings, and BEFORE reachability so its $destroy calls drive
+        // double-frees the temps' bindings, and BEFORE reachability so its destroy calls drive
         // liveness. Stdlib + variant bodies are already Phase-7 lowered here (when→if done); USER
         // programs are lowered later (Phase 7 per-file), so they get this pass in RunPhase7Postprocessing.
         var tempTeardownPass = new TemporaryTeardownPass(markerCtx);
@@ -730,9 +730,9 @@ public sealed partial class SemanticVerifier
             variantBodies: _variantBodies,
             target: _target,
             buildMode: _buildMode);
-        // Inline simple iterator `$emit!` bodies into their for-loops before the rest of Phase 7
+        // Inline simple iterator `emit!` bodies into their for-loops before the rest of Phase 7
         // lowering, replacing the `try_emit` call with the spliced advance. By Phase 7 the concrete
-        // `$emit!` bodies are already monomorphized (Phase 6 ran), so the lookup succeeds; the
+        // `emit!` bodies are already monomorphized (Phase 6 ran), so the lookup succeeds; the
         // spliced body then flows through the normal Phase 7 lowering below. Composed/filtering
         // iterators fall back to the existing `try_emit` loop.
         new IteratorInlineLoweringPass(
@@ -743,7 +743,7 @@ public sealed partial class SemanticVerifier
         // Owned rvalue-temporary teardown for user code, now that Phase 7 has lowered when→if so the
         // producing calls sit in real statements. ScopeTeardownLoweringPass already ran (pre-lowering,
         // step 4) and will not revisit this program, so the temps' bindings are freed exactly once by
-        // the $destroy calls this pass emits (codegen emit-on-demand resolves the concrete $destroy).
+        // the destroy calls this pass emits (codegen emit-on-demand resolves the concrete destroy).
         new TemporaryTeardownPass(ctx).Run(program: program);
     }
 

@@ -7,7 +7,7 @@ namespace Compiler.CodeGen;
 /// <summary>
 /// Returns <c>true</c> on the first descendant that is an
 /// <see cref="IdentifierExpression"/> with <c>Name == "me"</c>.
-/// Used to decide whether an entity <c>$create</c> routine needs an implicit
+/// Used to decide whether an entity <c>create</c> routine needs an implicit
 /// <c>me</c> allocation at routine entry — canonical <c>return Type(field: …)</c>
 /// factories that never touch <c>me</c> skip the extra heap allocation.
 /// </summary>

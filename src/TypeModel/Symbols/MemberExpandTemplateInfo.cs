@@ -20,7 +20,7 @@ public sealed class MemberExpandTemplateInfo
 {
     /// <summary>The synthetic per-field placeholder a <c>${m.type}</c> splice resolves to during
     /// generic-def resolution; substituted by each concrete field's type at instantiation.</summary>
-    public const string ColumnPlaceholderName = "$Col";
+    public const string ColumnPlaceholderName = "0col";
 
     /// <summary>The literal name prefix (e.g. <c>"inner_"</c>) prepended to each field name, or "".</summary>
     public string NamePrefix { get; }

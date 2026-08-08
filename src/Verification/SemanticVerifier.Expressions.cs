@@ -551,7 +551,7 @@ public sealed partial class SemanticVerifier
                 return leftType.TypeArguments[index: 0];
             }
 
-            // User type — look up $unwrap_or method
+            // User type — look up unwrap_or method
             RoutineInfo? unwrapOrMethod =
                 _registry.LookupMethod(type: leftType, methodName: "unwrap_or");
             if (unwrapOrMethod != null)
@@ -561,7 +561,7 @@ public sealed partial class SemanticVerifier
 
             ReportError(code: SemanticDiagnosticCode.TypeDoesNotSupportOperator,
                 message: $"Type '{leftType.Name}' does not support the '??' operator. " +
-                         "Implement '$unwrap_or(default: T) -> T' to enable none coalescing.",
+                         "Implement 'unwrap_or(default: T) -> T' to enable none coalescing.",
                 location: binary.Location);
             return ErrorTypeInfo.Instance;
         }
@@ -804,7 +804,7 @@ public sealed partial class SemanticVerifier
             {
                 TypeSymbol indexedObjectType = AnalyzeExpression(expression: index.Object);
 
-                // Failability: lookup $setitem on the indexed type and propagate `!` to caller.
+                // Failability: lookup setitem on the indexed type and propagate `!` to caller.
                 // `arr[i] = v` desugars to `arr.setitem!(i, v)` for failable indexers; a
                 // non-failable caller must mark HasFailableCalls so its `!` decl is justified.
                 TryGetTransparentProtocolTarget(type: indexedObjectType,
@@ -906,8 +906,8 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Analyzes a compound assignment expression (e.g., a += b).
-    /// Dispatch order: (0) verify target is var, (1) try in-place wired ($iadd) -> None,
-    /// (2) fallback to create-and-assign ($add), (3) error if neither exists.
+    /// Dispatch order: (0) verify target is var, (1) try in-place wired (iadd) -> None,
+    /// (2) fallback to create-and-assign (add), (3) error if neither exists.
     /// </summary>
     private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound) // NOSONAR S3776
     {
@@ -1026,7 +1026,7 @@ public sealed partial class SemanticVerifier
         string? inPlaceMethod = compound.Operator.GetInPlaceMethodName();
         string? regularMethod = compound.Operator.GetMethodName();
 
-        // Step 1: Try in-place wired ($iadd, etc.)
+        // Step 1: Try in-place wired (iadd, etc.)
         if (inPlaceMethod != null)
         {
             RoutineInfo? inPlaceRoutine =
@@ -1149,7 +1149,7 @@ public sealed partial class SemanticVerifier
                     return inner;
                 }
 
-                // User type — look up $unwrap method
+                // User type — look up unwrap method
             {
                 RoutineInfo? unwrapMethod =
                     _registry.LookupMethod(type: operandType, methodName: "unwrap");
@@ -1160,7 +1160,7 @@ public sealed partial class SemanticVerifier
 
                 ReportError(code: SemanticDiagnosticCode.TypeDoesNotSupportOperator,
                     message: $"Type '{operandType.Name}' does not support the '!!' operator. " +
-                             "Implement '$unwrap() -> T' to enable force unwrap.",
+                             "Implement 'unwrap() -> T' to enable force unwrap.",
                     location: unary.Location);
                 return ErrorTypeInfo.Instance;
             }

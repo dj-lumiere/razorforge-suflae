@@ -266,7 +266,7 @@ public record IdentifierExpression(string Name, SourceLocation Location, string?
 
 /// <summary>
 /// Expression representing a compound assignment operation (e.g., a += b).
-/// The semantic analyzer dispatches this to an in-place wired method ($iadd, etc.)
+/// The semantic analyzer dispatches this to an in-place wired method (iadd, etc.)
 /// or falls back to create-and-assign (a = a.add(b)) when no in-place operator exists.
 /// </summary>
 /// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
@@ -405,7 +405,7 @@ public record CallExpression(
 
     /// <summary>
     /// When true, this call is a collection literal constructor (e.g., List(1, 2, 3), Set(1, 2, 3)).
-    /// Codegen should emit $create() + repeated add/add_last calls instead of a normal function call.
+    /// Codegen should emit create() + repeated add/add_last calls instead of a normal function call.
     /// </summary>
     public bool IsCollectionLiteral { get; set; }
 
@@ -508,7 +508,7 @@ public record CreatorExpression(
     public TypeInfo? ConstructedType { get; set; }
 
     /// <summary>
-    /// When the creator's named arguments match a `$create(named:)` overload (rather than
+    /// When the creator's named arguments match a `create(named:)` overload (rather than
     /// field names), SA resolves and stores that creator routine here. Codegen then dispatches
     /// through the routine instead of doing inline field initialization.
     /// </summary>
@@ -676,7 +676,7 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
 
     /// <summary>
     /// When this IndexExpression is the target of an assignment, set by OperatorLoweringPass
-    /// to the method-generic-resolved <c>$setitem</c>/<c>$setitem!</c> routine. Codegen uses
+    /// to the method-generic-resolved <c>setitem</c>/<c>setitem!</c> routine. Codegen uses
     /// this in place of a fresh registry lookup so method-level generics (e.g.
     /// <c>BitList.setitem![I]</c> -> <c>BitList.setitem![S64]</c>) dispatch to the
     /// monomorphized entry.
@@ -983,7 +983,7 @@ public record GenericMethodCallExpression(
 
     /// <summary>
     /// When true, this call is a collection literal constructor (e.g., List[S64](1, 2, 3)).
-    /// Codegen should emit $create() + repeated add/add_last calls instead of a normal type constructor.
+    /// Codegen should emit create() + repeated add/add_last calls instead of a normal type constructor.
     /// </summary>
     public bool IsCollectionLiteral { get; set; }
 

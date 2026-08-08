@@ -42,7 +42,7 @@ public sealed class ProtocolMethodInfo
     /// <summary>
     /// True when this entry is an auto-derived failable variant (`try_X`, `check_X`,
     /// `lookup_X`) synthesized by <c>FillProtocolMethods</c> from a failable original
-    /// (`$X!`). Such entries exist for call-site resolution but are NOT conformance
+    /// (`X!`). Such entries exist for call-site resolution but are NOT conformance
     /// obligations — the implementer only needs to provide the failable original.
     /// </summary>
     public bool IsAutoDerivedVariant { get; init; }

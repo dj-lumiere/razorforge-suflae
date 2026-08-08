@@ -241,7 +241,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     }
 
     /// <summary>True when <paramref name="t"/> carries no unresolved generic parameter (so its
-    /// <c>$create</c> mangles to a real symbol, not e.g. <c>ExcludeIterator[T, Me, SO].create</c>).</summary>
+    /// <c>create</c> mangles to a real symbol, not e.g. <c>ExcludeIterator[T, Me, SO].create</c>).</summary>
     private static bool IsConcreteType(TypeInfo t)
     {
         if (t is GenericParameterTypeInfo or ProtocolTypeInfo) return false;

@@ -7,18 +7,18 @@ using TypeModel.Types;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
-/// Lowers <see cref="UsingStatement"/> to explicit <c>$enter</c> / <c>$exit</c> call sequences,
-/// injecting <c>$exit()</c> before every control-flow escape from the using body.
+/// Lowers <see cref="UsingStatement"/> to explicit <c>enter</c> / <c>exit</c> call sequences,
+/// injecting <c>exit()</c> before every control-flow escape from the using body.
 /// After this pass codegen sees only plain declarations, calls, and standard control flow.
 ///
 /// <para>Transformation of <c>using x = resource { body }</c>:</para>
 /// <code>
 /// {
 ///   var __uf_N = resource
-///   var x = __uf_N.enter()      // if $enter returns a value
-///   // OR: __uf_N.enter(); var x = __uf_N   // if $enter is void
-///   // OR: var x = __uf_N                     // if no $enter
-///   [body, with $exit() injected before every escape]
+///   var x = __uf_N.enter()      // if enter returns a value
+///   // OR: __uf_N.enter(); var x = __uf_N   // if enter is void
+///   // OR: var x = __uf_N                     // if no enter
+///   [body, with exit() injected before every escape]
 ///   __uf_N.exit()               // normal-path exit (unreachable if body always terminates)
 /// }
 /// </code>
@@ -33,7 +33,7 @@ namespace Compiler.Postprocessing.Passes;
 /// </list>
 ///
 /// <para>Nested usings are lowered bottom-up: the body is recursively lowered before the outer
-/// using is processed, so inner <c>$exit()</c> calls appear before outer ones in every escape path.</para>
+/// using is processed, so inner <c>exit()</c> calls appear before outer ones in every escape path.</para>
 /// </summary>
 internal sealed class UsingLoweringPass(PostprocessingContext ctx)
 {
@@ -181,7 +181,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         // var __uf_N = resource
         stmts.Add(MakeBinding(name: resTemp, value: u.Resource, type: resourceType, loc: loc));
 
-        // Bind user's name via $enter (or directly to the resource if no $enter)
+        // Bind user's name via enter (or directly to the resource if no enter)
         if (enterMethod != null)
         {
             var enterCallee = new MemberExpression(
@@ -213,7 +213,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
             stmts.Add(MakeBinding(name: u.Name, value: resTempIdent, type: resourceType, loc: loc));
         }
 
-        // Build the $exit() call expression (reused for injection and normal exit)
+        // Build the exit() call expression (reused for injection and normal exit)
         ExpressionStatement? exitCallStmt = null;
         if (exitMethod != null)
         {
@@ -248,13 +248,13 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
     ///   var __uf_N = resource
     ///   if __uf_N.try_enter():        // Bool: did the non-blocking acquire succeed?
     ///     var x = __uf_N
-    ///     [body, with $exit() injected before every escape]
+    ///     [body, with exit() injected before every escape]
     ///     __uf_N.exit()               // normal-path release
     ///   else:
-    ///     [fallback]                    // nothing acquired -> no $exit
+    ///     [fallback]                    // nothing acquired -> no exit
     /// }
     /// </code>
-    /// The hold is released by <c>$exit</c> on every exit from the success branch only; the
+    /// The hold is released by <c>exit</c> on every exit from the success branch only; the
     /// fallback branch never acquired it, so it carries no teardown.
     /// </summary>
     private BlockStatement LowerFallibleUsing(UsingStatement u, Statement loweredBody)
@@ -282,7 +282,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         // var __uf_N = resource
         stmts.Add(MakeBinding(name: resTemp, value: u.Resource, type: resourceType, loc: loc));
 
-        // Condition: __uf_N.try_enter()  (Bool; SA has already verified $try_enter exists)
+        // Condition: __uf_N.try_enter()  (Bool; SA has already verified try_enter exists)
         var tryEnterCallee = new MemberExpression(
             Object: resTempIdent, MemberName: "try_enter", Location: loc);
         var tryEnterCall = new CallExpression(
@@ -292,7 +292,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
             ResolvedType = tryEnterMethod?.ReturnType
         };
 
-        // Success branch: bind the token, run body with $exit injected, then normal-path $exit.
+        // Success branch: bind the token, run body with exit injected, then normal-path exit.
         var thenStmts = new List<Statement>
         {
             MakeBinding(name: u.Name, value: resTempIdent, type: resourceType, loc: loc)

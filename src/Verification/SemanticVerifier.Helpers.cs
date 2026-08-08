@@ -457,10 +457,10 @@ public sealed partial class SemanticVerifier
             }
             else
             {
-                // Implicit $refer/$control coercion for marker-protocol params.
+                // Implicit refer/control coercion for marker-protocol params.
                 // Wraps the argument expression as `arg.refer()` / `arg.control()` so
                 // codegen, reachability, and call-classification all see a fully resolved
-                // routine reference. The wrapper's $refer/$control method returns T (the
+                // routine reference. The wrapper's refer/control method returns T (the
                 // inner entity), which matches the rewritten signature post-Phase 7.
                 TryInjectMarkerCoercion(routine, arguments, binding.Key, paramType, argType);
             }
@@ -1012,7 +1012,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Unwraps a transparent borrow protocol (<c>Referring[T]</c> / <c>Controlling[T]</c>) to its
     /// referent <c>T</c>; returns the type unchanged otherwise. Used so comparison operands that are
-    /// borrows are treated as their referent (the operator auto-dispatches <c>$refer</c>/<c>$control</c>).
+    /// borrows are treated as their referent (the operator auto-dispatches <c>refer</c>/<c>control</c>).
     /// </summary>
     private static TypeSymbol UnwrapBorrowProtocol(TypeSymbol type)
     {
@@ -1028,9 +1028,9 @@ public sealed partial class SemanticVerifier
 
     private bool SupportsOperator(TypeSymbol type, BinaryOperator op)
     {
-        // Check the BASE wired method, not the derived one: `!=`/`==` are both backed by `$eq`
-        // ($ne is auto-derived from $eq), and all ordering operators are backed by `$cmp`
-        // ($lt/$le/$gt/$ge are auto-derived). Protocols (Equatable/Comparable) declare only the
+        // Check the BASE wired method, not the derived one: `!=`/`==` are both backed by `eq`
+        // (ne is auto-derived from eq), and all ordering operators are backed by `cmp`
+        // (lt/le/gt/ge are auto-derived). Protocols (Equatable/Comparable) declare only the
         // base method, so checking the derived name would spuriously fail for constrained generics
         // (e.g. `me[i] != other[i]` inside `List[T].eq needs T obeys Equatable`).
         string? methodName = op switch
@@ -1048,7 +1048,7 @@ public sealed partial class SemanticVerifier
         // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].eq).
         // A resolution whose owner is a ProtocolTypeInfo is the ABSTRACT protocol declaration
         // (RF protocols have no default implementations) — for a CONCRETE receiver it would link
-        // to nothing (e.g. `record Cat` with no `$eq` resolving `==` to `Equatable.eq`). Only a
+        // to nothing (e.g. `record Cat` with no `eq` resolving `==` to `Equatable.eq`). Only a
         // concrete implementation counts as support here; generic-parameter receivers get their
         // constraint-based support from the dedicated branch below.
         RoutineInfo? resolved = _registry.LookupMethod(type: type, methodName: methodName);
@@ -1098,7 +1098,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Returns true if the protocol (or any protocol it transitively obeys) declares a method
     /// matching the given name. e.g. <c>Comparable</c> obeys <c>Equatable</c>, so
-    /// <c>$eq</c> is reachable through <c>Comparable</c>.
+    /// <c>eq</c> is reachable through <c>Comparable</c>.
     /// </summary>
     private static bool ProtocolDeclaresMethod(TypeSymbol proto, string methodName,
         HashSet<string>? visited = null)
@@ -1199,7 +1199,7 @@ public sealed partial class SemanticVerifier
         "enter", "exit"
     ];
 
-    /// <summary>Returns true if the given method name is an operator wired (e.g., <c>$add</c>, <c>$eq</c>).</summary>
+    /// <summary>Returns true if the given method name is an operator wired (e.g., <c>add</c>, <c>eq</c>).</summary>
     private static bool IsOperatorWired(string name)
     {
         return OperatorWiredMethods.Contains(value: name);
@@ -1214,7 +1214,7 @@ public sealed partial class SemanticVerifier
         SourceLocation location)
     {
         // A `Referring[T]` / `Controlling[T]` operand is a borrow that transparently forwards to its
-        // referent: comparing it auto-dispatches `$refer()` / `$control()` to the inner `T`. Compare
+        // referent: comparing it auto-dispatches `refer()` / `control()` to the inner `T`. Compare
         // against that referent so e.g. `me[i] == value` (with `value: Referring[T]`) type-checks as
         // `T == T` and resolves operator support on `T`.
         left = UnwrapBorrowProtocol(type: left);
@@ -1234,7 +1234,7 @@ public sealed partial class SemanticVerifier
             return;
         }
 
-        // Membership operators (in, notin): check that right has $contains accepting left
+        // Membership operators (in, notin): check that right has contains accepting left
         if (op is BinaryOperator.In or BinaryOperator.NotIn)
         {
             RoutineInfo? containsMethod =
@@ -1243,7 +1243,7 @@ public sealed partial class SemanticVerifier
             {
                 ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
                     message:
-                    $"Type '{right.Name}' does not support 'in'/'notin' (no $contains method).",
+                    $"Type '{right.Name}' does not support 'in'/'notin' (no contains method).",
                     location: location);
             }
 
@@ -1261,10 +1261,10 @@ public sealed partial class SemanticVerifier
         }
 
         // For overloadable ordering/equality operators, verify the type actually implements the
-        // backing wired method ($eq for ==/!=, $cmp for </<=/>/>=). These are desugared to method
+        // backing wired method (eq for ==/!=, cmp for </<=/>/>=). These are desugared to method
         // calls by OperatorLoweringPass (after SA), so without this check an unsupported operator
         // would slip past SA and surface as an undefined-symbol LINKERR at codegen — e.g. a record
-        // with no $eq whose `==` resolves to the abstract `Equatable.eq`. A LINKERR on SA-passing
+        // with no eq whose `==` resolves to the abstract `Equatable.eq`. A LINKERR on SA-passing
         // code is a compiler bug; catch it here with a clean diagnostic.
         if (op is not (BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
             or BinaryOperator.GreaterEqual or BinaryOperator.Equal or BinaryOperator.NotEqual))
@@ -1350,8 +1350,8 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Resolves the element type produced by iterating over <paramref name="iterableType"/>.
-    /// The type must implement the <c>Iterable</c> protocol, whose <c>$iter</c> returns a <c>Iterator[T]</c>.
-    /// The element type is taken from the return type of the <c>$iter</c> method or the type's first generic argument.
+    /// The type must implement the <c>Iterable</c> protocol, whose <c>iter</c> returns a <c>Iterator[T]</c>.
+    /// The element type is taken from the return type of the <c>iter</c> method or the type's first generic argument.
     /// Reports an error and returns <see cref="ErrorTypeInfo"/> if the type is not iterable or the element type cannot be determined.
     /// </summary>
     private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
@@ -1403,7 +1403,7 @@ public sealed partial class SemanticVerifier
         // Type must follow the Iterable protocol
         bool obeysIterable = ImplementsProtocol(type: iterableType, protocolName: "Iterable");
 
-        // For generic resolution types, also check if the generic definition has $iter
+        // For generic resolution types, also check if the generic definition has iter
         if (!obeysIterable && iterableType.IsGenericResolution)
         {
             RoutineInfo? seqMethod =
@@ -1472,8 +1472,8 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Strategy 1.5 (ground truth): the element is exactly what the iterator's `$emit!` returns.
-        // Resolve `iterable.iter()` to the concrete iterator type, then that iterator's `$emit!`
+        // Strategy 1.5 (ground truth): the element is exactly what the iterator's `emit!` returns.
+        // Resolve `iterable.iter()` to the concrete iterator type, then that iterator's `emit!`
         // return type. This mirrors the for-loop lowering (IteratorInlineLoweringPass) and, unlike
         // Strategy 1, does NOT depend on the instance's ImplementedProtocols being populated — so it
         // works for a generic-instance collection (e.g. `Dict[Text, SerialValue]`) iterated inside a
@@ -1491,7 +1491,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Strategy 2: Look for $iter method to get element type from Iterator[T] return type
+        // Strategy 2: Look for iter method to get element type from Iterator[T] return type
         RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.iter");
 
         // Generic fallback: Range[S64].iter -> Range.iter via LookupMethod
@@ -1528,7 +1528,7 @@ public sealed partial class SemanticVerifier
             return returnTypeArg;
         }
 
-        // Fallback to type arguments if $iter method not found but protocol is implemented
+        // Fallback to type arguments if iter method not found but protocol is implemented
         if (iterableType.TypeArguments is { Count: > 0 })
         {
             return iterableType.TypeArguments[index: 0];
@@ -1536,7 +1536,7 @@ public sealed partial class SemanticVerifier
 
         ReportError(code: SemanticDiagnosticCode.TypeNotIterable,
             message:
-            $"Cannot determine element type for '{iterableType.Name}'. The $iter method must return Iterator[T].",
+            $"Cannot determine element type for '{iterableType.Name}'. The iter method must return Iterator[T].",
             location: location);
         return ErrorTypeInfo.Instance;
     }

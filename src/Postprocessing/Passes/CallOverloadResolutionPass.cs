@@ -91,7 +91,7 @@ internal sealed class CallOverloadResolutionPass
 
     /// <summary>
     /// Classifies all <see cref="CallExpression"/> nodes inside synthesized derived-operator bodies
-    /// ($ne, $lt, $le, $gt, $ge, $notcontains). These bodies are built by
+    /// (ne, lt, le, gt, ge, notcontains). These bodies are built by
     /// <see cref="Compiler.Synthesis.DerivedOperatorPass"/> with <c>ResolvedRoutine</c> set but
     /// <c>LoweringKind = Unknown</c>; this pass fills in the missing kind before codegen.
     /// </summary>
@@ -344,7 +344,7 @@ internal sealed class CallOverloadResolutionPass
 
                 // Const-generic value types (e.g. ConstGenericValueTypeInfo("63") = N=63 in Array[T, 63])
                 // are not registered in _routinesByOwner.  Resolve to the underlying numeric type so
-                // method lookup can find operators like $sub!.
+                // method lookup can find operators like sub!.
                 // Also, their arguments may lack ResolvedType (pre-SA stdlib bodies), so allow a
                 // type-less fallback lookup — there is typically only one overload for numeric operators.
                 bool isConstGenericReceiver = receiverType is ConstGenericValueTypeInfo;

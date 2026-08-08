@@ -1142,7 +1142,7 @@ public partial class Parser
         Statement body = ParseBody();
 
         // Optional `fallback` block — the contention branch of a fallible `using`
-        // (runs when the resource's non-blocking `$try_enter()` fails to acquire; no
+        // (runs when the resource's non-blocking `try_enter()` fails to acquire; no
         // resource is held on that path). Single-resource only.
         //
         // `fallback` is a CONTEXTUAL keyword: it stays a normal identifier everywhere else

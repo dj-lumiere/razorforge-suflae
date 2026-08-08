@@ -22,7 +22,7 @@ public partial class LlvmCodeGenerator
     private string EmitRoutineCall(StringBuilder sb, RoutineCallRequest req)
     {
         (string functionName, List<Expression> arguments, RoutineInfo? resolvedRoutine, TypeInfo? resolvedReturnType, List<TypeExpression>? typeArguments, CallLoweringKind loweringKind, TypeInfo? constructedType) = req;
-        // Synthesized bodies (e.g. $hash, $eq, $cmp) are built programmatically and never
+        // Synthesized bodies (e.g. hash, eq, cmp) are built programmatically and never
         // pass through SemanticVerifier, so they arrive with Unknown. Treat as DirectRoutine.
         if (loweringKind == CallLoweringKind.Unknown)
             loweringKind = CallLoweringKind.DirectRoutine;
@@ -87,10 +87,10 @@ public partial class LlvmCodeGenerator
             return result;
         }
 
-        // When SA resolved this entity construction to a user-declared `$create` (non-synthesized),
+        // When SA resolved this entity construction to a user-declared `create` (non-synthesized),
         // the inline memberwise cases below must NOT intercept it — fall through to the routine-call
-        // path so the user `$create` body actually runs. The synthesized memberwise creator and the
-        // base-case construction inside `$create` carry a null/synth resolvedRoutine and still inline.
+        // path so the user `create` body actually runs. The synthesized memberwise creator and the
+        // base-case construction inside `create` carry a null/synth resolvedRoutine and still inline.
         bool routesToUserCreate = resolvedRoutine is
         {
             IsSynthesized: false, Name: "create" or "create!"
@@ -164,7 +164,7 @@ public partial class LlvmCodeGenerator
             if (calledType != null)
             {
                 // Direct named-field construction: when all arg names match field names exactly,
-                // emit struct construction directly (avoids $create infinite recursion).
+                // emit struct construction directly (avoids create infinite recursion).
                 // e.g., CStr(ptr: from_ptr) inside CStr.create body
                 if (calledType is RecordTypeInfo { MemberVariables.Count: > 0 } record &&
                     arguments.Count == record.MemberVariables.Count && arguments.All(
@@ -177,7 +177,7 @@ public partial class LlvmCodeGenerator
 
                 // Zero-field record construction (e.g. `ReadOnly()` — a `record ... pass`, reached
                 // monomorphized from `P()` where P=ReadOnly): no fields to initialize and no user
-                // `$create`. Materialize the empty struct value directly. Without this the call
+                // `create`. Materialize the empty struct value directly. Without this the call
                 // falls through to a spurious `call void @TypeName()` to an undefined symbol (LINKERR).
                 if (calledType is RecordTypeInfo { MemberVariables.Count: 0 } emptyRecord &&
                     arguments.Count == 0)
@@ -206,7 +206,7 @@ public partial class LlvmCodeGenerator
                         arguments: arguments);
                 }
 
-                // Zero-arg entity construction -> try $create() first, then null
+                // Zero-arg entity construction -> try create() first, then null
                 if (calledType is EntityTypeInfo && arguments.Count == 0)
                 {
                     string createName = $"{calledType.Name}.create";
@@ -215,12 +215,12 @@ public partial class LlvmCodeGenerator
                     if (!(creator is { Parameters.Count: 0 }))
                     {
                         throw new InvalidOperationException(
-                            $"No zero-arg '$create' found for entity type '{calledType.Name}'. " +
-                            "Entity types require a '$create' routine for zero-argument construction.");
+                            $"No zero-arg 'create' found for entity type '{calledType.Name}'. " +
+                            "Entity types require a 'create' routine for zero-argument construction.");
                     }
                 }
 
-                // Try $create overload -> this covers conversion constructors
+                // Try create overload -> this covers conversion constructors
                 // (e.g., CStr(from: text) -> CStr.create(from: Text))
                 var semanticArgTypes = new List<TypeInfo>();
                 foreach (Expression arg in arguments)
@@ -234,7 +234,7 @@ public partial class LlvmCodeGenerator
 
                 // If calledType is a generic definition and explicit typeArguments were provided
                 // (e.g., Hijacked[U64](addr)), resolve to the concrete instance so we find the
-                // monomorphized $create whose OwnerType is Hijacked[U64], not Hijacked.
+                // monomorphized create whose OwnerType is Hijacked[U64], not Hijacked.
                 TypeInfo creatorOwnerType = calledType;
                 if (calledType.IsGenericDefinition && typeArguments is { Count: > 0 })
                 {
@@ -591,10 +591,10 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Decides whether a 1-arg construction of a `@llvm("...")` record should be inlined as
-    /// a scalar cast / reinterpret instead of dispatching to its `$create` routine.
-    /// Inline when no $create was resolved, OR when the resolved routine's parameter LLVM
+    /// a scalar cast / reinterpret instead of dispatching to its `create` routine.
+    /// Inline when no create was resolved, OR when the resolved routine's parameter LLVM
     /// type differs from the wrapper's backend type (a scalar primitive cast like U64(s8)).
-    /// Otherwise call the routine — same LLVM type with a resolved $create indicates a real
+    /// Otherwise call the routine — same LLVM type with a resolved create indicates a real
     /// conversion (e.g. CStr.create(from: Referring[Text])), which a reinterpret would skip.
     /// </summary>
     private bool ShouldInlineDirectBackendConstruction(RecordTypeInfo record, Expression arg,
@@ -606,7 +606,7 @@ public partial class LlvmCodeGenerator
         TypeInfo? argType = GetExpressionType(expr: arg);
         if (argType == null) return false;
 
-        // When SA resolved a real `$create(from: argType)` (or a reference-wrapper of argType),
+        // When SA resolved a real `create(from: argType)` (or a reference-wrapper of argType),
         // that routine IS the conversion: its body does the correct thing for every backend
         // shape — a scalar cast for @llvm primitives, a real BID/IEEE encode for carrier records
         // (F128/F256/D32/D64/D128/Decimal store a bit-ENCODING, not the value), a UTF-8 encode
@@ -642,7 +642,7 @@ public partial class LlvmCodeGenerator
         List<TypeExpression>? typeArguments = null,
         CallLoweringKind loweringKind = CallLoweringKind.Unknown)
     {
-        // Synthesized bodies (e.g. $hash, $eq, $cmp) are built programmatically and never
+        // Synthesized bodies (e.g. hash, eq, cmp) are built programmatically and never
         // pass through SemanticVerifier, so they arrive with Unknown. Treat as DirectMemberRoutine.
         if (loweringKind == CallLoweringKind.Unknown)
             loweringKind = CallLoweringKind.DirectMemberRoutine;
@@ -663,8 +663,8 @@ public partial class LlvmCodeGenerator
         }
 
         // Intercept `<entity>.roam_trace_ref()` / `.roam_free_ref()` (cycle-collector hook intrinsics):
-        // materialize a closure over the receiver entity's synthesized `$roam_trace_impl` /
-        // `$roam_free_impl` — an unbound member-routine value (methods aren't referenceable in surface
+        // materialize a closure over the receiver entity's synthesized `roam_trace_impl` /
+        // `roam_free_impl` — an unbound member-routine value (methods aren't referenceable in surface
         // syntax, so the stdlib routine has a `cptr_none()` fallback body that this replaces). The
         // receiver (`data.as_entity()`) is a pure reinterpret and is intentionally not emitted. The
         // concrete entity type is available here (post-monomorphization), unlike in earlier passes
@@ -704,7 +704,7 @@ public partial class LlvmCodeGenerator
         //   - member chain obj.field[.f...] -> GEP into the root lvalue, chained per field
         // Entity receivers fall through to the regular call path — `me` for entities is
         // already a ptr, so the stdlib body works. Index access (arr[i].get_address()) is
-        // deferred to post-v0.0.1a (requires per-collection `$getitem_addr`).
+        // deferred to post-v0.0.1a (requires per-collection `getitem_addr`).
         if (member.MemberName == "get_address" && arguments.Count == 0)
         {
             TypeInfo? receiverTypeForIntercept = GetExpressionType(expr: member.Object);
@@ -791,12 +791,12 @@ public partial class LlvmCodeGenerator
             resolvedRoutine: resolvedRoutine);
 
         // Member-conversion call (`x.U64()`, `"42".S32!()`): SA classified it as a
-        // TypeConstructor and stamped the resolved `$create`/`$create!` (see #78 in
+        // TypeConstructor and stamped the resolved `create`/`create!` (see #78 in
         // SemanticVerifier.Expressions.Calls — LoweringKind=TypeConstructor is set only when a
         // creator was found, so `method` is guaranteed non-null here). The receiver is the
         // conversion SOURCE: it becomes the `from:` argument, NOT an implicit `me`. Emit the
         // resolved creator call directly — no re-resolution, no inline scalar-cast heuristic. The
-        // numeric `$create` bodies do the real cast (e.g. U64.create(from: U8) = zero_extend),
+        // numeric `create` bodies do the real cast (e.g. U64.create(from: U8) = zero_extend),
         // which is also why F128 is correct here: its i128 backend is an IEEE bit carrier, so a
         // scalar cast would reinterpret integer bits as float bits (the old s128→F128 NaN bug).
         if (loweringKind == CallLoweringKind.TypeConstructor && method != null)
@@ -825,8 +825,8 @@ public partial class LlvmCodeGenerator
         // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets the shared
         // ShareController[T, P], NOT the guarded entity. When the resolved method is a FORWARDED entity
         // method (owned by the inner T — e.g. `c.bump()`), the callee's `me` must be the entity, so
-        // project the receiver through `controller.data`. Token-own methods ($enter/$exit/$refer/
-        // $control/$represent/$diagnose/$destroy, owned by the token itself) keep the controller ptr.
+        // project the receiver through `controller.data`. Token-own methods (enter/exit/refer/
+        // control/represent/diagnose/destroy, owned by the token itself) keep the controller ptr.
         if (method is { OwnerType: { } methodOwner } &&
             receiverType is RecordTypeInfo tokenRec &&
             GetGenericBaseName(type: tokenRec) is Resolution.RuntimeContract.Inspecting or Resolution.RuntimeContract.Claiming &&
@@ -878,7 +878,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Member-conversions (`obj.Text()`, `index.U64!()`) are handled above via the
-        // TypeConstructor intercept using the SA-stamped `$create`. Any DirectMemberRoutine that
+        // TypeConstructor intercept using the SA-stamped `create`. Any DirectMemberRoutine that
         // still reaches here with no resolved method is a semantic-verifier contract violation.
         if (method == null && loweringKind is CallLoweringKind.DirectMemberRoutine)
         {
@@ -905,7 +905,7 @@ public partial class LlvmCodeGenerator
 
         // Build argument list: receiver first, then explicit arguments.
         // Skip the receiver for routines that don't take an implicit `me`:
-        //   - creators (`$create`) — owner-scoped but no receiver in the param list
+        //   - creators (`create`) — owner-scoped but no receiver in the param list
         //   - common routines — explicitly declared without `me`
         // Prepending a phantom receiver for these shifts every actual argument by one
         // slot in the LLVM call, corrupting all reads (e.g. Moment.create(year:2026,...)
@@ -945,10 +945,10 @@ public partial class LlvmCodeGenerator
             argTypeInfos.Add(item: argType);
         }
 
-        // Synthesized/lowered bodies (programmatic $eq/$cmp/$hash, operator-lowered calls) never
+        // Synthesized/lowered bodies (programmatic eq/cmp/hash, operator-lowered calls) never
         // pass through SemanticVerifier, so they arrive without a stamped ResolvedRoutine. Once the
         // concrete argument types are known, resolve the exact overload here so failable operators
-        // like $add!/$sub! do not degrade to undecorated placeholder symbols (Core.S32.add). This
+        // like add!/sub! do not degrade to undecorated placeholder symbols (Core.S32.add). This
         // is resolution for SA-bypassing bodies, NOT intent-rediscovery on user calls — every
         // SA-analyzed member call is already stamped or rejected (RF-S458). The former bare
         // `LookupMethod(name)` that resolved a non-failable name to its failable variant was
@@ -1518,7 +1518,7 @@ public partial class LlvmCodeGenerator
         List<TypeExpression>? typeArguments, TypeInfo? resolvedReturnType)
     {
         // `hollow[T]()` — the entity-footprint alloc primitive (@innate, bodyless). Heap-allocate the
-        // concrete entity's STRUCT footprint zeroed, exactly like a `$create` prologue with no args, so a
+        // concrete entity's STRUCT footprint zeroed, exactly like a `create` prologue with no args, so a
         // SoA entity (SplitList) starts with null columns + zero counts. Only entity return types are
         // valid; a non-entity `hollow` is a stdlib authoring error.
         if (functionName == "hollow" || functionName.EndsWith(value: ".hollow", comparisonType: StringComparison.Ordinal))

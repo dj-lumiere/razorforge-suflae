@@ -89,8 +89,8 @@ public partial class LlvmCodeGenerator
     /// Emits a parameter default value that is an EMPTY collection literal (<c>{:}</c> / <c>[]</c> /
     /// <c>{}</c>) on a plainly-owned collection parameter, returning the created collection register.
     /// Collection literals are normally lowered by ExpressionLoweringPass, but default values are
-    /// never lowered — so we construct an empty collection inline here ($create, no adds). Because the
-    /// parameter is owned, the callee frees it via its own $destroy, so there is no caller-side
+    /// never lowered — so we construct an empty collection inline here (create, no adds). Because the
+    /// parameter is owned, the callee frees it via its own destroy, so there is no caller-side
     /// teardown gap. Returns false (caller falls back to EmitExpression) for non-empty literals or
     /// non-owned params. Non-empty collection defaults remain unsupported (the element expressions are
     /// never SA-analyzed, so they lack a ResolvedType for inline emission).
@@ -178,7 +178,7 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Entity collections (List, Set, Dict, etc.): $create() + add/add_last calls.
+        // Entity collections (List, Set, Dict, etc.): create() + add/add_last calls.
         // Reached only via CollectionConstruction lowering kind, not from ListLiteralExpression
         // (which is lowered by ExpressionLoweringPass for entity collection types).
         string collectionPtr =
@@ -302,7 +302,7 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Emits a zero-arg $create() call for a collection type, handling monomorphization.
+    /// Emits a zero-arg create() call for a collection type, handling monomorphization.
     /// </summary>
     private string EmitCollectionCreate(StringBuilder sb, TypeInfo? resolvedType)
     {
@@ -373,7 +373,7 @@ public partial class LlvmCodeGenerator
         }
 
         throw new InvalidOperationException(
-            $"No '$create' routine found for collection type '{resolvedType.Name}'. " +
-            "All collection types must have a registered '$create' body in the stdlib.");
+            $"No 'create' routine found for collection type '{resolvedType.Name}'. " +
+            "All collection types must have a registered 'create' body in the stdlib.");
     }
 }

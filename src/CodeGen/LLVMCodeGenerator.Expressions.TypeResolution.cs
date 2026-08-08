@@ -237,7 +237,7 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Gets the return type of an index expression by looking up $getitem on the target type.
+    /// Gets the return type of an index expression by looking up getitem on the target type.
     /// </summary>
     private TypeInfo? GetUnaryExpressionType(UnaryExpression unary)
     {
@@ -316,7 +316,7 @@ public partial class LlvmCodeGenerator
             return memberType.TypeArguments[index: 0];
         }
 
-        // Try $getitem on the member type
+        // Try getitem on the member type
         RoutineInfo? getItem = _registry.LookupMethod(type: memberType, methodName: "getitem");
         return getItem?.ReturnType;
     }
@@ -717,7 +717,7 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Gets the return type of an index expression by looking up $getitem on the target type.
+    /// Gets the return type of an index expression by looking up getitem on the target type.
     /// </summary>
     private TypeInfo? GetIndexReturnType(IndexExpression index) // NOSONAR S3776
     {
@@ -793,7 +793,7 @@ public partial class LlvmCodeGenerator
         // still records the bare constructed payload in ConstructedType (S64) while the routine
         // actually returns — and emits — the Maybe[S64] carrier. Sizing a spilled
         // `var __td_ret = S64(x)` off ConstructedType there yields `store i64 %maybeVal`, which fails
-        // LLVM verification. When ReturnType is still generic (the universal `$create` returns `T`/
+        // LLVM verification. When ReturnType is still generic (the universal `create` returns `T`/
         // `Me`), it is not concrete, so we fall through to ConstructedType — preserving prior
         // behaviour for generic constructors.
         if (call.ResolvedRoutine?.ReturnType is { } resolvedReturn and not ErrorTypeInfo)
@@ -816,7 +816,7 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Fallback: OperatorLoweringPass sets ResolvedType on $getitem! calls when it can't
+        // Fallback: OperatorLoweringPass sets ResolvedType on getitem! calls when it can't
         // find a RoutineInfo via LookupMethod (e.g., when registered name differs from lookup name).
         // ResolvedType was set from the IndexExpression SA annotated before lowering.
         if (call.ResolvedType is not null and not ErrorTypeInfo)

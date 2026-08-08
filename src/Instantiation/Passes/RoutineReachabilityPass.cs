@@ -58,7 +58,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         Drain();
         // Loop until fixed-point: every time we drain we may discover new owner types
         // (e.g. Bool first reached during synthesized-body walks of Tuple[S8, Bool].hash).
-        // The wired-routine seed must rerun on those new owners so their $eq/$hash/etc.
+        // The wired-routine seed must rerun on those new owners so their eq/hash/etc.
         // become live.
         int prevOwnerCount;
         do
@@ -98,12 +98,12 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             foreach (string wiredName in WiredRoutineNames)
             {
                 // Only seed a wired routine the concrete type can actually host. For a generic
-                // instantiation like List[Person], List[T].eq/$contains carry `needs T obeys
+                // instantiation like List[Person], List[T].eq/contains carry `needs T obeys
                 // Equatable`; if Person doesn't obey Equatable the routine is not instantiable —
-                // its body would call the abstract `Equatable.eq`/`$ne` (no concrete impl) →
-                // LINKERR. The user program can't legally call it either (SA rejects the // constraint violation), so skipping is safe. Derived siblings ($ne, $notcontains,
-                // $lt/$le/$gt/$ge) aren't in the wired-capability map themselves — gate them on
-                // their base capability so seeding $ne doesn't drag in $eq (whose body LINKERRs).
+                // its body would call the abstract `Equatable.eq`/`ne` (no concrete impl) →
+                // LINKERR. The user program can't legally call it either (SA rejects the // constraint violation), so skipping is safe. Derived siblings (ne, notcontains,
+                // lt/le/gt/ge) aren't in the wired-capability map themselves — gate them on
+                // their base capability so seeding ne doesn't drag in eq (whose body LINKERRs).
                 string capabilityName = wiredName switch
                 {
                     "ne" => "eq",
@@ -116,12 +116,12 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 if (routine != null) EnqueueCallee(callee: routine);
             }
 
-            // Unified teardown needs NO `$destroy` seeding here: ScopeTeardownLoweringPass inserts
+            // Unified teardown needs NO `destroy` seeding here: ScopeTeardownLoweringPass inserts
             // the `local.destroy()` calls BEFORE this pass runs (start of Phase 6), so reachability
             // walks the real call expressions and emits exactly the destructors that are used — no
-            // hand-seeding, and no `$eq`→`$notcontains` cascade from marking types live abstractly.
+            // hand-seeding, and no `eq`→`notcontains` cascade from marking types live abstractly.
 
-            // Unified teardown needs NO `$destroy` seeding here either: ScopeTeardownLoweringPass
+            // Unified teardown needs NO `destroy` seeding here either: ScopeTeardownLoweringPass
             // inserts the `local.destroy()` calls before this pass, so reachability walks the real
             // call expressions.
 
@@ -162,10 +162,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     // lack ResolvedType (e.g. CStr.create's UTF-8 encoder uses cp & 0x3F, cp >> 6) — seeding these
     // names per live owner backstops that. Derived from the single source of truth
     // WiredRoutineCatalog (entries flagged WiredView.ReachabilitySeed). Note: index forms use the
-    // bare name ($getitem not $getitem!) to match what LookupMethod compares against (the parser
+    // bare name (getitem not getitem!) to match what LookupMethod compares against (the parser
     // strips trailing '!' and tracks failability separately); the catalog encodes that. Excluded
-    // (not seeded here): $create/$destroy (driven by CreatorExpression / scope) and
-    // $getitem!/$setitem! bang-forms — those have dedicated reachability paths.
+    // (not seeded here): create/destroy (driven by CreatorExpression / scope) and
+    // getitem!/setitem! bang-forms — those have dedicated reachability paths.
     private static readonly string[] WiredRoutineNames =
         WiredRoutineCatalog.BuildReachabilitySeedNames();
 
@@ -297,11 +297,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
         // Parameter default values never appear in any routine body (they are filled at call sites),
         // so walk them here too. A collection-literal default (e.g. `d: Dict[K,V] = {:}`) must seed
-        // the collection's $create/add, since codegen constructs it inline at the call site
+        // the collection's create/add, since codegen constructs it inline at the call site
         // (TryEmitEmptyCollectionDefault) and would otherwise reference a pruned routine. Default
         // values are never SA-analyzed, so a collection-literal default has a null ResolvedType —
         // stamp it from the parameter's resolved type so EnqueueImplicitLoweringCallees can resolve
-        // the collection's $create.
+        // the collection's create.
         foreach (var defParam in frame.Decl.Parameters)
         {
             if (defParam.DefaultValue == null) continue;
@@ -354,12 +354,12 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             RecordSuspendEdge(caller: frame.Routine, callee: concreteCallee);
             EnqueueRoamHookIfNeeded(node: node, callee: concreteCallee, typeSubs: frame.TypeSubs);
 
-            // Pure synthesized $represent / try_emit / wrapper-forwarders also have call sites
+            // Pure synthesized represent / try_emit / wrapper-forwarders also have call sites
             // we may need to walk later; their bodies live in VariantBodies under the generic-def
             // key and are scanned via the synthesized-AST handling below.
         }
 
-        // Variant bodies (synthesized $represent / try_emit / wrapper forwarders) for this routine —
+        // Variant bodies (synthesized represent / try_emit / wrapper forwarders) for this routine —
         // walk if present, using the same typeSubs.
         if (ctx.VariantBodies.TryGetValue(key: frame.Routine.RegistryKey, out Statement? variantBody))
         {
@@ -401,14 +401,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// Resolves and enqueues the implicit method callees that Phase 7 lowering will introduce
     /// for collection literals and index-access expressions. Reachability runs BEFORE Phase 7
     /// (ExpressionLoweringPass / OperatorLoweringPass), so without this hook the resulting
-    /// add_last / add / $getitem! / $setitem! calls would be unreachable and GMP would skip
+    /// add_last / add / getitem! / setitem! calls would be unreachable and GMP would skip
     /// emitting their bodies — producing linker errors at the lowered call sites.
     /// </summary>
     private void EnqueueImplicitLoweringCallees(object node, Dictionary<string, TypeInfo> typeSubs)
     {
         // BinaryExpression handled separately — OperatorLoweringPass (Phase 7) lowers
         // `a op b` to `a.method(b)`, but reachability runs in Phase 6 before that.
-        // Resolve the exact overload by argument type so two overloads of e.g. $sub
+        // Resolve the exact overload by argument type so two overloads of e.g. sub
         // (LocalMoment.sub(Duration) and LocalMoment.sub(LocalMoment)) both reach
         // the live set when their respective call sites exist in user code.
         if (node is BinaryExpression bin)
@@ -483,7 +483,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;
             case IndexExpression ixNode:
-                // Both read ($getitem) and write ($setitem) — IndexExpression's role is determined
+                // Both read (getitem) and write (setitem) — IndexExpression's role is determined
                 // by parent context (assignment target or not). Enqueue both; if either is absent
                 // on this type, LookupMethod returns null and EnqueueMethodIfPresent is a no-op.
                 // Names use the bare form (no '!') — parser strips the failable suffix and
@@ -496,7 +496,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     // `coll[^n]` (BackIndex index) is desugared by OperatorLoweringPass (Phase 7,
                     // after this pass) to `coll.getitem!(backIdx.resolve!(coll.count()))`. Seed the
                     // two helper routines that desugar introduces so they aren't linked-but-unemitted:
-                    // the collection's `count()` and `BackIndex.resolve!`. The `$getitem` forward
+                    // the collection's `count()` and `BackIndex.resolve!`. The `getitem` forward
                     // (U64) form is already seeded above.
                     if (idxType is { Name: "BackIndex" })
                     {
@@ -514,9 +514,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 break;
             case UnaryExpression { Operator: UnaryOperator.ForceUnwrap }:
                 // `expr!!` is lowered by OperatorLoweringPass (Phase 7) to `expr.unwrap()`.
-                // Failability is a property, not part of the name — seed the bare `$unwrap` on the
+                // Failability is a property, not part of the name — seed the bare `unwrap` on the
                 // operand's resolved owner so Maybe/Result/Lookup carriers' unwrap bodies get
-                // monomorphized (whether or not that `$unwrap` is failable).
+                // monomorphized (whether or not that `unwrap` is failable).
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "unwrap");
                 break;
             case UsingStatement usingNode:
@@ -527,7 +527,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // is a no-op when LookupMethod returns null.
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "enter");
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "exit");
-                // A `fallback` branch lowers the entry to `__uf.try_enter()` instead of `$enter`.
+                // A `fallback` branch lowers the entry to `__uf.try_enter()` instead of `enter`.
                 if (usingNode.FallbackBody != null)
                     EnqueueMethodIfPresent(owner: collectionType, methodName: "try_enter");
                 break;
@@ -548,8 +548,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// <summary>
     /// Enqueues the <paramref name="methodName"/> overload whose parameter list matches a single
     /// argument of <paramref name="argType"/>. Used to reach a type-specific index overload (e.g.
-    /// <c>$getitem!(BackIndex)</c>) that the first-match <see cref="EnqueueMethodIfPresent"/> skips.
-    /// No-op when no such overload exists (e.g. two-parameter <c>$setitem!</c> against one argType).
+    /// <c>getitem!(BackIndex)</c>) that the first-match <see cref="EnqueueMethodIfPresent"/> skips.
+    /// No-op when no such overload exists (e.g. two-parameter <c>setitem!</c> against one argType).
     /// </summary>
     private void EnqueueMethodOverloadIfPresent(TypeInfo owner, string methodName, TypeInfo argType)
     {
@@ -559,15 +559,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     }
 
     /// <summary>
-    /// Enqueue the zero-arg <c>$create()</c> overload specifically. Types with multiple
-    /// <c>$create</c> overloads (List, Set, Dict have 2-3 each) can have LookupMethod
+    /// Enqueue the zero-arg <c>create()</c> overload specifically. Types with multiple
+    /// <c>create</c> overloads (List, Set, Dict have 2-3 each) can have LookupMethod
     /// pick the wrong one; the literal-lowering path always calls the no-arg form.
     /// Also seeds the mangled-name fallback so codegen's mangled call can resolve.
     /// </summary>
     private void EnqueueZeroArgCreateIfPresent(TypeInfo owner)
     {
         // Prefer LookupMethod's substituted routine for generic owners. Only accept it when
-        // its arity matches (LookupMethod is first-match and may return $create(capacity)).
+        // its arity matches (LookupMethod is first-match and may return create(capacity)).
         RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: CreateMethodName);
         if (routine is { Parameters.Count: 0 })
         {
@@ -603,7 +603,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// f-string parts get lowered to `&lt;expr&gt;.represent()` / `&lt;expr&gt;.diagnose()` calls by
     /// FStringLoweringPass in Phase 7. Reachability runs in Phase 6 — before that lowering —
     /// so the calls don't exist yet for the worklist to follow. Seed them here so synthesized
-    /// $represent/$diagnose bodies on the interpolated expressions' types make it into the
+    /// represent/diagnose bodies on the interpolated expressions' types make it into the
     /// live set. Without this, codegen emits a call to the symbol but skips emitting the
     /// definition (gated by the live set), producing a link-time undefined symbol.
     /// </summary>
@@ -616,8 +616,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             TypeInfo? rawType = ep.Expression.ResolvedType ?? InferExpressionType(e: ep.Expression);
             if (rawType == null) continue;
             TypeInfo concreteType = RoutineInfo.SubstituteType(type: rawType, substitution: typeSubs);
-            // `?` format spec → $diagnose, otherwise $represent. FStringLoweringPass also
-            // emits a $add chain — Text.add is on a concrete type already and gets walked
+            // `?` format spec → diagnose, otherwise represent. FStringLoweringPass also
+            // emits a add chain — Text.add is on a concrete type already and gets walked
             // through the resulting call expressions in subsequent frames.
             bool isDiagnose = ep.FormatSpec is "?";
             EnqueueMethodIfPresent(owner: concreteType,
@@ -695,7 +695,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // substitute the def-level overload onto the concrete owner so the resulting routine has
         // the correct owner AND the correct parameter signature. Don't delegate to LookupMethod
         // — its FirstOrDefault picks the wrong overload when multiple have the same name + same
-        // failability (e.g. `$create()` vs `$create(key: SecureHashKey)`, both non-failable).
+        // failability (e.g. `create()` vs `create(key: SecureHashKey)`, both non-failable).
         TypeInfo? genDef = owner switch
         {
             EntityTypeInfo { GenericDefinition: { } d } => d,
@@ -841,7 +841,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (callee.OwnerType is { } liveOwner) _liveOwnerTypes.Add(item: liveOwner);
 
         // Return type of an RC wrapper (Owned/Retained/Tracked) becomes a live owner: codegen
-        // will emit implicit `release`/`$destroy` calls on the returned value at scope exit.
+        // will emit implicit `release`/`destroy` calls on the returned value at scope exit.
         // Without this, e.g. `var vt = retained.track()` produces a `Tracked[Node]` value whose
         // destructor is never made reachable, because no method on `Tracked[Node]` is called
         // explicitly in user code.
@@ -913,7 +913,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (decl == null)
         {
             // No source AST — but the routine may have a synthesized body in VariantBodies
-            // (e.g. Tuple[S8, Bool].hash, generated record/entity $eq/$cmp/$hash). Walk that
+            // (e.g. Tuple[S8, Bool].hash, generated record/entity eq/cmp/hash). Walk that
             // body directly so its calls (S8.hash, Bool.hash, ...) reach the live set.
             // Without this, synthesized routines are leaf nodes in the BFS and their callees
             // never become live -> linker errors.
@@ -933,7 +933,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // owner's generic-def shape AND the variant's signature. The lookup above can
                 // miss when the variant body wasn't keyed under the generic-def form we
                 // reconstructed. Use `callee.OriginalName` to find the underlying failable
-                // routine (`$emit!`) and walk its body from `ctx.RoutineBodies` — the variant
+                // routine (`emit!`) and walk its body from `ctx.RoutineBodies` — the variant
                 // body is just a transformed copy of the same statements, so the calls it
                 // makes are identical.
                 if (synthBody == null && callee.OriginalName is { } origName)
@@ -986,8 +986,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                                 continue;
                             }
                             // Collection literals in synthesized bodies (e.g. MakeListReturn for
-                            // BuilderService.protocols) need the same implicit add/$create seeding
-                            // as user-code literals; otherwise the literal's $create body never
+                            // BuilderService.protocols) need the same implicit add/create seeding
+                            // as user-code literals; otherwise the literal's create body never
                             // gets monomorphized and codegen emits a call to an undefined symbol.
                             if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap } or BinaryExpression)
                             {
@@ -1026,8 +1026,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// Codegen synthesizes related routines unconditionally for a type that has any of its methods
     /// emitted. To keep the linker happy without forcing all-or-nothing emission, when we mark a
     /// routine live we also enqueue:
-    /// — comparison-op group siblings ($cmp ↔ $lt/$le/$gt/$ge, $eq ↔ $ne, $contains ↔ $notcontains)
-    /// — display routines on the owner ($represent, $diagnose) — emitted unconditionally per type
+    /// — comparison-op group siblings (cmp ↔ lt/le/gt/ge, eq ↔ ne, contains ↔ notcontains)
+    /// — display routines on the owner (represent, diagnose) — emitted unconditionally per type
     /// — wrapper transparency: same-named method on the inner T of wrapper owners
     /// </summary>
     private void ExpandSyntheticSiblings(RoutineInfo callee)
@@ -1057,7 +1057,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 }
             }
 
-            // (2) Display routines: codegen emits $represent/$diagnose for every owner that has any
+            // (2) Display routines: codegen emits represent/diagnose for every owner that has any
             // method emitted. Force them live so transitive callers of show()/alert() resolve.
             if (name != RepresentMethodName && name != DiagnoseMethodName)
             {
@@ -1115,15 +1115,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (ct == null) return null;
         // In a monomorphized frame the constructed type may be a generic parameter (e.g. `P()`
         // inside `ShareController[T, P].create`'s body, with P bound to a concrete LockPolicy).
-        // Substitute through the active frame subs so we enqueue the concrete policy's `$create`
+        // Substitute through the active frame subs so we enqueue the concrete policy's `create`
         // (and emit its body) rather than a bogus `P.create`.
         ct = RoutineInfo.SubstituteType(type: ct, substitution: _currentFrameSubs);
         // Match overload by parameter count — Text() (no args) and Text(from: CStr) are
-        // distinct $create overloads on the same type. LookupMethod alone returns the
+        // distinct create overloads on the same type. LookupMethod alone returns the
         // first-registered one and misses the no-arg variant when callers use it.
         int argCount = cre.MemberVariables.Count;
         // Use the call's named-argument labels to disambiguate sibling overloads. Without
-        // this, all 1-arg `$create` overloads (capacity: U64 / from: Set / from: FastSet /
+        // this, all 1-arg `create` overloads (capacity: U64 / from: Set / from: FastSet /
         // from: SortedList / from: SortedSet) get enqueued for any `List[T](x)` call —
         // FastSet's overload then drags FastSet.iter etc. into the live set on programs
         // that never reference FastSet, producing LINKERR across the playground.
@@ -1179,10 +1179,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             _live.Add(item: $"{ct.FullName}.create");
         }
         // Return only the label-matched overload. The previous LookupMethod fallback returned
-        // the first-registered $create by name regardless of param shape — that pulled in
+        // the first-registered create by name regardless of param shape — that pulled in
         // `List[T].create(from: FastSet[T])` (first 1-arg overload) for any field-init
         // CreatorExpression like `List[T](data:..., count:..., capacity:...)` that has no
-        // matching $create overload at all. Such field-init creators are emitted inline by
+        // matching create overload at all. Such field-init creators are emitted inline by
         // codegen and don't need a routine seeded.
         return matched;
     }
@@ -1200,7 +1200,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // .create`'s body) is parsed as a CallExpression whose callee is an IdentifierExpression
         // naming the param, and SA leaves ConstructedType null (the param has no concrete type yet).
         // In a monomorphized frame the param is bound, so recover the concrete type from the frame
-        // subs — otherwise the concrete policy's `$create` body is never enqueued (LINKERR).
+        // subs — otherwise the concrete policy's `create` body is never enqueued (LINKERR).
         if (ct == null && ce.Callee is IdentifierExpression idCalleeForParam
             && _currentFrameSubs.TryGetValue(key: idCalleeForParam.Name, value: out TypeInfo? boundParamType))
         {
@@ -1216,7 +1216,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
         // Method-chain constructor: text.S32!() lowers to S32.create(receiver). The call
         // has zero positional arguments but the member-receiver is the conversion source.
-        // Match the $create overload whose single parameter accepts the receiver type so
+        // Match the create overload whose single parameter accepts the receiver type so
         // reachability marks the failable Text overload (not the first-registered S8 one).
         if (ce.Callee is MemberExpression chainMember)
         {
@@ -1311,7 +1311,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// <summary>
     /// A call to the cycle-collector hook intrinsic <c>&lt;entity&gt;.roam_trace_ref()</c> /
     /// <c>.roam_free_ref()</c> is lowered at codegen to a closure over the receiver entity's
-    /// synthesized <c>$roam_trace_impl</c> / <c>$roam_free_impl</c> (see the intercept in
+    /// synthesized <c>roam_trace_impl</c> / <c>roam_free_impl</c> (see the intercept in
     /// <c>EmitMemberRoutineCall</c>). That reference is invisible to normal reachability walking, so
     /// mark the target impl live here, or its body is never emitted and the thunk links against an
     /// undefined symbol.
@@ -1340,7 +1340,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// Handles call-style constructor invocations like <c>Byte(U8(cp))</c> — a CallExpression
     /// whose Callee is an IdentifierExpression naming a type, with no ResolvedRoutine. Codegen
     /// emits a call to <c>&lt;Type&gt;.create(...)</c> by mangled name; mark the matching
-    /// $create overload live by parameter count.
+    /// create overload live by parameter count.
     /// </summary>
     private RoutineInfo? ResolveCallStyleConstructor(CallExpression ce)
     {
@@ -1392,12 +1392,12 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 match = PickOverload(methods: ctx.Registry.GetMethodsForType(type: genDef));
         }
 
-        // Direct named-field construction has no `$create` routine — codegen synthesizes a struct
+        // Direct named-field construction has no `create` routine — codegen synthesizes a struct
         // literal in `EmitRecordConstruction`. Without a routine to enqueue, reachability would
         // never mark the constructed type as a live owner, blocking `SeedWiredRoutinesOnLiveTypes`
-        // from seeding its derived operators ($ne/$lt/...). Add the type to the live-owner set
+        // from seeding its derived operators (ne/lt/...). Add the type to the live-owner set
         // directly when we recognise this construction pattern. Affects user records like Point
-        // that obey Equatable/Comparable and rely on synthesised $ne/$lt/$le/$gt/$ge bodies.
+        // that obey Equatable/Comparable and rely on synthesised ne/lt/le/gt/ge bodies.
         if (match == null && ct is RecordTypeInfo or EntityTypeInfo)
         {
             _liveOwnerTypes.Add(item: ct);
@@ -1580,8 +1580,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Concrete owner: e.g. "S32.add" or "Bytes.split". Match over BOTH stdlib AND user decls
         // combined: a user program may define a NEW overload of a stdlib-type method (e.g.
         // `routine F64.create(from: D32B)` in playground code, against Core.F64's many numeric
-        // `$create` overloads). Checking stdlib alone first lets MatchOverload's count-only
-        // fallback bind to the wrong overload (`$create(S8)`) and walk ITS body — so the real
+        // `create` overloads). Checking stdlib alone first lets MatchOverload's count-only
+        // fallback bind to the wrong overload (`create(S8)`) and walk ITS body — so the real
         // D32B body's callees (`F64.from_bits`, `coeff.F64()`) never reach the live set. Merging
         // lets the exact type-signature match (Pass 1) pick the user D32B overload.
         string concreteKey = $"{owner.Name}.{callee.Name}";
@@ -1821,8 +1821,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 _liveOwnerTypes.Add(item: concreteOwner);
                 // Disambiguate overloads by parameter signature. LookupMethod's first-match heuristic
                 // picks the wrong overload when multiple share name + count + failability — e.g.
-                // List[T] has five 1-arg non-failable `$create` overloads ($create(capacity: U64),
-                // $create(from: FastSet[T]), etc.). Match on substituted parameter type names so
+                // List[T] has five 1-arg non-failable `create` overloads (create(capacity: U64),
+                // create(from: FastSet[T]), etc.). Match on substituted parameter type names so
                 // `List[T].create#U64` substitutes to `List[S64].create(capacity: U64)` instead of
                 // dragging FastSet.iter into the live set.
                 RoutineInfo? resolved = LookupMethodMatchingParamTypes(
@@ -1833,7 +1833,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                         paramCount: routine.Parameters.Count, isFailable: routine.IsFailable)
                     ?? ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
                 if (resolved != null) return TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs);
-                // Synthesized routines (try_emit, $represent, $diagnose, wrapper forwarders) live
+                // Synthesized routines (try_emit, represent, diagnose, wrapper forwarders) live
                 // only on the generic-def. Manually mark the substituted RegistryKey live so the
                 // codegen Phase B/C gates emit the concrete-form symbol that callers reference.
                 string concreteKey = ComputeConcreteRegistryKey(routine: routine, concreteOwner: concreteOwner, subs: typeSubs);

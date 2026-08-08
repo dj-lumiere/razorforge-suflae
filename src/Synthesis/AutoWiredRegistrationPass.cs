@@ -14,8 +14,8 @@ namespace Compiler.Synthesis;
 
 /// <summary>
 /// Phase 2.55: Auto-registers builder-generated member routine signatures for all user types.
-/// These are default routines that every type of a given category gets ($hash(), $eq(), etc.).
-/// $represent and $diagnose are auto-registered (overridable).
+/// These are default routines that every type of a given category gets (hash(), eq(), etc.).
+/// represent and diagnose are auto-registered (overridable).
 /// Only registers if the user hasn't already defined the routine.
 /// </summary>
 internal sealed class AutoWiredRegistrationPass
@@ -82,7 +82,7 @@ internal sealed class AutoWiredRegistrationPass
             var existingMethods = _registry.GetMethodsForType(type: type)
                                            .ToList();
 
-            // All types: $represent(), $diagnose() — auto-generated, overridable
+            // All types: represent(), diagnose() — auto-generated, overridable
             if (textType != null)
             {
                 MaybeRegisterWired(owner: type,
@@ -106,8 +106,8 @@ internal sealed class AutoWiredRegistrationPass
                     existingMethods: existingMethods);
             }
 
-            // Unified destructor: every non-wrapper type gets a `dangerous` `$destroy()`.
-            // RC wrappers (Owned/Retained/Tracked/...) supply their own custom `$destroy` that
+            // Unified destructor: every non-wrapper type gets a `dangerous` `destroy()`.
+            // RC wrappers (Owned/Retained/Tracked/...) supply their own custom `destroy` that
             // delegates to the controller, so they're excluded here. The generated body is a
             // no-op for now (full field-recursion + invalidate-me lands with the codegen
             // unification); registering it lets explicit `me.field.destroy()` calls resolve.
@@ -117,8 +117,8 @@ internal sealed class AutoWiredRegistrationPass
                     existingMethods: existingMethods);
             }
 
-            // Cycle-collector per-type hooks: every non-wrapper entity gets `$roam_trace_impl()`
-            // (visits its Roamed fields) and `$roam_free_impl()` (tears down non-Roamed fields + frees
+            // Cycle-collector per-type hooks: every non-wrapper entity gets `roam_trace_impl()`
+            // (visits its Roamed fields) and `roam_free_impl()` (tears down non-Roamed fields + frees
             // the entity). Only entities can be Roamed[T] (RoamController needs `T is EntityType`).
             // Bodies are synthesized by WiredRoutinePass; unused ones are dead-code-eliminated.
             if (noneType != null && type.Category == TypeCategory.Entity && !IsWrapperType(type: type))
@@ -149,31 +149,31 @@ internal sealed class AutoWiredRegistrationPass
                     // None maps to LLVM void — it cannot appear as a parameter type.
                     // Skip comparison/hash/copy stubs; two Nones are trivially equal.
                     // Wrapper types (Retained, Viewing, etc.) are transparent forwarders —
-                    // WrapperForwardingPass lazily synthesizes their $hash/$eq/$cmp from the inner T.
+                    // WrapperForwardingPass lazily synthesizes their hash/eq/cmp from the inner T.
                     // Don't register field-based stubs here: for zero-field wrappers (T)
                     // WiredRoutinePass would generate wrong bodies (returns 0 / returns true).
                     bool isWrapper = type is RecordTypeInfo &&
                                      WrapperForwardingPass.WrapperTypeNames.Contains(
                                          item: (type as RecordTypeInfo)?.GenericDefinition?.Name
                                                ?? type.Name);
-                    // DECISION (2026-06-14): records do NOT auto-derive $eq / $hash. `obeys Equatable`
+                    // DECISION (2026-06-14): records do NOT auto-derive eq / hash. `obeys Equatable`
                     // / `Hashable` on a record is a PROMISE the author fulfils by HAND-WRITING the
                     // method — field-delegated synthesis is fragile (breaks when a field type lacks the
                     // method, e.g. an Atomic / lock-flag field) and is semantically wrong for opaque /
-                    // container types whose logical value is not their field tuple. Auto $eq / $hash is
+                    // container types whose logical value is not their field tuple. Auto eq / hash is
                     // reserved for tuple / choice / flags (simple, unambiguous tag/element compare). The
                     // stdlib's equatable/hashable struct records (Complex, Integer, Decimal, C32/64/128)
-                    // already hand-write these. $store (below) + $represent / $diagnose stay auto-derived.
+                    // already hand-write these. store (below) + represent / diagnose stay auto-derived.
 
-                    // `$store` / `clone` (Assignable): their bodies are `return me` /
+                    // `store` / `clone` (Assignable): their bodies are `return me` /
                     // `return me.store()` — NOT field-based — so they are safe even for @llvm-backed
-                    // opaque primitives (S64, Bool, F64, …), unlike the field-based $hash/$eq above.
-                    // Registering them for primitives lets explicit `clone()`/`$store()` calls (e.g.
+                    // opaque primitives (S64, Bool, F64, …), unlike the field-based hash/eq above.
+                    // Registering them for primitives lets explicit `clone()`/`store()` calls (e.g.
                     // from `List.add_range`) link; the trivial body is inlined away by LLVM. Wrapper
                     // types (Retained/Tracked/…) keep their own custom retain-aware copy, so excluded.
-                    // `$store` is registered for any Storable-obeyer (incl. Copyable types, which obey
+                    // `store` is registered for any Storable-obeyer (incl. Copyable types, which obey
                     // Storable transitively). Deep `copy` is Copyable-ONLY — Storable-only raw-pointer
-                    // types (Hijacked/CPtr) can bitwise-`$store` but have no meaningful deep copy.
+                    // types (Hijacked/CPtr) can bitwise-`store` but have no meaningful deep copy.
                     if (!type.IsNone && !isWrapper &&
                         ObeysProtocol(type: type, protocolName: "Storable"))
                     {
@@ -214,15 +214,15 @@ internal sealed class AutoWiredRegistrationPass
                     break;
 
                 case TypeCategory.Entity:
-                    // DECISION (2026-06-14): entities do NOT auto-derive $eq either. An entity is an
+                    // DECISION (2026-06-14): entities do NOT auto-derive eq either. An entity is an
                     // identity/reference type whose logical value is rarely its field tuple (e.g. a
                     // collection's value is its elements, not its buffer pointer + counts), so
                     // field-delegated equality is the wrong default. Entities that want equality declare
-                    // `$eq` explicitly with the right semantics. (No stdlib entity obeys Equatable.)
+                    // `eq` explicitly with the right semantics. (No stdlib entity obeys Equatable.)
 
-                    // Synthesize $create(field1: T1, ...) -> EntityType for field construction.
+                    // Synthesize create(field1: T1, ...) -> EntityType for field construction.
                     // Always synthesize the all-fields overload unless an exact match already exists,
-                    // so field construction inside user-defined $create overloads works too.
+                    // so field construction inside user-defined create overloads works too.
                     // Skip generic definitions (their resolved instances get synthesis).
                     if (type is EntityTypeInfo entityForCreate &&
                         !type.IsGenericDefinition &&
@@ -253,10 +253,10 @@ internal sealed class AutoWiredRegistrationPass
                     break;
 
                 case TypeCategory.Choice:
-                    // Choices/flags get $eq/$hash unconditionally — equality is unambiguous
+                    // Choices/flags get eq/hash unconditionally — equality is unambiguous
                     // tag-compare with no field-selection design choice to make. Stdlib's
-                    // ComparisonSign and BuilderService enums rely on this for $represent /
-                    // $diagnose / derived comparison operators.
+                    // ComparisonSign and BuilderService enums rely on this for represent /
+                    // diagnose / derived comparison operators.
                     if (u64Type != null)
                     {
                         MaybeRegisterWired(owner: type,
@@ -339,7 +339,7 @@ internal sealed class AutoWiredRegistrationPass
                             existingMethods: existingMethods);
                     }
 
-                    // Synthesize $create(field1: T1, ...) -> CrashableType for construction via throw
+                    // Synthesize create(field1: T1, ...) -> CrashableType for construction via throw
                     if (type is CrashableTypeInfo crashableForCreate &&
                         !existingMethods.Any(predicate: m => m.Name == CreateMethodName))
                     {
@@ -448,7 +448,7 @@ internal sealed class AutoWiredRegistrationPass
                     break;
 
                 case TypeCategory.Variant:
-                    // Variants get auto-synthesized `$represent` / `$diagnose` so user-defined
+                    // Variants get auto-synthesized `represent` / `diagnose` so user-defined
                     // tagged unions render in f-strings and `show()` without manual impls.
                     // WiredRoutinePass.HandleVariant builds the bodies from the member list;
                     // registration here makes the stubs visible to overload resolution and the
@@ -521,7 +521,7 @@ internal sealed class AutoWiredRegistrationPass
                 }
 
                 // Skip generic-definition types (T, Retained[T], List[T], etc. without
-                // concrete arg) and WrapperTypeInfo definitions — registering a $create(from: T)
+                // concrete arg) and WrapperTypeInfo definitions — registering a create(from: T)
                 // for the bare wrapper produces a phantom Text.create(Core.Owned) symbol that
                 // overload-resolution can drift onto, then linker fails (no definition emitted).
                 if (type.IsGenericDefinition || type is WrapperTypeInfo)
@@ -552,7 +552,7 @@ internal sealed class AutoWiredRegistrationPass
             }
         }
 
-        // Register BS per-type routines + $represent/$diagnose as universal methods.
+        // Register BS per-type routines + represent/diagnose as universal methods.
         // This allows T.data_size(), K.type_id(), T.represent(), etc. to resolve in
         // generic function bodies where the receiver is a GenericParameterTypeInfo.
         var tParam = new GenericParameterTypeInfo(name: "T");
@@ -581,7 +581,7 @@ internal sealed class AutoWiredRegistrationPass
                 existingMethods: universalExisting);
         }
 
-        // `$destroy` as a universal method too — so `v.destroy()` resolves on a generic `T`
+        // `destroy` as a universal method too — so `v.destroy()` resolves on a generic `T`
         // (e.g. element teardown loops in `List[T].destroy`).
         if (noneType != null)
         {
@@ -616,7 +616,7 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// Registers the auto-derived <c>$destroy()</c> destructor if not already user-defined.
+    /// Registers the auto-derived <c>destroy()</c> destructor if not already user-defined.
     /// Marked <c>dangerous</c>: calling it (explicitly or overriding it) is manual memory
     /// management. The body is synthesized by <see cref="WiredRoutinePass"/>.
     /// </summary>
@@ -644,7 +644,7 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// Registers a cycle-collector hook method (<c>$roam_trace_impl</c> / <c>$roam_free_impl</c>) if
+    /// Registers a cycle-collector hook method (<c>roam_trace_impl</c> / <c>roam_free_impl</c>) if
     /// not already user-defined. Marked <c>dangerous</c> (raw controller/pointer work). No params,
     /// void return; the body is synthesized by <see cref="WiredRoutinePass"/>.
     /// </summary>
@@ -673,7 +673,7 @@ internal sealed class AutoWiredRegistrationPass
 
     /// <summary>
     /// True for RC wrapper types (Retained/Tracked/Viewing/Modifying/Hijacked/...) — they
-    /// supply their own custom destructor / forwarders and are excluded from generated `$destroy`.
+    /// supply their own custom destructor / forwarders and are excluded from generated `destroy`.
     /// </summary>
     private static bool IsWrapperType(TypeSymbol type)
     {
@@ -687,8 +687,8 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// Registers the keyed `$hash(k0: U64, k1: U64) -> U64` overload if not already defined.
-    /// Distinct from the unkeyed `$hash()` by parameter count, so both can coexist.
+    /// Registers the keyed `hash(k0: U64, k1: U64) -> U64` overload if not already defined.
+    /// Distinct from the unkeyed `hash()` by parameter count, so both can coexist.
     /// </summary>
     private void MaybeRegisterKeyedHash(TypeSymbol owner, TypeSymbol u64Type,
         List<RoutineInfo> existingMethods)
@@ -742,7 +742,7 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// Registers a failable wired routine if not already defined (for clone, $create!).
+    /// Registers a failable wired routine if not already defined (for clone, create!).
     /// </summary>
     /// <summary>
     /// Registers the two auto-generated constructors for each non-<c>None</c> arm of a variant:
@@ -832,14 +832,14 @@ internal sealed class AutoWiredRegistrationPass
     /// <summary>
     /// Returns true if <paramref name="type"/> declares conformance to the named protocol
     /// via <c>obeys</c>, either directly or transitively through a parent protocol.
-    /// Used to gate auto-derivation of <c>$eq</c> / <c>$hash</c> on records, entities,
+    /// Used to gate auto-derivation of <c>eq</c> / <c>hash</c> on records, entities,
     /// choices, and flags — these are now opt-in rather than universal.
     /// </summary>
     /// <summary>
-    /// Returns true when every member-variable type on <paramref name="type"/> supports `$eq`
-    /// — either it obeys `Equatable`, has an explicit `$eq` method, or is a primitive /
+    /// Returns true when every member-variable type on <paramref name="type"/> supports `eq`
+    /// — either it obeys `Equatable`, has an explicit `eq` method, or is a primitive /
     /// `@llvm("...")`-backed record (whose equality is a built-in instruction). Used to gate
-    /// auto-derivation of `$eq` so entities holding non-equatable fields (e.g. `Array[T, N]`)
+    /// auto-derivation of `eq` so entities holding non-equatable fields (e.g. `Array[T, N]`)
     /// don't get a synthesised body whose recursion dead-ends at link time.
     /// </summary>
     private bool AllFieldsHaveEquality(TypeSymbol type)
@@ -861,10 +861,10 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// Recursive check for whether <paramref name="type"/> supports `$eq`. Handles three layers:
+    /// Recursive check for whether <paramref name="type"/> supports `eq`. Handles three layers:
     /// (1) primitives / `@llvm` records — built-in IR equality;
-    /// (2) explicit `$eq` method or obeys `Equatable` — registered conformance;
-    /// (3) generic resolution like `Array[T, N]` — looks up the generic def's `$eq` method
+    /// (2) explicit `eq` method or obeys `Equatable` — registered conformance;
+    /// (3) generic resolution like `Array[T, N]` — looks up the generic def's `eq` method
     /// and recursively verifies every `T obeys Equatable` constraint against the substituted
     /// type args. Without (3), `Array[X, 64]` passes the check (because `Array.eq` exists
     /// on the generic def) even though the body's recursion into `X.ne` link-errors.
@@ -882,7 +882,7 @@ internal sealed class AutoWiredRegistrationPass
         // Cycle guard — recursive record / entity types must not loop here.
         if (!seen.Add(item: type.FullName)) return true;
 
-        // For a generic resolution, the generic def's `$eq` method may carry
+        // For a generic resolution, the generic def's `eq` method may carry
         // `T obeys Equatable` constraints. Each such constraint must hold for the
         // corresponding type argument.
         TypeSymbol? genericDef = type switch
@@ -918,10 +918,10 @@ internal sealed class AutoWiredRegistrationPass
             }
         }
 
-        // Explicit `$eq` method on the type (either user-defined or already auto-derived).
+        // Explicit `eq` method on the type (either user-defined or already auto-derived).
         if (_registry.LookupMethod(type: type, methodName: "eq") != null) return true;
 
-        // Type declares obeys Equatable — we expect a `$eq` will eventually be synthesised.
+        // Type declares obeys Equatable — we expect a `eq` will eventually be synthesised.
         if (ObeysProtocol(type: type, protocolName: EquatableProtocolName)) return true;
 
         return false;

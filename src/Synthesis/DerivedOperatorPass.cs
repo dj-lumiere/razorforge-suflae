@@ -13,7 +13,7 @@ using TypeSymbol = TypeModel.Types.TypeInfo;
 namespace Compiler.Synthesis;
 
 /// <summary>
-/// Phase 2.6: Generates derived comparison operators from $eq and $cmp routines,
+/// Phase 2.6: Generates derived comparison operators from eq and cmp routines,
 /// and synthesizes crash_title() bodies for all crashable types.
 /// </summary>
 internal sealed class DerivedOperatorPass
@@ -32,7 +32,7 @@ internal sealed class DerivedOperatorPass
     }
 
     /// <summary>
-    /// Generates derived comparison operators from $eq and $cmp routines.
+    /// Generates derived comparison operators from eq and cmp routines.
     /// </summary>
     public void Run()
     {
@@ -68,14 +68,14 @@ internal sealed class DerivedOperatorPass
         IEnumerable<RoutineInfo> methods = _registry.GetMethodsForType(type: type);
         var methodList = methods.ToList();
 
-        // Look for $eq method
+        // Look for eq method
         RoutineInfo? eqMethod = methodList.FirstOrDefault(predicate: m => m.Name == "eq");
         if (eqMethod != null)
         {
             GenerateNeFromEq(type: type, eqMethod: eqMethod, existingMethods: methodList);
         }
 
-        // Look for $cmp method
+        // Look for cmp method
         RoutineInfo? cmpMethod = methodList.FirstOrDefault(predicate: m => m.Name == "cmp");
         if (cmpMethod != null)
         {
@@ -84,7 +84,7 @@ internal sealed class DerivedOperatorPass
                 existingMethods: methodList);
         }
 
-        // Look for $contains method
+        // Look for contains method
         RoutineInfo? containsMethod =
             methodList.FirstOrDefault(predicate: m => m.Name == "contains");
         if (containsMethod != null)
@@ -97,8 +97,8 @@ internal sealed class DerivedOperatorPass
     }
 
     /// <summary>
-    /// Generates $ne from $eq.
-    /// $ne(you) = not me.eq(you: you)
+    /// Generates ne from eq.
+    /// ne(you) = not me.eq(you: you)
     /// </summary>
     private void GenerateNeFromEq(TypeSymbol type, RoutineInfo eqMethod,
         List<RoutineInfo> existingMethods)
@@ -127,10 +127,10 @@ internal sealed class DerivedOperatorPass
             IsFailable = false,
             DeclaredMutation = MutationCategory.Readonly,
             MutationCategory = MutationCategory.Readonly,
-            // Inherit `$eq`'s generic-parameter constraints so `$ne` is only available
-            // for the same instantiations as `$eq`. Without this, Array[T,N].ne is
-            // unconditionally derivable even when $eq requires `T obeys Equatable`,
-            // and the synthesized `$ne` body references a non-existent `$eq` at link
+            // Inherit `eq`'s generic-parameter constraints so `ne` is only available
+            // for the same instantiations as `eq`. Without this, Array[T,N].ne is
+            // unconditionally derivable even when eq requires `T obeys Equatable`,
+            // and the synthesized `ne` body references a non-existent `eq` at link
             // time for instantiations that fail the constraint (e.g. Array[X,N]).
             GenericParameters = eqMethod.GenericParameters,
             GenericConstraints = eqMethod.GenericConstraints,
@@ -156,8 +156,8 @@ internal sealed class DerivedOperatorPass
     }
 
     /// <summary>
-    /// Generates $notcontains from $contains.
-    /// $notcontains(item) = not me.contains(item: item)
+    /// Generates notcontains from contains.
+    /// notcontains(item) = not me.contains(item: item)
     /// </summary>
     private void GenerateNotContainsFromContains(TypeSymbol type, RoutineInfo containsMethod,
         List<RoutineInfo> existingMethods)
@@ -185,7 +185,7 @@ internal sealed class DerivedOperatorPass
             IsFailable = false,
             DeclaredMutation = MutationCategory.Readonly,
             MutationCategory = MutationCategory.Readonly,
-            // Inherit `$contains`'s constraints so `$notcontains` is only available for
+            // Inherit `contains`'s constraints so `notcontains` is only available for
             // the same instantiations.
             GenericParameters = containsMethod.GenericParameters,
             GenericConstraints = containsMethod.GenericConstraints,
@@ -211,11 +211,11 @@ internal sealed class DerivedOperatorPass
     }
 
     /// <summary>
-    /// Generates $lt, $le, $gt, $ge from $cmp.
-    /// $lt(you) = me.cmp(you: you) == ComparisonSign.ME_SMALL
-    /// $le(you) = me.cmp(you: you) != ComparisonSign.ME_LARGE
-    /// $gt(you) = me.cmp(you: you) == ComparisonSign.ME_LARGE
-    /// $ge(you) = me.cmp(you: you) != ComparisonSign.ME_SMALL
+    /// Generates lt, le, gt, ge from cmp.
+    /// lt(you) = me.cmp(you: you) == ComparisonSign.ME_SMALL
+    /// le(you) = me.cmp(you: you) != ComparisonSign.ME_LARGE
+    /// gt(you) = me.cmp(you: you) == ComparisonSign.ME_LARGE
+    /// ge(you) = me.cmp(you: you) != ComparisonSign.ME_SMALL
     /// </summary>
     private void GenerateComparisonOperatorsFromCmp(TypeSymbol type, RoutineInfo cmpMethod,
         List<RoutineInfo> existingMethods)
@@ -259,7 +259,7 @@ internal sealed class DerivedOperatorPass
                 IsFailable = false,
                 DeclaredMutation = MutationCategory.Readonly,
                 MutationCategory = MutationCategory.Readonly,
-                // Inherit `$cmp`'s constraints so `$lt/$le/$gt/$ge` are only available for
+                // Inherit `cmp`'s constraints so `lt/le/gt/ge` are only available for
                 // the same instantiations.
                 GenericParameters = cmpMethod.GenericParameters,
                 GenericConstraints = cmpMethod.GenericConstraints,
@@ -367,8 +367,8 @@ internal sealed class DerivedOperatorPass
             LiteralType: TokenType.S32Literal,
             Location: _synthLoc) { ResolvedType = cmpResultType };
 
-        // Always use $eq (guaranteed registered by AutoWiredRegistrationPass before DerivedOperatorPass).
-        // $ne may not yet be registered when this body is built (ordering not guaranteed).
+        // Always use eq (guaranteed registered by AutoWiredRegistrationPass before DerivedOperatorPass).
+        // ne may not yet be registered when this body is built (ordering not guaranteed).
         RoutineInfo? eqMethod = _registry.LookupMethod(type: cmpResultType, methodName: "eq");
         var eqCall = new CallExpression(
             Callee: new MemberExpression(Object: cmpCall, MemberName: "eq", Location: _synthLoc),
@@ -387,7 +387,7 @@ internal sealed class DerivedOperatorPass
             return new ReturnStatement(Value: eqCall, Location: _synthLoc);
         }
 
-        // "not equal" case ($le, $ge): use if-return to avoid needing $ne on ComparisonSign.
+        // "not equal" case (le, ge): use if-return to avoid needing ne on ComparisonSign.
         var falseVal = new LiteralExpression(Value: false, LiteralType: TokenType.False,
             Location: _synthLoc) { ResolvedType = boolType };
         var trueVal = new LiteralExpression(Value: true, LiteralType: TokenType.True,

@@ -14,7 +14,7 @@ namespace Compiler.Desugaring.Passes;
 ///
 /// <para>Lowered cases (require <c>ResolvedRoutine != null</c> from Phase 5):</para>
 /// <list type="bullet">
-/// <item><b>Type constructor with resolved <c>$create</c></b>:
+/// <item><b>Type constructor with resolved <c>create</c></b>:
 /// <c>Maybe[S64](value: x)</c> -> <c>CallExpression(IdentifierExpression("create"), args)</c></item>
 /// <item><b>Generic method call on receiver</b>:
 /// <c>buf.read![U8](offset)</c> ??
@@ -24,7 +24,7 @@ namespace Compiler.Desugaring.Passes;
 /// <para>Kept as <see cref="GenericMethodCallExpression"/> (not lowered):</para>
 /// <list type="bullet">
 /// <item>Collection literals -> <c>IsCollectionLiteral == true</c>;
-/// codegen emits <c>$create + add_last</c> loops.</item>
+/// codegen emits <c>create + add_last</c> loops.</item>
 /// <item>Unresolved calls -> <c>ResolvedRoutine == null</c> and no safe lowering target
 /// has been determined yet.</item>
 /// </list>
@@ -123,7 +123,7 @@ internal sealed class GenericCallLoweringPass
         {
             MonomorphizedBody body = _instantiatedGenericBodies[key];
             // NOTE: Previously skipped synthesized bodies (assumed they never contained GMCEs),
-            // but wrapper $represent/$diagnose forwarders synthesized by WiredRoutinePass /
+            // but wrapper represent/diagnose forwarders synthesized by WiredRoutinePass /
             // wrapper-forwarder synthesis DO contain GMCEs (e.g. Hijacked[T].x calls). Lower
             // them too so they meet the codegen contract.
             Statement lowered = LowerStatement(body.Ast.Body);
@@ -437,21 +437,21 @@ internal sealed class GenericCallLoweringPass
     /// </summary>
     private Expression? TryLowerGenericCall(GenericMethodCallExpression gmc)
     {
-        // Collection literals need special codegen ($create + add_last loop).
+        // Collection literals need special codegen (create + add_last loop).
         if (gmc.IsCollectionLiteral) return null;
 
         // -----------------------------------------------------------------------------
-        // SA finds no matching $create overload (e.g. List[T](data:..., count:..., capacity:...))
+        // SA finds no matching create overload (e.g. List[T](data:..., count:..., capacity:...))
         // because this is a raw field-initialization form, not a regular routine call.
         // Lower to CreatorExpression so codegen's EmitConstructorCall handles it.
         // Also covers zero-arg construction of zero-field records and const-generic record
         // resolutions (e.g. BitArray[8](), Array[S64, 4]()) — SA marks these as type
         // constructions via ConstructedType/LoweringKind=TypeConstructor but never finds a
-        // matching $create() to bind ResolvedRoutine. Without lowering they'd survive as
+        // matching create() to bind ResolvedRoutine. Without lowering they'd survive as
         // GMCEs and trip the IllegalBackendResidualNode check.
         //
         // Zero-arg construction of a type that has fields (e.g. Deque[S64]()) is NOT lowered
-        // here — the type relies on a real $create() overload that SA failed to bind, and
+        // here — the type relies on a real create() overload that SA failed to bind, and
         // forging an empty CreatorExpression would just re-issue the bug as S455
         // (missing field). Leave that case to the SA fix path.
         // A FAILABLE construction `Type![Args](args)` (IsMemoryOperation) must NOT be lowered to a
@@ -503,13 +503,13 @@ internal sealed class GenericCallLoweringPass
             loweredArgs.Add(LowerExpression(arg));
 
         // -----------------------------------------------------------------------------
-        // e.g., Maybe[S64](present: true, value: x) -> SA resolved $create and set ResolvedRoutine.
+        // e.g., Maybe[S64](present: true, value: x) -> SA resolved create and set ResolvedRoutine.
         // Also handles standalone generic free routines and LLVM intrinsic free functions where
         // Object.Name == MethodName but there is no constructable type.
         // A failable generic construction `Type![Args](args)` parses with a BARE MethodName equal to
         // the type name plus the structured IsMemoryOperation failable flag; treat it like the
         // construction case (same as `Type[Args](args)`) so its arguments are passed straight to the
-        // resolved `$create!` instead of being mis-lowered into a member call whose receiver (the type
+        // resolved `create!` instead of being mis-lowered into a member call whose receiver (the type
         // name) becomes a null first argument.
         if (gmc.Object is IdentifierExpression id && id.Name == gmc.MethodName)
         {

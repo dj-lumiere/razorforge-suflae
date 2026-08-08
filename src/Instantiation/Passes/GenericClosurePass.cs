@@ -75,9 +75,9 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // that never went through Phase 4 desugaring. Lower them before subsequent passes.
         new ControlFlowLoweringPass(ctx: adapter)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
-        // Inline simple iterator `$emit!` bodies into their for-loops, replacing the `try_emit`
+        // Inline simple iterator `emit!` bodies into their for-loops, replacing the `try_emit`
         // call with the spliced advance. Runs AFTER ControlFlowLowering (which produced the flagged
-        // iterator loops) and AFTER monomorphization (so the concrete `$emit!` bodies exist in
+        // iterator loops) and AFTER monomorphization (so the concrete `emit!` bodies exist in
         // InstantiatedGenericBodies for lookup). Composed/filtering iterators fall back to try_emit.
         new IteratorInlineLoweringPass(registry: ctx.Registry, monoBodies: adapter.InstantiatedGenericBodies)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
@@ -94,7 +94,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
             target: ctx.Target,
             buildMode: ctx.BuildMode);
         // FStringLoweringPass runs BEFORE OperatorLoweringPass (per the per-file pipeline order);
-        // monomorphized $represent/$diagnose bodies need f-strings lowered to $represent/$diagnose
+        // monomorphized represent/diagnose bodies need f-strings lowered to represent/diagnose
         // method calls + Text.add before operator lowering can fold the `+` chain.
         new FStringLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
@@ -118,10 +118,10 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         new OperatorLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         // Copy lowering for instantiated bodies: at generic-def time a field of generic type T looks
-        // borrow-tier (no retaining $store), so a monomorphized body that returns/stores a value with
+        // borrow-tier (no retaining store), so a monomorphized body that returns/stores a value with
         // a now-concrete refcounted field (e.g. DictEntry[Text, S64] from entry_get) never retained
         // it — torn down per use then freed again at container teardown. Re-run here, post-mono, so
-        // GetLifecycle sees the concrete field types and injects the balancing $store.
+        // GetLifecycle sees the concrete field types and injects the balancing store.
         new RecordCopyLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
 

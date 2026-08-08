@@ -463,7 +463,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 }
 
                 // Variant construction via the call form: `Inner(7_s32)` / `Inner(none)`. SA leaves
-                // these as CallExpressions with ConstructedType=<variant> but no $create routine, so
+                // these as CallExpressions with ConstructedType=<variant> but no create routine, so
                 // codegen would emit a bogus `call @Inner`. Rewrite to the variant CreatorExpression
                 // that EmitVariantConstruction handles (the same shape the assignment auto-wrap uses).
                 if (call is { ConstructedType: VariantTypeInfo callVariant, ResolvedRoutine: null }
@@ -605,7 +605,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 hoisted.AddRange(targetH);
                 hoisted.AddRange(valueH);
                 SourceLocation loc = compound.Location;
-                // Try in-place method first ($iadd, $isub, etc.)
+                // Try in-place method first (iadd, isub, etc.)
                 if (inPlaceName != null && loweredTarget.ResolvedType != null &&
                     ctx.Registry.LookupMethod(type: loweredTarget.ResolvedType, methodName: inPlaceName) != null)
                 {
@@ -1057,7 +1057,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             // AFTER this pass — so the lifted body is never lowered again. Descend into the body
             // here so its UndecidedInteger/UndecidedDecimal literals get a concrete LiteralType;
             // otherwise codegen receives UndecidedInteger and (per IsIntegerLiteralType) emits it
-            // as a Text string constant (e.g. `x % 2` → `$mod(i64, %Record.Text)` type mismatch).
+            // as a Text string constant (e.g. `x % 2` → `mod(i64, %Record.Text)` type mismatch).
             // Lambda bodies are expression-position and cannot carry hoisted statements, so only
             // rewrite when lowering produced none; complex bodies (`??`/`?.`) fall through unchanged.
             case LambdaExpression lambda:
@@ -1542,7 +1542,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// <summary>
     /// 1i. Lowers logical not to <see cref="ConditionalExpression"/>:
     /// <c>not x</c> -> <c>if x { _cif = false } else { _cif = true }</c>.
-    /// FlagsTypeInfo bitwise-not (<c>~</c>) is lowered to <c>$bitnot()</c> by
+    /// FlagsTypeInfo bitwise-not (<c>~</c>) is lowered to <c>bitnot()</c> by
     /// <see cref="OperatorLoweringPass"/> and never reaches this path.
     /// </summary>
     private (List<Statement> Hoisted, Expression Expr) LowerLogicalNot(UnaryExpression notExpr)
@@ -1628,7 +1628,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// <summary>
     /// Lowers <c>base with .field1 = v1, .field2 = v2</c> into
     /// <c>var tmp = base.store(); tmp.field1 = v1; tmp.field2 = v2; tmp</c>. The
-    /// <c>$store</c> dispatch carries any per-field semantics (e.g. retains on
+    /// <c>store</c> dispatch carries any per-field semantics (e.g. retains on
     /// <c>Retained[T]</c> fields) that a field-by-field constructor rebuild would skip.
     /// SA gates this in <c>AnalyzeWithExpression</c> (base type must obey Assignable).
     /// Only handles simple (non-nested, non-index) updates on RecordTypeInfo.

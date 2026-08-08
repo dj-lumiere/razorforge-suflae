@@ -167,7 +167,7 @@ public partial class Parser
                     message: $"Only '${{{handle}.type}}' is valid in a type position, not '${{{handle}.{projection}}}'.");
             }
             Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' to close '${...}' type splice");
-            return new TypeExpression(Name: "$splice", GenericArguments: null, Location: location,
+            return new TypeExpression(Name: "splice", GenericArguments: null, Location: location,
                 SpliceHandle: handle);
         }
 

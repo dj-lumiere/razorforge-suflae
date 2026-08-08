@@ -54,11 +54,11 @@ public partial class LlvmCodeGenerator
         var paramTypes = new List<string>();
 
         // For methods, add implicit 'me' parameter first
-        // Skip 'me' for $create routines (static factories) and common (type-level) routines
+        // Skip 'me' for create routines (static factories) and common (type-level) routines
         bool isCreator = IsCreatorRoutine(routine: routine);
         if (routine.OwnerType != null && !isCreator && !routine.IsCommon)
         {
-            // $setitem! on records: me is passed by pointer so mutations propagate to caller
+            // setitem! on records: me is passed by pointer so mutations propagate to caller
             paramTypes.Add(item: GetImplicitMeParameterDeclaration(routine: routine,
                 includeName: false));
         }
@@ -209,10 +209,10 @@ public partial class LlvmCodeGenerator
 
             // MEMBER decl in a known module: resolve OWNER-SCOPED to this module FIRST. A bare
             // `LookupRoutine("Box.destroy")` returns a first-wins entry, so when two modules each
-            // declare `record Box` with a `$destroy`/0-param method, this module's body would be
+            // declare `record Box` with a `destroy`/0-param method, this module's body would be
             // emitted under the OTHER module's symbol — leaving this module's symbol undefined (the
             // module-scoped-type over-prune). The overload block below only rescues >0-param methods;
-            // 0-param ones (`$destroy()`, `bump()`) must be pinned here, before the bare lookup.
+            // 0-param ones (`destroy()`, `bump()`) must be pinned here, before the bare lookup.
             int memberDot = baseName.IndexOf(value: '.');
             if (!string.IsNullOrEmpty(value: moduleContext) && memberDot > 0)
             {
@@ -392,7 +392,7 @@ public partial class LlvmCodeGenerator
         }
 
         // For methods, add implicit 'me' parameter first
-        // Skip 'me' for $create routines (static factories), common (type-level) routines, and void/None owner types
+        // Skip 'me' for create routines (static factories), common (type-level) routines, and void/None owner types
         bool isCreator = IsCreatorRoutine(routine: routineInfo);
         if (routineInfo.OwnerType != null && !isCreator && !routineInfo.IsCommon)
         {
@@ -472,10 +472,10 @@ public partial class LlvmCodeGenerator
             : _currentReturnCoerceType ?? returnType;
         string returnPrefix =
             !_currentReturnViaSret && isCreator && returnType == "ptr" ? "noalias " : "";
-        // Compiler-synthesized routines (lifecycle $destroy/$store/copy, derived operators, wrapper
+        // Compiler-synthesized routines (lifecycle destroy/store/copy, derived operators, wrapper
         // forwarding, variant-arm constructors, try_/check_ variants, …) are only ever referenced
         // within this whole-program module, so give them `internal` linkage: LLVM's GlobalDCE can then
-        // strip the ones that end up uncalled (e.g. a no-op $destroy) and inline+eliminate single-use
+        // strip the ones that end up uncalled (e.g. a no-op destroy) and inline+eliminate single-use
         // helpers. The runtime never unwinds (no invoke/landingpad/personality is ever emitted), so
         // they are also `nounwind`. main / start / user routines and extern `declare`s are untouched.
         bool isCompilerGenerated = routineInfo.IsSynthesized || routineInfo.IsWiredMemberRoutine;
@@ -576,7 +576,7 @@ public partial class LlvmCodeGenerator
         // Track current routine for source_routine() / source_module() injection
         _currentEmittingRoutine = routine;
 
-        // Register implicit 'me' parameter for methods (skip for $create static factories and common routines)
+        // Register implicit 'me' parameter for methods (skip for create static factories and common routines)
         if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine) && !routine.IsCommon)
         {
             // A Suflae entity member routine receives `me` as the `Roamed[E]` handle (SF slice 2 sets
@@ -608,9 +608,9 @@ public partial class LlvmCodeGenerator
                 _localVariables[key: "me"] = meLocalType;
             }
         }
-        // Entity $create that references `me`: allocate the entity at routine entry, bind
+        // Entity create that references `me`: allocate the entity at routine entry, bind
         // `me` to the fresh pointer, and let the body mutate via `me.field = …` / `return me`.
-        // Canonical `return Type(field: …)` $create routines that never touch `me` skip this.
+        // Canonical `return Type(field: …)` create routines that never touch `me` skip this.
         else if (routine.OwnerType is EntityTypeInfo creatorEntity &&
                  IsCreatorRoutine(routine: routine) &&
                  MeReferenceScanner.Scan(body: body))
@@ -790,8 +790,8 @@ public partial class LlvmCodeGenerator
     internal static string MangleRoutineName(RoutineInfo routine)
     {
         // All routines with parameters are disambiguated by parameter type. Overloads
-        // sharing only a name (e.g. LocalMoment.sub(Duration) vs $sub(LocalMoment),
-        // or $hash() vs $hash(k0, k1)) collapse to the same symbol otherwise and the
+        // sharing only a name (e.g. LocalMoment.sub(Duration) vs sub(LocalMoment),
+        // or hash() vs hash(k0, k1)) collapse to the same symbol otherwise and the
         // linker arbitrarily picks one definition, mis-typing every call site.
         static bool ShouldDisambiguateByParameterTypes(RoutineInfo candidate) =>
             candidate.Parameters.Count > 0;
@@ -1114,7 +1114,7 @@ public partial class LlvmCodeGenerator
     /// would be wrong. These are pure values and never mutate <c>me</c> in place, so "needs by-value"
     /// and "mutates in place" never overlap.</item>
     /// </list>
-    /// Entities are already by-ref via their pointer ABI. This replaces the old <c>$setitem</c>
+    /// Entities are already by-ref via their pointer ABI. This replaces the old <c>setitem</c>
     /// name-check: <c>Array.setitem</c> is by-ref because Array is aggregate-backed, like every
     /// other Array method — not because of its name.
     /// </summary>

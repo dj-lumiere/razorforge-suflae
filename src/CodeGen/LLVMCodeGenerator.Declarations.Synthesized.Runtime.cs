@@ -54,7 +54,7 @@ public partial class LlvmCodeGenerator
         int savedLength = _functionDefinitions.Length;
         int savedTempCounter = _tempCounter;
         // Same whole-program-internal treatment as GenerateRoutineDefinition: these are all
-        // compiler-synthesized bodies (auto-derived $destroy/$store/copy, wrapper forwarding, …),
+        // compiler-synthesized bodies (auto-derived destroy/store/copy, wrapper forwarding, …),
         // referenced only within this module, so `internal` linkage lets GlobalDCE strip the uncalled
         // ones and `nounwind` reflects that the runtime never unwinds.
         bool isCompilerGenerated = routine.IsSynthesized || routine.IsWiredMemberRoutine;

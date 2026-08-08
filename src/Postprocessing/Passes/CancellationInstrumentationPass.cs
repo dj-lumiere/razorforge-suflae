@@ -22,7 +22,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <c>local.destroy()</c> calls <c>ScopeTeardownLoweringPass</c> already inserted. A push goes
 /// right after a local's construction (so a value built *after* a suspend point is not on the stack
 /// before it — partial init), and a pop right before each of that local's inline
-/// <c>$destroy</c> (so the node is removed exactly when the inline teardown runs — the value can
+/// <c>destroy</c> (so the node is removed exactly when the inline teardown runs — the value can
 /// never be torn down twice). Empty may-suspend set ⇒ this pass is a no-op.</para>
 ///
 /// <para>First cut scope: owned LOCALS of free routines. Member routines and synthesized/generic
@@ -77,7 +77,7 @@ public sealed class CancellationInstrumentationPass
 
         // Monomorphized generic bodies (List[Box].pop, etc.) are keyed by concrete RegistryKey and
         // are the SAME objects codegen emits, so mutating their bodies in place takes effect. They
-        // inherited the inline $destroy calls from the lowered generic-def, so InstrumentBody derives
+        // inherited the inline destroy calls from the lowered generic-def, so InstrumentBody derives
         // the teardown set the same way.
         foreach ((string key, Instantiation.MonomorphizedBody mb) in instantiatedBodies)
         {
@@ -151,7 +151,7 @@ public sealed class CancellationInstrumentationPass
 
     /// <summary>
     /// Rewrites <paramref name="block"/>'s statement list in place: a push marker after each
-    /// instrumented local's construction, a pop marker before each of its inline <c>$destroy</c>,
+    /// instrumented local's construction, a pop marker before each of its inline <c>destroy</c>,
     /// recursing into nested blocks first.
     /// </summary>
     private void InstrumentBlock(BlockStatement block, HashSet<string> locals)

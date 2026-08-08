@@ -186,7 +186,7 @@ public sealed class RoutineInfo
 
     /// <summary>
     /// Whether this is a WIRED member routine — one the source spells with a leading <c>$</c>
-    /// (<c>$create</c>, <c>$store</c>, <c>$eq</c>, <c>$emit</c>, <c>$destroy</c>, …). The <c>$</c> is
+    /// (<c>create</c>, <c>store</c>, <c>eq</c>, <c>emit</c>, <c>destroy</c>, …). The <c>$</c> is
     /// a STRUCTURED attribute recorded here, NOT part of <see cref="Name"/>: the canonical name is the
     /// bare identifier (<c>create</c>, <c>store</c>, …). Wired routines are always member routines.
     /// </summary>

@@ -52,7 +52,7 @@ internal sealed class LiteralLoweringPass
     {
         _variantBodies = ctx.VariantBodies;
         // Cached so the synthesized `BackIndex(...)` creator can carry a resolved type — a later
-        // pass (OperatorLoweringPass) needs it to pick the BackIndex `$getitem!` overload.
+        // pass (OperatorLoweringPass) needs it to pick the BackIndex `getitem!` overload.
         _backIndexType = ctx.Registry.LookupType(name: "BackIndex");
 
         // `n`/`dn` arbitrary-precision literals are emitted as malformed scalar IR by codegen
@@ -272,7 +272,7 @@ internal sealed class LiteralLoweringPass
     {
         if (expr is LiteralExpression literal)
         {
-            // Arbitrary-precision `n`/`dn` literals -> infallible $from_literal constructor call
+            // Arbitrary-precision `n`/`dn` literals -> infallible from_literal constructor call
             // (instance lowering: needs the cached Integer/Decimal types + routines).
             Expression? fromLit = TryLowerArbitraryPrecisionLiteral(literal);
             if (fromLit != null) return fromLit;
@@ -526,7 +526,7 @@ internal sealed class LiteralLoweringPass
     }
 
     /// <summary>
-    /// Lowers an arbitrary-precision <c>n</c>/<c>dn</c> literal to a <c>$from_literal</c> constructor
+    /// Lowers an arbitrary-precision <c>n</c>/<c>dn</c> literal to a <c>from_literal</c> constructor
     /// call, or returns null if <paramref name="literal"/> is not such a literal (or the
     /// Integer/Decimal type/routine is unavailable). Codegen has no scalar form for these record
     /// types, so they must become a call before codegen.
@@ -579,7 +579,7 @@ internal sealed class LiteralLoweringPass
                 return MakeComplexCreator("C128", _c128Type, mag, TokenType.F128Literal, _f128Type, loc);
             case TokenType.JnLiteral when _complexType != null && _realType != null
                                           && _realFromLiteral != null:
-                // Complex components are arbitrary-precision Real -> $from_literal calls
+                // Complex components are arbitrary-precision Real -> from_literal calls
                 // (the creator's args are not re-lowered, so build them already-lowered here).
                 return new CreatorExpression("Complex", null,
                     [("real", MakeFromLiteralCall("0", "", _realType, _realFromLiteral, loc)),
@@ -603,7 +603,7 @@ internal sealed class LiteralLoweringPass
     /// <summary>
     /// Builds <c>&lt;Type&gt;.from_literal(text: "&lt;digits&gt;")</c> for an arbitrary-precision
     /// (<c>n</c>/<c>dn</c>) literal. The suffix and digit-group underscores are stripped; the bare
-    /// digit string is materialized at runtime by the infallible <c>$from_literal</c> constructor.
+    /// digit string is materialized at runtime by the infallible <c>from_literal</c> constructor.
     /// </summary>
     private CallExpression MakeFromLiteralCall(string raw, string suffix, TypeInfo type,
         RoutineInfo fromLiteral, SourceLocation loc)
@@ -682,7 +682,7 @@ internal sealed class LiteralLoweringPass
                 ? lit with { LiteralType = TokenType.U64Literal }
                 : operand;
         var creator = new CreatorExpression("BackIndex", null, [("offset", offset)], loc);
-        // Carry the resolved type so OperatorLoweringPass can disambiguate `$getitem!`/`$setitem!`
+        // Carry the resolved type so OperatorLoweringPass can disambiguate `getitem!`/`setitem!`
         // by the index argument type (the BackIndex overload, not the forward U64 one).
         creator.ResolvedType = _backIndexType;
         return creator;

@@ -165,10 +165,10 @@ public partial class LlvmCodeGenerator
         // `local.destroy()` calls by ScopeTeardownLoweringPass (Phase 7), so codegen emits none.
         //
         // The entity self-free (freeing the heap allocation backing `me`) is ALSO lowered into the
-        // synthesized `$destroy` body as `me.hijack().invalidate()` (see
+        // synthesized `destroy` body as `me.hijack().invalidate()` (see
         // WiredRoutinePass.BuildEntitySelfFree). Codegen used to additionally emit a raw
-        // `rf_invalidate(me)` here for synthesized entity `$destroy`, but that DUPLICATED the
-        // AST-level free → every synthesized entity `$destroy` double-freed `me` (ASan: "double-free"
+        // `rf_invalidate(me)` here for synthesized entity `destroy`, but that DUPLICATED the
+        // AST-level free → every synthesized entity `destroy` double-freed `me` (ASan: "double-free"
         // / glibc "double free in tcache"), crashing programs that destroy an owned entity at scope
         // exit (e.g. `using x.modify() as g`). The AST free is the single source of truth, so this is
         // now a no-op; the parameters are kept for call-site compatibility.

@@ -104,7 +104,7 @@ public partial class LlvmCodeGenerator
                 message: $"Unknown type in constructor: {expr.TypeName}");
         }
 
-        // SA resolved this creator to a `$create(named:)` overload — dispatch through it
+        // SA resolved this creator to a `create(named:)` overload — dispatch through it
         // instead of inline field-init.
         if (expr.ResolvedCreatorRoutine is { } creatorRoutine)
         {
@@ -212,8 +212,8 @@ public partial class LlvmCodeGenerator
         CreatorExpression expr)
     {
         // Empty creator (e.g. `Set[T]()` from collection-literal lowering) must route through
-        // the type's no-arg `$create()` overload — entities like Set/Dict allocate heap buffers
-        // (ctrl/slot arrays) inside $create that a raw rf_allocate_dynamic + zero-init would skip,
+        // the type's no-arg `create()` overload — entities like Set/Dict allocate heap buffers
+        // (ctrl/slot arrays) inside create that a raw rf_allocate_dynamic + zero-init would skip,
         // leaving the entity in an invalid state that crashes on the first method call.
         if (expr.MemberVariables.Count == 0)
         {
@@ -252,7 +252,7 @@ public partial class LlvmCodeGenerator
         CreatorExpression expr) // NOSONAR S3776
     {
         // Backend-annotated or single-member-variable wrapper: just return the inner value.
-        // BUT: only when there's no explicit `$create(from: argType)` overload — those have
+        // BUT: only when there's no explicit `create(from: argType)` overload — those have
         // real conversion bodies (e.g. `CStr.create(from: Referring[Text])` UTF-8-encodes a
         // Text into bytes). Passing the Text entity ptr through as if it were a CStr ptr
         // skips the conversion and `rf_console_show` ends up dumping the entity struct as

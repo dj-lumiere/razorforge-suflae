@@ -119,7 +119,7 @@ public partial class LlvmCodeGenerator
         // Taking a routine as a value references it as a real callee (the adapter thunk calls it), so
         // its body must be emitted. The thunk is written straight to the aux buffer and never routes
         // through GenerateRoutineDeclaration, so record the reference here — otherwise a routine used
-        // ONLY as a value (e.g. a synthesized `$roam_*_impl` cycle-collector hook) fails the Phase-C
+        // ONLY as a value (e.g. a synthesized `roam_*_impl` cycle-collector hook) fails the Phase-C
         // `_referencedKeys` emission gate and links against an undefined symbol.
         _referencedKeys.Add(item: routine.RegistryKey);
         string thunkSym = EnsureRoutineValueThunk(routine: routine);
@@ -144,7 +144,7 @@ public partial class LlvmCodeGenerator
     /// <para>Free routines forward their declared parameters. An <b>unbound entity-method</b>
     /// reference additionally forwards the receiver as a leading <c>ptr %me</c> — the real method
     /// symbol takes <c>me</c> first, and the caller (e.g. the cycle collector invoking a per-type
-    /// <c>$roam_trace_impl</c> hook) supplies the entity pointer as that first logical argument.
+    /// <c>roam_trace_impl</c> hook) supplies the entity pointer as that first logical argument.
     /// Only entity receivers (always <c>ptr</c>) are handled; record-value receivers would need
     /// their by-value receiver ABI and are not used as values.</para>
     /// </summary>
@@ -155,7 +155,7 @@ public partial class LlvmCodeGenerator
         string mangled = MangleRoutineName(routine: routine);
         string realRef = $"@{mangled}";
         string rawName = mangled.StartsWith(value: '"') ? mangled[1..^1] : mangled;
-        string thunkRaw = $"{rawName}$rfvthunk";
+        string thunkRaw = $"{rawName}.rfvthunk";
         string thunkSym = $"@{Q(name: thunkRaw)}";
         if (!_emittedRoutineValueThunks.Add(item: thunkRaw))
             return thunkSym;
@@ -178,7 +178,7 @@ public partial class LlvmCodeGenerator
         // Unbound entity-method reference: the real method symbol takes `me` (a `ptr`) first, so the
         // thunk forwards it as its first logical argument (after the ignored closure slot). The caller
         // supplies the receiver at call time — e.g. the collector passes the entity address to a
-        // `$roam_trace_impl` / `$roam_free_impl` hook.
+        // `roam_trace_impl` / `roam_free_impl` hook.
         if (routine.OwnerType is { Category: TypeCategory.Entity })
         {
             paramDecls.Add(item: "ptr %me");
@@ -271,7 +271,7 @@ public partial class LlvmCodeGenerator
         string mangled = MangleRoutineName(routine: routine);
         string realRef = $"@{mangled}";
         string raw = mangled.StartsWith(value: '"') ? mangled[1..^1] : mangled;
-        string thunkRaw = $"{raw}$thread_entry";
+        string thunkRaw = $"{raw}.thread_entry";
         string thunkSym = $"@{Q(name: thunkRaw)}";
         if (!_emittedRoutineValueThunks.Add(item: thunkRaw))
             return thunkSym;
@@ -627,7 +627,7 @@ public partial class LlvmCodeGenerator
         string mangled = MangleRoutineName(routine: routine);
         string realRef = $"@{mangled}";
         string raw = mangled.StartsWith(value: '"') ? mangled[1..^1] : mangled;
-        string thunkRaw = $"{raw}$coro_entry";
+        string thunkRaw = $"{raw}.coro_entry";
         string thunkSym = $"@{Q(name: thunkRaw)}";
         if (!_emittedRoutineValueThunks.Add(item: thunkRaw))
             return thunkSym;
@@ -873,8 +873,8 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Lowers a <c>__rf_cf_push(local)</c> marker: allocate a cancellation node for the owned local
-    /// and push it onto the coroutine's shadow stack with the local's value and its <c>$destroy</c>.
-    /// The value pushed is exactly the <c>me</c> the inline <c>$destroy</c> would receive: the loaded
+    /// and push it onto the coroutine's shadow stack with the local's value and its <c>destroy</c>.
+    /// The value pushed is exactly the <c>me</c> the inline <c>destroy</c> would receive: the loaded
     /// pointer for an entity, the alloca address for a value-type record. Returns "" (void).
     /// </summary>
     private string EmitCancelPush(StringBuilder sb, CallExpression call)
@@ -919,7 +919,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Lowers a <c>__rf_cf_pop(local)</c> marker: unlink the local's cancellation node before its
-    /// inline <c>$destroy</c> runs (so abandon never double-frees it). No-op if the local was never
+    /// inline <c>destroy</c> runs (so abandon never double-frees it). No-op if the local was never
     /// pushed (e.g. a param). Returns "" (void).
     /// </summary>
     private string EmitCancelPop(StringBuilder sb, CallExpression call)
@@ -1127,7 +1127,7 @@ public partial class LlvmCodeGenerator
             BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),
             BinaryOperator.Disobeys => EmitCompileTimeConstant(value: "false"),
             // Flags types intentionally bypass method-call lowering for bitwise ops to avoid
-            // infinite recursion in synthesized $bitor/$bitand bodies. They reach codegen
+            // infinite recursion in synthesized bitor/bitand bodies. They reach codegen
             // unlowered and are emitted as direct LLVM bitwise instructions on the underlying
             // integer representation. See OperatorLoweringPass.cs (around the FlagsTypeInfo
             // skip) for the symmetric end.
@@ -1137,7 +1137,7 @@ public partial class LlvmCodeGenerator
                 => EmitFlagsBitwiseOp(sb: sb, binary: binary, llvmOp: "and"),
             BinaryOperator.BitwiseXor when GetExpressionType(expr: binary.Left) is FlagsTypeInfo
                 => EmitFlagsBitwiseOp(sb: sb, binary: binary, llvmOp: "xor"),
-            // Same skip-list as the bitwise ops above — Flags $eq/$ne bodies use `me == you` /
+            // Same skip-list as the bitwise ops above — Flags eq/ne bodies use `me == you` /
             // `me != you` (BinaryExpression(Equal/NotEqual)) and OperatorLoweringPass leaves
             // them unlowered for Flags to avoid infinite recursion. Codegen emits a direct
             // `icmp eq/ne` on the underlying integer.
@@ -1153,6 +1153,7 @@ public partial class LlvmCodeGenerator
 
     private string EmitFlagsBitwiseOp(StringBuilder sb, BinaryExpression binary, string llvmOp)
     {
+        // TODO: This should be done with member routine, not here
         string left = EmitExpression(sb: sb, expr: binary.Left);
         string right = EmitExpression(sb: sb, expr: binary.Right);
         TypeInfo? flagsType = GetExpressionType(expr: binary.Left);
@@ -1164,6 +1165,7 @@ public partial class LlvmCodeGenerator
 
     private string EmitFlagsCmpOp(StringBuilder sb, BinaryExpression binary, string cmpKind)
     {
+        // TODO: This should be done with member routine, not here
         string left = EmitExpression(sb: sb, expr: binary.Left);
         string right = EmitExpression(sb: sb, expr: binary.Right);
         TypeInfo? flagsType = GetExpressionType(expr: binary.Left);
@@ -1263,6 +1265,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitChoiceIs(StringBuilder sb, BinaryExpression binary, string cmpOp)
     {
+        // TODO: This should be done with member routine, not here
         string left = EmitExpression(sb: sb, expr: binary.Left);
         string right = EmitExpression(sb: sb, expr: binary.Right);
         string result = NextTemp();
@@ -1285,7 +1288,7 @@ public partial class LlvmCodeGenerator
     {
         // TODO: This should be done with member routine, not here
         // BitwiseNot on FlagsTypeInfo is intentionally left unlowered by OperatorLoweringPass
-        // (flags have no $bitnot body to avoid synthesizer recursion). Emit `xor x, -1` directly
+        // (flags have no bitnot body to avoid synthesizer recursion). Emit `xor x, -1` directly
         // on the underlying integer type, mirroring EmitFlagsBitwiseOp.
         if (unary.Operator == UnaryOperator.BitwiseNot &&
             GetExpressionType(expr: unary.Operand) is FlagsTypeInfo flagsType)

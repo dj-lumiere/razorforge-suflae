@@ -198,7 +198,7 @@ public partial class LlvmCodeGenerator
         {
             // Track entity variables for automatic cleanup at return points.
             // Tracked when initialized via constructor (actual heap allocation) or as a
-            // lateinit placeholder (allocated below, $create not run).
+            // lateinit placeholder (allocated below, create not run).
             case EntityTypeInfo when IsEntityConstructorCall(expr: varDecl.Initializer) ||
                                      (varDecl.IsLateInit && varDecl.Initializer == null):
                 _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
@@ -253,10 +253,10 @@ public partial class LlvmCodeGenerator
         if (varDecl.Initializer == null)
         {
             // `lateinit var x: T` — eager allocation, late initialization. Entities get a
-            // real heap block ($create not run, no field stores) so the binding is
+            // real heap block (create not run, no field stores) so the binding is
             // immediately valid and borrowable, and scope teardown frees a real allocation.
             // The block must come from the calloc-backed rf_allocate_dynamic (NOT the
-            // _uninit variant): $destroy runs on the placeholder (scope exit, and on
+            // _uninit variant): destroy runs on the placeholder (scope exit, and on
             // reassignment) and walks its fields — zeroed fields are null-safe to free,
             // garbage fields are wild pointers. Value types are stored zeroed for the same
             // reason (RC-field release walks). Zeroed contents are teardown armor, not a
@@ -498,7 +498,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void ConsumeTransferredLocalOwnership(Expression expr)
     {
-        // `$store` synthesis is gone — borrowed-reference values reach here as bare
+        // `store` synthesis is gone — borrowed-reference values reach here as bare
         // identifiers / member accesses or wrapped in `steal`. Both are handled below.
         // Named arguments wrap their value (`value: steal new_node` → NamedArgumentExpression);
         // peek through the wrapper to reach the underlying identifier.
@@ -782,15 +782,15 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, Expression rhs) // NOSONAR S3776
     {
-        // TODO: Record setitem is a hack and should be following $setitem member routine.
-        // TODO: Also, the $setitem routine should be just called through anyway and handled not in here.
+        // TODO: Record setitem is a hack and should be following setitem member routine.
+        // TODO: Also, the setitem routine should be just called through anyway and handled not in here.
         TypeInfo? targetType = GetExpressionType(expr: index.Object);
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
         RoutineInfo? setItem = LookupSetItemMethod(index: index);
 
-        // Wrapper-record detection: if the resolved $setitem's value-param type doesn't match
+        // Wrapper-record detection: if the resolved setitem's value-param type doesn't match
         // the target's last type-argument, the lookup unwrapped through a wrapper (e.g.
         // Owned[List[S64]] -> inner List[S64].setitem!(i64)). The inline mangled-name path
         // would emit a call to the wrapper's symbol which doesn't exist, so escape to the
@@ -802,7 +802,7 @@ public partial class LlvmCodeGenerator
             targetType?.TypeArguments is [not ConstGenericValueTypeInfo] &&
             setItem.Parameters[^1].Type.FullName != targetType.TypeArguments[^1].FullName;
 
-        // Record $setitem!: the receiver must be the alloca pointer so mutations persist in the
+        // Record setitem!: the receiver must be the alloca pointer so mutations persist in the
         // caller's frame. EmitMemberRoutineCall evaluates the receiver as a loaded value, which would
         // discard writes -> so keep the pointer-based dispatch inline for this case.
         if (setItem != null && targetType is RecordTypeInfo &&
@@ -826,7 +826,7 @@ public partial class LlvmCodeGenerator
                 ? GetLlvmType(type: indexType)
                 : "i64";
             string valueLlvm;
-            // Prefer the resolved $setitem's value param type — that's what the call signature
+            // Prefer the resolved setitem's value param type — that's what the call signature
             // actually expects. Only fall back to TypeArguments[^1] when the param is still an
             // unresolved generic parameter (rare; should not happen for IsGenericResolution targets).
             // Falling through to TypeArguments[^1] is wrong for single-arg wrappers like
@@ -858,7 +858,7 @@ public partial class LlvmCodeGenerator
         RoutineInfo? dispatchSetItem = index.ResolvedSetItem ?? setItem;
         if (dispatchSetItem != null)
         {
-            // Failability is a property, not part of the name — use the bare `$setitem`. Codegen
+            // Failability is a property, not part of the name — use the bare `setitem`. Codegen
             // dispatches via ResolvedRoutine (dispatchSetItem), which carries IsFailable.
             var member = new MemberExpression(Object: index.Object,
                 MemberName: "setitem",
@@ -871,7 +871,7 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        // Fallback: raw GEP + store for pointer/contiguous-memory types with no $setitem
+        // Fallback: raw GEP + store for pointer/contiguous-memory types with no setitem
         string rawValue = EmitExpression(sb: sb, expr: rhs);
         string target = EmitExpression(sb: sb, expr: index.Object);
         string idxVal = EmitExpression(sb: sb, expr: index.Index);
@@ -894,7 +894,7 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Looks up the $setitem method for an indexed target, handling failable names and generic types.
+    /// Looks up the setitem method for an indexed target, handling failable names and generic types.
     /// </summary>
     private RoutineInfo? LookupSetItemMethod(IndexExpression index)
     {
@@ -998,7 +998,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
 
-            // Unified teardown: tear the RC-wrapper field down via its `$destroy` (which forwards
+            // Unified teardown: tear the RC-wrapper field down via its `destroy` (which forwards
             // to `release`→controller), not `release` directly — keeps every teardown on one verb.
             RoutineInfo? destroyMethod = _registry.LookupMethod(type: w, methodName: "destroy");
             if (destroyMethod == null)
@@ -1027,7 +1027,7 @@ public partial class LlvmCodeGenerator
     {
         // Teardown is now lowered into the AST as explicit `local.destroy()` calls by
         // ScopeTeardownLoweringPass (Phase 7) — RC wrapper vars and RC-field records get their
-        // `$destroy` (which forwards to `release`) inserted there. Codegen emits no teardown.
+        // `destroy` (which forwards to `release`) inserted there. Codegen emits no teardown.
         _ = sb;
     }
 
@@ -1067,8 +1067,8 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Tears down an RC wrapper variable at scope exit by calling its <c>$destroy()</c> (which
-    /// forwards to <c>release()</c>→controller). Both Retained and Tracked expose <c>$destroy</c>.
+    /// Tears down an RC wrapper variable at scope exit by calling its <c>destroy()</c> (which
+    /// forwards to <c>release()</c>→controller). Both Retained and Tracked expose <c>destroy</c>.
     /// </summary>
     private void EmitRetainedVarRelease(StringBuilder sb, string llvmAddr,
         RecordTypeInfo recordType)

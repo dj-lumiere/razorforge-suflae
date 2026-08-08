@@ -164,9 +164,9 @@ internal sealed class WrapperForwardingPass
             return null;
         }
 
-        // $create and $destroy are type-lifecycle methods, not instance methods.
+        // create and destroy are type-lifecycle methods, not instance methods.
         // Forwarding them would generate `Hijacked[T](me)` in the body but `me` is
-        // not set up for $create (constructor) methods — skip unconditionally.
+        // not set up for create (constructor) methods — skip unconditionally.
         if (methodName is "create" or "destroy")
             return null;
 
@@ -257,7 +257,7 @@ internal sealed class WrapperForwardingPass
         }
 
         // Don't overwrite a method already defined on the wrapper's generic def
-        // (source-defined routines like $represent, $diagnose, $destroy take precedence).
+        // (source-defined routines like represent, diagnose, destroy take precedence).
         var existingOnDef = _registry.LookupMethod(type: wrapperDef,
                 methodName: methodName,
                 isFailable: isFailable);
@@ -489,8 +489,8 @@ internal sealed class WrapperForwardingPass
             // counts (first 8 bytes) as if they were T's first 8 bytes.
             // A `Roaming` guard indirects through `RoamController.data_ptr()`; Retained/Tracked through
             // `RetainController.borrow_data()`. Both just reach the inner entity — for `Roaming` the
-            // lock is already held by the enclosing `using` ($enter), so the forwarder only reaches +
-            // calls (release happens at $exit on every path).
+            // lock is already held by the enclosing `using` (enter), so the forwarder only reaches +
+            // calls (release happens at exit on every path).
             bool isRoamed = wrapperType.BareName == RuntimeContract.Roamed;
             bool viaRoamController = isRoamed;
             string controllerName = viaRoamController ? "RoamController" : "RetainController";
@@ -611,7 +611,7 @@ internal sealed class WrapperForwardingPass
             if (isRoamed)
             {
                 // Mode-checked lock, released EXPLICITLY (synthesized forwarder bodies are not run
-                // through ScopeTeardownLoweringPass, so an owned-guard $destroy would never be inserted).
+                // through ScopeTeardownLoweringPass, so an owned-guard destroy would never be inserted).
                 RoutineInfo? lockEnter = _registry.LookupMethod(type: wrapperType, methodName: "lock_enter");
                 RoutineInfo? lockExit = _registry.LookupMethod(type: wrapperType, methodName: "lock_exit");
                 ExpressionStatement MkLock(RoutineInfo? m, string verb) => new ExpressionStatement(

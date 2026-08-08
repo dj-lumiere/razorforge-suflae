@@ -238,7 +238,7 @@ public partial class Parser
         //   "List[T]"      -> name="List", genericParams=["T"]
         //   "Point.get_x"  -> name="Point.get_x"
         // ===============================================================================
-        // A leading `$` (wired member routine like `$store`) is a separate Dollar token, recorded
+        // A leading `$` (wired member routine like `store`) is a separate Dollar token, recorded
         // structurally (IsWiredMemberRoutine) and dropped from the bare name.
         _routineNameWired = false;
         if (Match(type: TokenType.Dollar))

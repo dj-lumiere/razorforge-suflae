@@ -108,8 +108,8 @@ public sealed partial class TypeRegistry
             // and failability) REPLACES its prior list entry instead of appending. Appending
             // duplicates here let method resolution iterate stale-and-fresh copies of the same
             // overload and pick order-dependently — a non-determinism that manifested as
-            // platform-specific codegen. Failability is part of the identity because `$mul` and
-            // `$mul!` share a RegistryKey (the `!` is not in it) yet are distinct overloads that
+            // platform-specific codegen. Failability is part of the identity because `mul` and
+            // `mul!` share a RegistryKey (the `!` is not in it) yet are distinct overloads that
             // must coexist. The dedup scan only runs when the RegistryKey was already present
             // (`keyExisted`); a key's first registration stays an O(1) append. User-written
             // routines are never replaced by a synthesized same-identity routine.
@@ -774,10 +774,10 @@ public sealed partial class TypeRegistry
         TypeInfo? forImplementer = null)
     {
         // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) obey `Storable` but define no concrete
-        // `$store` — their store-hook IS the refcount copy verb (retain/track/share/watch/roam). Redirect
-        // `$store` to that verb so a generic `T obeys Storable` call resolves to a real, defined method
+        // `store` — their store-hook IS the refcount copy verb (retain/track/share/watch/roam). Redirect
+        // `store` to that verb so a generic `T obeys Storable` call resolves to a real, defined method
         // rather than an undefined `<Wrapper>.store` symbol (which would fail to link). A hand-written
-        // `$store` would recurse (its own `return me.retain()` re-enters `$store`), so the redirect lives
+        // `store` would recurse (its own `return me.retain()` re-enters `store`), so the redirect lives
         // here in lookup instead of as a stdlib method.
         if (methodName == "store" && GetRcWrapperBaseName(type: type) is { } rcBase
             && RuntimeContract.RcCopyVerb.TryGetValue(
@@ -789,7 +789,7 @@ public sealed partial class TypeRegistry
         // Transparent-protocol unwrap: Referring[X] / Controlling[X] are markers that
         // dispatch every method to X. If the receiver is one of these wrappers with a
         // single type argument, recurse on the inner type. Without this, for-loops over
-        // `Referring[Iterable[T]]` parameters can't resolve $iter at SA time, leading
+        // `Referring[Iterable[T]]` parameters can't resolve iter at SA time, leading
         // to "no resolved method" warnings during generic monomorphization.
         if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
@@ -1027,7 +1027,7 @@ public sealed partial class TypeRegistry
     {
         // Transparent-protocol unwrap: Referring[X] / Controlling[X] forward every method
         // to X. Mirror the unwrap in LookupMethod so overload-driven resolution (e.g. the
-        // CallOverloadResolutionPass walking f-string-lowered $represent calls on a
+        // CallOverloadResolutionPass walking f-string-lowered represent calls on a
         // `Referring[Text]` receiver) lands on Text's method instead of synthesizing a
         // protocol-dispatch stub on Referring that has no implementers registered.
         if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
@@ -1723,7 +1723,7 @@ public sealed partial class TypeRegistry
     /// definition's own methods substituted for this owner (via <see cref="SubstituteMethodForOwner"/>).
     /// This is the single source of truth the find-side and the lifecycle (teardown/copy) passes share,
     /// so <c>GetMethodsForType</c> (raw) and <see cref="LookupMethod"/> can no longer disagree about
-    /// whether e.g. <c>Retained[Tracer]</c> has a <c>$destroy</c>.
+    /// whether e.g. <c>Retained[Tracer]</c> has a <c>destroy</c>.
     ///
     /// <para>Plain OWN-method enumeration only — no protocol-method synthesis, no universal-method
     /// stub, no marker/wrapper unwrap (those are dispatch concerns). That keeps it from surfacing the
@@ -1776,14 +1776,14 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Lifecycle and reference are governed by the four wired routines
-    /// <c>$create</c>/<c>$refer</c>/<c>$control</c>/<c>$destroy</c> — the system is AGNOSTIC to
+    /// <c>create</c>/<c>refer</c>/<c>control</c>/<c>destroy</c> — the system is AGNOSTIC to
     /// specific wrapper-type names (no hardcoded Viewing/Modifying/Hijacked list). Teardown simply calls
-    /// <c>$destroy</c> uniformly: it is a real destructor on owning types and a no-op on the
+    /// <c>destroy</c> uniformly: it is a real destructor on owning types and a no-op on the
     /// access/borrow wrappers, so firing it is always safe by construction. The only thing this gate
     /// excludes is the ABSTRACT tier — generic parameters and protocols (the latter also covering the
-    /// <c>Referring</c>/<c>Controlling</c> access markers) — which have no concrete <c>$destroy</c> to
+    /// <c>Referring</c>/<c>Controlling</c> access markers) — which have no concrete <c>destroy</c> to
     /// resolve. The one remaining hazard, a <c>T</c> reference bound to the bare referent type via the
-    /// reference primitives <c>$refer</c>/<c>$control</c>/<c>as_entity</c>, is excluded at the binding
+    /// reference primitives <c>refer</c>/<c>control</c>/<c>as_entity</c>, is excluded at the binding
     /// site by <c>ScopeTeardownLoweringPass.IsViewBinding</c> (keyed on the producing verb, since the
     /// binding's static type is the referent itself, not a borrow wrapper).
     /// </summary>
@@ -1793,7 +1793,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// If <paramref name="type"/> is an RC wrapper (Retained/Tracked/Shared/Watched/Roamed) — matched
     /// by its generic base name — returns that base name, else null. Used to redirect the abstract
-    /// <c>$store</c> hook to the wrapper's concrete refcount copy verb (see
+    /// <c>store</c> hook to the wrapper's concrete refcount copy verb (see
     /// <see cref="RuntimeContract.RcCopyVerb"/>).
     /// </summary>
     internal static string? GetRcWrapperBaseName(TypeInfo type)
@@ -1815,9 +1815,9 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Resolves a type's owned-value lifecycle: its retaining <c>$store</c> (a hand-written, i.e.
-    /// non-synthesized, zero-arg <c>$store</c> on a record — the managed-leaf retain hook), its
-    /// <c>$destroy</c> (preferring the user-written one), and whether it is a borrow-tier type. The
+    /// Resolves a type's owned-value lifecycle: its retaining <c>store</c> (a hand-written, i.e.
+    /// non-synthesized, zero-arg <c>store</c> on a record — the managed-leaf retain hook), its
+    /// <c>destroy</c> (preferring the user-written one), and whether it is a borrow-tier type. The
     /// teardown and copy lowering passes both drive off THIS one decision, so a value is either both
     /// retaining-copied and balanced-destroyed, or neither — never the asymmetry that double-freed
     /// before. Resolved via <see cref="GetOwnMethodsResolved"/>, so it works for generic resolutions.
@@ -1832,8 +1832,8 @@ public sealed partial class TypeRegistry
             .Where(predicate: m => m.Name == "destroy" && m.Parameters.Count == 0)
             .OrderBy(keySelector: m => m.IsSynthesized ? 1 : 0)
             .FirstOrDefault();
-        // The store-site hook: the verb the copy-lowering pass injects at each `$store` point to make
-        // an aliased value sound. For records/RC wrappers it is the retaining `$store`; for a variant
+        // The store-site hook: the verb the copy-lowering pass injects at each `store` point to make
+        // an aliased value sound. For records/RC wrappers it is the retaining `store`; for a variant
         // with a destructible arm it is the deep `copy` (a bitwise alias would double-free the heap arm).
         RoutineInfo? store = null;
         // Variant MUST be checked before RecordTypeInfo: VariantTypeInfo is a RecordTypeInfo subclass,
@@ -1858,7 +1858,7 @@ public sealed partial class TypeRegistry
         }
         else if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
         {
-            // A variant with a destructible arm (an arm whose own $destroy does real work — a heap
+            // A variant with a destructible arm (an arm whose own destroy does real work — a heap
             // entity like a collection, a managed leaf like Text, or a record that transitively owns
             // one) would DOUBLE-FREE if bitwise-aliased: two copies of the variant both tear down the
             // same heap arm. Its synthesized deep `copy` (WiredRoutinePass.BuildVariantCopyBody,
@@ -1871,15 +1871,15 @@ public sealed partial class TypeRegistry
         }
         else if (type is RecordTypeInfo rec)
         {
-            // A hand-written $store is always a retaining copy (the managed-leaf retain hook,
+            // A hand-written store is always a retaining copy (the managed-leaf retain hook,
             // e.g. Text/Decimal bumping a shared controller).
             store = own.FirstOrDefault(predicate: m =>
                 m.Name == "store" && m.Parameters.Count == 0 && !m.IsSynthesized);
 
-            // The synthesized record $store is field-delegating (WiredRoutinePass.
-            // BuildRecordCopyBody) — symmetric with the field-delegating synthesized $destroy.
+            // The synthesized record store is field-delegating (WiredRoutinePass.
+            // BuildRecordCopyBody) — symmetric with the field-delegating synthesized destroy.
             // Treat it as a retaining copy iff some field itself needs one, so it gets injected
-            // at copy sites and balances the per-field $destroy at teardown (else: double-free).
+            // at copy sites and balances the per-field destroy at teardown (else: double-free).
             if (store is null && RecordHasRetainingField(record: rec))
                 store = own.FirstOrDefault(predicate: m =>
                     m.Name == "store" && m.Parameters.Count == 0);
@@ -1889,7 +1889,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Whether a variant has at least one arm whose payload owns a real destructor — i.e. an arm type
-    /// with a non-borrow <c>$destroy</c> (a heap entity/collection, a managed leaf like <c>Text</c>, or
+    /// with a non-borrow <c>destroy</c> (a heap entity/collection, a managed leaf like <c>Text</c>, or
     /// a record that transitively owns one). Such an arm double-frees on bitwise alias, so the variant
     /// needs a synthesized deep <c>copy</c>. None/None/scalar arms are safe to bitwise-copy and are
     /// ignored. Drives the variant branch of <see cref="GetLifecycle"/> and the copy/Copyable synthesis.
@@ -1919,9 +1919,9 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Whether a record transitively contains a field that needs a retaining copy — i.e. a
-    /// field whose type has a hand-written <c>$store</c> (a managed leaf such as <c>Text</c> or
+    /// field whose type has a hand-written <c>store</c> (a managed leaf such as <c>Text</c> or
     /// <c>Decimal</c>), or a composite record that itself contains one. Drives whether the
-    /// synthesized field-delegating <c>$store</c> counts as retaining in <see cref="GetLifecycle"/>.
+    /// synthesized field-delegating <c>store</c> counts as retaining in <see cref="GetLifecycle"/>.
     /// </summary>
     private bool RecordHasRetainingField(RecordTypeInfo record,
         HashSet<string>? visited = null)
@@ -1947,17 +1947,17 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// True when a value's <c>$destroy</c> is transitively a no-op — nothing to free, no user side
-    /// effect — so its scope-exit teardown call can be ELIDED. Every synthesized <c>$destroy</c> is a
+    /// True when a value's <c>destroy</c> is transitively a no-op — nothing to free, no user side
+    /// effect — so its scope-exit teardown call can be ELIDED. Every synthesized <c>destroy</c> is a
     /// (possibly empty) chain of field/arm destroys; when the whole tree bottoms out in scalars, the
     /// chain is pure <c>ret void</c>, yet the calls are NOT stripped by the optimizer (external linkage)
     /// and pin the value's alloca, blocking SROA. Skipping the call lets a pure-scalar record scalarize.
     ///
     /// A value is NON-trivially destructible (needs the call) when it (or, recursively, a field/arm/
     /// element) OWNS a resource or carries a user teardown: an <c>entity</c> (heap identity), an RC
-    /// wrapper (refcount release), a managed leaf with a hand-written <c>$store</c>/<c>$destroy</c>
+    /// wrapper (refcount release), a managed leaf with a hand-written <c>store</c>/<c>destroy</c>
     /// (<c>Text</c>/<c>Decimal</c>), an RC-wrapper field (the separate <c>HasRCFields</c> teardown
-    /// path), a variant with a destructible arm, or ANY user-written <c>$destroy</c>. Abstract/unknown
+    /// path), a variant with a destructible arm, or ANY user-written <c>destroy</c>. Abstract/unknown
     /// shapes return false (conservative — keep the call). Mirrors the ownership signals
     /// <see cref="GetLifecycle"/>, <see cref="VariantHasDestructibleArm"/> and
     /// <see cref="RecordTypeInfo.HasRCFields"/> already trust, so it can never disagree with what
@@ -1970,7 +1970,7 @@ public sealed partial class TypeRegistry
             return true;
 
         // Raw-pointer wrapper `Hijacked[T]` is USER-MANAGED: the holder frees it explicitly via
-        // `invalidate()`. The compiler must NEVER auto-tear it down — its `$destroy` is a no-op, and
+        // `invalidate()`. The compiler must NEVER auto-tear it down — its `destroy` is a no-op, and
         // auto-freeing a pointer the user also frees is a double-free. So it is trivially destructible
         // (skipped by teardown). (`CPtr` is `@llvm("ptr")` and already trivial via HasDirectBackendType.)
         if (type is WrapperTypeInfo && type.Name == RuntimeContract.Hijacked)
@@ -1993,7 +1993,7 @@ public sealed partial class TypeRegistry
         if (GetRcWrapperBaseName(type: type) is not null)
             return false;
 
-        // A user-written (non-synthesized) $destroy may have observable side effects even on a
+        // A user-written (non-synthesized) destroy may have observable side effects even on a
         // pointer-free value — it must run.
         if (GetOwnMethodsResolved(type: type).Any(predicate: m =>
                 m.Name == "destroy" && m.Parameters.Count == 0 && !m.IsSynthesized))
@@ -2004,7 +2004,7 @@ public sealed partial class TypeRegistry
 
         if (type is RecordTypeInfo rec)
         {
-            // Scalar-backed records (S64/F64/Bool/Character/CPtr/Hijacked…) have a no-op $destroy.
+            // Scalar-backed records (S64/F64/Bool/Character/CPtr/Hijacked…) have a no-op destroy.
             if (rec.HasDirectBackendType)
                 return true;
             // Generic definition without concrete args — analysed via monomorphisation; be conservative.

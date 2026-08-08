@@ -246,7 +246,7 @@ internal static class NativeToolchain
 
     /// <summary>
     /// Resolves an LLVM toolchain tool (clang/opt) to a concrete path. Resolution order:
-    /// 1. $RAZORFORGE_LLVM_HOME/bin/&lt;tool&gt; — explicit user override.
+    /// 1. RAZORFORGE_LLVM_HOME/bin/&lt;tool&gt; — explicit user override.
     /// 2. &lt;dir of RazorForge executable&gt;/toolchain/bin/&lt;tool&gt; — self-contained release
     ///    packages bundle a relocatable LLVM (llvm-mingw on Windows) there.
     /// 3. The bare tool name, resolved from PATH (dev setups).

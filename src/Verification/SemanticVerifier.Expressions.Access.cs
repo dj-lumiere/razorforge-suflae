@@ -30,7 +30,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// True if the protocol declares no methods other than the implicit-coercion markers
-    /// $refer/$control. Such protocols (Referring[T], Controlling[T]) are transparent for
+    /// refer/control. Such protocols (Referring[T], Controlling[T]) are transparent for
     /// member access — `param.member` falls through to the inner T.
     /// </summary>
     private static bool HasOnlyMarkerCoercionMethods(ProtocolTypeInfo proto)
@@ -354,7 +354,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Resolves the index parameter type of a `$getitem` routine for a given lookup type, with
+    /// Resolves the index parameter type of a `getitem` routine for a given lookup type, with
     /// owner generic parameters substituted. Returns null when the routine or parameter is missing.
     /// `me` is implicit and not in <see cref="RoutineInfo.Parameters"/>; the index is at index 0.
     /// </summary>
@@ -366,7 +366,7 @@ public sealed partial class SemanticVerifier
             ownerType: getItem.OwnerType);
 
         // The index param is frequently a by-reference marker wrapper — `Dict.getitem!(key:
-        // Referring[K])` / `Controlling[K]` — the `$refer`/`$control` coercion the container declares on
+        // Referring[K])` / `Controlling[K]` — the `refer`/`control` coercion the container declares on
         // its key. That wrapper is TRANSPARENT: the caller passes a bare `K`. Unwrap it to the inner key
         // type so a bare integer key literal (`d[1]`) conforms to e.g. S64 instead of stalling at the
         // Suflae `Integer` default (RF escapes this only because its default already IS S64). Inferring
@@ -406,7 +406,7 @@ public sealed partial class SemanticVerifier
         // Type-as-value generic instantiation: when the object is a bare type name (no
         // shadowing variable) referring to a generic type, reinterpret the brackets as
         // generic-arg syntax — `NumericSumAdd[T].identity_lazy()` should produce the
-        // resolved type `NumericSumAdd[T]`, not run $getitem on the gen-def.
+        // resolved type `NumericSumAdd[T]`, not run getitem on the gen-def.
         if (index.Object is IdentifierExpression typeRefId &&
             _registry.LookupVariable(name: typeRefId.Name) == null &&
             LookupTypeWithImports(name: typeRefId.Name) is { GenericParameters.Count: > 0 } typeRef)
@@ -437,7 +437,7 @@ public sealed partial class SemanticVerifier
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
-        // Look for $getitem method — LookupMethod handles generic resolutions
+        // Look for getitem method — LookupMethod handles generic resolutions
         RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: GetItemMethodName);
         // Try failable variant if non-failable not found
         if (getItem == null)
@@ -461,7 +461,7 @@ public sealed partial class SemanticVerifier
             lookupType: lookupType);
         AnalyzeExpression(expression: index.Index, expectedType: indexExpectedType);
 
-        // Failability propagation: the resolved $getitem may be `!` per its protocol contract
+        // Failability propagation: the resolved getitem may be `!` per its protocol contract
         // (e.g. Indexable.getitem!). A non-failable caller using `arr[i]` must propagate that.
         if (getItem is { IsFailable: true } && _currentRoutine != null)
         {
@@ -480,7 +480,7 @@ public sealed partial class SemanticVerifier
                                      getItem.OwnerType?.GenericParameters;
             }
 
-            // Only substitute when `$getitem` came from the GENERIC DEFINITION (its ReturnType is the
+            // Only substitute when `getitem` came from the GENERIC DEFINITION (its ReturnType is the
             // bare owner param, e.g. List[T]'s `T`). If it was resolved against the instantiated
             // owner, its ReturnType is ALREADY expressed in the resolution's type arguments —
             // re-substituting would double-apply. That double-application is silent for `List[S64]`
@@ -511,21 +511,21 @@ public sealed partial class SemanticVerifier
             return returnType;
         }
 
-        // No `$getitem` resolved. If the lookup type is fully concrete (no unresolved generic
+        // No `getitem` resolved. If the lookup type is fully concrete (no unresolved generic
         // parameters), it genuinely does not support indexing — report it cleanly here rather
         // than letting `arr[i]` slip through to codegen, which would crash with
-        // "reached codegen ... but no resolved method". Types that removed their `$getitem`
+        // "reached codegen ... but no resolved method". Types that removed their `getitem`
         // (e.g. SortedList, replaced by the named `get_by_rank!`) land here.
         if (getItem == null && !ContainsUnresolvedTypeParameter(type: lookupType))
         {
             ReportError(code: SemanticDiagnosticCode.TypeNotIndexable,
                 message:
-                $"Type '{lookupType.Name}' does not support indexing with '[]' (no '$getitem' routine).",
+                $"Type '{lookupType.Name}' does not support indexing with '[]' (no 'getitem' routine).",
                 location: index.Location);
             return ErrorTypeInfo.Instance;
         }
 
-        // For generic types like List<T> whose `$getitem` resolves only after monomorphization,
+        // For generic types like List<T> whose `getitem` resolves only after monomorphization,
         // return the element type.
         if (lookupType.TypeArguments is { Count: > 0 })
         {
@@ -1038,12 +1038,12 @@ public sealed partial class SemanticVerifier
         creator.LoweringKind = ClassifyConstruction(type: type, isCollectionLiteral: false);
 
         // Propagate the in-flight bit from the resolved type's implicit constructor.
-        // If TryRouteCreatorToCreate routes through a user-declared `$create` below,
+        // If TryRouteCreatorToCreate routes through a user-declared `create` below,
         // it overrides this with that routine's IsInFlightReturn.
         creator.IsInFlight = type.ImplicitConstructorReturnsInFlight;
 
-        // Named-arg → $create routing: if the provided names don't match any field but DO match
-        // a `$create(named:)` overload's parameter names, dispatch through that creator instead
+        // Named-arg → create routing: if the provided names don't match any field but DO match
+        // a `create(named:)` overload's parameter names, dispatch through that creator instead
         // of doing inline field-init. Lets `SegTreeLazy[..](size: 10, alg: alg)` route to
         // `SegTreeLazy.create(size:, alg:)` even though `size`/`alg` aren't field names.
         if (creator.MemberVariables.Count > 0 &&
@@ -1061,10 +1061,10 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Tries to route a CreatorExpression's named args to a matching `$create(named:)` overload.
+    /// Tries to route a CreatorExpression's named args to a matching `create(named:)` overload.
     /// Returns true if a matching overload was found and resolved (caller should skip field-init
     /// validation). The match requires that every provided arg name corresponds to a parameter
-    /// name on some `$create` overload, AND that at least one provided name is NOT a field name
+    /// name on some `create` overload, AND that at least one provided name is NOT a field name
     /// (field-init pattern is still preferred when all names are fields). Routing is purely
     /// name-based; arg analysis (with proper expected types) happens via the standard pipeline
     /// later when codegen evaluates the call.
@@ -1073,8 +1073,8 @@ public sealed partial class SemanticVerifier
     {
         var providedNames = creator.MemberVariables.Select(selector: mv => mv.Name).ToList();
 
-        // Name-based match against $create overloads. Iterate type's methods looking for ones
-        // named `$create` whose parameter names match the provided set exactly. If multiple
+        // Name-based match against create overloads. Iterate type's methods looking for ones
+        // named `create` whose parameter names match the provided set exactly. If multiple
         // overloads share the same param names (e.g. `S64.create(from: S8)` vs
         // `S64.create(from: ComparisonSign)`), bail out — disambiguation by arg type is the
         // job of the legacy path and we don't want to silently pick the wrong overload.
@@ -1089,8 +1089,8 @@ public sealed partial class SemanticVerifier
         _registry.CollectMemberRoutineCandidates(type: type, methodName: "create!",
             candidates: candidates);
         // Also pull the concrete type's own routines directly — CollectMemberRoutineCandidates
-        // can miss a user-declared `$create` on an entity, while GetMethodsForType returns it
-        // (this is how the entity `$destroy` resolves correctly elsewhere).
+        // can miss a user-declared `create` on an entity, while GetMethodsForType returns it
+        // (this is how the entity `destroy` resolves correctly elsewhere).
         candidates.AddRange(collection: _registry.GetMethodsForType(type: type)
             .Where(predicate: m => m.Name is "create" or "create!"));
         foreach (RoutineInfo m in candidates)
@@ -1105,24 +1105,24 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Prefer a user-defined (non-synthesized) `$create`. Entities/records also get an
-        // auto-synthesized all-args `$create` (AutoWiredRegistrationPass) whose only job is inline
+        // Prefer a user-defined (non-synthesized) `create`. Entities/records also get an
+        // auto-synthesized all-args `create` (AutoWiredRegistrationPass) whose only job is inline
         // field-init ("stuffing") — when that's the sole match we fall through to inline
-        // construction below. A user `$create` with the same signature as the all-args creator
+        // construction below. A user `create` with the same signature as the all-args creator
         // (e.g. `Resource.create(tag:)` where `tag` is the only field) is the real constructor
         // and must be called so its body/side-effects run.
         // Dedupe by registry key — CollectMemberRoutineCandidates can surface the same overload
         // through more than one path (owner table + protocol/universal walk), which would make a
-        // single user `$create` look ambiguous and wrongly fall back to inline construction.
+        // single user `create` look ambiguous and wrongly fall back to inline construction.
         var userMatches = nameMatches.Where(predicate: m => !m.IsSynthesized)
             .GroupBy(keySelector: m => m.RegistryKey)
             .Select(selector: g => g.First())
             .ToList();
 
-        // `T(...)` written *inside* T's own `$create` is the field-init base case ONLY when it
-        // resolves back to the SAME `$create` we are compiling (genuine self-recursion). A call to
-        // a *different* `$create` overload (e.g. `F128(from: hi)` -> `$create(from: U64)` inside
-        // `$create(from: U128)`) is an ordinary conversion and must route to that overload;
+        // `T(...)` written *inside* T's own `create` is the field-init base case ONLY when it
+        // resolves back to the SAME `create` we are compiling (genuine self-recursion). A call to
+        // a *different* `create` overload (e.g. `F128(from: hi)` -> `create(from: U64)` inside
+        // `create(from: U128)`) is an ordinary conversion and must route to that overload;
         // otherwise codegen falls back to inline field-init and mis-lowers bit-carrier types like
         // F128 to a raw integer reinterpret of the IEEE storage.
         bool insideOwnCreate = _currentRoutine is { Name: "create" or "create!" } currentCreate
@@ -1132,7 +1132,7 @@ public sealed partial class SemanticVerifier
             && userMatches.Count == 1
             && ReferenceEquals(objA: userMatches[index: 0], objB: currentCreate);
 
-        // Route through a unique user-defined `$create` (so its body runs). Otherwise — no
+        // Route through a unique user-defined `create` (so its body runs). Otherwise — no
         // user match, ambiguous user overloads, or self-reference inside the creator — fall back
         // to inline field-init / standard validation.
         if (userMatches.Count != 1 || insideOwnCreate)

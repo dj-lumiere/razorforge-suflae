@@ -41,7 +41,7 @@ public abstract class TypeInfo
     /// at construction (the freshly-created handle is unbound until a `var`/`let` /
     /// field/param consumes it). Records and other value types default to false.
     /// Used by creator analysis to propagate <see cref="SyntaxTree.Expression.IsInFlight"/>
-    /// when no user-declared <c>$create</c> routine resolves at the call site.
+    /// when no user-declared <c>create</c> routine resolves at the call site.
     /// </summary>
     public virtual bool ImplicitConstructorReturnsInFlight => false;
 

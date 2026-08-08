@@ -688,7 +688,7 @@ public sealed partial class SemanticVerifier
                 location: routine.Location);
         }
 
-        // Index operators ($getitem/$setitem) are governed by PROTOCOL conformance, not type KIND:
+        // Index operators (getitem/setitem) are governed by PROTOCOL conformance, not type KIND:
         // any type that follows Indexable/MutableIndexable may define them (records like
         // Array[T,N]/BitArray[N], entities like List/Dict, and user containers alike). The
         // conformance requirement is enforced by RF-S411 (OperatorWithoutProtocol) via the
@@ -929,7 +929,7 @@ public sealed partial class SemanticVerifier
 
             // Skip auto-derived failable variants. These `try_X` / `check_X` / `lookup_X`
             // entries are synthesized by FillProtocolMethods from the failable original
-            // (`$X!`) so call sites typed against the bare protocol can resolve them. The
+            // (`X!`) so call sites typed against the bare protocol can resolve them. The
             // implementer only owes the failable original — ErrorHandlingVariantPass
             // generates the variants on user types at synthesis time. A protocol-declared
             // `try_X` written by hand (no auto-derivation flag) still produces an obligation.

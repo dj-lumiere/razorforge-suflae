@@ -8,7 +8,7 @@ using TypeModel.Types;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
-/// Lowers <see cref="InsertedTextExpression"/> f-strings to <c>$represent</c>/<c>$diagnose</c>
+/// Lowers <see cref="InsertedTextExpression"/> f-strings to <c>represent</c>/<c>diagnose</c>
 /// method calls folded with <c>Text.add</c>.
 /// Runs after <see cref="ExpressionLoweringPass"/> and before <see cref="OperatorLoweringPass"/>
 /// in the per-file desugaring pipeline.
@@ -71,7 +71,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
     /// <summary>
     /// Lowers f-strings in instantiated generic routine bodies. Phase 6's
     /// <c>GenericMonomorphizationPass</c> populates <c>InstantiatedGenericBodies</c> AFTER
-    /// the Phase 7 RunGlobal sweep has finished, so monomorphized $represent/$diagnose bodies
+    /// the Phase 7 RunGlobal sweep has finished, so monomorphized represent/diagnose bodies
     /// keep their raw <see cref="InsertedTextExpression"/> nodes and trip the codegen guard
     /// ("Expression type not implemented: InsertedTextExpression"). Mirrors
     /// <c>OperatorLoweringPass.RunOnInstantiatedGenericBodies</c>.
@@ -456,7 +456,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// Converts an <see cref="InsertedTextExpression"/> to a left-folded chain of
-    /// <c>Text.add</c> calls interleaved with <c>$represent</c>/<c>$diagnose</c> calls.
+    /// <c>Text.add</c> calls interleaved with <c>represent</c>/<c>diagnose</c> calls.
     /// </summary>
     private Expression LowerFString(InsertedTextExpression ftext) // NOSONAR S3776
     {
@@ -506,7 +506,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                     // `Module.Counter` renders as `Module.?Counter(...)`. The rendered
                     // text is post-processed via `Text.replace` because the type-name
                     // prefix is compile-time known and appears verbatim at the head of
-                    // `$diagnose` / `$represent` output.
+                    // `diagnose` / `represent` output.
                     if (ep.Expression is { IsInFlight: true, ResolvedType: EntityTypeInfo entityType })
                     {
                         string fullName = entityType.FullName;

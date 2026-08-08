@@ -190,10 +190,10 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <param name="rewriter">Optional tail-return rewriter; when it succeeds the return is emitted as a passthrough.</param>
     /// <param name="registry">Optional type registry used for try_-variant synthesis when <paramref name="kind"/> is <c>Try</c>.</param>
     /// <param name="nextOnlyPropagation">
-    /// When true, non-tail failable-call propagation is restricted to inner <c>$emit</c> calls
+    /// When true, non-tail failable-call propagation is restricted to inner <c>emit</c> calls
     /// (iterator chaining). Used by the MONOMORPHIZED (path-2) caller, which runs AFTER reachability:
     /// any other <c>try_X</c> it introduces wouldn't be marked live and would LINKERR (e.g. a guarded
-    /// <c>$getitem!</c>), whereas <c>try_emit</c> is always emitted for live iterators. When false
+    /// <c>getitem!</c>), whereas <c>try_emit</c> is always emitted for live iterators. When false
     /// (the global path-1 caller, which runs BEFORE reachability), ALL non-tail failable calls are
     /// propagated — reachability then sees the introduced <c>try_X</c> calls and emits them. Path-1
     /// MUST propagate broadly so a try_ variant whose failability is purely propagated through a
@@ -437,9 +437,9 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
 
         // In the monomorphized (path-2) caller — which runs AFTER reachability — restrict propagation
-        // to inner `$emit!` calls: `try_emit` is systematically emitted for live iterator instances, so
+        // to inner `emit!` calls: `try_emit` is systematically emitted for live iterator instances, so
         // the propagated chain always links, whereas an arbitrary `try_X` introduced here wouldn't be
-        // marked live and would LINKERR (e.g. a bounds-guarded `$getitem!` in SortedSetIterator, which
+        // marked live and would LINKERR (e.g. a bounds-guarded `getitem!` in SortedSetIterator, which
         // also can't actually fail). The global (path-1) caller runs BEFORE reachability, so it
         // propagates ALL non-tail failable calls and reachability then emits the introduced variants.
         if (nextOnly && baseName != "emit") return false;
@@ -619,7 +619,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// per-pass rewriter instance. It rewrites a TAIL-position <c>return src.emit!()</c> into a
     /// passthrough call to the matching <c>try_/check_/lookup_emit</c> variant (resolved via
     /// <see cref="TypeRegistry.LookupMethod"/> on the concrete callee owner). Restricted to
-    /// <c>$emit</c> for the same reason as <see cref="TryBuildTryPropagation"/>: <c>try_emit</c> is
+    /// <c>emit</c> for the same reason as <see cref="TryBuildTryPropagation"/>: <c>try_emit</c> is
     /// systematically emitted for live iterator instances, so the rewritten chain always links.
     /// </summary>
     public static VariantCallRewriter MakeNextVariantRewriter(TypeRegistry registry)

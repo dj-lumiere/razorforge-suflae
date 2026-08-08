@@ -307,7 +307,7 @@ public enum TokenType
     /// <summary>
     /// Late-init modifier on var declarations: `lateinit var x: T`.
     /// Eager allocation, late initialization: the binding's storage is allocated
-    /// (entities get a real zeroed heap block, $create not run) so the value is
+    /// (entities get a real zeroed heap block, create not run) so the value is
     /// immediately valid/borrowable; reading before assignment yields meaningless
     /// (zeroed) values. Definite-assignment analysis is deferred to a later version.
     /// </summary>
@@ -758,7 +758,7 @@ public enum TokenType
     /// <summary>Crashable routine suffix (!)</summary>
     Bang,
 
-    /// <summary>Wired member-routine marker prefix ($) — e.g. $create, $store. Structural: the
+    /// <summary>Wired member-routine marker prefix ($) — e.g. create, store. Structural: the
     /// parser records it as RoutineInfo.IsWiredMemberRoutine and keeps the name bare.</summary>
     Dollar,
 

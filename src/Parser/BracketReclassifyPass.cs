@@ -190,7 +190,7 @@ internal static class BracketReclassifyPass
             {
                 Inner: MemberExpression { Object: IdentifierExpression spliceHandle, MemberName: "type" }
             } se:
-                return new TypeExpression(Name: "$splice",
+                return new TypeExpression(Name: "splice",
                     GenericArguments: null,
                     Location: se.Location,
                     SpliceHandle: spliceHandle.Name);

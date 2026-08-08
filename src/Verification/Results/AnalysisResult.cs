@@ -16,7 +16,7 @@ namespace Verification.Results;
 /// <param name="Warnings">List of semantic warnings.</param>
 /// <param name="ParsedLiterals">Parsed literal values for code generation (f128, d32, d64, d128, Integer, Decimal).</param>
 /// <param name="SynthesizedBodies">AST bodies for compiler-generated routines (derived operators + variant bodies),
-/// keyed by RoutineInfo.RegistryKey. Includes both $ne/$lt/etc. operators and pre-transformed
+/// keyed by RoutineInfo.RegistryKey. Includes both ne/lt/etc. operators and pre-transformed
 /// try_/check_/lookup_ variant bodies produced by <see cref="ErrorHandlingVariantPass"/>.</param>
 /// <param name="InstantiatedGenericBodies">Concrete generic method bodies produced by
 /// <see cref="GenericMonomorphizationPass"/>, keyed by the concrete

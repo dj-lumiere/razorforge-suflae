@@ -639,7 +639,7 @@ public sealed partial class TypeRegistry
         // Creating a new object here would leave _resolutions entries (e.g. Maybe[Bool] created
         // from the pre-registered carrier shell) with stale GenericDefinition pointers that have
         // empty MemberVariables — causing "Member variable 'present' not found on record
-        // 'Core.Maybe[Core.Bool]'" errors during codegen of synthesized $represent bodies that
+        // 'Core.Maybe[Core.Bool]'" errors during codegen of synthesized represent bodies that
         // iterate via for-loop (NonePattern lowering emits subject.present access).
         // Mirrors the in-place strategy in UpdateEntityMemberVariables.
         record.MemberVariables = memberVariables;
@@ -1249,7 +1249,7 @@ public sealed partial class TypeRegistry
     /// forward-reference params — a concrete <c>index: U64</c> param silently dropped because U64
     /// wasn't registered yet. Instances created before that re-fill (during earlier stdlib
     /// registration, e.g. List's <c>obeys MutableIndexable[T]</c>) hold stale method signatures and
-    /// are cached, so user types obeying the protocol pick up the stale 1-param <c>$setitem</c> and
+    /// are cached, so user types obeying the protocol pick up the stale 1-param <c>setitem</c> and
     /// wrongly fail conformance (S703). Mirrors <see cref="RefreshEntityResolutions"/> /
     /// <see cref="RefreshRecordResolutions"/> by rebuilding Methods in place so existing references
     /// (e.g. a collection's ImplementedProtocols) also see the fix.
@@ -1398,9 +1398,9 @@ public sealed partial class TypeRegistry
             });
         }
 
-        // Auto-register $eq and $ne if every element type has $eq (option a:
+        // Auto-register eq and ne if every element type has eq (option a:
         // structural derivation iff all components support it). Component types whose
-        // owners haven't opted into Equatable simply won't have $eq registered, so the
+        // owners haven't opted into Equatable simply won't have eq registered, so the
         // tuple won't either — keeping derivation in lockstep with the underlying types.
         TypeInfo? boolType = LookupType(name: "Bool");
         if (boolType != null &&
@@ -1435,7 +1435,7 @@ public sealed partial class TypeRegistry
             });
         }
 
-        // Auto-register $hash if ALL element types support $hash
+        // Auto-register hash if ALL element types support hash
         TypeInfo? u64Type = LookupType(name: "U64");
         if (u64Type != null &&
             elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "hash") != null))
@@ -1480,7 +1480,7 @@ public sealed partial class TypeRegistry
             });
         }
 
-        // Auto-register $cmp + derived operators if ALL element types support $cmp
+        // Auto-register cmp + derived operators if ALL element types support cmp
         TypeInfo? comparisonSignType = LookupType(name: "ComparisonSign");
         if (boolType != null && comparisonSignType != null &&
             elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "cmp") != null))
@@ -1500,7 +1500,7 @@ public sealed partial class TypeRegistry
                 IsSynthesized = true
             });
 
-            // Derived: $lt, $le, $gt, $ge
+            // Derived: lt, le, gt, ge
             foreach (string opName in new[]
                      {
                          "lt",
@@ -1656,7 +1656,7 @@ public sealed partial class TypeRegistry
     /// <see cref="AllConcreteGenericInstancesUnfiltered"/> for wrapper types — used by GMP to
     /// monomorphize methods on wrappers like <c>Hijacked[Text]</c> that were created
     /// during stdlib analysis but never reached the liveness walk (e.g. as a field type of an
-    /// iterator entity referenced indirectly via $represent/$diagnose).
+    /// iterator entity referenced indirectly via represent/diagnose).
     /// </summary>
     public IEnumerable<WrapperTypeInfo> AllConcreteWrapperInstancesUnfiltered =>
         _wrapperResolutions.Values

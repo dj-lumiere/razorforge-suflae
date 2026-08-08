@@ -113,7 +113,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// <summary>
     /// Cheap re-run after <see cref="ProtocolDefaultImplLoweringPass"/> synthesizes new bodies post-GMP
     /// (e.g. <c>List[S64].List</c>/<c>.Set</c> collectors whose call sites appear only inside
-    /// GMP-monomorphized adapter <c>$iter</c> bodies). The persisted <see cref="_processedTypes"/> /
+    /// GMP-monomorphized adapter <c>iter</c> bodies). The persisted <see cref="_processedTypes"/> /
     /// <see cref="_walkedBodyKeys"/> sets mean the seed scans short-circuit and the liveness expansion
     /// walks only the freshly-synthesized bodies, so this is bounded by NEW work — unlike re-running
     /// the full <see cref="RunGlobal"/> per round.
@@ -198,7 +198,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 $"[SA]     GMP reachable types: {_processedTypes.Count} ({_processedTypes.Count - startCount} new) ({sw.ElapsedMilliseconds} ms)");
         }
 
-        // Scan built bodies for method-generic call sites (e.g. $getitem[U64]! called from
+        // Scan built bodies for method-generic call sites (e.g. getitem[U64]! called from
         // List[Bytes].eq). SA only analyzes generic-def bodies, so these concrete
         // call sites are never registered in _routineResolutions. Register them now so
         // ProcessResolvedMethodGenericRoutines can build their bodies.
@@ -225,7 +225,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// that become reachable as a result. Needed because <see cref="RoutineReachabilityPass"/> runs
     /// before <see cref="ProtocolDefaultImplLoweringPass"/>, so types/routines reachable only through
     /// the synthesized iterator-adapter chain were never marked live and got gated out. A fixed-point
-    /// loop is required: enlivening one layer (e.g. <c>SelectIterator</c>) emits its <c>$iter</c>,
+    /// loop is required: enlivening one layer (e.g. <c>SelectIterator</c>) emits its <c>iter</c>,
     /// whose body references the next layer (<c>SelectEmitter</c>), and so on.
     /// </summary>
     private void ExpandLivenessThroughEmittedBodies()
@@ -303,13 +303,13 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     }
 
                     // An `obj[i]` access is still an IndexExpression in an emitted body (OperatorLoweringPass
-                    // on instantiated bodies only rewrites it to a `$getitem`/`$setitem` CallExpression
+                    // on instantiated bodies only rewrites it to a `getitem`/`setitem` CallExpression
                     // LATER, in GenericClosurePass, which runs AFTER this liveness pass). Its concrete
                     // callee — e.g. `Array[F32, 4].getitem`/`.setitem` reached only through a SoA container's
                     // monomorphized method `me.${m.name}[index]` — was never seen by RoutineReachabilityPass
                     // and is left "declared but never defined" at codegen. Mark both index accessors live
                     // here, mirroring the CallExpression callee handling above and the IndexExpression
-                    // discovery at ScanExprForMethodGenericCalls. (A read never calls `$setitem`, but
+                    // discovery at ScanExprForMethodGenericCalls. (A read never calls `setitem`, but
                     // emitting the extra concrete accessor is harmless — codegen only calls the one it needs.)
                     if (expr is IndexExpression { Object.ResolvedType: { } idxObjType } idxExpr
                         && idxObjType is not GenericParameterTypeInfo
@@ -375,21 +375,21 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// Closes the live-routine set under the implicit callees of compiler-synthesized routines.
     /// <para>
     /// Routines enlivened AFTER <see cref="RoutineReachabilityPass"/> (by this pass, e.g. a wired
-    /// <c>$destroy</c> on <c>Tuple[S64, Bool]</c> pulled in by overflow-arithmetic machinery, or a
+    /// <c>destroy</c> on <c>Tuple[S64, Bool]</c> pulled in by overflow-arithmetic machinery, or a
     /// derived <c>U64.lt</c> referenced from an emitted generic body) never had their own bodies
     /// walked: those bodies live in <c>SynthesizedBodies</c> (not <c>VariantBodies</c>, the only
     /// source the reachability BFS walks), and their leaf callees sit on NON-generic primitive
     /// owners that <see cref="ProcessConcreteType"/> never visits. The result is a live aggregate
     /// whose leaf callee is declared-but-undefined at link time:
     /// <list type="bullet">
-    ///   <item>derived <c>$lt/$le/$gt/$ge</c> → owner <c>$cmp</c> + <c>ComparisonSign.eq/$ne</c></item>
-    ///   <item><c>$ne</c> → owner <c>$eq</c>; <c>$notcontains</c> → owner <c>$contains</c></item>
-    ///   <item>composite <c>$destroy/$store/$hash/$fast_hash/$eq/$cmp</c> → the same wired verb on
+    ///   <item>derived <c>lt/le/gt/ge</c> → owner <c>cmp</c> + <c>ComparisonSign.eq/ne</c></item>
+    ///   <item><c>ne</c> → owner <c>eq</c>; <c>notcontains</c> → owner <c>contains</c></item>
+    ///   <item>composite <c>destroy/store/hash/fast_hash/eq/cmp</c> → the same wired verb on
     ///         each field/element type (recursing to a fixed point)</item>
     /// </list>
     /// This mirrors <c>RoutineReachabilityPass.ExpandSyntheticSiblings</c> + its synthesized-body
     /// walk, applied to the post-GMP live set. Bounded by design: the verbs covered never cascade
-    /// into formatting/IO (deliberately excludes <c>$represent</c>/<c>$diagnose</c>).
+    /// into formatting/IO (deliberately excludes <c>represent</c>/<c>diagnose</c>).
     /// </para>
     /// </summary>
     private void EnliveWiredLeafCallees()
@@ -432,8 +432,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         switch (routine.Name)
         {
             case "lt" or "le" or "gt" or "ge" or "cmp":
-                // Derived comparisons (and composite $cmp) reduce to a $cmp whose ComparisonSign
-                // result is tested with ComparisonSign.eq/$ne.
+                // Derived comparisons (and composite cmp) reduce to a cmp whose ComparisonSign
+                // result is tested with ComparisonSign.eq/ne.
                 if (routine.Name != "cmp"
                     && ctx.Registry.LookupMethod(type: owner, methodName: "cmp") is { } cmp)
                     yield return cmp;
@@ -512,7 +512,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     {
         // Strategy-B reachability gate at the type level: skip concrete instances that no
         // reachable routine ever owned. This prevents unreachable types like Array[BuildMode, 63]
-        // or BTreeListNode[Text] from emitting try_emit/$getitem!/etc. via the wired-routine bypass
+        // or BTreeListNode[Text] from emitting try_emit/getitem!/etc. via the wired-routine bypass
         // on the per-routine gate.
         //
         // The "reachability ran" signal is LiveRoutineKeys (NOT LiveOwnerTypeNames): reachability
@@ -521,7 +521,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // — gating on `LiveOwnerTypeNames.Count > 0` would misread that as "filter off" and fan out
         // over every concrete instance in the registry (BuilderService/BTree/numeric machinery),
         // force-emitting wired operators whose plain-helper callees (add_with_overflow, recast_as,
-        // $cmp) are never emitted → LINKERR. Mirror the per-routine gate at the BuildBody site below,
+        // cmp) are never emitted → LINKERR. Mirror the per-routine gate at the BuildBody site below,
         // which already keys off LiveRoutineKeys. Both empty = legacy fan-out (reachability skipped).
         if (ctx.LiveRoutineKeys.Count > 0
             && !ctx.LiveOwnerTypeNames.Contains(item: concreteType.FullName))
@@ -613,13 +613,13 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     }
 
     /// Routines emitted for every live owner regardless of call-site reachability. Two sources:
-    /// (1) the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$store</c>, from
+    /// (1) the unified-teardown lifecycle routines (<c>destroy</c>/<c>store</c>, from
     /// <see cref="Compiler.Resolution.WiredRoutineCatalog.AlwaysLiveNames"/>) — scope-exit teardown
-    /// inserts <c>$destroy</c> calls that must always have a concrete body, and the matching
-    /// retaining <c>$store</c> likewise; (2) <c>try_emit</c>, reachable only through synthesized
+    /// inserts <c>destroy</c> calls that must always have a concrete body, and the matching
+    /// retaining <c>store</c> likewise; (2) <c>try_emit</c>, reachable only through synthesized
     /// for-loop iteration bodies whose owner type (ListEmitter[Byte], etc.) is created post-pass
     /// during GMP body rewriting, so ReachabilityPass cannot trace it. Kept narrow otherwise —
-    /// broader sets cascade into derived-op chains ($ne->$eq) where the missing companion is the
+    /// broader sets cascade into derived-op chains (ne->eq) where the missing companion is the
     /// actual culprit.
     private static readonly HashSet<string> _gateBypassNames =
         new(collection: WiredRoutineCatalog.AlwaysLiveNames,
@@ -631,7 +631,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// Returns false when this concrete instantiation does not actually have the wired
     /// routine. Example: `Array[T, N].eq` is declared `needs T obeys Equatable` — for
     /// `T = X` (not equatable), the routine does not exist on this owner. Body
-    /// emission must skip it so derived companions (`$ne`, `$notcontains`) don't reference
+    /// emission must skip it so derived companions (`ne`, `notcontains`) don't reference
     /// a missing symbol downstream in codegen. The actual protocol-to-wired-routine map
     /// lives in <see cref="TypeRegistry"/> (single source of truth).
     /// </summary>
@@ -1537,8 +1537,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             }
 
             // Count matches. If we also have expected param names, prefer the overload whose
-            // param names match exactly — this disambiguates overloads like $create(capacity: U64)
-            // vs $create(from: SortedList[T]) which both have 1 parameter.
+            // param names match exactly — this disambiguates overloads like create(capacity: U64)
+            // vs create(from: SortedList[T]) which both have 1 parameter.
             if (expectedParamNames != null && decl.Parameters.Count == expectedParamNames.Count)
             {
                 bool namesMatch = true;
@@ -1553,10 +1553,10 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 if (namesMatch)
                 {
                     // Param names alone don't disambiguate same-name-different-type overloads
-                    // (e.g. `$create(from: Set[T])` vs `$create(from: FastSet[T])`). When type
+                    // (e.g. `create(from: Set[T])` vs `create(from: FastSet[T])`). When type
                     // names are supplied, require those to match too. Without this gate the
                     // first-declared overload wins by source order, and Set's body ends up
-                    // mounted under FastSet's mangled signature (LINKERR on $iter mismatch).
+                    // mounted under FastSet's mangled signature (LINKERR on iter mismatch).
                     if (expectedParamTypeNames != null &&
                         decl.Parameters.Count == expectedParamTypeNames.Count)
                     {
@@ -1725,7 +1725,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
     /// <summary>
     /// Walks all built InstantiatedGenericBodies and registers method-level generic
-    /// call-site resolutions (e.g. $getitem[U64]! called from List[Bytes].eq).
+    /// call-site resolutions (e.g. getitem[U64]! called from List[Bytes].eq).
     /// SA only analyzes generic-def bodies, so these concrete resolutions are never in
     /// _routineResolutions. Registering them here lets ProcessResolvedMethodGenericRoutines
     /// build the bodies before codegen runs.
@@ -1840,8 +1840,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             case IndexExpression idx:
                 ScanExprForMethodGenericCalls(idx.Object);
                 ScanExprForMethodGenericCalls(idx.Index);
-                // Register method-generic $getitem!/$setitem! resolutions from IndexExpression nodes.
-                // OperatorLoweringPass doesn't run on InstantiatedGenericBodies, so $getitem/$setitem
+                // Register method-generic getitem!/setitem! resolutions from IndexExpression nodes.
+                // OperatorLoweringPass doesn't run on InstantiatedGenericBodies, so getitem/setitem
                 // calls in those bodies are still IndexExpression rather than CallExpression.
                 if (idx.Object.ResolvedType is { } idxObjType &&
                     idx.Index.ResolvedType is { } idxIdxType and not GenericParameterTypeInfo)

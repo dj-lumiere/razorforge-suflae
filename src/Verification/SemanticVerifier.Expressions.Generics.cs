@@ -39,7 +39,7 @@ public sealed partial class SemanticVerifier
         // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args).
         // A FAILABLE construction `Type![Args](args)` parses with a BARE MethodName equal to the
         // type name plus the structured `IsMemoryOperation` failable flag — recognize it here and
-        // route to the type's failable `$create` overload (e.g. the auto-generated variant arm
+        // route to the type's failable `create` overload (e.g. the auto-generated variant arm
         // extractor `Dict[Text, SerialValue].create!(from: sv)`).
         bool isFailableCtor = generic.IsMemoryOperation &&
                               generic.Object is IdentifierExpression fctorId &&
@@ -521,7 +521,7 @@ public sealed partial class SemanticVerifier
                 return memberType.TypeArguments[index: 0];
             }
 
-            // If the member type has a $getitem method, use its return type
+            // If the member type has a getitem method, use its return type
             RoutineInfo? getItem =
                 _registry.LookupMethod(type: memberType, methodName: "getitem");
             if (getItem?.ReturnType != null)

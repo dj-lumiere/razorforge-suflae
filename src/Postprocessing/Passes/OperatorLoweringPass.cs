@@ -19,7 +19,7 @@ namespace Compiler.Postprocessing.Passes;
 ///   <item><see cref="IndexExpression"/> (<c>obj[i]</c>) ??
 ///         <c>obj.getitem!(i)</c> -> failable method call.</item>
 ///   <item><see cref="GenericMemberExpression"/> (<c>obj.field[i]</c>, parser quirk) ??
-///         <c>MemberExpression(obj, field)</c> + <c>IndexExpression</c> ??<c>$getitem!</c>.</item>
+///         <c>MemberExpression(obj, field)</c> + <c>IndexExpression</c> ??<c>getitem!</c>.</item>
 ///   <item><see cref="BinaryExpression"/> with an overloadable operator ??
 ///         <c>left.method(you: right)</c>. Membership operators reverse operands:
 ///         <c>x in coll</c> ??<c>coll.contains(x)</c>.</item>
@@ -32,7 +32,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para>Only the <em>value</em> side of <see cref="AssignmentStatement"/> is lowered.
 /// Indexed-assignment targets (<c>arr[i] = val</c>) remain as <see cref="IndexExpression"/>
-/// so codegen's <c>EmitAssignment</c> can dispatch to <c>$setitem!</c>.</para>
+/// so codegen's <c>EmitAssignment</c> can dispatch to <c>setitem!</c>.</para>
 /// </summary>
 internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 {
@@ -181,7 +181,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             {
                 // Only lower the value, not the target.
                 // Indexed-assignment targets (arr[i] = val) stay as IndexExpression so
-                // codegen's EmitAssignment can dispatch to $setitem!.
+                // codegen's EmitAssignment can dispatch to setitem!.
                 Expression val = LowerExpression(asgn.Value);
                 return ReferenceEquals(val, asgn.Value) ? stmt : asgn with { Value = val };
             }
@@ -261,7 +261,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     /// </list>
     /// This is needed because assignment targets like <c>node!!.field = v</c> or
     /// <c>coll[expr!!] = v</c> have <c>!!</c> (ForceUnwrap) nested inside the target,
-    /// which must be lowered to <c>$unwrap()</c> even though the outer shape must remain.
+    /// which must be lowered to <c>unwrap()</c> even though the outer shape must remain.
     /// </summary>
     private Expression LowerAssignTarget(Expression target)
     {
@@ -277,8 +277,8 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression obj = LowerExpression(idx.Object);
                 Expression index = LowerExpression(idx.Index);
 
-                // Resolve $setitem with method-level generic monomorphization (parallel to the
-                // $getitem! lowering path). Non-generic owners with method-level generics (e.g.
+                // Resolve setitem with method-level generic monomorphization (parallel to the
+                // getitem! lowering path). Non-generic owners with method-level generics (e.g.
                 // BitList.setitem![I]) need the resolved routine stashed so codegen can dispatch
                 // to the monomorphized entry rather than hitting ResolveMethod's generic-def guard.
                 RoutineInfo? resolvedSetItem = null;
@@ -351,14 +351,14 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression loweredIdx = LowerExpression(idx.Index);
 
                 // Failability is a property, not part of the name — the property name is always
-                // the bare `$getitem`; codegen dispatches via ResolvedRoutine (which carries
+                // the bare `getitem`; codegen dispatches via ResolvedRoutine (which carries
                 // IsFailable). Resolve the method to set ResolvedRoutine / lowering kind.
                 const string propertyName = "getitem";
                 RoutineInfo? resolvedGetItem = null;
                 TypeInfo? targetType = idx.Object.ResolvedType;
 
                 // Back-index desugaring: `coll[^n]` has a BackIndex-typed index. Collections only
-                // expose `$getitem!(index: U64)`, so rewrite the index to a forward U64 position
+                // expose `getitem!(index: U64)`, so rewrite the index to a forward U64 position
                 // via `backIdx.resolve!(coll.count())` (which throws on out-of-range, matching the
                 // old per-type BackIndex overload). The object is referenced twice — acceptable for
                 // the common `var[^n]` case; a side-effecting receiver would evaluate twice.
@@ -372,7 +372,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 if (targetType != null)
                 {
                     TypeInfo? indexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
-                    // Pick the `$getitem` overload by the (now forward U64) index argument type.
+                    // Pick the `getitem` overload by the (now forward U64) index argument type.
                     resolvedGetItem = indexType != null
                         ? ctx.Registry.LookupMethodOverload(type: targetType,
                               methodName: "getitem", argTypes: [indexType])
@@ -405,7 +405,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 };
             }
 
-            //  GenericMemberExpression -> member + index ??$getitem!
+            //  GenericMemberExpression -> member + index ??getitem!
             // Parser quirk: obj.field[i] is parsed as GenericMemberExpression(obj, "field", [i]).
             // TypeArguments are index expressions in disguise; lower to IndexExpression then recurse.
             //
@@ -440,7 +440,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     ResolvedType = gme.ResolvedType
                 };
 
-                // Recurse -> IndexExpression case above converts to $getitem! call.
+                // Recurse -> IndexExpression case above converts to getitem! call.
                 return LowerExpression(indexExpr);
             }
 
@@ -529,8 +529,8 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     // (e.g., the Object of a MemberExpression, or the Object/Index of an
                     // IndexExpression).  The outermost left-side node must stay as-is so that
                     // EmitBinaryAssign can dispatch on its type (MemberExpression -> field write,
-                    // IndexExpression ??$setitem!).  Lowering the entire left would convert
-                    // IndexExpression -> CallExpression($getitem!), breaking setitem dispatch.
+                    // IndexExpression ??setitem!).  Lowering the entire left would convert
+                    // IndexExpression -> CallExpression(getitem!), breaking setitem dispatch.
                     if (bin.Operator == BinaryOperator.Assign)
                     {
                         Expression rhs = LowerExpression(bin.Right);
@@ -661,10 +661,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     }
                 }
 
-                // Flags types have no $bitand/$bitor/$bitnot/$eq/$ne method bodies -> codegen handles
+                // Flags types have no bitand/bitor/bitnot/eq/ne method bodies -> codegen handles
                 // them as direct LLVM instructions (bitwise or icmp eq/ne on the underlying i64).
                 // Skip method-call lowering so the BinaryExpression stays and codegen emits the
-                // instruction directly, avoiding infinite recursion in the generated $eq/$ne body.
+                // instruction directly, avoiding infinite recursion in the generated eq/ne body.
                 if (receiverType is FlagsTypeInfo
                     && methodName is "bitand" or "bitor" or "bitxor" or "eq" or "ne")
                 {
@@ -673,13 +673,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         : bin with { Left = left, Right = right };
                 }
 
-                // Choice $eq/$ne bodies use BinaryOperator.Is (not Equal), so they never reach
+                // Choice eq/ne bodies use BinaryOperator.Is (not Equal), so they never reach
                 // this point. No skip needed for choice types.
 
                 // Always lower to a method call -> even when the method isn't in the registry
                 // (e.g., stdlib bodies where ResolvedType is null).  When ResolvedRoutine is null,
                 // codegen's EmitMethodCall resolves the method at emission time using the receiver's
-                // LLVM-inferred type; it will also retry with isFailable:null to find $add! etc.
+                // LLVM-inferred type; it will also retry with isFailable:null to find add! etc.
                 // Failability is structural on the callee — no `!` in the name. When the method is
                 // unknown, IsFailable stays false and codegen's EmitMethodCall retries either form.
                 bool binFailable = resolvedMethod?.IsFailable ?? false;
@@ -709,7 +709,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             // This runs for both user code (where ExpressionLoweringPass has already
             // run but no longer handles ForceUnwrap) and stdlib bodies (which bypass
             // ExpressionLoweringPass).  ResolvedType may be null for stdlib bodies;
-            // codegen infers the return type from the $unwrap method definition.
+            // codegen infers the return type from the unwrap method definition.
 
             case UnaryExpression { Operator: UnaryOperator.ForceUnwrap } forceUnwrap:
             {
@@ -754,7 +754,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 TypeInfo? operandType = operand.ResolvedType;
 
-                // Flags types have no $bitnot method body -> codegen handles it via EmitBitwiseNot.
+                // Flags types have no bitnot method body -> codegen handles it via EmitBitwiseNot.
                 // Skip method-call lowering so the UnaryExpression passes through unchanged.
                 if (operandType is FlagsTypeInfo
                     && methodName == "bitnot")
@@ -1106,8 +1106,8 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     /// Builds the forward-index expression for a back-index subscript: given a receiver and a
     /// <c>BackIndex</c> value, produces <c>backIndex.resolve!(receiver.count())</c> — a resolved
     /// <c>U64</c> position. This is the call-site desugaring that replaces the per-collection
-    /// <c>$getitem!(index: BackIndex)</c> overloads; collections need only declare the
-    /// <c>$getitem!(index: U64)</c> form. <c>BackIndex.resolve!</c> throws on out-of-range, so the
+    /// <c>getitem!(index: BackIndex)</c> overloads; collections need only declare the
+    /// <c>getitem!(index: U64)</c> form. <c>BackIndex.resolve!</c> throws on out-of-range, so the
     /// bounds semantics match the old overload.
     /// </summary>
     private Expression BuildBackIndexResolve(Expression loweredObj, Expression backIndex,

@@ -1443,7 +1443,7 @@ public sealed partial class StdlibLoader
                 // U64 was registered) is silently dropped by FillProtocolMethods, leaving the proto
                 // method with fewer params than declared. Detect the count mismatch and re-fill now
                 // that all type shells exist, so conformance (S703) sees the real arity. This must
-                // run for void methods too (e.g. `$setitem!`), so it precedes the return-type check.
+                // run for void methods too (e.g. `setitem!`), so it precedes the return-type check.
                 int declParamCount = method.Parameters.Count(predicate: p => p.Name != "me");
                 if (protoMethod != null && protoMethod.ParameterTypes.Count != declParamCount)
                 {

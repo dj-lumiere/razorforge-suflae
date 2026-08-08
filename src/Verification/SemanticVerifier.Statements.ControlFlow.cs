@@ -744,11 +744,11 @@ public sealed partial class SemanticVerifier
         }
 
         // The bound variable type defaults to the resource type, but may be overridden
-        // by $enter's return type when it returns non-void.
+        // by enter's return type when it returns non-void.
         TypeSymbol boundType = resourceType;
 
-        // A `using` target must obey `Enterable` — the protocol that declares the `$enter`/`$exit`
-        // scope-management contract. Conformance (not just the presence of `$enter`/`$exit` by name)
+        // A `using` target must obey `Enterable` — the protocol that declares the `enter`/`exit`
+        // scope-management contract. Conformance (not just the presence of `enter`/`exit` by name)
         // is the gate, so being `using`-able is an explicit, checked capability.
         if (_registry.Language == Language.RazorForge)
         {
@@ -757,12 +757,12 @@ public sealed partial class SemanticVerifier
                 ReportError(code: SemanticDiagnosticCode.UsingTargetMissingEnterExit,
                     message:
                     $"Using target of type '{resourceType.Name}' must obey 'Enterable' (which provides " +
-                    "'$enter'/'$exit') for scope-managed resource access.",
+                    "'enter'/'exit') for scope-managed resource access.",
                     location: usingStmt.Location);
             }
             else
             {
-                // The bound variable's type is `$enter`'s return type when non-void (pass-through).
+                // The bound variable's type is `enter`'s return type when non-void (pass-through).
                 // LookupMethod handles generic fallback (Viewing[Point].enter -> Viewing.enter).
                 RoutineInfo? enterMethod =
                     _registry.LookupMethod(type: resourceType, methodName: "enter");
@@ -770,15 +770,15 @@ public sealed partial class SemanticVerifier
                     boundType = enterReturn;
 
                 // A `fallback` branch drives a non-blocking acquisition — the resource must
-                // provide `$try_enter` (returns Bool: did the hold succeed?). Types whose entry
-                // can only block (no `$try_enter`) cannot take a `fallback`.
+                // provide `try_enter` (returns Bool: did the hold succeed?). Types whose entry
+                // can only block (no `try_enter`) cannot take a `fallback`.
                 if (usingStmt.FallbackBody != null &&
                     _registry.LookupMethod(type: resourceType, methodName: "try_enter") == null)
                 {
                     ReportError(code: SemanticDiagnosticCode.UsingFallbackRequiresTryEnter,
                         message:
                         $"'using ... fallback' requires the resource type '{resourceType.Name}' to " +
-                        "provide '$try_enter' (a non-blocking acquisition). This type only supports " +
+                        "provide 'try_enter' (a non-blocking acquisition). This type only supports " +
                         "blocking entry — drop the 'fallback' branch.",
                         location: usingStmt.Location);
                 }

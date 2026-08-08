@@ -109,7 +109,7 @@ public sealed partial class SemanticVerifier
                 return;
         }
 
-        // A user-defined `$destroy` replaces the compiler-generated memory teardown (field
+        // A user-defined `destroy` replaces the compiler-generated memory teardown (field
         // recursion + invalidate `me`), so the author owns freeing `me` and its fields. Require
         // `dangerous` so this opt-in to manual memory management is explicit at the declaration.
         bool isDestroyDecl = routine.Name == "destroy"
@@ -117,7 +117,7 @@ public sealed partial class SemanticVerifier
         if (isDestroyDecl && !routine.IsDangerous)
         {
             ReportError(code: SemanticDiagnosticCode.DestroyMustBeDangerous,
-                message: "A user-defined `$destroy` must be marked `dangerous` — overriding it " +
+                message: "A user-defined `destroy` must be marked `dangerous` — overriding it " +
                          "makes you responsible for freeing `me` and its owned fields.",
                 location: routine.Location);
         }
@@ -133,11 +133,10 @@ public sealed partial class SemanticVerifier
         }
         else if (routine.Name.Contains(value: '.'))
         {
-            // Extension method syntax (e.g., "List[T].add_last"):
-            // Resolve OwnerType to get canonical name, then append method name
-            // Method + args-stripped owner base come from the parser's structural fields; `typeName`
-            // (owner WITH type-args) is still needed for the bracketed protocol-extension lookup below,
-            // and only that string form carries the args, so it stays reconstructed from Name.
+            // Extension method syntax (e.g., "List[T].add_last"): method + args-stripped owner base
+            // come from the parser's structural fields; `typeName` (owner WITH type-args) is still
+            // needed for the bracketed protocol-extension registry lookup below — that registry-key
+            // string form only lives in Name (ResolveType(ReceiverType) resolves differently here).
             int dotIndex = routine.Name.IndexOf(value: '.');
             string typeName = routine.Name[..dotIndex];
             string methodName = routine.MethodName!;
@@ -399,7 +398,7 @@ public sealed partial class SemanticVerifier
         _pendingLookupVars.Clear();
 
         // Snapshot the per-routine "out of scope via steal/consumption" set onto the declaration so
-        // the scope-exit teardown pass can exclude these bindings from `$destroy` — `steal` takes the
+        // the scope-exit teardown pass can exclude these bindings from `destroy` — `steal` takes the
         // variable out of scope (the callee kills the content), and this deadref record survives even
         // after the `steal` AST wrapper is normalized away during arg lowering.
         routine.StolenVariableNames = [.. _deadrefVariables];

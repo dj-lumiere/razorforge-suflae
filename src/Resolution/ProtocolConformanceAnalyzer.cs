@@ -107,7 +107,7 @@ internal sealed class ProtocolConformanceAnalyzer
     /// </summary>
     private void ApplyAutoAssignableConformance()
     {
-        // A no-ptr layout is a bitwise duplicate — which is BOTH a valid cheap `$store` AND a valid
+        // A no-ptr layout is a bitwise duplicate — which is BOTH a valid cheap `store` AND a valid
         // deep `copy` (nothing heap is shared). So auto-derive the stronger `Copyable` (which obeys
         // `Storable`), giving the type both capabilities. Raw-pointer opt-in types (Hijacked/CPtr) have a
         // ptr, so CanAutoDeriveAssignable is false and they keep their hand-written `obeys Storable` only.
@@ -145,7 +145,7 @@ internal sealed class ProtocolConformanceAnalyzer
     /// Auto-derives <c>Storable</c> (NOT <c>Copyable</c>) for the RC wrapper family — the types in
     /// <see cref="RuntimeContract.RcCopyVerb"/> (Retained/Tracked/Shared/Watched/Roamed). Their
     /// assignment-copy is a refcount SHARE (retain/track/share/watch/roam), i.e. exactly the
-    /// <c>$store</c> operation — never a deep, independent <c>copy</c> (you cannot duplicate a shared
+    /// <c>store</c> operation — never a deep, independent <c>copy</c> (you cannot duplicate a shared
     /// handle's referent). So they are Storable but not Copyable, and a generic <c>T: Storable</c>
     /// accepts them while <c>T: Copyable</c> correctly rejects them. The <c>RcCopyVerb</c> mapping is
     /// the structural "storable" marker — no <c>@storable</c> annotation is needed.

@@ -408,7 +408,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             Location: loc) { IsSynthesizedLowering = true };
 
         // When running after SA (stdlib/variant bodies), annotate ResolvedType, ResolvedRoutine,
-        // and LoweringKind on the $iter and try_emit calls so CallOverloadResolutionPass doesn't
+        // and LoweringKind on the iter and try_emit calls so CallOverloadResolutionPass doesn't
         // need to re-classify them (which fails for instantiated bodies where the receiver variable
         // has no SA-annotated type), and so reachability marks the CONCRETE emitter's try_emit.
         // Skip ErrorTypeInfo: SA suppresses stdlib errors.
@@ -417,7 +417,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "iter");
             if (iterMethod?.ReturnType is { } rawIteratorType)
             {
-                // LookupMethod returns the generic-def `$iter`, whose ReturnType still carries the
+                // LookupMethod returns the generic-def `iter`, whose ReturnType still carries the
                 // owner's params (e.g. `?EnumerateEmitter[T, S/Iter]`). Substitute the concrete
                 // owner's type args so `try_emit` resolves on the CONCRETE emitter
                 // (`EnumerateEmitter[Text, ListEmitter[Text]]`); otherwise reachability marks the
@@ -582,7 +582,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
 
     /// <summary>
     /// Substitutes a type with a concrete generic owner's type arguments (e.g. the generic-def
-    /// <c>$iter</c> return <c>EnumerateEmitter[T, S/Iter]</c> for owner
+    /// <c>iter</c> return <c>EnumerateEmitter[T, S/Iter]</c> for owner
     /// <c>EnumerateIterator[Text, List[Text]]</c> → <c>EnumerateEmitter[Text, ListEmitter[Text]]</c>).
     /// Resolves associated-type projections via <see cref="RecordTypeInfo.SubstituteType"/>.
     /// </summary>
