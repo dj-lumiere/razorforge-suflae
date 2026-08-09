@@ -239,40 +239,16 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     private string PrintBody(IEnumerable<Statement> stmts)
     {
         _indent++;
+        // Print statements verbatim in AST order. Teardown lowering (ScopeTeardownLoweringPass /
+        // TemporaryTeardownPass) always emits scope/temporary destroys BEFORE the terminating
+        // return/throw, so the dump order already matches execution order — a destroy printed after a
+        // `return` would be a real bug (dead teardown / leak), and the dump must show it, not hide it.
         var flat = FlattenStatements(stmts).ToList();
-        // Scope teardown is inserted AFTER the `return` terminator. Move those destroys to just before
-        // the return so they print in execution order — but DROP the returned value's own destroy, since
-        // it is moved out (codegen skips it), not torn down.
-        int ret = flat.FindIndex(match: s => s is ReturnStatement);
-        if (ret >= 0 && ret < flat.Count - 1)
-        {
-            Statement retStmt = flat[index: ret];
-            string? returnedVar = (retStmt as ReturnStatement)?.Value is IdentifierExpression id
-                ? id.Name
-                : null;
-            var trailing = flat.Skip(count: ret + 1)
-                               .Where(s => !IsDestroyOf(stmt: s, varName: returnedVar))
-                               .ToList();
-            flat = flat.Take(count: ret).Concat(trailing).Append(element: retStmt).ToList();
-        }
         string result = string.Join("\n",
             flat.Select(s => s.Accept(this)).Where(l => !string.IsNullOrWhiteSpace(value: l)));
         _indent--;
         return result;
     }
-
-    /// <summary>True if the statement is exactly <c>varName.destroy()</c>.</summary>
-    private static bool IsDestroyOf(Statement stmt, string? varName) =>
-        varName != null
-        && stmt is ExpressionStatement
-        {
-            Expression: CallExpression
-            {
-                Callee: MemberExpression { Object: IdentifierExpression id, MemberName: "destroy" },
-                Arguments.Count: 0
-            }
-        }
-        && id.Name == varName;
 
     /// <summary>Flattens bare nested blocks (expand-unroll / lowering containers, which carry no scope
     /// of their own) into a single statement stream at the current level.</summary>
