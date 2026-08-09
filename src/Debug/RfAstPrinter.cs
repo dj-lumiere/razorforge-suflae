@@ -482,12 +482,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     /// <inheritdoc/>
     public string VisitCallExpression(CallExpression node)
     {
-        string argList = string.Join(", ", node.Arguments.Select(a => a.Accept(this)));
         // Qualify every resolved call to its module-qualified routine name with the full generic
         // type-argument list spelled out. Method calls are rendered free-function style with the
         // receiver as the explicit first argument.
         if (node.ResolvedRoutine is { } ri)
         {
+            string argList = RenderArgs(args: node.Arguments, routine: ri);
             string typeArgs = ri.TypeArguments is { Count: > 0 }
                 ? $"[{string.Join(", ", ri.TypeArguments.Select(RoutineInfo.GetTypeIdentity))}]"
                 : "";
@@ -502,7 +502,24 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
                 return $"{mem.Object.Accept(this)}.{ri.Name}{typeArgs}({argList})";
             return $"{ri.QualifiedName}{typeArgs}({argList})";
         }
-        return $"{node.Callee.Accept(this)}({argList})";
+        return $"{node.Callee.Accept(this)}({RenderArgs(args: node.Arguments, routine: null)})";
+    }
+
+    /// <summary>Renders a call's argument list with EVERY argument spelled as <c>label: value</c> — the
+    /// label comes from the resolved routine's parameter at that position (already-named arguments keep
+    /// their own label). A single positional argument is labelled too, so the dump is a fully-named,
+    /// unambiguous form. Falls back to bare positional when no routine/parameter is known.</summary>
+    private string RenderArgs(IEnumerable<Expression> args, RoutineInfo? routine)
+    {
+        var parms = routine?.Parameters;
+        return string.Join(", ", args.Select((a, i) =>
+        {
+            if (a is NamedArgumentExpression) return a.Accept(this);
+            string? label = parms != null && i < parms.Count ? parms[index: i].Name : null;
+            return label != null && label != "me"
+                ? $"{label}: {a.Accept(this)}"
+                : a.Accept(this);
+        }));
     }
 
 
@@ -701,7 +718,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string typeArgs = node.TypeArguments.Count > 0
             ? $"[{string.Join(", ", node.TypeArguments.Select(t => t.Accept(this)))}]"
             : "";
-        string args = string.Join(", ", node.Arguments.Select(a => a.Accept(this)));
+        string args = RenderArgs(args: node.Arguments, routine: node.ResolvedRoutine);
         // Qualify to the resolved routine, keeping the explicit type-argument list; method calls
         // render free-function style with the receiver as the first argument (as VisitCallExpression).
         if (node.ResolvedRoutine is { } ri)
