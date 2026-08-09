@@ -537,6 +537,16 @@ public sealed partial class StdlibLoader
                 name: TypeModel.Symbols.MemberExpandTemplateInfo.ColumnPlaceholderName);
         }
 
+        // Comptime VALUE-position splice used as a const-generic argument, e.g. the carrier payload
+        // size `Array[U8, ${max(T.data_size().byte_size(), 8)}]`. Resolve to a symbolic
+        // ComptimeConstGenericTypeInfo; RoutineInfo/RecordTypeInfo.SubstituteType fold it at
+        // monomorphization. Without this the stdlib registration path returns null and the whole field
+        // (Result/Lookup `payload`) is silently dropped from the record's member list.
+        if (typeExpr.ComptimeValue != null)
+        {
+            return new ComptimeConstGenericTypeInfo(comptimeExpr: typeExpr.ComptimeValue);
+        }
+
         string typeName = typeExpr.Name;
 
         // `Me` (protocol-self / owner placeholder) used as a type or type argument — e.g. in

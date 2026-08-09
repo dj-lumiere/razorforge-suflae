@@ -195,6 +195,16 @@ internal static class BracketReclassifyPass
                     Location: se.Location,
                     SpliceHandle: spliceHandle.Name);
 
+            // A comptime VALUE-position splice as a const-generic argument, e.g.
+            // `Array[U8, ${max(T.data_size().byte_size(), 8)}]`. Unlike the `${m.type}` TYPE splice above,
+            // the inner is a scalar comptime expression; carry it on ComptimeValue for the monomorphizer
+            // to fold into a ConstGenericValueTypeInfo once the concrete type args are known.
+            case SpliceExpression valueSplice:
+                return new TypeExpression(Name: "splice_value",
+                    GenericArguments: null,
+                    Location: valueSplice.Location,
+                    ComptimeValue: valueSplice.Inner);
+
             // A TypeExpression already (should not normally occur from bracket parsing) passes through.
             case TypeExpression te:
                 return te;

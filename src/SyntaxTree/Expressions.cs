@@ -895,7 +895,12 @@ public record TypeExpression(
     // Comptime type-position splice: when non-null this whole type IS the `${handle.type}` projection
     // of an expand handle (e.g. `${m.type}` in `Array[${m.type}, N]`). At expansion it resolves to the
     // current member/arm's static type. Null for an ordinary written type.
-    string? SpliceHandle = null) : Expression(Location: Location)
+    string? SpliceHandle = null,
+    // Comptime VALUE-position splice used as a const-generic argument: `${max(T.data_size().byte_size(), 8)}`
+    // in `Array[U8, ${...}]`. When non-null this type-arg is a const-generic whose integer value is the
+    // monomorph-time fold of this expression (see GenericAstRewriter / RewriteContext.TypeSubs). Distinct
+    // from SpliceHandle, which is a TYPE splice; this is a comptime scalar. Null for ordinary type-args.
+    Expression? ComptimeValue = null) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

@@ -371,6 +371,15 @@ internal sealed class TypeResolver
             return new GenericParameterTypeInfo(name: typeExpr.Name);
         }
 
+        // Comptime const-generic argument from a `${…}` value-splice (e.g. the payload buffer size
+        // `${max(T.data_size().byte_size(), 8)}`). Resolves to a symbolic ComptimeConstGenericTypeInfo;
+        // RoutineInfo.SubstituteType folds it to a concrete value once the enclosing type's parameters
+        // are bound at monomorphization.
+        if (typeExpr.ComptimeValue != null)
+        {
+            return new ComptimeConstGenericTypeInfo(comptimeExpr: typeExpr.ComptimeValue);
+        }
+
         // Check for const generic literal values (e.g., 4, 8u64, true/false)
         // These come from ParseTypeOrConstGeneric in the parser
         if (TryParseConstGenericLiteral(name: typeExpr.Name,

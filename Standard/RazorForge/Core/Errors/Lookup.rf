@@ -12,6 +12,9 @@ import BuilderService
 record Lookup[T]
   ### Identifies the stored payload type, or `0` for the absent state.
   secret type_id: U64
+  ### Inline payload buffer, sized to the success `T` but at least 8 bytes so a boxed error
+  ### pointer always fits. The `${…}` splice folds to a literal element count at monomorphization.
+  secret payload: Array[U8, ${max(T.data_size().byte_size(), 8)}]
 
 ### Returns the display form of this lookup result.
 ### Absent renders as `"none"`; present/crashable arms delegate to the payload's

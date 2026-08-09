@@ -559,6 +559,21 @@ public sealed class RoutineInfo
                 : new AssociatedProjectionTypeInfo(baseType: newBase, slotName: projection.SlotName);
         }
 
+        // Comptime const-generic (`${max(T.data_size().byte_size(), 8)}`): once the referenced type
+        // params are bound, fold to a plain ConstGenericValueTypeInfo; otherwise keep it symbolic.
+        if (type is ComptimeConstGenericTypeInfo comptime)
+        {
+            return comptime.TryFold(
+                    resolveTypeParam: name => substitution.TryGetValue(key: name, value: out TypeSymbol? s)
+                        ? s as TypeInfo
+                        : null,
+                    pointerSize: 8, out long folded)
+                ? new ConstGenericValueTypeInfo(literalText: folded.ToString(),
+                    value: folded,
+                    explicitTypeName: "U64")
+                : comptime;
+        }
+
         if (substitution.TryGetValue(key: type.Name, value: out TypeSymbol? substituted))
         {
             return substituted;

@@ -569,7 +569,10 @@ public partial class LlvmCodeGenerator
 
     private static bool ContainsGenericParameter(TypeInfo type)
     {
-        if (type is GenericParameterTypeInfo or ErrorTypeInfo)
+        // An unfolded comptime const-generic (`${…}` payload-size splice before monomorphization)
+        // still depends on a type parameter — treat as non-concrete so the generic-def layout is
+        // skipped and only folded instances are emitted.
+        if (type is GenericParameterTypeInfo or ErrorTypeInfo or ComptimeConstGenericTypeInfo)
         {
             return true;
         }

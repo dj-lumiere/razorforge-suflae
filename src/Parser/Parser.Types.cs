@@ -158,17 +158,17 @@ public partial class Parser
         // ═══════════════════════════════════════════════════════════════════════════
         if (Match(type: TokenType.SpliceOpen))
         {
-            string handle = ConsumeIdentifier(errorMessage: "Expected an expand handle name in '${...}' type splice");
-            Consume(type: TokenType.Dot, errorMessage: "Expected '.type' in '${...}' type splice");
-            string projection = ConsumeIdentifier(errorMessage: "Expected 'type' after '.' in type splice");
-            if (projection != "type")
-            {
-                throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedToken,
-                    message: $"Only '${{{handle}.type}}' is valid in a type position, not '${{{handle}.{projection}}}'.");
-            }
-            Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' to close '${...}' type splice");
-            return new TypeExpression(Name: "splice", GenericArguments: null, Location: location,
-                SpliceHandle: handle);
+            Expression spliced = ParseExpression();
+            Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' to close '${...}' splice");
+            // `${handle.type}` — a comptime TYPE splice of an expand handle's member type.
+            if (spliced is MemberExpression { Object: IdentifierExpression handleId, MemberName: "type" })
+                return new TypeExpression(Name: "splice", GenericArguments: null, Location: location,
+                    SpliceHandle: handleId.Name);
+            // Otherwise a comptime VALUE splice used as a const-generic argument, e.g. the carrier
+            // payload size `Array[U8, ${max(T.data_size().byte_size(), 8)}]`. Carry the expression for
+            // the monomorphizer to fold into a ConstGenericValueTypeInfo.
+            return new TypeExpression(Name: "splice_value", GenericArguments: null, Location: location,
+                ComptimeValue: spliced);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════

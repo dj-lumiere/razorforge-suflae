@@ -503,6 +503,22 @@ public class RecordTypeInfo : TypeInfo
                 : new AssociatedProjectionTypeInfo(baseType: newBase, slotName: projection.SlotName);
         }
 
+        // Comptime const-generic (`${max(T.data_size().byte_size(), 8)}`): fold to a concrete value
+        // once its referenced type params are bound, else keep symbolic (mirror of the RoutineInfo
+        // overload's fold on the TypeSymbol map).
+        if (type is ComptimeConstGenericTypeInfo comptime)
+        {
+            return comptime.TryFold(
+                    resolveTypeParam: name => substitution.TryGetValue(key: name, value: out TypeInfo? bound)
+                        ? bound
+                        : null,
+                    pointerSize: 8, out long folded)
+                ? new ConstGenericValueTypeInfo(literalText: folded.ToString(),
+                    value: folded,
+                    explicitTypeName: "U64")
+                : comptime;
+        }
+
         // If it's a type parameter, substitute it
         if (substitution.TryGetValue(key: type.Name, value: out TypeInfo? substituted))
         {

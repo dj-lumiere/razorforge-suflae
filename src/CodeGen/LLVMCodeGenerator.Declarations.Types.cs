@@ -159,15 +159,10 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        // Result[T] / Lookup[T] use a codegen-owned inline-payload layout.
-        if (record.CarrierKind is CarrierKind.Result or CarrierKind.Lookup
-            && record.TypeArguments is { Count: 1 } resOrLkpArgs)
-        {
-            _typeDeclarationsRecord[key: typeName] =
-                BuildCarrierTypeDeclaration(typeName: typeName, innerT: resOrLkpArgs[index: 0]);
-            return;
-        }
-
+        // Result[T] / Lookup[T] now declare their inline payload buffer as a real RF field
+        // (`payload: Array[U8, ${max(T.data_size().byte_size(), 8)}]`), so the ordinary record layout
+        // below produces the same `{ i64 type_id, [N x i8] payload }` the codegen-owned synthesis used
+        // to build. No carrier special-case here anymore.
         record = RefreshRecordMembers(record: record);
 
         // Recursively ensure struct types for member variable types are defined
@@ -194,21 +189,6 @@ public partial class LlvmCodeGenerator
                 ContainsAbstractProjection(t)) == true;
     }
 
-    /// <summary>
-    /// Builds the codegen-owned inline-payload carrier layout for Result[T] / Lookup[T]:
-    /// <c>{ i64 type_id, [max(sizeof(T), 8) x i8] payload }</c>. The stdlib record's declared fields
-    /// are ignored — codegen owns the layout, storing the success T / crashable ptr inline. type_id
-    /// == 0 is the None/absent state with don't-care payload bytes.
-    /// </summary>
-    private string BuildCarrierTypeDeclaration(string typeName, TypeInfo innerT)
-    {
-        EnsureTypeGenerated(type: innerT, visited: new HashSet<string>());
-        int payloadBytes = Math.Max(val1: GetTypeSize(type: innerT), val2: 8);
-        var rlDecl = new StringBuilder();
-        rlDecl.AppendLine(value: $"{typeName} = type {{ i64, [{payloadBytes} x i8] }}");
-        rlDecl.AppendLine(handler: $"; {typeName} carrier: 0=type_id, 1=payload[{payloadBytes}]");
-        return rlDecl.ToString();
-    }
 
     /// <summary>
     /// Refreshes a record's member variables when a generic resolution was created before its
