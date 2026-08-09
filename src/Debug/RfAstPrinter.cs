@@ -220,25 +220,55 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     private string PrintBody(IEnumerable<Statement> stmts)
     {
         _indent++;
+        var flat = FlattenStatements(stmts).ToList();
+        // Scope teardown is inserted AFTER the `return` terminator. Move those destroys to just before
+        // the return so they print in execution order — but DROP the returned value's own destroy, since
+        // it is moved out (codegen skips it), not torn down.
+        int ret = flat.FindIndex(match: s => s is ReturnStatement);
+        if (ret >= 0 && ret < flat.Count - 1)
+        {
+            Statement retStmt = flat[index: ret];
+            string? returnedVar = (retStmt as ReturnStatement)?.Value is IdentifierExpression id
+                ? id.Name
+                : null;
+            var trailing = flat.Skip(count: ret + 1)
+                               .Where(s => !IsDestroyOf(stmt: s, varName: returnedVar))
+                               .ToList();
+            flat = flat.Take(count: ret).Concat(trailing).Append(element: retStmt).ToList();
+        }
         string result = string.Join("\n",
-            FlattenStatements(stmts).Where(l => !string.IsNullOrWhiteSpace(value: l)));
+            flat.Select(s => s.Accept(this)).Where(l => !string.IsNullOrWhiteSpace(value: l)));
         _indent--;
         return result;
     }
 
-    /// <summary>Renders a statement list at the current indent, flattening bare nested blocks in place.</summary>
-    private IEnumerable<string> FlattenStatements(IEnumerable<Statement> stmts)
+    /// <summary>True if the statement is exactly <c>varName.destroy()</c>.</summary>
+    private static bool IsDestroyOf(Statement stmt, string? varName) =>
+        varName != null
+        && stmt is ExpressionStatement
+        {
+            Expression: CallExpression
+            {
+                Callee: MemberExpression { Object: IdentifierExpression id, MemberName: "destroy" },
+                Arguments.Count: 0
+            }
+        }
+        && id.Name == varName;
+
+    /// <summary>Flattens bare nested blocks (expand-unroll / lowering containers, which carry no scope
+    /// of their own) into a single statement stream at the current level.</summary>
+    private static IEnumerable<Statement> FlattenStatements(IEnumerable<Statement> stmts)
     {
         foreach (Statement s in stmts)
         {
             if (s is BlockStatement inner)
             {
-                foreach (string line in FlattenStatements(inner.Statements))
-                    yield return line;
+                foreach (Statement x in FlattenStatements(inner.Statements))
+                    yield return x;
             }
             else
             {
-                yield return s.Accept(this);
+                yield return s;
             }
         }
     }
@@ -724,7 +754,13 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     /// <inheritdoc/>
     public string VisitVariableDeclaration(VariableDeclaration node)
     {
-        string typeStr = node.Type != null ? $": {node.Type.Accept(this)}" : "";
+        // Spell out the type on every local: written annotation if present, else the inferred type
+        // resolved from the initializer (so the dump has no implicit `var x = …` inference left).
+        string typeStr = node.Type != null
+            ? $": {node.Type.Accept(this)}"
+            : node.Initializer?.ResolvedType is { } inferred
+                ? $": {inferred.FullName}"
+                : "";
         string initStr = node.Initializer != null ? $" = {node.Initializer.Accept(this)}" : "";
         return $"{I}var {node.Name}{typeStr}{initStr}";
     }
