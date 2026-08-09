@@ -344,6 +344,7 @@ public static class BuilderInfoProvider
         {
             Kind = RoutineKind.Function,
             OwnerType = null,
+            Module = "BuilderService",
             Parameters = [],
             ReturnType = returnType,
             IsFailable = false,
