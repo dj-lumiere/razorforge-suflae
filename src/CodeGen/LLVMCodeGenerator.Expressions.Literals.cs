@@ -274,6 +274,35 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Builds the constant initializer for a Bytes/Text literal, mapping the buffer pointer and element
+    /// count onto the carrier's fields BY NAME (<c>data</c> → buffer, <c>count</c> → element count,
+    /// any other field — the <c>ctrl</c> refcount controller — zero/null). Keying on field name keeps
+    /// codegen independent of the physical field order; a reorder of the record moves the values with it.
+    /// </summary>
+    private string BuildLiteralCarrierValue(string carrierName, string dataName, long count)
+    {
+        TypeInfo? carrier = _registry.LookupType(name: carrierName)
+            ?? _registry.LookupType(name: $"Core.{carrierName}");
+        if (carrier is RecordTypeInfo record && record.MemberVariables.Count > 0)
+        {
+            IEnumerable<string> parts = record.MemberVariables.Select(selector: mv =>
+            {
+                string ft = GetFieldStorageLlvmType(type: mv.Type);
+                return mv.Name switch
+                {
+                    "data" => $"ptr {dataName}",
+                    "count" => $"{ft} {count}",
+                    _ => ft == "ptr" ? "ptr null" : $"{ft} 0"
+                };
+            });
+            return string.Join(separator: ", ", values: parts);
+        }
+
+        // Fallback matching the physical { ptr data, i64 count, ptr ctrl } layout.
+        return $"ptr {dataName}, i64 {count}, ptr null";
+    }
+
+    /// <summary>
     /// Emits a Bytes literal (b"...") as a constant Bytes record.
     /// Bytes layout is derived from its registered fields (physically <c>{ ptr, i64, ptr }</c>:
     /// data, count, ctrl). Returns the loaded record value.
@@ -313,8 +342,9 @@ public partial class LlvmCodeGenerator
         // is never freed and refcount ops are skipped.
         string bytesLayout = BuildLiteralCarrierLayout(carrierName: "Bytes", expectedFields: 3,
             out string bytesStructType);
+        string bytesValue = BuildLiteralCarrierValue(carrierName: "Bytes", dataName: dataName, count: count);
         EmitLine(sb: _globalDeclarations,
-            line: $"{constName} = private unnamed_addr constant {{ {bytesLayout} }} {{ ptr {dataName}, i64 {count}, ptr null }}");
+            line: $"{constName} = private unnamed_addr constant {{ {bytesLayout} }} {{ {bytesValue} }}");
 
         // Load the record value from the global. Bytes is a value-typed record, so call
         // sites expect the record by value, not a pointer. Use the named struct type so
@@ -739,8 +769,9 @@ public partial class LlvmCodeGenerator
         // store/destroy short-circuit on null and never free the literal or touch the refcount.
         string textLayout = BuildLiteralCarrierLayout(carrierName: "Text", expectedFields: 3,
             out _);
+        string textValue = BuildLiteralCarrierValue(carrierName: "Text", dataName: dataName, count: count);
         EmitLine(sb: _globalDeclarations,
-            line: $"{constName} = private unnamed_addr constant {{ {textLayout} }} {{ ptr {dataName}, i64 {count}, ptr null }}");
+            line: $"{constName} = private unnamed_addr constant {{ {textLayout} }} {{ {textValue} }}");
 
         return constName;
     }

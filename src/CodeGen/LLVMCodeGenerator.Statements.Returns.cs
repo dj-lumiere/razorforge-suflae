@@ -208,18 +208,29 @@ public partial class LlvmCodeGenerator
             string mangledCrash = resolvedCrash.MangledName;
             string llvmReceiverType = GetLlvmType(type: errorType!);
 
-            // Text is `record Text { data: Hijacked[Character], count: U64, ctrl: ... }` —
-            // returned by value as %Record.Text. Extract field 0 (codepoint ptr) and
-            // field 1 (count) directly from the SSA struct.
+            // crash_message() returns a Text by value. Derive the Text record type AND the buffer/count
+            // field indices from the registered Text type — never assume the physical field order.
+            var textRecord = _registry.LookupType(name: "Text") as RecordTypeInfo
+                ?? _registry.LookupType(name: "Core.Text") as RecordTypeInfo;
+            string textLlvm = textRecord != null
+                ? GetRecordTypeName(record: textRecord)
+                : "%Record.Core.Text";
+            int dataIdx = textRecord != null
+                ? ResolveRecordFieldIndex(record: textRecord, memberVariableName: "data")
+                : 0;
+            int countIdx = textRecord != null
+                ? ResolveRecordFieldIndex(record: textRecord, memberVariableName: "count")
+                : 1;
+
             string textVal = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {textVal} = call %Record.Core.Text @{mangledCrash}({llvmReceiverType} {errorVal})");
+                line: $"  {textVal} = call {textLlvm} @{mangledCrash}({llvmReceiverType} {errorVal})");
             dataPtr = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {dataPtr} = extractvalue %Record.Core.Text {textVal}, 0");
+                line: $"  {dataPtr} = extractvalue {textLlvm} {textVal}, {dataIdx}");
             msgLen = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {msgLen} = extractvalue %Record.Core.Text {textVal}, 1");
+                line: $"  {msgLen} = extractvalue {textLlvm} {textVal}, {countIdx}");
         }
 
         string typeCStr = EmitCStringConstant(value: typeName);
