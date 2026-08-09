@@ -213,7 +213,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string name = ri is { Name: "create", OwnerType: { } ctorOwner }
             ? ctorOwner.FullName
             : $"{ownerPrefix}{ri.Name}";
-        return $"{annotations}routine {name}{failable}({paramStr}){retStr}";
+        // Spell out the routine's own resolved generic args (e.g. a monomorphized `hijacked_none[U128]`)
+        // so instantiations aren't collapsed to the same bare name. (Owner generics are in ownerPrefix.)
+        string typeArgs = ri is { Name: not "create", TypeArguments: { Count: > 0 } ta }
+            ? $"[{string.Join(", ", ta.Select(RoutineInfo.GetTypeIdentity))}]"
+            : "";
+        return $"{annotations}routine {name}{typeArgs}{failable}({paramStr}){retStr}";
     }
 
     // -----------------------------------------------------------------------------
@@ -1016,8 +1021,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             paramsStr = string.Join(", ", node.Parameters.Select(p =>
                 p.Type != null ? $"{p.Name}: {p.Type.Accept(this)}" : p.Name));
         }
+        // Spell out the routine's own resolved generic args so monomorphized instantiations are distinct.
+        string typeArgs = node.ResolvedInfo is { Name: not "create", TypeArguments: { Count: > 0 } ta }
+            ? $"[{string.Join(", ", ta.Select(RoutineInfo.GetTypeIdentity))}]"
+            : "";
         sb.Append(AnnotationLines(node.Annotations));
-        sb.AppendLine($"{I}routine {QualifyRoutineName(node)}{failStr}({paramsStr}){returnStr}");
+        sb.AppendLine($"{I}routine {QualifyRoutineName(node)}{typeArgs}{failStr}({paramsStr}){returnStr}");
         sb.Append(PrintBodyOf(node.Body));
         return sb.ToString().TrimEnd();
     }
