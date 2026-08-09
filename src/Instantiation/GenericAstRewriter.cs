@@ -1957,7 +1957,7 @@ internal static class GenericAstRewriter
 
                 ctx.ActiveMemberType = vm.Type;
                 ctx.ActiveMemberName = vm.Name;
-                ctx.ActiveMemberIndex = vm.TagValue;
+                ctx.ActiveMemberIndex = vm.Ordinal;
 
                 var typeExpr = new TypeExpression(Name: vm.Type.Name, GenericArguments: null,
                     Location: loc)

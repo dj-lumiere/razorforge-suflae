@@ -281,21 +281,18 @@ public partial class LlvmCodeGenerator
     /// to that constant.
     ///
     /// <list type="bullet">
-    /// <item>Variant subjects: <see cref="TypePattern"/> -> <see cref="VariantMemberInfo.TagValue"/></item>
     /// <item>Result/Lookup subjects: <see cref="TypePattern"/> -> FNV-1a type_id of the named type;
     /// "None" -> 0.</item>
-    /// <item><see cref="NonePattern"/> -> None member tag (variant) or 0 (Lookup absent).</item>
+    /// <item><see cref="NonePattern"/> -> 0 (Lookup absent).</item>
     /// </list>
+    ///
+    /// <para>VARIANT subjects are NOT handled here: PatternLoweringPass rewrites every variant
+    /// <c>when … is Arm</c> into a <c>subject.type_id == FNV-1a(Arm.FullName)</c> if-chain before
+    /// codegen, so a raw variant TypePattern never reaches this switch builder.</para>
     /// </summary>
     private bool TryGetSwitchTagValue(Pattern pattern, TypeInfo subjectType, out string tagLiteral)
     {
         tagLiteral = "0";
-
-        if (subjectType is VariantTypeInfo variantType)
-        {
-            return TryGetVariantSwitchTag(pattern: pattern, variantType: variantType,
-                tagLiteral: out tagLiteral);
-        }
 
         if (!IsCarrierType(type: subjectType) || IsMaybeType(type: subjectType))
         {
@@ -303,37 +300,6 @@ public partial class LlvmCodeGenerator
         }
 
         return TryGetCarrierSwitchTag(pattern: pattern, tagLiteral: out tagLiteral);
-    }
-
-    /// <summary>Resolves a variant subject's arm tag for a TypePattern / NonePattern.</summary>
-    private bool TryGetVariantSwitchTag(Pattern pattern, VariantTypeInfo variantType,
-        out string tagLiteral)
-    {
-        tagLiteral = "0";
-        VariantMemberInfo? member = pattern switch
-        {
-            TypePattern tp => ResolveVariantMemberForTypePattern(tp: tp, variantType: variantType),
-            NonePattern => variantType.Members.FirstOrDefault(predicate: m => m.IsNone),
-            _ => null
-        };
-        if (member == null)
-        {
-            return false;
-        }
-        tagLiteral = member.TagValue.ToString();
-        return true;
-    }
-
-    /// <summary>Resolves the variant member a TypePattern selects (None arm or a payload arm).</summary>
-    private VariantMemberInfo? ResolveVariantMemberForTypePattern(TypePattern tp,
-        VariantTypeInfo variantType)
-    {
-        TypeInfo? targetType = tp.Type.ResolvedType ?? _registry.LookupType(name: tp.Type.Name);
-        if (targetType?.Name == "None")
-        {
-            return variantType.Members.FirstOrDefault(predicate: m => m.IsNone);
-        }
-        return targetType != null ? variantType.FindMember(type: targetType) : null;
     }
 
     /// <summary>Resolves a Result/Lookup carrier subject's tag (0 for None/absent, else type_id).</summary>
@@ -714,16 +680,19 @@ public partial class LlvmCodeGenerator
         bool needsBind = typePattern.VariableName != null && targetType != null;
         string branchTarget = needsBind ? NextLabel(prefix: "type_bind") : matchLabel;
 
-        if (subjectType is VariantTypeInfo variant && targetType != null)
+        // A variant TypePattern must never reach codegen: PatternLoweringPass rewrites every variant
+        // `is Arm` into a `subject.type_id == FNV-1a(Arm.FullName)` comparison first. If one arrives
+        // here, the lowering was skipped and an optimistic entity-match would silently pick the wrong
+        // arm — fail loud instead.
+        if (subjectType is VariantTypeInfo && targetType != null)
         {
-            EmitVariantTypePatternMatch(sb: sb, subject: subject, variant: variant,
-                targetType: targetType, branchTarget: branchTarget, failLabel: failLabel);
+            throw new InvalidOperationException(
+                "Variant TypePattern reached codegen; PatternLoweringPass should have lowered it to a " +
+                "type_id comparison.");
         }
-        else
-        {
-            EmitEntityTypePatternMatch(sb: sb, subjectType: subjectType, targetType: targetType,
-                branchTarget: branchTarget, failLabel: failLabel);
-        }
+
+        EmitEntityTypePatternMatch(sb: sb, subjectType: subjectType, targetType: targetType,
+            branchTarget: branchTarget, failLabel: failLabel);
 
         // Bind to variable if specified -> emit alloca+store in a dedicated block
         if (needsBind)
@@ -762,30 +731,6 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: sb,
             line: $"  {cmp} = icmp eq {choiceLlvm} {subject}, {matchedCase.ComputedValue}");
         EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-    }
-
-    /// <summary>Emits a variant type pattern as an arm-tag comparison against the matched member.</summary>
-    private void EmitVariantTypePatternMatch(StringBuilder sb, string subject,
-        VariantTypeInfo variant, TypeInfo targetType, string branchTarget, string failLabel)
-    {
-        VariantMemberInfo? matchedMember = targetType.Name == "None"
-            ? variant.Members.FirstOrDefault(predicate: m => m.IsNone)
-            : variant.FindMember(type: targetType);
-        if (matchedMember == null)
-        {
-            EmitLine(sb: sb, line: $"  br label %{failLabel}");
-            return;
-        }
-
-        string tagPtr = NextTemp();
-        string tag = NextTemp();
-        string variantTypeName = GetVariantTypeName(variant: variant);
-        EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
-        string cmp = NextTemp();
-        EmitLine(sb: sb, line: $"  {cmp} = icmp eq i64 {tag}, {matchedMember.TagValue}");
-        EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
     }
 
     /// <summary>

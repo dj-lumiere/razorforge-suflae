@@ -318,7 +318,7 @@ public partial class LlvmCodeGenerator
         {
             if (i > 0) decl.Append(value: ", ");
             VariantMemberInfo m = variant.Members[index: i];
-            decl.Append(handler: $"{m.Name}={m.TagValue}");
+            decl.Append(handler: $"{m.Name}={m.Ordinal}");
         }
 
         decl.AppendLine();

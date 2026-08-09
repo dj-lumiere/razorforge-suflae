@@ -550,7 +550,7 @@ internal sealed class TypeBodyResolver
                 hasNone = true;
                 // None is always tag 0
                 members.Insert(index: 0,
-                    item: VariantMemberInfo.CreateNone(tagValue: 0, location: member.Location));
+                    item: VariantMemberInfo.CreateNone(ordinal: 0, location: member.Location));
                 continue;
             }
 
@@ -615,7 +615,7 @@ internal sealed class TypeBodyResolver
         {
             finalMembers.Add(item: new VariantMemberInfo(type: m.Type!)
             {
-                TagValue = tag++, Location = m.Location
+                Ordinal = tag++, Location = m.Location
             });
         }
 

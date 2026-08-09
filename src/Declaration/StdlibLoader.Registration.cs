@@ -1339,7 +1339,7 @@ public sealed partial class StdlibLoader
         {
             if (memberDecl.Type.Name == "None")
             {
-                members.Add(item: VariantMemberInfo.CreateNone(tagValue: 0, location: null));
+                members.Add(item: VariantMemberInfo.CreateNone(ordinal: 0, location: null));
                 tag = 1;
                 break;
             }
@@ -1356,7 +1356,7 @@ public sealed partial class StdlibLoader
                 genericParams: variant.GenericParameters, moduleName: moduleName);
             if (memberType != null)
             {
-                members.Add(item: new VariantMemberInfo(type: memberType) { TagValue = tag++ });
+                members.Add(item: new VariantMemberInfo(type: memberType) { Ordinal = tag++ });
             }
         }
 
