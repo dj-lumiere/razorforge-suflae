@@ -221,15 +221,15 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
 
             case ReturnStatement { Value: { } rv } ret:
                 return SpillAround(ret, rv,
-                    rebuildWithCondition: val => ret with { Value = val });
+                    rebuildWithCondition: val => ret with { Value = val }, isTerminator: true);
 
             case VariantReturnStatement { Value: { } vrv } vret:
                 return SpillAround(vret, vrv,
-                    rebuildWithCondition: val => vret with { Value = val });
+                    rebuildWithCondition: val => vret with { Value = val }, isTerminator: true);
 
             case ThrowStatement th:
                 return SpillAround(th, th.Error,
-                    rebuildWithCondition: err => th with { Error = err });
+                    rebuildWithCondition: err => th with { Error = err }, isTerminator: true);
 
             default:
                 return stmt;
@@ -239,24 +239,49 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// <summary>
     /// Walks <paramref name="root"/> spilling owned receiver/discarded temporaries, then — if any
     /// were found — wraps <paramref name="owner"/> (rebuilt around the rewritten expression) in a
-    /// block that declares the temps before it and destroys them (LIFO) after it.
+    /// block that declares the temps before it and destroys them (LIFO).
     /// <paramref name="topOwning"/> is true when <paramref name="root"/> itself sits in an owning
     /// position (var init / assignment RHS / return value), so its top-level producer is left intact.
+    ///
+    /// <para><paramref name="isTerminator"/> must be set for a control-transferring owner (return /
+    /// throw / variant-return): the destroys must run BEFORE the terminator (statements after it are
+    /// unreachable — placing teardown there would LEAK every spilled temp), yet the value expression
+    /// may still reference those temps. So the value is first computed into a moved-out result temp,
+    /// the spills are destroyed, and only then does control transfer:
+    /// <code>var __ret = EXPR ; &lt;destroy spills LIFO&gt; ; return __ret</code>
+    /// The result temp is fresh/independent of the spilled receivers (a method's record return never
+    /// aliases its receiver — the same invariant that makes spilling the receivers safe), so freeing
+    /// them after computing it is sound.</para>
     /// </summary>
     private Statement SpillAround(Statement owner, Expression root,
-        Func<Expression, Statement> rebuildWithCondition, bool topOwning = true)
+        Func<Expression, Statement> rebuildWithCondition, bool topOwning = true,
+        bool isTerminator = false)
     {
         var spills = new List<Spill>();
         Expression rewritten = Visit(root, objectPos: !topOwning, spills);
         if (spills.Count == 0)
             return owner;
 
-        var stmts = new List<Statement>(capacity: spills.Count * 2 + 1);
+        var stmts = new List<Statement>(capacity: spills.Count * 2 + 2);
         foreach (Spill s in spills)
             stmts.Add(new DeclarationStatement(
                 Declaration: new VariableDeclaration(Name: s.Name, Type: null, Initializer: s.Init,
                     Visibility: VisibilityModifier.Secret, Location: owner.Location),
                 Location: owner.Location));
+
+        if (isTerminator)
+        {
+            // Compute the transferred value while the spills are still alive, tear them down, then
+            // transfer control. Without this the destroys would sit after an unreachable point.
+            string retName = $"__ret_{_counter++}";
+            stmts.Add(DeclStmt(retName, rewritten, owner.Location));
+            for (int i = spills.Count - 1; i >= 0; i--)
+                stmts.Add(MakeDestroyStmt(spills[i], owner.Location));
+            stmts.Add(rebuildWithCondition(new IdentifierExpression(Name: retName,
+                Location: owner.Location) { ResolvedType = rewritten.ResolvedType }));
+            return new BlockStatement(Statements: stmts, Location: owner.Location);
+        }
+
         stmts.Add(rebuildWithCondition(rewritten));
         for (int i = spills.Count - 1; i >= 0; i--)
             stmts.Add(MakeDestroyStmt(spills[i], owner.Location));

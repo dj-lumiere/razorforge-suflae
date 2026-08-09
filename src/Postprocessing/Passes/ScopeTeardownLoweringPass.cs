@@ -465,6 +465,10 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         BlockStatement b => b.Statements.Count > 0 && AlwaysTerminates(b.Statements[^1]),
         IfStatement { ElseStatement: { } elseS } ifs =>
             AlwaysTerminates(ifs.ThenStatement) && AlwaysTerminates(elseS),
+        // `danger` is a scope-transparent wrapper (an unsafe marker, no control flow of its own): it
+        // terminates exactly when its body does. A `danger { … return }` at a block's end therefore
+        // makes the fall-through unreachable, so the outer scope must not append dead teardown after it.
+        DangerStatement d => AlwaysTerminates(d.Body),
         _ => false
     };
 
