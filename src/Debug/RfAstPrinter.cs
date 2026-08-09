@@ -139,7 +139,9 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         var sb = new StringBuilder();
         void Emit(string text)
         {
-            sb.AppendLine(value: text);
+            // TrimEnd so a body-less item (e.g. an @innate routine whose empty body left a trailing
+            // newline) doesn't stack an extra blank on top of the single separator blank below.
+            sb.AppendLine(value: text.TrimEnd());
             sb.AppendLine();
         }
 
@@ -212,13 +214,33 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
     // -----------------------------------------------------------------------------
 
-    /// <summary>Prints a list of statements at _indent+1.</summary>
+    /// <summary>Prints a list of statements at _indent+1. Anonymous nested blocks (e.g. expand-unroll
+    /// or lowering containers, which carry no scope of their own) are flattened to the same indent, and
+    /// statements that render to nothing are dropped so the dump has no stray blank lines.</summary>
     private string PrintBody(IEnumerable<Statement> stmts)
     {
         _indent++;
-        var lines = stmts.Select(s => s.Accept(this)).ToList();
+        string result = string.Join("\n",
+            FlattenStatements(stmts).Where(l => !string.IsNullOrWhiteSpace(value: l)));
         _indent--;
-        return string.Join("\n", lines);
+        return result;
+    }
+
+    /// <summary>Renders a statement list at the current indent, flattening bare nested blocks in place.</summary>
+    private IEnumerable<string> FlattenStatements(IEnumerable<Statement> stmts)
+    {
+        foreach (Statement s in stmts)
+        {
+            if (s is BlockStatement inner)
+            {
+                foreach (string line in FlattenStatements(inner.Statements))
+                    yield return line;
+            }
+            else
+            {
+                yield return s.Accept(this);
+            }
+        }
     }
 
     /// <summary>
