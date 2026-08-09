@@ -776,10 +776,16 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitReturnStatement(ReturnStatement node) =>
-        node.Value != null
-            ? $"{I}return {node.Value.Accept(this)}"
-            : $"{I}return";  // valueless return in a None-returning routine
+    public string VisitReturnStatement(ReturnStatement node)
+    {
+        if (node.Value == null)
+            return $"{I}return";
+        string v = node.Value.Accept(this);
+        // A None-returning routine prints a bare `return`, not `return None`.
+        return v is "None" or "Core.None" || v.EndsWith(value: ".None")
+            ? $"{I}return"
+            : $"{I}return {v}";
+    }
 
 
     /// <inheritdoc/>
