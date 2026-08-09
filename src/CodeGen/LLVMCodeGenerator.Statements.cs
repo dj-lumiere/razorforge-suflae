@@ -95,8 +95,9 @@ public partial class LlvmCodeGenerator
                 return true; // Absent terminates the block
 
             case VariantReturnStatement variantRet:
-                EmitVariantReturn(sb: sb, variantRet: variantRet);
-                return true; // Always a terminator
+                throw new InvalidOperationException(
+                    $"VariantReturnStatement ({variantRet.VariantKind}/{variantRet.SiteKind}) reached codegen " +
+                    "— VariantReturnLoweringPass must lower all carrier returns to record construction.");
 
             default:
                 throw new NotImplementedException(
