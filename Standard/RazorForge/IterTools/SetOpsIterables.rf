@@ -20,7 +20,7 @@ relates IntersectEmittable[T, S/Iter] as Iter
 routine IntersectIterable[T, S, SO].iter() -> IntersectEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
   danger
-    var other_set = me.other.as_entity().Set()
+    var other_set = me.you.as_entity().Set()
     return IntersectEmittable[T, S/Iter](source: me.source.as_entity().iter(), you: steal other_set)
 
 ### Iterates over a source sequence and keeps only elements that appear in the membership set.
@@ -41,7 +41,7 @@ needs T obeys Hashable, Comparable
   danger
     loop
       var item = me.source.as_entity().emit()
-      if me.other.contains(item)
+      if me.you.contains(item)
         return item
 
 ### Returns a lazy adapter that keeps only elements also present in `other`.
@@ -52,7 +52,7 @@ routine Iterable[T].intersect[SO](you: Referring[SO]) -> IntersectIterable[T, Me
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   danger
-    return IntersectIterable[T, Me, SO](source: me.hijack(), you: other.hijack())
+    return IntersectIterable[T, Me, SO](source: me.hijack(), you: you.hijack())
 
 ### Represents a lazy adapter that suppresses elements present in another iterable.
 ### The exclusion iterable is fully materialized into a set when iteration begins.
@@ -74,7 +74,7 @@ relates ExcludeEmittable[T, S/Iter] as Iter
 routine ExcludeIterable[T, S, SO].iter() -> ExcludeEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
   danger
-    var other_set = me.other.as_entity().Set()
+    var other_set = me.you.as_entity().Set()
     return ExcludeEmittable[T, S/Iter](source: me.source.as_entity().iter(), you: steal other_set)
 
 ### Iterates over a source sequence and suppresses elements found in the exclusion set.
@@ -95,7 +95,7 @@ needs T obeys Hashable, Comparable
   danger
     loop
       var item = me.source.as_entity().emit()
-      if not me.other.contains(item)
+      if not me.you.contains(item)
         return item
 
 ### Returns a lazy adapter that suppresses all elements also found in `other`.
@@ -106,7 +106,7 @@ routine Iterable[T].exclude[SO](you: Referring[SO]) -> ExcludeIterable[T, Me, SO
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   danger
-    return ExcludeIterable[T, Me, SO](source: me.hijack(), you: other.hijack())
+    return ExcludeIterable[T, Me, SO](source: me.hijack(), you: you.hijack())
 
 ### Returns a lazy adapter that yields all distinct elements from this iterable followed by `other`.
 ### Duplicate values across both sources are suppressed.
@@ -116,4 +116,4 @@ needs T obeys Hashable, Comparable
 routine Iterable[T].union[SO](you: Referring[SO]) -> DistinctIterable[T, ExtendIterable[T, Me, SO]]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
-  return me.extend(other).distinct()
+  return me.extend(you).distinct()

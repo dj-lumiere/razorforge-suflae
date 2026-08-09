@@ -428,11 +428,11 @@ routine Deque[T].diagnose() -> Text
 @readonly
 routine Deque[T].eq(you: Referring[Deque[T]]) -> Bool
 needs T obeys Equatable
-  if me.count != other.count
+  if me.count != you.count
     return false
   var i = 0u64
   while i < me.count
-    if me[i] != other[i]
+    if me[i] != you[i]
       return false
     i = i +% 1u64
   return true

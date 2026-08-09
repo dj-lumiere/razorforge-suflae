@@ -300,10 +300,10 @@ routine FastSet[T].remove(value: T) -> Bool
 
 @readonly
 routine FastSet[T].union(you: Referring[FastSet[T]]) -> FastSet[T]
-  var result = FastSet[T](me.count +% other.count)
+  var result = FastSet[T](me.count +% you.count)
   each val in me
     discard result.add(val)
-  each val in other
+  each val in you
     discard result.add(val)
   return steal result
 
@@ -311,7 +311,7 @@ routine FastSet[T].union(you: Referring[FastSet[T]]) -> FastSet[T]
 routine FastSet[T].intersection(you: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   each val in me
-    if val in other
+    if val in you
       discard result.add(val)
   return steal result
 
@@ -319,7 +319,7 @@ routine FastSet[T].intersection(you: Referring[FastSet[T]]) -> FastSet[T]
 routine FastSet[T].difference(you: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   each val in me
-    if val notin other
+    if val notin you
       discard result.add(val)
   return steal result
 
@@ -327,30 +327,30 @@ routine FastSet[T].difference(you: Referring[FastSet[T]]) -> FastSet[T]
 routine FastSet[T].symmetric_difference(you: Referring[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   each val in me
-    if val notin other
+    if val notin you
       discard result.add(val)
-  each val in other
+  each val in you
     if val notin me
       discard result.add(val)
   return steal result
 
 @readonly
 routine FastSet[T].is_subset(you: Referring[FastSet[T]]) -> Bool
-  if me.count > other.count
+  if me.count > you.count
     return false
   each val in me
-    if val notin other
+    if val notin you
       return false
   return true
 
 @readonly
 routine FastSet[T].is_superset(you: Referring[FastSet[T]]) -> Bool
-  return other.is_subset(me)
+  return you.is_subset(me)
 
 @readonly
 routine FastSet[T].is_disjoint(you: Referring[FastSet[T]]) -> Bool
   each val in me
-    if val in other
+    if val in you
       return false
   return true
 
@@ -433,9 +433,9 @@ routine FastSet[T].diagnose() -> Text
 ### Returns true if both sets contain exactly the same elements (order-independent).
 @readonly
 routine FastSet[T].eq(you: Referring[FastSet[T]]) -> Bool
-  if me.count != other.count
+  if me.count != you.count
     return false
-  return me.is_subset(other)
+  return me.is_subset(you)
 
 dangerous routine FastSet[T].destroy()
   # Tear down each live element before freeing the buffers (mirrors FastSetEmittable.emit!).

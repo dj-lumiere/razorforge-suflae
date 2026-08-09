@@ -890,7 +890,7 @@ routine Decimal.round_ties_away() -> Decimal
 ### :returns: Whether the two share a quantum.
 routine Decimal.same_quantum(you: Decimal) -> Bool
   var pa = me.decode()
-  var pb = other.decode()
+  var pb = you.decode()
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
     return LLVM::unsigned_ge(a: pa.special, b: 2_u64) and LLVM::unsigned_ge(a: pb.special, b: 2_u64)
   if LLVM::int_eq(a: pa.special, b: 1_u64) or LLVM::int_eq(a: pb.special, b: 1_u64)
@@ -906,7 +906,7 @@ routine Decimal.same_quantum(you: Decimal) -> Bool
 ### :throws: {NumericOverflowError} when the result needs more than 70 digits.
 routine Decimal.quantize!(you: Decimal) -> Decimal
   var pa = me.decode()
-  var target = other.decode().exp
+  var target = you.decode().exp
   if LLVM::int_eq(a: pa.exp, b: target)
     return me
   if LLVM::signed_gt(a: pa.exp, b: target)
@@ -936,5 +936,5 @@ routine Decimal.quantize!(you: Decimal) -> Decimal
 ### :param you: The divisor.
 ### :returns: The IEEE remainder of `me / other`.
 routine Decimal.remainder(you: Decimal) -> Decimal
-  var n = (me / other).rint()
-  return me - other * n
+  var n = (me / you).rint()
+  return me - you * n

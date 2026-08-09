@@ -11,7 +11,7 @@ routine start()
 
   # zip yields Tuple[T, U]
   var nums: List[S64] = [10, 20, 30]
-  each (lbl, n) in labels.zip(other: nums)
+  each (lbl, n) in labels.zip(you: nums)
     show(f"  {lbl} -> {n}")
 
   # Iterate pairs in a Dict (dict iter yields DictEntry[K, V])

@@ -152,14 +152,14 @@ routine Character.to_lowercase() -> Character
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Character.eq(you: Character) -> Bool
-  return U32(me) == U32(other)
+  return U32(me) == U32(you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Character.cmp(you: Character) -> ComparisonSign
-  return U32(me) <=> U32(other)
+  return U32(me) <=> U32(you)
 
 # ============================================================================
 # Type conversions

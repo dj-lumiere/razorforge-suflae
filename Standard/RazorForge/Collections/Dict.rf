@@ -486,7 +486,7 @@ routine Dict[K, V].diagnose() -> Text
 @readonly
 routine Dict[K, V].eq(you: Referring[Dict[K, V]]) -> Bool
 needs V obeys Equatable
-  if me.count != other.count
+  if me.count != you.count
     return false
   var i = 0u64
   while i < me.entries_used
@@ -494,11 +494,11 @@ needs V obeys Equatable
       if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
         var k = me.keys.offset(K.data_size() * i).peek()
         var v = me.vals.offset(V.data_size() * i).peek()
-        var slot = other.find_slot(k)
-        if slot >= other.capacity
+        var slot = you.find_slot(k)
+        if slot >= you.capacity
           return false
-        var other_ei = other.indices.offset(U64.data_size() * slot).peek()
-        var other_v = other.vals.offset(V.data_size() * other_ei).peek()
+        var other_ei = you.indices.offset(U64.data_size() * slot).peek()
+        var other_v = you.vals.offset(V.data_size() * other_ei).peek()
         if v != other_v
           return false
     i = i +% 1u64

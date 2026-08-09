@@ -52,14 +52,14 @@ routine Byte.codepoint() -> U32
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.eq(you: Byte) -> Bool
-  return U8(me) == U8(other)
+  return U8(me) == U8(you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Byte.cmp(you: Byte) -> ComparisonSign
-  return U8(me) <=> U8(other)
+  return U8(me) <=> U8(you)
 
 # ============================================================================
 # Range check

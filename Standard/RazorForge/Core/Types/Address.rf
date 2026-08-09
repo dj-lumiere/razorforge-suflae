@@ -11,7 +11,7 @@ obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtr
 
 # ============================================================================
 # No create routines — Address has no implicit or explicit conversions.
-# Use Hijacked[T] for converting between Address and other types.
+# Use Hijacked[T] for converting between Address and you types.
 # ============================================================================
 
 ### Returns `from` unchanged.
@@ -114,7 +114,7 @@ routine Address.add(offset: ByteSize) -> Address
 ### :returns: The resulting `ByteSize` value.
 @readonly
 routine Address.sub(you: Address) -> ByteSize
-  return ByteSize(U64(LLVM::sub(me, other)))
+  return ByteSize(U64(LLVM::sub(me, you)))
 
 ### Returns the result of stepping this address back by a byte size.
 ### :param offset: The byte count to subtract.

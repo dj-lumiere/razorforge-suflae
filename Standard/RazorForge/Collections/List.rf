@@ -141,10 +141,10 @@ routine List[T].add_last(value: T)
 ###       memory/bytes_io_api_plan.md (v0.1.0 first additions).
 @migratable
 routine List[T].add_range(you: Referring[Iterable[T]])
-  # TODO(fast-io): hoist capacity-reserve when `other` exposes a known count.
+  # TODO(fast-io): hoist capacity-reserve when `you` exposes a known count.
   # For now, fall back to per-element append so the routine type-checks while the
   # optimized path is being designed.
-  each value in other
+  each value in you
     me.add_last(value: value)
   return
 
@@ -359,11 +359,11 @@ routine ListEmittable[T].emit!() -> T
 @readonly
 routine List[T].eq(you: Referring[List[T]]) -> Bool
 needs T obeys Equatable
-  if me.count() != other.count()
+  if me.count() != you.count()
     return false
   var i = 0u64
   while i < me.count()
-    if me[i] != other[i]
+    if me[i] != you[i]
       return false
     i = i +% 1u64
   return true

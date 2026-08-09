@@ -103,7 +103,7 @@ dangerous routine Real.destroy()
 @readonly
 routine Real.add(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_add(result: result.handle, a: me.handle, b: other.handle)
+  rf_real_add(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Subtracts `other` from this value (exact).
@@ -112,7 +112,7 @@ routine Real.add(you: Real) -> Real
 @readonly
 routine Real.sub(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_sub(result: result.handle, a: me.handle, b: other.handle)
+  rf_real_sub(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Multiplies this value by `other` (exact).
@@ -121,7 +121,7 @@ routine Real.sub(you: Real) -> Real
 @readonly
 routine Real.mul(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_mul(result: result.handle, a: me.handle, b: other.handle)
+  rf_real_mul(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Divides this value by `other`, rounded to the working precision.
@@ -130,7 +130,7 @@ routine Real.mul(you: Real) -> Real
 @readonly
 routine Real.truediv(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_div(result: result.handle, a: me.handle, b: other.handle)
+  rf_real_div(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Returns the additive inverse of this value.
@@ -332,7 +332,7 @@ routine Real.log10() -> Real
 @readonly
 routine Real.hypot(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_hypot(result: result.handle, a: me.handle, b: other.handle)
+  rf_real_hypot(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Cube root.
@@ -348,7 +348,7 @@ routine Real.cbrt() -> Real
 @readonly
 routine Real.divide(you: Real, precision: S32) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_div_p(result: result.handle, a: me.handle, b: other.handle, prec: precision)
+  rf_real_div_p(result: result.handle, a: me.handle, b: you.handle, prec: precision)
   return result
 
 ### Square root to `precision` decimal digits.
@@ -488,7 +488,7 @@ routine Real.log10(precision: S32) -> Real
 @readonly
 routine Real.hypot(you: Real, precision: S32) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_hypot_p(result: result.handle, a: me.handle, b: other.handle, prec: precision)
+  rf_real_hypot_p(result: result.handle, a: me.handle, b: you.handle, prec: precision)
   return result
 
 ### Cube root to `precision` decimal digits.
@@ -524,8 +524,8 @@ routine Real.signum() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.min(you: Real) -> Real
-  if me.cmp(you: other) is ME_LARGE
-    return other.store()
+  if me.cmp(you: you) is ME_LARGE
+    return you.store()
   return me.store()
 
 ### Returns the larger of this value and `other`.
@@ -533,8 +533,8 @@ routine Real.min(you: Real) -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.max(you: Real) -> Real
-  if me.cmp(you: other) is ME_SMALL
-    return other.store()
+  if me.cmp(you: you) is ME_SMALL
+    return you.store()
   return me.store()
 
 ### Returns this value's magnitude carrying the sign of `you`.
