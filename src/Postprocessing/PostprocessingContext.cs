@@ -39,18 +39,26 @@ public sealed class PostprocessingContext
     public Dictionary<string, Statement>? SynthesizedBodies { get; }
 
     /// <summary>
+    /// Monomorphized generic routine instances (keyed by RegistryKey). Exposed so late lowering passes
+    /// (e.g. VariantReturnLoweringPass) can rewrite carrier-return sites inside concrete instances too.
+    /// </summary>
+    public Dictionary<string, Compiler.Instantiation.MonomorphizedBody>? MonomorphizedBodies { get; }
+
+    /// <summary>
     /// Initializes shared state for the Phase 7 lowering pipeline.
     /// </summary>
     public PostprocessingContext(TypeRegistry registry,
         Dictionary<string, Statement>? variantBodies = null,
         Dictionary<string, Statement>? synthesizedBodies = null,
         TargetConfig? target = null,
-        RfBuildMode buildMode = RfBuildMode.Debug)
+        RfBuildMode buildMode = RfBuildMode.Debug,
+        Dictionary<string, Compiler.Instantiation.MonomorphizedBody>? monomorphizedBodies = null)
     {
         Registry = registry;
         VariantBodies = variantBodies ?? new Dictionary<string, Statement>();
         SynthesizedBodies = synthesizedBodies;
         Target = target ?? TargetConfig.ForCurrentHost();
         BuildMode = buildMode;
+        MonomorphizedBodies = monomorphizedBodies;
     }
 }

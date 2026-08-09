@@ -534,7 +534,8 @@ public sealed partial class SemanticVerifier
             variantBodies: _variantBodies,
             synthesizedBodies: synthesizedBodyStatements,
             target: _target,
-            buildMode: _buildMode);
+            buildMode: _buildMode,
+            monomorphizedBodies: _instantiatedGenericBodies as Dictionary<string, MonomorphizedBody>);
         new PostprocessingPipeline(ctx: p7ctx).RunGlobal();
     }
 
@@ -729,7 +730,11 @@ public sealed partial class SemanticVerifier
         var ctx = new PostprocessingContext(registry: _registry,
             variantBodies: _variantBodies,
             target: _target,
-            buildMode: _buildMode);
+            buildMode: _buildMode,
+            monomorphizedBodies: _instantiatedGenericBodies as Dictionary<string, MonomorphizedBody>);
+        // Now that Phase 6 has produced the concrete instances, lower any carrier-return sites inside
+        // them (a monomorphized try_/check_/lookup_ variant) to real record construction.
+        new VariantReturnLoweringPass(ctx).RunOnMonomorphizedBodies();
         // Inline simple iterator `emit!` bodies into their for-loops before the rest of Phase 7
         // lowering, replacing the `try_emit` call with the spliced advance. By Phase 7 the concrete
         // `emit!` bodies are already monomorphized (Phase 6 ran), so the lookup succeeds; the

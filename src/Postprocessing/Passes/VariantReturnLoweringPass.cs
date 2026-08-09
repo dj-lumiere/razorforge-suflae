@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Compiler.Instantiation;
 using Compiler.Synthesis;
 using Compiler.Tokenizer;
 using SyntaxTree;
@@ -109,6 +110,21 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
             Statement lowered = Lower(statement: _variantBodies[key: key]);
             if (!ReferenceEquals(objA: lowered, objB: _variantBodies[key: key]))
                 _variantBodies[key: key] = lowered;
+        }
+    }
+
+    /// <summary>Lowers carrier-return sites inside monomorphized generic instances (e.g. a concrete
+    /// <c>ListEmittable[Character].try_emit</c>), which are not part of the program/variant-body tracks.</summary>
+    public void RunOnMonomorphizedBodies()
+    {
+        if (ctx.MonomorphizedBodies is not { } bodies) return;
+        foreach (string key in bodies.Keys.ToList())
+        {
+            MonomorphizedBody mono = bodies[key: key];
+            _carrierReturn = mono.Info.ReturnType;
+            Statement lowered = Lower(statement: mono.Ast.Body);
+            if (!ReferenceEquals(objA: lowered, objB: mono.Ast.Body))
+                bodies[key: key] = mono with { Ast = mono.Ast with { Body = lowered } };
         }
     }
 
