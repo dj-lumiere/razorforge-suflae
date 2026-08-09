@@ -1203,7 +1203,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             : "";
         string typeStr = field.Type != null ? $": {field.Type.Accept(this)}" : "";
         string initStr = field.Initializer != null ? $" = {field.Initializer.Accept(this)}" : "";
-        return $"{anns}{field.Visibility.ToString().ToLowerInvariant()} {field.Name}{typeStr}{initStr}";
+        // `open` is the default visibility — no keyword is written in source, so omit it in the dump
+        // too; only `posted`/`secret` are spelled.
+        string vis = field.Visibility == VisibilityModifier.Open
+            ? ""
+            : $"{field.Visibility.ToString().ToLowerInvariant()} ";
+        return $"{anns}{vis}{field.Name}{typeStr}{initStr}";
     }
 
 
