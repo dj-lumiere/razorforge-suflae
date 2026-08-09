@@ -273,10 +273,14 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         // Fall-through end-of-block: destroy this block's own locals in REVERSE declaration order
         // (LIFO) — a later-declared local may reference an earlier one, so destroying dependents
         // before dependencies is the safe RAII order (and matches this pass's documented contract).
-        // Codegen drops these as dead code if the block always terminates (same as
-        // UsingLoweringPass's normal-exit exit).
-        for (int i = live.Count - 1; i >= blockStart; i--)
-            stmts.Add(item: MakeDestroyStmt(live[index: i], block.Location));
+        // Skip entirely when the block already unconditionally terminates (its last statement is a
+        // return/throw/absent/break/continue, possibly wrapped by PrefixDestroys): the fall-through
+        // is unreachable, and the terminator's own PrefixDestroys already tore these locals down.
+        // Emitting them here anyway produced redundant post-terminator `x.destroy()` calls that
+        // codegen silently dropped but that polluted the AST (and the dump).
+        if (!(stmts.Count > 0 && AlwaysTerminates(stmts[^1])))
+            for (int i = live.Count - 1; i >= blockStart; i--)
+                stmts.Add(item: MakeDestroyStmt(live[index: i], block.Location));
 
         return block with { Statements = stmts };
     }
@@ -446,6 +450,23 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     {
         return type is not (GenericParameterTypeInfo or ProtocolTypeInfo);
     }
+
+    /// <summary>
+    /// True when control cannot fall off the end of <paramref name="s"/> — every path terminates via
+    /// return/throw/absent/variant-return/break/continue. Used to suppress the unreachable fall-through
+    /// teardown of a block whose last statement is itself a terminator (bare, or wrapped by
+    /// <see cref="PrefixDestroys"/> into a trailing-return block, or an if/else where both arms exit).
+    /// Conservative: anything not provably terminating returns false (fall-through teardown kept).
+    /// </summary>
+    private static bool AlwaysTerminates(Statement s) => s switch
+    {
+        ReturnStatement or AbsentStatement or ThrowStatement or VariantReturnStatement
+            or BreakStatement or ContinueStatement => true,
+        BlockStatement b => b.Statements.Count > 0 && AlwaysTerminates(b.Statements[^1]),
+        IfStatement { ElseStatement: { } elseS } ifs =>
+            AlwaysTerminates(ifs.ThenStatement) && AlwaysTerminates(elseS),
+        _ => false
+    };
 
     private static string? ReturnedName(Statement stmt) => stmt switch
     {
