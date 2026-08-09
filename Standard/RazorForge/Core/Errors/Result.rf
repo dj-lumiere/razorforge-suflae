@@ -12,9 +12,11 @@ record Result[T]
   ### Identifies the stored payload type.
   ### The runtime uses this to distinguish successful payloads from crashables.
   secret type_id: U64
-  ### The success `T` or the boxed error, stored in a single pointer-width slot: values <= 8 bytes are
-  ### reinterpreted in place, wider values / error entities are held by pointer. type_id disambiguates.
-  secret payload: CPtr
+  ### Inline payload buffer, sized to the success `T` but at least 8 bytes so an error entity pointer
+  ### always fits. The `${…}` splice folds to a literal element count at monomorphization. The success
+  ### `T` is stored inline at its FULL width (no truncation); an error is stored as its entity pointer
+  ### in the first 8 bytes. type_id disambiguates.
+  secret payload: Array[U8, ${max(T.data_size().byte_size(), 8)}]
 
 ### Returns the display form of this result: the payload's own `represent` for both the success
 ### (`T`) and crashable arms. `is T` matches the success state (type-id of the concrete `T`); the

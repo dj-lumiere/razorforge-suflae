@@ -257,6 +257,16 @@ public partial class LlvmCodeGenerator
             return EmitWrapperRecordConstruction(sb: sb, record: record, expr: expr);
         }
 
+        // Result[T] / Lookup[T]: the payload is an inline byte buffer sized to max(sizeof(T), 8), and
+        // the success `T` is stored inline at its FULL width. `insertvalue` cannot put a typed T into a
+        // `[N x i8]` field, so build the carrier through memory: alloca, zero, then a typed store of the
+        // payload into the buffer (writes sizeof(T) bytes — no truncation; an error is stored as its
+        // 8-byte entity pointer). Maybe[T] keeps its `{present, T}` layout and the memberwise path.
+        if (record.CarrierKind is CarrierKind.Result or CarrierKind.Lookup)
+        {
+            return EmitInlineCarrierConstruction(sb: sb, record: record, expr: expr);
+        }
+
         // Multi-member-variable record: build the struct value. The CreatorExpression carries member
         // values POSITIONALLY (already field-ordered by the SA/lowering that produced it), so field i
         // takes MemberVariables[i] when present.
@@ -264,44 +274,57 @@ public partial class LlvmCodeGenerator
             valueForField: (i, field) =>
             {
                 if (i >= expr.MemberVariables.Count) return null;
-                Expression valueExpr = expr.MemberVariables[index: i].Value;
-                string value = EmitExpression(sb: sb, expr: valueExpr);
-                // A non-pointer scalar stored into a pointer-typed field (the Result/Lookup carrier's
-                // `payload: CPtr` receiving a success value) — reinterpret it into the pointer slot.
-                return CoerceScalarIntoPointerSlot(sb: sb, value: value,
-                    valueType: GetExpressionType(expr: valueExpr), fieldType: field.Type);
+                return EmitExpression(sb: sb, expr: expr.MemberVariables[index: i].Value);
             });
     }
 
-    /// <summary>When <paramref name="fieldType"/> is a pointer slot but the value is a non-pointer
-    /// scalar, reinterpret the scalar into the pointer (int → <c>inttoptr</c>, float → bitcast then
-    /// inttoptr). Otherwise returns the value unchanged. Used to pack a carrier payload into its
-    /// single <c>CPtr</c> slot; the reader loads it back and truncates to the concrete type.</summary>
-    private string CoerceScalarIntoPointerSlot(StringBuilder sb, string value, TypeInfo? valueType,
-        TypeInfo fieldType)
+    /// <summary>
+    /// Builds a Result[T]/Lookup[T] carrier through an alloca so the success payload can be stored at
+    /// its full width into the inline <c>[N x i8]</c> buffer (field 1). Zero-inits, stores the
+    /// <c>type_id</c> (field 0, i64), and — when a payload member is present — typed-stores it into the
+    /// buffer (an entity/crashable error stores its <c>ptr</c>; a value type stores its own LLVM type).
+    /// Mirror of the reader in <see cref="EmitCarrierPayloadExpression"/>.
+    /// </summary>
+    private string EmitInlineCarrierConstruction(StringBuilder sb, RecordTypeInfo record,
+        CreatorExpression expr)
     {
-        if (valueType == null || GetFieldStorageLlvmType(type: fieldType) != "ptr")
-            return value;
-        string valueLlvm = GetLlvmType(type: valueType);
-        if (valueLlvm == "ptr")
-            return value;
+        string carrier = GetRecordTypeName(record: record);
+        string slot = NextTemp();
+        EmitLine(sb: sb, line: $"  {slot} = alloca {carrier}");
+        EmitLine(sb: sb, line: $"  store {carrier} zeroinitializer, ptr {slot}");
 
-        // Floats reinterpret to their same-width integer first.
-        string asInt = value;
-        string intLlvm = valueLlvm;
-        if (valueLlvm is "half" or "float" or "double" or "fp128")
+        for (int i = 0; i < expr.MemberVariables.Count && i < record.MemberVariables.Count; i++)
         {
-            intLlvm = valueLlvm switch
+            MemberVariableInfo field = record.MemberVariables[index: i];
+            Expression valueExpr = expr.MemberVariables[index: i].Value;
+            string value = EmitExpression(sb: sb, expr: valueExpr);
+
+            string fieldPtr = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {fieldPtr} = getelementptr {carrier}, ptr {slot}, i32 0, i32 {i}");
+
+            // The payload field is the byte buffer: store the value at its OWN width (full T, or an
+            // 8-byte entity pointer for an error). type_id and any other field use their storage type.
+            string storeType;
+            if (field.Name == "payload")
             {
-                "half" => "i16", "float" => "i32", "double" => "i64", _ => "i128"
-            };
-            asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = bitcast {valueLlvm} {value} to {intLlvm}");
+                TypeInfo? payloadType = GetExpressionType(expr: valueExpr);
+                storeType = payloadType is EntityTypeInfo or CrashableTypeInfo
+                    ? "ptr"
+                    : payloadType != null ? GetLlvmType(type: payloadType) : "i64";
+            }
+            else
+            {
+                value = CoerceBoolToStorage(sb: sb, value: value, fieldType: field.Type);
+                storeType = GetFieldStorageLlvmType(type: field.Type);
+            }
+
+            EmitLine(sb: sb, line: $"  store {storeType} {value}, ptr {fieldPtr}");
         }
 
-        string ptr = NextTemp();
-        EmitLine(sb: sb, line: $"  {ptr} = inttoptr {intLlvm} {asInt} to ptr");
-        return ptr;
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {carrier}, ptr {slot}");
+        return loaded;
     }
 
     /// <summary>

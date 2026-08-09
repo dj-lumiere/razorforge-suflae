@@ -12,10 +12,11 @@ import BuilderService
 record Lookup[T]
   ### Identifies the stored payload type, or `0` for the absent state.
   secret type_id: U64
-  ### The success `T` or the boxed error, stored in a single pointer-width slot: values <= 8 bytes are
-  ### reinterpreted in place, wider values / error entities are held by pointer. type_id disambiguates
-  ### (0 = absent).
-  secret payload: CPtr
+  ### Inline payload buffer, sized to the success `T` but at least 8 bytes so an error entity pointer
+  ### always fits. The `${…}` splice folds to a literal element count at monomorphization. The success
+  ### `T` is stored inline at its FULL width (no truncation); an error is stored as its entity pointer
+  ### in the first 8 bytes. type_id disambiguates (0 = absent).
+  secret payload: Array[U8, ${max(T.data_size().byte_size(), 8)}]
 
 ### Returns the display form of this lookup result.
 ### Absent renders as `"none"`; present/crashable arms delegate to the payload's
