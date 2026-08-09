@@ -192,7 +192,10 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string ownerPrefix = ri.OwnerType != null
             ? $"{ri.OwnerType.FullName}."
             : string.IsNullOrEmpty(ri.Module) ? "" : $"{ri.Module}.";
-        string failable = ri.IsFailable ? "!" : "";
+        // Some synthesized routines carry a trailing `!` in the NAME (e.g. `create!`), which double-
+        // counts against the failability marker. `!` is a structured attribute, not part of the name.
+        string bareName = ri.Name.TrimEnd('!');
+        string failable = ri.IsFailable || ri.Name.EndsWith(value: "!") ? "!" : "";
         string paramStr = ri.Parameters.Count == 0
             ? ""
             : string.Join(", ", ri.Parameters.Select(p => $"{p.Name}: {p.Type.FullName}"));
@@ -210,12 +213,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
                 : System.Array.Empty<string>();
         string annotations = string.Concat(anns.Select(a => $"@{a}\n"));
         // Constructor: `routine Type(...)`, not `routine Type.create(...)`.
-        string name = ri is { Name: "create", OwnerType: { } ctorOwner }
+        string name = bareName == "create" && ri.OwnerType is { } ctorOwner
             ? ctorOwner.FullName
-            : $"{ownerPrefix}{ri.Name}";
+            : $"{ownerPrefix}{bareName}";
         // Spell out the routine's own resolved generic args (e.g. a monomorphized `hijacked_none[U128]`)
         // so instantiations aren't collapsed to the same bare name. (Owner generics are in ownerPrefix.)
-        string typeArgs = ri is { Name: not "create", TypeArguments: { Count: > 0 } ta }
+        string typeArgs = bareName != "create" && ri.TypeArguments is { Count: > 0 } ta
             ? $"[{string.Join(", ", ta.Select(RoutineInfo.GetTypeIdentity))}]"
             : "";
         return $"{annotations}routine {name}{typeArgs}{failable}({paramStr}){retStr}";
@@ -1038,17 +1041,18 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     {
         if (node.ResolvedInfo is { } ri)
         {
+            string bareName = ri.Name.TrimEnd('!');   // `!` is IsFailable, never part of the name
             if (ri.OwnerType != null)
             {
                 // Constructor: `routine Type(...)`, not `routine Type.create(...)`.
-                if (ri.Name == "create")
+                if (bareName == "create")
                     return ri.OwnerType.FullName;
                 string mod = string.IsNullOrEmpty(ri.OwnerType.Module) ? _currentModule : ri.OwnerType.Module;
                 string owner = ri.OwnerType.Name;
-                return string.IsNullOrEmpty(mod) ? $"{owner}.{ri.Name}" : $"{mod}.{owner}.{ri.Name}";
+                return string.IsNullOrEmpty(mod) ? $"{owner}.{bareName}" : $"{mod}.{owner}.{bareName}";
             }
             string m = string.IsNullOrEmpty(ri.Module) ? _currentModule : ri.Module;
-            return string.IsNullOrEmpty(m) ? ri.Name : $"{m}.{ri.Name}";
+            return string.IsNullOrEmpty(m) ? bareName : $"{m}.{bareName}";
         }
         return string.IsNullOrEmpty(_currentModule) ? node.Name : $"{_currentModule}.{node.Name}";
     }
