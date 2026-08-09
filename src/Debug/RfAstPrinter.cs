@@ -209,7 +209,11 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
                 ? new[] { "readonly" }
                 : System.Array.Empty<string>();
         string annotations = string.Concat(anns.Select(a => $"@{a}\n"));
-        return $"{annotations}routine {ownerPrefix}{ri.Name}{failable}({paramStr}){retStr}";
+        // Constructor: `routine Type(...)`, not `routine Type.create(...)`.
+        string name = ri is { Name: "create", OwnerType: { } ctorOwner }
+            ? ctorOwner.FullName
+            : $"{ownerPrefix}{ri.Name}";
+        return $"{annotations}routine {name}{failable}({paramStr}){retStr}";
     }
 
     // -----------------------------------------------------------------------------
@@ -1027,6 +1031,9 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         {
             if (ri.OwnerType != null)
             {
+                // Constructor: `routine Type(...)`, not `routine Type.create(...)`.
+                if (ri.Name == "create")
+                    return ri.OwnerType.FullName;
                 string mod = string.IsNullOrEmpty(ri.OwnerType.Module) ? _currentModule : ri.OwnerType.Module;
                 string owner = ri.OwnerType.Name;
                 return string.IsNullOrEmpty(mod) ? $"{owner}.{ri.Name}" : $"{mod}.{owner}.{ri.Name}";
