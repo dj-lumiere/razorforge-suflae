@@ -54,6 +54,8 @@ public sealed class DesugaringPipeline(DesugaringContext ctx)
         new GenericCallLoweringPass(ctx).RunOnVariantBodies();
 
         // Phase 3 on stdlib programs (bypassed per-file desugaring since pre-loaded by StdlibLoader).
+        // Skipped on the warm-restore path: the restored stdlib programs are already fully desugared.
+        if (ctx.Registry.SkipStdlibReprocessing) return;
         foreach ((Program program, _, _) in ctx.Registry.StdlibPrograms)
         {
             new NoneReturnNormalizationPass(ctx).Run(program);

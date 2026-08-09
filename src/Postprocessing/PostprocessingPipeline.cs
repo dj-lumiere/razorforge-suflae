@@ -110,6 +110,8 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new CallOverloadResolutionPass(ctx).RunOnVariantBodies();
         new CallOverloadResolutionPass(ctx).RunOnSynthesizedBodies();
 
+        // Skipped on the warm-restore path: restored stdlib programs are already Phase-7 lowered.
+        if (ctx.Registry.SkipStdlibReprocessing) return;
         foreach ((Program program, _, _) in ctx.Registry.StdlibPrograms)
             Run(program);
     }

@@ -366,7 +366,22 @@ public sealed partial class TypeRegistry
     /// Returns the programs parsed by the stdlib loader, including routine bodies.
     /// </summary>
     public List<(Program Program, string FilePath, string Module)> StdlibPrograms =>
-        _stdlibLoader?.AllLoadedPrograms ?? [];
+        _restoredStdlibPrograms ?? _stdlibLoader?.AllLoadedPrograms ?? [];
+
+    /// <summary>Lowered stdlib program ASTs restored from a warm-compile snapshot. When set, these
+    /// (already fully desugared/lowered) programs are served as <see cref="StdlibPrograms"/> instead of
+    /// re-parsing/re-lowering them — the fast-restore path for the compile daemon / warm compiles.</summary>
+    private List<(Program Program, string FilePath, string Module)>? _restoredStdlibPrograms;
+
+    /// <summary>Installs pre-lowered stdlib programs from a warm-compile snapshot.</summary>
+    public void RestoreStdlibPrograms(List<(Program Program, string FilePath, string Module)> programs) =>
+        _restoredStdlibPrograms = programs;
+
+    /// <summary>True when the stdlib was restored from a warm-compile snapshot already fully
+    /// desugared/lowered/synthesized. The global desugaring + postprocessing passes then SKIP their
+    /// stdlib-program loops (re-lowering already-lowered ASTs would be wasted work / double-apply).
+    /// User programs and synthesized/monomorphized user bodies are still processed normally.</summary>
+    public bool SkipStdlibReprocessing { get; set; }
 
     private readonly List<(Program Program, string FilePath, string Module)> _userPrograms = [];
 

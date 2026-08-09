@@ -96,3 +96,6 @@ old
 /build_linux.log
 /build_windows.log
 /build_macos.log
+
+# Local IDE MCP server config (Rider)
+.mcp.json
