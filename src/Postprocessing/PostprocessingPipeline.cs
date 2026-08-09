@@ -16,6 +16,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
     /// </summary>
     public void Run(Program program)
     {
+        new VariantReturnLoweringPass(ctx).Run(program);
         new LiteralLoweringPass(ctx).Run(program);
         new BuilderServiceInliningPass(ctx.Registry, ctx.VariantBodies).Run(program);
         new GenericCallLoweringPass(ctx.Registry, ctx.VariantBodies).Run(program);
@@ -68,6 +69,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
     /// </summary>
     public void RunGlobal()
     {
+        new VariantReturnLoweringPass(ctx).RunOnVariantBodies();
         new LiteralLoweringPass(ctx).RunOnVariantBodies();
         new BuilderServiceInliningPass(ctx.Registry, ctx.VariantBodies).RunOnVariantBodies();
         new GenericCallLoweringPass(ctx.Registry, ctx.VariantBodies).RunOnVariantBodies();
