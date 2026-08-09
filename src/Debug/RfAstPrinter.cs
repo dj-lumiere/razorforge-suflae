@@ -373,12 +373,11 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             string typeArgs = ri.TypeArguments is { Count: > 0 }
                 ? $"[{string.Join(", ", ri.TypeArguments.Select(RoutineInfo.GetTypeIdentity))}]"
                 : "";
+            // Member routines stay in receiver form (`obj.method(...)`) — the owner is implicit in the
+            // receiver, so there is no need to spell the qualified free-function form. Free routines get
+            // the fully-qualified name.
             if (node.Callee is MemberExpression mem)
-            {
-                string recv = mem.Object.Accept(this);
-                string all = argList.Length == 0 ? recv : $"{recv}, {argList}";
-                return $"{ri.QualifiedName}{typeArgs}({all})";
-            }
+                return $"{mem.Object.Accept(this)}.{ri.Name}{typeArgs}({argList})";
             return $"{ri.QualifiedName}{typeArgs}({argList})";
         }
         return $"{node.Callee.Accept(this)}({argList})";
@@ -588,9 +587,8 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             // Type constructor / free routine: Object and MethodName are the same identifier.
             if (node.Object is IdentifierExpression ctorId && ctorId.Name == node.MethodName)
                 return $"{ri.QualifiedName}{typeArgs}({args})";
-            string recv = node.Object.Accept(this);
-            string all = args.Length == 0 ? recv : $"{recv}, {args}";
-            return $"{ri.QualifiedName}{typeArgs}({all})";
+            // Member routine: keep the receiver form (`obj.method[...](...)`).
+            return $"{node.Object.Accept(this)}.{ri.Name}{typeArgs}({args})";
         }
         // Type constructor: Object and MethodName are the same identifier (e.g. SortedDict[S64, S64]())
         if (node.Object is IdentifierExpression id && id.Name == node.MethodName)
