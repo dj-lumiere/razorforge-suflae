@@ -91,6 +91,25 @@ public sealed class WarmCompileBenchmark
             $"warm SA-only ({warmSa:N0}ms) should be far below cold snapshot capture ({cold:N0}ms)");
     }
 
+    private static string Codegen(AnalysisResult r)
+    {
+        Compiler.Postprocessing.Passes.CancellationInstrumentationPass.Run(
+            programs: r.Registry.UserPrograms,
+            instantiatedBodies: r.InstantiatedGenericBodies,
+            maySuspendKeys: r.MaySuspendRoutineKeys,
+            registry: r.Registry);
+        var gen = new Compiler.CodeGen.LlvmCodeGenerator(
+            userPrograms: r.Registry.UserPrograms,
+            registry: r.Registry,
+            stdlibPrograms: r.Registry.StdlibPrograms,
+            synthesizedBodies: r.SynthesizedBodies,
+            instantiatedGenericBodies: r.InstantiatedGenericBodies,
+            liveRoutineKeys: r.LiveRoutineKeys,
+            liveOwnerTypeNames: r.LiveOwnerTypeNames,
+            maySuspendRoutineKeys: r.MaySuspendRoutineKeys);
+        return gen.Generate();
+    }
+
     private static string PrintCodegenAst(AnalysisResult r) =>
         new Builder.RfSyntaxTreePrinter().PrintMultiProgram(
             programs: r.Registry.UserPrograms,
@@ -104,17 +123,18 @@ public sealed class WarmCompileBenchmark
     /// codegen the IDENTICAL desugared AST as a COLD compile of the same source. Codegen is a pure
     /// translator, so identical input AST ⇒ identical .ll.
     ///
-    /// WIP — does not pass yet. Warm analyze is ~1,080ms (was 5,345ms) via the variant-reuse gate +
-    /// gating the Phase-6 teardown/marker/crashable RE-runs on the already-lowered restored stdlib.
+    /// WIP — does not pass yet. Warm analyze is ~1,080ms (was 5,345ms). Oracle is now the EMITTED .ll.
     ///
-    /// REMAINING (deep) divergence: warm's REACHABILITY finds far fewer live routines than cold
-    /// (LiveRoutineKeys: warm ~694 vs cold ~3289), so codegen would emit a truncated program. The restored
-    /// stdlib call graph is not being fully walked from `start` on the warm path — reachability/GMP over
-    /// restored-vs-freshly-lowered stdlib diverge. Root-causing this (routine identity across the snapshot
-    /// boundary? seeding? lowering consistency of the restored programs?) is the next, larger step before
-    /// the warm path is codegen-sound. Oracle: cold LiveRoutineKeys == warm LiveRoutineKeys.
+    /// LOCALIZED bug — warm codegen emits a TRUNCATED program: cold .ll ≈ 95 `define`s, warm ≈ 6 (only
+    /// Bench.start, main, runtime trace fns). Codegen's def-emission worklist never grows from `start`
+    /// into the stdlib even though `IO/Console.show#Core.Text,Core.Text` IS in warm LiveRoutineKeys
+    /// (show-live == true, same as cold) and warm StdlibPrograms(207)/SynthesizedBodies(3370) are present.
+    /// So the gap is a routine-MATCHING mismatch across the snapshot boundary — the restored StdlibPrograms
+    /// decls codegen iterates aren't matched against the live set / worklist. Next: trace
+    /// GenerateRoutineDefinitions' liveness match (RegistryKey vs object identity of a restored decl's
+    /// ResolvedInfo). Oracle: cold .ll == warm .ll.
     /// </summary>
-    [Fact(Skip = "WIP Milestone 1: warm reachability diverges (live 694 vs cold 3289) — deep next step")]
+    [Fact(Skip = "WIP Milestone 1: warm codegen emits 6 defines vs cold 95 — routine-match gap across snapshot boundary")]
     public void WarmCodegenAst_MatchesCold()
     {
         // COLD reference: a normal from-scratch compile of the trivial file.
@@ -133,18 +153,17 @@ public sealed class WarmCompileBenchmark
         warmMs = sw.Elapsed.TotalMilliseconds;
         string warmAst = PrintCodegenAst(warmResult);
 
-        // Codegen only emits REACHABLE routines (LiveRoutineKeys); the full instantiated set (printed in
-        // the AST) may legitimately contain extra unreachable stdlib-internal monomorphizations. So the
-        // codegen-equivalence oracle is the live set + the reachable-routine subset of the AST.
-        var coldLive = coldResult.LiveRoutineKeys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray();
-        var warmLive = warmResult.LiveRoutineKeys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray();
+        // The true codegen-equivalence oracle: the emitted .ll. Codegen only emits REACHABLE routines, so
+        // extra unreachable instantiations in the AST are irrelevant — what matters is byte-identical IR.
+        string coldLl = Codegen(coldResult);
+        string warmLl = Codegen(warmResult);
         _out.WriteLine($"cold errors={coldResult.Errors.Count}  warm errors={warmResult.Errors.Count}");
-        _out.WriteLine($"cold AST len={coldAst.Length}  warm AST len={warmAst.Length}");
-        _out.WriteLine($"cold live={coldLive.Length}  warm live={warmLive.Length}");
+        _out.WriteLine($"cold live={coldResult.LiveRoutineKeys.Count}  warm live={warmResult.LiveRoutineKeys.Count}");
+        _out.WriteLine($"cold .ll len={coldLl.Length}  warm .ll len={warmLl.Length}");
         _out.WriteLine($"warm analyze: {warmMs:N1} ms");
 
         Assert.Empty(coldResult.Errors);
         Assert.Empty(warmResult.Errors);
-        Assert.Equal(coldLive, warmLive);
+        Assert.Equal(coldLl, warmLl);
     }
 }
