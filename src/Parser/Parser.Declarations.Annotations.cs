@@ -123,11 +123,12 @@ public partial class Parser
         // Annotation values are limited to build-time constants:
         // string, number, bool, or identifier (for enums/presets)
 
-        // String literal
+        // String literal — keep it quoted so the stored annotation round-trips as `@llvm("i64")`
+        // rather than `@llvm(i64)`. All consumers strip the wrapping quotes (ExtractLlvmAnnotation /
+        // llvm_ir template extraction / SA all Trim or strip one pair).
         if (Check(TokenType.TextLiteral, TokenType.BytesLiteral))
         {
-            return Advance()
-               .Text;
+            return $"\"{Advance().Text}\"";
         }
 
         // Boolean literals

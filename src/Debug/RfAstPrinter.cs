@@ -8,6 +8,7 @@ using Compiler.Resolution;
 using Verification.Enums;
 using SyntaxTree;
 using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace Builder;
 
@@ -17,12 +18,15 @@ namespace Builder;
 /// </summary>
 public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 {
-    private const string SectionSeparator = "# ========================================================";
-
     /// <summary>
     /// Stores the indent state used by this compiler phase.
     /// </summary>
     private int _indent;
+    /// <summary>
+    /// The module of the program currently being printed. Used to module-qualify declaration names so
+    /// the dump is one flat, fully-qualified stream (no per-module / per-file separators).
+    /// </summary>
+    private string _currentModule = "";
     /// <summary>
     /// Stores the i state used by this compiler phase.
     /// </summary>
@@ -47,94 +51,145 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
                                    .GroupBy(r => r.RegistryKey)
                                    .ToDictionary(g => g.Key, g => g.First());
 
-        var sb = new StringBuilder();
+        // Categorized buckets so the flat stream is ordered: presets → each type definition
+        // followed by its member routines → free routines → the entry point `start`.
+        var presets = new List<string>();
+        var typeDefs = new List<(string Key, string Text)>();
+        var methodsByOwner = new Dictionary<string, List<string>>();
+        var freeRoutines = new List<string>();
+        string? startText = null;
 
-        if (stdlibPrograms != null)
+        void AddMethod(string ownerKey, string text)
         {
-            sb.AppendLine(SectionSeparator);
-            sb.AppendLine("# STDLIB");
-            sb.AppendLine(SectionSeparator);
-            sb.AppendLine();
-            foreach ((SyntaxTree.Program prog, string filePath, string module) in stdlibPrograms)
-            {
-                sb.AppendLine($"# === stdlib module {module} ===");
-                sb.AppendLine($"# file: {filePath}");
-                sb.AppendLine();
-                _indent = 0;
-                sb.AppendLine(prog.Accept(this));
-                sb.AppendLine();
-            }
-            sb.AppendLine(SectionSeparator);
-            sb.AppendLine("# USER PROGRAMS");
-            sb.AppendLine(SectionSeparator);
-            sb.AppendLine();
+            if (!methodsByOwner.TryGetValue(key: ownerKey, value: out List<string>? list))
+                methodsByOwner[key: ownerKey] = list = new List<string>();
+            list.Add(item: text);
         }
 
-        foreach ((SyntaxTree.Program prog, string filePath, string module) in programs)
+        void CategorizeRoutine(RoutineInfo ri, string text)
         {
-            sb.AppendLine($"# === module {module} ===");
-            sb.AppendLine($"# file: {filePath}");
-            sb.AppendLine();
+            if (ri.OwnerType is { IsGenericDefinition: false } owner)
+                AddMethod(ownerKey: owner.FullName, text: text);
+            else if (ri.OwnerType == null && ri.Name == "start")
+                startText = text;
+            else if (ri.OwnerType == null)
+                freeRoutines.Add(item: text);
+            else
+                AddMethod(ownerKey: ri.OwnerType.FullName, text: text);
+        }
+
+        // 1. AST declarations from every program (stdlib + user), bucketed.
+        foreach ((SyntaxTree.Program prog, string _, string module) in
+                 (stdlibPrograms ?? Enumerable.Empty<(SyntaxTree.Program, string, string)>())
+                 .Concat(programs))
+        {
+            _currentModule = module;
+            foreach (ISyntaxTreeNode node in prog.Declarations)
+            {
+                if (node is PassDeclaration or ModuleDeclaration or ImportDeclaration
+                    || IsGenericTemplate(d: node) || node is not Declaration decl)
+                    continue;
+                _indent = 0;
+                switch (decl)
+                {
+                    case PresetDeclaration:
+                        presets.Add(item: decl.Accept(this));
+                        break;
+                    case RecordDeclaration or EntityDeclaration or ChoiceDeclaration
+                        or FlagsDeclaration or VariantDeclaration or CrashableDeclaration
+                        or ProtocolDeclaration:
+                        typeDefs.Add(item: ($"{QualifyDecl(NodeTypeName(decl))}", decl.Accept(this)));
+                        break;
+                    case RoutineDeclaration routine when routine.ResolvedInfo is { } ri:
+                        CategorizeRoutine(ri: ri, text: routine.Accept(this));
+                        break;
+                    case RoutineDeclaration { Name: "start" } startRoutine:
+                        startText = startRoutine.Accept(this);
+                        break;
+                    default:
+                        freeRoutines.Add(item: decl.Accept(this));
+                        break;
+                }
+            }
+        }
+        _currentModule = "";
+
+        // 2. Synthesized routine bodies (concrete only), bucketed by owner.
+        foreach ((string key, Statement body) in synthesizedBodies)
+        {
             _indent = 0;
-            sb.AppendLine(prog.Accept(this));
+            if (!routineByKey.TryGetValue(key: key, value: out RoutineInfo? ri)
+                || ri.IsGenericDefinition || ri.OwnerType?.IsGenericDefinition == true)
+                continue;
+            CategorizeRoutine(ri: ri, text: $"{FormatRoutineSignature(ri: ri)}\n{PrintBodyOf(body)}");
+        }
+
+        // 3. Monomorphized instances (concrete AST bodies), bucketed by owner.
+        foreach ((string key, MonomorphizedBody mono) in
+                 instantiatedGenericBodies ?? new Dictionary<string, MonomorphizedBody>())
+        {
+            if (mono.IsSynthesized)
+                continue;
+            _indent = 0;
+            CategorizeRoutine(ri: mono.Info,
+                text: $"{FormatRoutineSignature(ri: mono.Info)}\n{PrintBodyOf(mono.Ast.Body)}");
+        }
+
+        // Emit in the requested order.
+        var sb = new StringBuilder();
+        void Emit(string text)
+        {
+            sb.AppendLine(value: text);
             sb.AppendLine();
         }
 
-        if (synthesizedBodies.Count > 0)
+        foreach (string preset in presets)
+            Emit(text: preset);
+        foreach ((string key, string text) in typeDefs)
         {
-            sb.AppendLine("# === SYNTHESIZED BODIES ===");
-            foreach ((string key, Statement body) in synthesizedBodies)
-            {
-                _indent = 0;
-                if (routineByKey.TryGetValue(key: key, value: out RoutineInfo? ri))
-                {
-                    // Skip generic definitions — type params are still unresolved (T, K, V, …)
-                    if (ri.IsGenericDefinition || ri.OwnerType?.IsGenericDefinition == true)
-                        continue;
-                    sb.AppendLine(FormatRoutineSignature(ri: ri));
-                }
-                else
-                {
-                    // No RoutineInfo — skip keys that still carry generic brackets
-                    if (key.Contains('['))
-                        continue;
-                    sb.AppendLine($"# {key}");
-                }
-                sb.AppendLine(PrintBodyOf(body));
-                sb.AppendLine();
-            }
+            Emit(text: text);
+            if (methodsByOwner.Remove(key: key, value: out List<string>? typeMethods))
+                foreach (string method in typeMethods)
+                    Emit(text: method);
         }
-
-        if (instantiatedGenericBodies is { Count: > 0 })
+        // Methods whose owner type has no printed definition here (e.g. its def was a filtered generic
+        // template) — emit them so nothing is dropped.
+        foreach (List<string> orphaned in methodsByOwner.Values)
+            foreach (string method in orphaned)
+                Emit(text: method);
+        foreach (string free in freeRoutines)
+            Emit(text: free);
+        if (startText != null)
         {
-            sb.AppendLine("# === MONOMORPHIZED BODIES ===");
-            foreach ((string key, MonomorphizedBody mono) in instantiatedGenericBodies)
-            {
-                _indent = 0;
-                if (mono.IsSynthesized)
-                {
-                    // Wired/synthesized routine -> no AST body; note it for reference.
-                    sb.AppendLine($"# {key} [synthesized, no AST body]");
-                }
-                else
-                {
-                    // Use RoutineInfo for a fully-qualified signature, then print the rewritten body.
-                    sb.AppendLine(FormatRoutineSignature(ri: mono.Info));
-                    sb.AppendLine(PrintBodyOf(mono.Ast.Body));
-                }
-                sb.AppendLine();
-            }
+            // Mark the executable entry point.
+            sb.AppendLine(value: "# Starting from here");
+            Emit(text: startText);
         }
 
         return sb.ToString();
     }
+
+    /// <summary>The bare declared name of a type declaration node (for grouping methods under it).</summary>
+    private static string NodeTypeName(Declaration decl) => decl switch
+    {
+        RecordDeclaration r => r.Name,
+        EntityDeclaration e => e.Name,
+        ChoiceDeclaration c => c.Name,
+        FlagsDeclaration f => f.Name,
+        VariantDeclaration v => v.Name,
+        CrashableDeclaration cr => cr.Name,
+        ProtocolDeclaration p => p.Name,
+        _ => ""
+    };
 
     /// <summary>
     /// Format routine signature as part of this compiler phase.
     /// </summary>
     private static string FormatRoutineSignature(RoutineInfo ri)
     {
-        string ownerPrefix = ri.OwnerType != null ? $"{ri.OwnerType.FullName}." : "";
+        string ownerPrefix = ri.OwnerType != null
+            ? $"{ri.OwnerType.FullName}."
+            : string.IsNullOrEmpty(ri.Module) ? "" : $"{ri.Module}.";
         string failable = ri.IsFailable ? "!" : "";
         string paramStr = ri.Parameters.Count == 0
             ? ""
@@ -144,9 +199,14 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string retStr = ri.ReturnType != null
             ? $" -> {ri.ReturnType.FullName}"
             : " -> None";
-        string annotations = ri.DeclaredMutation == MutationCategory.Readonly
-            ? "@readonly\n"
-            : "";
+        // Preserve every annotation (`@llvm_ir(...)`, `@readonly`, `@positional`, …); fall back to
+        // synthesizing `@readonly` from the mutation category when SA recorded it that way.
+        IEnumerable<string> anns = ri.Annotations.Count > 0
+            ? ri.Annotations
+            : ri.DeclaredMutation == MutationCategory.Readonly
+                ? new[] { "readonly" }
+                : System.Array.Empty<string>();
+        string annotations = string.Concat(anns.Select(a => $"@{a}\n"));
         return $"{annotations}routine {ownerPrefix}{ri.Name}{failable}({paramStr}){retStr}";
     }
 
@@ -197,8 +257,25 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         GuardPattern gp => $"{PrintPattern(gp.InnerPattern)} where {gp.Guard.Accept(this)}",
         FlagsPattern fp =>
             $"is {string.Join(fp.Connective == FlagsTestConnective.And ? " and " : " or ", fp.FlagNames)}",
+        DestructuringPattern dp => $"({string.Join(", ", dp.Bindings.Select(PrintBinding))})",
+        TypeDestructuringPattern tdp =>
+            $"is {tdp.Type.Accept(this)} ({string.Join(", ", tdp.Bindings.Select(PrintBinding))})",
         _ => $"#{p.GetType().Name}"
     };
+
+    /// <summary>Renders one destructuring binding: <c>x: a</c> (renamed), <c>a</c> (positional),
+    /// or <c>x: (nested)</c>.</summary>
+    private string PrintBinding(DestructuringBinding b)
+    {
+        if (b.NestedPattern != null)
+        {
+            string inner = PrintPattern(b.NestedPattern);
+            return b.MemberVariableName != null ? $"{b.MemberVariableName}: {inner}" : inner;
+        }
+        if (b.MemberVariableName != null && b.BindingName != null && b.MemberVariableName != b.BindingName)
+            return $"{b.MemberVariableName}: {b.BindingName}";
+        return b.BindingName ?? b.MemberVariableName ?? "_";
+    }
 
     /// <summary>
     /// Format literal value as part of this compiler phase.
@@ -285,8 +362,27 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitCallExpression(CallExpression node) =>
-        $"{node.Callee.Accept(this)}({string.Join(", ", node.Arguments.Select(a => a.Accept(this)))})";
+    public string VisitCallExpression(CallExpression node)
+    {
+        string argList = string.Join(", ", node.Arguments.Select(a => a.Accept(this)));
+        // Qualify every resolved call to its module-qualified routine name with the full generic
+        // type-argument list spelled out. Method calls are rendered free-function style with the
+        // receiver as the explicit first argument.
+        if (node.ResolvedRoutine is { } ri)
+        {
+            string typeArgs = ri.TypeArguments is { Count: > 0 }
+                ? $"[{string.Join(", ", ri.TypeArguments.Select(RoutineInfo.GetTypeIdentity))}]"
+                : "";
+            if (node.Callee is MemberExpression mem)
+            {
+                string recv = mem.Object.Accept(this);
+                string all = argList.Length == 0 ? recv : $"{recv}, {argList}";
+                return $"{ri.QualifiedName}{typeArgs}({all})";
+            }
+            return $"{ri.QualifiedName}{typeArgs}({argList})";
+        }
+        return $"{node.Callee.Accept(this)}({argList})";
+    }
 
 
     /// <inheritdoc/>
@@ -319,6 +415,13 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     /// <inheritdoc/>
     public string VisitTypeExpression(TypeExpression node)
     {
+        // Prefer the resolved concrete type's fully-qualified name (module-qualified, generic args
+        // baked in) so type references match the qualified call/decl names. Skip const-generic values
+        // (their "type" is just the literal) and unresolved/splice types.
+        if (node.ResolvedType is { } rt
+            && rt is not ConstGenericValueTypeInfo and not ComptimeConstGenericTypeInfo
+            and not GenericParameterTypeInfo && node.SpliceHandle == null && node.ComptimeValue == null)
+            return rt.FullName;
         if (node.GenericArguments == null || node.GenericArguments.Count == 0)
             return node.Name;
         string args = string.Join(", ", node.GenericArguments.Select(a => a.Accept(this)));
@@ -478,6 +581,17 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             ? $"[{string.Join(", ", node.TypeArguments.Select(t => t.Accept(this)))}]"
             : "";
         string args = string.Join(", ", node.Arguments.Select(a => a.Accept(this)));
+        // Qualify to the resolved routine, keeping the explicit type-argument list; method calls
+        // render free-function style with the receiver as the first argument (as VisitCallExpression).
+        if (node.ResolvedRoutine is { } ri)
+        {
+            // Type constructor / free routine: Object and MethodName are the same identifier.
+            if (node.Object is IdentifierExpression ctorId && ctorId.Name == node.MethodName)
+                return $"{ri.QualifiedName}{typeArgs}({args})";
+            string recv = node.Object.Accept(this);
+            string all = args.Length == 0 ? recv : $"{recv}, {args}";
+            return $"{ri.QualifiedName}{typeArgs}({all})";
+        }
         // Type constructor: Object and MethodName are the same identifier (e.g. SortedDict[S64, S64]())
         if (node.Object is IdentifierExpression id && id.Name == node.MethodName)
             return $"{node.MethodName}{typeArgs}({args})";
@@ -609,7 +723,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     public string VisitReturnStatement(ReturnStatement node) =>
         node.Value != null
             ? $"{I}return {node.Value.Accept(this)}"
-            : $"{I}return <ERROR>";
+            : $"{I}return";  // valueless return in a None-returning routine
 
 
     /// <inheritdoc/>
@@ -645,13 +759,15 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
     /// <inheritdoc/>
     public string VisitDestructuringStatement(DestructuringStatement node) =>
-        $"{I}#Destructuring";
+        $"{I}var {PrintPattern(node.Pattern)} = {node.Initializer.Accept(this)}";
 
 
     /// <inheritdoc/>
     public string VisitVariantReturnStatement(VariantReturnStatement node) =>
-        $"{I}#variant_return({node.VariantKind}, {node.SiteKind}" +
-        $"{(node.Value != null ? ", " + node.Value.Accept(this) : "")})";
+        // Synthetic — no surface syntax. Reads as: return the failable-variant carrier for this
+        // {Try|Check|Lookup} body, built from the {throw|absent|return|passthrough} site's value.
+        $"{I}return #carrier[{node.VariantKind}, {node.SiteKind}]" +
+        $"({(node.Value != null ? node.Value.Accept(this) : "")})";
 
 
     /// <inheritdoc/>
@@ -670,7 +786,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         while (elseStmt is IfStatement elif)
         {
             sb.AppendLine();
-            sb.AppendLine($"{I}else if {elif.Condition.Accept(this)}");
+            sb.AppendLine($"{I}elseif {elif.Condition.Accept(this)}");
             sb.Append(PrintBodyOf(elif.ThenStatement));
             elseStmt = elif.ElseStatement;
         }
@@ -714,17 +830,47 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitEachStatement(EachStatement node) => $"{I}#EachStatement";
+    public string VisitEachStatement(EachStatement node)
+    {
+        // Runtime loop — lowered to loop+if before codegen; only appears in un-lowered generic defs.
+        string binder = node.Variable
+                        ?? (node.VariablePattern != null ? PrintPattern(node.VariablePattern) : "_");
+        var sb = new StringBuilder();
+        sb.AppendLine($"{I}each {binder} in {node.Iterable.Accept(this)}");
+        sb.Append(PrintBodyOf(node.Body));
+        if (node.ElseBranch != null)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"{I}else");
+            sb.Append(PrintBodyOf(node.ElseBranch));
+        }
+        return sb.ToString().TrimEnd();
+    }
 
     /// <inheritdoc/>
-    public string VisitExpandStatement(ExpandStatement node) => $"{I}#ExpandStatement";
+    public string VisitExpandStatement(ExpandStatement node)
+    {
+        // Comptime unroll loop — never survives to codegen (unrolled at monomorphization), but a
+        // generic definition still carries it. Round-trips as `expand h in memvarof(T)`.
+        string source = node.SourceKind switch
+        {
+            ExpandSourceKind.MemberVariables => "memvarof",
+            ExpandSourceKind.Arms => "armof",
+            ExpandSourceKind.Cases => "caseof",
+            _ => node.SourceKind.ToString()
+        };
+        var sb = new StringBuilder();
+        sb.AppendLine($"{I}expand {node.HandleName} in {source}({node.SourceType.Accept(this)})");
+        sb.Append(PrintBodyOf(node.Body));
+        return sb.ToString().TrimEnd();
+    }
 
     /// <inheritdoc/>
-    public string VisitSpliceExpression(SpliceExpression node) => "${...}";
+    public string VisitSpliceExpression(SpliceExpression node) => $"${{{node.Inner.Accept(this)}}}";
 
     /// <inheritdoc/>
     public string VisitSpliceMemberExpression(SpliceMemberExpression node) =>
-        $"{node.Object.Accept(visitor: this)}.${{...}}";
+        $"{node.Object.Accept(visitor: this)}.${{{node.Selector.Inner.Accept(this)}}}";
 
 
     /// <inheritdoc/>
@@ -782,13 +928,56 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     {
         var sb = new StringBuilder();
         string failStr = node.IsFailable ? "!" : "";
-        string returnStr = node.ReturnType != null ? $" -> {node.ReturnType.Accept(this)}" : " -> <ERROR>";
-        string paramsStr = string.Join(", ", node.Parameters.Select(p =>
-            p.Type != null ? $"{p.Name}: {p.Type.Accept(this)}" : p.Name));
-        sb.AppendLine($"{I}routine {node.Name}{failStr}({paramsStr}){returnStr}");
+        // Prefer resolved TypeInfo (module-qualified) for the signature's parameter/return types;
+        // the AST TypeExpressions in a signature carry no ResolvedType.
+        string returnStr;
+        string paramsStr;
+        if (node.ResolvedInfo is { } sig)
+        {
+            returnStr = sig.ReturnType != null ? $" -> {sig.ReturnType.FullName}" : " -> None";
+            paramsStr = string.Join(", ", sig.Parameters.Select(p => $"{p.Name}: {p.Type.FullName}"));
+        }
+        else
+        {
+            returnStr = node.ReturnType != null ? $" -> {node.ReturnType.Accept(this)}" : " -> None";
+            paramsStr = string.Join(", ", node.Parameters.Select(p =>
+                p.Type != null ? $"{p.Name}: {p.Type.Accept(this)}" : p.Name));
+        }
+        sb.Append(AnnotationLines(node.Annotations));
+        sb.AppendLine($"{I}routine {QualifyRoutineName(node)}{failStr}({paramsStr}){returnStr}");
         sb.Append(PrintBodyOf(node.Body));
         return sb.ToString().TrimEnd();
     }
+
+    /// <summary>Module-qualifies a routine declaration name for the flat dump: methods become
+    /// <c>Module.Owner.name</c>, free routines <c>Module.name</c>. Prefers the resolved info; falls
+    /// back to prefixing the ambient module.</summary>
+    private string QualifyRoutineName(RoutineDeclaration node)
+    {
+        if (node.ResolvedInfo is { } ri)
+        {
+            if (ri.OwnerType != null)
+            {
+                string mod = string.IsNullOrEmpty(ri.OwnerType.Module) ? _currentModule : ri.OwnerType.Module;
+                string owner = ri.OwnerType.Name;
+                return string.IsNullOrEmpty(mod) ? $"{owner}.{ri.Name}" : $"{mod}.{owner}.{ri.Name}";
+            }
+            string m = string.IsNullOrEmpty(ri.Module) ? _currentModule : ri.Module;
+            return string.IsNullOrEmpty(m) ? ri.Name : $"{m}.{ri.Name}";
+        }
+        return string.IsNullOrEmpty(_currentModule) ? node.Name : $"{_currentModule}.{node.Name}";
+    }
+
+    /// <summary>Module-qualifies a type/preset declaration name for the flat dump.</summary>
+    private string QualifyDecl(string name) =>
+        string.IsNullOrEmpty(_currentModule) ? name : $"{_currentModule}.{name}";
+
+    /// <summary>Renders each annotation as its own <c>@name(args)</c> line at the current indent
+    /// (annotations are stored without the leading <c>@</c>). Empty string when there are none.</summary>
+    private string AnnotationLines(IEnumerable<string>? annotations) =>
+        annotations == null
+            ? ""
+            : string.Concat(annotations.Select(a => $"{I}@{a}\n"));
 
 
     /// <inheritdoc/>
@@ -808,7 +997,8 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string protos = node.Protocols.Count > 0
             ? $" obeys {string.Join(", ", node.Protocols.Select(p => p.Accept(this)))}"
             : "";
-        return PrintTypeDecl($"record {node.Name}{generics}{protos}", node.Members);
+        return PrintTypeDecl($"record {QualifyDecl(node.Name)}{generics}{protos}", node.Members,
+            node.Annotations);
     }
 
 
@@ -821,7 +1011,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string protos = node.Protocols.Count > 0
             ? $" obeys {string.Join(", ", node.Protocols.Select(p => p.Accept(this)))}"
             : "";
-        return PrintTypeDecl($"entity {node.Name}{generics}{protos}", node.Members);
+        return PrintTypeDecl($"entity {QualifyDecl(node.Name)}{generics}{protos}", node.Members);
     }
 
 
@@ -829,7 +1019,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     public string VisitChoiceDeclaration(ChoiceDeclaration node)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"{I}choice {node.Name}");
+        sb.AppendLine($"{I}choice {QualifyDecl(node.Name)}");
         _indent++;
         foreach (ChoiceCase c in node.Cases)
         {
@@ -847,7 +1037,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     public string VisitFlagsDeclaration(FlagsDeclaration node)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"{I}flags {node.Name}");
+        sb.AppendLine($"{I}flags {QualifyDecl(node.Name)}");
         _indent++;
         foreach (string m in node.Members)
             sb.AppendLine($"{I}{m}");
@@ -863,7 +1053,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             ? $"[{string.Join(", ", node.GenericParameters)}]"
             : "";
         var sb = new StringBuilder();
-        sb.AppendLine($"{I}variant {node.Name}{generics}");
+        sb.AppendLine($"{I}variant {QualifyDecl(node.Name)}{generics}");
         _indent++;
         foreach (VariantMember m in node.Members)
             sb.AppendLine($"{I}{m.Type.Accept(this)}");
@@ -882,7 +1072,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             ? $" obeys {string.Join(", ", node.ParentProtocols.Select(p => p.Accept(this)))}"
             : "";
         var sb = new StringBuilder();
-        sb.AppendLine($"{I}protocol {node.Name}{generics}{parents}");
+        sb.AppendLine($"{I}protocol {QualifyDecl(node.Name)}{generics}{parents}");
         _indent++;
         foreach (RoutineSignature sig in node.Methods)
         {
@@ -900,23 +1090,48 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
     /// <inheritdoc/>
     public string VisitCrashableDeclaration(CrashableDeclaration node) =>
-        PrintTypeDecl($"crashable {node.Name}", node.Members);
+        PrintTypeDecl($"crashable {QualifyDecl(node.Name)}", node.Members);
 
     /// <summary>
     /// Prints a type declaration header followed by its members indented one level.
     /// Returns just the header line when the member list is empty.
     /// </summary>
-    private string PrintTypeDecl(string header, List<Declaration> members)
+    private string PrintTypeDecl(string header, List<Declaration> members,
+        IEnumerable<string>? annotations = null)
     {
-        if (members.Count == 0)
-            return $"{I}{header}";
         var sb = new StringBuilder();
+        sb.Append(AnnotationLines(annotations));
         sb.AppendLine($"{I}{header}");
         _indent++;
-        foreach (Declaration m in members)
-            sb.AppendLine(m.Accept(this));
+        if (members.Count == 0)
+        {
+            // An empty type body always gets an explicit `pass`.
+            sb.AppendLine($"{I}pass");
+        }
+        else
+        {
+            foreach (Declaration m in members)
+            {
+                // Member-variable declarations print as fields (`secret name: Type`), never with `var`.
+                sb.AppendLine(m is VariableDeclaration field
+                    ? $"{I}{FormatMemberField(field)}"
+                    : m.Accept(this));
+            }
+        }
         _indent--;
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Formats a member-variable declaration as an RF field: <c>visibility name: Type[ = init]</c>
+    /// (no <c>var</c> — that prefix is for locals only).</summary>
+    private string FormatMemberField(VariableDeclaration field)
+    {
+        string anns = field.Annotations is { Count: > 0 }
+            ? string.Concat(field.Annotations.Select(a => $"@{a} "))
+            : "";
+        string typeStr = field.Type != null ? $": {field.Type.Accept(this)}" : "";
+        string initStr = field.Initializer != null ? $" = {field.Initializer.Accept(this)}" : "";
+        return $"{anns}{field.Visibility.ToString().ToLowerInvariant()} {field.Name}{typeStr}{initStr}";
     }
 
 
@@ -926,18 +1141,36 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitExternalDeclaration(ExternalDeclaration node) =>
-        $"{I}external {node.Name}";
+    public string VisitExternalDeclaration(ExternalDeclaration node)
+    {
+        // Foreign routines round-trip as realm-qualified `routine C::name(...)` / `routine LLVM::name(...)`
+        // — the modern spelling; the old `external` keyword was removed. CallingConvention holds the realm.
+        string realm = string.Equals(node.CallingConvention, "llvm", StringComparison.OrdinalIgnoreCase)
+            ? "LLVM"
+            : "C";
+        string danger = node.IsDangerous ? "dangerous " : "";
+        string fail = node.IsFailable ? "!" : "";
+        string generics = node.GenericParameters is { Count: > 0 }
+            ? $"[{string.Join(", ", node.GenericParameters)}]"
+            : "";
+        var pieces = node.Parameters
+                         .Select(p => p.Type != null ? $"{p.Name}: {p.Type.Accept(this)}" : p.Name)
+                         .ToList();
+        if (node.IsVariadic)
+            pieces.Add("...");
+        string returnStr = node.ReturnType != null ? $" -> {node.ReturnType.Accept(this)}" : " -> None";
+        return $"{AnnotationLines(node.Annotations)}{I}{danger}routine {realm}::{node.Name}{fail}{generics}({string.Join(", ", pieces)}){returnStr}";
+    }
 
 
     /// <inheritdoc/>
     public string VisitExternalBlockDeclaration(ExternalBlockDeclaration node) =>
-        $"{I}external block";
+        string.Join("\n", node.Declarations.Select(d => d.Accept(this)));
 
 
     /// <inheritdoc/>
     public string VisitPresetDeclaration(PresetDeclaration node) =>
-        $"{I}preset {node.Name}: {node.Type.Accept(this)} = {node.Value.Accept(this)}";
+        $"{I}preset {QualifyDecl(node.Name)}: {node.Type.Accept(this)} = {node.Value.Accept(this)}";
 
     // -----------------------------------------------------------------------------
     // PROGRAM
@@ -947,6 +1180,63 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     /// <inheritdoc/>
     public string VisitProgram(SyntaxTree.Program node) =>
         string.Join("\n\n", node.Declarations
-            .Where(d => d is not PassDeclaration)
+            // `module`/`import` are file/module-separation headers — dropped from the flat dump.
+            .Where(d => d is not PassDeclaration and not ModuleDeclaration and not ImportDeclaration)
+            .Where(d => !IsGenericTemplate(d))
             .Select(d => d.Accept(this)));
+
+    /// <summary>
+    /// True for a generic-DEFINITION declaration — a template that codegen never emits (only its
+    /// monomorphized concrete instances are). Dropping these keeps the dump equal to codegen's actual
+    /// emit set: no un-expanded <c>expand</c> / <c>${…}</c> leaks through. Uses the structured resolved
+    /// info + declared generic params, never string-parses the name.
+    /// </summary>
+    private static bool IsGenericTemplate(ISyntaxTreeNode d) => d switch
+    {
+        RoutineDeclaration r =>
+            r.GenericParameters is { Count: > 0 }
+            || r.ResolvedInfo is { IsGenericDefinition: true }
+            || (r.ResolvedInfo is { } ri && RoutineTouchesGenericParam(ri))
+            // Capability-default templates on a bare param (e.g. `routine T.eq`) carry no ResolvedInfo,
+            // but any un-monomorphized template still holds an expand/splice in its body — a definitive
+            // marker that codegen never emits this as-is (only its per-type expansions).
+            || BodyHasComptimeExpansion(r.Body),
+        RecordDeclaration rec => rec.GenericParameters is { Count: > 0 },
+        EntityDeclaration ent => ent.GenericParameters is { Count: > 0 },
+        VariantDeclaration v => v.GenericParameters is { Count: > 0 },
+        _ => false
+    };
+
+    /// <summary>Mirrors codegen's skip predicate: a routine whose owner, return, or any parameter still
+    /// references an unbound generic parameter is a template codegen never emits (e.g. a capability
+    /// default like <c>routine T.represent()</c> whose owner is the bare param <c>T</c>).</summary>
+    private static bool RoutineTouchesGenericParam(RoutineInfo ri) =>
+        (ri.OwnerType != null && ContainsGenericParameter(ri.OwnerType))
+        || (ri.ReturnType != null && ContainsGenericParameter(ri.ReturnType))
+        || ri.Parameters.Any(p => ContainsGenericParameter(p.Type));
+
+    /// <summary>True if a routine body still contains a comptime <c>expand</c> unroll or a
+    /// <c>${…}</c> splice — i.e. it is an un-monomorphized template, never emitted verbatim.</summary>
+    private static bool BodyHasComptimeExpansion(Statement body)
+    {
+        bool found = false;
+        AstWalker.Walk(root: body, visit: n =>
+        {
+            if (n is ExpandStatement or ExpandMemberDeclaration or SpliceExpression or SpliceMemberExpression)
+                found = true;
+        });
+        return found;
+    }
+
+    /// <summary>Replicates <c>LlvmCodeGenerator.ContainsGenericParameter</c> so the dump's drop-set
+    /// matches codegen's emit-set exactly.</summary>
+    private static bool ContainsGenericParameter(TypeInfo type)
+    {
+        if (type is GenericParameterTypeInfo or ErrorTypeInfo or ProtocolSelfTypeInfo
+            or ComptimeConstGenericTypeInfo)
+            return true;
+        if (type is RecordTypeInfo { HasDirectBackendType: true })
+            return false;
+        return type.TypeArguments?.Any(ContainsGenericParameter) ?? false;
+    }
 }
