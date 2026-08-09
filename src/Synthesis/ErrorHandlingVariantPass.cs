@@ -152,6 +152,12 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                     subs: new Dictionary<string, string>());
                 Statement variantBody = TransformBody(body: variantSourceBody, kind: kind,
                     rewriter: TryRewriteToVariantCall, registry: ctx.Registry);
+                // Warm-restore: a variant body pre-seeded from the captured stdlib is already lowered +
+                // analyzed — keep it instead of overwriting with a fresh un-analyzed regeneration (the
+                // seeded ones are what AnalyzeVariantBodies skips; overwriting would leave them unanalyzed).
+                if (ctx.Registry.SkipStdlibReprocessing
+                    && ctx.VariantBodies.ContainsKey(key: variant.Routine.RegistryKey))
+                    continue;
                 ctx.VariantBodies[key: variant.Routine.RegistryKey] = variantBody;
             }
         }
