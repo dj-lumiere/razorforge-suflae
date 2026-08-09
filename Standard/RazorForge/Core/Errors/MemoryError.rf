@@ -25,18 +25,3 @@ crashable MemoryBoundsError
 ### :returns: The resulting `Text` value.
 routine MemoryBoundsError.crash_message() -> Text
   return f"Memory access at offset {me.offset} with size {me.size} exceeds allocated {me.allocated} bytes"
-
-### Represents the crashable raised when a requested slice would extend beyond
-### the underlying storage.
-crashable SliceBoundsError
-  ### Stores the starting offset of the requested slice.
-  offset: U64
-  ### Stores the requested slice length in bytes.
-  length: U64
-  ### Stores the number of bytes that are actually available.
-  allocated: U64
-
-### Returns the default message for invalid slice creation.
-### :returns: The resulting `Text` value.
-routine SliceBoundsError.crash_message() -> Text
-  return f"Slice from {me.offset} with length {me.length} exceeds allocated {me.allocated} bytes"
