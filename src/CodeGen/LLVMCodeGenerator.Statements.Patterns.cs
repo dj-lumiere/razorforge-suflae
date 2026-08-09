@@ -367,20 +367,15 @@ public partial class LlvmCodeGenerator
                     EmitLine(sb: sb, line: $"  store {payloadLlvm} {payloadVal}, ptr {varAddr}");
                     _localVariables[key: tp.VariableName] = member.Type;
                 }
+                // Result/Lookup carrier arm bindings are lowered by PatternLoweringPass into a
+                // CarrierPayloadExpression (which extracts the payload at its true type via the carrier's
+                // own LLVM type — see EmitCarrierPayloadExpression), so a carrier subject must not reach
+                // this codegen switch-arm binding with its hardcoded { i64, i64 } assumption.
                 else
                 {
-                    // Result/Lookup { i64 type_id, i64 data }: field 1 is the address as i64
-                    string dataPtr = NextTemp();
-                    string dataVal = NextTemp();
-                    string handleVal = NextTemp();
-                    EmitLine(sb: sb,
-                        line:
-                        $"  {dataPtr} = getelementptr {{ i64, i64 }}, ptr {subject}, i32 0, i32 1");
-                    EmitLine(sb: sb, line: $"  {dataVal} = load i64, ptr {dataPtr}");
-                    EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {dataVal} to ptr");
-                    EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
-                    EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
-                    _localVariables[key: tp.VariableName] = targetType;
+                    throw new InvalidOperationException(
+                        "Result/Lookup carrier switch-arm binding reached codegen; PatternLoweringPass " +
+                        "should have lowered it to a CarrierPayloadExpression.");
                 }
 
                 break;
@@ -759,72 +754,25 @@ public partial class LlvmCodeGenerator
         CrashablePattern crashable, string matchLabel, string failLabel,
         TypeInfo? subjectType)
     {
+        // Maybe has no error case -> a CrashablePattern on a Maybe subject never matches.
+        if (subjectType != null && IsCarrierType(type: subjectType) && IsMaybeType(type: subjectType))
+        {
+            EmitLine(sb: sb, line: $"  br label %{failLabel}");
+            return;
+        }
+
+        // Result/Lookup `is Crashable` is expanded by CrashableExpansionPass into per-error-type
+        // `type_id == …` checks (and payload extraction via CarrierPayloadExpression) before codegen,
+        // so a carrier subject must not reach this method with its hardcoded { i64, i64 } layout.
         if (subjectType != null && IsCarrierType(type: subjectType))
         {
-            // Maybe has no error case -> CrashablePattern cannot match
-            if (IsMaybeType(type: subjectType))
-            {
-                EmitLine(sb: sb, line: $"  br label %{failLabel}");
-                return;
-            }
-
-            // Result/Lookup carrier layout: { i64 (type_id), i64 (address) }
-            // type_id == 0 -> ABSENT (None), ComputeTypeId(T) -> VALID, ComputeTypeId(Error) -> ERROR
-            // CrashablePattern matches the ERROR case: tag != 0 &&-> tag != ComputeTypeId(valueType)
-            string tagPtr = NextTemp();
-            string tag = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {tagPtr} = getelementptr {{ i64, i64 }}, ptr {subject}, i32 0, i32 0");
-            EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
-
-            // tag != 0 (not absent) &&-> tag != ComputeTypeId(T) (not valid) -> error
-            TypeInfo valueType = subjectType.TypeArguments![0];
-            ulong validId = TypeIdHelper.ComputeTypeId(fullName: valueType.FullName);
-            string notAbsent = NextTemp();
-            string notValid = NextTemp();
-            string cmp = NextTemp();
-            EmitLine(sb: sb, line: $"  {notAbsent} = icmp ne i64 {tag}, 0");
-            EmitLine(sb: sb, line: $"  {notValid} = icmp ne i64 {tag}, {validId}");
-            EmitLine(sb: sb, line: $"  {cmp} = and i1 {notAbsent}, {notValid}");
-
-            // Bind error value to variable if specified
-            if (crashable.VariableName != null)
-            {
-                string extractLabel = NextLabel(prefix: "crash_extract");
-                EmitLine(sb: sb,
-                    line: $"  br i1 {cmp}, label %{extractLabel}, label %{failLabel}");
-
-                EmitLine(sb: sb, line: $"{extractLabel}:");
-                // Extract address from field 1 (i64) and convert to ptr
-                string addrFieldPtr = NextTemp();
-                string addrVal = NextTemp();
-                string handleVal = NextTemp();
-                EmitLine(sb: sb,
-                    line:
-                    $"  {addrFieldPtr} = getelementptr {{ i64, i64 }}, ptr {subject}, i32 0, i32 1");
-                EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {addrFieldPtr}");
-                EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {addrVal} to ptr");
-
-                string varAddr = $"%{crashable.VariableName}.addr";
-                EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
-                EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
-
-                // The bound variable is an opaque error pointer -> type it as Crashable (protocol)
-                // so subsequent method calls (e.g., err.crash_message()) resolve correctly.
-                TypeInfo errVarType = _registry.LookupType(name: "Crashable") ?? subjectType;
-                _localVariables[key: crashable.VariableName] = errVarType;
-                EmitLine(sb: sb, line: $"  br label %{matchLabel}");
-            }
-            else
-            {
-                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-            }
+            throw new InvalidOperationException(
+                "Result/Lookup `is Crashable` reached codegen; CrashableExpansionPass should have " +
+                "expanded it into type_id comparisons.");
         }
-        else
-        {
-            // Not a carrier type -> cannot match crashable pattern
-            EmitLine(sb: sb, line: $"  br label %{failLabel}");
-        }
+
+        // Not a carrier type -> cannot match a crashable pattern.
+        EmitLine(sb: sb, line: $"  br label %{failLabel}");
     }
 
     /// <summary>
@@ -1017,37 +965,16 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb, line: $"  store {innerLlvm} {val}, ptr {varAddr}");
             _localVariables[key: variableName] = innerType;
         }
+        // Result/Lookup narrowed-else extraction is lowered by PatternLoweringPass into a
+        // CarrierPayloadExpression (which loads the inner value at its TRUE width via the carrier's own
+        // LLVM type — see EmitCarrierPayloadExpression), so a Result/Lookup subject must not reach this
+        // method. The old inline path here assumed a { i64, i64 } layout and `trunc i64`-truncated wide
+        // inner values — exactly the layout assumption codegen must never make.
         else
         {
-            // Result/Lookup { i64 type_id, i64 data }: raw value bits at field 1
-            string dataPtr = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {dataPtr} = getelementptr {{ i64, i64 }}, ptr {subject}, i32 0, i32 1");
-            string dataVal = NextTemp();
-            EmitLine(sb: sb, line: $"  {dataVal} = load i64, ptr {dataPtr}");
-
-            string innerLlvm = GetLlvmType(type: innerType);
-            if (innerType is EntityTypeInfo)
-            {
-                string ptrVal = NextTemp();
-                EmitLine(sb: sb, line: $"  {ptrVal} = inttoptr i64 {dataVal} to ptr");
-                EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
-                EmitLine(sb: sb, line: $"  store ptr {ptrVal}, ptr {varAddr}");
-            }
-            else if (innerLlvm == "i64")
-            {
-                EmitEntryAlloca(llvmName: varAddr, llvmType: "i64");
-                EmitLine(sb: sb, line: $"  store i64 {dataVal}, ptr {varAddr}");
-            }
-            else
-            {
-                string truncVal = NextTemp();
-                EmitLine(sb: sb, line: $"  {truncVal} = trunc i64 {dataVal} to {innerLlvm}");
-                EmitEntryAlloca(llvmName: varAddr, llvmType: innerLlvm);
-                EmitLine(sb: sb, line: $"  store {innerLlvm} {truncVal}, ptr {varAddr}");
-            }
-
-            _localVariables[key: variableName] = innerType;
+            throw new InvalidOperationException(
+                "Result/Lookup narrowed-else extraction reached codegen; PatternLoweringPass should " +
+                "have lowered it to a CarrierPayloadExpression.");
         }
 
         if (matchLabel != null)
