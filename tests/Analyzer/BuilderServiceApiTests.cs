@@ -476,9 +476,12 @@ public class BuilderServiceApiTests
                             return
                           """;
 
+        // Standalone BuilderService routines are plain `module BuilderService` members: without the
+        // import the bare name is simply out of scope, an ordinary UnknownIdentifier (not a bespoke
+        // import-required diagnostic), consistent with every other unimported module member.
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
     /// <summary>Verifies that the routine with import produces no unexpected diagnostics.</summary>
 
@@ -529,9 +532,11 @@ public class BuilderServiceApiTests
                             return
                           """;
 
+        // See SourceLocationRoutine_WithoutImport_ReportsError: standalone BuilderService routines are
+        // ordinary module members now, so a missing import is a plain UnknownIdentifier.
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
     /// <summary>Verifies that the routine with import produces no unexpected diagnostics.</summary>
 

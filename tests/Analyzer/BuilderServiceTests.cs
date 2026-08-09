@@ -120,9 +120,11 @@ public class BuilderServiceTests
                           return
                         """;
 
+        // Standalone BuilderService routines are plain `module BuilderService` members: a missing
+        // import is an ordinary UnknownIdentifier, not a bespoke import-required diagnostic.
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
     /// <summary>
     /// Verifies that the test validates file with import without unexpected diagnostics.
@@ -156,9 +158,10 @@ public class BuilderServiceTests
                           return
                         """;
 
+        // See SourceFile_WithoutImport_ReportsError: standalone routine → plain UnknownIdentifier.
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
     /// <summary>
     /// Verifies that the test validates file without import and reports the expected error.
@@ -173,9 +176,10 @@ public class BuilderServiceTests
                           return
                         """;
 
+        // See SourceFile_WithoutImport_ReportsError: standalone routine → plain UnknownIdentifier.
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
 
     #endregion

@@ -353,7 +353,19 @@ public sealed partial class StdlibLoader
         string name = routine.Name;
         int dot = name.IndexOf(value: '.');
         string method = dot > 0 ? name[(dot + 1)..] : name;
-        return BuilderServiceClosureCascadingRoutines.Contains(item: method);
+        if (BuilderServiceClosureCascadingRoutines.Contains(item: method))
+        {
+            return true;
+        }
+
+        // Standalone BuilderService routines (build_mode/target_os/source_*/page_size/…) are provided
+        // by the compiler: RegisterStandaloneRoutines/RegisterModuleRoutines register a single synthesized
+        // RoutineInfo (module BuilderService) whose body WiredRoutinePass folds to a build-time literal,
+        // and the source-location ones are folded at their call sites. The stdlib `@innate` decl is only
+        // the surface signature — registering it too would create a SECOND, bodiless routine under the
+        // same BuilderService.<name> identity, and codegen would emit a call to the undefined one. So the
+        // stdlib standalone decl is skipped; the synthesized routine is the sole definition.
+        return dot < 0 && RuntimeContract.BuilderStandaloneRoutines.Contains(item: name);
     }
 
     private static void RegisterProgramRoutines(TypeRegistry registry, Program program,

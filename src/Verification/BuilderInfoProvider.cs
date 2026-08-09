@@ -340,14 +340,17 @@ public static class BuilderInfoProvider
             return;
         }
 
-        // NOTE: do NOT set Module = "BuilderService" here — that field is consumed by name resolution,
-        // and setting it makes a bare `target_os()` call fail to resolve (UnknownIdentifier) BEFORE the
-        // import-gating diagnostic (BuilderServiceImportRequired) can fire. The dump-ast printer qualifies
-        // these routines itself via BuilderInfoProvider.IsBuilderServiceStandalone (a printer-only concern).
+        // Standalone BuilderService routines (target_os/build_mode/source_*/page_size/…) belong to the
+        // real `module BuilderService`, so register them under it: name resolution then gates them by
+        // normal module-import scoping — `import BuilderService` brings them in, and a bare call without
+        // the import is a plain UnknownIdentifier, exactly like any other unimported module member.
+        // (The per-TYPE reflection routines — type_id/type_name/… injected onto every type — still use
+        // the dedicated import-gate, since they are not free routines you can resolve through a module.)
         registry.RegisterRoutine(routine: new RoutineInfo(name: name)
         {
             Kind = RoutineKind.Function,
             OwnerType = null,
+            Module = "BuilderService",
             Parameters = [],
             ReturnType = returnType,
             IsFailable = false,

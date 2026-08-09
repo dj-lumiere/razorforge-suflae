@@ -569,16 +569,9 @@ public sealed partial class SemanticVerifier
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 
-                    // Import-gating: BuilderService standalone routines require 'import BuilderService'
-                    if (routine.IsSynthesized &&
-                        BuilderInfoProvider.IsBuilderServiceStandalone(name: routine.Name) &&
-                        !_importedModules.Contains(item: "BuilderService"))
-                    {
-                        ReportError(code: SemanticDiagnosticCode.BuilderServiceImportRequired,
-                            message: $"'{routine.Name}()' requires 'import BuilderService'.",
-                            location: call.Location);
-                        return ErrorTypeInfo.Instance;
-                    }
+                    // Standalone BuilderService routines are plain `module BuilderService` members now:
+                    // normal import scoping gates them (no import → UnknownIdentifier), so no bespoke
+                    // import-required diagnostic here. (Per-type reflection routines keep their gate.)
 
                     // Track failable calls for error handling variant generation
                     if (routine.IsFailable && _currentRoutine != null)
@@ -890,16 +883,9 @@ public sealed partial class SemanticVerifier
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 
-                    // Import-gating: BuilderService standalone routines require 'import BuilderService'
-                    if (routine.IsSynthesized &&
-                        BuilderInfoProvider.IsBuilderServiceStandalone(name: routine.Name) &&
-                        !_importedModules.Contains(item: "BuilderService"))
-                    {
-                        ReportError(code: SemanticDiagnosticCode.BuilderServiceImportRequired,
-                            message: $"'{routine.Name}()' requires 'import BuilderService'.",
-                            location: call.Location);
-                        return ErrorTypeInfo.Instance;
-                    }
+                    // Standalone BuilderService routines are plain `module BuilderService` members now:
+                    // normal import scoping gates them (no import → UnknownIdentifier), so no bespoke
+                    // import-required diagnostic here. (Per-type reflection routines keep their gate.)
 
                     // Track failable calls for error handling variant generation
                     if (routine.IsFailable && _currentRoutine != null)
