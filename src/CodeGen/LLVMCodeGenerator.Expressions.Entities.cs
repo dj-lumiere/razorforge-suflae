@@ -261,9 +261,47 @@ public partial class LlvmCodeGenerator
         // values POSITIONALLY (already field-ordered by the SA/lowering that produced it), so field i
         // takes MemberVariables[i] when present.
         return EmitMemberwiseRecordStruct(sb: sb, record: record,
-            valueForField: (i, _) => i < expr.MemberVariables.Count
-                ? EmitExpression(sb: sb, expr: expr.MemberVariables[index: i].Value)
-                : null);
+            valueForField: (i, field) =>
+            {
+                if (i >= expr.MemberVariables.Count) return null;
+                Expression valueExpr = expr.MemberVariables[index: i].Value;
+                string value = EmitExpression(sb: sb, expr: valueExpr);
+                // A non-pointer scalar stored into a pointer-typed field (the Result/Lookup carrier's
+                // `payload: CPtr` receiving a success value) — reinterpret it into the pointer slot.
+                return CoerceScalarIntoPointerSlot(sb: sb, value: value,
+                    valueType: GetExpressionType(expr: valueExpr), fieldType: field.Type);
+            });
+    }
+
+    /// <summary>When <paramref name="fieldType"/> is a pointer slot but the value is a non-pointer
+    /// scalar, reinterpret the scalar into the pointer (int → <c>inttoptr</c>, float → bitcast then
+    /// inttoptr). Otherwise returns the value unchanged. Used to pack a carrier payload into its
+    /// single <c>CPtr</c> slot; the reader loads it back and truncates to the concrete type.</summary>
+    private string CoerceScalarIntoPointerSlot(StringBuilder sb, string value, TypeInfo? valueType,
+        TypeInfo fieldType)
+    {
+        if (valueType == null || GetFieldStorageLlvmType(type: fieldType) != "ptr")
+            return value;
+        string valueLlvm = GetLlvmType(type: valueType);
+        if (valueLlvm == "ptr")
+            return value;
+
+        // Floats reinterpret to their same-width integer first.
+        string asInt = value;
+        string intLlvm = valueLlvm;
+        if (valueLlvm is "half" or "float" or "double" or "fp128")
+        {
+            intLlvm = valueLlvm switch
+            {
+                "half" => "i16", "float" => "i32", "double" => "i64", _ => "i128"
+            };
+            asInt = NextTemp();
+            EmitLine(sb: sb, line: $"  {asInt} = bitcast {valueLlvm} {value} to {intLlvm}");
+        }
+
+        string ptr = NextTemp();
+        EmitLine(sb: sb, line: $"  {ptr} = inttoptr {intLlvm} {asInt} to ptr");
+        return ptr;
     }
 
     /// <summary>

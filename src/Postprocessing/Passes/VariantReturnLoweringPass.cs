@@ -182,13 +182,14 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
                         && vr.Value is null or IdentifierExpression { Name: "None" }))
                     return MakeCarrierReturn(carrier: carrier, typeId: 0, payload: null, loc: vr.Location);
 
-                TypeInfo? payloadType = vr.Value?.ResolvedType;
-                if (payloadType is EntityTypeInfo or CrashableTypeInfo && vr.Value != null)
+                // Any success/error payload: type_id = FNV of the payload type; the value is stored into
+                // the CPtr slot (codegen reinterprets a scalar via inttoptr, an entity is already a ptr).
+                if (vr.Value is { ResolvedType: { } payloadType })
                     return MakeCarrierReturn(carrier: carrier,
                         typeId: Compiler.TypeIdHelper.ComputeTypeId(fullName: payloadType.FullName),
                         payload: vr.Value, loc: vr.Location);
 
-                // Scalar / non-pointer payload — leave for codegen (needs reinterpret to the CPtr slot).
+                // No resolved type on the value — leave for codegen.
                 return statement;
             }
 
