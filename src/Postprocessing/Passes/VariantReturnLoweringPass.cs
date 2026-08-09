@@ -3,6 +3,8 @@ using System.Linq;
 using Compiler.Synthesis;
 using Compiler.Tokenizer;
 using SyntaxTree;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace Compiler.Postprocessing.Passes;
 
@@ -23,6 +25,28 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
 {
     private readonly Dictionary<string, Statement>? _variantBodies = ctx.VariantBodies;
 
+    /// <summary>Return type (the concrete carrier, e.g. <c>Maybe[S64]</c>) of the routine whose body
+    /// is being lowered — needed to construct the carrier record.</summary>
+    private TypeInfo? _carrierReturn;
+
+    private Dictionary<string, TypeInfo?>? _returnByKey;
+    private Dictionary<string, TypeInfo?> ReturnByKey => _returnByKey ??=
+        ctx.Registry.GetAllRoutines()
+            .GroupBy(r => r.RegistryKey)
+            .ToDictionary(g => g.Key, g => g.First().ReturnType);
+
+    private TypeInfo? _boolType;
+    private TypeInfo? BoolType => _boolType ??= ctx.Registry.LookupType(name: "Bool");
+
+    /// <summary>A <c>Bool</c>-typed literal for a carrier's <c>present</c> flag.</summary>
+    private LiteralExpression BoolLiteral(bool value, SourceLocation loc) =>
+        new LiteralExpression(Value: value,
+            LiteralType: value ? TokenType.True : TokenType.False,
+            Location: loc)
+        {
+            ResolvedType = BoolType
+        };
+
     /// <summary>Lowers routine bodies in a single program (user file or stdlib file).</summary>
     public void Run(Program program)
     {
@@ -32,6 +56,7 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
             {
                 case RoutineDeclaration routine:
                 {
+                    _carrierReturn = routine.ResolvedInfo?.ReturnType;
                     Statement lowered = Lower(statement: routine.Body);
                     if (!ReferenceEquals(objA: lowered, objB: routine.Body))
                         program.Declarations[i] = routine with { Body = lowered };
@@ -56,6 +81,7 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
         if (_variantBodies == null) return;
         foreach (string key in _variantBodies.Keys.ToList())
         {
+            _carrierReturn = ReturnByKey.GetValueOrDefault(key: key);
             Statement lowered = Lower(statement: _variantBodies[key: key]);
             if (!ReferenceEquals(objA: lowered, objB: _variantBodies[key: key]))
                 _variantBodies[key: key] = lowered;
@@ -67,6 +93,7 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
         for (int i = 0; i < members.Count; i++)
         {
             if (members[i] is not RoutineDeclaration routine) continue;
+            _carrierReturn = routine.ResolvedInfo?.ReturnType;
             Statement lowered = Lower(statement: routine.Body);
             if (!ReferenceEquals(objA: lowered, objB: routine.Body))
                 members[i] = routine with { Body = lowered };
@@ -85,6 +112,32 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
                         Value: present,
                         LiteralType: present ? TokenType.True : TokenType.False,
                         Location: vr.Location),
+                    Location: vr.Location);
+            }
+
+            // Try → Maybe[T] (a plain `{present: Bool, value: T}` record) built with a real
+            // CreatorExpression: present carries the value; throw / absent / return-a-crashable = absent.
+            case VariantReturnStatement { VariantKind: ErrorHandlingVariantKind.Try } vr
+                when _carrierReturn is RecordTypeInfo maybe:
+            {
+                if (vr.SiteKind == VariantSiteKind.FromVariantPassthrough && vr.Value != null)
+                    return new ReturnStatement(Value: vr.Value, Location: vr.Location);
+
+                bool present = vr.SiteKind == VariantSiteKind.FromReturn
+                               && vr.Value?.ResolvedType is not CrashableTypeInfo;
+                bool hasValue = present && vr.Value is not null
+                                and not IdentifierExpression { Name: "None" };
+
+                var members = new List<(string Name, Expression Value)>
+                {
+                    ("present", BoolLiteral(value: present, loc: vr.Location))
+                };
+                if (hasValue)
+                    members.Add(("value", vr.Value!));
+
+                return new ReturnStatement(
+                    Value: new CreatorExpression(TypeName: maybe.Name, TypeArguments: null,
+                        MemberVariables: members, Location: vr.Location) { ResolvedType = maybe },
                     Location: vr.Location);
             }
 
