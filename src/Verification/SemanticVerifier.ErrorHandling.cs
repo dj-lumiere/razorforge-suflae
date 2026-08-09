@@ -203,6 +203,12 @@ public sealed partial class SemanticVerifier
                         body: decl.Body);
                 }
 
+                // Warm-restore: keep stdlib routines OUT of the _routineBodies synthesis working set —
+                // their variant/wired bodies are captured, so ErrorHandlingVariantPass/WiredRoutinePass
+                // then process ONLY user routines and reuse the restored stdlib bodies. (Derive templates
+                // above are still registered — user-type synthesis needs them.)
+                if (_registry.SkipStdlibReprocessing) continue;
+
                 RoutineInfo? routineInfo = ResolveRoutineInfoForDeclaration(decl: decl, moduleName: module);
                 if (routineInfo == null) continue;
 

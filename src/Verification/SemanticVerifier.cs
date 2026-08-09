@@ -505,9 +505,11 @@ public sealed partial class SemanticVerifier
         var ctx = new DesugaringContext(registry: _registry,
             routineBodies: _routineBodies,
             target: _target,
-            buildMode: _buildMode);
+            buildMode: _buildMode) { VariantBodies = _variantBodies };
         new DesugaringPipeline(ctx: ctx).RunGlobal();
-        // Capture variant bodies produced by ErrorHandlingVariantPass for codegen.
+        // Capture variant bodies produced by ErrorHandlingVariantPass for codegen. On the warm-restore
+        // path _variantBodies is pre-seeded with the captured stdlib variants, so ErrorHandlingVariantPass
+        // only ADDS user variants here — the seeded restored ones survive for codegen.
         _variantBodies = ctx.VariantBodies;
         AnalyzeVariantBodies();
 
@@ -1332,6 +1334,12 @@ public sealed partial class SemanticVerifier
     {
         foreach ((string key, Statement body) in _variantBodies)
         {
+            // Warm-restore: variants captured from the snapshot were already analyzed at capture time.
+            if (_restoredVariantKeys.Contains(item: key))
+            {
+                continue;
+            }
+
             RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: key) ??
                 _registry.GetAllRoutines()
                          .FirstOrDefault(predicate: r => r.RegistryKey == key);

@@ -103,15 +103,19 @@ public sealed class WarmCompileBenchmark
     /// codegen the IDENTICAL desugared AST as a COLD compile of the same source. Codegen is a pure
     /// translator, so identical input AST ⇒ identical .ll.
     ///
-    /// WIP — does not pass yet. Profiling the warm-restore path pinpointed the dominant cost:
-    /// <c>AnalyzeVariantBodies = 3661ms</c> — ErrorHandlingVariantPass REGENERATES all try_/check_/lookup_
-    /// variant bodies (incl. stdlib) each compile (RunPhase4GlobalDesugaring line 511 overwrites the
-    /// seeded _variantBodies with ctx.VariantBodies), then AnalyzeVariantBodies re-analyzes them all.
-    /// Next gate: seed ctx.VariantBodies with the captured stdlib variants, make ErrorHandlingVariantPass
-    /// skip-if-present, and make AnalyzeVariantBodies skip already-analyzed (restored) variants — then the
-    /// remaining GMP (459ms) / Phase-5b (206ms) stdlib re-walks. Correctness oracle: warm AST == cold AST.
+    /// WIP — does not pass yet, but the variant-reuse gate landed: warm analyze is now ~1,170ms (was
+    /// 5,345ms) — CollectStdlibBodiesForVariantGeneration keeps stdlib routines out of _routineBodies on
+    /// the warm path, so ErrorHandlingVariantPass/AnalyzeVariantBodies process only user routines and the
+    /// captured stdlib variants are reused (AnalyzeVariantBodies skips _restoredVariantKeys).
+    ///
+    /// REMAINING divergence: warm is missing ~620 monomorphized instances (Array[S64, 20], const-generic
+    /// size instances) — starving _routineBodies of stdlib bodies also diverges GMP/monomorphization over
+    /// the restored stdlib (these are stdlib-internal, unreachable from `trivial`, so codegen-safe HERE but
+    /// unsound for other user files). Next gate: keep GMP fed with the restored stdlib generic-def
+    /// instances (the captured InstantiatedGenericBodies must fully survive Phase 6 merge) so warm's
+    /// monomorph set == cold's. Correctness oracle: warm AST == cold AST.
     /// </summary>
-    [Fact(Skip = "WIP Milestone 1: warm path needs variant-body reuse (AnalyzeVariantBodies 3.6s) + reachability/GMP gating")]
+    [Fact(Skip = "WIP Milestone 1: variant-reuse landed (warm 1.17s); GMP/monomorph instance divergence remains")]
     public void WarmCodegenAst_MatchesCold()
     {
         // COLD reference: a normal from-scratch compile of the trivial file.

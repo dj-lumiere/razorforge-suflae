@@ -76,12 +76,20 @@ public partial class SemanticVerifier
         _buildMode = buildMode;
         _snapshotMode = true;
 
-        // Seed the body dicts: the global synthesis passes skip already-present (stdlib) entries
-        // (WiredRoutinePass / ErrorHandlingVariantPass gate on ContainsKey), and codegen consumes them.
+        // Seed the codegen-consumed body dicts from the captured (already-lowered/analyzed) stdlib.
+        // NOTE: _routineBodies is deliberately NOT seeded — it is the synthesis working set that drives
+        // ErrorHandlingVariantPass / WiredRoutinePass; seeding it makes them REGENERATE + re-analyze all
+        // stdlib variant/wired bodies (the 3.6 s AnalyzeVariantBodies cost). CollectStdlibBodiesForVariant-
+        // Generation is gated on SkipStdlibReprocessing so stdlib routines stay out of _routineBodies and
+        // those passes only process USER routines; the stdlib variant/synthesized bodies come from here.
         foreach (var kv in warm.SynthesizedBodies) _synthesizedBodies[kv.Key] = kv.Value;
-        foreach (var kv in warm.RoutineBodies) _routineBodies[kv.Key] = kv.Value;
         _variantBodies = new Dictionary<string, Statement>(warm.VariantBodies);
+        _restoredVariantKeys = new HashSet<string>(warm.VariantBodies.Keys, System.StringComparer.Ordinal);
         _instantiatedGenericBodies =
             new Dictionary<string, MonomorphizedBody>(warm.InstantiatedGenericBodies);
     }
+
+    /// <summary>Variant-body keys restored from a warm snapshot — already analyzed at capture time, so
+    /// <see cref="AnalyzeVariantBodies"/> skips them instead of re-analyzing (the ~3.6 s warm cost).</summary>
+    private HashSet<string> _restoredVariantKeys = new(System.StringComparer.Ordinal);
 }
