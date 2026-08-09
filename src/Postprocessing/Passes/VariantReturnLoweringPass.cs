@@ -38,6 +38,9 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
     private TypeInfo? _boolType;
     private TypeInfo? BoolType => _boolType ??= ctx.Registry.LookupType(name: "Bool");
 
+    private TypeInfo? _u64Type;
+    private TypeInfo? U64Type => _u64Type ??= ctx.Registry.LookupType(name: "U64");
+
     /// <summary>A <c>Bool</c>-typed literal for a carrier's <c>present</c> flag.</summary>
     private LiteralExpression BoolLiteral(bool value, SourceLocation loc) =>
         new LiteralExpression(Value: value,
@@ -46,6 +49,27 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
         {
             ResolvedType = BoolType
         };
+
+    /// <summary>A <c>U64</c>-typed literal (used for a carrier's <c>type_id</c> tag).</summary>
+    private LiteralExpression U64Literal(ulong value, SourceLocation loc) =>
+        new LiteralExpression(Value: value, LiteralType: TokenType.U64Literal, Location: loc)
+        {
+            ResolvedType = U64Type
+        };
+
+    /// <summary>Builds `return Carrier(type_id: …, payload: …)` for a Result/Lookup carrier.
+    /// A null payload is omitted so the record's memberwise builder zero-fills it (the absent state).</summary>
+    private Statement MakeCarrierReturn(RecordTypeInfo carrier, ulong typeId, Expression? payload,
+        SourceLocation loc)
+    {
+        var members = new List<(string Name, Expression Value)> { ("type_id", U64Literal(typeId, loc)) };
+        if (payload != null)
+            members.Add(("payload", payload));
+        return new ReturnStatement(
+            Value: new CreatorExpression(TypeName: carrier.Name, TypeArguments: null,
+                MemberVariables: members, Location: loc) { ResolvedType = carrier },
+            Location: loc);
+    }
 
     /// <summary>Lowers routine bodies in a single program (user file or stdlib file).</summary>
     public void Run(Program program)
@@ -139,6 +163,33 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx)
                     Value: new CreatorExpression(TypeName: maybe.Name, TypeArguments: null,
                         MemberVariables: members, Location: vr.Location) { ResolvedType = maybe },
                     Location: vr.Location);
+            }
+
+            // Check → Result[T] / Lookup → Lookup[T] (record { type_id: U64, payload: CPtr }): build the
+            // record directly. type_id = FNV of the payload type (matches the reader); the payload is the
+            // entity/error POINTER stored straight into the CPtr slot. Absent = type_id 0, payload zeroed.
+            // Scalar payloads still need a reinterpret-to-CPtr, so those fall through to codegen for now.
+            case VariantReturnStatement
+            {
+                VariantKind: ErrorHandlingVariantKind.Check or ErrorHandlingVariantKind.Lookup
+            } vr when _carrierReturn is RecordTypeInfo carrier:
+            {
+                if (vr.SiteKind == VariantSiteKind.FromVariantPassthrough && vr.Value != null)
+                    return new ReturnStatement(Value: vr.Value, Location: vr.Location);
+
+                if (vr.SiteKind == VariantSiteKind.FromAbsent
+                    || (vr.SiteKind == VariantSiteKind.FromReturn
+                        && vr.Value is null or IdentifierExpression { Name: "None" }))
+                    return MakeCarrierReturn(carrier: carrier, typeId: 0, payload: null, loc: vr.Location);
+
+                TypeInfo? payloadType = vr.Value?.ResolvedType;
+                if (payloadType is EntityTypeInfo or CrashableTypeInfo && vr.Value != null)
+                    return MakeCarrierReturn(carrier: carrier,
+                        typeId: Compiler.TypeIdHelper.ComputeTypeId(fullName: payloadType.FullName),
+                        payload: vr.Value, loc: vr.Location);
+
+                // Scalar / non-pointer payload — leave for codegen (needs reinterpret to the CPtr slot).
+                return statement;
             }
 
             case BlockStatement block:
