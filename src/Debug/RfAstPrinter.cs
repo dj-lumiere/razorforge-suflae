@@ -425,6 +425,10 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             string typeArgs = ri.TypeArguments is { Count: > 0 }
                 ? $"[{string.Join(", ", ri.TypeArguments.Select(RoutineInfo.GetTypeIdentity))}]"
                 : "";
+            // A constructor call renders as the type-constructor sugar `Type(...)`, not `Type.create(...)`
+            // — `create` is the internal routine name (the owner's generic args are already in FullName).
+            if (ri.Name == "create" && ri.OwnerType is { } ctorOwner)
+                return $"{ctorOwner.FullName}({argList})";
             // Member routines stay in receiver form (`obj.method(...)`) — the owner is implicit in the
             // receiver, so there is no need to spell the qualified free-function form. Free routines get
             // the fully-qualified name.
@@ -636,6 +640,9 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         // render free-function style with the receiver as the first argument (as VisitCallExpression).
         if (node.ResolvedRoutine is { } ri)
         {
+            // Constructor → type-constructor sugar `Type(...)` (owner FullName carries the generic args).
+            if (ri.Name == "create" && ri.OwnerType is { } ctorOwner)
+                return $"{ctorOwner.FullName}({args})";
             // Type constructor / free routine: Object and MethodName are the same identifier.
             if (node.Object is IdentifierExpression ctorId && ctorId.Name == node.MethodName)
                 return $"{ri.QualifiedName}{typeArgs}({args})";
