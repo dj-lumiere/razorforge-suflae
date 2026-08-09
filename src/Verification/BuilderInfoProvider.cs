@@ -340,11 +340,14 @@ public static class BuilderInfoProvider
             return;
         }
 
+        // NOTE: do NOT set Module = "BuilderService" here — that field is consumed by name resolution,
+        // and setting it makes a bare `target_os()` call fail to resolve (UnknownIdentifier) BEFORE the
+        // import-gating diagnostic (BuilderServiceImportRequired) can fire. The dump-ast printer qualifies
+        // these routines itself via BuilderInfoProvider.IsBuilderServiceStandalone (a printer-only concern).
         registry.RegisterRoutine(routine: new RoutineInfo(name: name)
         {
             Kind = RoutineKind.Function,
             OwnerType = null,
-            Module = "BuilderService",
             Parameters = [],
             ReturnType = returnType,
             IsFailable = false,

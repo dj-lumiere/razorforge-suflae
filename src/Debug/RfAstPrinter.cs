@@ -184,6 +184,14 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         _ => ""
     };
 
+    /// <summary>Call-site name for a resolved FREE routine. Standalone BuilderService routines
+    /// (target_os/page_size/…) are registered with no Module (so name resolution can import-gate them),
+    /// so qualify them here in the dump only — a printer-only concern, matching FormatRoutineSignature.</summary>
+    private static string FreeRoutineName(RoutineInfo ri) =>
+        Verification.BuilderInfoProvider.IsBuilderServiceStandalone(name: ri.Name)
+            ? $"BuilderService.{ri.QualifiedName}"
+            : ri.QualifiedName;
+
     /// <summary>
     /// Format routine signature as part of this compiler phase.
     /// </summary>
@@ -191,7 +199,9 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     {
         string ownerPrefix = ri.OwnerType != null
             ? $"{ri.OwnerType.FullName}."
-            : string.IsNullOrEmpty(ri.Module) ? "" : $"{ri.Module}.";
+            : Verification.BuilderInfoProvider.IsBuilderServiceStandalone(name: ri.Name)
+                ? "BuilderService."
+                : string.IsNullOrEmpty(ri.Module) ? "" : $"{ri.Module}.";
         // Some synthesized routines carry a trailing `!` in the NAME (e.g. `create!`), which double-
         // counts against the failability marker. `!` is a structured attribute, not part of the name.
         string bareName = ri.Name.TrimEnd('!');
@@ -446,7 +456,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             // the fully-qualified name.
             if (node.Callee is MemberExpression mem)
                 return $"{mem.Object.Accept(this)}.{ri.Name}{typeArgs}({argList})";
-            return $"{ri.QualifiedName}{typeArgs}({argList})";
+            return $"{FreeRoutineName(ri)}{typeArgs}({argList})";
         }
         return $"{node.Callee.Accept(this)}({argList})";
     }
@@ -657,7 +667,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
                 return $"{ctorOwner.FullName}({args})";
             // Type constructor / free routine: Object and MethodName are the same identifier.
             if (node.Object is IdentifierExpression ctorId && ctorId.Name == node.MethodName)
-                return $"{ri.QualifiedName}{typeArgs}({args})";
+                return $"{FreeRoutineName(ri)}{typeArgs}({args})";
             // Member routine: keep the receiver form (`obj.method[...](...)`).
             return $"{node.Object.Accept(this)}.{ri.Name}{typeArgs}({args})";
         }
