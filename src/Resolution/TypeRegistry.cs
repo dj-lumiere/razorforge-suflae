@@ -366,7 +366,12 @@ public sealed partial class TypeRegistry
     /// Returns the programs parsed by the stdlib loader, including routine bodies.
     /// </summary>
     public List<(Program Program, string FilePath, string Module)> StdlibPrograms =>
-        _restoredStdlibPrograms ?? _stdlibLoader?.AllLoadedPrograms ?? [];
+        _restoredStdlibPrograms == null
+            ? _stdlibLoader?.AllLoadedPrograms ?? []
+            // Warm-restore: the restored set is the modules loaded at CAPTURE time; a warm compile may
+            // `import` further modules (e.g. IO/Console) that the fresh loader parses on-demand — those
+            // must join the stdlib program list or their routine bodies never reach codegen.
+            : [.. _restoredStdlibPrograms, .. _stdlibLoader?.AllLoadedPrograms ?? []];
 
     /// <summary>Lowered stdlib program ASTs restored from a warm-compile snapshot. When set, these
     /// (already fully desugared/lowered) programs are served as <see cref="StdlibPrograms"/> instead of
@@ -376,6 +381,14 @@ public sealed partial class TypeRegistry
     /// <summary>Installs pre-lowered stdlib programs from a warm-compile snapshot.</summary>
     public void RestoreStdlibPrograms(List<(Program Program, string FilePath, string Module)> programs) =>
         _restoredStdlibPrograms = programs;
+
+    /// <summary>Stdlib programs that still need Phase 4/6/7 lowering: the loader's freshly-parsed
+    /// programs. In a cold compile that is EVERY stdlib program; in a warm compile the restored programs
+    /// are already lowered (excluded here), so this is just the modules the warm compile imported
+    /// on-demand (e.g. IO/Console). The desugaring/monomorph/lowering passes iterate THIS, not the full
+    /// <see cref="StdlibPrograms"/> — re-lowering the restored (already-lowered) programs would diverge.</summary>
+    public List<(Program Program, string FilePath, string Module)> FreshlyLoadedStdlibPrograms =>
+        _stdlibLoader?.AllLoadedPrograms ?? [];
 
     /// <summary>True when the stdlib was restored from a warm-compile snapshot already fully
     /// desugared/lowered/synthesized. The global desugaring + postprocessing passes then SKIP their

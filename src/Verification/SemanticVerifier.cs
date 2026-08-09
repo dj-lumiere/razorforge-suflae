@@ -478,8 +478,9 @@ public sealed partial class SemanticVerifier
         // M-0: Annotate stdlib expression types so desugaring passes can lower stdlib bodies
         // uniformly (OperatorLoweringPass, ExpressionLoweringPass, etc.).
         // Stdlib errors and warnings are suppressed from user-visible output -> use 'validate-stdlib' to surface them.
-        // Snapshot mode: stdlib bodies were analyzed during snapshot capture — skip the repeat.
-        if (!_snapshotMode)
+        // Snapshot mode: the RESTORED stdlib bodies were analyzed during snapshot capture; AnalyzeStdlibBodies
+        // now iterates only the FRESHLY-loaded programs (cold: all; warm: on-demand imports), so it is a
+        // no-op for the restored set and correctly analyzes modules the warm compile imported on-demand.
         {
             int errorsBeforeStdlib = _errors.Count;
             int warningsBeforeStdlib = _warnings.Count;
@@ -600,16 +601,16 @@ public sealed partial class SemanticVerifier
         // params are still protocol-typed and excluded as access types, not yet stripped to the
         // inner entity). Generic bodies are processed here too, then monomorphized with the calls.
         // Warm-restore: the restored stdlib programs already carry teardown/temp-teardown/marker/
-        // crashable lowering from the capture, so re-running those passes on them would double-apply
-        // and diverge. Reachability + GMP below still walk the (already-lowered) restored programs.
-        bool reprocessStdlib = !_registry.SkipStdlibReprocessing;
+        // crashable lowering from the capture, so re-running those passes on them would double-apply and
+        // diverge. Only the FRESHLY-loaded stdlib programs (cold: all; warm: on-demand imports) need it.
+        // Reachability + GMP below still walk the FULL (restored + fresh) StdlibPrograms.
+        var freshStdlib = _registry.FreshlyLoadedStdlibPrograms;
 
         var teardownPass = new ScopeTeardownLoweringPass(markerCtx);
         foreach ((Program program, _, _) in _registry.UserPrograms)
             teardownPass.Run(program: program);
-        if (reprocessStdlib)
-            foreach ((Program program, _, _) in _registry.StdlibPrograms)
-                teardownPass.Run(program: program);
+        foreach ((Program program, _, _) in freshStdlib)
+            teardownPass.Run(program: program);
         teardownPass.RunOnVariantBodies();
 
         // Tear down owned RVALUE temporaries (heap-owning receiver/discarded producers) that the
@@ -618,9 +619,8 @@ public sealed partial class SemanticVerifier
         // liveness. Stdlib + variant bodies are already Phase-7 lowered here (when→if done); USER
         // programs are lowered later (Phase 7 per-file), so they get this pass in RunPhase7Postprocessing.
         var tempTeardownPass = new TemporaryTeardownPass(markerCtx);
-        if (reprocessStdlib)
-            foreach ((Program program, _, _) in _registry.StdlibPrograms)
-                tempTeardownPass.Run(program: program);
+        foreach ((Program program, _, _) in freshStdlib)
+            tempTeardownPass.Run(program: program);
         tempTeardownPass.RunOnBodies(markerCtx.VariantBodies);
 
         var markerPass = new MarkerProtocolDesugarPass(markerCtx);
@@ -631,12 +631,11 @@ public sealed partial class SemanticVerifier
             MarkerProtocolDesugarPass.RewriteAstSignatures(program);
             markerPass.Run(program);
         }
-        if (reprocessStdlib)
-            foreach ((Program program, _, _) in _registry.StdlibPrograms)
-            {
-                MarkerProtocolDesugarPass.RewriteAstSignatures(program);
-                markerPass.Run(program);
-            }
+        foreach ((Program program, _, _) in freshStdlib)
+        {
+            MarkerProtocolDesugarPass.RewriteAstSignatures(program);
+            markerPass.Run(program);
+        }
         markerPass.RunOnVariantBodies();
         markerPass.RunOnSynthesizedBodies();
 
@@ -648,9 +647,8 @@ public sealed partial class SemanticVerifier
             var crashablePass = new CrashableExpansionPass(markerCtx);
             foreach ((Program program, _, _) in _registry.UserPrograms)
                 crashablePass.Run(program);
-            if (reprocessStdlib)
-                foreach ((Program program, _, _) in _registry.StdlibPrograms)
-                    crashablePass.Run(program);
+            foreach ((Program program, _, _) in freshStdlib)
+                crashablePass.Run(program);
         }
 
         if (SaTiming)
@@ -965,7 +963,11 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void AnalyzeStdlibBodies()
     {
-        if (_registry.StdlibPrograms.Count == 0)
+        // Analyze only FRESHLY-loaded stdlib programs: in a cold compile that is every stdlib program;
+        // in a warm-restore compile the restored bodies were already analyzed at capture, so this is just
+        // the modules imported on-demand (e.g. IO/Console) — which still need SA before lowering/codegen.
+        var freshStdlibPrograms = _registry.FreshlyLoadedStdlibPrograms;
+        if (freshStdlibPrograms.Count == 0)
         {
             return;
         }
@@ -988,7 +990,7 @@ public sealed partial class SemanticVerifier
             comparer: StringComparer.OrdinalIgnoreCase);
         string? previousModuleName = _currentModuleName;
         int stdlibIdx = 0;
-        foreach ((Program program, string filePath, string module) in _registry.StdlibPrograms)
+        foreach ((Program program, string filePath, string module) in freshStdlibPrograms)
         {
             stdlibIdx++;
             _currentFilePath = filePath;
