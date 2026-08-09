@@ -484,7 +484,7 @@ routine Dict[K, V].diagnose() -> Text
 # ============================================================================
 
 @readonly
-routine Dict[K, V].eq(other: Referring[Dict[K, V]]) -> Bool
+routine Dict[K, V].eq(you: Referring[Dict[K, V]]) -> Bool
 needs V obeys Equatable
   if me.count != other.count
     return false

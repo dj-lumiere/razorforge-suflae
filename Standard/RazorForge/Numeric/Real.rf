@@ -98,37 +98,37 @@ dangerous routine Real.destroy()
 # ============================================================================
 
 ### Adds `other` to this value (exact).
-### :param other: The value to add.
+### :param you: The value to add.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.add(other: Real) -> Real
+routine Real.add(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_add(result: result.handle, a: me.handle, b: other.handle)
   return result
 
 ### Subtracts `other` from this value (exact).
-### :param other: The value to subtract.
+### :param you: The value to subtract.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.sub(other: Real) -> Real
+routine Real.sub(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_sub(result: result.handle, a: me.handle, b: other.handle)
   return result
 
 ### Multiplies this value by `other` (exact).
-### :param other: The value to multiply by.
+### :param you: The value to multiply by.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.mul(other: Real) -> Real
+routine Real.mul(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_mul(result: result.handle, a: me.handle, b: other.handle)
   return result
 
 ### Divides this value by `other`, rounded to the working precision.
-### :param other: The divisor.
+### :param you: The divisor.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.truediv(other: Real) -> Real
+routine Real.truediv(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_div(result: result.handle, a: me.handle, b: other.handle)
   return result
@@ -330,7 +330,7 @@ routine Real.log10() -> Real
 
 ### Euclidean distance `sqrt(me^2 + other^2)` without intermediate overflow.
 @readonly
-routine Real.hypot(other: Real) -> Real
+routine Real.hypot(you: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_hypot(result: result.handle, a: me.handle, b: other.handle)
   return result
@@ -346,7 +346,7 @@ routine Real.cbrt() -> Real
 
 ### Divides this value by `other`, rounding to `precision` decimal digits.
 @readonly
-routine Real.divide(other: Real, precision: S32) -> Real
+routine Real.divide(you: Real, precision: S32) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_div_p(result: result.handle, a: me.handle, b: other.handle, prec: precision)
   return result
@@ -486,7 +486,7 @@ routine Real.log10(precision: S32) -> Real
 
 ### Euclidean distance to `precision` decimal digits.
 @readonly
-routine Real.hypot(other: Real, precision: S32) -> Real
+routine Real.hypot(you: Real, precision: S32) -> Real
   var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
   rf_real_hypot_p(result: result.handle, a: me.handle, b: other.handle, prec: precision)
   return result
@@ -520,19 +520,19 @@ routine Real.signum() -> Real
   return Real(value: 1_s64)
 
 ### Returns the smaller of this value and `other`.
-### :param other: The value to compare against.
+### :param you: The value to compare against.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.min(other: Real) -> Real
+routine Real.min(you: Real) -> Real
   if me.cmp(you: other) is ME_LARGE
     return other.store()
   return me.store()
 
 ### Returns the larger of this value and `other`.
-### :param other: The value to compare against.
+### :param you: The value to compare against.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.max(other: Real) -> Real
+routine Real.max(you: Real) -> Real
   if me.cmp(you: other) is ME_SMALL
     return other.store()
   return me.store()

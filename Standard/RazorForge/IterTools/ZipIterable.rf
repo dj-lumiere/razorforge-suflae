@@ -47,10 +47,10 @@ routine ZipEmittable[T, U, SE1, SE2].emit!() -> Tuple[T, U]
 
 ### Returns a lazy adapter that pairs each element of this iterable with an element from `other`.
 ### Stops when either source is exhausted.
-### :param other: The second source iterable to zip with.
+### :param you: The second source iterable to zip with.
 ### :returns: The resulting `ZipIterable[T, U, Me, S2]` value.
 @readonly
-routine Iterable[T].zip[U, S2](other: Referring[S2]) -> ZipIterable[T, U, Me, S2]
+routine Iterable[T].zip[U, S2](you: Referring[S2]) -> ZipIterable[T, U, Me, S2]
 needs S2 obeys Iterable[U]
   danger
     return ZipIterable[T, U, Me, S2](first: me.hijack(), second: other.hijack())

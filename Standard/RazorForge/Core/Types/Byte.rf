@@ -48,17 +48,17 @@ routine Byte.codepoint() -> U32
   return U32(U8(me))
 
 ### Returns whether both values are equal.
-### :param other: The other value to compare against.
+### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Byte.eq(other: Byte) -> Bool
+routine Byte.eq(you: Byte) -> Bool
   return U8(me) == U8(other)
 
 ### Compares this value with the other value.
-### :param other: The other value to compare against.
+### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Byte.cmp(other: Byte) -> ComparisonSign
+routine Byte.cmp(you: Byte) -> ComparisonSign
   return U8(me) <=> U8(other)
 
 # ============================================================================

@@ -208,7 +208,7 @@ routine BTreeSetNode[T].children_truncate(n: U64)
   return
 
 # Append `count` elements from `other.keys[start..start+count)` to me.keys.
-routine BTreeSetNode[T].keys_add_range_from(other: Referring[BTreeSetNode[T]], start: U64, count: U64)
+routine BTreeSetNode[T].keys_add_range_from(you: Referring[BTreeSetNode[T]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = T.data_size()
@@ -219,7 +219,7 @@ routine BTreeSetNode[T].keys_add_range_from(other: Referring[BTreeSetNode[T]], s
   return
 
 # Append `count` children from `other.children[start..start+count)` to me.children.
-routine BTreeSetNode[T].children_add_range_from(other: Referring[BTreeSetNode[T]], start: U64, count: U64)
+routine BTreeSetNode[T].children_add_range_from(you: Referring[BTreeSetNode[T]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = Address.data_size()
@@ -487,11 +487,11 @@ routine SortedSet[T].split_child(parent_node: Controlling[BTreeSetNode[T]], chil
     var new_node = new_node_ptr.as_entity()
 
     # Copy the upper keys (indices mid+1 .. end) into the new node.
-    new_node.keys_add_range_from(other: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
+    new_node.keys_add_range_from(you: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
 
     # For internal nodes, copy the upper children (indices mid+1 .. end).
     if not child.is_leaf
-      new_node.children_add_range_from(other: child, start: mid +% 1u64, count: child.children_count() -% mid -% 1u64)
+      new_node.children_add_range_from(you: child, start: mid +% 1u64, count: child.children_count() -% mid -% 1u64)
 
     # Save the median key before truncating — it will be promoted to the parent.
     var mid_key = child.keys_get(mid)
@@ -670,11 +670,11 @@ routine SortedSet[T].merge_children_at(node: Controlling[BTreeSetNode[T]], i: U6
     left.keys_add_last(node.keys_get(i))
 
     # Step 2: append all of right's keys into left.
-    left.keys_add_range_from(other: right, start: 0u64, count: right.keys_count())
+    left.keys_add_range_from(you: right, start: 0u64, count: right.keys_count())
 
     # Step 3: for internal nodes, adopt right's children.
     if not right.is_leaf
-      left.children_add_range_from(other: right, start: 0u64, count: right.children_count())
+      left.children_add_range_from(you: right, start: 0u64, count: right.children_count())
 
     # Step 4: update left's subtree_size.
     left.subtree_size = left.subtree_size +% right.subtree_size +% 1u64
@@ -1024,10 +1024,10 @@ routine SortedSet[T].diagnose() -> Text
 
 ### Returns true if both sets contain exactly the same values.
 ### Because duplicates are disallowed and elements are ordered, this is element-wise equality.
-### :param other: The other set to compare against.
+### :param you: The other set to compare against.
 ### :returns: `true` if both sets have equal count and all corresponding elements are equal.
 @readonly
-routine SortedSet[T].eq(other: Referring[SortedSet[T]]) -> Bool
+routine SortedSet[T].eq(you: Referring[SortedSet[T]]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

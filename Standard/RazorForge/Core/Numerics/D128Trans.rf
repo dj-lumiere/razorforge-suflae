@@ -809,9 +809,9 @@ routine D128.round_ties_away() -> D128
 
 ### IEEE 754 sameQuantum: `true` when `me` and `other` have the same exponent (quantum), or are
 ### both infinities, or both NaNs. Never crashes.
-### :param other: The value whose quantum to compare against.
+### :param you: The value whose quantum to compare against.
 ### :returns: Whether the two share a quantum.
-routine D128.same_quantum(other: D128) -> Bool
+routine D128.same_quantum(you: D128) -> Bool
   var pa = me.decode()
   var pb = other.decode()
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
@@ -823,9 +823,9 @@ routine D128.same_quantum(other: D128) -> Bool
 ### IEEE 754 quantize: returns `me`'s value re-expressed with the exponent of `other` (rounding
 ### half-even when digits are dropped). Returns NaN when the result needs more than 34 significand
 ### digits, or for incompatible specials. The canonical money-formatting / fixed-scale operation.
-### :param other: The value supplying the target exponent.
+### :param you: The value supplying the target exponent.
 ### :returns: `me` quantized to `other`'s exponent, or NaN if not representable.
-routine D128.quantize(other: D128) -> D128
+routine D128.quantize(you: D128) -> D128
   var pa = me.decode()
   var pb = other.decode()
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
@@ -864,9 +864,9 @@ routine D128.quantize(other: D128) -> D128
 ### IEEE 754 remainder: `me - other * n`, where `n` is the integer nearest `me / other` (ties to
 ### even). Result satisfies `|r| <= |other| / 2`. Returns NaN if `me` is infinite or `other` is
 ### zero; returns `me` if `other` is infinite. Never crashes.
-### :param other: The divisor.
+### :param you: The divisor.
 ### :returns: The IEEE remainder of `me / other`.
-routine D128.remainder(other: D128) -> D128
+routine D128.remainder(you: D128) -> D128
   if me.is_nan() or other.is_nan()
     return D128.quiet_nan()
   if me.is_infinite() or other.is_zero()

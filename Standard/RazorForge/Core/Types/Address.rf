@@ -110,10 +110,10 @@ routine Address.add(offset: ByteSize) -> Address
   return LLVM::add(me, LLVM::reinterpret_bits[ByteSize, Address](value: offset))
 
 ### Returns the byte distance from this address to another address.
-### :param other: The address to subtract.
+### :param you: The address to subtract.
 ### :returns: The resulting `ByteSize` value.
 @readonly
-routine Address.sub(other: Address) -> ByteSize
+routine Address.sub(you: Address) -> ByteSize
   return ByteSize(U64(LLVM::sub(me, other)))
 
 ### Returns the result of stepping this address back by a byte size.

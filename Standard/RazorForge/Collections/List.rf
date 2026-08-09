@@ -130,17 +130,17 @@ routine List[T].add_last(value: T)
 ### per-element growth that a naive `for x in other; me.add_last(value: x)` loop
 ### incurs. Equivalent to `extend` in Python or `addAll` in Java/Kotlin.
 ###
-### :param other: The sequence to append. Any `Iterable[T]` is accepted; pass a
+### :param you: The sequence to append. Any `Iterable[T]` is accepted; pass a
 ###               `List[T]`, `Bytes` (for `List[Byte]`), a generator, an IterTools
 ###               chain, etc.
 ### :note: Common fast-output idiom: accumulate digit bytes into a `List[Byte]`
-###        via `buf.add_range(other: x.to_digit_bytes())`, then flush once.
+###        via `buf.add_range(you: x.to_digit_bytes())`, then flush once.
 ### :see: {List[T].add_last}, {T.to_digit_bytes}
 ###
 ### NOTE: Stub signature — implementation pending. Tracking:
 ###       memory/bytes_io_api_plan.md (v0.1.0 first additions).
 @migratable
-routine List[T].add_range(other: Referring[Iterable[T]])
+routine List[T].add_range(you: Referring[Iterable[T]])
   # TODO(fast-io): hoist capacity-reserve when `other` exposes a known count.
   # For now, fall back to per-element append so the routine type-checks while the
   # optimized path is being designed.
@@ -354,10 +354,10 @@ routine ListEmittable[T].emit!() -> T
     return _result
 
 ### Returns true if both lists contain the same elements in the same order.
-### :param other: The other list to compare against.
+### :param you: The other list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine List[T].eq(other: Referring[List[T]]) -> Bool
+routine List[T].eq(you: Referring[List[T]]) -> Bool
 needs T obeys Equatable
   if me.count() != other.count()
     return false

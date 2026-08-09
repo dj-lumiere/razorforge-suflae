@@ -732,9 +732,9 @@ routine D64.round_ties_away() -> D64
 
 ### IEEE 754 sameQuantum: `true` when `me` and `other` share an exponent, or are both infinite,
 ### or both NaN. Never crashes.
-### :param other: The value whose quantum to compare against.
+### :param you: The value whose quantum to compare against.
 ### :returns: Whether the two share a quantum.
-routine D64.same_quantum(other: D64) -> Bool
+routine D64.same_quantum(you: D64) -> Bool
   var pa = me.decode()
   var pb = other.decode()
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
@@ -745,9 +745,9 @@ routine D64.same_quantum(other: D64) -> Bool
 
 ### IEEE 754 quantize: `me`'s value re-expressed with `other`'s exponent (half-even when dropping
 ### digits). NaN if the result needs more than 16 significand digits, or for incompatible specials.
-### :param other: The value supplying the target exponent.
+### :param you: The value supplying the target exponent.
 ### :returns: `me` quantized to `other`'s exponent, or NaN if not representable.
-routine D64.quantize(other: D64) -> D64
+routine D64.quantize(you: D64) -> D64
   var pa = me.decode()
   var pb = other.decode()
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
@@ -783,9 +783,9 @@ routine D64.quantize(other: D64) -> D64
 
 ### IEEE 754 remainder: `me - other * n` with `n` the nearest integer to `me / other` (ties even).
 ### NaN if `me` infinite or `other` zero; `me` if `other` infinite. Never crashes.
-### :param other: The divisor.
+### :param you: The divisor.
 ### :returns: The IEEE remainder of `me / other`.
-routine D64.remainder(other: D64) -> D64
+routine D64.remainder(you: D64) -> D64
   if me.is_nan() or other.is_nan()
     return D64.quiet_nan()
   if me.is_infinite() or other.is_zero()

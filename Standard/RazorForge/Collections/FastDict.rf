@@ -539,10 +539,10 @@ routine FastDict[K, V].diagnose() -> Text
 ### Returns true if both dictionaries contain exactly the same keys with the same associated values.
 ### Comparison is order-independent: two dictionaries with the same key/value pairs are equal
 ### regardless of the insertion order they were built in.
-### :param other: The other dictionary to compare against.
+### :param you: The other dictionary to compare against.
 ### :returns: `true` if both have the same count and every key-value pair is equal.
 @readonly
-routine FastDict[K, V].eq(other: Referring[FastDict[K, V]]) -> Bool
+routine FastDict[K, V].eq(you: Referring[FastDict[K, V]]) -> Bool
 needs V obeys Equatable
   if me.count != other.count
     return false

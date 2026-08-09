@@ -886,9 +886,9 @@ routine Decimal.round_ties_away() -> Decimal
   return me.round()
 
 ### IEEE 754 sameQuantum: `true` when `me` and `other` share the same exponent (quantum).
-### :param other: The value whose quantum to compare against.
+### :param you: The value whose quantum to compare against.
 ### :returns: Whether the two share a quantum.
-routine Decimal.same_quantum(other: Decimal) -> Bool
+routine Decimal.same_quantum(you: Decimal) -> Bool
   var pa = me.decode()
   var pb = other.decode()
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
@@ -901,10 +901,10 @@ routine Decimal.same_quantum(other: Decimal) -> Bool
 ### (rounding half-even when digits are dropped). The canonical money-formatting /
 ### fixed-scale operation. Throws when the result would need more than 70 significand
 ### digits (which IEEE represents as NaN, but `Decimal` is finite-only).
-### :param other: The value supplying the target exponent.
+### :param you: The value supplying the target exponent.
 ### :returns: `me` quantized to `other`'s exponent.
 ### :throws: {NumericOverflowError} when the result needs more than 70 digits.
-routine Decimal.quantize!(other: Decimal) -> Decimal
+routine Decimal.quantize!(you: Decimal) -> Decimal
   var pa = me.decode()
   var target = other.decode().exp
   if LLVM::int_eq(a: pa.exp, b: target)
@@ -933,8 +933,8 @@ routine Decimal.quantize!(other: Decimal) -> Decimal
 ### IEEE 754 remainder: `me - other * n`, where `n` is the integer nearest `me / other`
 ### (ties to even). Result satisfies `|r| <= |other| / 2`. Crashes (DivisionByZeroError)
 ### when `other` is zero, like the rest of `Decimal` division.
-### :param other: The divisor.
+### :param you: The divisor.
 ### :returns: The IEEE remainder of `me / other`.
-routine Decimal.remainder(other: Decimal) -> Decimal
+routine Decimal.remainder(you: Decimal) -> Decimal
   var n = (me / other).rint()
   return me - other * n

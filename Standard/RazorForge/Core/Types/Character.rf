@@ -148,17 +148,17 @@ routine Character.to_lowercase() -> Character
 # ============================================================================
 
 ### Returns whether both values are equal.
-### :param other: The other value to compare against.
+### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Character.eq(other: Character) -> Bool
+routine Character.eq(you: Character) -> Bool
   return U32(me) == U32(other)
 
 ### Compares this value with the other value.
-### :param other: The other value to compare against.
+### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Character.cmp(other: Character) -> ComparisonSign
+routine Character.cmp(you: Character) -> ComparisonSign
   return U32(me) <=> U32(other)
 
 # ============================================================================

@@ -226,10 +226,10 @@ routine BTreeListNode[T].children_truncate(n: U64)
   return
 
 ### Bulk-copies `count` keys from `other` starting at `start` into this node's keys buffer.
-### :param other: The source node to copy from.
+### :param you: The source node to copy from.
 ### :param start: Zero-based start index in `other`.
 ### :param count: Number of keys to copy.
-routine BTreeListNode[T].keys_add_range_from(other: Referring[BTreeListNode[T]], start: U64, count: U64)
+routine BTreeListNode[T].keys_add_range_from(you: Referring[BTreeListNode[T]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = T.data_size()
@@ -240,10 +240,10 @@ routine BTreeListNode[T].keys_add_range_from(other: Referring[BTreeListNode[T]],
   return
 
 ### Bulk-copies `count` child pointers from `other` starting at `start` into this node's children buffer.
-### :param other: The source node to copy from.
+### :param you: The source node to copy from.
 ### :param start: Zero-based start index in `other`.
 ### :param count: Number of child pointers to copy.
-routine BTreeListNode[T].children_add_range_from(other: Referring[BTreeListNode[T]], start: U64, count: U64)
+routine BTreeListNode[T].children_add_range_from(you: Referring[BTreeListNode[T]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = Address.data_size()
@@ -465,10 +465,10 @@ routine SortedList[T].split_child(parent_node: Controlling[BTreeListNode[T]], ch
 
     var new_node_ptr = BTreeListNode[T](is_leaf: child.is_leaf).hijack()
     var new_node = new_node_ptr.as_entity()
-    new_node.keys_add_range_from(other: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
+    new_node.keys_add_range_from(you: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
 
     if not child.is_leaf
-      new_node.children_add_range_from(other: child, start: mid +% 1u64, count: child.children_count() -% mid -% 1u64)
+      new_node.children_add_range_from(you: child, start: mid +% 1u64, count: child.children_count() -% mid -% 1u64)
 
     var mid_key = child.keys_get(mid)
     child.keys_truncate(mid)
@@ -599,9 +599,9 @@ routine SortedList[T].merge_children_at(node: Controlling[BTreeListNode[T]], i: 
     var right = node.children_get(i +% 1u64).as_entity()
 
     left.keys_add_last(node.keys_get(i))
-    left.keys_add_range_from(other: right, start: 0u64, count: right.keys_count())
+    left.keys_add_range_from(you: right, start: 0u64, count: right.keys_count())
     if not right.is_leaf
-      left.children_add_range_from(other: right, start: 0u64, count: right.children_count())
+      left.children_add_range_from(you: right, start: 0u64, count: right.children_count())
     left.subtree_size = left.subtree_size +% right.subtree_size +% 1u64
 
     node.keys_remove_at(i)
@@ -898,10 +898,10 @@ routine SortedList[T].diagnose() -> Text
   return steal result
 
 ### Returns true if both lists contain exactly the same elements in the same order.
-### :param other: The list to compare against.
+### :param you: The list to compare against.
 ### :returns: `true` if element-wise equal.
 @readonly
-routine SortedList[T].eq(other: Referring[SortedList[T]]) -> Bool
+routine SortedList[T].eq(you: Referring[SortedList[T]]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64
