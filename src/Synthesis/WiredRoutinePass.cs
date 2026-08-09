@@ -2620,8 +2620,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     ChoiceCaseInfo? found =
                         buildModeChoice.Cases.FirstOrDefault(c => c.Name == caseName);
                     if (found == null) return false;
-                    ctx.VariantBodies[key: routine.RegistryKey] =
-                        MakeLiteralReturn(value: found.ComputedValue, returnType: buildModeChoice);
+                    // Choice discriminants are S32 — emit an S32 literal (ComputedValue is int), not the
+                    // S64 the `long` overload of MakeLiteralReturn would produce.
+                    ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
+                        Value: new LiteralExpression(Value: found.ComputedValue,
+                            LiteralType: TokenType.S32Literal, Location: _synthLoc)
+                        { ResolvedType = buildModeChoice },
+                        Location: _synthLoc);
                     return true;
                 }
 
