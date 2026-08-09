@@ -103,12 +103,15 @@ public sealed class WarmCompileBenchmark
     /// codegen the IDENTICAL desugared AST as a COLD compile of the same source. Codegen is a pure
     /// translator, so identical input AST ⇒ identical .ll.
     ///
-    /// WIP — does not pass yet: restoring StdlibPrograms makes RoutineReachabilityPass / GMP re-walk the
-    /// stdlib (slow), and the synthesized-body set restored from the __snapshot__ capture differs from a
-    /// cold trivial compile (missing @overridable derived routines). Next: gate reachability/GMP to reuse
-    /// the captured live-set + monomorphizations, and capture the synthesized bodies consistently.
+    /// WIP — does not pass yet. Profiling the warm-restore path pinpointed the dominant cost:
+    /// <c>AnalyzeVariantBodies = 3661ms</c> — ErrorHandlingVariantPass REGENERATES all try_/check_/lookup_
+    /// variant bodies (incl. stdlib) each compile (RunPhase4GlobalDesugaring line 511 overwrites the
+    /// seeded _variantBodies with ctx.VariantBodies), then AnalyzeVariantBodies re-analyzes them all.
+    /// Next gate: seed ctx.VariantBodies with the captured stdlib variants, make ErrorHandlingVariantPass
+    /// skip-if-present, and make AnalyzeVariantBodies skip already-analyzed (restored) variants — then the
+    /// remaining GMP (459ms) / Phase-5b (206ms) stdlib re-walks. Correctness oracle: warm AST == cold AST.
     /// </summary>
-    [Fact(Skip = "WIP Milestone 1: warm codegen-equivalence needs reachability/GMP gating + synthesis consistency")]
+    [Fact(Skip = "WIP Milestone 1: warm path needs variant-body reuse (AnalyzeVariantBodies 3.6s) + reachability/GMP gating")]
     public void WarmCodegenAst_MatchesCold()
     {
         // COLD reference: a normal from-scratch compile of the trivial file.
