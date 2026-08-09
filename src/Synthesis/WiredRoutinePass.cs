@@ -1891,7 +1891,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
 
             case "all_off":
-                ctx.VariantBodies[key: routine.RegistryKey] = MakeLiteralReturn(value: 0L,
+                // 0UL so the literal is U64 (flags are U64-backed), not an S64 literal in a U64 slot.
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeLiteralReturn(value: 0UL,
                     returnType: routine.ReturnType ?? flags);
                 break;
 
@@ -2406,7 +2407,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
                 // Build if-elseif chain from last field to first, wrapping each around the
                 // previous so the outermost IfStatement checks field[0].
-                Statement body = MakeLiteralReturn(value: 0L, returnType: u64Type);
+                // `0UL` (not `0L`) so the fallback literal is U64, matching the U64 return type — the
+                // long overload would emit an S64 literal in a U64 routine.
+                Statement body = MakeLiteralReturn(value: 0UL, returnType: u64Type);
                 var memberNameRef =
                     new IdentifierExpression(Name: "member_name", Location: _synthLoc)
                     {
