@@ -332,25 +332,37 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         TokenType.TextLiteral => $"\"{EscapeText(value?.ToString() ?? "")}\"",
         TokenType.True => "true",
         TokenType.False => "false",
-        TokenType.S8Literal => $"S8({StripSuffix(value, "s8")})",
-        TokenType.S16Literal => $"S16({StripSuffix(value, "s16")})",
-        TokenType.S32Literal => $"S32({StripSuffix(value, "s32")})",
-        TokenType.S64Literal => $"S64({StripSuffix(value, "s64")})",
-        TokenType.S128Literal => $"S128({StripSuffix(value, "s128")})",
-        TokenType.S256Literal => $"S256({StripSuffix(value, "s256")})",
-        TokenType.U8Literal => $"U8({StripSuffix(value, "u8")})",
-        TokenType.U16Literal => $"U16({StripSuffix(value, "u16")})",
-        TokenType.U32Literal => $"U32({StripSuffix(value, "u32")})",
-        TokenType.U64Literal => $"U64({StripSuffix(value, "u64")})",
-        TokenType.U128Literal => $"U128({StripSuffix(value, "u128")})",
-        TokenType.U256Literal => $"U256({StripSuffix(value, "u256")})",
-        TokenType.F16Literal => $"F16({StripSuffix(value, "f16")})",
-        TokenType.F32Literal => $"F32({StripSuffix(value, "f32")})",
-        TokenType.F64Literal => $"F64({StripSuffix(value, "f64")})",
-        TokenType.F128Literal => $"F128({StripSuffix(value, "f128")})",
-        TokenType.D32Literal => $"D32({StripSuffix(value, "d32")})",
-        TokenType.D64Literal => $"D64({StripSuffix(value, "d64")})",
-        TokenType.D128Literal => $"D128({StripSuffix(value, "d128")})",
+        // Integers: normalized to base-10 (any 0x/0b/0o source is decimalized), wrapped as TypeName(n).
+        TokenType.S8Literal => $"S8({Int10(value, "s8")})",
+        TokenType.S16Literal => $"S16({Int10(value, "s16")})",
+        TokenType.S32Literal => $"S32({Int10(value, "s32")})",
+        TokenType.S64Literal => $"S64({Int10(value, "s64")})",
+        TokenType.S128Literal => $"S128({Int10(value, "s128")})",
+        TokenType.S256Literal => $"S256({Int10(value, "s256")})",
+        TokenType.U8Literal => $"U8({Int10(value, "u8")})",
+        TokenType.U16Literal => $"U16({Int10(value, "u16")})",
+        TokenType.U32Literal => $"U32({Int10(value, "u32")})",
+        TokenType.U64Literal => $"U64({Int10(value, "u64")})",
+        TokenType.U128Literal => $"U128({Int10(value, "u128")})",
+        TokenType.U256Literal => $"U256({Int10(value, "u256")})",
+        TokenType.AddressLiteral => $"Address({Int10(value, "addr")})",
+        TokenType.IntegerLiteral => $"Integer({Int10(value, "")})",
+        // Floating point: strip the suffix + separators; the mantissa is already decimal.
+        TokenType.F16Literal => $"F16({Real(value, "f16")})",
+        TokenType.F32Literal => $"F32({Real(value, "f32")})",
+        TokenType.F64Literal => $"F64({Real(value, "f64")})",
+        TokenType.F128Literal => $"F128({Real(value, "f128")})",
+        TokenType.D32Literal => $"D32({Real(value, "d32")})",
+        TokenType.D64Literal => $"D64({Real(value, "d64")})",
+        TokenType.D128Literal => $"D128({Real(value, "d128")})",
+        TokenType.DecimalLiteral => $"Decimal({Real(value, "")})",
+        TokenType.J32Literal => $"J32({Real(value, "j32")})",
+        TokenType.J64Literal => $"J64({Real(value, "j64")})",
+        TokenType.J128Literal => $"J128({Real(value, "j128")})",
+        TokenType.JnLiteral => $"Jn({Real(value, "j")})",
+        // Context-inferred bare literals with no resolved type available at this call site.
+        TokenType.UndecidedInteger => $"Integer({Int10(value, "")})",
+        TokenType.UndecidedDecimal => $"Decimal({Real(value, "")})",
         _ => value?.ToString() ?? "null"
     };
 
@@ -362,9 +374,56 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     private static string StripSuffix(object value, string suffix)
     {
         string s = value?.ToString() ?? "0";
-        if (s.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        if (suffix.Length > 0 && s.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             s = s[..^suffix.Length].TrimEnd('_');
         return s;
+    }
+
+    /// <summary>Renders a floating/decimal literal: suffix + digit separators stripped, mantissa kept
+    /// as-is (already base-10 and round-trippable).</summary>
+    private static string Real(object value, string suffix) =>
+        StripSuffix(value, suffix).Replace("_", "");
+
+    /// <summary>Renders an integer literal in base-10 (round-trippable): strips the type suffix and
+    /// digit separators, then decimalizes any 0x/0b/0o-prefixed source. Falls back to the stripped text
+    /// if it does not parse as an integer.</summary>
+    private static string Int10(object value, string suffix)
+    {
+        string s = StripSuffix(value, suffix).Replace("_", "");
+        bool neg = s.StartsWith('-');
+        if (neg) s = s[1..];
+        System.Numerics.BigInteger n;
+        bool ok;
+        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            // Prefix "0" so the high nibble is never read as a sign bit.
+            ok = System.Numerics.BigInteger.TryParse("0" + s[2..],
+                System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out n);
+        else if (s.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
+            ok = TryParseRadix(s[2..], 2, out n);
+        else if (s.StartsWith("0o", StringComparison.OrdinalIgnoreCase))
+            ok = TryParseRadix(s[2..], 8, out n);
+        else
+            ok = System.Numerics.BigInteger.TryParse(s, out n);
+        if (!ok)
+            return StripSuffix(value, suffix).Replace("_", "");
+        return (neg ? "-" : "") + n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static bool TryParseRadix(string digits, int radix, out System.Numerics.BigInteger n)
+    {
+        n = System.Numerics.BigInteger.Zero;
+        if (digits.Length == 0) return false;
+        foreach (char c in digits)
+        {
+            int d = c is >= '0' and <= '9' ? c - '0'
+                : c is >= 'a' and <= 'f' ? c - 'a' + 10
+                : c is >= 'A' and <= 'F' ? c - 'A' + 10
+                : -1;
+            if (d < 0 || d >= radix) return false;
+            n = n * radix + d;
+        }
+        return true;
     }
 
     /// <summary>
@@ -379,8 +438,20 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitLiteralExpression(LiteralExpression node) =>
-        FormatLiteralValue(node.Value, node.LiteralType);
+    public string VisitLiteralExpression(LiteralExpression node)
+    {
+        // A context-inferred bare literal (0xD800, 42, 3.14) keeps its Undecided token type. Wrap it in
+        // its RESOLVED type when SA determined one (e.g. a U32 preset), else fall back to Integer/Decimal.
+        if (node.LiteralType is TokenType.UndecidedInteger or TokenType.UndecidedDecimal)
+        {
+            bool isInt = node.LiteralType == TokenType.UndecidedInteger;
+            string typeName = node.ResolvedType?.Name
+                ?? (isInt ? "Integer" : "Decimal");
+            string v = isInt ? Int10(node.Value, "") : Real(node.Value, "");
+            return $"{typeName}({v})";
+        }
+        return FormatLiteralValue(node.Value, node.LiteralType);
+    }
 
 
     /// <inheritdoc/>
