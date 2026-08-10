@@ -1032,7 +1032,19 @@ public sealed partial class TypeRegistry
             ? $"{genericDef.FullName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]"
             : null;
 
-        if (_resolutions.TryGetValue(key: fullKey, value: out TypeInfo? existing))
+        // The module-qualified key is DISTINCT across modules/realms (RazorForge `Core.List` vs the
+        // Suflae-realm overlay `Suflae.List`), so check it FIRST — the bare fullKey/shortKey below are
+        // module-blind aliases that a same-named other-module type can occupy first-wins.
+        if (moduleFullKey != null &&
+            _resolutions.TryGetValue(key: moduleFullKey, value: out TypeInfo? existing))
+        {
+            if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
+            return existing;
+        }
+        // Bare fullKey: accept only when the cached resolution's generic DEFINITION is the one requested
+        // (no-op for single-realm types; rejects a Suflae `List[Core.S32]` for a Core.List request).
+        if (_resolutions.TryGetValue(key: fullKey, value: out existing)
+            && ResolutionGenericDefMatches(resolved: existing, genericDef: genericDef))
         {
             if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
@@ -1041,15 +1053,10 @@ public sealed partial class TypeRegistry
         // look up by short arg name. It COLLIDES when two modules declare a same-named type
         // (Modifying[A/Counter] vs Modifying[B/Counter]): a first-wins short alias would return the
         // wrong module's inner type, contaminating wrapper forwarding / method dispatch. Only accept a
-        // short-alias hit whose type arguments actually match the request by FullName.
+        // short-alias hit whose type arguments AND generic definition match the request.
         if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing)
-            && ResolutionTypeArgsMatch(resolved: existing, typeArguments: typeArguments))
-        {
-            if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
-            return existing;
-        }
-        if (moduleFullKey != null &&
-            _resolutions.TryGetValue(key: moduleFullKey, value: out existing))
+            && ResolutionTypeArgsMatch(resolved: existing, typeArguments: typeArguments)
+            && ResolutionGenericDefMatches(resolved: existing, genericDef: genericDef))
         {
             if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
@@ -1071,13 +1078,19 @@ public sealed partial class TypeRegistry
         // templates (one per member of the concrete source type). Appends real member variables so the
         // SoA layout falls out of ordinary record layout.
         ExpandSoAColumns(genericDef: bestDef, resolved: resolved, typeArguments: typeArguments);
-        _resolutions[key: fullKey] = resolved;
-        // Short-name alias for backward-compatible lookups via LookupType("Hijacked[Byte]")
-        if (fullKey != shortKey) _resolutions[key: shortKey] = resolved;
-        // Module-qualified full key for ResolveTypeExpressionToLLVM (GMP rewrites type args
-        // to fully-qualified names like "Collections.BTreeSetNode[Core.S64]")
+        // Store the DISTINCT module-qualified key authoritatively. The bare fullKey/shortKey are
+        // module-blind aliases (backward-compatible `LookupType("List[Core.S32]")` / "List[S32]"):
+        // write them only when free or already ours, so a same-named OTHER-module type keeps its own
+        // bare alias instead of being clobbered (the cross-module collision this all guards against).
         if (moduleFullKey != null && moduleFullKey != fullKey)
             _resolutions[key: moduleFullKey] = resolved;
+        if (!_resolutions.TryGetValue(key: fullKey, value: out TypeInfo? bareOccupant)
+            || ResolutionGenericDefMatches(resolved: bareOccupant, genericDef: genericDef))
+            _resolutions[key: fullKey] = resolved;
+        if (fullKey != shortKey
+            && (!_resolutions.TryGetValue(key: shortKey, value: out TypeInfo? shortOccupant)
+                || ResolutionGenericDefMatches(resolved: shortOccupant, genericDef: genericDef)))
+            _resolutions[key: shortKey] = resolved;
 
         if (_stdlibAnalysisActive)
         {
@@ -1203,6 +1216,29 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// True when a cached resolution's generic DEFINITION is the one being requested (matched by
+    /// module-qualified FullName). Guards the bare, module-blind resolution-cache aliases against
+    /// returning a same-NAMED type from a DIFFERENT module/realm — a request for `Core.List[S32]` must
+    /// not be satisfied by a cached Suflae-realm `Suflae.List[S32]` sharing the bare key `List[Core.S32]`.
+    /// For single-realm types (one type of a given name) the definition matches itself, so this is a
+    /// no-op; it only bites on genuine cross-module name collisions. Falls back to bare-name equality
+    /// when the cached instance records no definition (older/aliased instances).
+    /// </summary>
+    private static bool ResolutionGenericDefMatches(TypeInfo resolved, TypeInfo genericDef)
+    {
+        TypeInfo? resolvedDef = resolved switch
+        {
+            EntityTypeInfo e => e.GenericDefinition,
+            RecordTypeInfo r => r.GenericDefinition,
+            ProtocolTypeInfo p => p.GenericDefinition,
+            _ => null
+        };
+        return resolvedDef == null
+            ? resolved.BareName == genericDef.BareName
+            : resolvedDef.FullName == genericDef.FullName;
+    }
+
+    /// <summary>
     /// Looks up an existing concrete resolution without creating a new one.
     /// Returns null if the type has not been resolved yet.
     /// Use this in passes that must not create new concrete type instances as a side effect.
@@ -1211,11 +1247,19 @@ public sealed partial class TypeRegistry
     {
         string fullKey =
             $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]";
-        if (_resolutions.TryGetValue(key: fullKey, value: out TypeInfo? existing))
+        // Module-qualified key first (distinct across modules/realms); mirrors GetOrCreateResolution.
+        string? moduleFullKey = genericDef.FullName != genericDef.Name
+            ? $"{genericDef.FullName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]"
+            : null;
+        if (moduleFullKey != null && _resolutions.TryGetValue(key: moduleFullKey, value: out TypeInfo? existing))
+            return existing;
+        if (_resolutions.TryGetValue(key: fullKey, value: out existing)
+            && ResolutionGenericDefMatches(resolved: existing, genericDef: genericDef))
             return existing;
         string shortKey =
             $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: GetShortName))}]";
-        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing))
+        if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing)
+            && ResolutionGenericDefMatches(resolved: existing, genericDef: genericDef))
             return existing;
         // Wrapper types (Hijacked, Retained, etc.) are stored in _wrapperResolutions, not _resolutions.
         if (_wrapperResolutions.TryGetValue(key: fullKey, value: out WrapperTypeInfo? wrapper))

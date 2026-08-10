@@ -1487,7 +1487,12 @@ internal static class GenericAstRewriter
             newObj.ResolvedType = paramType;
         }
         var rewritten = me with { Object = newObj };
-        rewritten.ResolvedType = me.ResolvedType;
+        // Substitute the member-access type through the type map: a field read `me.inner` typed
+        // `Core.List[T]` on the generic def must become `Core.List[Core.S32]` in the instantiation.
+        // Copying the raw generic-def type left `T` unsubstituted, so a downstream re-resolution of the
+        // unresolved-`T` receiver mis-bound the method to the shadowing same-named type (the SF-overlay
+        // wrapper) → self-recursion.
+        rewritten.ResolvedType = ctx.ResolveType(original: me.ResolvedType) ?? me.ResolvedType;
         return rewritten;
     }
 
