@@ -502,9 +502,12 @@ public sealed class BuildDriver
             //     TODO: narrow to Integer.)
             //   - `IO/Console`, `IO/File` — always-available I/O in SF, so `show(...)` / file access need
             //     no ceremony import.
+            //   - `Suflae` — the Suflae-realm overlay Core (e.g. the roam-boundary `List` wrapper over
+            //     `RF::Core.List`). In SF these ARE Core, so no explicit `import Suflae` is needed; a bare
+            //     `List` shadows the RazorForge `Core.List` via own-module/import resolution priority.
             if (isSuflae && !isStdlibFile)
             {
-                string[] preludeModules = ["Numerics", "IO/Console", "IO/File"];
+                string[] preludeModules = ["Numerics", "IO/Console", "IO/File", "Suflae"];
                 int insertAt = 1; // Module declaration is guaranteed at index 0 by now.
                 foreach (string preludeModule in preludeModules)
                 {
