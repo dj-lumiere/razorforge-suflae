@@ -569,8 +569,12 @@ public sealed partial class StdlibLoader
                 string bracketContent = typeName[(bracketIndex + 1)..]
                    .TrimEnd(trimChar: ']');
                 string baseName = typeName[..bracketIndex];
-                TypeInfo? baseDef = registry.LookupType(name: baseName) ??
-                                    registry.LookupType(name: $"{moduleName}.{baseName}");
+                // Own-module FIRST: `routine List[T].add_last` in `module Suflae` owns `Suflae.List`,
+                // not the earlier-registered context-free `Core.List`. Bare-first bound the Suflae
+                // overlay's List methods to Core.List, so dispatch on `Roamed[Suflae.List]` found no
+                // such method (RF-S458). Falls back to bare for a Core type used from another module.
+                TypeInfo? baseDef = registry.LookupType(name: $"{moduleName}.{baseName}") ??
+                                    registry.LookupType(name: baseName);
 
                 // If the base is a generic definition, check if bracket args are its own params
                 bool isGenericDef = false;
@@ -616,8 +620,12 @@ public sealed partial class StdlibLoader
             }
             else
             {
-                ownerType = registry.LookupType(name: typeName) ??
-                            registry.LookupType(name: $"{moduleName}.{typeName}");
+                // Own-module FIRST (mirrors the constructor path + LookupTypeWithImports): a member
+                // `routine List[T].add_last` in `module Suflae` owns `Suflae.List`, not the earlier-
+                // registered context-free `Core.List`. Falls back to the bare context-free type for a
+                // Core type referenced from another module (e.g. `Collections` methods on `Core.List`).
+                ownerType = registry.LookupType(name: $"{moduleName}.{typeName}") ??
+                            registry.LookupType(name: typeName);
 
                 // If type not found, treat as a generic type parameter (e.g., T in "routine T.view()")
                 if (ownerType == null)
@@ -635,8 +643,13 @@ public sealed partial class StdlibLoader
             // `T.create` registration so call-site construction resolves the creator. The
             // trailing `!` (failable) is carried structurally on routine.IsFailable.
             string bareName = TypeInfo.StripTypeArgs(name: routineName);
-            TypeInfo? ctorOwner = registry.LookupType(name: bareName) ??
-                                  registry.LookupType(name: $"{moduleName}.{bareName}");
+            // Own-module FIRST: a constructor `routine List(...)` in `module Suflae` owns `Suflae.List`,
+            // NOT the first-registered context-free `List` (Core.List, loaded earlier). Resolving bare
+            // first bound the Suflae overlay's `List()` creator to Core.List → same RegistryKey as
+            // Core's own `List()` → a spurious divergent-duplicate-constructor error (RF-S406). This
+            // mirrors LookupTypeWithImports's own-module-shadows rule for the stdlib registration path.
+            TypeInfo? ctorOwner = registry.LookupType(name: $"{moduleName}.{bareName}") ??
+                                  registry.LookupType(name: bareName);
             if (ctorOwner != null)
             {
                 ownerType = ctorOwner;
@@ -1048,8 +1061,15 @@ public sealed partial class StdlibLoader
     private static void RegisterEntityType(TypeRegistry registry, EntityDeclaration entity,
         string moduleName)
     {
-        // Skip if already registered
-        if (registry.LookupType(name: entity.Name) != null)
+        // Skip if THIS module's type is already registered (idempotency). The check must be
+        // module-qualified: a bare-name check would skip a Suflae-realm overlay `entity List` merely
+        // because the RazorForge-realm `Core.List` (loaded earlier) shares the bare name, leaving
+        // `Suflae.List` unregistered — its constructor/methods then mis-bind to `Core.List` (spurious
+        // RF-S406). Different modules own distinct same-named types.
+        string qualifiedName = string.IsNullOrEmpty(value: moduleName)
+            ? entity.Name
+            : $"{moduleName}.{entity.Name}";
+        if (registry.LookupType(name: qualifiedName) != null)
         {
             return;
         }

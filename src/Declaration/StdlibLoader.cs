@@ -75,6 +75,9 @@ public sealed partial class StdlibLoader
         _language = language;
         // EXPERIMENT: Suflae has no authored Standard/Suflae/ Core yet, and SF's Core IS RF's Core
         // (SF ≡ RF grammar / semantic-lowering-only difference). So SF borrows the RazorForge stdlib.
+        // The Suflae OVERLAY (Standard/Suflae/*.sf wrappers) is registered separately by the
+        // BuildDriver (PreRegisterStdlib → RegisterStdlibDirectory("Suflae", "*.sf")), so it is NOT
+        // re-scanned here — that would double-register the overlay's routines.
         _fileExtension = "*.rf";
         _stdlibPath = Path.Combine(path1: stdlibRoot, path2: "RazorForge");
     }

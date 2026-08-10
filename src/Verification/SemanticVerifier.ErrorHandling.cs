@@ -243,7 +243,15 @@ public sealed partial class SemanticVerifier
             // on different types: prefer the one that actually has the candidate method.
             string bareLookupName = TypeInfo.StripTypeArgs(name: ownerTypeName);
 
-            TypeSymbol? bareOwner = _registry.LookupType(name: bareLookupName);
+            // Own-module FIRST: a member decl `routine List[T].add_last` in `module Suflae` owns
+            // `Suflae.List`, not the earlier-registered context-free `Core.List`. Resolving bare first
+            // collected candidates only from `Core.List`, so the Suflae overlay's method body was keyed
+            // under (and monomorphized as) Core.List's — the wrapper forwarder body was lost, and the
+            // Suflae instantiation ran Core.List's `add_last` (with its `reserve` call) instead.
+            TypeSymbol? bareOwner = (moduleName != null
+                                        ? _registry.LookupType(name: $"{moduleName}.{bareLookupName}")
+                                        : null)
+                                    ?? _registry.LookupType(name: bareLookupName);
             if (bareOwner == null)
             {
                 return null;

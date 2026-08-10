@@ -723,7 +723,10 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     expectedParamNames: resolvedRoutine.GenericDefinition.Parameters
                         .Select(static p => p.Name).ToList(),
                     expectedParamTypeNames: resolvedRoutine.GenericDefinition.Parameters
-                        .Select(static p => (string?)p.Type?.Name).ToList());
+                        .Select(static p => (string?)p.Type?.Name).ToList(),
+                    expectedOwnerModule: resolvedRoutine.OwnerType?.FullName is { } ownerFn
+                        ? TypeInfo.StripTypeArgs(name: ownerFn)
+                        : null);
                 if (astDecl == null)
                 {
                     // Check if the generic definition has a synthesized body in VariantBodies.
@@ -931,7 +934,10 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             expectedParamCount: genMethod.Parameters.Count,
             typeSubs: typeSubs,
             expectedParamNames: paramNames,
-            expectedParamTypeNames: paramTypeNames);
+            expectedParamTypeNames: paramTypeNames,
+            expectedOwnerModule: genDef.FullName is { } gdFn
+                ? TypeInfo.StripTypeArgs(name: gdFn)
+                : null);
 
         if (astDecl == null)
         {
@@ -1508,7 +1514,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// </summary>
     private RoutineDeclaration? FindInStdlib(string genericAstName, int expectedParamCount = -1,
         Dictionary<string, TypeInfo>? typeSubs = null, List<string>? expectedParamNames = null,
-        List<string?>? expectedParamTypeNames = null)
+        List<string?>? expectedParamTypeNames = null, string? expectedOwnerModule = null)
     {
         bool requireGenericSuffix = genericAstName.EndsWith("[generic]");
         string baseName = requireGenericSuffix
@@ -1521,6 +1527,24 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         if (!_routineIndex.TryGetValue(key: baseName, value: out List<RoutineDeclaration>? candidates))
         {
             return null;
+        }
+
+        // Module-scoped disambiguation: the same bare AST name (`List[T].add_last`) is declared in both
+        // the RazorForge-realm `Core.List` and the Suflae-realm overlay `Suflae.List`. Without keying on
+        // the owner module, the first-registered (Core) decl is cloned for the Suflae instantiation — so
+        // `Suflae.List[S32].add_last` ran Core.List's body (its `reserve` call left the wrapper body's T
+        // unsubstituted → monomorphization-incomplete crash). Prefer the candidate whose registered
+        // owner module matches; fall back to the full set when none match (non-overlay types).
+        if (expectedOwnerModule != null)
+        {
+            // Match on the type-arg-stripped owner FullName (e.g. "Suflae.List") rather than the
+            // Module field: a concrete generic-instance owner (Suflae.List[Core.S32]) carries an empty
+            // Module, but its FullName still embeds the realm/module prefix.
+            var moduleMatched = candidates
+                .Where(predicate: d => d.ResolvedInfo?.OwnerType?.FullName is { } fn
+                                       && TypeInfo.StripTypeArgs(name: fn) == expectedOwnerModule)
+                .ToList();
+            if (moduleMatched.Count > 0) candidates = moduleMatched;
         }
 
         RoutineDeclaration? countOnlyMatch = null;
