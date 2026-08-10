@@ -1,0 +1,42 @@
+module Suflae
+
+### Suflae `List[T]` — the roam-boundary-owning wrapper over a bare `RF::Core.List[T]`.
+###
+### In Suflae, an `entity` is a `Roamed[E]` biased-RC handle (auto-promote-on-escape, task-keyed
+### lock, cycle collection). A raw `RF::Core.List` buffers its elements in an opaque `Hijacked[T]`
+### region the cycle collector cannot walk. This wrapper gives the collector a WALKABLE structure: the
+### SF `List` is itself an `entity` (so a `Roamed[Suflae.List[T]]` at every SF use site), and it holds
+### the bare RazorForge list in a plain `inner` field the roam-trace can field-walk. Method calls
+### forward to the inner RF list, which does the real storage work.
+###
+### The `RF::` realm qualifier is load-bearing on `inner`: it reaches the bare RazorForge realm so the
+### field is a single-owner `Core.List`, NOT a re-roamed `Roamed[Core.List]` (which would nest roam
+### handles forever). See TypeResolver.ResolveType's `Realm != "RF"` gate.
+entity List[T]
+  ### Stores the backing RazorForge list that does the real element storage.
+  secret inner: RF::Core.List[T]
+
+# Creators
+
+### Creates an empty Suflae list.
+routine List[T]() -> List[T]
+  return List[T](inner: RF::Core.List[T]())
+
+# Core operations
+
+### Returns the number of elements currently stored.
+routine List[T].count() -> U64
+  return me.inner.count()
+
+### Returns true when the list holds no elements.
+routine List[T].is_empty() -> Bool
+  return me.inner.is_empty()
+
+### Appends `value` at the back of the list.
+routine List[T].add_last(value: T)
+  me.inner.add_last(value: value)
+  return
+
+### Returns the element at `index`, failing if out of range.
+routine List[T].getitem!(index: U64) -> T
+  return me.inner.getitem!(index: index)
