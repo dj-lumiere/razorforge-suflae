@@ -701,9 +701,13 @@ public sealed partial class StdlibLoader
                 return new TupleTypeInfo(elementTypes: elemTypes);
             }
 
-            TypeInfo? genericDef = registry.LookupType(name: typeName) ?? (moduleName != null
+            // Own-module FIRST: a bare `List` in `module Suflae` (e.g. the overlay constructor's
+            // `-> List[T]` return) must resolve to `Suflae.List`, not the auto-imported `Core.List`
+            // (LookupType's Core-prefix fast path). A dotted/RF::-qualified `Core.List` misses the
+            // `Suflae.Core.List` probe and correctly falls back to the RazorForge `Core.List`.
+            TypeInfo? genericDef = (moduleName != null
                 ? registry.LookupType(name: $"{moduleName}.{typeName}")
-                : null);
+                : null) ?? registry.LookupType(name: typeName);
             if (genericDef is { IsGenericDefinition: true } &&
                 genericDef.GenericParameters!.Count == typeExpr.GenericArguments.Count)
             {
@@ -727,10 +731,11 @@ public sealed partial class StdlibLoader
             }
         }
 
-        // Try to look up existing type, with module-qualified fallback
-        return registry.LookupType(name: typeName) ?? (moduleName != null
+        // Own-module FIRST, then the bare (auto-import/Core-prefix) lookup — see the generic-def branch
+        // above for why the overlay's same-named types must not collapse to the RazorForge realm.
+        return (moduleName != null
             ? registry.LookupType(name: $"{moduleName}.{typeName}")
-            : null);
+            : null) ?? registry.LookupType(name: typeName);
     }
 
     /// <summary>
