@@ -9,10 +9,14 @@ import BuilderService
 ### reentrant, task-keyed exclusive lock that serializes all access (the actor "one at a time"
 ### guarantee). Aliasing is free (`.roam()`), so `b = a` maps here, NOT to a bare single-owner entity.
 ###
-### **Access is lock-wrapped, NEVER coerced.** `Roamed` deliberately does NOT `obeys Controlling[T]`
-### and has NO `refer`/`control`: those hand out a raw inner reference that would bypass the lock
-### and break escaped-mode serialization. Real access goes through compiler-inserted `lock_enter` /
-### `lock_exit` wrapping (Stage 2). The `borrow()` here is a Stage-1 test hatch only.
+### **Access is coerced through `control`/`refer`, with the lock applied TRANSPARENTLY.** `Roamed`
+### `obeys Controlling[T]`: a deref (method dispatch on a `Roamed` receiver, or passing one to a
+### `Controlling[T]`/`Referring[T]` parameter) coerces to the inner entity via `control()`/`refer()`.
+### That coercion does NOT bypass serialization — the compiler's lock-bracket lowering wraps the
+### enclosing access scope in `lock_enter`/`lock_exit` (no-op in LOCAL mode, a reentrant task-keyed
+### acquire once ESCAPED), so Suflae code never sees the lock while access stays serialized. Holding a
+### handle is a strong reference, so the inner is never dangling. (The scope is per-access on the
+### explicit RazorForge side, per-borrow-scope on the Suflae side, chosen by the lock-bracket pass.)
 ###
 ### **Insertion is compiler-driven in Suflae.** `Roamed` IS registered as an RC wrapper
 ### (`RuntimeContract.RcWrapperBaseNames` / `RcCopyVerb`); the aliasing `roam()`, spawn-boundary
@@ -27,7 +31,7 @@ import BuilderService
 ### (no auto-scheduling yet), so cycles are reclaimed only where the collector is actually run.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
-record Roamed[T]
+record Roamed[T] obeys Controlling[T]
 needs T is EntityType
   pass
 
@@ -148,13 +152,38 @@ dangerous routine Roamed[T].cyclic_visit()
 routine Roamed[T].controller_address() -> Address
   return Hijacked[RoamController[T]](me).get_address()
 
-### The inner entity as a raw, UNLOCKED reference — STAGE-1/2 TEST HATCH ONLY. Real access is lock-wrapped
-### by the compiler (Stage 2c); this must never become `refer`/`control` (they would hand out a
-### lock-bypassing reference).
+### The inner entity as a raw reference. Real access is lock-wrapped by the compiler's lock-bracket
+### lowering around the enclosing access scope, so this coercion is safe: it is the deref half, the
+### bracket pass is the lock half. Kept as the low-level plumbing name behind `refer`/`control`.
 ### :returns: The inner entity.
 dangerous routine Roamed[T].raw_inner() -> T
   var ctrl = Hijacked[RoamController[T]](me).as_entity()
   return ctrl.data_ptr().as_entity()
+
+# ============================================================================
+# Marker-protocol coercion (refer/control) — yields the inner entity as T. The access lock is applied
+# transparently by the compiler's lock-bracket lowering around the enclosing scope (see class doc),
+# so these do NOT bypass escaped-mode serialization.
+# ============================================================================
+
+### Yields the inner entity as an in-flight `T` reference for read-only access.
+### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### :returns: The inner entity as `T`.
+@[readonly, inline]
+routine Roamed[T].refer() -> T
+  danger
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    return ctrl.data_ptr().as_entity()
+
+### Yields the inner entity as an in-flight `T` reference for read/write access.
+### Inserted implicitly at call sites whose parameter is `Controlling[T]`, and at method-dispatch
+### deref on a `Roamed` receiver.
+### :returns: The inner entity as `T`.
+@inline
+routine Roamed[T].control() -> T
+  danger
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    return ctrl.data_ptr().as_entity()
 
 # ============================================================================
 # Display (opaque — the inner value is reachable only through the lock in real use)

@@ -274,29 +274,31 @@ internal sealed class RoamedProjectionLoweringPass(PostprocessingContext ctx)
         call.LoweringKind = Verification.CallClassifier.ClassifyMethodCall(method: roamProj.Method);
         if (!roamProj.ProjectToInner) return call;
 
-        Expression rawRecv = MakeRawInnerCall(member.Object, receiverType, roamProj.InnerType);
-        if (ReferenceEquals(rawRecv, member.Object)) return call;
-        return call with { Callee = member with { Object = rawRecv } };
+        Expression innerRecv = MakeControlCall(member.Object, receiverType, roamProj.InnerType);
+        if (ReferenceEquals(innerRecv, member.Object)) return call;
+        return call with { Callee = member with { Object = innerRecv } };
     }
 
-    // Build `receiver.raw_inner()` : the bare inner pointer. Stamps the resolved raw_inner routine and
-    // the inner type so codegen emits it as a real, already-resolved call. Reachability already seeded
-    // raw_inner via ImplicitCallContract.ForLiveType, so the target is live/monomorphized.
-    private Expression MakeRawInnerCall(Expression receiver, TypeInfo receiverType, TypeInfo innerType)
+    // Build `receiver.control()` : the inner entity, via the Controlling marker-protocol deref (Roamed
+    // obeys Controlling[T]). Stamps the resolved control routine and inner type so codegen emits it as a
+    // real, already-resolved call. Reachability seeds control via ImplicitCallContract.ForLiveType, so
+    // the target is live/monomorphized. The access lock is applied around the enclosing statement by
+    // RoamedLockBracketLoweringPass (which recognizes this control() coercion), so the deref is safe.
+    private Expression MakeControlCall(Expression receiver, TypeInfo receiverType, TypeInfo innerType)
     {
-        RoutineInfo? rawInner = Registry.LookupMethod(type: receiverType,
-            methodName: RuntimeContract.RoamedMethod.RawInner);
-        if (rawInner is null) return receiver;
+        RoutineInfo? control = Registry.LookupMethod(type: receiverType,
+            methodName: RuntimeContract.Control);
+        if (control is null) return receiver;
 
         var callee = new MemberExpression(Object: receiver,
-            MemberName: RuntimeContract.RoamedMethod.RawInner, Location: receiver.Location)
+            MemberName: RuntimeContract.Control, Location: receiver.Location)
         {
             ResolvedType = innerType
         };
         return new CallExpression(Callee: callee, Arguments: new List<Expression>(),
             Location: receiver.Location)
         {
-            ResolvedRoutine = rawInner,
+            ResolvedRoutine = control,
             ResolvedType = innerType
         };
     }

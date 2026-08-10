@@ -48,11 +48,14 @@ internal static class ImplicitCallContract
             yield break;
 
         // Roamed[T]: promote at spawn boundaries, lock_enter/lock_exit around direct field access,
-        // raw_inner for the display-transparency projection — all on the Roamed handle itself.
+        // raw_inner for argument projection (Roamed arg → bare param), control for the method-dispatch
+        // receiver deref (Roamed obeys Controlling; RoamedProjectionLoweringPass coerces a Roamed
+        // receiver to its inner via control) — all on the Roamed handle itself.
         yield return (liveType, RuntimeContract.RoamedMethod.Promote);
         yield return (liveType, RuntimeContract.RoamedMethod.LockEnter);
         yield return (liveType, RuntimeContract.RoamedMethod.LockExit);
         yield return (liveType, RuntimeContract.RoamedMethod.RawInner);
+        yield return (liveType, RuntimeContract.Control);
 
         // Display transparency: codegen re-resolves represent/diagnose on the Roamed handle to the
         // INNER value's, so the inner display routines must be live even when the inner type is only

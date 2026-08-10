@@ -350,7 +350,7 @@ internal sealed class SuflaeEntityLoweringPass
                 // sets MeType — so the call passes the Roamed handle directly and `me.field` routes through
                 // the Roamed access machinery. No projection needed.)
 
-                return call.ResolvedType is EntityTypeInfo callEntity
+                return call.ResolvedType is EntityTypeInfo callEntity && !IsRfRealmRef(call.Callee)
                     ? WrapInRoam(inner: lowered, entity: callEntity)
                     : lowered;
             }
@@ -379,7 +379,7 @@ internal sealed class SuflaeEntityLoweringPass
 
                 GenericMethodCallExpression loweredG =
                     gChanged ? gmce with { Arguments = gArgs } : gmce;
-                return gmce.ResolvedType is EntityTypeInfo gEntity
+                return gmce.ResolvedType is EntityTypeInfo gEntity && !IsRfRealmRef(gmce.Object)
                     ? WrapInRoam(inner: loweredG, entity: gEntity)
                     : loweredG;
             }
@@ -471,22 +471,25 @@ internal sealed class SuflaeEntityLoweringPass
         return changed ? call with { Arguments = newArgs } : call;
     }
 
-    // Wrap a Roamed-valued argument in `<value>.raw_inner()` : the target bare entity. A non-Roamed arg
-    // (already a bare entity, or a non-entity value) is returned unchanged.
+    // Wrap a Roamed-valued receiver/argument in `<value>.control()` : the inner bare entity, via the
+    // Controlling marker-protocol deref (Roamed obeys Controlling[T]). A non-Roamed value (already a
+    // bare entity, or a non-entity value) is returned unchanged. The access lock is applied around the
+    // enclosing statement by RoamedLockBracketLoweringPass, which recognizes this control() coercion —
+    // so reaching the inner through it stays serialized (unlike the old raw_inner, which was unlocked).
     private Expression ProjectRawInner(Expression arg, EntityTypeInfo targetEntity)
     {
         Expression val = arg is NamedArgumentExpression na ? na.Value : arg;
         if (!IsRoamedType(val.ResolvedType)) return arg;
 
-        var raw = new CallExpression(
-            Callee: new MemberExpression(Object: val, MemberName: "raw_inner",
+        var inner = new CallExpression(
+            Callee: new MemberExpression(Object: val, MemberName: RuntimeContract.Control,
                 Location: val.Location) { ResolvedType = targetEntity },
             Arguments: new List<Expression>(),
             Location: val.Location) { ResolvedType = targetEntity };
 
         return arg is NamedArgumentExpression named
-            ? named with { Value = raw }
-            : raw;
+            ? named with { Value = inner }
+            : inner;
     }
 
     // True if the type is a `Roamed[E]` handle in either representation the pipeline produces: a
@@ -541,6 +544,15 @@ internal sealed class SuflaeEntityLoweringPass
     }
 
     // Wrap a bare-entity-valued expression in `<expr>.roam()`, retyped to Roamed[E].
+    // An `RF::`-qualified construction/call deliberately opts OUT of the Suflae entity->Roamed
+    // lowering: the realm tag reaches the bare RazorForge realm, so its bare-entity result must NOT be
+    // `.roam()`-wrapped. This is what lets an SF wrapper entity hold a bare `RF::Core.List` inside
+    // without re-roaming it into a `Roamed[List]`. Mirrors TypeResolver.ResolveType's `Realm != "RF"`
+    // gate on the type-annotation side; the realm survives on the construction callee's identifier
+    // (Parser.Expressions parses `RF::Core.List` into `IdentifierExpression { Realm = "RF" }`).
+    private static bool IsRfRealmRef(Expression callee) =>
+        callee is IdentifierExpression { Realm: "RF" };
+
     private Expression WrapInRoam(Expression inner, EntityTypeInfo entity)
     {
         WrapperTypeInfo roamed = _registry.GetOrCreateWrapperType(

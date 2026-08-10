@@ -123,8 +123,18 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
         {
             AstWalker.WalkExpressions(root: e, visit: n =>
             {
-                if (n is MemberExpression member && RoamedFieldReceiver(member) is { } handle)
-                    handles.Add(item: handle);
+                if (n is not MemberExpression member) return;
+                // A direct field access through a Roamed handle, OR a method-dispatch deref (the
+                // `control`/`refer`/`raw_inner` coercion RoamedProjectionLoweringPass inserts on a
+                // Roamed receiver). Both must hold the access lock across the enclosing statement —
+                // otherwise a METHOD call on a Roamed receiver (e.g. an SF wrapper's `xs.getitem!(i)`,
+                // whose bare-`me` inner is reached via the coercion) touches the object UNLOCKED,
+                // breaking escaped-mode serialization. Coarse (whole-statement) bracketing is exact for
+                // the reentrant, task-keyed lock.
+                if (RoamedFieldReceiver(member) is { } fieldHandle)
+                    handles.Add(item: fieldHandle);
+                else if (RoamedCoercionReceiver(member) is { } coerceHandle)
+                    handles.Add(item: coerceHandle);
             });
         }
         return handles;
@@ -162,6 +172,19 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
         if (RoamedInnerEntity(member.Object.ResolvedType) is not { } innerEntity) return null;
         bool isField = innerEntity.MemberVariables.Any(predicate: mv => mv.Name == member.MemberName);
         return isField ? member.Object : null;
+    }
+
+    // When `member` is a deref COERCION (`control` / `refer` / `raw_inner`) on a Roamed[E] handle —
+    // the receiver projection RoamedProjectionLoweringPass inserts for a method call on a Roamed
+    // receiver — returns the Roamed[E] handle to bracket; otherwise null. This is what makes a METHOD
+    // call on a Roamed receiver hold the access lock (the field-access path above only catches direct
+    // field touches). The lifecycle coercions on the handle itself (`roam`/`promote`/`lock_*`/`destroy`)
+    // are NOT deref and are deliberately excluded.
+    private static Expression? RoamedCoercionReceiver(MemberExpression member)
+    {
+        if (member.MemberName is not (RuntimeContract.RoamedMethod.RawInner
+            or RuntimeContract.Control or RuntimeContract.Refer)) return null;
+        return RoamedInnerEntity(member.Object.ResolvedType) is not null ? member.Object : null;
     }
 
     // The bare entity `E` inside a `Roamed[E]` handle, in either representation the pipeline produces
