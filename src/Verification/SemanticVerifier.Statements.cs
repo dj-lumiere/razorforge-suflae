@@ -596,7 +596,7 @@ public sealed partial class SemanticVerifier
             varType = ResolveType(typeExpr: varDecl.Type);
 
             (TypeSymbol resolved, bool isNullable, bool isEntitySlot) =
-                ResolveSuflaeEntityAnnotation(annotated: varType);
+                ResolveSuflaeEntityAnnotation(annotated: varType, typeExpr: varDecl.Type);
             varType = resolved;
             annotatedNullable = isNullable;
             annotatedNonNullEntity = isEntitySlot && !isNullable;
