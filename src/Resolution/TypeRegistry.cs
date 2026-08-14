@@ -1552,6 +1552,32 @@ public sealed partial class TypeRegistry
             });
         }
 
+        // Auto-register `store` (the retaining field-walk copy) iff every element is itself storable —
+        // a value / managed leaf / RC wrapper, never a bare `entity` or access token. Mirrors how a
+        // declared record gets its synthesized `store`: without it, `var u = t` on a tuple holding a
+        // managed leaf (Text) bitwise-aliases and double-frees at the two scopes' teardown. The body
+        // (WiredRoutinePass.HandleTuple `store` → BuildRecordCopyBody) reconstructs the tuple field-by-
+        // field, calling each retaining field's own `store`. Generic-parameter elements (`Tuple[U64, T]`)
+        // are not storable here, so store is registered per CONCRETE instantiation (like serialize).
+        if (elementTypes.All(predicate: et =>
+                CanAutoDeriveAssignable(type: et)
+                || DoesTypeObeyProtocol(type: et, protocolName: "Storable")
+                || LookupMethod(type: et, methodName: "store") is not null))
+        {
+            RegisterRoutine(routine: new RoutineInfo(name: "store")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [],
+                ReturnType = newType,
+                IsFailable = false,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+        }
+
         // Auto-register cmp + derived operators if ALL element types support cmp
         TypeInfo? comparisonSignType = LookupType(name: "ComparisonSign");
         if (boolType != null && comparisonSignType != null &&

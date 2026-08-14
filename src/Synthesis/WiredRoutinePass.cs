@@ -3112,6 +3112,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
+            // A tuple is a RecordTypeInfo, so its retaining field-walk copy reuses the record
+            // builder: reconstruct `(me.item0.store(), me.item1, …)` — each retaining element goes
+            // through its own `store`, value elements stay shallow. The Creator it emits is exactly
+            // what ExpressionLoweringPass lowers a tuple literal to (TypeName = tuple.Name, item{i}
+            // fields), so codegen materializes it identically.
+            case "store" when routine.Parameters.Count == 0:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildRecordCopyBody(record: tuple);
+                break;
+
             case "eq":
             {
                 TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");

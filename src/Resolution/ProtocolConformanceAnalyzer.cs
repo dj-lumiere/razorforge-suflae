@@ -93,6 +93,48 @@ internal sealed class ProtocolConformanceAnalyzer
 
         ApplyAutoAssignableConformance();
         ApplyAutoStorableConformance();
+        ApplyAutoStorableCascadeConformance();
+    }
+
+    /// <summary>
+    /// Auto-derives <c>Storable</c> (NOT <c>Copyable</c>) for a value aggregate whose every field/element is
+    /// itself storable — even when some are MANAGED (Text/Integer/RC wrapper), which <see
+    /// cref="ApplyAutoAssignableConformance"/> cannot handle (a managed field has a ptr → not bitwise
+    /// Copyable). Its <c>store</c> is a FIELD-WALK (each field's <c>store</c>), synthesized by
+    /// <c>WiredRoutinePass.BuildRecordCopyBody</c>. This completes storability so <c>.store()</c> resolves for
+    /// every identity-less type — the store-based replacement for the arbitrary <c>IsTriviallyStorable</c>
+    /// heuristic. Entities (identity) and the borrow/access tokens (scope-bound) are correctly left out —
+    /// <see cref="TypeRegistry.CanAutoDeriveStorable"/> excludes them.
+    /// </summary>
+    private void ApplyAutoStorableCascadeConformance()
+    {
+        if (_sa._registry.LookupType(name: "Storable") is not ProtocolTypeInfo storable)
+        {
+            return;
+        }
+
+        foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
+        {
+            if (type.IsGenericDefinition)
+            {
+                continue;
+            }
+
+            List<TypeSymbol> existing = GetImplementedProtocols(type: type);
+            if (existing.Any(predicate: p => p.Name is "Storable" or "Copyable"))
+            {
+                continue;
+            }
+
+            if (!_sa._registry.CanAutoDeriveStorable(type: type))
+            {
+                continue;
+            }
+
+            var merged = new List<TypeSymbol>(collection: existing) { storable };
+            _sa._implicitProtocolConformances.Add(item: (type.FullName, storable.Name));
+            UpdateTypeProtocols(type: type, protocols: merged);
+        }
     }
 
     /// <summary>

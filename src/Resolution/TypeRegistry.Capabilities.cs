@@ -196,6 +196,44 @@ public sealed partial class TypeRegistry
         };
     }
 
+    /// <summary>
+    /// Returns true iff <paramref name="type"/> can auto-derive <c>Storable</c> by FIELD-WALK: every field /
+    /// element is itself storable — it obeys <c>Storable</c> (a managed leaf <c>Text</c>/<c>Integer</c>, or
+    /// an RC wrapper) or cascades. Unlike <see cref="CanAutoDeriveAssignable"/> (no-ptr → a bitwise copy that
+    /// is also <c>Copyable</c>), this PERMITS managed (ptr) fields — the synthesized <c>store</c> field-walks
+    /// them, calling each field's <c>store</c>. Blocked by an <c>entity</c> or access-token field (no store).
+    /// Wrapper types are excluded here — RC wrappers derive <c>Storable</c> via
+    /// <c>ProtocolConformanceAnalyzer.ApplyAutoStorableConformance</c>, and the borrow/access tokens are
+    /// deliberately unstorable (scope-bound). This is the "identity-less → freely copyable" predicate,
+    /// structural — the store-based replacement for the arbitrary <c>IsTriviallyStorable</c> heuristic.
+    /// </summary>
+    public bool CanAutoDeriveStorable(TypeInfo type)
+    {
+        string? wrapperBase = type switch
+        {
+            RecordTypeInfo { GenericDefinition: { } gd } => gd.Name,
+            RecordTypeInfo r => r.Name,
+            _ => null
+        };
+        if (wrapperBase != null && RuntimeContract.WrapperTypes.Contains(item: wrapperBase))
+            return false;
+
+        bool FieldStorable(TypeInfo f) =>
+            CanAutoDeriveAssignable(type: f)
+            || CanAutoDeriveStorable(type: f)
+            || TypeObeysProtocol(type: f, protocolName: "Storable");
+
+        return type switch
+        {
+            ChoiceTypeInfo or FlagsTypeInfo => true,
+            TupleTypeInfo t => t.ElementTypes.All(predicate: FieldStorable),
+            RecordTypeInfo { IsGenericDefinition: false } r =>
+                r.MemberVariables is null or { Count: 0 }
+                || r.MemberVariables.All(predicate: m => FieldStorable(m.Type)),
+            _ => false
+        };
+    }
+
     private static bool LayoutContainsPtr(string layout)
     {
         // "void" (zero-sized) and any layout without "ptr" auto-derives.
