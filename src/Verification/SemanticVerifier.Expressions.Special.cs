@@ -260,6 +260,32 @@ public sealed partial class SemanticVerifier
         // Analyze the operand
         TypeSymbol operandType = AnalyzeExpression(expression: steal.Operand);
 
+        // Aggregate-steal = hole: you cannot move a value OUT of an aggregate's MIDDLE. `steal l[i]`
+        // leaves a dense List with no empty-slot state; `steal o.field` leaves a dangling struct hole.
+        // Neither copy (two owners) nor steal is sound there — only a REPAIRING removal (`remove_at`,
+        // which shifts and adjusts the count) or a shared handle extracts safely. A standalone
+        // `steal <identifier>` (deadref'd, no hole) and `steal x.duplicate()` (a fresh owned rvalue
+        // from a call — the operand is a CallExpression, not an aggregate-part read) stay legal. Tuple
+        // element access (`_t.item0` from a `var (a, b) = …` destructure) is a consumed-temporary MOVE,
+        // not an aggregate-middle steal, so it is excluded (Object is a TupleTypeInfo).
+        bool isAggregatePart = steal.Operand switch
+        {
+            IndexExpression => true,
+            MemberExpression m => m.Object.ResolvedType is not TupleTypeInfo,
+            _ => false
+        };
+        if (isAggregatePart)
+        {
+            ReportError(code: SemanticDiagnosticCode.StealAggregatePart,
+                message: "You are trying to steal a value out of the middle of an aggregate, which " +
+                         "would leave a hole where it used to sit. Move it out with a repairing " +
+                         "removal (e.g. 'remove_at', which closes the gap), or keep a shareable " +
+                         "handle instead.",
+                location: steal.Location);
+            steal.ResolvedType = operandType;
+            return operandType;
+        }
+
         // Check if the type is a scope-bound wrapper (cannot be stolen)
         if (IsMemoryToken(type: operandType))
         {

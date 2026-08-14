@@ -635,6 +635,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot steal a reference-counted handle (Retained/Tracked) — shared ownership, not unique.</summary>
     StealSharedOwnership = 617,
 
+    /// <summary>Cannot steal out of an aggregate's middle (a field or an index) — it would leave a hole.</summary>
+    StealAggregatePart = 622,
+
     /// <summary>Cannot capture scope-bound token in lambda.</summary>
     LambdaCaptureToken = 606,
 
