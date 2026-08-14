@@ -452,17 +452,8 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             return MakeCopyCall(expr: expr, copyMethod: copyMethod!);
         }
 
-        // An `a[i]` element read returns a VIEW of an element the container still owns (a raw buffer read),
-        // NOT a fresh owned value — so keeping it needs the element type's store, exactly like binding a
-        // borrowed field of a heap-backed value type. Done at the CONCRETE call site (post-monomorph) so
-        // the element type is known and its store (deep copy / retain / trivial no-op) resolves cleanly. A
-        // store-less element (a bare `entity`) is rejected earlier at SA, so it never reaches here.
-        if (!_inRcCopyVerb
-            && expr is CallExpression { IsElementView: true }
-            && NeedsRetainingCopy(type: expr.ResolvedType, copyMethod: out RoutineInfo? viewCopy))
-        {
-            return MakeCopyCall(expr: StripStealFromExpr(expr: expr), copyMethod: viewCopy!);
-        }
+        // (`a[i]` element reads are legitimized into an owned value by OperatorLoweringPass, which wraps the
+        // raw `getitem` peek in the element type's `store` — no copy injection is needed for them here.)
 
         // For complex expressions in ownership positions (calls, constructors, etc.),
         // recurse into argument positions (which are themselves copy positions).

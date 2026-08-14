@@ -407,17 +407,36 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     Object: loweredObj,
                     MemberName: propertyName,
                     Location: idx.Location);
-                return new CallExpression(
+                var getitemCall = new CallExpression(
                     Callee: member,
                     Arguments: [loweredIdx],
                     Location: idx.Location)
                 {
                     ResolvedRoutine = resolvedGetItem,
                     ResolvedType = idx.ResolvedType,
-                    LoweringKind = getitemKind,
-                    // `a[i]` reads a VIEW of an element the container still owns — mark it so the ownership
-                    // passes copy it when kept and never tear down the view temp.
-                    IsElementView = true
+                    LoweringKind = getitemKind
+                };
+                // `a[i]` reads an element the container STILL owns. Make it appear as a fresh owned value by
+                // applying the element type's `store` — a retaining copy (Text/Integer/variant) so the read
+                // no longer aliases the buffer's live element (which would double-free on teardown). A
+                // trivially-copyable element has no retaining store (GetLifecycle.Store == null) and its
+                // bitwise read is already independent, so it is left bare. A bare `entity` element likewise
+                // has no store — reading one out to KEEP it is rejected at SA (single-owner), so it never
+                // needs a copy here.
+                TypeInfo? elemType = idx.ResolvedType;
+                RoutineInfo? elemStore = elemType != null
+                    ? ctx.Registry.GetLifecycle(type: elemType).Store
+                    : null;
+                if (elemStore == null)
+                    return getitemCall;
+                var storeCallee = new MemberExpression(
+                    Object: getitemCall, MemberName: elemStore.Name, Location: idx.Location)
+                    { ResolvedType = elemType };
+                return new CallExpression(Callee: storeCallee, Arguments: [], Location: idx.Location)
+                {
+                    ResolvedRoutine = elemStore,
+                    ResolvedType = elemType,
+                    LoweringKind = ClassifyMethod(elemStore)
                 };
             }
 

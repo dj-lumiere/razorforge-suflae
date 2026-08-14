@@ -364,7 +364,14 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // teardown is decided HERE, where the enclosing call's result type is known, so the
                 // aliasing guard can apply. Nested receivers (a.b().c()) are handled by this same
                 // branch one level down, each guarded by its own call's result type.
-                bool receiverConsumed = ConsumingReceiverVerbs.Contains(m.MemberName);
+                // A COPY verb (`store` / a variant's deep `copy`) reads its receiver to MINT an owned
+                // value — so the receiver is a value being copied FROM (an lvalue read, or the raw `peek`
+                // an `a[i]` desugars to), never a fresh owned producer to tear down here. The minted copy
+                // (the call result) is what gets torn down. This is uniform: nothing about `getitem` is
+                // special — any copy-verb receiver is left alone. (No `freshProducer().store()` is ever
+                // emitted — the copy pass injects `store` only onto lvalue reads and `a[i]`.)
+                bool receiverConsumed = ConsumingReceiverVerbs.Contains(m.MemberName)
+                                        || m.MemberName is "store" or "copy";
                 Expression newRecv = Visit(m.Object, objectPos: false, spills);
 
                 // Spill the receiver iff it is a fresh heap-owning RC-record producer, the verb does
@@ -464,11 +471,6 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         if (e is not (CallExpression or CreatorExpression))
             return false;
         if (e is CallExpression { Callee: MemberExpression vm } && ViewVerbs.Contains(vm.MemberName))
-            return false;
-        // An `a[i]` element read returns a VIEW of an element the container still owns — spilling and
-        // `destroy`ing that temp would tear down the container's live element (double-free). The keep-site
-        // retaining copy (RecordCopyLoweringPass) is what gives a binder its own value.
-        if (e is CallExpression { IsElementView: true })
             return false;
         TypeInfo? t = e.ResolvedType;
         if (t is null)
