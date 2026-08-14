@@ -414,7 +414,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 {
                     ResolvedRoutine = resolvedGetItem,
                     ResolvedType = idx.ResolvedType,
-                    LoweringKind = getitemKind
+                    LoweringKind = getitemKind,
+                    // `a[i]` reads a VIEW of an element the container still owns — mark it so the ownership
+                    // passes copy it when kept and never tear down the view temp.
+                    IsElementView = true
                 };
             }
 

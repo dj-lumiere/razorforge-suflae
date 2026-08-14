@@ -410,6 +410,16 @@ public record CallExpression(
     public bool IsCollectionLiteral { get; set; }
 
     /// <summary>
+    /// True when this call is the <c>getitem</c> that an index expression <c>a[i]</c> lowered to — i.e. it
+    /// returns a VIEW of an element the container still owns (a raw buffer read), not a fresh owned value.
+    /// Set by <see cref="Compiler.Postprocessing.Passes.OperatorLoweringPass"/> at the <c>[]</c> site so
+    /// the ownership passes treat it like a field read: keeping it copies (the element type's store), and
+    /// the view temp is never torn down (it would free the container's live element). The <c>[]</c> syntax
+    /// itself is the signal — no stdlib annotation needed.
+    /// </summary>
+    public bool IsElementView { get; set; }
+
+    /// <summary>
     /// Method-level type arguments, set by <c>GenericCallLoweringPass</c> when lowering a
     /// <c>GenericMethodCallExpression</c> that has explicit type parameters at the call site
     /// (e.g., <c>buf.read![U8](offset)</c> -> <c>TypeArguments = [U8]</c>).

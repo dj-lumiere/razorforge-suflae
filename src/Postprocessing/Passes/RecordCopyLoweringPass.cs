@@ -452,21 +452,16 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             return MakeCopyCall(expr: expr, copyMethod: copyMethod!);
         }
 
-        // Reading an element out of a container you're KEEPING (`var x = a[i]`, `a.first()`) is a "look":
-        // `getitem`/`first`/`last` return a shallow view of an element the container STILL owns (a raw
-        // `peek`). Single-owner means keeping it needs your OWN value, so — exactly like binding a
-        // borrowed field of a heap-backed value type — inject that value type's `store` (a deep copy for
-        // Integer/Text/variant; a no-op for a trivial value whose bitwise peek is already independent;
-        // `NeedsRetainingCopy` decides). The accessor is tagged `@projecting`; a moving accessor
-        // (`remove_*`/`pop_*`, which the container RELEASES) is NOT, so it moves out uncopied. Done at the
-        // concrete CALL SITE (not inside the generic accessor body), so the element type is known and its
-        // `store` resolves. (Bare-entity elements are single-owner containment governed separately —
-        // reading one out is an explicit `copy`/`steal`, not this implicit value copy.)
+        // An `a[i]` element read returns a VIEW of an element the container still owns (a raw buffer read),
+        // NOT a fresh owned value — so keeping it needs the element type's store, exactly like binding a
+        // borrowed field of a heap-backed value type. Done at the CONCRETE call site (post-monomorph) so
+        // the element type is known and its store (deep copy / retain / trivial no-op) resolves cleanly. A
+        // store-less element (a bare `entity`) is rejected earlier at SA, so it never reaches here.
         if (!_inRcCopyVerb
-            && expr is CallExpression { ResolvedRoutine.Annotations: { } anns } && anns.Contains(value: "projecting")
-            && NeedsRetainingCopy(type: expr.ResolvedType, copyMethod: out RoutineInfo? projCopy))
+            && expr is CallExpression { IsElementView: true }
+            && NeedsRetainingCopy(type: expr.ResolvedType, copyMethod: out RoutineInfo? viewCopy))
         {
-            return MakeCopyCall(expr: StripStealFromExpr(expr: expr), copyMethod: projCopy!);
+            return MakeCopyCall(expr: StripStealFromExpr(expr: expr), copyMethod: viewCopy!);
         }
 
         // For complex expressions in ownership positions (calls, constructors, etc.),
