@@ -651,16 +651,33 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // RazorForge: Entity bare assignment prohibition
-        // `var b = a` where `a` is an entity is a build error (must use .share() or steal)
-        // Only applies to bare identifier references, not creator calls or function returns
-        if (_registry.Language == Language.RazorForge &&
-            varDecl.Initializer is IdentifierExpression && varType is EntityTypeInfo)
+        // RazorForge: keeping a value with NO STORE. The dividing line for an implicit bind is whether
+        // the value can be STORED — i.e. whether its type obeys `Storable` (every value type does: a
+        // trivial record via the auto-derived bitwise store, a managed leaf like Text via its retaining
+        // store). A single-owner `entity` deliberately obeys no `Storable`, so it has no copy of its own.
+        // A bind whose initializer is a VIEW of a value someone else owns — a bare reference (`var x = a`)
+        // or an element read (`var x = a[i]`) — would make TWO owners of that one entity, so it is
+        // rejected. A fresh owned producer (creator / in-flight call) and an explicit `steal` are MOVES,
+        // not views, and are allowed. (SF entity elements are `Roamed`, which DOES obey Storable via its
+        // refcount retain — so this never fires in Suflae.)
+        // The store-less set is EXACTLY the entities: every value category (records, tuples, routines,
+        // SIMD vectors, generic records) is copyable via an auto-derived bitwise or field-wise store, so
+        // `obeys Storable` under-reports them — `EntityTypeInfo` is the precise predicate for "has no
+        // store of its own". (SF entity elements are `Roamed`, a record wrapper, not an `EntityTypeInfo`.)
+        // A tuple element access (`_t.item0`) is how `var (a, b) = expr` destructuring lowers: the tuple
+        // is a CONSUMED temporary, so each element MOVES out — not a view of a persisting owner. Exclude it
+        // (Object is a TupleTypeInfo) so channel/pair destructuring of entity elements stays a legal move.
+        bool isEntityViewInit = varDecl.Initializer is IdentifierExpression or IndexExpression
+            || varDecl.Initializer is MemberExpression { Object.ResolvedType: not TupleTypeInfo };
+        if (_registry.Language == Language.RazorForge
+            && isEntityViewInit
+            && varType is EntityTypeInfo)
         {
             ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
                 message:
-                $"Cannot directly assign entity of type '{varType.Name}' to variable '{varDecl.Name}'. " +
-                "Use '.share()' for shared ownership or 'steal' for ownership transfer.",
+                $"You are keeping a '{varType.Name}', but a '{varType.Name}' has no copy of its own — it " +
+                $"is single-owner, so 'var {varDecl.Name} = …' would make two owners of one value. Move it " +
+                "out with 'steal' (e.g. 'remove_at'), or keep a shareable handle instead.",
                 location: varDecl.Location);
         }
 
