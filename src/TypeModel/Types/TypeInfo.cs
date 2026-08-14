@@ -63,7 +63,26 @@ public abstract class TypeInfo
     public string? Module { get; init; }
 
     /// <summary>
-    /// The fully qualified name of this type (module + name + generic args).
+    /// The stdlib "world-line" this type identity belongs to: <c>"RF"</c> (RazorForge realm — bare
+    /// single-owner entities, deterministic teardown) or <c>"SF"</c> (Suflae realm — <c>entity</c> lowers
+    /// to <c>Roamed</c>, cycle-collected). A structured attribute (like <c>IsFailable</c> /
+    /// <c>TypeArguments</c>), never string-parsed off the name. The SAME stdlib source instantiates under
+    /// BOTH realms as DISTINCT identities: <c>RF::Core.List</c> ≠ <c>SF::Core.List</c>. The ambient realm
+    /// comes from the source file (.rf ⇒ RF, .sf ⇒ SF); an explicit <c>RF::</c>/<c>SF::</c> qualifier
+    /// overrides it. Both realms are rendered explicitly in <see cref="FullName"/> (and therefore in LLVM
+    /// symbols) so the two world-lines never collide when they coexist in one binary.
+    /// </summary>
+    public string Realm { get; init; } = "RF";
+
+    /// <summary>
+    /// The fully qualified name of this type (module + name + generic args), e.g.
+    /// <c>Core.List[Core.S64]</c>. This is the primary identity key across the registry, generic
+    /// resolution caches, and name resolution. It is deliberately REALM-FREE: the ambient realm is a
+    /// compilation-global constant, so realm-distinctness only matters where the non-ambient realm is
+    /// reached via an explicit qualifier — handled by <see cref="RealmQualifiedName"/> / the registry's
+    /// cross-realm keys, NOT by polluting every resolution key with a realm prefix (which would force the
+    /// whole ~119-site name-resolution surface to become realm-aware). The realm lives as the structured
+    /// <see cref="Realm"/> attribute and is rendered explicitly only in LLVM symbols.
     /// </summary>
     public string FullName
     {
@@ -83,6 +102,31 @@ public abstract class TypeInfo
             string args = string.Join(separator: ", ",
                 values: TypeArguments.Select(selector: t => t.FullName));
             return $"{baseName}[{args}]";
+        }
+    }
+
+    /// <summary>
+    /// <see cref="FullName"/> with the structured <see cref="Realm"/> rendered as an explicit
+    /// <c>RF::</c>/<c>SF::</c> prefix (recursively over generic args), e.g. <c>RF::Core.List[RF::Core.S64]</c>.
+    /// This is the SYMMETRIC identity used for LLVM symbol mangling (both world-lines always marked) and as
+    /// the cross-realm registry key when RF and SF instances of the same type coexist in one binary.
+    /// </summary>
+    public string RealmQualifiedName
+    {
+        get
+        {
+            string baseName = string.IsNullOrEmpty(value: Module)
+                ? Name
+                : $"{Module}.{Name}";
+
+            if (TypeArguments is not { Count: > 0 } || Name.Contains(value: '['))
+            {
+                return $"{Realm}::{baseName}";
+            }
+
+            string args = string.Join(separator: ", ",
+                values: TypeArguments.Select(selector: t => t.RealmQualifiedName));
+            return $"{Realm}::{baseName}[{args}]";
         }
     }
 
