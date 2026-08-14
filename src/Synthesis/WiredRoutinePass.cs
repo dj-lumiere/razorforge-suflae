@@ -2736,6 +2736,33 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Location: _synthLoc));
         }
 
+        // Nested aggregate: a bare (non-Roamed) ENTITY field owns its own roam machinery — the SF
+        // container overlay's `inner: RF::Core.List[T]` is the canonical case, a single-owner RazorForge
+        // list whose `Hijacked[T]` buffer holds the `Roamed` elements. The field-walk above treats that
+        // bare entity as an opaque leaf, so its held elements are invisible to the collector. Delegate to
+        // the field's OWN `roam_trace_impl` so the trace descends into the nested aggregate (whose buffer
+        // branch below then visits each element). Infinite recursion is impossible: a bare entity field is
+        // single-owner CONTAINMENT, which is acyclic by construction — a cycle needs SHARED ownership, i.e.
+        // a `Roamed`, and those are handled by `cyclic_visit` (color-based, cycle-safe) above. Trivially
+        // destructible fields cannot transitively hold a `Roamed`, so they are skipped.
+        foreach (MemberVariableInfo field in fields)
+        {
+            if (IsRoamedField(t: field.Type) || field.Type is not EntityTypeInfo)
+                continue;
+            if (ctx.Registry.IsTriviallyDestructible(type: field.Type))
+                continue;
+            var fieldRef = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = owner },
+                MemberName: field.Name, Location: _synthLoc) { ResolvedType = field.Type };
+            var traceImplCall = new CallExpression(
+                Callee: new MemberExpression(Object: fieldRef, MemberName: "roam_trace_impl",
+                    Location: _synthLoc) { ResolvedType = noneType },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = noneType };
+            statements.Add(item: new ExpressionStatement(Expression: traceImplCall,
+                Location: _synthLoc));
+        }
+
         // Container buffer: a lone `Hijacked[T]` field paired with a `count: U64` field is a dense
         // element buffer (List). The field-walk above treats the raw pointer as an opaque leaf, so
         // emit `me.<buf>.cyclic_trace_buffer(count: me.count)` to visit each element (a no-op when the
