@@ -63,6 +63,22 @@ public sealed partial class SemanticVerifier
     /// emits the same `List.create + add_last` sequence either way; the Owned wrapper is
     /// `@llvm("ptr")` and shares the entity's pointer.
     /// </summary>
+    /// <summary>
+    /// Picks the collection literal's own type from an expected (annotation) type. A Suflae entity slot
+    /// pins the annotation as <c>Roamed[Core.List[T]]</c>, but the literal itself must stay the BARE
+    /// collection — it builds a fresh <c>create + add_last</c> sequence and the SF binding lowering roams
+    /// the result at the var/field/assignment site (exactly like a <c>List[T]()</c> constructor RHS).
+    /// Stamping <c>Roamed</c> onto the literal would make its <c>add</c>/<c>add_last</c> calls target the
+    /// Roamed handle, which has no collection method → codegen "no resolved method" (or, once the temp is
+    /// created as <c>Roamed[Set]()</c>, an uninitialized controller → AccessViolation). Other expected
+    /// wrappers (Owned/Retained/Tracked) and exact collection types pass through unchanged.
+    /// </summary>
+    private TypeSymbol LiteralTypeFromExpected(TypeSymbol expectedType,
+        TypeSymbol? collectionExpectedType) =>
+        GetTypeBaseName(type: expectedType) == Compiler.Resolution.RuntimeContract.Roamed
+            ? collectionExpectedType!
+            : expectedType;
+
     private TypeSymbol WrapOwnedCollectionLiteralType(TypeSymbol type,
         bool wrapForBinding = false)
     {
@@ -182,15 +198,8 @@ public sealed partial class SemanticVerifier
         if (expectedType != null && expectedBaseName is "List" or "Deque" or "SortedList" or "BitList" or
             "Array" or "BitArray")
         {
-            // A Suflae entity slot pins the annotation as `Roamed[Core.List[T]]`. The literal itself must
-            // stay the BARE collection — it builds a fresh `create + add_last` sequence, and the SF binding
-            // lowering roams the result at the var/field/assignment site (exactly like a `List[T]()`
-            // constructor RHS). Stamping `Roamed` onto the literal would make its `add_last` calls target
-            // the Roamed handle, which has no collection method → codegen "no resolved method". Other
-            // expected wrappers (Owned/Retained/Tracked) and exact collection types pass through unchanged.
-            return GetTypeBaseName(type: expectedType) == Compiler.Resolution.RuntimeContract.Roamed
-                ? collectionExpectedType!
-                : expectedType;
+            return LiteralTypeFromExpected(expectedType: expectedType,
+                collectionExpectedType: collectionExpectedType);
         }
 
         // Return List<T> type by default.
@@ -257,7 +266,8 @@ public sealed partial class SemanticVerifier
 
         if (expectedType != null && expectedBaseName is "Set" or "SortedSet" or "SecureSet")
         {
-            return expectedType;
+            return LiteralTypeFromExpected(expectedType: expectedType,
+                collectionExpectedType: collectionExpectedType);
         }
 
         // Return Set<T> type by default.
@@ -335,7 +345,8 @@ public sealed partial class SemanticVerifier
         if (expectedType != null &&
             expectedBaseName is "Dict" or "SortedDict" or "PriorityQueue" or "SecureDict")
         {
-            return expectedType;
+            return LiteralTypeFromExpected(expectedType: expectedType,
+                collectionExpectedType: collectionExpectedType);
         }
 
         // Return Dict<K, V> type by default.
