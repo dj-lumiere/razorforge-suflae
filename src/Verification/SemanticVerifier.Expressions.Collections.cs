@@ -182,7 +182,15 @@ public sealed partial class SemanticVerifier
         if (expectedType != null && expectedBaseName is "List" or "Deque" or "SortedList" or "BitList" or
             "Array" or "BitArray")
         {
-            return expectedType;
+            // A Suflae entity slot pins the annotation as `Roamed[Core.List[T]]`. The literal itself must
+            // stay the BARE collection — it builds a fresh `create + add_last` sequence, and the SF binding
+            // lowering roams the result at the var/field/assignment site (exactly like a `List[T]()`
+            // constructor RHS). Stamping `Roamed` onto the literal would make its `add_last` calls target
+            // the Roamed handle, which has no collection method → codegen "no resolved method". Other
+            // expected wrappers (Owned/Retained/Tracked) and exact collection types pass through unchanged.
+            return GetTypeBaseName(type: expectedType) == Compiler.Resolution.RuntimeContract.Roamed
+                ? collectionExpectedType!
+                : expectedType;
         }
 
         // Return List<T> type by default.

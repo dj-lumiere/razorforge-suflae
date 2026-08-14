@@ -232,6 +232,18 @@ internal sealed class SuflaeEntityLoweringPass
             case CreatorExpression creator when creator.ResolvedType is EntityTypeInfo ce:
                 return WrapInRoam(inner: creator, entity: ce);
 
+            // A collection literal (`[1,2,3]` / `{…}`) is an entity rvalue just like a constructor call —
+            // it resolves to a bare `Core.List`/`Set`/`Dict` entity, so an SF entity slot must `.roam()` it
+            // (else a bare-list pointer is bound to a `Roamed` handle and reinterpreted as a controller →
+            // AccessViolation on first access). ExpressionLoweringPass later expands the literal to a
+            // `create + add_last` temp; the `.roam()` wraps that temp reference.
+            case ListLiteralExpression when expr.ResolvedType is EntityTypeInfo le:
+                return WrapInRoam(inner: expr, entity: le);
+            case SetLiteralExpression when expr.ResolvedType is EntityTypeInfo se:
+                return WrapInRoam(inner: expr, entity: se);
+            case DictLiteralExpression when expr.ResolvedType is EntityTypeInfo de:
+                return WrapInRoam(inner: expr, entity: de);
+
             // Reference to a local we've retyped to Roamed[E] -> flip its resolved type so aliasing
             // and access see the wrapper.
             case IdentifierExpression id

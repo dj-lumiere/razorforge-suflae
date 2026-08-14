@@ -502,12 +502,13 @@ public sealed class BuildDriver
             //     TODO: narrow to Integer.)
             //   - `IO/Console`, `IO/File` — always-available I/O in SF, so `show(...)` / file access need
             //     no ceremony import.
-            //   - `Suflae` — the Suflae-realm overlay Core (e.g. the roam-boundary `List` wrapper over
-            //     `RF::Core.List`). In SF these ARE Core, so no explicit `import Suflae` is needed; a bare
-            //     `List` shadows the RazorForge `Core.List` via own-module/import resolution priority.
+            // (Historical: a `Suflae` overlay module was prelude-injected here so a bare `List` shadowed
+            // `Core.List` with a hand-written roam-boundary wrapper. Removed 2026-08-14 — the world-line
+            // model makes SF's bare `List` resolve to the REAL `Core.List` (full API), which an SF `entity`
+            // slot roams directly, so the wrapper is obsolete. See [[realm-scoped-core]] pivot.)
             if (isSuflae && !isStdlibFile)
             {
-                string[] preludeModules = ["Numerics", "IO/Console", "IO/File", "Suflae"];
+                string[] preludeModules = ["Numerics", "IO/Console", "IO/File"];
                 int insertAt = 1; // Module declaration is guaranteed at index 0 by now.
                 foreach (string preludeModule in preludeModules)
                 {
