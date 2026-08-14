@@ -187,7 +187,7 @@ routine Deque[T].remove_first!() -> T
 ### Returns the front element without removing it.
 ### :returns: The current front element.
 ### :absent: The deque is empty.
-@readonly
+@[readonly, projecting]
 routine Deque[T].first!() -> T
   # Peek at front element without removing
   if me.is_empty()
@@ -197,7 +197,7 @@ routine Deque[T].first!() -> T
 ### Returns the back element without removing it.
 ### :returns: The current back element.
 ### :absent: The deque is empty.
-@readonly
+@[readonly, projecting]
 routine Deque[T].last!() -> T
   # Peek at back element without removing
   if me.is_empty()
@@ -263,7 +263,7 @@ routine Deque[T].reserve(new_capacity: U64)
 ### :param index: The zero-based logical position to read.
 ### :returns: The element at that logical position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-@readonly
+@[readonly, projecting]
 routine Deque[T].getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)

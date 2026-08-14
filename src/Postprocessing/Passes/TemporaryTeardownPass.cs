@@ -465,6 +465,12 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
             return false;
         if (e is CallExpression { Callee: MemberExpression vm } && ViewVerbs.Contains(vm.MemberName))
             return false;
+        // A `@projecting` accessor (`getitem`/`first`/`last`) returns a VIEW of an element the container
+        // still owns — spilling+`destroy`ing that temp would tear down the container's live element (a
+        // double-free). Like a view verb, it is not a fresh owned producer; the keep-site retaining copy
+        // (RecordCopyLoweringPass) is what gives the binder its own value.
+        if (e is CallExpression { ResolvedRoutine.Annotations: { } anns } && anns.Contains(value: "projecting"))
+            return false;
         TypeInfo? t = e.ResolvedType;
         if (t is null)
             return false;

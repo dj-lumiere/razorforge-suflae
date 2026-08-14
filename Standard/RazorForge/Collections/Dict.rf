@@ -339,7 +339,7 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # Indexing
 # ============================================================================
 
-@readonly
+@[readonly, projecting]
 routine Dict[K, V].getitem!(key: Referring[K]) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity

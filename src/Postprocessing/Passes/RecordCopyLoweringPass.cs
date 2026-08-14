@@ -452,6 +452,23 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             return MakeCopyCall(expr: expr, copyMethod: copyMethod!);
         }
 
+        // Reading an element out of a container you're KEEPING (`var x = a[i]`, `a.first()`) is a "look":
+        // `getitem`/`first`/`last` return a shallow view of an element the container STILL owns (a raw
+        // `peek`). Single-owner means keeping it needs your OWN value, so — exactly like binding a
+        // borrowed field of a heap-backed value type — inject that value type's `store` (a deep copy for
+        // Integer/Text/variant; a no-op for a trivial value whose bitwise peek is already independent;
+        // `NeedsRetainingCopy` decides). The accessor is tagged `@projecting`; a moving accessor
+        // (`remove_*`/`pop_*`, which the container RELEASES) is NOT, so it moves out uncopied. Done at the
+        // concrete CALL SITE (not inside the generic accessor body), so the element type is known and its
+        // `store` resolves. (Bare-entity elements are single-owner containment governed separately —
+        // reading one out is an explicit `copy`/`steal`, not this implicit value copy.)
+        if (!_inRcCopyVerb
+            && expr is CallExpression { ResolvedRoutine.Annotations: { } anns } && anns.Contains(value: "projecting")
+            && NeedsRetainingCopy(type: expr.ResolvedType, copyMethod: out RoutineInfo? projCopy))
+        {
+            return MakeCopyCall(expr: StripStealFromExpr(expr: expr), copyMethod: projCopy!);
+        }
+
         // For complex expressions in ownership positions (calls, constructors, etc.),
         // recurse into argument positions (which are themselves copy positions).
         return StripStealFromExpr(expr: expr);
