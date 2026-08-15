@@ -1809,6 +1809,35 @@ public sealed partial class TypeRegistry
     /// retaining-copied and balanced-destroyed, or neither — never the asymmetry that double-freed
     /// before. Resolved via <see cref="GetOwnMethodsResolved"/>, so it works for generic resolutions.
     /// </summary>
+    // True iff a method's owner-level `needs <param> obeys <Protocol>` constraints HOLD for the concrete
+    // owner's type args. e.g. `Array[T,N].store() needs T obeys Storable` — for `Array[Node]` the map
+    // T→Node fails (an entity is not storable), so the store hook must NOT be handed to the copy-lowering
+    // pass: injecting a `needs`-gated method whose constraint is unmet produces a body that can't resolve
+    // its inner `element.store()` → the "declared+called but never defined" over-prune crash. Monomorph's
+    // ConstraintsSatisfied deliberately trusts SA for `Obeys`, and no SA site rejects `var b = a` on a
+    // container of a non-storable element, so this is the guard that keeps the injection honest.
+    private bool OwnerConstraintsSatisfied(RoutineInfo method, TypeInfo ownerType)
+    {
+        if (method.GenericConstraints is not { Count: > 0 } constraints)
+            return true;
+        List<string>? paramNames =
+            (ownerType as RecordTypeInfo)?.GenericDefinition?.GenericParameters
+            ?? ownerType.GenericParameters;
+        List<TypeInfo>? args = ownerType.TypeArguments;
+        if (paramNames is null || args is null)
+            return true;
+        var subs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
+        for (int i = 0; i < paramNames.Count && i < args.Count; i++)
+            subs[key: paramNames[i]] = args[i];
+        foreach (GenericConstraintDeclaration c in constraints)
+        {
+            if (subs.TryGetValue(key: c.ParameterName, value: out TypeInfo? actual)
+                && !ImplementerSatisfiesConstraint(implementer: actual, constraint: c))
+                return false;
+        }
+        return true;
+    }
+
     public Lifecycle GetLifecycle(TypeInfo type)
     {
         if (IsBorrowTier(type: type))
@@ -1859,9 +1888,14 @@ public sealed partial class TypeRegistry
         else if (type is RecordTypeInfo rec)
         {
             // A hand-written store is always a retaining copy (the managed-leaf retain hook,
-            // e.g. Text/Decimal bumping a shared controller).
+            // e.g. Text/Decimal bumping a shared controller). Skip it when its owner-level `needs`
+            // constraint is unmet for the concrete type — e.g. `Array[SomeEntity]` whose element-loop
+            // store `needs T obeys Storable` (an entity is not storable): returning it would inject a
+            // store whose body can't resolve → over-prune crash. Store=null ⇒ the value is not storable
+            // and the implicit copy is (correctly) not injected.
             store = own.FirstOrDefault(predicate: m =>
-                m.Name == "store" && m.Parameters.Count == 0 && !m.IsSynthesized);
+                m.Name == "store" && m.Parameters.Count == 0 && !m.IsSynthesized
+                && OwnerConstraintsSatisfied(method: m, ownerType: type));
 
             // The synthesized record store is field-delegating (WiredRoutinePass.
             // BuildRecordCopyBody) — symmetric with the field-delegating synthesized destroy.
