@@ -75,7 +75,10 @@ routine Array[T, N].setitem!(index: U64, value: T)
 dangerous routine Array[T, N].destroy()
   var i = 0u64
   while i < N
-    LLVM::element_at[Array[T, N], T](me, i).destroy()
+    # Read element i in place through the storage pointer (element_at's by-VALUE form copies the whole
+    # array — which also draws a spurious retaining `me.store()` at the copy-lowering pass; the pointer
+    # form is what getitem/setitem use). The routine is already `dangerous`, so no nested `danger` block.
+    LLVM::load_element_ref[Array[T, N], T](me.hijack(), i).destroy()
     i = i + 1u64
   return
 
@@ -129,7 +132,8 @@ routine Array[T, N].is_empty() -> Bool
 routine Array[T, N].first!() -> T
   if N == 0u64
     absent
-  return LLVM::element_at[Array[T, N], T](me, 0u64)
+  danger
+    return LLVM::load_element_ref[Array[T, N], T](me.hijack(), 0u64)
 
 ### Returns the last element of the array.
 ### :returns: The element at index `N - 1`.
@@ -138,7 +142,8 @@ routine Array[T, N].first!() -> T
 routine Array[T, N].last!() -> T
   if N == 0u64
     absent
-  return LLVM::element_at[Array[T, N], T](me, N - 1u64)
+  danger
+    return LLVM::load_element_ref[Array[T, N], T](me.hijack(), N - 1u64)
 
 ### Returns true if any element equals `value`.
 ### Scans from index 0 to N - 1 using the element type's equality operator.
