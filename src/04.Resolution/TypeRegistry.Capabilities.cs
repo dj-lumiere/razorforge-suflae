@@ -228,8 +228,17 @@ public sealed partial class TypeRegistry
             ChoiceTypeInfo or FlagsTypeInfo => true,
             TupleTypeInfo t => t.ElementTypes.All(predicate: FieldStorable),
             RecordTypeInfo { IsGenericDefinition: false } r =>
-                r.MemberVariables is null or { Count: 0 }
-                || r.MemberVariables.All(predicate: m => FieldStorable(m.Type)),
+                r.MemberVariables is { Count: > 0 }
+                    ? r.MemberVariables.All(predicate: m => FieldStorable(m.Type))
+                    // No AST member variables: an `@llvm` inline-storage record (Array[T,N], Vector[E,N])
+                    // stores its type-KIND generic args INLINE — cascade storability to them so
+                    // Array[Text] is storable (Text is) but Array[SomeEntity] is NOT (entity has no
+                    // store). A const-generic VALUE arg (N) stores nothing → filtered out. Wrapper
+                    // records are excluded above. A field-less record with no type args ⇒ vacuously
+                    // storable (All over empty).
+                    : (r.TypeArguments ?? [])
+                        .Where(predicate: a => a.Category != TypeModel.Enums.TypeCategory.ConstGenericValue)
+                        .All(predicate: FieldStorable),
             _ => false
         };
     }
