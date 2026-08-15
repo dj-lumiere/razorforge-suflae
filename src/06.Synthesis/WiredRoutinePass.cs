@@ -1,0 +1,3681 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Compiler.Desugaring;
+using Compiler.Instantiation;
+using Compiler.Tokenizer;
+using Compiler.Postprocessing;
+using Compiler.Postprocessing.Passes;
+using Compiler.Targeting;
+using SyntaxTree;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
+using Verification;
+
+namespace Compiler.Synthesis;
+
+/// <summary>
+/// Generates real AST bodies for <c>IsSynthesized = true</c> stub routines on record, entity,
+/// and crashable types. Runs as a global pass after all per-file desugaring (Phase 6a).
+///
+/// <para>Generated bodies (keyed by <c>RoutineInfo.RegistryKey</c> ??<c>ctx.VariantBodies</c>):</para>
+/// <list type="bullet">
+///   <item><c>eq</c>   -> field-by-field <c>==</c> AND-chain for concrete <see cref="RecordTypeInfo"/>, <see cref="EntityTypeInfo"/>, <see cref="TupleTypeInfo"/>.</item>
+///   <item><c>hash</c> -> XOR-chain of <c>me.f.hash()</c> calls for records, entities, tuples.</item>
+///   <item><c>represent</c> / <c>diagnose</c> -> f-string body for <see cref="RecordTypeInfo"/> and
+///         <see cref="EntityTypeInfo"/>, including generic definitions (monomorphization substitutes type params).</item>
+///   <item><c>represent</c> on crashable ??<c>return me.crash_message()</c>.</item>
+///   <item><c>diagnose</c> on crashable -> f-string <c>Module.Name(crash_message, field: val, ...)</c>.</item>
+///   <item><c>Text.create(from: T)</c> ??<c>return from.represent()</c>.</item>
+/// </list>
+///
+/// <para>Not generated here:</para>
+/// <list type="bullet">
+///   <item><see cref="VariantTypeInfo"/> bodies — pattern dispatch on numeric value; not
+///         expressible in plain AST. Emitted by <c>ErrorHandlingVariantPass</c>.</item>
+///   <item>Records with <c>HasDirectBackendType</c> — intrinsic types with no RF member
+///         variables (skipped early in <see cref="HandleRecord"/>).</item>
+///   <item><c>Maybe[T].represent</c> / <c>diagnose</c> — defined explicitly in
+///         <c>Core/Errors/Maybe.rf</c> (treated as user code, not synthesized).</item>
+/// </list>
+/// </summary>
+public sealed class WiredRoutinePass(DesugaringContext ctx)
+{
+    private const string RepresentMethodName = "represent";
+    private const string DiagnoseMethodName = "diagnose";
+    private const string HashMethodName = "hash";
+    private const string BitXorMethodName = "bitxor";
+    private const string ResultVarName = "result";
+    private const string FirstVarName = "first";
+    private const string OtherParamName = "other";
+
+    private static readonly SourceLocation _synthLoc = new(FileName: "",
+        Line: 0,
+        Column: 0,
+        Position: 0);
+
+    /// <summary>Synthesizes and registers all wired routines for the current program.</summary>
+    public void RunGlobal() // NOSONAR S3776
+    {
+        TypeInfo? textType = ctx.Registry.LookupType(name: "Text");
+        TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
+        TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+        TypeInfo? s32Type = ctx.Registry.LookupType(name: "S32");
+        TypeInfo? s64Type = ctx.Registry.LookupType(name: "S64");
+        TypeInfo? byteSizeType = ctx.Registry.LookupType(name: "ByteSize");
+        TypeInfo? logicBreachedErrorType = ctx.Registry.LookupType(name: "LogicBreachedError");
+        TypeInfo? typeKindType = ctx.Registry.LookupType(name: "TypeKind");
+        TypeInfo? listTypeDef = ctx.Registry.LookupType(name: "List");
+        TypeInfo? listTextType = listTypeDef != null && textType != null
+            ? ctx.Registry.GetOrCreateResolution(genericDef: listTypeDef,
+                typeArguments: [textType])
+            : null;
+        if (textType == null || boolType == null)
+            return;
+
+        foreach (RoutineInfo routine in ctx.Registry.GetAllRoutines())
+        {
+            if (!routine.IsSynthesized) continue;
+            if (ctx.RoutineBodies.ContainsKey(key: routine.RegistryKey)) continue;
+            if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
+
+            // Auto-generated variant arm constructors (handled before the by-NAME explicit-impl skip
+            // below): an extractor `Arm.create(from: V)` shares the name `create` with the arm type's
+            // other constructors, so a name-only skip would wrongly drop it. This hook is overload-precise
+            // (owner/param must be in an arm relationship), so it is safe to run first.
+            if (TryBuildVariantArmConstructorBody(routine: routine,
+                    body: out Statement? armCtorBody))
+            {
+                ctx.VariantBodies[key: routine.RegistryKey] = armCtorBody!;
+                continue;
+            }
+
+            // Skip if an explicit (non-synthesized) implementation already exists in the registry.
+            // This prevents synthesized bodies from overriding custom stdlib implementations
+            // such as Watched[T,P].represent / diagnose defined in Watched.rf.
+            if (routine.OwnerType != null && ctx.Registry
+                                                .GetMethodsForType(type: routine.OwnerType)
+                                                .Any(r => r.Name == routine.Name &&
+                                                          !r.IsSynthesized))
+                continue;
+
+            // BuilderService constant routines apply to all owner types -> check by name first.
+            if (routine.OwnerType != null && TryHandleBuilderServiceConstant(routine: routine,
+                    textType: textType,
+                    u64Type: u64Type,
+                    s64Type: s64Type,
+                    boolType: boolType,
+                    typeKindType: typeKindType,
+                    listTextType: listTextType,
+                    byteSizeType: byteSizeType))
+                continue;
+
+            // Standalone BuilderService constants (no owner type): page_size, target_os, etc.
+            if (routine.OwnerType == null && TryHandleStandaloneBuilderServiceConstant(
+                    routine: routine,
+                    textType: textType,
+                    u64Type: u64Type,
+                    byteSizeType: byteSizeType))
+                continue;
+
+            switch (routine)
+            {
+                // Unified destructor: synthesize the auto-derived `destroy()` body. Composite
+                // record/entity/crashable types recurse into their owned fields; scalar kinds
+                // (choices, flags, `@llvm`-backed primitives, tuples, variants) are no-ops. The
+                // leaf RC/ptr behaviour (Hijacked → invalidate, Retained/Tracked → controller,
+                // Viewing/Modifying → no-op) lives in hand-written wrapper `destroy`s, so those are
+                // never auto-derived (they already exist).
+                case { Name: "destroy", Parameters.Count: 0 }:
+                {
+                    // Plain records/tuples (field-walk) and entities (field-walk + `hijack().invalidate()`
+                    // self-free via the `is EntityType` override) clone the `@overridable routine
+                    // T.destroy()` derive template. The template skips inert members (`m.is_inert`) — incl.
+                    // raw-pointer `Hijacked[T]` fields, now trivially destructible — so no undefined-symbol
+                    // trivial-destroy call is emitted. @llvm leaves / choice / flags (no owned fields →
+                    // noop) and VARIANTS (tag-dispatch teardown) keep the C# builder.
+                    TypeInfo? dOwner = routine.OwnerType;
+                    bool templatable = dOwner is EntityTypeInfo or VariantTypeInfo
+                        || (dOwner is RecordTypeInfo { HasDirectBackendType: false }
+                            and not (VariantTypeInfo or ChoiceTypeInfo or FlagsTypeInfo));
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        (templatable && dOwner != null
+                            ? CloneUniversalDeriveBody(ownerType: dOwner, synthesized: routine,
+                                methodName: "destroy")
+                            : null)
+                        ?? BuildDestroyBody(owner: dOwner);
+                    continue;
+                }
+                // Cycle-collector per-type hooks (see AutoWiredRegistrationPass.MaybeRegisterRoamHook).
+                case { Name: "roam_trace_impl", Parameters.Count: 0 }:
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        BuildRoamTraceBody(owner: routine.OwnerType);
+                    continue;
+                case { Name: "roam_free_impl", Parameters.Count: 0 }:
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        BuildRoamFreeBody(owner: routine.OwnerType);
+                    continue;
+                default:
+                    switch (routine.OwnerType)
+                    {
+                        case TupleTypeInfo tuple:
+                            HandleTuple(routine: routine,
+                                tuple: tuple,
+                                textType: textType,
+                                s32Type: s32Type);
+                            break;
+
+                        case ChoiceTypeInfo choice:
+                            HandleChoice(routine: routine,
+                                choice: choice,
+                                textType: textType,
+                                boolType: boolType,
+                                logicBreachedErrorType: logicBreachedErrorType,
+                                u64Type: u64Type,
+                                s64Type: s64Type,
+                                listTypeDef: listTypeDef);
+                            break;
+
+                        case FlagsTypeInfo flags:
+                            HandleFlags(routine: routine,
+                                flags: flags,
+                                textType: textType,
+                                boolType: boolType,
+                                u64Type: u64Type,
+                                listTypeDef: listTypeDef);
+                            break;
+
+                        case VariantTypeInfo variant:
+                            HandleVariant(routine: routine, variant: variant, textType: textType);
+                            break;
+
+                        case RecordTypeInfo record:
+                            HandleRecord(routine: routine,
+                                record: record,
+                                textType: textType,
+                                boolType: boolType,
+                                s32Type: s32Type);
+                            break;
+
+                        case CrashableTypeInfo crashable:
+                            HandleCrashable(routine: routine, crashable: crashable, textType: textType);
+                            break;
+
+                        case EntityTypeInfo entity:
+                            HandleEntity(routine: routine,
+                                entity: entity,
+                                textType: textType,
+                                boolType: boolType);
+                            break;
+                    }
+
+                    break;
+            }
+
+        }
+
+        // Tuple types appear only as local variable / expression types and never as routine
+        // signatures, so TypeLivenessPass cannot seed them — `GetAllRoutines()` filters them
+        // out via `IsConcreteTypeLive`. Iterate them directly from `_resolutions` (via
+        // `GetTypesWithMethods`) so their wired bodies are synthesized regardless of liveness.
+        foreach (TypeInfo type in ctx.Registry.GetTypesWithMethods())
+        {
+            if (type is not TupleTypeInfo tuple) continue;
+            foreach (RoutineInfo routine in ctx.Registry.GetMethodsForType(type))
+            {
+                if (!routine.IsSynthesized) continue;
+                if (ctx.RoutineBodies.ContainsKey(key: routine.RegistryKey)) continue;
+                if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
+                HandleTuple(routine: routine,
+                    tuple: tuple,
+                    textType: textType,
+                    s32Type: s32Type);
+            }
+        }
+
+        // GetAllRoutines() filters out generic-definition owner types to prevent T/K,V placeholders
+        // in LLVM. However, BuilderService routines on generic defs return only fixed literals or
+        // empty collections — they never reference the generic parameters. GMP needs these bodies
+        // to emit the generic-def LLVM function (e.g. @Collections.BTreeDictNode.member_variable_count)
+        // so that wrapper forwarders for Hijacked[BTreeDictNode] have a valid callee.
+        RunForGenericDefBuilderServiceRoutines(textType: textType,
+            u64Type: u64Type,
+            s64Type: s64Type,
+            boolType: boolType,
+            typeKindType: typeKindType,
+            listTextType: listTextType,
+            byteSizeType: byteSizeType);
+
+        // Synthesize wired routines (eq, hash, represent, diagnose) for
+        // generic def entity/record types that have no source-defined implementation.
+        // GMP needs a body in VariantBodies[genericDefKey] to rewrite into concrete instances.
+        RunForGenericDefWiredRoutines(textType: textType, boolType: boolType, s32Type: s32Type);
+    }
+
+    private void RunForGenericDefBuilderServiceRoutines(TypeInfo textType, TypeInfo? u64Type,
+        TypeInfo? s64Type, TypeInfo? boolType, TypeInfo? typeKindType,
+        TypeInfo? listTextType, TypeInfo? byteSizeType)
+    {
+        foreach (TypeInfo type in ctx.Registry.GetTypesWithMethods())
+        {
+            if (!type.IsGenericDefinition) continue;
+            foreach (RoutineInfo routine in ctx.Registry.GetMethodsForType(type))
+            {
+                if (!routine.IsSynthesized) continue;
+                if (!BuilderInfoProvider.IsBuilderServiceRoutine(name: routine.Name)) continue;
+                if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
+                TryHandleBuilderServiceConstant(routine: routine,
+                    textType: textType,
+                    u64Type: u64Type,
+                    s64Type: s64Type,
+                    boolType: boolType,
+                    typeKindType: typeKindType,
+                    listTextType: listTextType,
+                    byteSizeType: byteSizeType);
+            }
+        }
+    }
+
+    private void RunForGenericDefWiredRoutines(TypeInfo textType, TypeInfo boolType,
+        TypeInfo? s32Type)
+    {
+        TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+        foreach (TypeInfo type in ctx.Registry.GetTypesWithMethods())
+        {
+            if (!type.IsGenericDefinition) continue;
+            // Skip if a non-synthesized override exists — source-defined wins.
+            var methods = ctx.Registry
+                             .GetMethodsForType(type)
+                             .ToList();
+            foreach (RoutineInfo routine in methods)
+            {
+                if (!routine.IsSynthesized) continue;
+                if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
+                if (methods.Any(r => r.Name == routine.Name && !r.IsSynthesized)) continue;
+
+                // Unified destructor for generic-def entity/record types (e.g. ListEmitter[T],
+                // DictEntry[K,V]). The first loop's destroy handler runs over GetAllRoutines(),
+                // which excludes generic-def owners, so without this their destroy body is never
+                // synthesized — and GMP.BuildBody returns null for a synthesized method with no
+                // VariantBody, leaving scope-exit `emitter.destroy()` calls (inserted once these
+                // helper locals exist, e.g. from for-loop iteration) undefined at link.
+                if (routine is { Name: "destroy", Parameters.Count: 0 })
+                {
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        BuildDestroyBody(owner: routine.OwnerType);
+                    continue;
+                }
+
+                if (routine is { Name: "roam_trace_impl", Parameters.Count: 0 })
+                {
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        BuildRoamTraceBody(owner: routine.OwnerType);
+                    continue;
+                }
+
+                if (routine is { Name: "roam_free_impl", Parameters.Count: 0 })
+                {
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        BuildRoamFreeBody(owner: routine.OwnerType);
+                    continue;
+                }
+
+                switch (type)
+                {
+                    case EntityTypeInfo entity:
+                        HandleEntityGenericDefWired(routine: routine,
+                            entity: entity,
+                            textType: textType,
+                            boolType: boolType,
+                            u64Type: u64Type);
+                        break;
+                    case RecordTypeInfo { HasDirectBackendType: false } record:
+                        HandleRecordGenericDefWired(routine: routine,
+                            record: record,
+                            textType: textType,
+                            boolType: boolType,
+                            s32Type: s32Type,
+                            u64Type: u64Type);
+                        break;
+                }
+            }
+        }
+    }
+
+    private void HandleEntityGenericDefWired(RoutineInfo routine, EntityTypeInfo entity,
+        TypeInfo textType, TypeInfo boolType, TypeInfo? u64Type)
+    {
+        switch (routine.Name)
+        {
+            case RepresentMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
+                        methodName: RepresentMethodName)
+                    ?? BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
+                        textType: textType, diagnose: false);
+                break;
+            case DiagnoseMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
+                        methodName: DiagnoseMethodName)
+                    ?? BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
+                        textType: textType, diagnose: true);
+                break;
+            case "eq":
+                ctx.VariantBodies[key: routine.RegistryKey] = entity.MemberVariables.Count == 0
+                    ? BuildReturnTrueBody(boolType: boolType)
+                    : BuildEqBody(ownerType: entity,
+                        fields: entity.MemberVariables,
+                        boolType: boolType);
+                break;
+            case HashMethodName when entity.MemberVariables.Count > 0 && u64Type != null &&
+                                     routine.Parameters.Count == 0:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildHashBody(ownerType: entity,
+                    fields: entity.MemberVariables,
+                    u64Type: u64Type);
+                break;
+            case HashMethodName when entity.MemberVariables.Count > 0 && u64Type != null &&
+                                     routine.Parameters.Count == 2:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildSecureHashBody(ownerType: entity,
+                        fields: entity.MemberVariables,
+                        u64Type: u64Type);
+                break;
+        }
+    }
+
+    private void HandleRecordGenericDefWired(RoutineInfo routine, RecordTypeInfo record,
+        TypeInfo textType, TypeInfo boolType, TypeInfo? s32Type,
+        TypeInfo? u64Type)
+    {
+        switch (routine.Name)
+        {
+            case RepresentMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildTextBody(ownerType: record,
+                    fields: record.MemberVariables,
+                    textType: textType,
+                    diagnose: false);
+                break;
+            case DiagnoseMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildTextBody(ownerType: record,
+                    fields: record.MemberVariables,
+                    textType: textType,
+                    diagnose: true);
+                break;
+            case "eq":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildEqBody(ownerType: record,
+                    fields: record.MemberVariables,
+                    boolType: boolType);
+                break;
+            case HashMethodName when u64Type != null && routine.Parameters.Count == 0:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildHashBody(ownerType: record,
+                    fields: record.MemberVariables,
+                    u64Type: u64Type);
+                break;
+            case HashMethodName when u64Type != null && routine.Parameters.Count == 2:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildSecureHashBody(ownerType: record,
+                        fields: record.MemberVariables,
+                        u64Type: u64Type);
+                break;
+            case "cmp" when s32Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildCmpBody(ownerType: record,
+                    fields: record.MemberVariables,
+                    s32Type: s32Type,
+                    boolType: boolType);
+                break;
+        }
+    }
+
+    //  Per-type handlers
+
+    private void HandleRecord(RoutineInfo routine, RecordTypeInfo record, TypeInfo textType,
+        TypeInfo boolType, TypeInfo? s32Type) // NOSONAR S3776
+    {
+        // Numeric create bodies for @llvm-typed primitive records.
+        // S64.create(from: Choice) -> sign_extend; U64.create(from: Flags) -> reinterpret_bits.
+        // Must be checked before the HasDirectBackendType guard because these live on S64/U64.
+        if (routine is { Name: "create", Parameters.Count: 1 })
+        {
+            TypeInfo paramType = routine.Parameters[index: 0].Type;
+            string paramName = routine.Parameters[index: 0].Name;
+            TypeInfo? s64Type = ctx.Registry.LookupType(name: "S64");
+            TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+            if (paramType is ChoiceTypeInfo && record.Name == "S64" && s64Type != null)
+            {
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmIntrinsicCallBody(
+                    intrinsicName: "sign_extend",
+                    fromType: paramType,
+                    toType: s64Type,
+                    paramName: paramName);
+                return;
+            }
+
+            if (paramType is FlagsTypeInfo && record.Name == "U64" && u64Type != null)
+            {
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmIntrinsicCallBody(
+                    intrinsicName: "reinterpret_bits",
+                    fromType: paramType,
+                    toType: u64Type,
+                    paramName: paramName);
+                return;
+            }
+        }
+
+        // `store` / `clone` bodies are field-independent (`return me` / `return me.store()`), so
+        // synthesize them BEFORE the opaque-backend skip — @llvm primitives (S64, Bool, …) need real
+        // (trivial, LLVM-inlined) bodies so explicit `clone()`/`store()` calls link. Only synth stubs
+        // reach here; user-written copies (e.g. Text.store, which retains) keep their own body.
+        switch (routine.Name)
+        {
+            case "store":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    (record.IsGenericDefinition
+                        ? null
+                        : CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                            methodName: "store"))
+                    ?? BuildRecordCopyBody(record: record);
+                return;
+            case "copy":
+                // Deep `copy` forwards to `store` — cloned from the `@overridable routine T.copy()`
+                // derive template (`return me.store()`); falls back to the C# builder.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                        methodName: "copy")
+                    ?? BuildCloneViaCopyBody(ownerType: record);
+                return;
+            case "serialize" when !record.IsGenericDefinition:
+                // A COMPOSITE record clones the universal `@overridable routine T.serialize()` derive
+                // template (comptime `expand` field-walk into a `Dict[Text, SerialValue]` arm). A type
+                // that boxes into its OWN SerialValue arm keeps the C# builder: the scalar leaves
+                // (S8..U64/F32/F64/Bool/Moment/Bytes/Text — a matching scalar arm) and zero-field opaque
+                // @llvm records self-box, not field-walk (an empty `expand` would wrongly yield `{}`).
+                // "Composite" = has RF fields, no direct @llvm backend, AND no scalar arm of its own.
+                bool serializeComposite = !record.HasDirectBackendType &&
+                    record.MemberVariables.Count > 0 &&
+                    ctx.Registry.LookupType(name: "SerialValue") is VariantTypeInfo serialValueDef &&
+                    FindScalarArm(serialValue: serialValueDef, fieldType: record) == null;
+                Statement? recSer =
+                    (serializeComposite
+                        ? CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                            methodName: "serialize")
+                        : null)
+                    ?? BuildSerializeBody(owner: record, fields: record.MemberVariables,
+                        textType: textType);
+                if (recSer != null) ctx.VariantBodies[key: routine.RegistryKey] = recSer;
+                return;
+        }
+
+        if (record.HasDirectBackendType) return;
+
+        switch (routine.Name)
+        {
+            case "eq":
+            {
+                // eq generation requires knowing the concrete field types at body-gen time.
+                // Generic definitions are handled per concrete instantiation via GMP.
+                if (record.IsGenericDefinition) break;
+                // The record's eq body is CLONED from the universal `@overridable routine T.eq()`
+                // RazorForge derive template (comptime `expand` field-walk), moving the logic out of
+                // C#. Falls back to the C# builder if the template isn't present.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                        methodName: "eq")
+                    ?? BuildEqBody(ownerType: record, fields: record.MemberVariables,
+                        boolType: boolType);
+                break;
+            }
+
+            case "cmp":
+            {
+                if (s32Type == null) break;
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                        methodName: "cmp")
+                    ?? BuildCmpBody(ownerType: record, fields: record.MemberVariables,
+                        s32Type: s32Type, boolType: boolType);
+                break;
+            }
+
+            // (store / clone handled above, before the opaque-backend skip.)
+
+            case RepresentMethodName:
+                // A record's represent body is CLONED from the universal `@overridable routine
+                // T.represent()` RazorForge derive template (comptime `expand` field-walk), moving the
+                // logic out of C#. Falls back to the C# builder if the template isn't present.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                        methodName: RepresentMethodName)
+                    ?? BuildTextBody(ownerType: record, fields: record.MemberVariables,
+                        textType: textType, diagnose: false);
+                break;
+
+            case "serialize":
+            {
+                // Handled before the opaque-backend skip (see the switch above) so @llvm scalar leaves
+                // get a boxing body; composite records are covered there as well. Nothing to do here.
+                break;
+            }
+
+            case DiagnoseMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                        methodName: DiagnoseMethodName)
+                    ?? BuildTextBody(ownerType: record, fields: record.MemberVariables,
+                        textType: textType, diagnose: true);
+                break;
+
+            case HashMethodName when routine.Parameters.Count == 0:
+            {
+                // Generic definitions allowed: monomorphization substitutes type params.
+                // Concrete records clone the universal `@overridable routine T.hash()` derive
+                // template (comptime `expand` XOR-fold); generic defs stay on the C# builder.
+                TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+                if (u64Type == null) break;
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    (record.IsGenericDefinition
+                        ? null
+                        : CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                            methodName: HashMethodName))
+                    ?? BuildHashBody(ownerType: record, fields: record.MemberVariables,
+                        u64Type: u64Type);
+                break;
+            }
+
+            case HashMethodName when routine.Parameters.Count == 2:
+            {
+                if (record.IsGenericDefinition) break;
+                TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+                if (u64Type == null) break;
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
+                        methodName: HashMethodName)
+                    ?? BuildSecureHashBody(ownerType: record,
+                        fields: record.MemberVariables,
+                        u64Type: u64Type);
+                break;
+            }
+        }
+    }
+
+    private void HandleEntity(RoutineInfo routine, EntityTypeInfo entity, TypeInfo textType,
+        TypeInfo boolType)
+    {
+        // Generic definitions allowed: monomorphization substitutes type params via _typeSubstitutions.
+        switch (routine.Name)
+        {
+            case RepresentMethodName:
+                // Cloned from the universal `@overridable routine T.represent()` derive template
+                // (comptime `expand` field-walk), same as records/tuples; a routine-typed member now
+                // renders its first-class `represent` (the signature) instead of the old `<routine>`.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
+                        methodName: RepresentMethodName)
+                    ?? BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
+                        textType: textType, diagnose: false);
+                break;
+
+            case DiagnoseMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
+                        methodName: DiagnoseMethodName)
+                    ?? BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
+                        textType: textType, diagnose: true);
+                break;
+
+            case "serialize":
+            {
+                if (entity.IsGenericDefinition) break;
+                // A composite entity clones the universal `@overridable routine T.serialize()` derive
+                // template — same as records, but the template's per-field `m.obeying(...)` gate now
+                // earns its keep: an entity MAY hold a routine-typed field (records can't, RF-S412),
+                // which the gate lowers to the `<routine>` placeholder. Zero-field entities keep the
+                // C# builder (opaque Text box). Falls back to C# too.
+                Statement? serBody =
+                    (entity.MemberVariables.Count > 0
+                        ? CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
+                            methodName: "serialize")
+                        : null)
+                    ?? BuildSerializeBody(owner: entity, fields: entity.MemberVariables,
+                        textType: textType);
+                if (serBody != null) ctx.VariantBodies[key: routine.RegistryKey] = serBody;
+                break;
+            }
+
+            case "eq":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
+                        methodName: "eq")
+                    ?? (entity.MemberVariables.Count == 0
+                        ? BuildReturnTrueBody(boolType: boolType)
+                        : BuildEqBody(ownerType: entity, fields: entity.MemberVariables,
+                            boolType: boolType));
+                break;
+
+            case HashMethodName
+                when entity.MemberVariables.Count > 0 && routine.Parameters.Count == 0:
+            {
+                TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+                if (u64Type == null) break;
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    (entity.IsGenericDefinition
+                        ? null
+                        : CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
+                            methodName: HashMethodName))
+                    ?? BuildHashBody(ownerType: entity, fields: entity.MemberVariables,
+                        u64Type: u64Type);
+                break;
+            }
+
+            case HashMethodName
+                when entity.MemberVariables.Count > 0 && routine.Parameters.Count == 2:
+            {
+                TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+                if (u64Type == null) break;
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    (entity.IsGenericDefinition
+                        ? null
+                        : CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
+                            methodName: HashMethodName))
+                    ?? BuildSecureHashBody(ownerType: entity,
+                        fields: entity.MemberVariables,
+                        u64Type: u64Type);
+                break;
+            }
+
+            // Text.create(from: T) -> return from.represent()
+            case "create" when entity.Name == "Text" && routine.Parameters.Count == 1:
+            {
+                TypeInfo paramType = routine.Parameters[index: 0].Type;
+                string paramName = routine.Parameters[index: 0].Name;
+                var fromRef = new IdentifierExpression(Name: paramName, Location: _synthLoc)
+                {
+                    ResolvedType = paramType
+                };
+                var representCall = new CallExpression(
+                    Callee: new MemberExpression(Object: fromRef,
+                        MemberName: RepresentMethodName,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = textType };
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    new ReturnStatement(Value: representCall, Location: _synthLoc);
+                break;
+            }
+        }
+    }
+
+    private void HandleCrashable(RoutineInfo routine, CrashableTypeInfo crashable,
+        TypeInfo textType)
+    {
+        switch (routine.Name)
+        {
+            case RepresentMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildCrashableRepresentBody(crashable: crashable);
+                break;
+
+            case DiagnoseMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildCrashableDiagnoseBody(crashable: crashable, textType: textType);
+                break;
+
+            case "crash_title":
+                ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
+                    Value: new LiteralExpression(Value: crashable.CrashTitle,
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc);
+                break;
+        }
+    }
+
+    private void HandleChoice(RoutineInfo routine, ChoiceTypeInfo choice, TypeInfo textType,
+        TypeInfo boolType, TypeInfo? logicBreachedErrorType, TypeInfo? u64Type,
+        TypeInfo? s64Type, TypeInfo? listTypeDef)
+    {
+        switch (routine.Name)
+        {
+            case "eq":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildEqBodyNumeric(ownerType: choice,
+                    boolType: boolType,
+                    isChoice: true);
+                break;
+
+            case HashMethodName
+                when s64Type != null && u64Type != null && routine.Parameters.Count == 0:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildNumericHashBodyViaConversion(
+                    ownerType: choice,
+                    conversionTypeName: "S64",
+                    conversionType: s64Type,
+                    u64Type: u64Type);
+                break;
+
+            case HashMethodName
+                when s64Type != null && u64Type != null && routine.Parameters.Count == 2:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildNumericSecureHashBodyViaConversion(ownerType: choice,
+                        conversionTypeName: "S64",
+                        conversionType: s64Type,
+                        u64Type: u64Type);
+                break;
+
+            case "all_cases" when listTypeDef != null:
+            {
+                TypeInfo listChoiceType =
+                    ctx.Registry.GetOrCreateResolution(genericDef: listTypeDef,
+                        typeArguments: [choice]);
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildAllCasesBody(memberNames: choice
+                       .Cases
+                       .Select(c => c.Name)
+                       .ToList(),
+                    elementType: choice,
+                    listType: listChoiceType);
+                break;
+            }
+
+            case RepresentMethodName:
+                // Cloned from the `@override … needs T is ChoiceType` derive template (VALUE-dispatch
+                // via `caseof`); falls back to the C# builder.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: choice, synthesized: routine,
+                        methodName: RepresentMethodName)
+                    ?? BuildChoiceRepresentBody(choice: choice, textType: textType,
+                        logicBreachedErrorType: logicBreachedErrorType);
+                break;
+
+            case DiagnoseMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: choice, synthesized: routine,
+                        methodName: DiagnoseMethodName)
+                    ?? BuildChoiceDiagnoseBody(choice: choice, textType: textType,
+                        logicBreachedErrorType: logicBreachedErrorType);
+                break;
+
+            case "create!":
+                // Text -> ChoiceType conversion is not implementable at the RF level;
+                // this always crashes. The body is unreachable in well-typed programs.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildBreachStatement(logicBreachedErrorType: logicBreachedErrorType);
+                break;
+
+            case "store":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: choice);
+                break;
+
+            case "copy":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildCloneViaCopyBody(ownerType: choice);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds the body: <c>return me == you</c> for choice and flags types.
+    /// The <c>BinaryExpression(Equal)</c> lowers to <c>icmp eq i32</c> (choice) or
+    /// <c>icmp eq i64</c> (flags) in <c>EmitPrimitiveBinaryOp</c>.
+    /// </summary>
+    private static ReturnStatement BuildEqBodyNumeric(TypeInfo ownerType, TypeInfo boolType,
+        bool isChoice)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var youRef = new IdentifierExpression(Name: "you", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        // Choice: BinaryOperator.Is -> EmitChoiceIs -> icmp eq i32 (no eq recursion).
+        // Flags: BinaryOperator.Equal stays — OperatorLoweringPass skips it for flags,
+        // and codegen emits icmp eq i64 via the flags-specific handler.
+        BinaryOperator op = isChoice
+            ? BinaryOperator.Is
+            : BinaryOperator.Equal;
+        var cmp = new BinaryExpression(Left: meRef,
+            Operator: op,
+            Right: youRef,
+            Location: _synthLoc) { ResolvedType = boolType };
+        return new ReturnStatement(Value: cmp, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body: <c>return me.f1 == you.f1 and me.f2 == you.f2 and ...</c>
+    /// Zero-field types: <c>return true</c>.
+    /// </summary>
+    private static ReturnStatement BuildEqBody(TypeInfo ownerType, List<MemberVariableInfo> fields,
+        TypeInfo boolType)
+    {
+        if (fields.Count == 0)
+        {
+            return new ReturnStatement(
+                Value: new LiteralExpression(Value: true,
+                    LiteralType: TokenType.True,
+                    Location: _synthLoc) { ResolvedType = boolType },
+                Location: _synthLoc);
+        }
+
+        Expression? combined = null;
+        foreach (MemberVariableInfo field in fields)
+        {
+            // None fields carry no information — two None values are always equal; skip them
+            // to avoid emitting calls to None.eq (void params, illegal in LLVM IR).
+            if (field.Type.IsNone) continue;
+
+            var lhs = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
+                {
+                    ResolvedType = ownerType
+                },
+                MemberName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+
+            var rhs = new MemberExpression(
+                Object: new IdentifierExpression(Name: "you", Location: _synthLoc)
+                {
+                    ResolvedType = ownerType
+                },
+                MemberName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+
+            var cmp = new BinaryExpression(Left: lhs,
+                Operator: BinaryOperator.Equal,
+                Right: rhs,
+                Location: _synthLoc) { ResolvedType = boolType };
+
+            combined = combined == null
+                ? cmp
+                : new BinaryExpression(Left: combined,
+                    Operator: BinaryOperator.And,
+                    Right: cmp,
+                    Location: _synthLoc) { ResolvedType = boolType };
+        }
+
+        return new ReturnStatement(
+            Value: combined ??
+                   new LiteralExpression(Value: true,
+                       LiteralType: TokenType.True,
+                       Location: _synthLoc) { ResolvedType = boolType },
+            Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body: <c>return true</c> for zero-field entity types.
+    /// Zero-field entities have no distinguishing state, so any two instances are structurally equal.
+    /// </summary>
+    /// <summary>
+    /// Builds the body: <c>return me</c>. Used for synthesized <c>store()</c> on
+    /// Assignable types. Codegen emits a bitwise copy of the receiver into the
+    /// return slot — no method dispatch overhead at the call site.
+    /// </summary>
+    private static ReturnStatement BuildReturnMeBody(TypeInfo ownerType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        return new ReturnStatement(Value: meRef, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the synthesized record <c>store</c> body. Symmetric with
+    /// <see cref="BuildDestroyBody"/>: if any field needs a retaining copy (e.g. a
+    /// refcounted <c>Decimal</c>/<c>Text</c> field whose own <c>store</c> bumps a shared
+    /// controller), reconstruct the record memberwise — <c>return Owner(f: me.f.store(),
+    /// g: me.g, …)</c> — so those field refcounts are bumped to balance the per-field
+    /// <c>destroy</c> at teardown. Without this, the value-copy shares field handles at
+    /// refcount 1 and both copies free them → double-free.
+    ///
+    /// Pure value records (all fields trivially copyable) and @llvm-backed primitives keep
+    /// the cheap shallow <c>return me</c>.
+    /// </summary>
+    private ReturnStatement BuildRecordCopyBody(RecordTypeInfo record)
+    {
+        // @llvm-backed primitives (S64, Bool, …) have no composite fields to recurse into.
+        if (record.HasDirectBackendType || record.MemberVariables is null or { Count: 0 })
+            return BuildReturnMeBody(ownerType: record);
+
+        // Only reconstruct when at least one field genuinely needs a retaining copy.
+        // Otherwise the shallow byte-copy is both correct and cheaper.
+        var anyRetaining = record.MemberVariables.Any(predicate: f => ctx.Registry
+           .GetLifecycle(type: f.Type)
+           .Store is not null);
+        if (!anyRetaining)
+            return BuildReturnMeBody(ownerType: record);
+
+        var memberArgs = new List<(string Name, Expression Value)>(
+            capacity: record.MemberVariables.Count);
+        foreach (MemberVariableInfo field in record.MemberVariables)
+        {
+            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            {
+                ResolvedType = record
+            };
+            var fieldRef =
+                new MemberExpression(Object: meRef, MemberName: field.Name, Location: _synthLoc)
+                {
+                    ResolvedType = field.Type
+                };
+
+            // Retaining field → me.f.store() (bumps its refcount); value field → me.f (shallow).
+            Expression argExpr = ctx.Registry.GetLifecycle(type: field.Type)
+                                    .Store is not null
+                ? new CallExpression(
+                    Callee: new MemberExpression(Object: fieldRef,
+                        MemberName: "store",
+                        Location: _synthLoc) { ResolvedType = field.Type },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = field.Type }
+                : fieldRef;
+            memberArgs.Add(item: (field.Name, argExpr));
+        }
+
+        var creator =
+            new CreatorExpression(TypeName: record.Name,
+                TypeArguments: null,
+                MemberVariables: memberArgs,
+                Location: _synthLoc)
+            {
+                ResolvedType = record, LoweringKind = CallLoweringKind.TypeConstructor
+            };
+        return new ReturnStatement(Value: creator, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body: <c>return me.store()</c>. Used for synthesized <c>clone()</c>
+    /// on Assignable types — clone is an Assignable-implied alias for the explicit
+    /// copy verb, so it just forwards.
+    /// </summary>
+    private static ReturnStatement BuildCloneViaCopyBody(TypeInfo ownerType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var copyMember =
+            new MemberExpression(Object: meRef, MemberName: "store", Location: _synthLoc)
+            {
+                ResolvedType = ownerType
+            };
+        var copyCall =
+            new CallExpression(Callee: copyMember, Arguments: [], Location: _synthLoc)
+            {
+                ResolvedType = ownerType
+            };
+        return new ReturnStatement(Value: copyCall, Location: _synthLoc);
+    }
+
+    private static ReturnStatement BuildReturnTrueBody(TypeInfo boolType)
+    {
+        return new ReturnStatement(
+            Value: new LiteralExpression(Value: true,
+                LiteralType: TokenType.True,
+                Location: _synthLoc) { ResolvedType = boolType },
+            Location: _synthLoc);
+    }
+
+    //  hash
+
+    /// <summary>
+    /// Builds the body: <c>return me.f1.hash() ^ me.f2.hash() ^ ...</c>.
+    /// Zero-field types: <c>return 0_u64</c>.
+    /// </summary>
+    private ReturnStatement BuildHashBody(TypeInfo ownerType, List<MemberVariableInfo> fields,
+        TypeInfo u64Type)
+    {
+        if (fields.Count == 0)
+        {
+            return new ReturnStatement(
+                Value: new LiteralExpression(Value: 0UL,
+                    LiteralType: TokenType.U64Literal,
+                    Location: _synthLoc) { ResolvedType = u64Type },
+                Location: _synthLoc);
+        }
+
+        // Pre-resolve U64.bitxor so synthesized CallExpression nodes carry a concrete
+        // ResolvedRoutine. Without it, codegen's DirectMemberRoutine path throws when it
+        // can't determine the receiver type for the XOR accumulator call.
+        RoutineInfo? u64Bitxor =
+            ctx.Registry.LookupMethod(type: u64Type, methodName: BitXorMethodName);
+
+        Expression? accum = null;
+        foreach (MemberVariableInfo field in fields)
+        {
+            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            {
+                ResolvedType = ownerType
+            };
+            var fieldAccess =
+                new MemberExpression(Object: meRef, MemberName: field.Name, Location: _synthLoc)
+                {
+                    ResolvedType = field.Type
+                };
+            var hashMethod = new MemberExpression(
+                Object: fieldAccess,
+                MemberName: HashMethodName,
+                Location: _synthLoc) { ResolvedType = u64Type };
+            RoutineInfo? fieldHashRoutine = ctx.Registry.LookupMethodOverload(type: field.Type,
+                methodName: HashMethodName,
+                argTypes: []);
+            Expression fieldHash =
+                new CallExpression(Callee: hashMethod, Arguments: [], Location: _synthLoc)
+                {
+                    ResolvedType = u64Type,
+                    ResolvedRoutine = fieldHashRoutine,
+                    LoweringKind = CallLoweringKind.DirectMemberRoutine
+                };
+
+            if (accum == null)
+            {
+                accum = fieldHash;
+            }
+            else
+            {
+                // XOR the accumulated hash with this field's hash via bitxor method call.
+                // BinaryExpression(BitwiseXor) must be lowered before codegen; synthesized
+                // bodies bypass the lowering pass, so we emit the method call directly.
+                accum = new CallExpression(
+                    Callee: new MemberExpression(Object: accum,
+                        MemberName: BitXorMethodName,
+                        Location: _synthLoc) { ResolvedType = u64Type },
+                    Arguments:
+                    [
+                        new NamedArgumentExpression(Name: "you",
+                            Value: fieldHash,
+                            Location: _synthLoc)
+                    ],
+                    Location: _synthLoc)
+                {
+                    ResolvedType = u64Type,
+                    ResolvedRoutine = u64Bitxor,
+                    LoweringKind = CallLoweringKind.DirectMemberRoutine
+                };
+            }
+        }
+
+        return new ReturnStatement(Value: accum!, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body: <c>return ConversionType(from: me).hash()</c>.
+    /// Used for Choice (<c>S64(from: me).hash()</c>) and Flags (<c>U64(from: me).hash()</c>).
+    /// The numeric create lowers via the existing codegen numeric-create path; <c>hash</c>
+    /// on the result delegates to the primitive type's xxHash64 implementation.
+    /// </summary>
+    private static ReturnStatement BuildNumericHashBodyViaConversion(TypeInfo ownerType,
+        string conversionTypeName, TypeInfo conversionType, TypeInfo u64Type)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var creator =
+            new CreatorExpression(TypeName: conversionTypeName,
+                TypeArguments: null,
+                MemberVariables: [("from", meRef)],
+                Location: _synthLoc)
+            {
+                ResolvedType = conversionType, LoweringKind = CallLoweringKind.TypeConstructor
+            };
+        var hashCall = new CallExpression(
+            Callee: new MemberExpression(Object: creator,
+                MemberName: HashMethodName,
+                Location: _synthLoc) { ResolvedType = u64Type },
+            Arguments: [],
+            Location: _synthLoc) { ResolvedType = u64Type };
+        return new ReturnStatement(Value: hashCall, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body: <c>return [Member1, Member2, ...]</c> as a list literal.
+    /// Used for <c>all_cases()</c> on choice and flags types.
+    /// </summary>
+    private static ReturnStatement BuildAllCasesBody(List<string> memberNames,
+        TypeInfo elementType, TypeInfo listType)
+    {
+        var elements = memberNames.Select(name =>
+                                       (Expression)new IdentifierExpression(Name: name,
+                                           Location: _synthLoc) { ResolvedType = elementType })
+                                  .ToList();
+        return new ReturnStatement(
+            Value: new ListLiteralExpression(Elements: elements,
+                ElementType: null,
+                Location: _synthLoc) { ResolvedType = listType },
+            Location: _synthLoc);
+    }
+
+    //  Numeric create (sign_extend / reinterpret_bits)
+
+    /// <summary>
+    /// Builds: <c>return intrinsicName[From, To](value: paramName)</c>.
+    /// Used for <c>S64.create(from: Choice)</c> via <c>sign_extend</c> and
+    /// <c>U64.create(from: Flags)</c> via <c>reinterpret_bits</c>.
+    /// </summary>
+    private static ReturnStatement BuildLlvmIntrinsicCallBody(string intrinsicName,
+        TypeInfo fromType, TypeInfo toType, string paramName)
+    {
+        var fromRef = new IdentifierExpression(Name: paramName, Location: _synthLoc)
+        {
+            ResolvedType = fromType
+        };
+        var typeArgFrom = new TypeExpression(
+            Name: fromType.Name,
+            GenericArguments: null,
+            Location: _synthLoc) { ResolvedType = fromType };
+        var typeArgTo =
+            new TypeExpression(Name: toType.Name, GenericArguments: null, Location: _synthLoc)
+            {
+                ResolvedType = toType
+            };
+        var call = new CallExpression(
+            Callee: new IdentifierExpression(Name: intrinsicName, Location: _synthLoc)
+            {
+                ResolvedType = toType
+            },
+            Arguments:
+            [new NamedArgumentExpression(Name: "value", Value: fromRef, Location: _synthLoc)],
+            Location: _synthLoc)
+        {
+            ResolvedType = toType,
+            LoweringKind = CallLoweringKind.LlvmIntrinsic,
+            TypeArguments = [typeArgFrom, typeArgTo]
+        };
+        return new ReturnStatement(Value: call, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds: <c>return intrinsicName[reprType](a: me, b: you)</c> for a two-operand LLVM intrinsic
+    /// whose params are <c>a</c>/<c>b</c> and whose single type param is the operands' underlying
+    /// integer repr. Used for Flags <c>bitor</c>/<c>bitand</c>/<c>bitxor</c> (<c>bit_or</c>/<c>bit_and</c>/
+    /// <c>bit_xor</c> → the Flags i64 repr) and <c>eq</c>/<c>ne</c> (<c>int_eq</c>/<c>int_ne</c>). The
+    /// intrinsic is emitted directly (not via a surface operator), so OperatorLoweringPass never
+    /// recurses back into these bodies.
+    /// </summary>
+    private static ReturnStatement BuildLlvmBinaryIntrinsicCallBody(string intrinsicName,
+        TypeInfo ownerType, TypeInfo reprType, TypeInfo resultType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var youRef = new IdentifierExpression(Name: "you", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var typeArgRepr = new TypeExpression(Name: reprType.Name, GenericArguments: null,
+            Location: _synthLoc) { ResolvedType = reprType };
+        var call = new CallExpression(
+            Callee: new IdentifierExpression(Name: intrinsicName, Location: _synthLoc)
+            {
+                ResolvedType = resultType
+            },
+            Arguments:
+            [
+                new NamedArgumentExpression(Name: "a", Value: meRef, Location: _synthLoc),
+                new NamedArgumentExpression(Name: "b", Value: youRef, Location: _synthLoc)
+            ],
+            Location: _synthLoc)
+        {
+            ResolvedType = resultType,
+            LoweringKind = CallLoweringKind.LlvmIntrinsic,
+            TypeArguments = [typeArgRepr]
+        };
+        return new ReturnStatement(Value: call, Location: _synthLoc);
+    }
+
+    //  keyed hash(k0, k1)
+
+    /// <summary>
+    /// Builds the body: <c>return me.f1.hash(k0: k0, k1: k1) ^ me.f2.hash(...) ^ ...</c>.
+    /// Zero-field types: <c>return 0_u64</c>.
+    /// </summary>
+    private ReturnStatement BuildSecureHashBody(TypeInfo ownerType,
+        List<MemberVariableInfo> fields, TypeInfo u64Type)
+    {
+        if (fields.Count == 0)
+            return new ReturnStatement(
+                Value: new LiteralExpression(Value: 0UL,
+                    LiteralType: TokenType.U64Literal,
+                    Location: _synthLoc) { ResolvedType = u64Type },
+                Location: _synthLoc);
+
+        RoutineInfo? u64Bitxor =
+            ctx.Registry.LookupMethod(type: u64Type, methodName: BitXorMethodName);
+
+        var k0Ref =
+            new IdentifierExpression(Name: "k0", Location: _synthLoc) { ResolvedType = u64Type };
+        var k1Ref =
+            new IdentifierExpression(Name: "k1", Location: _synthLoc) { ResolvedType = u64Type };
+
+        Expression? accum = null;
+        foreach (MemberVariableInfo field in fields)
+        {
+            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            {
+                ResolvedType = ownerType
+            };
+            var fieldAccess =
+                new MemberExpression(Object: meRef, MemberName: field.Name, Location: _synthLoc)
+                {
+                    ResolvedType = field.Type
+                };
+            RoutineInfo? fieldSecureHashRoutine = ctx.Registry.LookupMethodOverload(
+                type: field.Type,
+                methodName: HashMethodName,
+                argTypes: [u64Type, u64Type]);
+            Expression fieldHash = new CallExpression(
+                Callee: new MemberExpression(Object: fieldAccess,
+                    MemberName: HashMethodName,
+                    Location: _synthLoc) { ResolvedType = u64Type },
+                Arguments:
+                [
+                    new NamedArgumentExpression(Name: "k0", Value: k0Ref, Location: _synthLoc),
+                    new NamedArgumentExpression(Name: "k1", Value: k1Ref, Location: _synthLoc)
+                ],
+                Location: _synthLoc)
+            {
+                ResolvedType = u64Type,
+                ResolvedRoutine = fieldSecureHashRoutine,
+                LoweringKind = CallLoweringKind.DirectMemberRoutine
+            };
+
+            if (accum == null)
+            {
+                accum = fieldHash;
+            }
+            else
+            {
+                accum = new CallExpression(
+                    Callee: new MemberExpression(Object: accum,
+                        MemberName: BitXorMethodName,
+                        Location: _synthLoc) { ResolvedType = u64Type },
+                    Arguments:
+                    [
+                        new NamedArgumentExpression(Name: "you",
+                            Value: fieldHash,
+                            Location: _synthLoc)
+                    ],
+                    Location: _synthLoc)
+                {
+                    ResolvedType = u64Type,
+                    ResolvedRoutine = u64Bitxor,
+                    LoweringKind = CallLoweringKind.DirectMemberRoutine
+                };
+            }
+        }
+
+        return new ReturnStatement(Value: accum!, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body: <c>return ConversionType(from: me).hash(k0: k0, k1: k1)</c>.
+    /// Used for Choice (<c>S64(from: me)</c>) and Flags (<c>U64(from: me)</c>).
+    /// </summary>
+    private static ReturnStatement BuildNumericSecureHashBodyViaConversion(TypeInfo ownerType,
+        string conversionTypeName, TypeInfo conversionType, TypeInfo u64Type)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var k0Ref =
+            new IdentifierExpression(Name: "k0", Location: _synthLoc) { ResolvedType = u64Type };
+        var k1Ref =
+            new IdentifierExpression(Name: "k1", Location: _synthLoc) { ResolvedType = u64Type };
+        var creator =
+            new CreatorExpression(TypeName: conversionTypeName,
+                TypeArguments: null,
+                MemberVariables: [("from", meRef)],
+                Location: _synthLoc)
+            {
+                ResolvedType = conversionType, LoweringKind = CallLoweringKind.TypeConstructor
+            };
+        var hashCall = new CallExpression(
+            Callee: new MemberExpression(Object: creator,
+                MemberName: HashMethodName,
+                Location: _synthLoc) { ResolvedType = u64Type },
+            Arguments:
+            [
+                new NamedArgumentExpression(Name: "k0", Value: k0Ref, Location: _synthLoc),
+                new NamedArgumentExpression(Name: "k1", Value: k1Ref, Location: _synthLoc)
+            ],
+            Location: _synthLoc) { ResolvedType = u64Type };
+        return new ReturnStatement(Value: hashCall, Location: _synthLoc);
+    }
+
+    //  cmp
+
+    /// <summary>
+    /// Builds the body: lexicographic field comparison returning S32 (-1/0/1).
+    /// <c>var r = me.f1.cmp(you: you.f1); if r != 0 { return r } ...</c>
+    /// Zero-field types: <c>return 0_s32</c>.
+    /// </summary>
+    private static Statement BuildCmpBody(TypeInfo ownerType, List<MemberVariableInfo> fields,
+        TypeInfo s32Type, TypeInfo boolType)
+    {
+        var zeroS32 = new LiteralExpression(
+            Value: 0L,
+            LiteralType: TokenType.S32Literal,
+            Location: _synthLoc) { ResolvedType = s32Type };
+
+        if (fields.Count == 0)
+            return new ReturnStatement(Value: zeroS32, Location: _synthLoc);
+
+        var stmts = new List<Statement>(capacity: fields.Count * 2 + 1);
+        bool first = true;
+
+        foreach (MemberVariableInfo field in fields)
+        {
+            var meField = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
+                {
+                    ResolvedType = ownerType
+                },
+                MemberName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+
+            var youField = new MemberExpression(
+                Object: new IdentifierExpression(Name: "you", Location: _synthLoc)
+                {
+                    ResolvedType = ownerType
+                },
+                MemberName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+
+            var cmpCall = new CallExpression(
+                Callee: new MemberExpression(Object: meField,
+                    MemberName: "cmp",
+                    Location: _synthLoc) { ResolvedType = s32Type },
+                Arguments:
+                [
+                    new NamedArgumentExpression(Name: "you", Value: youField, Location: _synthLoc)
+                ],
+                Location: _synthLoc) { ResolvedType = s32Type };
+
+            if (first)
+            {
+                stmts.Add(new DeclarationStatement(Declaration: new VariableDeclaration(Name: "r",
+                        Type: null,
+                        Initializer: cmpCall,
+                        Visibility: VisibilityModifier.Open,
+                        Location: _synthLoc),
+                    Location: _synthLoc));
+                first = false;
+            }
+            else
+            {
+                stmts.Add(new AssignmentStatement(
+                    Target: new IdentifierExpression(Name: "r", Location: _synthLoc)
+                    {
+                        ResolvedType = s32Type
+                    },
+                    Value: cmpCall,
+                    Location: _synthLoc));
+            }
+
+            var isNonZero = new BinaryExpression(
+                Left: new IdentifierExpression(Name: "r", Location: _synthLoc)
+                {
+                    ResolvedType = s32Type
+                },
+                Operator: BinaryOperator.NotEqual,
+                Right: new LiteralExpression(Value: 0L,
+                    LiteralType: TokenType.S32Literal,
+                    Location: _synthLoc) { ResolvedType = s32Type },
+                Location: _synthLoc) { ResolvedType = boolType };
+
+            stmts.Add(new IfStatement(Condition: isNonZero,
+                ThenStatement: new ReturnStatement(
+                    Value: new IdentifierExpression(Name: "r", Location: _synthLoc)
+                    {
+                        ResolvedType = s32Type
+                    },
+                    Location: _synthLoc),
+                ElseStatement: null,
+                Location: _synthLoc));
+        }
+
+        stmts.Add(new ReturnStatement(Value: zeroS32, Location: _synthLoc));
+        return new BlockStatement(Statements: stmts, Location: _synthLoc);
+    }
+
+    //  represent / diagnose (record + entity)
+
+    /// <summary>
+    /// Builds the body for <c>represent</c> or <c>diagnose</c> on a record or entity.
+    /// <list type="bullet">
+    ///   <item><c>represent</c>: <c>return f"TypeName(f1: {me.f1}, f2: {me.f2})"</c> -> open+posted fields, named.</item>
+    ///   <item><c>diagnose</c>:  <c>return f"Module.TypeName(f1: {me.f1}, [secret] f2: {me.f2})"</c> -> all fields named,
+    ///         values via <c>represent</c> (not <c>diagnose</c>) to avoid cascading verbosity.</item>
+    /// </list>
+    /// Field access via <see cref="MemberExpression"/> works for both records (extractvalue) and
+    /// entities (GEP + load).
+    /// </summary>
+    /// <summary>
+    /// Materializes a type's <c>represent</c>/<c>diagnose</c> body by CLONING the universal
+    /// <c>@overridable routine T.&lt;method&gt;()</c> RazorForge derive template (owner = a
+    /// type-parameter placeholder) with the placeholder + <c>Me</c> substituted to the concrete
+    /// owner. The clone runs through <see cref="GenericAstRewriter"/>, which unrolls the template's
+    /// comptime <c>expand memvarof(T)</c> right here (T is now concrete) — so the field-walk logic
+    /// lives in RF, not in this C# synthesizer, yet each type still gets its own concrete body (one
+    /// per type ⇒ no signature clash). Returns null if the template or its body isn't found.
+    /// </summary>
+    private Statement? CloneUniversalDeriveBody(TypeInfo ownerType, RoutineInfo synthesized,
+        string methodName)
+    {
+        // Pick the most-specific kind-matching template for this type (a `needs T is VariantType`
+        // override beats the unconstrained base), taking its owner param + body straight from the
+        // derive-template store — several same-signature templates coexist there, keyed by gate set.
+        (string OwnerParam, Statement Body)? picked =
+            ctx.Registry.GetDeriveTemplate(name: methodName,
+                arity: synthesized.Parameters.Count, forType: ownerType);
+        if (picked is not { } t) return null;
+        Statement body = t.Body;
+
+        var typeSubs = new Dictionary<string, TypeInfo>
+        {
+            [t.OwnerParam] = ownerType,
+            ["Me"] = ownerType
+        };
+        var stringSubs = typeSubs.ToDictionary(keySelector: kv => kv.Key,
+            elementSelector: kv => kv.Value.FullName);
+        Statement cloned = GenericAstRewriter.RewriteStatement(stmt: body, subs: stringSubs,
+            typeSubs: typeSubs, registry: ctx.Registry, enclosingRoutine: synthesized);
+
+        // Stdlib bodies are stored raw (no SA annotation); backfill `me`'s type so downstream
+        // lowering/codegen sees the concrete receiver.
+        AstWalker.WalkExpressions(root: cloned, visit: expr =>
+        {
+            if (expr is IdentifierExpression { Name: "me", ResolvedType: null } id)
+                id.ResolvedType = ownerType;
+        });
+        return cloned;
+    }
+
+    private static ReturnStatement BuildTextBody(TypeInfo ownerType,
+        List<MemberVariableInfo> fields, TypeInfo textType, bool diagnose)
+    {
+        var parts = new List<InsertedTextPart>();
+
+        // Emit `me.type_name()` (or `me.full_type_name()` for diagnose) so per-instance
+        // monomorphization produces the correct generic-args-included name (e.g.
+        // "List[Core.S64]"). Baking ownerType.Name/FullName here freezes the generic-def
+        // name ("List") and the type-args are lost in monomorphized bodies.
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var typeNameCall = new CallExpression(Callee: new MemberExpression(Object: meRef,
+                MemberName: diagnose
+                    ? "full_type_name"
+                    : "type_name",
+                Location: _synthLoc) { ResolvedType = textType },
+            Arguments: [],
+            Location: _synthLoc) { ResolvedType = textType };
+        parts.Add(new ExpressionPart(Expression: typeNameCall,
+            FormatSpec: null,
+            Location: _synthLoc));
+        parts.Add(new TextPart(Text: "(", Location: _synthLoc));
+
+        IEnumerable<MemberVariableInfo> visibleFields = diagnose
+            ? fields
+            : fields.Where(predicate: f =>
+                f.Visibility is VisibilityModifier.Open or VisibilityModifier.Posted);
+
+        bool first = true;
+        foreach (MemberVariableInfo field in visibleFields)
+        {
+            if (!first)
+                parts.Add(new TextPart(Text: ", ", Location: _synthLoc));
+            first = false;
+
+            string secretPrefix = diagnose && field.Visibility == VisibilityModifier.Secret
+                ? "[secret] "
+                : "";
+            parts.Add(new TextPart(Text: secretPrefix + field.Name + ": ", Location: _synthLoc));
+
+            // Routine-typed fields (stored lambdas/function pointers in iterator adapters such as
+            // WhereIterator's `predicate`) have no represent — emitting one yields an undefined
+            // `Routine[...].represent` symbol at link time. Render a stable placeholder instead.
+            if (field.Type is RoutineTypeInfo)
+            {
+                parts.Add(new TextPart(Text: "<routine>", Location: _synthLoc));
+                continue;
+            }
+
+            var fieldExpr = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
+                {
+                    ResolvedType = ownerType
+                },
+                MemberName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+
+            // Always use represent for field values, even inside diagnose.
+            // Using diagnose recursively would produce exponentially verbose output.
+            parts.Add(new ExpressionPart(Expression: fieldExpr,
+                FormatSpec: null,
+                Location: _synthLoc));
+        }
+
+        parts.Add(new TextPart(Text: ")", Location: _synthLoc));
+
+        var fstring =
+            new InsertedTextExpression(Parts: parts, IsRaw: false, Location: _synthLoc)
+            {
+                ResolvedType = textType
+            };
+
+        return new ReturnStatement(Value: fstring, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the auto-derived <c>serialize() -> SerialValue</c> body: a <c>Dict[Text, SerialValue]</c>
+    /// of every member variable (name -> value), boxed into the SerialValue <c>Dict</c> arm. Scalar
+    /// fields whose type is a direct SerialValue arm are boxed inline; aggregate fields with their own
+    /// synthesized <c>serialize()</c> recurse; everything else falls back to <c>Text(field.represent())</c>
+    /// (represent is universal, so the fallback always links). Returns null if SerialValue / Dict are
+    /// unavailable. Depth-guard for cyclic entity graphs is a follow-up (see serializable-serialvalue-impl).
+    /// </summary>
+    private ReturnStatement? BuildSerializeBody(TypeInfo owner, List<MemberVariableInfo> fields,
+        TypeInfo textType)
+    {
+        if (ctx.Registry.LookupType(name: "SerialValue") is not VariantTypeInfo serialValue)
+            return null;
+
+        // Scalar leaf types (S8..U64, F32/F64, Bool, Moment, Bytes, Text) serialize by boxing THEMSELVES
+        // into their own SerialValue arm — not a field walk. This makes `x.serialize()` uniform for every
+        // serializable type, so collection `serialize()` can call it per element.
+        VariantMemberInfo? ownArm = FindScalarArm(serialValue: serialValue, fieldType: owner);
+        if (ownArm?.Type != null)
+        {
+            var meScalar = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            {
+                ResolvedType = owner
+            };
+            var boxedScalar =
+                new CreatorExpression(TypeName: serialValue.Name,
+                    TypeArguments: null,
+                    MemberVariables: [(ownArm.Type.Name, meScalar)],
+                    Location: _synthLoc)
+                {
+                    ResolvedType = serialValue, ConstructedType = serialValue
+                };
+            return new ReturnStatement(Value: boxedScalar, Location: _synthLoc);
+        }
+
+        // OPAQUE-VALUE rule: a type with no direct SerialValue arm AND no RF fields is an opaque scalar
+        // (the @llvm wide primitives — U128/U256/S128/F128/Decimal/Address/…). It serializes as a single
+        // Text value: its `represent()` boxed into the Text arm. The OLD behavior field-walked it into a
+        // `Dict[Text, SerialValue]`; with zero fields that Dict was degenerate and its `Dict.create`
+        // never monomorphized, leaking the generic `Core.Dict.create` into codegen (the synth-body-failed
+        // warning flood). A structured type with ≥1 field (even a single-field record like `Leaf{x}`)
+        // still field-walks into the Dict arm below, preserving `{x: …}` structure. A specific type may
+        // hand-define `serialize()` to override.
+        if (fields.Count == 0)
+        {
+            var meRepr = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            {
+                ResolvedType = owner
+            };
+            var reprCall = new CallExpression(
+                Callee: new MemberExpression(Object: meRepr,
+                    MemberName: RepresentMethodName,
+                    Location: _synthLoc) { ResolvedType = textType },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = textType };
+            var boxedText =
+                new CreatorExpression(TypeName: serialValue.Name,
+                    TypeArguments: null,
+                    MemberVariables: [("Text", reprCall)],
+                    Location: _synthLoc)
+                {
+                    ResolvedType = serialValue, ConstructedType = serialValue
+                };
+            return new ReturnStatement(Value: boxedText, Location: _synthLoc);
+        }
+
+        // The Dict[Text, SerialValue] arm is the only 2-type-argument member; use its resolved Type
+        // (and Name) directly so the DictLiteral type and the boxing arm are the exact same resolution.
+        VariantMemberInfo? dictArm = serialValue.Members.FirstOrDefault(predicate: m =>
+            m.Type?.TypeArguments is { Count: 2 });
+        if (dictArm?.Type == null) return null;
+        TypeInfo dictType = dictArm.Type;
+
+        var pairs = new List<(Expression Key, Expression Value)>();
+        foreach (MemberVariableInfo field in fields)
+        {
+            var keyLit = new LiteralExpression(Value: field.Name,
+                LiteralType: TokenType.TextLiteral,
+                Location: _synthLoc) { ResolvedType = textType };
+            var meField = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
+                {
+                    ResolvedType = owner
+                },
+                MemberName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+            pairs.Add(item: (keyLit,
+                BuildSerializeFieldValue(field: field,
+                    meField: meField,
+                    serialValue: serialValue,
+                    textType: textType)));
+        }
+
+        var dict = new DictLiteralExpression(Pairs: pairs,
+            KeyType: null,
+            ValueType: null,
+            Location: _synthLoc) { ResolvedType = dictType };
+        var boxed =
+            new CreatorExpression(TypeName: serialValue.Name,
+                TypeArguments: null,
+                MemberVariables: [(dictArm.Name, dict)],
+                Location: _synthLoc) { ResolvedType = serialValue, ConstructedType = serialValue };
+        return new ReturnStatement(Value: boxed, Location: _synthLoc);
+    }
+
+    private Expression BuildSerializeFieldValue(MemberVariableInfo field, Expression meField,
+        VariantTypeInfo serialValue, TypeInfo textType)
+    {
+        // Direct SerialValue arm (S8..U64 / F32/F64 / Bool / Moment / Bytes / Text) -> box inline.
+        VariantMemberInfo? arm = FindScalarArm(serialValue: serialValue, fieldType: field.Type);
+        if (arm != null)
+            return new CreatorExpression(TypeName: serialValue.Name,
+                TypeArguments: null,
+                MemberVariables: [(arm.Type!.Name, meField)],
+                Location: _synthLoc) { ResolvedType = serialValue, ConstructedType = serialValue };
+
+        // Aggregate with a REAL synthesized serialize() (not an @llvm primitive record) -> recurse.
+        bool recurse = field.Type switch
+        {
+            RecordTypeInfo r => !r.HasDirectBackendType && TypeHasSerialize(type: r),
+            EntityTypeInfo e => TypeHasSerialize(type: e),
+            _ => false,
+        };
+        if (recurse)
+            return new CallExpression(
+                Callee: new MemberExpression(Object: meField,
+                    MemberName: "serialize",
+                    Location: _synthLoc) { ResolvedType = serialValue },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = serialValue };
+
+        // Fallback: Text(field.represent()). Routine-typed fields have no represent -> placeholder.
+        Expression textVal = field.Type is RoutineTypeInfo
+            ? new LiteralExpression(Value: "<routine>",
+                LiteralType: TokenType.TextLiteral,
+                Location: _synthLoc) { ResolvedType = textType }
+            : new CallExpression(
+                Callee: new MemberExpression(Object: meField,
+                    MemberName: RepresentMethodName,
+                    Location: _synthLoc) { ResolvedType = textType },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = textType };
+        return new CreatorExpression(TypeName: serialValue.Name,
+            TypeArguments: null,
+            MemberVariables: [("Text", textVal)],
+            Location: _synthLoc) { ResolvedType = serialValue, ConstructedType = serialValue };
+    }
+
+    private static VariantMemberInfo? FindScalarArm(VariantTypeInfo serialValue,
+        TypeInfo fieldType)
+    {
+        foreach (VariantMemberInfo m in serialValue.Members)
+        {
+            if (m.IsNone || m.Type is null) continue;
+            // List[SerialValue] / Dict[Text, SerialValue] arms are generic (recursion arms), not scalars.
+            if (m.Type.TypeArguments is { Count: > 0 }) continue;
+            if (m.Type.Name == fieldType.Name || m.Type.FullName == fieldType.FullName) return m;
+        }
+
+        return null;
+    }
+
+    private bool TypeHasSerialize(TypeInfo type) =>
+        // LookupMethod resolves through the generic definition, so a concrete instance like
+        // `List[S32]` sees the generic `List[T].serialize` (GetMethodsForType only lists the instance's
+        // own already-materialized methods, which misses it during field-value synthesis).
+        ctx.Registry.LookupMethod(type: type, methodName: "serialize") is not null || ctx.Registry
+           .GetMethodsForType(type: type)
+           .Any(predicate: m => m.Name == "serialize");
+
+    //  represent / diagnose (choice)
+
+    /// <summary>
+    /// Builds the body: a WhenStatement over <c>me</c> returning the case name string.
+    /// </summary>
+    private static WhenStatement BuildChoiceRepresentBody(ChoiceTypeInfo choice, TypeInfo textType,
+        TypeInfo? logicBreachedErrorType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = choice
+        };
+
+        var clauses = new List<WhenClause>(capacity: choice.Cases.Count + 1);
+        foreach (ChoiceCaseInfo c in choice.Cases)
+        {
+            clauses.Add(new WhenClause(
+                Pattern: new LiteralPattern(Value: c.ComputedValue,
+                    LiteralType: TokenType.S32Literal,
+                    Location: _synthLoc),
+                Body: new ReturnStatement(
+                    Value: new LiteralExpression(Value: c.Name,
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc),
+                Location: _synthLoc));
+        }
+
+        clauses.Add(new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+            Body: BuildBreachStatement(logicBreachedErrorType: logicBreachedErrorType),
+            Location: _synthLoc));
+
+        return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body: a WhenStatement over <c>me</c> returning
+    /// <c>"Module.ChoiceName(id: N, CaseName)"</c> per case.
+    /// </summary>
+    private static WhenStatement BuildChoiceDiagnoseBody(ChoiceTypeInfo choice, TypeInfo textType,
+        TypeInfo? logicBreachedErrorType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = choice
+        };
+
+        string prefix = choice.FullName + "(id: ";
+        var clauses = new List<WhenClause>(capacity: choice.Cases.Count + 1);
+        foreach (ChoiceCaseInfo c in choice.Cases)
+        {
+            string text = $"{prefix}{c.ComputedValue}, {c.Name})";
+            clauses.Add(new WhenClause(
+                Pattern: new LiteralPattern(Value: c.ComputedValue,
+                    LiteralType: TokenType.S32Literal,
+                    Location: _synthLoc),
+                Body: new ReturnStatement(
+                    Value: new LiteralExpression(Value: text,
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc),
+                Location: _synthLoc));
+        }
+
+        clauses.Add(new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+            Body: BuildBreachStatement(logicBreachedErrorType: logicBreachedErrorType),
+            Location: _synthLoc));
+
+        return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
+    }
+
+    //  represent / diagnose (flags)
+
+    private void HandleFlags(RoutineInfo routine, FlagsTypeInfo flags, TypeInfo textType,
+        TypeInfo boolType, TypeInfo? u64Type, TypeInfo? listTypeDef)
+    {
+        switch (routine.Name)
+        {
+            // eq/ne emit `int_eq`/`int_ne` on the underlying i64 repr directly (not `me == you`), so
+            // codegen needs no Flags cmp special-case and OperatorLoweringPass — which lowers `==` to
+            // `.eq()` — never recurses back into this body. ne is derived from eq by DerivedOperatorPass.
+            case "eq" when u64Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmBinaryIntrinsicCallBody(
+                    intrinsicName: "int_eq", ownerType: flags, reprType: u64Type,
+                    resultType: boolType);
+                break;
+
+            // Bitwise combinators via `bit_or`/`bit_and`/`bit_xor` on the i64 repr — no codegen
+            // Flags-bitwise special-case, no operator recursion.
+            case "bitor" when u64Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmBinaryIntrinsicCallBody(
+                    intrinsicName: "bit_or", ownerType: flags, reprType: u64Type, resultType: flags);
+                break;
+            case "bitand" when u64Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmBinaryIntrinsicCallBody(
+                    intrinsicName: "bit_and", ownerType: flags, reprType: u64Type, resultType: flags);
+                break;
+            case "bitxor" when u64Type != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildLlvmBinaryIntrinsicCallBody(
+                    intrinsicName: "bit_xor", ownerType: flags, reprType: u64Type, resultType: flags);
+                break;
+
+            case HashMethodName when u64Type != null && routine.Parameters.Count == 0:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildNumericHashBodyViaConversion(
+                    ownerType: flags,
+                    conversionTypeName: "U64",
+                    conversionType: u64Type,
+                    u64Type: u64Type);
+                break;
+
+            case HashMethodName when u64Type != null && routine.Parameters.Count == 2:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildNumericSecureHashBodyViaConversion(ownerType: flags,
+                        conversionTypeName: "U64",
+                        conversionType: u64Type,
+                        u64Type: u64Type);
+                break;
+
+            case "all_cases" when listTypeDef != null:
+            {
+                TypeInfo listFlagsType =
+                    ctx.Registry.GetOrCreateResolution(genericDef: listTypeDef,
+                        typeArguments: [flags]);
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildAllCasesBody(memberNames: flags
+                       .Members
+                       .Select(m => m.Name)
+                       .ToList(),
+                    elementType: flags,
+                    listType: listFlagsType);
+                break;
+            }
+
+            case RepresentMethodName:
+                // Cloned from the `@override … needs T is FlagsType` derive template (SUBSET
+                // accumulation via `caseof`); falls back to the C# builder.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: flags, synthesized: routine,
+                        methodName: RepresentMethodName)
+                    ?? BuildFlagsRepresentBody(flags: flags, textType: textType, boolType: boolType);
+                break;
+
+            case DiagnoseMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: flags, synthesized: routine,
+                        methodName: DiagnoseMethodName)
+                    ?? BuildFlagsDiagnoseBody(flags: flags, textType: textType, boolType: boolType);
+                break;
+
+            case "all_off":
+                // 0UL so the literal is U64 (flags are U64-backed), not an S64 literal in a U64 slot.
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeLiteralReturn(value: 0UL,
+                    returnType: routine.ReturnType ?? flags);
+                break;
+
+            case "all_on":
+            {
+                ulong mask = 0;
+                foreach (FlagsMemberInfo member in flags.Members)
+                    mask |= 1UL << member.BitPosition;
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeLiteralReturn(
+                    value: unchecked((long)mask),
+                    returnType: routine.ReturnType ?? flags);
+                break;
+            }
+
+            case "store":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: flags);
+                break;
+
+            case "copy":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildCloneViaCopyBody(ownerType: flags);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds the common block of statements that computes:
+    /// <list type="bullet">
+    ///   <item><c>var result: Text = ""</c> -> flag names joined by <c>" and "</c>.</item>
+    ///   <item><c>var first: Bool = true</c> -> separator sentinel.</item>
+    ///   <item>When <paramref name="computeBits"/> is <c>true</c>: <c>var bits: Text = "%"</c> ??
+    ///         binary string in declaration order, e.g. <c>"%110"</c>.</item>
+    ///   <item>For each flag in declaration order:
+    ///     <c>if (me &amp; mask) != 0 { /* append name to result; first = false; [append "1" to bits] */ }
+    ///     else { [append "0" to bits] }</c></item>
+    ///   <item><c>if first { result = "&lt;none&gt;" }</c></item>
+    /// </list>
+    /// Returns the statement list (no trailing <c>return</c>).
+    /// </summary>
+    private static List<Statement> BuildFlagsComputeBlock(FlagsTypeInfo flags, TypeInfo textType,
+        TypeInfo boolType, TypeInfo s64Type, bool computeBits)
+    {
+        var stmts = new List<Statement>();
+        var emptyText = new LiteralExpression(
+            Value: "",
+            LiteralType: TokenType.TextLiteral,
+            Location: _synthLoc) { ResolvedType = textType };
+        var trueLit =
+            new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: _synthLoc)
+            {
+                ResolvedType = boolType
+            };
+        var falseLit = new LiteralExpression(
+            Value: false,
+            LiteralType: TokenType.False,
+            Location: _synthLoc) { ResolvedType = boolType };
+        var zeroLit = new LiteralExpression(
+            Value: 0L,
+            LiteralType: TokenType.S64Literal,
+            Location: _synthLoc) { ResolvedType = s64Type };
+        var noneLit = new LiteralExpression(
+            Value: "<none>",
+            LiteralType: TokenType.TextLiteral,
+            Location: _synthLoc) { ResolvedType = textType };
+        var oneLit = new LiteralExpression(
+            Value: "1",
+            LiteralType: TokenType.TextLiteral,
+            Location: _synthLoc) { ResolvedType = textType };
+        var zeroCharLit = new LiteralExpression(
+            Value: "0",
+            LiteralType: TokenType.TextLiteral,
+            Location: _synthLoc) { ResolvedType = textType };
+
+        // var result: Text = ""
+        stmts.Add(new DeclarationStatement(
+            Declaration: new VariableDeclaration(Name: ResultVarName,
+                Type: null,
+                Initializer: emptyText,
+                Visibility: VisibilityModifier.Open,
+                Location: _synthLoc),
+            Location: _synthLoc));
+
+        // var first: Bool = true
+        stmts.Add(new DeclarationStatement(Declaration: new VariableDeclaration(Name: FirstVarName,
+                Type: null,
+                Initializer: trueLit,
+                Visibility: VisibilityModifier.Open,
+                Location: _synthLoc),
+            Location: _synthLoc));
+
+        if (computeBits)
+        {
+            // var bits: Text = "%"
+            stmts.Add(new DeclarationStatement(Declaration: new VariableDeclaration(Name: "bits",
+                    Type: null,
+                    Initializer: new LiteralExpression(Value: "%",
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Visibility: VisibilityModifier.Open,
+                    Location: _synthLoc),
+                Location: _synthLoc));
+        }
+
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = flags
+        };
+
+        foreach (FlagsMemberInfo member in flags.Members)
+        {
+            long mask = 1L << member.BitPosition;
+            var maskLit = new LiteralExpression(
+                Value: mask,
+                LiteralType: TokenType.S64Literal,
+                Location: _synthLoc) { ResolvedType = s64Type };
+
+            // (me & mask) != 0
+            var bwAnd = new BinaryExpression(Left: meRef,
+                Operator: BinaryOperator.BitwiseAnd,
+                Right: maskLit,
+                Location: _synthLoc) { ResolvedType = s64Type };
+            var isSet = new BinaryExpression(
+                Left: bwAnd,
+                Operator: BinaryOperator.NotEqual,
+                Right: zeroLit,
+                Location: _synthLoc) { ResolvedType = boolType };
+
+            var nameLit = new LiteralExpression(
+                Value: member.Name,
+                LiteralType: TokenType.TextLiteral,
+                Location: _synthLoc) { ResolvedType = textType };
+            var andNameLit = new LiteralExpression(Value: " and " + member.Name,
+                LiteralType: TokenType.TextLiteral,
+                Location: _synthLoc) { ResolvedType = textType };
+
+            // result.add(other: " and FlagName")
+            var appendNameCall = new CallExpression(
+                Callee: new MemberExpression(
+                    Object: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
+                    {
+                        ResolvedType = textType
+                    },
+                    MemberName: "add",
+                    Location: _synthLoc),
+                Arguments:
+                [
+                    new NamedArgumentExpression(Name: OtherParamName,
+                        Value: andNameLit,
+                        Location: _synthLoc)
+                ],
+                Location: _synthLoc) { ResolvedType = textType };
+
+            // if first { result = "FlagName"; first = false } else { result = result.add(...) }
+            var innerNameIf = new IfStatement(
+                Condition: new IdentifierExpression(Name: FirstVarName, Location: _synthLoc)
+                {
+                    ResolvedType = boolType
+                },
+                ThenStatement: new BlockStatement(Statements:
+                    [
+                        new AssignmentStatement(
+                            Target: new IdentifierExpression(Name: ResultVarName,
+                                Location: _synthLoc)
+                            {
+                                ResolvedType = textType
+                            },
+                            Value: nameLit,
+                            Location: _synthLoc),
+                        new AssignmentStatement(
+                            Target: new IdentifierExpression(Name: FirstVarName,
+                                Location: _synthLoc)
+                            {
+                                ResolvedType = boolType
+                            },
+                            Value: falseLit,
+                            Location: _synthLoc)
+                    ],
+                    Location: _synthLoc),
+                ElseStatement: new BlockStatement(Statements:
+                    [
+                        new AssignmentStatement(
+                            Target: new IdentifierExpression(Name: ResultVarName,
+                                Location: _synthLoc)
+                            {
+                                ResolvedType = textType
+                            },
+                            Value: appendNameCall,
+                            Location: _synthLoc)
+                    ],
+                    Location: _synthLoc),
+                Location: _synthLoc);
+
+            if (!computeBits)
+            {
+                // if (me & mask) != 0 { <name logic> }
+                stmts.Add(new IfStatement(Condition: isSet,
+                    ThenStatement: new BlockStatement(Statements:
+                        [innerNameIf],
+                        Location: _synthLoc),
+                    ElseStatement: null,
+                    Location: _synthLoc));
+            }
+            else
+            {
+                // bits.add(other: "1") -> set branch
+                var append1 = new CallExpression(
+                    Callee: new MemberExpression(
+                        Object: new IdentifierExpression(Name: "bits", Location: _synthLoc)
+                        {
+                            ResolvedType = textType
+                        },
+                        MemberName: "add",
+                        Location: _synthLoc),
+                    Arguments:
+                    [
+                        new NamedArgumentExpression(Name: OtherParamName,
+                            Value: oneLit,
+                            Location: _synthLoc)
+                    ],
+                    Location: _synthLoc) { ResolvedType = textType };
+
+                // bits.add(other: "0") -> clear branch
+                var append0 = new CallExpression(
+                    Callee: new MemberExpression(
+                        Object: new IdentifierExpression(Name: "bits", Location: _synthLoc)
+                        {
+                            ResolvedType = textType
+                        },
+                        MemberName: "add",
+                        Location: _synthLoc),
+                    Arguments:
+                    [
+                        new NamedArgumentExpression(Name: OtherParamName,
+                            Value: zeroCharLit,
+                            Location: _synthLoc)
+                    ],
+                    Location: _synthLoc) { ResolvedType = textType };
+
+                // if (me & mask) != 0 { <name logic>; bits = bits.add("1") }
+                // else               { bits = bits.add("0") }
+                stmts.Add(new IfStatement(Condition: isSet,
+                    ThenStatement: new BlockStatement(Statements:
+                        [
+                            innerNameIf,
+                            new AssignmentStatement(
+                                Target: new IdentifierExpression(Name: "bits", Location: _synthLoc)
+                                {
+                                    ResolvedType = textType
+                                },
+                                Value: append1,
+                                Location: _synthLoc)
+                        ],
+                        Location: _synthLoc),
+                    ElseStatement: new BlockStatement(Statements:
+                        [
+                            new AssignmentStatement(
+                                Target: new IdentifierExpression(Name: "bits", Location: _synthLoc)
+                                {
+                                    ResolvedType = textType
+                                },
+                                Value: append0,
+                                Location: _synthLoc)
+                        ],
+                        Location: _synthLoc),
+                    Location: _synthLoc));
+            }
+        }
+
+        // if first { result = "<none>" }
+        stmts.Add(new IfStatement(
+            Condition: new IdentifierExpression(Name: FirstVarName, Location: _synthLoc)
+            {
+                ResolvedType = boolType
+            },
+            ThenStatement: new BlockStatement(Statements:
+                [
+                    new AssignmentStatement(
+                        Target: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
+                        {
+                            ResolvedType = textType
+                        },
+                        Value: noneLit,
+                        Location: _synthLoc)
+                ],
+                Location: _synthLoc),
+            ElseStatement: null,
+            Location: _synthLoc));
+
+        return stmts;
+    }
+
+    /// <summary>
+    /// Builds the <c>represent</c> body for a flags type.
+    /// Returns <c>"Flag1 and Flag2"</c>, or <c>"&lt;none&gt;"</c> if no bits are set.
+    /// </summary>
+    private Statement BuildFlagsRepresentBody(FlagsTypeInfo flags, TypeInfo textType,
+        TypeInfo boolType)
+    {
+        TypeInfo? s64Type = ctx.Registry.LookupType(name: "S64");
+        if (s64Type == null)
+            return new ReturnStatement(
+                Value: new LiteralExpression(Value: "<none>",
+                    LiteralType: TokenType.TextLiteral,
+                    Location: _synthLoc) { ResolvedType = textType },
+                Location: _synthLoc);
+
+        List<Statement> stmts = BuildFlagsComputeBlock(flags: flags,
+            textType: textType,
+            boolType: boolType,
+            s64Type: s64Type,
+            computeBits: false);
+
+        stmts.Add(new ReturnStatement(
+            Value: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
+            {
+                ResolvedType = textType
+            },
+            Location: _synthLoc));
+
+        return new BlockStatement(Statements: stmts, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the <c>diagnose</c> body for a flags type.
+    /// Returns <c>"Module.FlagsName(value: %110, Flag1 and Flag2)"</c> where the binary string
+    /// is in declaration order (<c>%</c> prefix, leftmost = first declared flag).
+    /// </summary>
+    private Statement BuildFlagsDiagnoseBody(FlagsTypeInfo flags, TypeInfo textType,
+        TypeInfo boolType)
+    {
+        TypeInfo? s64Type = ctx.Registry.LookupType(name: "S64");
+        if (s64Type == null)
+            return new ReturnStatement(
+                Value: new LiteralExpression(Value: flags.FullName + "(value: %0, <none>)",
+                    LiteralType: TokenType.TextLiteral,
+                    Location: _synthLoc) { ResolvedType = textType },
+                Location: _synthLoc);
+
+        List<Statement> stmts = BuildFlagsComputeBlock(flags: flags,
+            textType: textType,
+            boolType: boolType,
+            s64Type: s64Type,
+            computeBits: true);
+
+        // return f"Module.FlagsName(value: {bits}, {result})"
+        // Both result and bits are Text -> EmitRepresentCall returns them directly.
+        var resultRef = new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
+        {
+            ResolvedType = textType
+        };
+        var bitsRef = new IdentifierExpression(Name: "bits", Location: _synthLoc)
+        {
+            ResolvedType = textType
+        };
+        var fstring = new InsertedTextExpression(Parts:
+            [
+                new TextPart(Text: flags.FullName + "(value: ", Location: _synthLoc),
+                new ExpressionPart(Expression: bitsRef, FormatSpec: null, Location: _synthLoc),
+                new TextPart(Text: ", ", Location: _synthLoc),
+                new ExpressionPart(Expression: resultRef, FormatSpec: null, Location: _synthLoc),
+                new TextPart(Text: ")", Location: _synthLoc)
+            ],
+            IsRaw: false,
+            Location: _synthLoc) { ResolvedType = textType };
+
+        stmts.Add(new ReturnStatement(Value: fstring, Location: _synthLoc));
+
+        return new BlockStatement(Statements: stmts, Location: _synthLoc);
+    }
+
+    //  Unreachable helper
+
+    /// <summary>
+    /// Builds <c>throw LogicBreachedError()</c> for provably-unreachable else arms
+    /// (e.g. the default clause in a synthesized choice <c>represent</c> body).
+    /// Falls back to <c>throw LogicBreachedError()</c> with a null ResolvedType when the
+    /// type isn't in the registry yet (shouldn't happen in practice).
+    /// </summary>
+    private static ThrowStatement BuildBreachStatement(TypeInfo? logicBreachedErrorType)
+    {
+        // Use CallExpression, not CreatorExpression -> crashable constructors in RF source
+        // parse as calls (e.g. LogicBreachedError()), and EmitFunctionCall has the
+        // crashable-construction path; EmitConstructorCall does not.
+        var call = new CallExpression(
+            Callee: new IdentifierExpression(Name: "LogicBreachedError", Location: _synthLoc)
+            {
+                ResolvedType = logicBreachedErrorType
+            },
+            Arguments: [],
+            Location: _synthLoc) { ResolvedType = logicBreachedErrorType };
+        return new ThrowStatement(Error: call, Location: _synthLoc);
+    }
+
+    //  represent / diagnose (crashable)
+
+    /// <summary>
+    /// Builds the body: <c>return me.crash_message()</c>.
+    /// </summary>
+    private static ReturnStatement BuildCrashableRepresentBody(CrashableTypeInfo crashable)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = crashable
+        };
+        var call = new CallExpression(Callee: new MemberExpression(Object: meRef,
+                MemberName: Resolution.RuntimeContract.CrashMessage,
+                Location: _synthLoc),
+            Arguments: [],
+            Location: _synthLoc);
+        return new ReturnStatement(Value: call, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body:
+    /// <c>return f"Module.CrashableName({me.crash_message()}[, field1: {me.f1}, ...])"</c>.
+    /// </summary>
+    private static ReturnStatement BuildCrashableDiagnoseBody(CrashableTypeInfo crashable,
+        TypeInfo textType)
+    {
+        var parts = new List<InsertedTextPart>();
+
+        // Open with "Module.TypeName("
+        parts.Add(new TextPart(Text: crashable.FullName + "(", Location: _synthLoc));
+
+        // First element: crash_message() -> use represent format (no "?")
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = crashable
+        };
+        var crashMsgCall = new CallExpression(Callee: new MemberExpression(Object: meRef,
+                MemberName: Resolution.RuntimeContract.CrashMessage,
+                Location: _synthLoc),
+            Arguments: [],
+            Location: _synthLoc);
+        parts.Add(new ExpressionPart(Expression: crashMsgCall,
+            FormatSpec: null,
+            Location: _synthLoc));
+
+        // Remaining member-variable fields
+        foreach (MemberVariableInfo field in crashable.MemberVariables)
+        {
+            parts.Add(new TextPart(Text: ", " + field.Name + ": ", Location: _synthLoc));
+
+            var meRef2 = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            {
+                ResolvedType = crashable
+            };
+            var fieldExpr =
+                new MemberExpression(Object: meRef2, MemberName: field.Name, Location: _synthLoc)
+                {
+                    ResolvedType = field.Type
+                };
+
+            parts.Add(new ExpressionPart(Expression: fieldExpr,
+                FormatSpec: null,
+                Location: _synthLoc));
+        }
+
+        parts.Add(new TextPart(Text: ")", Location: _synthLoc));
+
+        var fstring =
+            new InsertedTextExpression(Parts: parts, IsRaw: false, Location: _synthLoc)
+            {
+                ResolvedType = textType
+            };
+
+        return new ReturnStatement(Value: fstring, Location: _synthLoc);
+    }
+
+    //  BuilderService constant routines
+
+    /// <summary>
+    /// Synthesizes AST bodies for BuilderService routines that return a single compile-time
+    /// constant value (Text, U64, S64, Bool). Called before the owner-type switch so it handles
+    /// all types uniformly.
+    /// Returns <c>true</c> if the routine was handled, <c>false</c> otherwise.
+    /// </summary>
+    private bool TryHandleBuilderServiceConstant(RoutineInfo routine, TypeInfo textType,
+        TypeInfo? u64Type, TypeInfo? s64Type, TypeInfo? boolType,
+        TypeInfo? typeKindType, TypeInfo? listTextType,
+        TypeInfo? byteSizeType = null) // NOSONAR S3776
+    {
+        if (routine.OwnerType == null) return false;
+        TypeInfo owner = routine.OwnerType;
+
+        // Skip compiler-internal/non-synthesizable categories.
+        if (owner.Category is TypeCategory.TypeParameter or TypeCategory.Error
+            or TypeCategory.ProtocolSelf or TypeCategory.ConstGenericValue)
+            return false;
+
+        // Fold-only constants (type_name/data_size/type_id/...): BuilderServiceInliningPass
+        // and GenericAstRewriter fold EVERY call site to a literal computed from TypeInfo, so
+        // a synthesized body is pure dead weight in the emitted IR — and for generic-def
+        // owners it would bake the unparameterized name ("List" instead of "List[S64]").
+        // Register no body: nothing related to these may survive the inlining pass. An
+        // unfolded call site surfacing as a linker error indicates a folding bug to fix
+        // at the pass layer, not a missing definition.
+        if (BuilderServiceInliningPass.IsFoldable(routineName: routine.Name))
+            return true;
+
+        switch (routine.Name)
+        {
+            case "member_type_id" when u64Type != null && boolType != null:
+            {
+                List<MemberVariableInfo>? fields = owner switch
+                {
+                    RecordTypeInfo r => r.MemberVariables,
+                    EntityTypeInfo e => e.MemberVariables,
+                    _ => null
+                };
+                fields ??= [];
+
+                // Build if-elseif chain from last field to first, wrapping each around the
+                // previous so the outermost IfStatement checks field[0].
+                // `0UL` (not `0L`) so the fallback literal is U64, matching the U64 return type — the
+                // long overload would emit an S64 literal in a U64 routine.
+                Statement body = MakeLiteralReturn(value: 0UL, returnType: u64Type);
+                var memberNameRef =
+                    new IdentifierExpression(Name: "member_name", Location: _synthLoc)
+                    {
+                        ResolvedType = textType
+                    };
+
+                for (int i = fields.Count - 1; i >= 0; i--)
+                {
+                    MemberVariableInfo field = fields[i];
+                    ulong typeId = TypeIdHelper.ComputeTypeId(fullName: field.Type.FullName);
+
+                    Expression cond = new CallExpression(
+                        Callee: new MemberExpression(Object: memberNameRef,
+                            MemberName: "eq",
+                            Location: _synthLoc),
+                        Arguments:
+                        [
+                            new NamedArgumentExpression(Name: OtherParamName,
+                                Value: new LiteralExpression(Value: field.Name,
+                                    LiteralType: TokenType.TextLiteral,
+                                    Location: _synthLoc) { ResolvedType = textType },
+                                Location: _synthLoc)
+                        ],
+                        Location: _synthLoc) { ResolvedType = boolType };
+
+                    body = new IfStatement(Condition: cond,
+                        ThenStatement: new ReturnStatement(
+                            Value: new LiteralExpression(Value: typeId,
+                                LiteralType: TokenType.U64Literal,
+                                Location: _synthLoc) { ResolvedType = u64Type },
+                            Location: _synthLoc),
+                        ElseStatement: body,
+                        Location: _synthLoc);
+                }
+
+                ctx.VariantBodies[key: routine.RegistryKey] = body;
+                return true;
+            }
+
+            case "protocols" when listTextType != null:
+            {
+                List<string> names = owner switch
+                {
+                    RecordTypeInfo r => r.ImplementedProtocols
+                                         .Select(p => p.Name)
+                                         .ToList(),
+                    EntityTypeInfo e => e.ImplementedProtocols
+                                         .Select(p => p.Name)
+                                         .ToList(),
+                    _ => []
+                };
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values: names,
+                    textType: textType,
+                    listTextType: listTextType);
+                return true;
+            }
+
+            case "routine_names" when listTextType != null:
+            {
+                var names = ctx.Registry
+                               .GetMethodsForType(type: owner)
+                               .Select(r => r.Name)
+                               .Distinct()
+                               .ToList();
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values: names,
+                    textType: textType,
+                    listTextType: listTextType);
+                return true;
+            }
+
+            case "generic_args" when listTextType != null:
+            {
+                List<string> args = owner.TypeArguments
+                                        ?.Select(t => t.Name)
+                                         .ToList() ?? owner.GenericParameters?.ToList() ?? [];
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values: args,
+                    textType: textType,
+                    listTextType: listTextType);
+                return true;
+            }
+
+            case "annotations" when listTextType != null:
+                // Type-level annotations are not yet tracked on TypeInfo -> return empty list
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values:
+                    [],
+                    textType: textType,
+                    listTextType: listTextType);
+                return true;
+
+            case "dependencies" when listTextType != null:
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values:
+                    [],
+                    textType: textType,
+                    listTextType: listTextType);
+                return true;
+
+            case "protocol_info" when listTextType != null:
+                // Full ProtocolInfo entity allocation deferred -> return empty list
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values:
+                    [],
+                    textType: textType,
+                    listTextType: listTextType);
+                return true;
+
+            case "routine_info" when listTextType != null:
+                // TODO: not yet implemented — full RoutineInfo entity allocation deferred; returns empty list
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values:
+                    [],
+                    textType: textType,
+                    listTextType: listTextType);
+                return true;
+
+            case "member_variable_info"
+                when owner is RecordTypeInfo or EntityTypeInfo or CrashableTypeInfo:
+            {
+                TypeInfo? fieldInfoType = ctx.Registry.LookupType(name: "FieldInfo");
+                TypeInfo? ownedDef =
+                    ctx.Registry.LookupType(name: Resolution.RuntimeContract.Owned);
+                TypeInfo? listDef = ctx.Registry.LookupType(name: "List");
+                if (fieldInfoType == null || ownedDef == null || listDef == null) return false;
+                TypeInfo ownedFieldInfo = ctx.Registry.GetOrCreateResolution(genericDef: ownedDef,
+                    typeArguments: [fieldInfoType]);
+                TypeInfo listOwnedFieldInfo = ctx.Registry.GetOrCreateResolution(
+                    genericDef: listDef,
+                    typeArguments: [ownedFieldInfo]);
+                ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
+                    Value: new ListLiteralExpression(Elements:
+                        [],
+                        ElementType: null,
+                        Location: _synthLoc) { ResolvedType = listOwnedFieldInfo },
+                    Location: _synthLoc);
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Handles standalone (non-owner) BuilderService constants derived from
+    /// <see cref="DesugaringContext.Target"/> / <see cref="DesugaringContext.BuildMode"/>.
+    /// </summary>
+    private bool TryHandleStandaloneBuilderServiceConstant(RoutineInfo routine, TypeInfo textType,
+        TypeInfo? u64Type, TypeInfo? byteSizeType)
+    {
+        switch (routine.Name)
+        {
+            case "page_size":
+                return EmitByteSizeOrU64(routine: routine,
+                    value: (ulong)ctx.Target.PageSize,
+                    u64Type: u64Type,
+                    byteSizeType: byteSizeType);
+
+            case "cache_line":
+                return EmitByteSizeOrU64(routine: routine,
+                    value: (ulong)ctx.Target.CacheLineSize,
+                    u64Type: u64Type,
+                    byteSizeType: byteSizeType);
+
+            case "word_size":
+                return EmitByteSizeOrU64(routine: routine,
+                    value: (ulong)(ctx.Target.PointerBitWidth / 8),
+                    u64Type: u64Type,
+                    byteSizeType: byteSizeType);
+
+            case "target_os":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: ctx.Target.TargetOS, returnType: textType);
+                return true;
+
+            case "target_arch":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: ctx.Target.TargetArch, returnType: textType);
+                return true;
+
+            case "builder_version":
+            {
+                Version version = typeof(WiredRoutinePass).Assembly.GetName()
+                                                          .Version ??
+                                  throw new InvalidOperationException(
+                                      "Unable to resolve the RazorForge assembly version for builder_version().");
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: version.ToString(fieldCount: 3),
+                        returnType: textType);
+                return true;
+            }
+
+            case "build_timestamp":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: DateTime.UtcNow.ToString(format: "o"),
+                        returnType: textType);
+                return true;
+
+            case "build_mode":
+            {
+                if (routine.ReturnType is ChoiceTypeInfo buildModeChoice)
+                {
+                    string caseName = ctx.BuildMode switch
+                    {
+                        RfBuildMode.Debug => "DEBUG",
+                        RfBuildMode.Release => "RELEASE",
+                        RfBuildMode.ReleaseTime => "RELEASE_TIME",
+                        RfBuildMode.ReleaseSpace => "RELEASE_SPACE",
+                        _ => throw new InvalidOperationException(
+                            $"Unhandled RfBuildMode value '{ctx.BuildMode}'.")
+                    };
+                    ChoiceCaseInfo? found =
+                        buildModeChoice.Cases.FirstOrDefault(c => c.Name == caseName);
+                    if (found == null) return false;
+                    // Choice discriminants are S32 — emit an S32 literal (ComputedValue is int), not the
+                    // S64 the `long` overload of MakeLiteralReturn would produce.
+                    ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
+                        Value: new LiteralExpression(Value: found.ComputedValue,
+                            LiteralType: TokenType.S32Literal, Location: _synthLoc)
+                        { ResolvedType = buildModeChoice },
+                        Location: _synthLoc);
+                    return true;
+                }
+
+                return false;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    private bool EmitByteSizeOrU64(RoutineInfo routine, ulong value, TypeInfo? u64Type,
+        TypeInfo? byteSizeType)
+    {
+        if (byteSizeType == null || u64Type == null)
+        {
+            return false;
+        }
+
+        ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
+            Value: BuilderServiceInliningPass.MakeByteSizeCreatorPublic(value: value,
+                u64Type: u64Type,
+                byteSizeType: byteSizeType,
+                loc: _synthLoc),
+            Location: _synthLoc);
+        return true;
+    }
+
+    /// <summary>
+    /// Builds a <c>return [elem0, elem1, ...]</c> statement using a
+    /// <see cref="ListLiteralExpression"/> with the given Text string values.
+    /// </summary>
+    private static ReturnStatement MakeListReturn(List<string> values, TypeInfo textType,
+        TypeInfo listTextType)
+    {
+        var elements = values.Select(v =>
+                                  (Expression)new LiteralExpression(Value: v,
+                                      LiteralType: TokenType.TextLiteral,
+                                      Location: _synthLoc) { ResolvedType = textType })
+                             .ToList();
+        return new ReturnStatement(
+            Value: new ListLiteralExpression(Elements: elements,
+                ElementType: null,
+                Location: _synthLoc) { ResolvedType = listTextType },
+            Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the auto-derived <c>destroy()</c> body. Composite record/entity/crashable types
+    /// recurse into their owned fields (<c>me.field.destroy()</c> for each); scalar kinds
+    /// (choices, flags, <c>@llvm</c>-backed primitives, tuples, variants) get a no-op return.
+    /// Leaf RC/ptr teardown (Hijacked, Retained/Tracked, Viewing/Modifying) lives in hand-written
+    /// wrapper destructors and is never reached here (those types keep their own <c>destroy</c>).
+    /// </summary>
+    /// <summary>True if <paramref name="t"/> is a <c>Roamed[U]</c> field type (a biased-RC handle).</summary>
+    private static bool IsRoamedField(TypeInfo? t)
+    {
+        if (t == null) return false;
+        string baseName = t switch
+        {
+            WrapperTypeInfo w => w.Name,
+            RecordTypeInfo { GenericDefinition: { } d } => d.Name,
+            _ => t.BareName
+        };
+        return baseName == Resolution.RuntimeContract.Roamed;
+    }
+
+    /// <summary>
+    /// Builds the cycle-collector trace hook <c>roam_trace_impl()</c> for an entity: one
+    /// <c>me.&lt;field&gt;.cyclic_visit()</c> per <c>Roamed[U]</c> field (reports the field's
+    /// controller to the collector). Non-Roamed fields cannot form strong cycles and are skipped;
+    /// an entity with no Roamed fields gets an empty (return-only) body.
+    /// </summary>
+    private Statement BuildRoamTraceBody(TypeInfo? owner)
+    {
+        var noop = new ReturnStatement(Value: null, Location: _synthLoc);
+        List<MemberVariableInfo>? fields = owner is EntityTypeInfo e
+            ? e.MemberVariables
+            : null;
+        if (fields is null or { Count: 0 })
+            return noop;
+
+        TypeInfo? noneType = ctx.Registry.LookupType(name: "None");
+        var statements = new List<Statement>(capacity: fields.Count + 1);
+        foreach (MemberVariableInfo field in fields)
+        {
+            // Both non-null (`x: E`) and optional (`x: E?`) entity fields are bare `Roamed[E]` in Suflae,
+            // so IsRoamedField covers both — the collector traces through a null (none) handle harmlessly.
+            if (!IsRoamedField(t: field.Type))
+                continue;
+            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            {
+                ResolvedType = owner
+            };
+            var fieldRef =
+                new MemberExpression(Object: meRef, MemberName: field.Name, Location: _synthLoc)
+                {
+                    ResolvedType = field.Type
+                };
+            var visitCall = new CallExpression(
+                Callee: new MemberExpression(Object: fieldRef,
+                    MemberName: "cyclic_visit",
+                    Location: _synthLoc) { ResolvedType = noneType },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = noneType };
+            statements.Add(item: new ExpressionStatement(Expression: visitCall,
+                Location: _synthLoc));
+        }
+
+        // Nested aggregate: a bare (non-Roamed) ENTITY field owns its own roam machinery — the SF
+        // container overlay's `inner: RF::Core.List[T]` is the canonical case, a single-owner RazorForge
+        // list whose `Hijacked[T]` buffer holds the `Roamed` elements. The field-walk above treats that
+        // bare entity as an opaque leaf, so its held elements are invisible to the collector. Delegate to
+        // the field's OWN `roam_trace_impl` so the trace descends into the nested aggregate (whose buffer
+        // branch below then visits each element). Infinite recursion is impossible: a bare entity field is
+        // single-owner CONTAINMENT, which is acyclic by construction — a cycle needs SHARED ownership, i.e.
+        // a `Roamed`, and those are handled by `cyclic_visit` (color-based, cycle-safe) above. Trivially
+        // destructible fields cannot transitively hold a `Roamed`, so they are skipped.
+        foreach (MemberVariableInfo field in fields)
+        {
+            if (IsRoamedField(t: field.Type) || field.Type is not EntityTypeInfo)
+                continue;
+            if (ctx.Registry.IsTriviallyDestructible(type: field.Type))
+                continue;
+            var fieldRef = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = owner },
+                MemberName: field.Name, Location: _synthLoc) { ResolvedType = field.Type };
+            var traceImplCall = new CallExpression(
+                Callee: new MemberExpression(Object: fieldRef, MemberName: "roam_trace_impl",
+                    Location: _synthLoc) { ResolvedType = noneType },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = noneType };
+            statements.Add(item: new ExpressionStatement(Expression: traceImplCall,
+                Location: _synthLoc));
+        }
+
+        // Container buffer: a lone `Hijacked[T]` field paired with a `count: U64` field is a dense
+        // element buffer (List). The field-walk above treats the raw pointer as an opaque leaf, so
+        // emit `me.<buf>.cyclic_trace_buffer(count: me.count)` to visit each element (a no-op when the
+        // element `T` is a value — `cyclic_visit` is a universal `@overridable` no-op). Gated to a
+        // SINGLE Hijacked field so a multi-buffer / sparse container (Dict) does not misfire — those
+        // carry their own trace.
+        List<MemberVariableInfo> buffers =
+            fields.Where(predicate: f => IsHijackedField(t: f.Type)).ToList();
+        MemberVariableInfo? countField =
+            fields.FirstOrDefault(predicate: f => f.Name == "count");
+        if (buffers is [{ } buffer] && countField != null)
+        {
+            var bufRef = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = owner },
+                MemberName: buffer.Name, Location: _synthLoc) { ResolvedType = buffer.Type };
+            var countRef = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = owner },
+                MemberName: "count", Location: _synthLoc) { ResolvedType = countField.Type };
+            var traceCall = new CallExpression(
+                Callee: new MemberExpression(Object: bufRef, MemberName: "cyclic_trace_buffer",
+                    Location: _synthLoc) { ResolvedType = noneType },
+                Arguments: [countRef],
+                Location: _synthLoc) { ResolvedType = noneType };
+            statements.Add(item: new ExpressionStatement(Expression: traceCall, Location: _synthLoc));
+        }
+
+        statements.Add(item: noop);
+        return new BlockStatement(Statements: statements, Location: _synthLoc);
+    }
+
+    /// <summary>True if <paramref name="t"/> is a <c>Hijacked[U]</c> raw-buffer field type.</summary>
+    private static bool IsHijackedField(TypeInfo? t)
+    {
+        if (t == null) return false;
+        string baseName = t switch
+        {
+            WrapperTypeInfo w => w.Name,
+            RecordTypeInfo { GenericDefinition: { } d } => d.Name,
+            _ => t.BareName
+        };
+        return baseName == Resolution.RuntimeContract.Hijacked;
+    }
+
+    /// <summary>
+    /// Builds the cycle-collector free hook <c>roam_free_impl()</c> for an entity: tears down each
+    /// NON-Roamed field (its own resources) then frees the entity allocation. Roamed fields are
+    /// deliberately NOT torn down — the collector frees the whole white cycle directly, so recursing
+    /// through a Roamed child's <c>destroy</c> here would double-free a sibling being reaped in the
+    /// same batch (the finalizer-recursion hazard).
+    /// </summary>
+    private Statement BuildRoamFreeBody(TypeInfo? owner)
+    {
+        var noop = new ReturnStatement(Value: null, Location: _synthLoc);
+        List<MemberVariableInfo>? fields = owner is EntityTypeInfo e
+            ? e.MemberVariables
+            : null;
+
+        TypeInfo? noneType = ctx.Registry.LookupType(name: "None");
+        var statements = new List<Statement>(capacity: (fields?.Count ?? 0) + 2);
+        if (fields is { Count: > 0 })
+        {
+            foreach (MemberVariableInfo field in fields)
+            {
+                if (IsRoamedField(t: field.Type))
+                    continue;
+                var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                {
+                    ResolvedType = owner
+                };
+                var fieldRef =
+                    new MemberExpression(Object: meRef,
+                        MemberName: field.Name,
+                        Location: _synthLoc) { ResolvedType = field.Type };
+                var destroyCall = new CallExpression(
+                    Callee: new MemberExpression(Object: fieldRef,
+                        MemberName: "destroy",
+                        Location: _synthLoc) { ResolvedType = noneType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = noneType };
+                statements.Add(item: new ExpressionStatement(Expression: destroyCall,
+                    Location: _synthLoc));
+            }
+        }
+
+        if (owner is EntityTypeInfo)
+            statements.Add(item: BuildEntitySelfFree(owner: owner!, noneType: noneType));
+
+        statements.Add(item: noop);
+        return new BlockStatement(Statements: statements, Location: _synthLoc);
+    }
+
+    private Statement BuildDestroyBody(TypeInfo? owner)
+    {
+        var noop = new ReturnStatement(Value: null, Location: _synthLoc);
+
+        // Variants tear down the *active* arm only: pattern-match the tag and `destroy` the
+        // bound payload. None/void arms (and any non-resource arms) fall through the else no-op.
+        if (owner is VariantTypeInfo variant)
+            return BuildVariantDestroyBody(variant: variant);
+
+        List<MemberVariableInfo>? fields = owner switch
+        {
+            EntityTypeInfo e => e.MemberVariables,
+            // Tuples are RecordTypeInfo subclasses that CAN carry owned references (e.g. a
+            // `Text` element), so recurse into their item0/item1/... fields to tear those down.
+            TupleTypeInfo t => t.MemberVariables,
+            // Choices/flags are RecordTypeInfo subclasses with no owned references — exclude
+            // them; only plain composite records (no @llvm backend) recurse.
+            ChoiceTypeInfo or FlagsTypeInfo => null,
+            RecordTypeInfo { HasDirectBackendType: false } r => r.MemberVariables,
+            _ => null
+        };
+
+        // Entities are heap-allocated (rf_allocate_dynamic); their destructor must free the
+        // entity allocation itself AFTER tearing down fields, exactly as hand-written entity
+        // destructors do (e.g. List[T].destroy ends with `me.hijack().invalidate()`). Without
+        // this the struct leaks on every destroy — auto-derived entities like RangeEmitter[T]
+        // (the iterator behind every `for x in range`) otherwise leak per iteration. Records,
+        // tuples, and crashables are value-typed / managed elsewhere, so they only recurse.
+        bool isEntity = owner is EntityTypeInfo;
+        if (!isEntity && fields is null or { Count: 0 })
+            return noop;
+
+        TypeInfo? noneType = ctx.Registry.LookupType(name: "None");
+        var statements = new List<Statement>(capacity: (fields?.Count ?? 0) + 2);
+        if (fields is { Count: > 0 })
+        {
+            foreach (MemberVariableInfo field in fields)
+            {
+                // A trivially-destructible field's `destroy` is a transitive no-op — skip the call
+                // (it would only emit an unstrippable `ret void` chain). Non-trivial fields (entity,
+                // RC wrapper, managed leaf, user destroy) still tear down.
+                if (ctx.Registry.IsTriviallyDestructible(type: field.Type))
+                    continue;
+                var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                {
+                    ResolvedType = owner
+                };
+                var fieldRef =
+                    new MemberExpression(Object: meRef,
+                        MemberName: field.Name,
+                        Location: _synthLoc) { ResolvedType = field.Type };
+                var destroyCall = new CallExpression(
+                    Callee: new MemberExpression(Object: fieldRef,
+                        MemberName: "destroy",
+                        Location: _synthLoc) { ResolvedType = noneType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = noneType };
+                statements.Add(item: new ExpressionStatement(Expression: destroyCall,
+                    Location: _synthLoc));
+            }
+        }
+
+        if (isEntity)
+            statements.Add(item: BuildEntitySelfFree(owner: owner!, noneType: noneType));
+
+        statements.Add(item: noop);
+        return new BlockStatement(Statements: statements, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds <c>me.hijack().invalidate()</c> — frees the heap allocation backing an entity.
+    /// Mirrors the tail of hand-written entity destructors (e.g. <c>List[T].destroy</c>); the
+    /// synthesized destructor must emit it too, or every auto-derived entity leaks its struct.
+    /// </summary>
+    private ExpressionStatement BuildEntitySelfFree(TypeInfo owner, TypeInfo? noneType)
+    {
+        TypeInfo hijackedType = ctx.Registry.GetOrCreateWrapperType(
+            wrapperName: Resolution.RuntimeContract.Hijacked,
+            innerType: owner,
+            isReadOnly: false);
+
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = owner
+        };
+        var hijackCall = new CallExpression(
+            Callee: new MemberExpression(Object: meRef,
+                MemberName: Resolution.RuntimeContract.RawPointer.Hijack,
+                Location: _synthLoc) { ResolvedType = hijackedType },
+            Arguments: [],
+            Location: _synthLoc) { ResolvedType = hijackedType };
+        var invalidateCall = new CallExpression(
+            Callee: new MemberExpression(Object: hijackCall,
+                MemberName: Resolution.RuntimeContract.RawPointer.Invalidate,
+                Location: _synthLoc) { ResolvedType = noneType },
+            Arguments: [],
+            Location: _synthLoc) { ResolvedType = noneType };
+        return new ExpressionStatement(Expression: invalidateCall, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the variant <c>destroy()</c>:
+    /// <c>when me { is None => ; is None => ; is T as v => v.destroy(); ... }</c>.
+    /// Only the active arm's payload is torn down. The absent arm is matched with <c>is None</c>
+    /// (variants use <c>None</c> for their empty branch); void (<c>None</c>) and value arms are
+    /// no-ops (a value arm's <c>destroy</c> is itself a no-op, kept for uniformity).
+    /// </summary>
+    private WhenStatement BuildVariantDestroyBody(VariantTypeInfo variant)
+    {
+        TypeInfo? noneType = ctx.Registry.LookupType(name: "None");
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = variant
+        };
+
+        var clauses = new List<WhenClause>(capacity: variant.Members.Count + 1);
+        foreach (VariantMemberInfo member in variant.Members)
+        {
+            string memberName = member.IsNone
+                ? "None"
+                : member.Type!.Name;
+            bool isVoidPayload = member is { IsNone: false, Type.Name: "None" };
+            var typeExpr =
+                new TypeExpression(Name: memberName, GenericArguments: null, Location: _synthLoc)
+                {
+                    ResolvedType = member.Type
+                };
+
+            // A trivially-destructible payload arm's `destroy` is a no-op, so it needs no binding or
+            // teardown — collapse it to the same empty clause as None/None. (Entity arms and unresolved
+            // generic-instance arms are NOT trivial — IsTriviallyDestructible returns false — so they
+            // still bind + tear down, matching the generic-entity-arm rule elsewhere in this pass.)
+            bool trivialPayload = !member.IsNone && !isVoidPayload && member.Type is not null &&
+                                  ctx.Registry.IsTriviallyDestructible(type: member.Type);
+
+            Pattern pattern;
+            Statement clauseBody;
+            if (member.IsNone || isVoidPayload || trivialPayload)
+            {
+                // `is None` / `is None` / trivially-destructible payload — no payload to tear down.
+                pattern = new TypePattern(Type: typeExpr,
+                    VariableName: null,
+                    Bindings: null,
+                    Location: _synthLoc);
+                clauseBody = new ReturnStatement(Value: null, Location: _synthLoc);
+            }
+            else
+            {
+                pattern = new TypePattern(Type: typeExpr,
+                    VariableName: "v",
+                    Bindings: null,
+                    Location: _synthLoc);
+                var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
+                {
+                    ResolvedType = member.Type
+                };
+                var destroyCall = new CallExpression(
+                    Callee: new MemberExpression(Object: vRef,
+                        MemberName: "destroy",
+                        Location: _synthLoc) { ResolvedType = noneType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = noneType };
+                clauseBody = new ExpressionStatement(Expression: destroyCall, Location: _synthLoc);
+            }
+
+            clauses.Add(item: new WhenClause(Pattern: pattern,
+                Body: clauseBody,
+                Location: _synthLoc));
+        }
+
+        clauses.Add(item: new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+            Body: new ReturnStatement(Value: null, Location: _synthLoc),
+            Location: _synthLoc));
+
+        return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
+    }
+
+    private static ReturnStatement MakeLiteralReturn(string value, TypeInfo returnType) =>
+        new ReturnStatement(
+            Value: new LiteralExpression(Value: value,
+                LiteralType: TokenType.TextLiteral,
+                Location: _synthLoc) { ResolvedType = returnType },
+            Location: _synthLoc);
+
+    private static ReturnStatement MakeLiteralReturn(ulong value, TypeInfo returnType) =>
+        new ReturnStatement(
+            Value: new LiteralExpression(Value: value,
+                LiteralType: TokenType.U64Literal,
+                Location: _synthLoc) { ResolvedType = returnType },
+            Location: _synthLoc);
+
+    private static ReturnStatement MakeLiteralReturn(long value, TypeInfo returnType) =>
+        new ReturnStatement(
+            Value: new LiteralExpression(Value: value,
+                LiteralType: TokenType.S64Literal,
+                Location: _synthLoc) { ResolvedType = returnType },
+            Location: _synthLoc);
+
+    private static ReturnStatement MakeLiteralReturn(bool value, TypeInfo returnType) =>
+        new ReturnStatement(Value: new LiteralExpression(Value: value,
+                LiteralType: value
+                    ? TokenType.True
+                    : TokenType.False,
+                Location: _synthLoc) { ResolvedType = returnType },
+            Location: _synthLoc);
+
+    //  represent / diagnose (tuple)
+
+    private void HandleTuple(RoutineInfo routine, TupleTypeInfo tuple, TypeInfo textType,
+        TypeInfo? s32Type)
+    {
+        switch (routine.Name)
+        {
+            case "destroy" when routine.Parameters.Count == 0:
+                // Tuples are filtered out of the main routine loop (they never appear in routine
+                // signatures), so the unified `destroy` synthesis at line ~108 never sees them.
+                // Build the field-recursing destructor here so owned elements (e.g. a `Text`) are
+                // torn down — otherwise the call emitted by ScopeTeardownLoweringPass is undefined.
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildDestroyBody(owner: tuple);
+                break;
+
+            // Tuples have a SPECIAL text format — represent `(1, 2)` (no type name / field names),
+            // diagnose `Tuple[…](1, 2)` — produced by the `@override … needs T is TupleType` derive
+            // template (NOT the universal `TypeName(field: value, …)` shape); falls back to the C# builder.
+            case RepresentMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: tuple, synthesized: routine,
+                        methodName: RepresentMethodName)
+                    ?? BuildTupleTextBody(tuple: tuple, textType: textType, diagnose: false);
+                break;
+
+            case DiagnoseMethodName:
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: tuple, synthesized: routine,
+                        methodName: DiagnoseMethodName)
+                    ?? BuildTupleTextBody(tuple: tuple, textType: textType, diagnose: true);
+                break;
+
+            case "serialize":
+            {
+                // A generic tuple (`Tuple[U64, T]`) has no concrete body — its serialize is cloned per
+                // CONCRETE instantiation during monomorphization; synthesizing one here would send the
+                // template's `SerialValue(…)` constructor to codegen with the unresolved `T` (RF-S959).
+                if (tuple.ElementTypes.Any(predicate: e => e is GenericParameterTypeInfo)) break;
+                // Field-walk item0/item1/… into a `Dict[Text, SerialValue]` via the SAME universal
+                // serialize derive template as records/entities (routine elements box their
+                // `represent` signature via the template's `m.is_routine` branch). Registered in
+                // GetOrCreateTupleType only when every element is serializable-or-routine.
+                Statement? tupSer =
+                    CloneUniversalDeriveBody(ownerType: tuple, synthesized: routine,
+                        methodName: "serialize")
+                    ?? BuildSerializeBody(owner: tuple, fields: tuple.MemberVariables,
+                        textType: textType);
+                if (tupSer != null) ctx.VariantBodies[key: routine.RegistryKey] = tupSer;
+                break;
+            }
+
+            // A tuple is a RecordTypeInfo, so its retaining field-walk copy reuses the record
+            // builder: reconstruct `(me.item0.store(), me.item1, …)` — each retaining element goes
+            // through its own `store`, value elements stay shallow. The Creator it emits is exactly
+            // what ExpressionLoweringPass lowers a tuple literal to (TypeName = tuple.Name, item{i}
+            // fields), so codegen materializes it identically.
+            case "store" when routine.Parameters.Count == 0:
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildRecordCopyBody(record: tuple);
+                break;
+
+            case "eq":
+            {
+                TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
+                if (boolType == null) break;
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: tuple, synthesized: routine,
+                        methodName: "eq")
+                    ?? BuildEqBody(ownerType: tuple, fields: tuple.MemberVariables,
+                        boolType: boolType);
+                break;
+            }
+
+            case "cmp":
+            {
+                TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
+                if (s32Type == null || boolType == null) break;
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: tuple, synthesized: routine,
+                        methodName: "cmp")
+                    ?? BuildCmpBody(ownerType: tuple, fields: tuple.MemberVariables,
+                        s32Type: s32Type, boolType: boolType);
+                break;
+            }
+
+            case HashMethodName:
+            {
+                TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+                if (u64Type == null) break;
+                // The 0-param `hash()` clones the universal derive template (comptime `expand`
+                // XOR-fold); the keyed `hash(k0, k1)` keeps the C# builder unchanged.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    (routine.Parameters.Count == 0
+                        ? CloneUniversalDeriveBody(ownerType: tuple, synthesized: routine,
+                            methodName: HashMethodName)
+                        : null)
+                    ?? BuildHashBody(ownerType: tuple, fields: tuple.MemberVariables,
+                        u64Type: u64Type);
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the body for <c>represent</c> or <c>diagnose</c> on a tuple.
+    /// <list type="bullet">
+    ///   <item><c>represent</c>: <c>return f"({me.item0}, {me.item1})"</c></item>
+    ///   <item><c>diagnose</c>: <c>return f"ValueTuple[T1, T2]({me.item0}, {me.item1})"</c></item>
+    /// </list>
+    /// </summary>
+    private static ReturnStatement BuildTupleTextBody(TupleTypeInfo tuple, TypeInfo textType,
+        bool diagnose)
+    {
+        var parts = new List<InsertedTextPart>();
+
+        if (diagnose)
+        {
+            parts.Add(new TextPart(Text: $"{tuple.QualifiedTypeName}(", Location: _synthLoc));
+        }
+        else
+        {
+            parts.Add(new TextPart(Text: "(", Location: _synthLoc));
+        }
+
+        bool first = true;
+        foreach (MemberVariableInfo field in tuple.MemberVariables)
+        {
+            if (!first)
+                parts.Add(new TextPart(Text: ", ", Location: _synthLoc));
+            first = false;
+
+            var fieldExpr = new MemberExpression(
+                Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
+                {
+                    ResolvedType = tuple
+                },
+                MemberName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+
+            parts.Add(new ExpressionPart(Expression: fieldExpr,
+                FormatSpec: null,
+                Location: _synthLoc));
+        }
+
+        parts.Add(new TextPart(Text: ")", Location: _synthLoc));
+
+        var fstring =
+            new InsertedTextExpression(Parts: parts, IsRaw: false, Location: _synthLoc)
+            {
+                ResolvedType = textType
+            };
+
+        return new ReturnStatement(Value: fstring, Location: _synthLoc);
+    }
+
+    //  represent / diagnose (variant)
+
+    private void HandleVariant(RoutineInfo routine, VariantTypeInfo variant, TypeInfo textType)
+    {
+        // Skip generic definitions -> no concrete member types to dispatch on.
+        if (variant.IsGenericDefinition) return;
+
+        // Synthesize the per-arm EXTRACTORS (`Arm.create!(from: V)`) here. They are owned by the arm
+        // type; for a GENERIC-instance arm (e.g. `Dict[Text, SerialValue]`) the main synthesis loop's
+        // `GetAllRoutines` liveness filter (IsConcreteTypeLive) excludes the arm-owned routine at this
+        // phase, so its body would never be built. We hold the arm list here, so build them directly
+        // (idempotent — guarded by ContainsKey). The BOX direction is owned by the concrete variant and
+        // is synthesized by the main-loop hook as usual.
+        SynthesizeVariantArmExtractors(variant: variant);
+
+        switch (routine.Name)
+        {
+            case RepresentMethodName:
+                // The `@override needs T is variant` derive template (arm-dispatch via `armof`) is
+                // selected for a variant; falls back to the C# builder if absent.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: variant, synthesized: routine,
+                        methodName: RepresentMethodName)
+                    ?? BuildVariantRepresentBody(variant: variant, textType: textType);
+                break;
+
+            case DiagnoseMethodName:
+                // TAG-dispatch from the `@override … needs T is VariantType` derive template
+                // (`armof` + `m.type_id` + `v.diagnose()`); falls back to the C# builder.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: variant, synthesized: routine,
+                        methodName: DiagnoseMethodName)
+                    ?? BuildVariantDiagnoseBody(variant: variant, textType: textType);
+                break;
+
+            case "copy":
+                // TAG-dispatch deep copy from the `@override … needs T is VariantType` derive
+                // template (arm reconstruction `is ${m.type} v => Me(from: v.copy())`); C# fallback.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    CloneUniversalDeriveBody(ownerType: variant, synthesized: routine,
+                        methodName: "copy")
+                    ?? BuildVariantCopyBody(variant: variant);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds a variant's deep <c>copy</c>:
+    /// <c>when me { is HeapArm as v => return Variant.HeapArm(v.copy()), … else => return me }</c>.
+    /// Each arm whose payload owns a real destructor (a collection, a managed leaf like <c>Text</c>, a
+    /// record that transitively owns one) is reconstructed with an independent <c>arm.copy()</c> so the
+    /// result shares no heap storage — a bitwise alias would double-free when both owners tear down.
+    /// Scalar / <c>None</c> / <c>None</c> arms are safe to bitwise-duplicate, so they fall to the
+    /// <c>else => return me</c> identity branch (RecordCopyLoweringPass treats this copy body like
+    /// <c>store</c>, so the bare <c>return me</c> is not re-injected).
+    /// </summary>
+    private WhenStatement BuildVariantCopyBody(VariantTypeInfo variant)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = variant
+        };
+
+        var clauses = new List<WhenClause>(capacity: variant.Members.Count + 1);
+        foreach (VariantMemberInfo member in variant.Members)
+        {
+            if (member.IsNone || member.Type is null)
+                continue;
+
+            Resolution.TypeRegistry.Lifecycle armLc =
+                ctx.Registry.GetLifecycle(type: member.Type);
+            if (armLc.IsBorrow)
+                continue; // borrow-tier arm — cannot copy; the else branch bitwise-forwards it.
+            // NOTE: do NOT skip on `armLc.Destroy is null`. A generic ENTITY-instance arm
+            // (Dict[Text, SerialValue], List[SerialValue]) reports a null destructor here because
+            // its instance methods aren't materialized at Phase-6 synthesis time — yet it is a heap
+            // reference that DOUBLE-FREES if bitwise-aliased. Emit `arm.copy()` for every non-borrow
+            // arm (identity for scalars, deep for heap arms); only None arms fall to the else branch.
+
+            var typeExpr =
+                new TypeExpression(Name: member.Type.Name,
+                    GenericArguments: null,
+                    Location: _synthLoc) { ResolvedType = member.Type };
+            var pattern = new TypePattern(Type: typeExpr,
+                VariableName: "v",
+                Bindings: null,
+                Location: _synthLoc);
+
+            var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
+            {
+                ResolvedType = member.Type
+            };
+            var copyCall = new CallExpression(
+                Callee: new MemberExpression(Object: vRef, MemberName: "copy", Location: _synthLoc)
+                {
+                    ResolvedType = member.Type
+                },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = member.Type };
+
+            var boxed =
+                new CreatorExpression(TypeName: variant.Name,
+                    TypeArguments: null,
+                    MemberVariables: [(member.Type.Name, copyCall)],
+                    Location: _synthLoc) { ResolvedType = variant, ConstructedType = variant };
+
+            clauses.Add(item: new WhenClause(Pattern: pattern,
+                Body: new ReturnStatement(Value: boxed, Location: _synthLoc),
+                Location: _synthLoc));
+        }
+
+        clauses.Add(item: new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+            Body: new ReturnStatement(Value: meRef, Location: _synthLoc),
+            Location: _synthLoc));
+
+        return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Synthesizes the body of an auto-generated variant arm constructor, if <paramref name="routine"/>
+    /// is one. Two shapes (both keyed off the arm/variant relationship, not the routine name text):
+    /// <list type="bullet">
+    ///   <item><c>V.create(from: Arm) -> V</c> — box: <c>return &lt;V with the Arm-tagged payload&gt;</c>.</item>
+    ///   <item><c>Arm.create!(from: V) -> Arm</c> — failable extract:
+    ///     <c>when from { is Arm as v => return v, else => absent }</c>.</item>
+    /// </list>
+    /// Only synthesized (auto) constructors are handled; a hand-written <c>create</c> keeps its body.
+    /// </summary>
+    private bool TryBuildVariantArmConstructorBody(RoutineInfo routine, out Statement? body)
+    {
+        body = null;
+        if (!routine.IsSynthesized || routine.Kind != RoutineKind.Creator ||
+            routine.Parameters is not [{ Name: "from" } fromParam] || fromParam.Type is null)
+        {
+            return false;
+        }
+
+        // Box: owner is the variant, `from` is one of its arms.
+        if (routine.Name == "create" && routine.OwnerType is VariantTypeInfo boxVariant &&
+            FindArmByType(variant: boxVariant, armType: fromParam.Type) is
+                { Type: { } boxArmType })
+        {
+            var fromRef = new IdentifierExpression(Name: "from", Location: _synthLoc)
+            {
+                ResolvedType = fromParam.Type
+            };
+            var boxed =
+                new CreatorExpression(TypeName: boxVariant.Name,
+                    TypeArguments: null,
+                    MemberVariables: [(boxArmType.Name, fromRef)],
+                    Location: _synthLoc)
+                {
+                    ResolvedType = boxVariant, ConstructedType = boxVariant
+                };
+            body = new ReturnStatement(Value: boxed, Location: _synthLoc);
+            return true;
+        }
+
+        // Failable extract: `from` is a variant, owner is one of its arms.
+        if (routine.Name == "create" && routine.IsFailable &&
+            fromParam.Type is VariantTypeInfo fromVariant && routine.OwnerType is { } armOwner &&
+            FindArmByType(variant: fromVariant, armType: armOwner) is { Type: { } })
+        {
+            var fromRef = new IdentifierExpression(Name: "from", Location: _synthLoc)
+            {
+                ResolvedType = fromVariant
+            };
+            var typeExpr =
+                new TypeExpression(Name: armOwner.Name,
+                    GenericArguments: null,
+                    Location: _synthLoc) { ResolvedType = armOwner };
+            var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
+            {
+                ResolvedType = armOwner
+            };
+            // The pattern binding `v` is a VIEW into `from`'s payload. Returning it bare hands the
+            // caller an alias to the variant's heap payload; when the caller owns the result AND the
+            // source variant tears its payload down, the same heap is freed twice. Deep-copy the
+            // payload out so the extracted value is independent. `copy` is AlwaysLive for every type
+            // — identity for scalars, deep for heap arms (Dict/List/Text). We can't gate on
+            // GetLifecycle here because a generic-instance arm (Dict[..]/List[..]) reports a null
+            // destructor at synth time (not-yet-live), which is exactly the arm that MUST be copied.
+            Expression extracted = new CallExpression(
+                Callee: new MemberExpression(Object: vRef, MemberName: "copy", Location: _synthLoc)
+                {
+                    ResolvedType = armOwner
+                },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = armOwner };
+            var matchClause = new WhenClause(
+                Pattern: new TypePattern(Type: typeExpr,
+                    VariableName: "v",
+                    Bindings: null,
+                    Location: _synthLoc),
+                Body: new ReturnStatement(Value: extracted, Location: _synthLoc),
+                Location: _synthLoc);
+            var elseClause = new WhenClause(
+                Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+                Body: new AbsentStatement(Location: _synthLoc),
+                Location: _synthLoc);
+            body = new WhenStatement(Expression: fromRef,
+                Clauses: [matchClause, elseClause],
+                Location: _synthLoc);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Builds the failable extractor body <c>Arm.create!(from: V)</c> for each non-None arm and stores
+    /// it under that routine's key, so a GENERIC-instance arm (excluded from the liveness-gated main
+    /// synthesis loop) still gets a body. Idempotent — skips arms whose extractor body already exists.
+    /// </summary>
+    private void SynthesizeVariantArmExtractors(VariantTypeInfo variant)
+    {
+        foreach (VariantMemberInfo arm in variant.Members)
+        {
+            if (arm.IsNone || arm.Type is null)
+            {
+                continue;
+            }
+
+            RoutineInfo? extractor = ctx.Registry
+                                        .GetMethodsForType(type: arm.Type)
+                                        .FirstOrDefault(predicate: m =>
+                                             m is { Name: "create", IsFailable: true } &&
+                                             m.Parameters is [{ Type: { } paramType }] &&
+                                             paramType.FullName == variant.FullName);
+            if (extractor is null || ctx.VariantBodies.ContainsKey(key: extractor.RegistryKey))
+            {
+                continue;
+            }
+
+            if (TryBuildVariantArmConstructorBody(routine: extractor,
+                    body: out Statement? exBody) && exBody is not null)
+            {
+                ctx.VariantBodies[key: extractor.RegistryKey] = exBody;
+            }
+        }
+    }
+
+    /// <summary>Finds the variant arm whose payload type matches <paramref name="armType"/> by full name.</summary>
+    private static VariantMemberInfo? FindArmByType(VariantTypeInfo variant, TypeInfo armType) =>
+        variant.Members.FirstOrDefault(predicate: m =>
+            !m.IsNone && m.Type is not null &&
+            (m.Type.FullName == armType.FullName || m.Type.Name == armType.Name));
+
+    /// <summary>
+    /// Builds: <c>when me { is None => return "None", is T as v => return v.represent(), ... }</c>.
+    /// </summary>
+    private static WhenStatement BuildVariantRepresentBody(VariantTypeInfo variant,
+        TypeInfo textType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = variant
+        };
+
+        var clauses = new List<WhenClause>(capacity: variant.Members.Count + 1);
+        foreach (VariantMemberInfo member in variant.Members)
+        {
+            string memberName = member.IsNone
+                ? "None"
+                : member.Type!.Name;
+            // IsNone = the absent arm (rendered as "none"). Zero-sized types like None or
+            // an empty record are real values — render via the type's own represent (or the
+            // type name when we can't bind a void payload).
+            bool isAbsentArm = member.IsNone;
+            bool isVoidPayload = !isAbsentArm && member.Type?.Name == "None";
+
+            var typeExpr =
+                new TypeExpression(Name: memberName, GenericArguments: null, Location: _synthLoc)
+                {
+                    ResolvedType = member.Type
+                };
+
+            Pattern pattern;
+            Statement clauseBody;
+
+            if (isAbsentArm)
+            {
+                pattern = new TypePattern(Type: typeExpr,
+                    VariableName: null,
+                    Bindings: null,
+                    Location: _synthLoc);
+                clauseBody = new ReturnStatement(
+                    Value: new LiteralExpression(Value: $"{variant.ShortTypeName}(none)",
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc);
+            }
+            else if (isVoidPayload)
+            {
+                pattern = new TypePattern(Type: typeExpr,
+                    VariableName: null,
+                    Bindings: null,
+                    Location: _synthLoc);
+                clauseBody = new ReturnStatement(
+                    Value: new LiteralExpression(Value: $"{variant.ShortTypeName}({memberName})",
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc);
+            }
+            else
+            {
+                pattern = new TypePattern(Type: typeExpr,
+                    VariableName: "v",
+                    Bindings: null,
+                    Location: _synthLoc);
+
+                var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
+                {
+                    ResolvedType = member.Type
+                };
+                var representCall = new CallExpression(
+                    Callee: new MemberExpression(Object: vRef,
+                        MemberName: RepresentMethodName,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = textType };
+
+                var parts = new List<InsertedTextPart>
+                {
+                    new TextPart(Text: $"{variant.ShortTypeName}(", Location: _synthLoc),
+                    new ExpressionPart(Expression: representCall,
+                        FormatSpec: null,
+                        Location: _synthLoc),
+                    new TextPart(Text: ")", Location: _synthLoc)
+                };
+                var fstring =
+                    new InsertedTextExpression(Parts: parts, IsRaw: false, Location: _synthLoc)
+                    {
+                        ResolvedType = textType
+                    };
+                clauseBody = new ReturnStatement(Value: fstring, Location: _synthLoc);
+            }
+
+            clauses.Add(new WhenClause(Pattern: pattern, Body: clauseBody, Location: _synthLoc));
+        }
+
+        clauses.Add(new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+            Body: new ReturnStatement(
+                Value: new LiteralExpression(Value: $"{variant.ShortTypeName}(<error>)",
+                    LiteralType: TokenType.TextLiteral,
+                    Location: _synthLoc) { ResolvedType = textType },
+                Location: _synthLoc),
+            Location: _synthLoc));
+
+        return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds:
+    /// <c>when me { is None => return "Mod.V(type_id: 0, none)", is T as v => return f"Mod.V(type_id: N, {v.diagnose()})", ... }</c>.
+    /// </summary>
+    private static WhenStatement BuildVariantDiagnoseBody(VariantTypeInfo variant,
+        TypeInfo textType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = variant
+        };
+
+        var clauses = new List<WhenClause>(capacity: variant.Members.Count + 1);
+        foreach (VariantMemberInfo member in variant.Members)
+        {
+            string memberName = member.IsNone
+                ? "None"
+                : member.Type!.Name;
+            bool isAbsentArm = member.IsNone;
+            bool isVoidPayload = !isAbsentArm && member.Type?.Name == "None";
+            ulong typeId = isAbsentArm
+                ? 0UL
+                : TypeIdHelper.ComputeTypeId(fullName: member.Type!.FullName);
+
+            var typeExpr =
+                new TypeExpression(Name: memberName, GenericArguments: null, Location: _synthLoc)
+                {
+                    ResolvedType = member.Type
+                };
+
+            Pattern pattern;
+            Statement clauseBody;
+
+            if (isAbsentArm)
+            {
+                pattern = new TypePattern(Type: typeExpr,
+                    VariableName: null,
+                    Bindings: null,
+                    Location: _synthLoc);
+                string literal = $"{variant.QualifiedTypeName}(type_id: 0, none)";
+                clauseBody = new ReturnStatement(
+                    Value: new LiteralExpression(Value: literal,
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc);
+            }
+            else if (isVoidPayload)
+            {
+                pattern = new TypePattern(Type: typeExpr,
+                    VariableName: null,
+                    Bindings: null,
+                    Location: _synthLoc);
+                string literal = $"{variant.QualifiedTypeName}(type_id: {typeId}, {memberName})";
+                clauseBody = new ReturnStatement(
+                    Value: new LiteralExpression(Value: literal,
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc);
+            }
+            else
+            {
+                pattern = new TypePattern(Type: typeExpr,
+                    VariableName: "v",
+                    Bindings: null,
+                    Location: _synthLoc);
+
+                var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
+                {
+                    ResolvedType = member.Type
+                };
+                var diagnoseCall = new CallExpression(
+                    Callee: new MemberExpression(Object: vRef,
+                        MemberName: DiagnoseMethodName,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = textType };
+
+                string prefix = $"{variant.QualifiedTypeName}(type_id: {typeId}, ";
+                var parts = new List<InsertedTextPart>
+                {
+                    new TextPart(Text: prefix, Location: _synthLoc),
+                    new ExpressionPart(Expression: diagnoseCall,
+                        FormatSpec: null,
+                        Location: _synthLoc),
+                    new TextPart(Text: ")", Location: _synthLoc)
+                };
+                var fstring =
+                    new InsertedTextExpression(Parts: parts, IsRaw: false, Location: _synthLoc)
+                    {
+                        ResolvedType = textType
+                    };
+                clauseBody = new ReturnStatement(Value: fstring, Location: _synthLoc);
+            }
+
+            clauses.Add(new WhenClause(Pattern: pattern, Body: clauseBody, Location: _synthLoc));
+        }
+
+        clauses.Add(new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+            Body: new ReturnStatement(
+                Value: new LiteralExpression(
+                    Value: $"{variant.QualifiedTypeName}(type_id: <error>)",
+                    LiteralType: TokenType.TextLiteral,
+                    Location: _synthLoc) { ResolvedType = textType },
+                Location: _synthLoc),
+            Location: _synthLoc));
+
+        return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
+    }
+}

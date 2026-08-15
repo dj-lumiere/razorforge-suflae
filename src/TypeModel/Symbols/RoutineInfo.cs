@@ -177,7 +177,7 @@ public sealed class RoutineInfo
     public bool IsInFlightReturn { get; init; }
 
     /// <summary>Whether this routine can fail. Set from the declared <c>!</c> suffix at registration,
-    /// then RE-DERIVED by the failability-inference fixpoint (<c>InferFailableRoutines</c>) after Phase-5
+    /// then RE-DERIVED by the failability-inference fixpoint (<c>InferFailableRoutines</c>) after Phase-4
     /// body analysis: a routine is failable iff it was declared <c>!</c> OR its body throws/absents OR it
     /// propagates an unhandled failable callee. The <c>internal set</c> lets that pass overwrite the
     /// declared value before codegen keys the failable-carrier ABI on it (mirrors
@@ -202,7 +202,7 @@ public sealed class RoutineInfo
     public bool HasFailableCalls { get; set; }
 
     /// <summary>
-    /// Failable routines directly called by this routine. Populated during Phase 5 verification.
+    /// Failable routines directly called by this routine. Populated during Phase 4 verification.
     /// Used by <c>ErrorHandlingVariantPass</c> to propagate <see cref="HasThrow"/> /
     /// <see cref="HasAbsent"/> / <see cref="ThrowableTypes"/> through the call graph so that
     /// routines whose failability is purely propagated (e.g. <c>return Foo!(...)</c>) get the
@@ -212,7 +212,7 @@ public sealed class RoutineInfo
 
     /// <summary>
     /// Concrete crashable types directly thrown by this routine (or its corresponding
-    /// <c>check_</c>/<c>lookup_</c> variant). Populated after Phase 5 body analysis.
+    /// <c>check_</c>/<c>lookup_</c> variant). Populated after Phase 4 body analysis.
     /// Does not include types thrown by called routines (propagated throws).
     /// </summary>
     public List<TypeSymbol> ThrowableTypes { get; set; } = [];
