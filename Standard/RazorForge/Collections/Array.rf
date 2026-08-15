@@ -79,6 +79,32 @@ dangerous routine Array[T, N].destroy()
     i = i + 1u64
   return
 
+### Returns a copy with each element STORED (refcount-bumped for managed element types like `Text`; a
+### plain bitwise duplicate for trivially-copyable elements). Element-wise so the per-element `destroy`
+### at scope teardown stays balanced — a whole-array bitwise copy would alias element handles at
+### refcount 1 and double-free. Storability CASCADES: `Array[T, N]` is storable iff `T` is.
+@readonly
+routine Array[T, N].store() -> Array[T, N]
+needs T obeys Storable
+  var result = Array[T, N]()
+  var i = 0u64
+  while i < N
+    result[i] = me[i].store()
+    i = i + 1u64
+  return result
+
+### Returns a deep, independent copy — each element deep-copied via its own `copy`. Copyability
+### cascades: `Array[T, N]` is copyable iff `T` is.
+@readonly
+routine Array[T, N].copy() -> Array[T, N]
+needs T obeys Copyable
+  var result = Array[T, N]()
+  var i = 0u64
+  while i < N
+    result[i] = me[i].copy()
+    i = i + 1u64
+  return result
+
 # ============================================================================
 # Query Operations
 # ============================================================================
