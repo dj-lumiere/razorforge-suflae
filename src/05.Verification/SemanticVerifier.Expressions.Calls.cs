@@ -1302,15 +1302,17 @@ public sealed partial class SemanticVerifier
                     // later use is a hard error (UseAfterSteal). `.retain()` on an existing
                     // RC handle (`Retained[T]`, `Shared[T]`, ...) is a refcount bump and the
                     // source remains valid.
-                    if (member.MemberName is Compiler.Resolution.RuntimeContract.RefCount.Retain or Compiler.Resolution.RuntimeContract.RefCount.Track &&
-                        member.Object is IdentifierExpression consumedId)
+                    // STRUCTURAL move-on-consume (name-agnostic): constructing an RC wrapper FROM a bare
+                    // entity (or an `Owned`) moves ownership into the handle, so the source name is dead
+                    // after. Signalled by receiver = bare entity/`Owned` and the call result = an RC
+                    // wrapper. A copy/observe on an existing WRAPPER receiver leaves the source valid.
+                    if (member.Object is IdentifierExpression consumedId
+                        && (objectType is EntityTypeInfo
+                            || objectType.BareName == Compiler.Resolution.RuntimeContract.Owned)
+                        && method.ReturnType is { } uasResultType
+                        && Compiler.Resolution.TypeRegistry.GetRcWrapperBaseName(type: uasResultType) is not null)
                     {
-                        string baseName = objectType.BareName;
-                        bool consumesSource = baseName == Compiler.Resolution.RuntimeContract.Owned || objectType is EntityTypeInfo;
-                        if (consumesSource)
-                        {
-                            _deadrefVariables.Add(item: consumedId.Name);
-                        }
+                        _deadrefVariables.Add(item: consumedId.Name);
                     }
 
                     // #68: Real-to-Complex promotion — only add/sub allow float↔complex cross-type

@@ -545,17 +545,19 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                     _movedNames.Add(item: id.Name);
                     break;
                 // `T.retain()` / `T.track()` on a bare ENTITY consumes it (ownership moves into the
-                // RC controller). But `Retained.retain()` / `Tracked.track()` only mint another
-                // handle — the receiver is NOT consumed and must still be released at scope exit.
-                // So only treat the receiver as moved when it is a bare entity.
+                // Constructing an RC wrapper FROM a bare entity moves the entity into the controller —
+                // STRUCTURAL (name-agnostic): a call whose receiver is a bare entity and whose result is
+                // an RC wrapper. `Retained.store()` / `.observe()` mint a handle from an existing WRAPPER
+                // receiver (not a bare entity), so they are correctly excluded and still released.
                 case CallExpression
                 {
                     Callee: MemberExpression
                     {
-                        MemberName: RuntimeContract.RefCount.Retain or RuntimeContract.RefCount.Track,
                         Object: IdentifierExpression { ResolvedType: EntityTypeInfo } recv
                     }
-                }:
+                } rcCtorCall
+                    when rcCtorCall.ResolvedType is { } rcRes
+                         && TypeRegistry.GetRcWrapperBaseName(type: rcRes) is not null:
                     _movedNames.Add(item: recv.Name);
                     break;
                 // Store primitives write their argument(s) into memory/storage — the source binding

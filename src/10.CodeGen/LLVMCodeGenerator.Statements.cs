@@ -283,18 +283,20 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: _currentRoutineEntryAllocas,
             line: $"  store {GetLlvmType(type: rcWrapRecord)} zeroinitializer, ptr {varPtr}");
 
-        // Move semantics: if the initializer is entity.retain()/roam(), the RC wrapper now manages
-        // the entity's lifetime — remove it from scope-exit entity cleanup to prevent double-free.
+        // Move semantics (STRUCTURAL, name-agnostic): constructing an RC wrapper FROM a bare entity —
+        // a call whose receiver is a bare entity and whose result is an RC wrapper (Retained/Roamed/…) —
+        // moves the entity's lifetime into the wrapper, so remove the source entity from scope-exit
+        // cleanup to prevent double-free. Replaces the old `retain`/`roam` name check.
         if (varDecl.Initializer is CallExpression
             {
                 Callee: MemberExpression
                 {
-                    MemberName: var rcMoveVerb,
-                    Object: IdentifierExpression { Name: var srcEntityName }
+                    Object: IdentifierExpression { Name: var srcEntityName } srcRecv
                 }
-            }
-            && rcMoveVerb is Resolution.RuntimeContract.RefCount.Retain
-                or Resolution.RuntimeContract.RefCount.Roam)
+            } rcCall
+            && srcRecv.ResolvedType is EntityTypeInfo
+            && rcCall.ResolvedType is { } rcResultType
+            && Resolution.TypeRegistry.GetRcWrapperBaseName(type: rcResultType) is not null)
         {
             _localEntityVars.RemoveAll(match: e => e.Name == srcEntityName);
         }

@@ -68,11 +68,6 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// <see cref="ScopeTeardownLoweringPass"/>'s view-verb exclusion.</summary>
     private static readonly IReadOnlySet<string> ViewVerbs = RuntimeContract.ViewVerbs;
 
-    /// <summary>Method verbs that consume their receiver (ownership moves into the RC controller),
-    /// so the receiver must NOT be torn down here.</summary>
-    private static readonly IReadOnlySet<string> ConsumingReceiverVerbs =
-        RuntimeContract.ConsumingReceiverVerbs;
-
     /// <summary>Borrow/view wrapper names whose value points INTO another value, so a method
     /// returning one may alias its receiver — freeing the receiver would then dangle it. The owning
     /// RC wrappers (Retained/Tracked/Shared/Watched) are NOT here: they carry a refcounted controller,
@@ -370,8 +365,13 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // (the call result) is what gets torn down. This is uniform: nothing about `getitem` is
                 // special — any copy-verb receiver is left alone. (No `freshProducer().store()` is ever
                 // emitted — the copy pass injects `store` only onto lvalue reads and `a[i]`.)
-                bool receiverConsumed = ConsumingReceiverVerbs.Contains(m.MemberName)
-                                        || m.MemberName is "store" or "copy";
+                // A COPY verb (`store`/`copy`) reads its receiver, and constructing an RC wrapper FROM a
+                // bare entity (STRUCTURAL: entity receiver + RC-wrapper result) moves it into the
+                // controller — in both cases the receiver is not a fresh producer to tear down here.
+                bool receiverConsumed = m.MemberName is "store" or "copy"
+                                        || (m.Object.ResolvedType is EntityTypeInfo
+                                            && call.ResolvedType is { } rcCtorRes
+                                            && TypeRegistry.GetRcWrapperBaseName(type: rcCtorRes) is not null);
                 Expression newRecv = Visit(m.Object, objectPos: false, spills);
 
                 // Spill the receiver iff it is a fresh heap-owning RC-record producer, the verb does
