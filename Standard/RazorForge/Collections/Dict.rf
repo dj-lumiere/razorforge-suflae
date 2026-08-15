@@ -35,7 +35,7 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### :typeparam V: The value type associated with each key.
 ### :see: {FastDict[K, V]} for an unkeyed faster variant when keys are fully trusted.
 ### :see: {Set[T]} for the set counterpart.
-entity Dict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable, Container
+entity Dict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable, Container, Copyable
 needs K obeys Hashable, Equatable
 relates DictEmittable[K, V] as Iter
 relates K as Key
