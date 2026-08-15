@@ -452,7 +452,7 @@ public enum ExpandSourceKind
     /// <summary><c>memvarof(T)</c> — the member variables (fields) of a record, declaration order.</summary>
     MemberVariables,
 
-    /// <summary><c>armof(T)</c> — the arms of a variant, tag order. Used inside a <c>when</c> to
+    /// <summary><c>branchof(T)</c> — the arms of a variant, tag order. Used inside a <c>when</c> to
     /// generate one type-dispatch clause per arm.</summary>
     Arms,
 
@@ -533,7 +533,7 @@ public record WhenStatement(
     Expression Expression,
     List<WhenClause> Clauses,
     SourceLocation Location,
-    // Comptime arm-expansion: `when me` / `expand m in armof(T)` / `is ${m.type} x => …`. When set,
+    // Comptime arm-expansion: `when me` / `expand m in branchof(T)` / `is ${m.type} x => …`. When set,
     // the (initially empty) Clauses are UNROLLED from this template at monomorphization — one clause
     // per variant arm, with `${m.type}` folded to the arm type. Null for an ordinary `when`.
     WhenArmExpansion? ArmExpansion = null) : Statement(Location: Location)
@@ -558,7 +558,7 @@ public record WhenStatement(
 public record WhenClause(Pattern Pattern, Statement Body, SourceLocation Location);
 
 /// <summary>
-/// A comptime clause-template for <c>expand m in armof(T)</c> inside a <c>when</c>. Carries the
+/// A comptime clause-template for <c>expand m in branchof(T)</c> inside a <c>when</c>. Carries the
 /// handle name, the variant source type, and the single template clause (whose pattern is a
 /// <see cref="SpliceTypePattern"/>). Monomorphization unrolls this into one concrete
 /// <see cref="WhenClause"/> per arm.
@@ -681,7 +681,7 @@ public record TypePattern(
     SourceLocation Location) : Pattern(Location: Location);
 
 /// <summary>
-/// A comptime type-splice pattern: <c>is ${m.type} x</c> inside an <c>expand m in armof(T)</c>.
+/// A comptime type-splice pattern: <c>is ${m.type} x</c> inside an <c>expand m in branchof(T)</c>.
 /// The concrete arm type is unknown until monomorphization, where this is replaced by a
 /// <see cref="TypePattern"/> bound to the current arm's type. <see cref="VariableName"/> is null
 /// for a payload-less arm (<c>is ${m.type} =></c>).

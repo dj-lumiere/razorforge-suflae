@@ -108,7 +108,7 @@ public sealed partial class SemanticVerifier
                     // ever spliced (`${c.value}`, deferred); type leniently as S32 for a bare reference.
                     return _registry.LookupType(name: "S32") ?? ErrorTypeInfo.Instance;
                 case "type_id":
-                    // armof `m.type_id` — the arm type's stable id (U64), used by variant diagnose.
+                    // branchof `m.type_id` — the arm type's stable id (U64), used by variant diagnose.
                     return _registry.LookupType(name: "U64") ?? ErrorTypeInfo.Instance;
                 case "type":
                     // `${m.type}` in EXPRESSION position — the member/arm type as a comptime typewise

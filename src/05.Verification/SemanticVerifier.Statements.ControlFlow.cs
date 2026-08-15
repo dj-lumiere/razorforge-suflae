@@ -250,7 +250,7 @@ public sealed partial class SemanticVerifier
     {
         TypeSymbol matchedType = AnalyzeExpression(expression: whenStmt.Expression);
 
-        // Comptime arm-expansion (`when me` / `expand m in armof(T)` / `is ${m.type} x => …`): the
+        // Comptime arm-expansion (`when me` / `expand m in branchof(T)` / `is ${m.type} x => …`): the
         // concrete arms are unknown until monomorphization. Validate the template leniently — the
         // handle `m` and the payload binding type-check via deferral (ErrorTypeInfo) — plus any
         // EXPLICIT clauses written alongside it (e.g. `is None => …`). Skip the exhaustiveness/order

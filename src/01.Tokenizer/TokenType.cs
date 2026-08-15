@@ -401,8 +401,8 @@ public enum TokenType
     /// <summary>Comptime member-variable reflection source keyword (`memvarof(T)`)</summary>
     MemVarOf,
 
-    /// <summary>Comptime variant-arm reflection source keyword (`armof(T)`)</summary>
-    ArmOf,
+    /// <summary>Comptime variant-arm reflection source keyword (`branchof(T)`)</summary>
+    BranchOf,
 
     /// <summary>Comptime choice/flags-case reflection source keyword (`caseof(T)`)</summary>
     CaseOf,

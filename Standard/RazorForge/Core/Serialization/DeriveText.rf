@@ -23,18 +23,18 @@ routine T.represent() -> Text
 
 ### Variant `represent()`: TYPE-dispatch on the live arm — `TypeName(payload_repr)`, or `TypeName(none)`
 ### for the absent arm. The `@override needs T is VariantType` gate makes the wired synthesizer pick this
-### over the record default for a variant type. `expand m in armof(T)` generates one arm clause each;
+### over the record default for a variant type. `expand m in branchof(T)` generates one arm clause each;
 ### the explicit `is None` clause covers the absent arm the payload expansion skips.
 @override
 routine T.represent() -> Text
 needs T is VariantType
   when me
     is None => return me.type_name() + "(none)"
-    expand m in armof(T)
+    expand m in branchof(T)
       is ${m.type} v => return me.type_name() + "(" + v.represent() + ")"
 
 ### Variant `diagnose()`: `Module.Variant(type_id: <arm id>, <arm diagnose>)` — TAG-dispatch via
-### `armof`; the live arm's `m.type_id` (its stable type id) and the payload's `diagnose()`. The absent
+### `branchof`; the live arm's `m.type_id` (its stable type id) and the payload's `diagnose()`. The absent
 ### `None` arm shows `(type_id: 0, none)`. (No `None`/void arms exist — `None` is the canonical empty
 ### branch — so no bindingless-arm form is needed.)
 @override
@@ -42,7 +42,7 @@ routine T.diagnose() -> Text
 needs T is VariantType
   when me
     is None => return me.full_type_name() + "(type_id: 0, none)"
-    expand m in armof(T)
+    expand m in branchof(T)
       is ${m.type} v => return me.full_type_name() + "(type_id: " + m.type_id.represent() + ", " + v.diagnose() + ")"
 
 ### Choice `represent()`: VALUE-dispatch on the S32 discriminant via `caseof`, returning the bare case
@@ -219,7 +219,7 @@ routine T.copy() -> Me
   return me.store()
 
 ### Variant `copy()`: TAG-dispatch DEEP copy — reconstruct the live arm with a copied payload, so a
-### heap arm (a collection, a managed leaf) is NOT bitwise-aliased (which would double-free). `armof`
+### heap arm (a collection, a managed leaf) is NOT bitwise-aliased (which would double-free). `branchof`
 ### emits one clause per payload arm boxing `v.copy()` back into the variant via the arm constructor
 ### `Me(from: …)`; None / borrow arms (borrow can't be a variant payload) fall to `else => return me`.
 @override
@@ -227,7 +227,7 @@ routine T.copy() -> Me
 needs T is VariantType
   when me
     is None => return me
-    expand m in armof(T)
+    expand m in branchof(T)
       is ${m.type} v =>
         return T(from: v.copy())
     else => return me
@@ -255,7 +255,7 @@ needs T is EntityType
   return
 
 ### Variant `destroy()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,
-### one arm live at a time). `armof` generates one `is ${m.type} v =>` clause per payload arm; the
+### one arm live at a time). `branchof` generates one `is ${m.type} v =>` clause per payload arm; the
 ### inert-arm skip (`m.is_inert`) drops no-op teardowns; the explicit `is None` + `else` cover the
 ### payload-less / void arms (nothing to destroy).
 @override
@@ -263,7 +263,7 @@ routine T.destroy()
 needs T is VariantType
   when me
     is None => return
-    expand m in armof(T)
+    expand m in branchof(T)
       is ${m.type} v =>
         if not m.is_inert
           v.destroy()

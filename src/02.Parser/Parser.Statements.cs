@@ -263,7 +263,7 @@ public partial class Parser
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand loop");
 
         // Statement-position expand sources: `memvarof(T)` (record/entity/tuple fields) or `caseof(T)`
-        // (choice/flags cases). (`armof(T)` is parsed separately — it only appears inside a `when`.)
+        // (choice/flags cases). (`branchof(T)` is parsed separately — it only appears inside a `when`.)
         ExpandSourceKind sourceKind;
         string sourceName;
         if (Match(type: TokenType.CaseOf))
@@ -398,7 +398,7 @@ public partial class Parser
                 continue;
             }
 
-            // Comptime arm-expansion: `expand m in armof(T)` generates one type-dispatch clause per
+            // Comptime arm-expansion: `expand m in branchof(T)` generates one type-dispatch clause per
             // variant arm at monomorphization. It may sit ALONGSIDE explicit clauses (e.g. an
             // `is None => …` clause the payload-arm expansion doesn't cover) — at most one per `when`.
             if (Check(type: TokenType.Expand))
@@ -583,7 +583,7 @@ public partial class Parser
 
     /// <summary>
     /// Parses a comptime arm-expansion inside a <c>when</c>:
-    /// <c>expand m in armof(T)</c> then an indented template clause <c>is ${m.type} x => body</c>
+    /// <c>expand m in branchof(T)</c> then an indented template clause <c>is ${m.type} x => body</c>
     /// (or payload-less <c>is ${m.type} => body</c>). Unrolled per variant arm at monomorphization.
     /// </summary>
     private WhenArmExpansion ParseWhenArmExpansion()
@@ -591,16 +591,16 @@ public partial class Parser
         Consume(type: TokenType.Expand, errorMessage: "Expected 'expand'");
         string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand");
-        Consume(type: TokenType.ArmOf, errorMessage: "Expected 'armof' after 'in' in a when-expand");
-        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'armof'");
+        Consume(type: TokenType.BranchOf, errorMessage: "Expected 'branchof' after 'in' in a when-expand");
+        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'branchof'");
         TypeExpression sourceType = ParseType();
-        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after armof type");
-        Consume(type: TokenType.Newline, errorMessage: "Expected newline after armof(...)");
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after branchof type");
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after branchof(...)");
 
         if (!Check(type: TokenType.Indent))
         {
             throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIndentedBlock,
-                message: "Expected indented 'is ${...} => ...' clause after armof(...)");
+                message: "Expected indented 'is ${...} => ...' clause after branchof(...)");
         }
 
         ProcessIndentToken();
@@ -608,7 +608,7 @@ public partial class Parser
 
         SourceLocation clauseLoc = GetLocation();
         Consume(type: TokenType.Is,
-            errorMessage: "Expected 'is ${m.type} ...' clause in an armof-expand");
+            errorMessage: "Expected 'is ${m.type} ...' clause in an branchof-expand");
         Consume(type: TokenType.SpliceOpen,
             errorMessage: "Expected '${m.type}' type splice after 'is'");
         // The splice inner must be the handle's `.type` projection; parsed and validated, then the
@@ -618,7 +618,7 @@ public partial class Parser
             || spliceHandle.Name != handle)
         {
             throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
-                message: $"An armof-expand arm pattern must be 'is ${{{handle}.type}} ...'.");
+                message: $"An branchof-expand arm pattern must be 'is ${{{handle}.type}} ...'.");
         }
 
         string? binding = Check(type: TokenType.Identifier)

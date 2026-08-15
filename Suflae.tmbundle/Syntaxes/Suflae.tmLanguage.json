@@ -48,9 +48,9 @@
           "match": "\\b(if|elseif|else|then|unless|each|expand|loop|while|when|break|continue|return|throw|absent|becomes|discard|emit)\\b"
         },
         {
-          "comment": "Compile-time reflection sources (expand m in memvarof(T)/armof(T)/caseof(T))",
+          "comment": "Compile-time reflection sources (expand m in memvarof(T)/branchof(T)/caseof(T))",
           "name": "support.function.builtin.sf",
-          "match": "\\b(memvarof|armof|caseof)\\b"
+          "match": "\\b(memvarof|branchof|caseof)\\b"
         },
         {
           "comment": "Type and pattern operations",

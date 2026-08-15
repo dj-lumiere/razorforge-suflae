@@ -292,7 +292,7 @@ public sealed partial class SemanticVerifier
             IfStatement { ElseStatement: not null } ifStmt =>
                 StatementAlwaysTerminates(statement: ifStmt.ThenStatement) &&
                 StatementAlwaysTerminates(statement: ifStmt.ElseStatement),
-            // A comptime arm-expansion `when` is provably exhaustive: `expand … armof(T)` covers
+            // A comptime arm-expansion `when` is provably exhaustive: `expand … branchof(T)` covers
             // every payload arm and any explicit clauses (e.g. `is None =>`) cover the rest. It
             // terminates iff every explicit clause body AND the arm template body terminate.
             WhenStatement { ArmExpansion: { } armExp } armWhen =>

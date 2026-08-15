@@ -19,7 +19,7 @@ public sealed class VariantMemberInfo
     public string Name => Type?.Name ?? "None";
 
     /// <summary>Zero-based declaration ordinal of this member (None first when present). This is a
-    /// reflection/<c>armof</c> index only — it is NOT the runtime discriminant. Codegen stores the
+    /// reflection/<c>branchof</c> index only — it is NOT the runtime discriminant. Codegen stores the
     /// arm's FNV-1a <c>type_id</c> (<c>ComputeTypeId(Type.FullName)</c>, 0 for None) in the variant's
     /// tag field, and PatternLoweringPass matches on that type_id, so nothing compares this ordinal at
     /// runtime.</summary>

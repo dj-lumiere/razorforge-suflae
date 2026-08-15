@@ -124,7 +124,7 @@ internal static class GenericAstRewriter
         public bool ActiveCaseIsFlags { get; set; }
 
         /// <summary>
-        /// Payload-binding name → concrete type while cloning an <c>armof</c> arm clause body, so a
+        /// Payload-binding name → concrete type while cloning an <c>branchof</c> arm clause body, so a
         /// reference to the bound payload (e.g. <c>x</c> in <c>is ${m.type} x => x.represent()</c>)
         /// resolves to the arm's type. Cleared per arm.
         /// </summary>
@@ -1205,7 +1205,7 @@ internal static class GenericAstRewriter
                 resolvedType = meReceiverType;
             }
 
-            // An `armof` arm payload binding (`x` in `is ${m.type} x => …`) has no SA annotation on
+            // An `branchof` arm payload binding (`x` in `is ${m.type} x => …`) has no SA annotation on
             // the generic template — supply the concrete arm type so the chained call re-resolves.
             if ((resolvedType is null or ErrorTypeInfo) &&
                 result is IdentifierExpression bindingRef &&
@@ -1926,7 +1926,7 @@ internal static class GenericAstRewriter
     }
 
     /// <summary>
-    /// Unrolls a comptime <c>when me</c> / <c>expand m in armof(T)</c> / <c>is ${m.type} x => …</c>
+    /// Unrolls a comptime <c>when me</c> / <c>expand m in branchof(T)</c> / <c>is ${m.type} x => …</c>
     /// at monomorphization: resolves the concrete variant, then clones the template clause once per
     /// arm with <c>${m.type}</c> folded to the arm type and the payload binding annotated. Payload-
     /// less arms (None / None) are skipped for now — a template with a binding cannot serve them;
@@ -2061,7 +2061,7 @@ internal static class GenericAstRewriter
 
         if (projection == "type_id")
         {
-            // The current arm/member type's stable type id (armof `m.type_id`), matching the C#
+            // The current arm/member type's stable type id (branchof `m.type_id`), matching the C#
             // `TypeIdHelper.ComputeTypeId(FullName)` used by variant `diagnose`.
             ulong typeId = ctx.ActiveMemberType?.FullName is { } fn
                 ? Compiler.TypeIdHelper.ComputeTypeId(fullName: fn)

@@ -3233,7 +3233,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         switch (routine.Name)
         {
             case RepresentMethodName:
-                // The `@override needs T is variant` derive template (arm-dispatch via `armof`) is
+                // The `@override needs T is variant` derive template (arm-dispatch via `branchof`) is
                 // selected for a variant; falls back to the C# builder if absent.
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     CloneUniversalDeriveBody(ownerType: variant, synthesized: routine,
@@ -3243,7 +3243,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             case DiagnoseMethodName:
                 // TAG-dispatch from the `@override … needs T is VariantType` derive template
-                // (`armof` + `m.type_id` + `v.diagnose()`); falls back to the C# builder.
+                // (`branchof` + `m.type_id` + `v.diagnose()`); falls back to the C# builder.
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     CloneUniversalDeriveBody(ownerType: variant, synthesized: routine,
                         methodName: DiagnoseMethodName)
