@@ -22,52 +22,52 @@ public sealed partial class SourceFolderFailurePointTests
             ["ReadRequiredString", "BuildModuleIndex", "ExtractModuleName", "DetectLinkerFromStderr"]
         },
         {
-            "Declaration",
+            "03.Declaration",
             "build and stdlib declaration loading handle import graphs and stdlib registration",
             ["ModuleDependencyGraph", "CompileFile", "RegisterProgramTypes", "RegisterProgramRoutines"]
         },
         {
-            "Tokenizer",
+            "01.Tokenizer",
             "source validation rejects ambiguous bytes and whitespace before scanning",
             ["NormalizeAndValidateSource", "Source contains a null byte", "Tabs are not allowed", "Unsupported whitespace character"]
         },
         {
-            "Parser",
+            "02.Parser",
             "parse errors are recorded and synchronized instead of aborting whole files",
             ["HasErrors", "Synchronize", "ExpectedIndentedBlock", "ProcessDedentTokens"]
         },
         {
-            "Resolution",
+            "04.Resolution",
             "type and method lookup handle missing symbols and overload ambiguity",
             ["LookupTypeWithImports", "LookupRoutineWithImports", "LookupMethodOverload", "ValidateGenericConstraints"]
         },
         {
-            "Verification",
+            "05.Verification",
             "semantic analysis runs ordered phases and reports diagnostics instead of raw exceptions",
-            ["RunPhase1Declaration", "RunPhase2Resolution", "RunPhase5Verification", "ReportError"]
+            ["RunPhase1Declaration", "RunPhase2Resolution", "RunPhase4Verification", "ReportError"]
         },
         {
-            "Desugaring",
+            "07.Desugaring",
             "syntax lowering covers user programs and generated variant bodies",
             ["RunOnVariantBodies", "LowerStatement", "LowerExpression"]
         },
         {
-            "Synthesis",
+            "06.Synthesis",
             "generated routines cover error variants, wired routines, and wrapper forwarding",
             ["ErrorHandlingVariantPass", "WiredRoutinePass", "WrapperForwardingPass"]
         },
         {
-            "Instantiation",
+            "08.Instantiation",
             "generic instantiation tracks reachable bodies and concrete substitutions",
             ["GenericClosurePass", "GenericMonomorphizationPass", "BuildConcreteRoutineInfo", "ResolveSubstitutedType"]
         },
         {
-            "Postprocessing",
+            "09.Postprocessing",
             "type-aware lowering and backend validation run after semantic analysis",
             ["PostprocessingPipeline", "BackendEntryValidator", "CallOverloadResolutionPass", "PatternLoweringPass"]
         },
         {
-            "CodeGen",
+            "10.CodeGen",
             "backend rejects unsupported AST/metadata states before emitting invalid IR",
             ["InvalidOperationException", "NotImplementedException", "GetExpressionType", "GenerateRoutineDefinitions"]
         },
@@ -137,13 +137,13 @@ public sealed partial class SourceFolderFailurePointTests
         string[] frontendFolders =
         [
             "BuildSystem",
-            "Declaration",
-            "Desugaring",
-            "Tokenizer",
-            "Parser",
-            "Resolution",
-            "Synthesis",
-            "Verification"
+            "03.Declaration",
+            "07.Desugaring",
+            "01.Tokenizer",
+            "02.Parser",
+            "04.Resolution",
+            "06.Synthesis",
+            "05.Verification"
         ];
 
         List<string> offenders = frontendFolders
@@ -230,7 +230,7 @@ public sealed partial class SourceFolderFailurePointTests
         {
             string candidate = Path.Combine(path1: current, path2: "src");
             if (Directory.Exists(path: candidate) &&
-                Directory.Exists(path: Path.Combine(path1: candidate, path2: "Tokenizer")))
+                Directory.Exists(path: Path.Combine(path1: candidate, path2: "01.Tokenizer")))
             {
                 return candidate;
             }

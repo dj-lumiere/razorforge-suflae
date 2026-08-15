@@ -2,7 +2,7 @@ module Tests/Stdlib/LiteralsApi
 import IO/Console
 import Numerics.[Integer, Decimal, Complex]
 
-# Exercises every literal token form the tokenizer produces (see src/Tokenizer/TokenType.cs):
+# Exercises every literal token form the tokenizer produces (see src/01.Tokenizer/TokenType.cs):
 # signed/unsigned fixed-width integers, Address, arbitrary-precision Integer (`n`),
 # number bases + digit separators, floats, fixed + arbitrary-precision Decimal (`dn`),
 # Bool, Text, Character, and ByteLetter literals.
