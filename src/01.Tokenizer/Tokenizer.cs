@@ -237,6 +237,7 @@ public partial class Tokenizer
             _keywords[key: "memvarof"] = TokenType.MemVarOf;
             _keywords[key: "branchof"] = TokenType.BranchOf;
             _keywords[key: "caseof"] = TokenType.CaseOf;
+            _keywords[key: "everywhere"] = TokenType.Everywhere;
         }
 
         // Numeric suffix map - shared between both languages except "j" default

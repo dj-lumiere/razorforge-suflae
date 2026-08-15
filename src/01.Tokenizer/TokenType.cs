@@ -407,6 +407,9 @@ public enum TokenType
     /// <summary>Comptime choice/flags-case reflection source keyword (`caseof(T)`)</summary>
     CaseOf,
 
+    /// <summary>Standard-impl eligibility quantifier keyword (`needs P everywhere`)</summary>
+    Everywhere,
+
     /// <summary>Break statement keyword</summary>
     Break,
 

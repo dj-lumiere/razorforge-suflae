@@ -47,5 +47,11 @@ public enum ConstraintKind
     TypeEquality,
 
     /// <summary>Crashable type constraint (where T is crashable).</summary>
-    Crashable
+    Crashable,
+
+    /// <summary>Standard-implementation eligibility constraint (<c>needs P everywhere</c>): the owner
+    /// <c>Me</c> obeys protocol <c>P</c> IFF every member (memvarof/branchof/caseof, per kind) obeys it.
+    /// The single ∀-quantified structural gate that drives a standard-impl template's eligibility and
+    /// conformance verdict. ParameterName is <c>"Me"</c>; ConstraintTypes[0] is the protocol.</summary>
+    Everywhere
 }

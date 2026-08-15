@@ -623,10 +623,26 @@ public partial class Parser
                         ConstraintTypes: equalityTypes,
                         Location: location));
                 }
+                else if (Match(type: TokenType.Everywhere))
+                {
+                    // `needs <Protocol> everywhere` — standard-impl eligibility gate: the owner `Me`
+                    // obeys the protocol IFF every member (memvarof/branchof/caseof, per kind) obeys it.
+                    // There is no explicit subject; the identifier just consumed as `paramName` is
+                    // actually the protocol name, and the subject is implicitly `Me`.
+                    constraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: "Me",
+                        ConstraintType: ConstraintKind.Everywhere,
+                        ConstraintTypes:
+                        [
+                            new TypeExpression(Name: paramName, GenericArguments: null,
+                                Location: location)
+                        ],
+                        Location: location));
+                }
                 else
                 {
                     throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedConstraintType,
-                        message: "Expected 'obeys', 'is', or 'in' in generic constraint");
+                        message: "Expected 'obeys', 'is', 'in', or 'everywhere' in generic constraint");
                 }
 
                 // Continue parsing if there's a comma
