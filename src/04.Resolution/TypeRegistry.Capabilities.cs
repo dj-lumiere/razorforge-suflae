@@ -234,6 +234,46 @@ public sealed partial class TypeRegistry
         };
     }
 
+    /// <summary>
+    /// ④ standard-impl eligibility evaluator (<c>needs P everywhere</c>): the CONCRETE type
+    /// <paramref name="type"/> obeys <paramref name="protocol"/> structurally IFF EVERY member
+    /// (memvarof per kind) obeys it — ∀-only, concrete-only. Per-member verdict uses the declared
+    /// conformance query (<see cref="TypeObeysProtocol"/>), matching how <c>needs T obeys P</c> is
+    /// checked. Empty member set (field-less record, choice/flags) ⇒ vacuously true. Dormant until the
+    /// ④-4 wiring makes it the standard-impl eligibility gate; <c>@llvm</c> types declare their
+    /// conformance explicitly (no members ⇒ <c>everywhere</c> does not apply to them).
+    /// </summary>
+    public bool EverywhereObeys(TypeInfo type, string protocol)
+    {
+        return MemberProjection(type: type)
+            .All(predicate: m => TypeObeysProtocol(type: m, protocolName: protocol));
+    }
+
+    /// <summary>
+    /// Kind-appropriate member sequence for the <c>everywhere</c> quantifier: record/entity →
+    /// member-variable types (memvarof), variant → live branch payload types (branchof, skipping the
+    /// payload-less None branch), choice/flags → none (scalar discriminant, no member types). A TUPLE is
+    /// NOT special-cased: by the time <c>everywhere</c> is evaluated it has been lowered to a
+    /// <see cref="RecordTypeInfo"/> (positional member variables), so it flows through the record arm. An
+    /// <c>@llvm</c> type has no member variables, so <c>everywhere</c> does not apply to it — it declares
+    /// its conformance explicitly instead.
+    /// </summary>
+    // Choice/Flags/Variant derive from RecordTypeInfo, so the more-derived arms MUST precede the record
+    // arm (else CS8510 unreachable). Variant → branchof; choice/flags → none; plain record/entity →
+    // memvarof.
+    private static IEnumerable<TypeInfo> MemberProjection(TypeInfo type) => type switch
+    {
+        ChoiceTypeInfo or FlagsTypeInfo => [],
+        VariantTypeInfo { IsGenericDefinition: false } v =>
+            v.Members.Where(predicate: m => m.Type != null).Select(selector: m => m.Type!),
+        RecordTypeInfo { IsGenericDefinition: false } r =>
+            r.MemberVariables?.Select(selector: m => m.Type) ?? [],
+        EntityTypeInfo { IsGenericDefinition: false } e =>
+            e.MemberVariables.Select(selector: m => m.Type),
+        _ => []
+    };
+
+
     private static bool LayoutContainsPtr(string layout)
     {
         // "void" (zero-sized) and any layout without "ptr" auto-derives.
