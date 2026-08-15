@@ -45,6 +45,14 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     // body, suppress ALL copy injection (stronger than `_inCopyRoutine`, which only guards `return me`).
     private bool _inRcCopyVerb;
 
+    // The MANAGED (retaining-store) parameters of the routine currently being lowered. Under the
+    // three-rules param model a record param is a BORROW — passed as-is, owned by the caller. Returning
+    // one hands the caller an owned value that ALIASES the caller's still-live argument, so it must be
+    // retained (a fresh +1) exactly like `return me`; otherwise both the caller's argument and the
+    // returned value free the same controller → double-free. A returned owned LOCAL, by contrast, is a
+    // move-out and must NOT be copied. So we retain-on-return only for these borrow params (and `me`).
+    private readonly HashSet<string> _borrowParamNames = new(comparer: StringComparer.Ordinal);
+
     // The method-name segment of a routine name/key: strips a leading `Owner.` qualifier and any
     // `(params)` / `[typeargs]` suffix. A stdlib generic DEF is keyed by its FULL name (e.g.
     // `Roamed[T].roam`), so a bare-name equality check would miss `roam` — extract the tail first.
@@ -105,6 +113,23 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         return tail == "store" || tail == "copy";
     }
 
+    // Populates <see cref="_borrowParamNames"/> with the routine's MANAGED (retaining-store) record
+    // params — the borrow params a `return` must retain (see the field doc). `me` and value/entity/
+    // borrow-tier params are excluded (a returned value record is a bitwise move, an entity/token is
+    // never retain-copied).
+    private void SetBorrowParams(IReadOnlyList<Parameter>? parameters)
+    {
+        _borrowParamNames.Clear();
+        if (parameters is null) return;
+        foreach (Parameter p in parameters)
+        {
+            if (p.Name == "me") continue;
+            TypeInfo? pt = p.Type?.ResolvedType;
+            if (pt != null && NeedsRetainingCopy(type: pt, copyMethod: out _))
+                _borrowParamNames.Add(item: p.Name);
+        }
+    }
+
     private static bool KeyIsCopyRoutine(string key)
     {
         return key.Contains(value: "store") || key.Contains(value: ".copy");
@@ -122,6 +147,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 case RoutineDeclaration r:
                 {
                     _inCopyRoutine = NameIsCopyRoutine(name: r.Name); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: r.Name);
+                    SetBorrowParams(parameters: r.Parameters);
                     Statement newBody = LowerStatement(stmt: r.Body);
                     if (!ReferenceEquals(newBody, r.Body))
                         program.Declarations[i] = r with { Body = newBody };
@@ -156,6 +182,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             // GetLifecycle.Store, that bare `return me` would otherwise re-inject `me.copy()` → infinite
             // recursion. Treat the copy body like `store`: its `return me` is the identity primitive.
             _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: key);
+            SetBorrowParams(parameters: null); // variant/synthesized bodies carry no parameter list here
             Statement lowered = LowerStatement(stmt: body);
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
@@ -180,6 +207,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue; // pure-synthesized: no AST to walk
             _inCopyRoutine = KeyIsCopyRoutine(key: key); _inRcCopyVerb = OwnerTypeIsRcWrapper(owner: entry.Info.OwnerType);
+            SetBorrowParams(parameters: entry.Ast.Parameters);
             Statement lowered = LowerStatement(stmt: entry.Ast.Body);
             if (!ReferenceEquals(lowered, entry.Ast.Body))
                 instantiatedGenericBodies[key] = entry with
@@ -199,6 +227,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             if (members[i] is RoutineDeclaration mr)
             {
                 _inCopyRoutine = NameIsCopyRoutine(name: mr.Name); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: mr.Name);
+                SetBorrowParams(parameters: mr.Parameters);
                 Statement newBody = LowerStatement(stmt: mr.Body);
                 if (!ReferenceEquals(newBody, mr.Body))
                     members[i] = mr with { Body = newBody };
@@ -433,12 +462,13 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             if (isReturn && expr is IdentifierExpression id)
             {
-                // Returning the borrowed receiver `me` hands the caller an owned value, so it must
-                // be copied (retained) — except inside `store` itself, where `return me` is the
-                // identity primitive. Any other bare identifier is an owned local/param being moved
-                // out, so it is returned as-is.
+                // Returning the borrowed receiver `me` — or a borrowed managed PARAM — hands the caller
+                // an owned value that aliases the caller's still-live argument, so it must be copied
+                // (retained). Inside `store` itself `return me` is the identity primitive (excluded). Any
+                // OTHER bare identifier is an owned local being moved out, so it is returned as-is.
                 bool returningBorrowedReceiver = id.Name == "me" && !_inCopyRoutine;
-                if (!returningBorrowedReceiver)
+                bool returningBorrowParam = _borrowParamNames.Contains(item: id.Name);
+                if (!returningBorrowedReceiver && !returningBorrowParam)
                     return expr;
             }
             return MakeCopyCall(expr: expr, copyMethod: copyMethod!);
@@ -478,10 +508,20 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 // reap it). Pass store-primitive args through untouched to keep copy==teardown.
                 bool isStorePrimitive = CalleeName(call.Callee) is { } cn
                     && Resolution.RuntimeContract.StorePrimitives.Contains(item: cn);
+                // A CONSTRUCTOR/conversion call (ConstructedType != null) persists its args into the new
+                // value's fields — a DESTINATION, exactly like a CreatorExpression member-init — so its
+                // borrowed-ref args must be retained (a bare struct copy would alias the source and
+                // double-free at teardown). A store primitive is likewise a destination (writes raw
+                // storage). Only a plain routine/method call borrows its args.
+                bool isDestination = isStorePrimitive || call.ConstructedType is not null;
                 var args = new List<Expression>(capacity: call.Arguments.Count);
                 foreach (Expression arg in call.Arguments)
                 {
-                    Expression s = isStorePrimitive ? arg : LowerArgument(arg: arg);
+                    // Three-rules model: a REGULAR (borrow) call arg passes AS-IS — the caller keeps
+                    // ownership, retain lives at the DESTINATION, and a fresh rvalue arg is torn down at
+                    // the caller by TemporaryTeardownPass. A DESTINATION call (constructor/conversion/
+                    // store primitive) retains its managed value args here.
+                    Expression s = isDestination ? LowerArgument(arg: arg) : LowerBorrowArgument(arg: arg);
                     args.Add(item: s);
                     if (!ReferenceEquals(s, arg)) changed = true;
                 }
@@ -533,10 +573,13 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 // memory and must NOT be retain-copied here.
                 bool isStorePrimitiveG = CalleeName(gmc.Object) is { } gcn
                     && Resolution.RuntimeContract.StorePrimitives.Contains(item: gcn);
+                bool isDestinationG = isStorePrimitiveG || gmc.ConstructedType is not null;
                 var args = new List<Expression>(capacity: gmc.Arguments.Count);
                 foreach (Expression arg in gmc.Arguments)
                 {
-                    Expression s = isStorePrimitiveG ? arg : LowerArgument(arg: arg);
+                    // See the CallExpression case: regular arg = borrow (as-is); destination (constructor/
+                    // conversion/store-primitive) arg = retain.
+                    Expression s = isDestinationG ? LowerArgument(arg: arg) : LowerBorrowArgument(arg: arg);
                     args.Add(item: s);
                     if (!ReferenceEquals(s, arg)) changed = true;
                 }
@@ -639,6 +682,24 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             return ReferenceEquals(loweredValue, named.Value) ? named : named with { Value = loweredValue };
         }
         return LowerOwnership(expr: arg, isReturn: false);
+    }
+
+    /// <summary>
+    /// Lowers a BORROW call argument (three-rules model): the value passes AS-IS — no retaining
+    /// <c>store</c> at the boundary, since the caller keeps ownership and the callee only borrows.
+    /// We still RECURSE (via <see cref="StripStealFromExpr"/>, not <see cref="LowerOwnership"/>) so that
+    /// nested DESTINATIONS inside the argument — a constructor's member-inits, a store-primitive value,
+    /// a <c>when</c>/conditional result position — keep their retains. Preserves the
+    /// <see cref="NamedArgumentExpression"/> wrapper (S510).
+    /// </summary>
+    private Expression LowerBorrowArgument(Expression arg)
+    {
+        if (arg is NamedArgumentExpression named)
+        {
+            Expression v = StripStealFromExpr(expr: named.Value);
+            return ReferenceEquals(v, named.Value) ? named : named with { Value = v };
+        }
+        return StripStealFromExpr(expr: arg);
     }
 
     /// <summary>

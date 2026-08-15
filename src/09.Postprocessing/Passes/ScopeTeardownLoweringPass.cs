@@ -103,15 +103,21 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         if (r.StolenVariableNames is { Count: > 0 } stolen)
             _movedNames.UnionWith(other: stolen);
 
-        // Consuming entity parameters are owned by the routine and torn down at every exit, exactly
-        // like a top-level local. (Borrows arrive as Referring/Controlling/Viewing/Modifying wrappers,
-        // never as bare EntityTypeInfo, so they are correctly excluded.)
+        // THREE-RULES param model (Rule 2): passing into a routine param is either 먹튀 (`steal`, move
+        // ownership in — a bare ENTITY the caller relinquished) OR handing over a borrow. A RECORD param
+        // (value record / Text / RC wrapper / access token) is always a BORROW — the caller retains
+        // ownership and tears it down at ITS scope exit, so the callee must NOT destroy it. Only a bare
+        // `EntityTypeInfo` param is consuming (RF-S413 forces `steal` at the call site), owned by the
+        // routine and torn down at every exit exactly like a top-level local. The retain that used to
+        // balance a callee-owned record param at the arg boundary is gone (RecordCopyLoweringPass no
+        // longer stores at the boundary); retain now lives at the DESTINATION (store primitive / field
+        // write), and a fresh rvalue record arg is torn down at the CALLER (TemporaryTeardownPass).
         //
-        // Suflae exception: an entity parameter is a BORROWED handle — the caller keeps ownership, so
-        // destroying it here double-frees the caller's live entity. After representation unification
-        // (SignatureResolver.MaybeRoamSuflaeEntity) an SF entity param resolves to `Roamed[E]` (a
-        // RecordTypeInfo), so we skip THAT; a bare `EntityTypeInfo` param is still skipped for the older
-        // interim `.raw_inner()`-projected shape (both are borrows the callee must not release).
+        // Suflae exception: an SF entity parameter is ALSO a borrowed handle — the caller keeps
+        // ownership, so destroying it here double-frees the caller's live entity. After representation
+        // unification (SignatureResolver.MaybeRoamSuflaeEntity) an SF entity param resolves to `Roamed[E]`
+        // (a RecordTypeInfo) which is a record → borrow by the rule above anyway; a bare `EntityTypeInfo`
+        // param in SF is skipped here (it would otherwise be consuming per the RF rule).
         bool isSuflae = ctx.Registry.Language == TypeModel.Enums.Language.Suflae;
         var paramLive = new List<Owned>();
         foreach (Parameter p in r.Parameters)
@@ -119,20 +125,17 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             if (p.Name == "me") continue;
             if (_movedNames.Contains(item: p.Name)) continue;
             TypeInfo? pt = p.Type?.ResolvedType;
-            if (isSuflae && (pt is EntityTypeInfo || IsRoamedRecord(pt))) continue;
-            if (pt != null && TryResolveDestroy(type: pt, out RoutineInfo? d) && d != null)
+            // Only a bare-entity (consuming / steal'd) param is owned by the callee; every record param
+            // is a borrow the caller still owns.
+            if (pt is not EntityTypeInfo) continue;
+            if (isSuflae) continue;
+            if (TryResolveDestroy(type: pt, out RoutineInfo? d) && d != null)
                 paramLive.Add(item: new Owned(Name: p.Name, Type: pt, Destroy: d));
         }
 
         Statement newBody = LowerStatement(r.Body, paramLive, loopBoundary: 0);
         return r.Body == newBody && paramLive.Count == 0 ? r : r with { Body = newBody };
     }
-
-    // True for a `Roamed[E]` handle in either representation the pipeline produces (the wrapper form
-    // from SuflaeEntityLoweringPass or the RecordTypeInfo form from the resolver's GetOrCreateResolution).
-    private static bool IsRoamedRecord(TypeInfo? t) =>
-        t is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed }
-          or WrapperTypeInfo { Name: RuntimeContract.Roamed };
 
     /// <summary>
     /// Lowers a statement. <paramref name="live"/> is the ordered list of owned bindings live on

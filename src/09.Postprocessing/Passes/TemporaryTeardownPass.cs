@@ -75,6 +75,12 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     private static readonly IReadOnlySet<string> BorrowWrapperNames =
         RuntimeContract.ReferringWrapperNAmes;
 
+    /// <summary>Store primitives whose value argument is MOVED into raw storage — its arg must NOT be
+    /// torn down at the caller (it lives on in the container). Mirrors
+    /// <see cref="RuntimeContract.StorePrimitives"/> / RecordCopyLoweringPass's store-primitive gate.</summary>
+    private static bool IsStorePrimitiveCall(string calleeName) =>
+        RuntimeContract.StorePrimitives.Contains(item: calleeName);
+
     private sealed record Spill(string Name, TypeInfo Type, RoutineInfo Destroy, Expression Init);
 
     public void Run(Program program)
@@ -386,8 +392,18 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                     && !ResultMayAliasReceiver(call.ResolvedType))
                     newRecv = MakeSpill(newRecv, spills);
 
+                // Three-rules model: a fresh owned RVALUE arg passed to a borrow param is torn down at
+                // the CALLER (the callee only borrows it and no longer frees it). So visit args in owning
+                // position — EXCEPT for a store primitive (poke/store_element_ref/store), whose value arg
+                // is MOVED into raw storage (RecordCopyLoweringPass retains it there); spilling it would
+                // free the just-inserted element → UAF.
+                // A CONSTRUCTOR/conversion call (ConstructedType != null) persists its args into the new
+                // value's fields (a destination that RETAINS via RecordCopyLoweringPass), and a store
+                // primitive MOVES its value into storage — in both cases the arg lives on, so it must NOT
+                // be torn down at the caller. Only a plain routine/method borrows a fresh rvalue arg.
+                bool argsOwned = call.ConstructedType is null && !IsStorePrimitiveCall(m.MemberName);
                 List<Expression> newArgs = call.Arguments
-                    .Select(a => Visit(a, objectPos: false, spills)).ToList();
+                    .Select(a => Visit(a, objectPos: argsOwned, spills)).ToList();
                 Expression result = call with
                 {
                     Callee = m with { Object = newRecv }, Arguments = newArgs
@@ -398,8 +414,12 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
             case CallExpression call:
             {
                 Expression newCallee = Visit(call.Callee, objectPos: false, spills);
+                // See the member-call case: owning-position args (torn down at the caller) unless this is
+                // a store primitive.
+                bool argsOwned = call.ConstructedType is null
+                    && (call.Callee is not IdentifierExpression fid || !IsStorePrimitiveCall(fid.Name));
                 List<Expression> newArgs = call.Arguments
-                    .Select(a => Visit(a, objectPos: false, spills)).ToList();
+                    .Select(a => Visit(a, objectPos: argsOwned, spills)).ToList();
                 Expression result = call with { Callee = newCallee, Arguments = newArgs };
                 return MaybeSpillTop(result, objectPos, spills);
             }
