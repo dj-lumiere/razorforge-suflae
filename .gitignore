@@ -99,3 +99,6 @@ old
 
 # Local IDE MCP server config (Rider)
 .mcp.json
+
+# Claude Code file-based memory (junctioned from ~/.claude/projects/.../memory; not shared via git)
+.claude-memory/
