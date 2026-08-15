@@ -228,10 +228,10 @@ public sealed partial class SemanticVerifier
     private static readonly Dictionary<string, string> NonTriviallyStorableWrappers =
         new(StringComparer.Ordinal)
         {
-            [Compiler.Resolution.RuntimeContract.Retained] = "a.retain()",
-            [Compiler.Resolution.RuntimeContract.Tracked] = "a.track()",
-            [Compiler.Resolution.RuntimeContract.Shared] = "a.share()",
-            [Compiler.Resolution.RuntimeContract.Watched] = "a.watch()",
+            [Compiler.Resolution.RuntimeContract.Retained] = "a.store()",
+            [Compiler.Resolution.RuntimeContract.Tracked] = "a.store()",
+            [Compiler.Resolution.RuntimeContract.Shared] = "a.store()",
+            [Compiler.Resolution.RuntimeContract.Watched] = "a.store()",
             [ViewingWrapperName] = ScopedNoEscapeHint,
             [ModifyingWrapperName] = ScopedNoEscapeHint,
             [InspectingWrapperName] = ScopedNoEscapeHint,

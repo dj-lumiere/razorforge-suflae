@@ -20,7 +20,7 @@ routine make_weak() -> Tracked[Tracer]
   var t = Tracer(tag: 7s32)
   var r = t.retain()
   show(f"  strong={r.strong_count()}")
-  var w = r.track()
+  var w = r.observe()
   show(f"  weak={r.weak_count()}, is_alive={w.is_alive()}")
   return w
   # r drops at function exit -> strong=0, entity destroyed; w returned still alive
@@ -30,7 +30,7 @@ routine start()
   show(f"after make_weak: is_alive={w.is_alive()}")
 
   # recover should now fail (strong is 0)
-  when w.try_recover()
+  when w.try_hold()
     is None => show("  recover -> absent (expected)")
     else r  => show("  recover -> got strong (unexpected!)")
 

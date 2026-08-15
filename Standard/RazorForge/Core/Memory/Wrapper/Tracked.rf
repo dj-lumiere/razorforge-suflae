@@ -3,7 +3,7 @@ module Core
 import BuilderService
 
 ### Single-threaded weak reference. Thin pointer to the same {RetainController[T]} as {Retained[T]}.
-### Does not keep the entity alive. Use {recover()} to attempt upgrade to a strong reference.
+### Does not keep the entity alive. Use {hold!()} to attempt upgrade to a strong reference.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
 record Tracked[T]
@@ -32,7 +32,7 @@ dangerous routine Tracked[T].release()
 ### Attempts to upgrade to a strong reference.
 ### :returns: A new strong handle to the entity if it is still alive.
 ### :absent: Returns absent when the entity has already been destroyed.
-routine Tracked[T].recover!() -> Retained[T]
+routine Tracked[T].hold!() -> Retained[T]
   danger
     var ctrl = hijacked_from[RetainController[T]](me.get_address()).as_entity()
     if ctrl.strong_count() == 0

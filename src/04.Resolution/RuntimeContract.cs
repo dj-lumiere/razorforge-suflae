@@ -164,8 +164,7 @@ public static class RuntimeContract
     [
         RawPointer.Peek, RawPointer.Poke, RawPointer.AsEntity, RawPointer.IsNone,
         RawPointer.Invalidate, RawPointer.Hijack,
-        RefCount.BorrowData, RefCount.Retain, RefCount.Release, RefCount.Track,
-        RefCount.Watch,
+        RefCount.BorrowData, RefCount.Retain, RefCount.Release,
         Collection.Count, Collection.Add, Collection.AddLast, Collection.Replace,
         Resolve, CrashMessage,
     ];

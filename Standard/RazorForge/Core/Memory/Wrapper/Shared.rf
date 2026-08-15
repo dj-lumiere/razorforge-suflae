@@ -54,7 +54,7 @@ dangerous routine Shared[T, P].release()
 
 ### Creates a weak reference to the same entity.
 ### :returns: A new weak handle to the same entity's controller.
-routine Shared[T, P].watch() -> Watched[T, P]
+routine Shared[T, P].observe() -> Watched[T, P]
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.increase_weak_count()

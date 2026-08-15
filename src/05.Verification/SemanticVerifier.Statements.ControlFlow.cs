@@ -887,7 +887,7 @@ public sealed partial class SemanticVerifier
                 {
                     Callee: MemberExpression
                     {
-                        Object: var receiver, MemberName: "store" or "watch"
+                        Object: var receiver, MemberName: "store" or "observe"
                     }
                 } when BuildAccessPath(expr: receiver) is { } recvPath =>
                 GetOrAssignHandleIdentity(path: recvPath),

@@ -106,7 +106,7 @@ public class ImplicitWrapperCopyAssignmentTests
                           var a = Node(value: 1)
                           var ra = a.retain()
                           var rb = ra.retain()
-                          rb = ra.track()
+                          rb = ra.observe()
                           return
                         """;
 

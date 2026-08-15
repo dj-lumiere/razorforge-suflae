@@ -34,7 +34,7 @@ dangerous routine Watched[T, P].release()
 ### Attempts to upgrade to a strong reference.
 ### :returns: A new strong handle to the entity if it is still alive.
 ### :absent: Returns absent when the entity has already been destroyed.
-routine Watched[T, P].recover!() -> Shared[T, P]
+routine Watched[T, P].hold!() -> Shared[T, P]
   danger
     var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
     if ctrl.strong_count() == 0_u64

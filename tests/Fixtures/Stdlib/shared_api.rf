@@ -21,7 +21,7 @@ routine start()
   var b = a.store()
   show(f"strong: {a.strong_count()}")
 
-  var w = a.watch()
+  var w = a.observe()
   show(f"weak: {a.weak_count()}")
   show(f"alive: {w.is_alive()}")
 

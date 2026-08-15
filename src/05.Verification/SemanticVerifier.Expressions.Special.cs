@@ -319,7 +319,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.StealSharedOwnership,
                 message:
                 $"Cannot steal '{operandType.Name}' - a reference-counted handle is shared ownership, " +
-                "not unique, so it cannot be exclusively moved. Clone it with `.retain()`/`.track()`, " +
+                "not unique, so it cannot be exclusively moved. Copy it with `.store()`, " +
                 "or use `Shared`/`Watched` to move ownership across a coroutine/thread boundary.",
                 location: steal.Location);
             steal.ResolvedType = operandType;

@@ -158,7 +158,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = TrackedBox(handle: a.track())
+                          var b = TrackedBox(handle: a.retain().observe())
                           var c = b
                           return
                         """;

@@ -8,7 +8,7 @@ using static TestHelpers;
 /// <summary>
 /// Tests for the S420 ImplicitWrapperCopy rule on variable declarations.
 /// `var b = a` where `a` carries a non-trivially-copyable wrapper must spell out
-/// the explicit verb (`steal` / `.retain()` / `.track()`). Trivially-copyable
+/// the explicit verb (`steal` / `.store()`). Trivially-copyable
 /// values (primitives, Hijacked[T], primitive-only records) still copy bitwise.
 /// </summary>
 public class ImplicitWrapperCopyVarDeclTests
@@ -32,7 +32,7 @@ public class ImplicitWrapperCopyVarDeclTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "Implicit copy",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                e.Message.Contains(value: "a.retain()",
+                e.Message.Contains(value: "a.store()",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
@@ -195,7 +195,7 @@ public class ImplicitWrapperCopyVarDeclTests
                         routine start()
                           var a = Node(value: 1)
                           var ra = a.retain()
-                          var t = ra.track()
+                          var t = ra.observe()
                           return
                         """;
 

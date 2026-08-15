@@ -127,7 +127,7 @@ public class MoveOnConsumeTests
                         routine start()
                           var a = Node(value: 1)
                           var ra = a.retain()
-                          var t = ra.track()
+                          var t = ra.observe()
                           show(ra.value)
                           return
                         """;
