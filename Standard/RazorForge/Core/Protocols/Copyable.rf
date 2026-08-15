@@ -1,11 +1,13 @@
 module Core
 
 ### The protocol for values that can produce an independent DEEP copy of themselves — a new object
-### with its own lifetime, sharing no externally visible mutable state. `Copyable obeys Storable`
-### (the capability rule: copy-able ⇒ store-able ⇒ assignable), so a `Copyable` value can also be
-### `store`-d and assigned. `copy` is inserted wherever an independent duplicate is required — not
-### only at assignment, but at every materialization point (e.g. building a value into a collection).
-protocol Copyable obeys Storable
+### with its own lifetime, sharing no externally visible mutable state. `Copyable` and `Storable` are
+### ORTHOGONAL capabilities, NOT a hierarchy: a value record obeys both; an RC handle is `Storable`
+### (share) but not `Copyable` (a shared handle's referent cannot be deep-duplicated); an `entity` is
+### `Copyable` (heap deep-clone) but not `Storable` (single-owner, moved via `steal`, never implicitly
+### bound). `copy` is inserted wherever an independent duplicate is required — at assignment and at
+### every materialization point (e.g. building a value into a collection).
+protocol Copyable
   ### Returns a deep, independent copy of this value.
   ### :returns: A copy of this value with its own valid lifetime and invariants.
   @readonly

@@ -150,11 +150,11 @@ internal sealed class ProtocolConformanceAnalyzer
     private void ApplyAutoAssignableConformance()
     {
         // A no-ptr layout is a bitwise duplicate — which is BOTH a valid cheap `store` AND a valid
-        // deep `copy` (nothing heap is shared). So auto-derive the stronger `Copyable` (which obeys
-        // `Storable`), giving the type both capabilities. Raw-pointer opt-in types (Hijacked/CPtr) have a
-        // ptr, so CanAutoDeriveAssignable is false and they keep their hand-written `obeys Storable` only.
-        TypeSymbol? assignableType = _sa._registry.LookupType(name: "Copyable");
-        if (assignableType is not ProtocolTypeInfo assignable)
+        // deep `copy` (nothing heap is shared). `Storable` and `Copyable` are ORTHOGONAL (no hierarchy),
+        // so derive BOTH explicitly. Raw-pointer opt-in types (Hijacked/CPtr) have a ptr, so
+        // CanAutoDeriveAssignable is false and they keep their hand-written `obeys Storable` only.
+        if (_sa._registry.LookupType(name: "Copyable") is not ProtocolTypeInfo copyable
+            || _sa._registry.LookupType(name: "Storable") is not ProtocolTypeInfo storable)
         {
             return;
         }
@@ -177,8 +177,9 @@ internal sealed class ProtocolConformanceAnalyzer
                 continue;
             }
 
-            var merged = new List<TypeSymbol>(collection: existing) { assignable };
-            _sa._implicitProtocolConformances.Add(item: (type.FullName, assignable.Name));
+            var merged = new List<TypeSymbol>(collection: existing) { storable, copyable };
+            _sa._implicitProtocolConformances.Add(item: (type.FullName, storable.Name));
+            _sa._implicitProtocolConformances.Add(item: (type.FullName, copyable.Name));
             UpdateTypeProtocols(type: type, protocols: merged);
         }
     }
@@ -212,7 +213,7 @@ internal sealed class ProtocolConformanceAnalyzer
                 RecordTypeInfo r => r.Name,
                 _ => null
             };
-            if (baseName is null || !RuntimeContract.RcCopyVerb.ContainsKey(key: baseName))
+            if (baseName is null || !RuntimeContract.RcWrapperBaseNames.Contains(item: baseName))
             {
                 continue;
             }

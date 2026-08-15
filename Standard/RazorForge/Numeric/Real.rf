@@ -9,7 +9,7 @@ module Numerics
 ### the transcendentals round to a generous default working precision under
 ### round-to-nearest-ties-to-even.
 ### :see: {Integer}, {Decimal}
-record Real obeys Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable, FastHashable
+record Real obeys Storable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable, FastHashable
   ### The native libbf handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count cell (or null) governing the shared handle lifetime.

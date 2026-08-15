@@ -12,7 +12,7 @@ module Numerics
 ### atomic-refcounted LibTomMath handle. Copying bumps the underlying refcount
 ### via SeqCst atomic; the last drop frees the handle + controller.
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
-record Integer obeys Copyable, Integral, Divisible, Negatable, Ordered, Hashable, FastHashable
+record Integer obeys Storable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable, FastHashable
   ### Stores the native big-integer handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count controller (null for transient stack values is not
