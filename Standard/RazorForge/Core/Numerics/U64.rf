@@ -3,7 +3,7 @@ module Core
 ### A 64-bit unsigned integer in the range 0 to 18,446,744,073,709,551,615.
 ### `U64` is the default word-sized counter and index type in RazorForge.
 @llvm("i64")
-record U64 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType
+record U64 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Storable, Copyable
   pass
 
 # Constants for U64 limits

@@ -24,7 +24,7 @@ record DecimalParts
 
 ### A software decimal256 value (BID-internal, binary coefficient storage).
 @llvm("i256")
-record Decimal obeys Numeric, Ordered
+record Decimal obeys Numeric, Ordered, Storable, Copyable
   pass
 
 # ============================================================================

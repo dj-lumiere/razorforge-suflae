@@ -18,7 +18,7 @@ import Collections
 
 ### A software decimal32 value in BID storage.
 @llvm("i32")
-record D32 obeys Numeric, Ordered
+record D32 obeys Numeric, Ordered, Storable, Copyable
   pass
 
 ### Narrow decoded fields (U64 coefficient — decimal32 has <= 7 digits).

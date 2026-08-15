@@ -20,7 +20,7 @@ import Collections
 
 ### A software decimal64 value in BID storage.
 @llvm("i64")
-record D64 obeys Numeric, Ordered
+record D64 obeys Numeric, Ordered, Storable, Copyable
   pass
 
 ### Narrow decoded fields (U64 coefficient — decimal64 has <= 16 digits).

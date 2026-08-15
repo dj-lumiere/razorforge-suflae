@@ -6,7 +6,7 @@ module Core
 ### `S8` is the smallest signed integer type in RazorForge, used for compact
 ### signed data such as audio samples (where the range fits) and C interop.
 @llvm("i8")
-record S8 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType
+record S8 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType, Storable, Copyable
   pass
 
 # Constants for S8 limits

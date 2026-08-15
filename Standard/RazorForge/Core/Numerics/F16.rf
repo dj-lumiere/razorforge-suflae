@@ -8,7 +8,7 @@ import Collections
 ### good fit for packed numeric data, graphics formats, and bandwidth-sensitive
 ### workloads.
 @llvm("half")
-record F16 obeys Numeric, Ordered
+record F16 obeys Numeric, Ordered, Storable, Copyable
   pass
 
 # IEEE 754 half precision constants

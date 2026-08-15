@@ -22,7 +22,7 @@ import Collections
 
 ### A software decimal128 value in BID binary storage.
 @llvm("i128")
-record D128 obeys Numeric, Ordered
+record D128 obeys Numeric, Ordered, Storable, Copyable
   pass
 
 ### The decoded fields of a decimal128: value = (-1)^sign * coeff * 10^exp.

@@ -3,7 +3,7 @@ module Core
 ### A 64-bit signed integer in the range −9,223,372,036,854,775,808 to 9,223,372,036,854,775,807.
 ### `S64` is the default word-sized signed integer type in RazorForge.
 @llvm("i64")
-record S64 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType
+record S64 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType, Storable, Copyable
   pass
 
 # Constants for S64 limits

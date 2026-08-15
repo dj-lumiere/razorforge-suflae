@@ -5,7 +5,7 @@ module Core
 ### `BackIndex` is the type behind `^` syntax such as `list[^1]` and `text[^2]`.
 ### :see: {Range[T]}, {Containers-And-Iterators}
 @llvm("i64")
-record BackIndex
+record BackIndex obeys Storable, Copyable
   pass
 
 ### Creates a back index from an end-relative offset.

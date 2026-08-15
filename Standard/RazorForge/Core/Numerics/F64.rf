@@ -13,7 +13,7 @@ import Collections
 ### non-finite (infinity or NaN). Use `truediv_unchecked` for raw IEEE 754
 ### semantics without the overflow guard.
 @llvm("double")
-record F64 obeys Numeric, Ordered
+record F64 obeys Numeric, Ordered, Storable, Copyable
   pass
 
 # IEEE 754 double precision constants

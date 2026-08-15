@@ -5,7 +5,7 @@ module Core
 ### `S32` is the standard 32-bit integer type in RazorForge, used for Unicode
 ### code points, array indices on smaller platforms, and general arithmetic.
 @llvm("i32")
-record S32 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType
+record S32 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType, Storable, Copyable
   pass
 
 # Constants for S32 limits

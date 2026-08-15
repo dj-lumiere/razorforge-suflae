@@ -23,7 +23,7 @@ module Core
 
 ### A software octuple-precision binary float backed by a raw 256-bit container.
 @llvm("i256")
-secret record F256 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible
+secret record F256 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Storable, Copyable
   pass
 
 # ============================================================================
