@@ -39,14 +39,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     // primitive itself, so it must NOT be rewritten to `me.store()` (that would recurse forever).
     private bool _inCopyRoutine;
 
-    // The retaining-copy verbs: a `store`, a variant deep `copy`, and every RC-wrapper refcount verb
-    // (retain/track/share/watch/roam). Inside ANY of these bodies the bare `return me` is the identity-copy
-    // primitive and must NOT be re-injected with a copy (that recurses infinitely). GetLifecycle now returns
-    // the RC verb as a type's Copy, so — unlike before — a `retain`/`roam` body is itself a copy routine.
-    private static readonly System.Collections.Generic.HashSet<string> RcCopyVerbs =
-        [.. Compiler.Resolution.RuntimeContract.RcCopyVerb.Values];
-
-    // True while lowering an RC-wrapper's refcount COPY VERB body (roam/retain/share/track/watch). These are
+    // True while lowering an RC-wrapper's refcount COPY VERB body (now the unified `store`). These are
     // hand-written refcount primitives that reference `me` in many forms (receiver, ctor arg, temp spill) —
     // ANY retain-copy injection inside them makes the verb call itself → infinite recursion. So inside such a
     // body, suppress ALL copy injection (stronger than `_inCopyRoutine`, which only guards `return me`).
@@ -109,13 +102,12 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     private static bool NameIsCopyRoutine(string name)
     {
         string tail = MethodTail(nameOrKey: name);
-        return tail == "store" || tail == "copy" || RcCopyVerbs.Contains(item: tail);
+        return tail == "store" || tail == "copy";
     }
 
     private static bool KeyIsCopyRoutine(string key)
     {
-        if (key.Contains(value: "store") || key.Contains(value: ".copy")) return true;
-        return RcCopyVerbs.Contains(item: MethodTail(nameOrKey: key));
+        return key.Contains(value: "store") || key.Contains(value: ".copy");
     }
 
     /// <summary>

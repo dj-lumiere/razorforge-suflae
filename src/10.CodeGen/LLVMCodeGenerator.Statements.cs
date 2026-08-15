@@ -1032,12 +1032,6 @@ public partial class LlvmCodeGenerator
         _ = sb;
     }
 
-    /// <summary>Copy verb per RC wrapper (the method that bumps the appropriate count).</summary>
-    private static string? RcCopyVerb(string wrapperBase) =>
-        Resolution.RuntimeContract.RcCopyVerb.TryGetValue(key: wrapperBase, value: out string? verb)
-            ? verb
-            : null;
-
     // NOTE: the RC-wrapper copy-verb bump for a Roamed entity-field write (formerly
     // EmitRetainedVarRetain) is now an explicit `field.roam()` AST call inserted by
     // RcRetainLoweringPass (Phase 8). The release-old side (EmitRetainedVarRelease below) stays in
@@ -1051,7 +1045,7 @@ public partial class LlvmCodeGenerator
         RecordTypeInfo recordType)
     {
         if (GetGenericBaseName(type: recordType) is not { } baseName ||
-            RcCopyVerb(wrapperBase: baseName) is null)
+            !Resolution.RuntimeContract.RcWrapperBaseNames.Contains(item: baseName))
         {
             return;
         }

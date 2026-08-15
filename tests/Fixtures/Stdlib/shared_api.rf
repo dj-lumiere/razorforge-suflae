@@ -18,7 +18,7 @@ routine start()
   var a = Node(id: 7).share[ReadOnly]()
   show(f"strong: {a.strong_count()}")
 
-  var b = a.share()
+  var b = a.store()
   show(f"strong: {a.strong_count()}")
 
   var w = a.watch()

@@ -165,7 +165,7 @@ public static class RuntimeContract
         RawPointer.Peek, RawPointer.Poke, RawPointer.AsEntity, RawPointer.IsNone,
         RawPointer.Invalidate, RawPointer.Hijack,
         RefCount.BorrowData, RefCount.Retain, RefCount.Release, RefCount.Track,
-        RefCount.Share, RefCount.Watch,
+        RefCount.Watch,
         Collection.Count, Collection.Add, Collection.AddLast, Collection.Replace,
         Resolve, CrashMessage,
     ];
@@ -274,18 +274,6 @@ public static class RuntimeContract
     public static readonly IReadOnlySet<string> RcWrapperBaseNames =
         new HashSet<string>(comparer: StringComparer.Ordinal)
             { Retained, Tracked, Shared, Watched, Roamed };
-
-    /// <summary>Per RC-wrapper base name, the copy verb that bumps the appropriate count. Mirrors
-    /// LLVMCodeGenerator.Statements.RcCopyVerb.</summary>
-    public static readonly IReadOnlyDictionary<string, string> RcCopyVerb =
-        new Dictionary<string, string>(comparer: StringComparer.Ordinal)
-        {
-            [Retained] = RefCount.Retain,
-            [Tracked] = RefCount.Track,
-            [Shared] = RefCount.Share,
-            [Watched] = RefCount.Watch,
-            [Roamed] = RefCount.Roam,
-        };
 
     // =====================================================================================
     // BuilderService intrinsic names — reflection-style routines folded at compile time

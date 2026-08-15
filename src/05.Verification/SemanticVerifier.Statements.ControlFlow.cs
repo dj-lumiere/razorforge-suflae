@@ -881,12 +881,13 @@ public sealed partial class SemanticVerifier
             // Fresh Arc: `node.share[P]()` / `node.watch[P]()` — an explicit-generic call.
             GenericMethodCallExpression { MethodName: "share" or "watch" } =>
                 _nextSharedHandleIdentity++,
-            // Clone: `s.share()` / `s.watch()` — inherit the receiver handle's identity.
+            // Clone: `s.store()` (unified copy verb) / `s.watch()` (strong→weak conversion) — inherit
+            // the receiver handle's identity (both alias the same controller).
             CallExpression
                 {
                     Callee: MemberExpression
                     {
-                        Object: var receiver, MemberName: "share" or "watch"
+                        Object: var receiver, MemberName: "store" or "watch"
                     }
                 } when BuildAccessPath(expr: receiver) is { } recvPath =>
                 GetOrAssignHandleIdentity(path: recvPath),

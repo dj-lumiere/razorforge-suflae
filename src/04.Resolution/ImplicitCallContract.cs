@@ -32,17 +32,10 @@ internal static class ImplicitCallContract
         // BareName, no ad-hoc bracket parsing). Returns null for anything that isn't an RC wrapper.
         string? ownerBase = TypeRegistry.GetRcWrapperBaseName(type: liveType);
 
-        // RC wrappers: codegen inserts the copy verb on every var binding of this wrapper (and on
-        // PLP-synthesized else-pattern bindings that appear after reachability runs).
-        string? copyVerb = ownerBase switch
-        {
-            RuntimeContract.Retained => RuntimeContract.RefCount.Retain,
-            RuntimeContract.Tracked => RuntimeContract.RefCount.Track,
-            RuntimeContract.Roamed => RuntimeContract.RefCount.Roam,
-            _ => null
-        };
-        if (copyVerb != null)
-            yield return (liveType, copyVerb);
+        // RC wrappers: codegen inserts the unified copy verb `store` on every var binding of this
+        // wrapper (and on PLP-synthesized else-pattern bindings that appear after reachability runs).
+        if (ownerBase != null)
+            yield return (liveType, "store");
 
         if (ownerBase != RuntimeContract.Roamed)
             yield break;

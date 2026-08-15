@@ -170,10 +170,9 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
         return bumps;
     }
 
-    // Matches the removed EmitRcRecordRetain EXACTLY: every RC-wrapper field bumps the STRONG count
-    // via `retain` (not the per-wrapper copy verb). This is deliberate symmetry — the field-release
-    // side (EmitRcRecordRelease, still in codegen) tears every field down through `destroy`→`release`
-    // (strong), so a `track`/`share`/`watch` here would be asymmetric and underflow the strong count.
+    // Every RC-wrapper field bumps its OWN count via the unified copy verb `store` (Retained/Shared →
+    // strong, Tracked/Watched → weak, Roamed → biased). This is per-kind symmetry with the field-release
+    // side (EmitRcRecordRelease tears each field down through its own `destroy`→`release`).
     private Statement? TryFieldBump(Expression target, MemberVariableInfo field)
     {
         if (field.Type is not WrapperTypeInfo wrapper ||
@@ -182,13 +181,12 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
             return null;
         }
 
-        RoutineInfo? retain = Registry.LookupMethod(type: wrapper,
-            methodName: RuntimeContract.RefCount.Retain);
-        if (retain is null) return null;
+        RoutineInfo? store = Registry.LookupMethod(type: wrapper, methodName: "store");
+        if (store is null) return null;
 
         var fieldAccess = new MemberExpression(Object: target, MemberName: field.Name,
             Location: target.Location) { ResolvedType = wrapper };
-        return MakeBumpStatement(receiver: fieldAccess, receiverType: wrapper, copy: retain);
+        return MakeBumpStatement(receiver: fieldAccess, receiverType: wrapper, copy: store);
     }
 
     // ---- Roamed entity-field write --------------------------------------------------------------
@@ -201,10 +199,9 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
     private Statement? RoamBump(MemberExpression target)
     {
         if (target.ResolvedType is not RecordTypeInfo rec) return null;
-        RoutineInfo? roam = Registry.LookupMethod(type: rec,
-            methodName: RuntimeContract.RefCount.Roam);
-        if (roam is null) return null;
-        return MakeBumpStatement(receiver: target, receiverType: rec, copy: roam);
+        RoutineInfo? store = Registry.LookupMethod(type: rec, methodName: "store");
+        if (store is null) return null;
+        return MakeBumpStatement(receiver: target, receiverType: rec, copy: store);
     }
 
     // ---- Shared node construction ---------------------------------------------------------------

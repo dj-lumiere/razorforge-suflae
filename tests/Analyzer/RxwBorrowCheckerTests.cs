@@ -142,7 +142,7 @@ public class RxwBorrowCheckerTests
         string source = Prelude + """
                                   routine start()
                                     var s = Counter(value: 1).share[MultiRead]()
-                                    var s2 = s.share()
+                                    var s2 = s.store()
                                     using s.claim() as c1
                                       using s2.claim() as c2
                                         show("aliased")
@@ -162,7 +162,7 @@ public class RxwBorrowCheckerTests
         string source = Prelude + """
                                   routine start()
                                     var s = Counter(value: 1).share[MultiRead]()
-                                    var s2 = s.share()
+                                    var s2 = s.store()
                                     using s.claim() as c
                                       using s2.inspect() as v
                                         show("aliased reader")
@@ -182,7 +182,7 @@ public class RxwBorrowCheckerTests
         string source = Prelude + """
                                   routine start()
                                     var s = Counter(value: 1).share[MultiRead]()
-                                    var s2 = s.share()
+                                    var s2 = s.store()
                                     using s.inspect() as v1
                                       using s2.inspect() as v2
                                         show("two readers, one controller")

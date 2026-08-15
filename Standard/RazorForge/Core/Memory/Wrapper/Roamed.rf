@@ -78,7 +78,7 @@ needs T is EntityType
 ### Returns a new alias to the same object (biased retain), or the absent handle unchanged. This is
 ### what `b = a` lowers to.
 ### :returns: A new handle sharing the same underlying entity.
-routine Roamed[T].roam() -> Roamed[T]
+routine Roamed[T].store() -> Roamed[T]
   danger
     if me.controller_address() != 0_addr
       var ctrl = Hijacked[RoamController[T]](me).as_entity()

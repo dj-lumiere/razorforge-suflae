@@ -773,19 +773,6 @@ public sealed partial class TypeRegistry
     public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null,
         TypeInfo? forImplementer = null)
     {
-        // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) obey `Storable` but define no concrete
-        // `store` — their store-hook IS the refcount copy verb (retain/track/share/watch/roam). Redirect
-        // `store` to that verb so a generic `T obeys Storable` call resolves to a real, defined method
-        // rather than an undefined `<Wrapper>.store` symbol (which would fail to link). A hand-written
-        // `store` would recurse (its own `return me.retain()` re-enters `store`), so the redirect lives
-        // here in lookup instead of as a stdlib method.
-        if (methodName == "store" && GetRcWrapperBaseName(type: type) is { } rcBase
-            && RuntimeContract.RcCopyVerb.TryGetValue(
-                key: rcBase, value: out string? rcVerb))
-        {
-            return LookupMethod(type: type, methodName: rcVerb, isFailable: isFailable);
-        }
-
         // Transparent-protocol unwrap: Referring[X] / Controlling[X] are markers that
         // dispatch every method to X. If the receiver is one of these wrappers with a
         // single type argument, recurse on the inner type. Without this, for-loops over
