@@ -773,16 +773,16 @@ public sealed partial class TypeRegistry
     public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null,
         TypeInfo? forImplementer = null)
     {
-        // Transparent-protocol unwrap: Referring[X] / Controlling[X] are markers that
+        // Transparent-protocol unwrap: Accessing[X] / Controlling[X] are markers that
         // dispatch every method to X. If the receiver is one of these wrappers with a
         // single type argument, recurse on the inner type. Without this, for-loops over
-        // `Referring[Iterable[T]]` parameters can't resolve iter at SA time, leading
+        // `Accessing[Iterable[T]]` parameters can't resolve iter at SA time, leading
         // to "no resolved method" warnings during generic monomorphization.
         if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
             string markerBase = TypeInfo.StripTypeArgs(
                 name: markerProto.GenericDefinition?.Name ?? markerProto.Name);
-            if (markerBase is RuntimeContract.Referring or RuntimeContract.Controlling)
+            if (markerBase is RuntimeContract.Accessing or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMethod(type: markerArgs[index: 0],
                     methodName: methodName, isFailable: isFailable);
@@ -929,7 +929,7 @@ public sealed partial class TypeRegistry
         // WrapperTypeInfo (Viewing/Modifying/Inspecting/Claiming/Shared/Watched)
         // is the parallel representation to the substituted RecordTypeInfo of the same wrapper.
         // The RecordTypeInfo path finds methods via its substituted `Controlling[InnerT]` /
-        // `Referring[InnerT]` protocol entry. WrapperTypeInfo carries no ImplementedProtocols,
+        // `Accessing[InnerT]` protocol entry. WrapperTypeInfo carries no ImplementedProtocols,
         // so the protocols loop above is skipped — without this fallback, the call dispatcher
         // would then synthesize a forwarder whose body is never emitted (LINKERR). Resolve
         // directly to InnerType as a last resort. Hijacked is intentionally excluded — its
@@ -1012,16 +1012,16 @@ public sealed partial class TypeRegistry
     public RoutineInfo? LookupMethodOverload(TypeInfo type, string methodName,
         List<TypeInfo> argTypes)
     {
-        // Transparent-protocol unwrap: Referring[X] / Controlling[X] forward every method
+        // Transparent-protocol unwrap: Accessing[X] / Controlling[X] forward every method
         // to X. Mirror the unwrap in LookupMethod so overload-driven resolution (e.g. the
         // CallOverloadResolutionPass walking f-string-lowered represent calls on a
-        // `Referring[Text]` receiver) lands on Text's method instead of synthesizing a
-        // protocol-dispatch stub on Referring that has no implementers registered.
+        // `Accessing[Text]` receiver) lands on Text's method instead of synthesizing a
+        // protocol-dispatch stub on Accessing that has no implementers registered.
         if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
             string markerBase = TypeInfo.StripTypeArgs(
                 name: markerProto.GenericDefinition?.Name ?? markerProto.Name);
-            if (markerBase is RuntimeContract.Referring or RuntimeContract.Controlling)
+            if (markerBase is RuntimeContract.Accessing or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMethodOverload(type: markerArgs[index: 0],
                     methodName: methodName, argTypes: argTypes);
@@ -1466,7 +1466,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// Removes a routine resolution entry by its (current) registry key. Used when a
     /// resolution's parameter types have been mutated in-place (e.g.
-    /// MarkerProtocolDesugarPass rewriting Referring[T] → T) so the resolution needs to
+    /// MarkerProtocolDesugarPass rewriting Accessing[T] → T) so the resolution needs to
     /// be re-inserted under its new <see cref="RoutineInfo.RegistryKey"/>.
     /// </summary>
     public bool UnregisterRoutineResolution(string oldKey)
@@ -1574,10 +1574,10 @@ public sealed partial class TypeRegistry
 
         if (target is ProtocolTypeInfo targetProto)
         {
-            // For generic-protocol targets (e.g. Referring[Bytes]), require the type-argument
+            // For generic-protocol targets (e.g. Accessing[Bytes]), require the type-argument
             // to match the source. Without this check, ANY type matches ANY generic protocol —
-            // CStr.create(Referring[Bytes]) "accepts" a Text arg, beating
-            // CStr.create(Referring[Text]) by source order and producing garbled output
+            // CStr.create(Accessing[Bytes]) "accepts" a Text arg, beating
+            // CStr.create(Accessing[Text]) by source order and producing garbled output
             // when SA emits a call to the wrong overload.
             if (targetProto.TypeArguments is { Count: 1 } pTypeArgs)
             {
@@ -1768,7 +1768,7 @@ public sealed partial class TypeRegistry
     /// <c>destroy</c> uniformly: it is a real destructor on owning types and a no-op on the
     /// access/borrow wrappers, so firing it is always safe by construction. The only thing this gate
     /// excludes is the ABSTRACT tier — generic parameters and protocols (the latter also covering the
-    /// <c>Referring</c>/<c>Controlling</c> access markers) — which have no concrete <c>destroy</c> to
+    /// <c>Accessing</c>/<c>Controlling</c> access markers) — which have no concrete <c>destroy</c> to
     /// resolve. The one remaining hazard, a <c>T</c> reference bound to the bare referent type via the
     /// reference primitives <c>refer</c>/<c>control</c>/<c>as_entity</c>, is excluded at the binding
     /// site by <c>ScopeTeardownLoweringPass.IsViewBinding</c> (keyed on the producing verb, since the

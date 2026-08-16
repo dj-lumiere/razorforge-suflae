@@ -344,7 +344,7 @@ routine BitList.none() -> Bool
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are `me[i] and other[i]`.
 @readonly
-routine BitList.bitand(other: Referring[BitList]) -> BitList
+routine BitList.bitand(other: Accessing[BitList]) -> BitList
   # Bitwise AND - returns new BitList with shorter length
   var min_count = if me.count < other.count then me.count else other.count
   var result = BitList(min_count)
@@ -361,7 +361,7 @@ routine BitList.bitand(other: Referring[BitList]) -> BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose length matches the longer input.
 @readonly
-routine BitList.bitor(other: Referring[BitList]) -> BitList
+routine BitList.bitor(other: Accessing[BitList]) -> BitList
   # Bitwise OR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -379,7 +379,7 @@ routine BitList.bitor(other: Referring[BitList]) -> BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are set where exactly one input bit is set.
 @readonly
-routine BitList.bitxor(other: Referring[BitList]) -> BitList
+routine BitList.bitxor(other: Accessing[BitList]) -> BitList
   # Bitwise XOR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -487,7 +487,7 @@ routine BitList.reverse() -> BitList
 ### :param other: The other bit list to compare against.
 ### :returns: `true` if both have the same count and all corresponding bits match.
 @readonly
-routine BitList.eq(other: Referring[BitList]) -> Bool
+routine BitList.eq(other: Accessing[BitList]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

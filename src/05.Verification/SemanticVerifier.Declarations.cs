@@ -831,7 +831,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Closed allowlist of stdlib wrappers permitted to declare <c>obeys Referring[T]</c> or
+    /// Closed allowlist of stdlib wrappers permitted to declare <c>obeys Accessing[T]</c> or
     /// <c>obeys Controlling[T]</c> (directly or transitively). Marker protocols type-erase in
     /// codegen — bodies of routines with marker-protocol params call T's methods on the raw ptr,
     /// so every obeyer must share T's ptr layout. Enforcing this via a closed list (not a
@@ -840,7 +840,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     /// <remarks>
     /// 6 active today + 4 deferred (v0.2+ concurrency wrappers). Entity T's auto-conformance to
-    /// <c>Referring[T]</c>/<c>Controlling[T]</c> is recorded in <c>_implicitProtocolConformances</c>
+    /// <c>Accessing[T]</c>/<c>Controlling[T]</c> is recorded in <c>_implicitProtocolConformances</c>
     /// and never reaches this list-based check.
     /// </remarks>
     private static readonly HashSet<string> _markerProtocolBlessedWrappers = new(comparer: StringComparer.Ordinal)
@@ -852,11 +852,11 @@ public sealed partial class SemanticVerifier
 
     private static readonly HashSet<string> _markerProtocolNames = new(comparer: StringComparer.Ordinal)
     {
-        Compiler.Resolution.RuntimeContract.Referring, Compiler.Resolution.RuntimeContract.Controlling,
+        Compiler.Resolution.RuntimeContract.Accessing, Compiler.Resolution.RuntimeContract.Controlling,
     };
 
     /// <summary>
-    /// Enforces the closed allowlist for marker-protocol (<c>Referring</c>/<c>Controlling</c>)
+    /// Enforces the closed allowlist for marker-protocol (<c>Accessing</c>/<c>Controlling</c>)
     /// obeyance. See <see cref="_markerProtocolBlessedWrappers"/> for rationale.
     /// </summary>
     private void ValidateMarkerProtocolMembership(TypeSymbol type, List<TypeSymbol> implementedProtocols)
@@ -881,7 +881,7 @@ public sealed partial class SemanticVerifier
             if (protocol is not ProtocolTypeInfo protoInfo)
                 continue;
 
-            // Implicit conformances (entity-T auto for Referring/Controlling) bypass —
+            // Implicit conformances (entity-T auto for Accessing/Controlling) bypass —
             // those are SA-synthesized, not user-written, and are sound by construction.
             if (_implicitProtocolConformances.Contains(item: (type.FullName, protoInfo.Name)))
                 continue;
@@ -893,7 +893,7 @@ public sealed partial class SemanticVerifier
                 message:
                 $"Type '{type.Name}' declares 'obeys {protoInfo.Name}' but only stdlib wrappers " +
                 $"({string.Join(separator: ", ", values: _markerProtocolBlessedWrappers.OrderBy(keySelector: n => n))}) " +
-                "may obey marker protocols Referring[T]/Controlling[T]. Marker-protocol parameters " +
+                "may obey marker protocols Accessing[T]/Controlling[T]. Marker-protocol parameters " +
                 "type-erase to T's ptr layout in codegen; obeyers with different layouts would " +
                 "produce undefined behavior.",
                 location: type.Location ?? new SourceLocation(FileName: "",
@@ -909,8 +909,8 @@ public sealed partial class SemanticVerifier
         if (_markerProtocolNames.Contains(item: baseName))
             return true;
 
-        // Check parents (Controlling[T] obeys Referring[T] — flagging a type declaring obeys
-        // Controlling[T] also catches the transitive Referring case).
+        // Check parents (Controlling[T] obeys Accessing[T] — flagging a type declaring obeys
+        // Controlling[T] also catches the transitive Accessing case).
         return _markerProtocolNames.Any(marker => CheckParentProtocols(proto: protoInfo, targetName: marker));
     }
 

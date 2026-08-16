@@ -95,8 +95,8 @@ public partial class LlvmCodeGenerator
             };
         }
 
-        // Skip SA-resolved type for CallExpression through transparent protocols (e.g., Referring[T]).
-        // The SA may resolve "other[j]" on a Referring[Text] parameter to "Text" (the inner type),
+        // Skip SA-resolved type for CallExpression through transparent protocols (e.g., Accessing[T]).
+        // The SA may resolve "other[j]" on a Accessing[Text] parameter to "Text" (the inner type),
         // but the correct return type is "Character" (from Text.getitem!). GetCallReturnType
         // handles this via the transparent-protocol fallback path.
         bool skipSaResolved = false;
@@ -705,7 +705,7 @@ public partial class LlvmCodeGenerator
     {
         foreach (ProtocolMethodInfo m in proto.Methods)
         {
-            if (m.Name != "refer" && m.Name != "control") return false;
+            if (m.Name != "access" && m.Name != "control") return false;
         }
         return true;
     }

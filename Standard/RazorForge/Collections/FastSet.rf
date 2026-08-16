@@ -299,7 +299,7 @@ routine FastSet[T].remove(value: T) -> Bool
 # ============================================================================
 
 @readonly
-routine FastSet[T].union(you: Referring[FastSet[T]]) -> FastSet[T]
+routine FastSet[T].union(you: Accessing[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T](me.count +% you.count)
   each val in me
     discard result.add(val)
@@ -308,7 +308,7 @@ routine FastSet[T].union(you: Referring[FastSet[T]]) -> FastSet[T]
   return steal result
 
 @readonly
-routine FastSet[T].intersection(you: Referring[FastSet[T]]) -> FastSet[T]
+routine FastSet[T].intersection(you: Accessing[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   each val in me
     if val in you
@@ -316,7 +316,7 @@ routine FastSet[T].intersection(you: Referring[FastSet[T]]) -> FastSet[T]
   return steal result
 
 @readonly
-routine FastSet[T].difference(you: Referring[FastSet[T]]) -> FastSet[T]
+routine FastSet[T].difference(you: Accessing[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   each val in me
     if val notin you
@@ -324,7 +324,7 @@ routine FastSet[T].difference(you: Referring[FastSet[T]]) -> FastSet[T]
   return steal result
 
 @readonly
-routine FastSet[T].symmetric_difference(you: Referring[FastSet[T]]) -> FastSet[T]
+routine FastSet[T].symmetric_difference(you: Accessing[FastSet[T]]) -> FastSet[T]
   var result = FastSet[T]()
   each val in me
     if val notin you
@@ -335,7 +335,7 @@ routine FastSet[T].symmetric_difference(you: Referring[FastSet[T]]) -> FastSet[T
   return steal result
 
 @readonly
-routine FastSet[T].is_subset(you: Referring[FastSet[T]]) -> Bool
+routine FastSet[T].is_subset(you: Accessing[FastSet[T]]) -> Bool
   if me.count > you.count
     return false
   each val in me
@@ -344,11 +344,11 @@ routine FastSet[T].is_subset(you: Referring[FastSet[T]]) -> Bool
   return true
 
 @readonly
-routine FastSet[T].is_superset(you: Referring[FastSet[T]]) -> Bool
+routine FastSet[T].is_superset(you: Accessing[FastSet[T]]) -> Bool
   return you.is_subset(me)
 
 @readonly
-routine FastSet[T].is_disjoint(you: Referring[FastSet[T]]) -> Bool
+routine FastSet[T].is_disjoint(you: Accessing[FastSet[T]]) -> Bool
   each val in me
     if val in you
       return false
@@ -361,7 +361,7 @@ routine FastSet[T].is_disjoint(you: Referring[FastSet[T]]) -> Bool
 ### Creates a {List[T]} from all elements of `from` in insertion order.
 ### :param from: The set to copy elements from.
 ### :returns: A new {List[T]} containing all elements of `from`.
-routine List[T](from: Referring[FastSet[T]]) -> List[T]
+routine List[T](from: Accessing[FastSet[T]]) -> List[T]
   var result = List[T](capacity: from.count)
   each val in from
     result.add_last(val)
@@ -432,7 +432,7 @@ routine FastSet[T].diagnose() -> Text
 
 ### Returns true if both sets contain exactly the same elements (order-independent).
 @readonly
-routine FastSet[T].eq(you: Referring[FastSet[T]]) -> Bool
+routine FastSet[T].eq(you: Accessing[FastSet[T]]) -> Bool
   if me.count != you.count
     return false
   return me.is_subset(you)

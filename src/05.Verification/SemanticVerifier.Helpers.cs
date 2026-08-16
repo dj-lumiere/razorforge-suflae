@@ -471,11 +471,11 @@ public sealed partial class SemanticVerifier
             Expression argValue = argExpr is NamedArgumentExpression namedArg
                 ? namedArg.Value
                 : argExpr;
-            // Borrow protocols (Referring[T] / Controlling[T]) accept the source by reference —
+            // Borrow protocols (Accessing[T] / Controlling[T]) accept the source by reference —
             // no copy/move is happening at the call site, so no verb is required.
             string paramBase = paramType.BareName;
             bool paramIsBorrow = paramType.Category == TypeCategory.Protocol &&
-                                 paramBase is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling;
+                                 paramBase is Compiler.Resolution.RuntimeContract.Accessing or Compiler.Resolution.RuntimeContract.Controlling;
             if (_registry.Language == Language.RazorForge &&
                 argValue is IdentifierExpression or MemberExpression &&
                 !IsTriviallyStorable(type: argType) &&
@@ -500,7 +500,7 @@ public sealed partial class SemanticVerifier
             // The old check false-positived because it looked at a stripped type; the reliable
             // signal is STRUCTURAL and read here at Phase 4, BEFORE MarkerProtocolDesugarPass strips
             // borrow params to their inner `T`: a consuming param is bare `EntityTypeInfo`, while
-            // every borrow is a Protocol (`Referring`/`Controlling`) or a Record wrapper
+            // every borrow is a Protocol (`Accessing`/`Controlling`) or a Record wrapper
             // (`Viewing`/`Modifying`/…) — never bare `EntityTypeInfo`. So gating on
             // `paramType is EntityTypeInfo` excludes all borrow forms with no name list. Verb-wrapped
             // arguments (`steal x`, `x.copy()`, `x.share()`) are Steal/Call expressions, not
@@ -562,7 +562,7 @@ public sealed partial class SemanticVerifier
     /// wrapper (Owned, Retained, Tracked, ...). Each such argument becomes `x.represent()`
     /// (for show) or `x.diagnose()` (for alert). The display protocols guarantee `@readonly`,
     /// so the method call is a borrow — `x` is not consumed. The resulting `Text` matches
-    /// the `show(value: Referring[Text])` / `alert(value: Referring[Text])` overload
+    /// the `show(value: Accessing[Text])` / `alert(value: Accessing[Text])` overload
     /// (value-record, no copy verb), so subsequent overload resolution picks that branch
     /// instead of the generic `show[T]` / `alert[T]` that would trigger S420.
     /// </summary>
@@ -600,7 +600,7 @@ public sealed partial class SemanticVerifier
             //   - raw entities (List[T], Set[T], Dict[K,V]) — `IsTriviallyStorable` returns
             //     true (fallback), but the generic `alert[T]` / `show[T]` monomorphization
             //     copies the entity ptr by value, which corrupts. Rewriting to `arg.diagnose()`
-            //     extracts a Text and uses the cleaner `Referring[Text]` overload instead.
+            //     extracts a Text and uses the cleaner `Accessing[Text]` overload instead.
             bool isEntity = argType is EntityTypeInfo;
             if (!isEntity && IsTriviallyStorable(type: argType)) continue;
 
@@ -767,28 +767,28 @@ public sealed partial class SemanticVerifier
         // Protocol conformance - if target is a protocol, check if source implements it
         if (target.Category == TypeCategory.Protocol)
         {
-            // Borrow protocols (Referring[T] / Controlling[T]) accept an ownership-carrying or
+            // Borrow protocols (Accessing[T] / Controlling[T]) accept an ownership-carrying or
             // bare source whose inner type matches T. Retained/Modifying are accepted by
-            // both; Viewing is readonly so accepted only by Referring; Hijacked needs explicit
+            // both; Viewing is readonly so accepted only by Accessing; Hijacked needs explicit
             // .as_entity() — never accepted by implicit borrow coercion.
             string targetBase = target.BareName;
-            if ((targetBase == Compiler.Resolution.RuntimeContract.Referring || targetBase == Compiler.Resolution.RuntimeContract.Controlling) &&
+            if ((targetBase == Compiler.Resolution.RuntimeContract.Accessing || targetBase == Compiler.Resolution.RuntimeContract.Controlling) &&
                 target.TypeArguments is { Count: 1 } borrowArgs)
             {
                 TypeSymbol borrowInner = borrowArgs[index: 0];
                 if (TryGetOwnershipWrapperInner(type: source, wrapperBase: out string? srcWrapper,
                         inner: out TypeSymbol? srcInner))
                 {
-                    bool wrapperAllowed = targetBase == Compiler.Resolution.RuntimeContract.Referring
+                    bool wrapperAllowed = targetBase == Compiler.Resolution.RuntimeContract.Accessing
                         ? srcWrapper is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Viewing
-                            or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Referring
+                            or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Accessing
                         : srcWrapper is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Controlling;
                     if (wrapperAllowed && srcInner != null &&
                         (srcInner.FullName == borrowInner.FullName ||
                          srcInner.Name == borrowInner.Name))
                         return true;
                 }
-                // Bare entity T: accepted by both Referring[T] and Controlling[T].
+                // Bare entity T: accepted by both Accessing[T] and Controlling[T].
                 if (source.Category == TypeCategory.Entity &&
                     (source.FullName == borrowInner.FullName ||
                      source.Name == borrowInner.Name ||
@@ -857,7 +857,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     /// <summary>
     /// If <paramref name="type"/> is an ownership-carrying or borrow wrapper
-    /// (Retained/Tracked/Modifying/Viewing/Controlling/Referring/Hijacked) over some inner T,
+    /// (Retained/Tracked/Modifying/Viewing/Controlling/Accessing/Hijacked) over some inner T,
     /// returns the base wrapper name and inner T. Returns false for anything else.
     /// </summary>
     private static bool TryGetOwnershipWrapperInner(TypeSymbol type, out string? wrapperBase,
@@ -865,7 +865,7 @@ public sealed partial class SemanticVerifier
     {
         string baseName = type.BareName;
         if (baseName is Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked or Compiler.Resolution.RuntimeContract.Modifying or Compiler.Resolution.RuntimeContract.Viewing
-            or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Hijacked)
+            or Compiler.Resolution.RuntimeContract.Controlling or Compiler.Resolution.RuntimeContract.Accessing or Compiler.Resolution.RuntimeContract.Hijacked)
         {
             if (type is WrapperTypeInfo { InnerType: not null } w)
             {
@@ -1010,14 +1010,14 @@ public sealed partial class SemanticVerifier
     /// Checks if a type supports a specific binary operator by looking up the operator method.
     /// </summary>
     /// <summary>
-    /// Unwraps a transparent borrow protocol (<c>Referring[T]</c> / <c>Controlling[T]</c>) to its
+    /// Unwraps a transparent borrow protocol (<c>Accessing[T]</c> / <c>Controlling[T]</c>) to its
     /// referent <c>T</c>; returns the type unchanged otherwise. Used so comparison operands that are
     /// borrows are treated as their referent (the operator auto-dispatches <c>refer</c>/<c>control</c>).
     /// </summary>
     private static TypeSymbol UnwrapBorrowProtocol(TypeSymbol type)
     {
         if (type.Category == TypeCategory.Protocol &&
-            type.BareName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling &&
+            type.BareName is Compiler.Resolution.RuntimeContract.Accessing or Compiler.Resolution.RuntimeContract.Controlling &&
             type.TypeArguments is { Count: > 0 } args)
         {
             return args[index: 0];
@@ -1213,9 +1213,9 @@ public sealed partial class SemanticVerifier
     private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op,
         SourceLocation location)
     {
-        // A `Referring[T]` / `Controlling[T]` operand is a borrow that transparently forwards to its
+        // A `Accessing[T]` / `Controlling[T]` operand is a borrow that transparently forwards to its
         // referent: comparing it auto-dispatches `refer()` / `control()` to the inner `T`. Compare
-        // against that referent so e.g. `me[i] == value` (with `value: Referring[T]`) type-checks as
+        // against that referent so e.g. `me[i] == value` (with `value: Accessing[T]`) type-checks as
         // `T == T` and resolves operator support on `T`.
         left = UnwrapBorrowProtocol(type: left);
         right = UnwrapBorrowProtocol(type: right);
@@ -1356,7 +1356,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
     {
-        // Marker-protocol unwrap: `Referring[X]` / `Controlling[X]` are transparent
+        // Marker-protocol unwrap: `Accessing[X]` / `Controlling[X]` are transparent
         // pass-throughs to X. If iterating one, dispatch to X's Iterable conformance.
         if (TryGetTransparentProtocolTarget(type: iterableType,
             targetType: out TypeSymbol unwrapped))
@@ -1544,7 +1544,7 @@ public sealed partial class SemanticVerifier
     #endregion
 
     /// <summary>
-    /// If <paramref name="paramType"/> is a marker protocol (Referring[T]/Controlling[T])
+    /// If <paramref name="paramType"/> is a marker protocol (Accessing[T]/Controlling[T])
     /// and the argument isn't already an in-flight inner T, wraps the argument expression
     /// as `arg.refer()` or `arg.control()`. The resulting CallExpression has
     /// ResolvedRoutine and ResolvedType set so downstream passes (reachability, codegen,
@@ -1560,11 +1560,11 @@ public sealed partial class SemanticVerifier
         string baseName = def.BareName;
         string methodName;
         if (baseName == Compiler.Resolution.RuntimeContract.Controlling) methodName = "control";
-        else if (baseName == Compiler.Resolution.RuntimeContract.Referring) methodName = "refer";
+        else if (baseName == Compiler.Resolution.RuntimeContract.Accessing) methodName = "refer";
         else return;
 
         // Pass-through: the argument is already typed as the same marker protocol. No
-        // coercion call is needed — Referring[T] is layout-compatible with inner T, so
+        // coercion call is needed — Accessing[T] is layout-compatible with inner T, so
         // the rewritten signature (T param) accepts it directly. Phase 8's expression
         // ResolvedType sweep retags the argument to inner T so codegen sees no marker.
         if (argType is ProtocolTypeInfo argProto
@@ -1605,7 +1605,7 @@ public sealed partial class SemanticVerifier
         Expression inner = slotExpr is NamedArgumentExpression nx ? nx.Value : slotExpr;
 
         // Skip if already coerced.
-        if (inner is CallExpression { Callee: MemberExpression { MemberName: "refer" or "control" } })
+        if (inner is CallExpression { Callee: MemberExpression { MemberName: "access" or "control" } })
             return;
 
         // Resolve the method on the source argument type.

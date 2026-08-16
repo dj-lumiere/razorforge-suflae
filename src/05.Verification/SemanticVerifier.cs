@@ -571,7 +571,7 @@ public sealed partial class SemanticVerifier
             target: _target,
             buildMode: _buildMode) { SaTiming = SaTiming };
 
-        // Rewrite Referring[T]/Controlling[T] params to inner T before reachability so
+        // Rewrite Accessing[T]/Controlling[T] params to inner T before reachability so
         // the resulting RegistryKeys / mangled names captured downstream match codegen.
         // Call-site refer/control coercion was already injected during SA argument binding.
         // Pass mergedVariantBodies (not _variantBodies) so the dict used by reachability/GMP
@@ -597,7 +597,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Insert scope-exit `destroy()` calls BEFORE reachability (so the calls drive liveness —
-        // no manual seeding needed) and BEFORE the marker pass (so Referring[T]/Controlling[T]
+        // no manual seeding needed) and BEFORE the marker pass (so Accessing[T]/Controlling[T]
         // params are still protocol-typed and excluded as access types, not yet stripped to the
         // inner entity). Generic bodies are processed here too, then monomorphized with the calls.
         // Warm-restore: the restored stdlib programs already carry teardown/temp-teardown/marker/
@@ -764,7 +764,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Diagnostic survey: after Phase 7/8 monomorphization, walks every routine in the
     /// registry and reports any RoutineInfo whose Parameters still contain
-    /// Referring[T]/Controlling[T]. Such routines indicate a creation path that bypassed
+    /// Accessing[T]/Controlling[T]. Such routines indicate a creation path that bypassed
     /// MarkerProtocolDesugarPass.RewriteAllSignatures — call-site mangling will then
     /// diverge from definition-site mangling and produce LINKERRs.
     /// </summary>
@@ -773,7 +773,7 @@ public sealed partial class SemanticVerifier
         // This survey's RescanLateResolutions / RewriteInstantiatedBodyInfos below are FUNCTIONAL
         // (they clean the registry + instantiated-body cache) and always run. Its leak REPORT, however,
         // is a developer early-warning aid that writes to stderr; a residual dormant leak
-        // (Hijacked[Referring[List[S64]]] comparison ops) would otherwise pollute every build's stderr
+        // (Hijacked[Accessing[List[S64]]] comparison ops) would otherwise pollute every build's stderr
         // and fail the harness's clean-stderr assertion. Gate the prints behind an opt-in env var — the
         // over-prune tripwire in codegen is the real undefined-symbol safety net.
         bool report = Environment.GetEnvironmentVariable(variable: "RF_MARKER_SURVEY") == "1";
@@ -782,7 +782,7 @@ public sealed partial class SemanticVerifier
         {
             if (t is not ProtocolTypeInfo p) return false;
             string n = (p.GenericDefinition ?? p).Name;
-            return n is RuntimeContract.Referring or RuntimeContract.Controlling;
+            return n is RuntimeContract.Accessing or RuntimeContract.Controlling;
         }
 
         static bool ContainsMarker(TypeInfo? t, HashSet<TypeInfo> seen)
@@ -819,7 +819,7 @@ public sealed partial class SemanticVerifier
 
         _markerPass?.RescanLateResolutions();
 
-        // GMP creates body.Info entries in Phase 7 whose params still wear Referring/Controlling;
+        // GMP creates body.Info entries in Phase 7 whose params still wear Accessing/Controlling;
         // RescanLateResolutions cleans the registry but not the codegen-side instantiated-body cache.
         // Rewrite those param types and re-key the dict + live-set so definition emission and
         // call-site mangling agree.

@@ -1594,9 +1594,9 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                             // Compare by base name (strip [T]/[K,V]) so `Set[T]` matches `Set`
                             // and `FastSet[T]` matches `FastSet` regardless of generic-arg form.
                             // Also unwrap a borrow/reference wrapper on the resolved side: a param
-                            // declared `from: Referring[FastSet[T]]` carries Type.Name "FastSet" in
+                            // declared `from: Accessing[FastSet[T]]` carries Type.Name "FastSet" in
                             // the AST (the wrapper is a modifier), but the resolved RoutineInfo keeps
-                            // the full "Referring[FastSet[T]]". Without unwrapping, the right overload
+                            // the full "Accessing[FastSet[T]]". Without unwrapping, the right overload
                             // is rejected and FindInStdlib falls back to an arbitrary same-arity one
                             // (e.g. List's `capacity:U64` body mounted under the FastSet creator).
                             string expectedBase = MatchableBaseName(expected);
@@ -1628,17 +1628,17 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     private static string StripGenericSuffix(string typeName) => TypeInfo.StripTypeArgs(name: typeName);
 
     /// <summary>Borrow/reference wrapper type names. A parameter declared with one of these
-    /// (e.g. <c>from: Referring[FastSet[T]]</c>) reaches the AST as the bare inner type
+    /// (e.g. <c>from: Accessing[FastSet[T]]</c>) reaches the AST as the bare inner type
     /// (<c>FastSet</c>), while the resolved <see cref="RoutineInfo"/> keeps the full wrapper —
     /// so overload disambiguation must compare the inner type, not the wrapper.</summary>
     private static readonly HashSet<string> BorrowWrapperNames = new(StringComparer.Ordinal)
     {
-        RuntimeContract.Referring, RuntimeContract.Viewing, RuntimeContract.Controlling, RuntimeContract.Modifying, RuntimeContract.Hijacked,
+        RuntimeContract.Accessing, RuntimeContract.Viewing, RuntimeContract.Controlling, RuntimeContract.Modifying, RuntimeContract.Hijacked,
         RuntimeContract.Inspecting, RuntimeContract.Claiming, RuntimeContract.Retained, RuntimeContract.Tracked, RuntimeContract.Shared
     };
 
     /// <summary>Base type name for overload matching: strips generic args and unwraps a leading
-    /// borrow/reference wrapper to its inner type (recursively), so <c>Referring[FastSet[T]]</c>
+    /// borrow/reference wrapper to its inner type (recursively), so <c>Accessing[FastSet[T]]</c>
     /// and the AST's bare <c>FastSet</c> compare equal.</summary>
     private static string MatchableBaseName(string typeName)
     {

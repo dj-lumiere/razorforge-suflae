@@ -123,8 +123,8 @@ public sealed partial class SemanticVerifier
                 // Display-routine desugaring (phase 1): `show(x)` / `alert(x)` where x is a
                 // copy-restricted wrapper becomes `show(x.represent())` / `alert(x.diagnose())`
                 // BEFORE overload resolution. The rewrite turns the call into a Text-typed
-                // argument, so overload resolution picks the `show(value: Referring[Text])`
-                // / `alert(value: Referring[Text])` overload instead of the generic-T variant
+                // argument, so overload resolution picks the `show(value: Accessing[Text])`
+                // / `alert(value: Accessing[Text])` overload instead of the generic-T variant
                 // that would either trigger S420 (implicit copy of the wrapper) or — worse —
                 // bind to the wrong overload and emit a garbage call at runtime.
                 if (_registry.Language == Language.RazorForge)
@@ -1011,7 +1011,7 @@ public sealed partial class SemanticVerifier
                 // Stdlib is exempt — its iterator implementations and wrapper bodies chain these
                 // dunders directly (e.g., `me.source.iter()`, wrapper `refer` forwarders).
                 if ((member.MemberName == "iter"
-                     || member.MemberName == "refer"
+                     || member.MemberName == "access"
                      || member.MemberName == "control")
                     && !call.IsSynthesizedLowering
                     && !IsStdlibFile(filePath: call.Location.FileName))
@@ -1019,7 +1019,7 @@ public sealed partial class SemanticVerifier
                     string hint = member.MemberName == "iter"
                         ? "use an 'each' loop or iterable combinators (skip, take, map, etc.) instead."
                         : "pass the value to a routine whose parameter is typed " +
-                          "Referring[T] / Controlling[T] — the compiler coerces it for you.";
+                          "Accessing[T] / Controlling[T] — the compiler coerces it for you.";
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
                         message: $"Method '{member.MemberName}' is internal to the compiler — {hint}",
                         location: call.Location);

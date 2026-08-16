@@ -183,7 +183,7 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
     private static Expression? RoamedCoercionReceiver(MemberExpression member)
     {
         if (member.MemberName is not (RuntimeContract.RoamedMethod.RawInner
-            or RuntimeContract.Control or RuntimeContract.Refer)) return null;
+            or RuntimeContract.Control or RuntimeContract.Access)) return null;
         return RoamedInnerEntity(member.Object.ResolvedType) is not null ? member.Object : null;
     }
 

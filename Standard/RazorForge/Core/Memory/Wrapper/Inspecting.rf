@@ -13,7 +13,7 @@ import BuilderService
 ### :typeparam P: The access-discipline lock policy of the originating `Shared`.
 ### :see: {Claiming[T]}, {Viewing[T]}, {Shared[T, P]}, {Access-Types}
 @llvm("ptr")
-record Inspecting[T, P] obeys Referring[T], Enterable
+record Inspecting[T, P] obeys Accessing[T], Enterable
 needs T is EntityType, P obeys LockPolicy
   pass
 
@@ -51,15 +51,15 @@ routine Inspecting[T, P].exit()
   return
 
 # ============================================================================
-# Marker-protocol coercion (refer) — yields the guarded entity as T
+# Marker-protocol coercion (access) — yields the guarded entity as T
 # ============================================================================
 
 ### Yields the guarded entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Referring[T]`. Projects through the
+### Inserted implicitly at call sites whose parameter is `Accessing[T]`. Projects through the
 ### controller to reach the managed entity.
 ### :returns: The guarded entity as `T`.
 @[readonly, inline]
-routine Inspecting[T, P].refer() -> T
+routine Inspecting[T, P].access() -> T
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return ctrl.borrow_data().as_entity()

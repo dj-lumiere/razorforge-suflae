@@ -7,8 +7,8 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// `$iter`, `$refer`, and `$control` are dunder-private — only the compiler's lowering
-/// passes may emit them (for-loop → $iter; argument coercion → $refer/$control). User
+/// `$iter`, `$access`, and `$control` are dunder-private — only the compiler's lowering
+/// passes may emit them (for-loop → $iter; argument coercion → $access/$control). User
 /// code calling them directly is a compile error; otherwise the borrow / iterator could
 /// be stored in a var and outlive its source. Defining the dunder is still allowed.
 /// </summary>
@@ -45,7 +45,7 @@ public class IterPrivacyTests
     }
 
     [Fact]
-    public void UserCode_CallsDollarRefer_OnOwnedEntity_Rejected()
+    public void UserCode_CallsDollarAccess_OnOwnedEntity_Rejected()
     {
         string source = """
                         entity Counter
@@ -53,7 +53,7 @@ public class IterPrivacyTests
 
                         routine start()
                           var c = Counter(value: 1)
-                          var r = c.refer()
+                          var r = c.access()
                           return
                         """;
 
@@ -83,14 +83,14 @@ public class IterPrivacyTests
     [Fact]
     public void ReferringParam_CallSiteCoercion_Resolves()
     {
-        // The compiler injects `.refer()` automatically at the Referring[T] param.
-        // No user-visible $refer call appears in source; the check must not fire on the
+        // The compiler injects `.access()` automatically at the Accessing[T] param.
+        // No user-visible $access call appears in source; the check must not fire on the
         // synthesized coercion.
         string source = """
                         record Box
                           n: S64
 
-                        routine echo(b: Referring[Box]) -> S64
+                        routine echo(b: Accessing[Box]) -> S64
                           return 0_s64
 
                         routine start()

@@ -159,22 +159,22 @@ public sealed partial class SemanticVerifier
         // Check if the type has all required methods of the protocol (structural conformance)
         if (protocol is ProtocolTypeInfo protoType)
         {
-            // Entity T implicitly satisfies Referring[T] and Controlling[T]
+            // Entity T implicitly satisfies Accessing[T] and Controlling[T]
             if (type.Category == TypeCategory.Entity &&
                 protoType.TypeArguments is { Count: 1 } args &&
                 args[index: 0].Name == type.Name)
             {
                 string baseProto = (protoType.GenericDefinition ?? protoType).BareName;
-                if (baseProto is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling)
+                if (baseProto is Compiler.Resolution.RuntimeContract.Accessing or Compiler.Resolution.RuntimeContract.Controlling)
                 {
                     return true;
                 }
             }
 
-            // Transparent relay for Referring[T] / Controlling[T]:
+            // Transparent relay for Accessing[T] / Controlling[T]:
             // A wrapper type satisfies any readonly protocol that its inner entity type satisfies.
             // All @readonly protocol methods are safe to delegate through both read-only
-            // (Referring) and read-write (Controlling) wrappers.
+            // (Accessing) and read-write (Controlling) wrappers.
             if (IsAllReadOnlyProtocol(protoType))
             {
                 TypeSymbol? innerT = GetReferringControllingInnerType(protocols: implementedProtocols);
@@ -393,7 +393,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Extracts the inner type T from the first <c>Referring[T]</c> or <c>Controlling[T]</c>
+    /// Extracts the inner type T from the first <c>Accessing[T]</c> or <c>Controlling[T]</c>
     /// entry in <paramref name="protocols"/>. Returns null if neither is present.
     /// </summary>
     private static TypeSymbol? GetReferringControllingInnerType(List<TypeSymbol> protocols)
@@ -401,7 +401,7 @@ public sealed partial class SemanticVerifier
         foreach (TypeSymbol proto in protocols)
         {
             string baseName = proto.BareName;
-            if (baseName is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling && proto.TypeArguments is { Count: 1 })
+            if (baseName is Compiler.Resolution.RuntimeContract.Accessing or Compiler.Resolution.RuntimeContract.Controlling && proto.TypeArguments is { Count: 1 })
                 return proto.TypeArguments[index: 0];
         }
 

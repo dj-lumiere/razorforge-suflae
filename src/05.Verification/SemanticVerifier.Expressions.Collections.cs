@@ -791,7 +791,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Second pass: infer any still-unbound generics from `needs` constraints whose constraining
-        // param is now known (e.g. `zip[U, S2](other: Referring[S2]) needs S2 obeys Iterable[U]` —
+        // param is now known (e.g. `zip[U, S2](other: Accessing[S2]) needs S2 obeys Iterable[U]` —
         // S2 binds from the argument, then U binds from S2's Iterable conformance).
         InferGenericsFromConstraints(routine: genericRoutine, inferred: typeArgs);
 
@@ -951,15 +951,15 @@ public sealed partial class SemanticVerifier
             return;
         }
 
-        // Marker borrow wrappers around a BARE generic param (Referring[S2]/Controlling[S2]) are
-        // transparent at call sites: a bare argument `a` passed where `Referring[S2]` is expected
-        // binds S2 to the WHOLE argument type. Without this, `other: Referring[S2]` against arg
+        // Marker borrow wrappers around a BARE generic param (Accessing[S2]/Controlling[S2]) are
+        // transparent at call sites: a bare argument `a` passed where `Accessing[S2]` is expected
+        // binds S2 to the WHOLE argument type. Without this, `other: Accessing[S2]` against arg
         // `List[S64]` would wrongly element-wise-bind S2 to S64 (the inner element). Restricted to a
-        // bare-generic inner so wrappers around constructed types (e.g. `Referring[List[T]]`) keep
+        // bare-generic inner so wrappers around constructed types (e.g. `Accessing[List[T]]`) keep
         // the normal element-wise unification that binds their inner params (T) correctly.
         if (paramType is { TypeArguments: [GenericParameterTypeInfo markerParam] } &&
-            ProtocolBaseName(type: paramType) is Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling &&
-            ProtocolBaseName(type: argType) is not (Compiler.Resolution.RuntimeContract.Referring or Compiler.Resolution.RuntimeContract.Controlling))
+            ProtocolBaseName(type: paramType) is Compiler.Resolution.RuntimeContract.Accessing or Compiler.Resolution.RuntimeContract.Controlling &&
+            ProtocolBaseName(type: argType) is not (Compiler.Resolution.RuntimeContract.Accessing or Compiler.Resolution.RuntimeContract.Controlling))
         {
             int markerIdx = genericParameters.ToList().IndexOf(item: markerParam.Name);
             if (markerIdx >= 0 && inferred[markerIdx] == null)

@@ -50,7 +50,7 @@ routine ZipEmittable[T, U, SE1, SE2].emit!() -> Tuple[T, U]
 ### :param you: The second source iterable to zip with.
 ### :returns: The resulting `ZipIterable[T, U, Me, S2]` value.
 @readonly
-routine Iterable[T].zip[U, S2](you: Referring[S2]) -> ZipIterable[T, U, Me, S2]
+routine Iterable[T].zip[U, S2](you: Accessing[S2]) -> ZipIterable[T, U, Me, S2]
 needs S2 obeys Iterable[U]
   danger
     return ZipIterable[T, U, Me, S2](first: me.hijack(), second: you.hijack())

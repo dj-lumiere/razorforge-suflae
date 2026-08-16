@@ -62,7 +62,7 @@ routine SplitList[T].is_empty() -> Bool
 ### :param value: The value to search for.
 ### :returns: `true` if a matching element is present.
 @readonly
-routine SplitList[T].contains(value: Referring[T]) -> Bool
+routine SplitList[T].contains(value: Accessing[T]) -> Bool
 needs T obeys Equatable
   var i = 0u64
   while i < me.count()

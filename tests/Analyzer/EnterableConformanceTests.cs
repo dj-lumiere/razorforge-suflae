@@ -122,7 +122,7 @@ public class EnterableConformanceTests
                         entity Counter
                           value: S64
 
-                        routine peek(c: Referring[Counter])
+                        routine peek(c: Accessing[Counter])
                           show(f"{c.value}")
                           return
 

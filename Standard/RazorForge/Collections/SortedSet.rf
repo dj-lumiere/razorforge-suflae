@@ -208,7 +208,7 @@ routine BTreeSetNode[T].children_truncate(n: U64)
   return
 
 # Append `count` elements from `you.keys[start..start+count)` to me.keys.
-routine BTreeSetNode[T].keys_add_range_from(you: Referring[BTreeSetNode[T]], start: U64, count: U64)
+routine BTreeSetNode[T].keys_add_range_from(you: Accessing[BTreeSetNode[T]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = T.data_size()
@@ -219,7 +219,7 @@ routine BTreeSetNode[T].keys_add_range_from(you: Referring[BTreeSetNode[T]], sta
   return
 
 # Append `count` children from `you.children[start..start+count)` to me.children.
-routine BTreeSetNode[T].children_add_range_from(you: Referring[BTreeSetNode[T]], start: U64, count: U64)
+routine BTreeSetNode[T].children_add_range_from(you: Accessing[BTreeSetNode[T]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = Address.data_size()
@@ -341,7 +341,7 @@ routine SortedSet[T].contains(value: T) -> Bool
 ### :returns: `true` if `value` is found anywhere in the subtree; `false` otherwise.
 @readonly
 @inline
-routine SortedSet[T].search_node(node: Referring[BTreeSetNode[T]], value: T) -> Bool
+routine SortedSet[T].search_node(node: Accessing[BTreeSetNode[T]], value: T) -> Bool
   danger
     # Binary search: find the first index where keys[i] >= value.
     var i = me.lower_bound(node: node, value: value)
@@ -370,7 +370,7 @@ routine SortedSet[T].search_node(node: Referring[BTreeSetNode[T]], value: T) -> 
 ### :returns: The first index where keys[index] >= value.
 @readonly
 @inline
-routine SortedSet[T].lower_bound(node: Referring[BTreeSetNode[T]], value: T) -> U64
+routine SortedSet[T].lower_bound(node: Accessing[BTreeSetNode[T]], value: T) -> U64
   var lo = 0u64
   var hi = node.keys_count()
   # Invariant: all keys[0..lo) < value, all keys[hi..count) >= value.
@@ -636,7 +636,7 @@ routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value:
 ### :param idx: Index into node.keys whose left subtree to descend.
 ### :returns: The in-order predecessor of keys[idx].
 @inline
-routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64) -> T
+routine SortedSet[T].get_predecessor(node: Accessing[BTreeSetNode[T]], idx: U64) -> T
   danger
     var current = node.children_get(idx).as_entity()
     while not current.is_leaf
@@ -649,7 +649,7 @@ routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64)
 ### :param idx: Index into node.keys whose right subtree to descend.
 ### :returns: The in-order successor of keys[idx].
 @inline
-routine SortedSet[T].get_successor(node: Referring[BTreeSetNode[T]], idx: U64) -> T
+routine SortedSet[T].get_successor(node: Accessing[BTreeSetNode[T]], idx: U64) -> T
   danger
     var current = node.children_get(idx +% 1u64).as_entity()
     while not current.is_leaf
@@ -815,7 +815,7 @@ routine SortedSet[T].get_by_rank!(rank: U64) -> T
 ### :param rank: The zero-based in-order rank to resolve.
 ### :returns: The element at that in-order rank within the subtree.
 @readonly
-routine SortedSet[T].get_at_subtree_rank(node: Referring[BTreeSetNode[T]], rank: U64) -> T
+routine SortedSet[T].get_at_subtree_rank(node: Accessing[BTreeSetNode[T]], rank: U64) -> T
   danger
     if node.is_leaf
       return node.keys_get(rank)
@@ -867,7 +867,7 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
 ### :param max_val: The inclusive upper bound.
 ### :param result: The destination list for matching values.
 @readonly
-routine SortedSet[T].range_collect(node: Referring[BTreeSetNode[T]], min_val: T, max_val: T, result: Controlling[List[T]])
+routine SortedSet[T].range_collect(node: Accessing[BTreeSetNode[T]], min_val: T, max_val: T, result: Controlling[List[T]])
   danger
     var i = 0u64
 
@@ -958,7 +958,7 @@ routine List[T](from: SortedSet[T]) -> List[T]
 ### :param node: The subtree root to visit.
 ### :param result: The destination list for collected values.
 @readonly
-routine SortedSet[T].collect_inorder(node: Referring[BTreeSetNode[T]], result: Controlling[List[T]])
+routine SortedSet[T].collect_inorder(node: Accessing[BTreeSetNode[T]], result: Controlling[List[T]])
   danger
     var i = 0u64
     while i < node.keys_count()
@@ -1027,7 +1027,7 @@ routine SortedSet[T].diagnose() -> Text
 ### :param you: The other set to compare against.
 ### :returns: `true` if both sets have equal count and all corresponding elements are equal.
 @readonly
-routine SortedSet[T].eq(you: Referring[SortedSet[T]]) -> Bool
+routine SortedSet[T].eq(you: Accessing[SortedSet[T]]) -> Bool
   if me.count != you.count
     return false
   var i = 0u64

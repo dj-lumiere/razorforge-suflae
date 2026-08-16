@@ -9,9 +9,9 @@ import BuilderService
 ### reentrant, task-keyed exclusive lock that serializes all access (the actor "one at a time"
 ### guarantee). Aliasing is free (`.roam()`), so `b = a` maps here, NOT to a bare single-owner entity.
 ###
-### **Access is coerced through `control`/`refer`, with the lock applied TRANSPARENTLY.** `Roamed`
+### **Access is coerced through `control`/`access`, with the lock applied TRANSPARENTLY.** `Roamed`
 ### `obeys Controlling[T]`: a deref (method dispatch on a `Roamed` receiver, or passing one to a
-### `Controlling[T]`/`Referring[T]` parameter) coerces to the inner entity via `control()`/`refer()`.
+### `Controlling[T]`/`Accessing[T]` parameter) coerces to the inner entity via `control()`/`access()`.
 ### That coercion does NOT bypass serialization — the compiler's lock-bracket lowering wraps the
 ### enclosing access scope in `lock_enter`/`lock_exit` (no-op in LOCAL mode, a reentrant task-keyed
 ### acquire once ESCAPED), so Suflae code never sees the lock while access stays serialized. Holding a
@@ -144,23 +144,23 @@ routine Roamed[T].controller_address() -> Address
 
 ### The inner entity as a raw reference. Real access is lock-wrapped by the compiler's lock-bracket
 ### lowering around the enclosing access scope, so this coercion is safe: it is the deref half, the
-### bracket pass is the lock half. Kept as the low-level plumbing name behind `refer`/`control`.
+### bracket pass is the lock half. Kept as the low-level plumbing name behind `access`/`control`.
 ### :returns: The inner entity.
 dangerous routine Roamed[T].raw_inner() -> T
   var ctrl = Hijacked[RoamController[T]](me).as_entity()
   return ctrl.data_ptr().as_entity()
 
 # ============================================================================
-# Marker-protocol coercion (refer/control) — yields the inner entity as T. The access lock is applied
+# Marker-protocol coercion (access/control) — yields the inner entity as T. The access lock is applied
 # transparently by the compiler's lock-bracket lowering around the enclosing scope (see class doc),
 # so these do NOT bypass escaped-mode serialization.
 # ============================================================================
 
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
 ### :returns: The inner entity as `T`.
 @[readonly, inline]
-routine Roamed[T].refer() -> T
+routine Roamed[T].access() -> T
   danger
     var ctrl = Hijacked[RoamController[T]](me).as_entity()
     return ctrl.data_ptr().as_entity()

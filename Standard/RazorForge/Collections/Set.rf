@@ -311,7 +311,7 @@ routine SetEmittable[T].emit!() -> T
 # ============================================================================
 
 @readonly
-routine Set[T].union(other: Referring[Set[T]]) -> Set[T]
+routine Set[T].union(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T](key: SecureHashKey.random(), capacity: me.count +% other.count)
   each val in me
     discard result.add(val)
@@ -320,7 +320,7 @@ routine Set[T].union(other: Referring[Set[T]]) -> Set[T]
   return steal result
 
 @readonly
-routine Set[T].intersection(other: Referring[Set[T]]) -> Set[T]
+routine Set[T].intersection(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
   each val in me
     if val in other
@@ -328,7 +328,7 @@ routine Set[T].intersection(other: Referring[Set[T]]) -> Set[T]
   return steal result
 
 @readonly
-routine Set[T].difference(other: Referring[Set[T]]) -> Set[T]
+routine Set[T].difference(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
   each val in me
     if val notin other
@@ -336,7 +336,7 @@ routine Set[T].difference(other: Referring[Set[T]]) -> Set[T]
   return steal result
 
 @readonly
-routine Set[T].symmetric_difference(other: Referring[Set[T]]) -> Set[T]
+routine Set[T].symmetric_difference(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
   each val in me
     if val notin other
@@ -347,7 +347,7 @@ routine Set[T].symmetric_difference(other: Referring[Set[T]]) -> Set[T]
   return steal result
 
 @readonly
-routine Set[T].is_subset(other: Referring[Set[T]]) -> Bool
+routine Set[T].is_subset(other: Accessing[Set[T]]) -> Bool
   if me.count > other.count
     return false
   each val in me
@@ -356,11 +356,11 @@ routine Set[T].is_subset(other: Referring[Set[T]]) -> Bool
   return true
 
 @readonly
-routine Set[T].is_superset(other: Referring[Set[T]]) -> Bool
+routine Set[T].is_superset(other: Accessing[Set[T]]) -> Bool
   return other.is_subset(me)
 
 @readonly
-routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
+routine Set[T].is_disjoint(other: Accessing[Set[T]]) -> Bool
   each val in me
     if val in other
       return false
@@ -414,7 +414,7 @@ routine Set[T].diagnose() -> Text
 # ============================================================================
 
 @readonly
-routine Set[T].eq(other: Referring[Set[T]]) -> Bool
+routine Set[T].eq(other: Accessing[Set[T]]) -> Bool
   if me.count != other.count
     return false
   each val in me

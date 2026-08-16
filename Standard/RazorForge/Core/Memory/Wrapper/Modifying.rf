@@ -39,14 +39,14 @@ routine Modifying[T].exit()
   return
 
 # ============================================================================
-# Marker-protocol coercion (refer/control) — yields the inner entity as T
+# Marker-protocol coercion (access/control) — yields the inner entity as T
 # ============================================================================
 
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
 ### :returns: The inner entity as `T`.
 @[readonly, inline]
-routine Modifying[T].refer() -> T
+routine Modifying[T].access() -> T
   danger
     return Hijacked[T](me).as_entity()
 

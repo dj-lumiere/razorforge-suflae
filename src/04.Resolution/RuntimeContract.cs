@@ -140,8 +140,8 @@ public static class RuntimeContract
     // but are matched by literal at teardown/lowering sites (grouped with the view-verb sets).
     // =====================================================================================
 
-    /// <summary><c>refer</c> — the <c>Referring</c> marker-protocol coercion (yields a borrow view).</summary>
-    public const string Refer = "refer";
+    /// <summary><c>access</c> — the <c>Accessing</c> marker-protocol coercion (yields a read-only view).</summary>
+    public const string Access = "access";
     /// <summary><c>control</c> — the <c>Controlling</c> marker-protocol coercion (yields a borrow view).</summary>
     public const string Control = "control";
 
@@ -149,7 +149,7 @@ public static class RuntimeContract
     /// the rename-sensitive set that <c>validate-stdlib</c>'s <see cref="RuntimeContractCheck"/>
     /// asserts. Deliberately EXCLUDES compiler-generated / intrinsic names that have no stdlib
     /// routine body: <see cref="TryEmit"/> (generated from <c>emit</c>), the marker verbs
-    /// <see cref="Refer"/>/<see cref="Control"/>, <see cref="DataSize"/> + the BuilderService sets
+    /// <see cref="Access"/>/<see cref="Control"/>, <see cref="DataSize"/> + the BuilderService sets
     /// (folded intrinsics), and the native <see cref="Runtime"/> externs (link-checked C-ABI). The
     /// carrier FIELDS (<see cref="Carrier"/>) are member variables, not routines — checked separately.</summary>
     public static readonly IReadOnlyList<string> StdlibRoutineContracts =
@@ -167,7 +167,7 @@ public static class RuntimeContract
     /// declared stdlib type, so it cannot be resolution-checked.</summary>
     public static readonly IReadOnlyList<string> StdlibTypeContracts =
     [
-        Atomic, Controlling, Referring,
+        Atomic, Controlling, Accessing,
     ];
 
     // =====================================================================================
@@ -188,7 +188,7 @@ public static class RuntimeContract
     /// <remarks>Sites: ScopeTeardownLoweringPass.ViewVerbs, TemporaryTeardownPass.ViewVerbs.</remarks>
     public static readonly IReadOnlySet<string> ViewVerbs =
         new HashSet<string>(comparer: StringComparer.Ordinal)
-            { RawPointer.AsEntity, Refer, Control };
+            { RawPointer.AsEntity, Access, Control };
 
     // =====================================================================================
     // Wrapper TYPE names — genuine type-identity checks (legitimate to keep as checks, but the
@@ -227,8 +227,8 @@ public static class RuntimeContract
     public const string Atomic = "Atomic";
     /// <summary>Marker protocol whose coercion mints a controlling borrow (<see cref="Control"/>).</summary>
     public const string Controlling = "Controlling";
-    /// <summary>Marker protocol whose coercion mints a referring borrow (<see cref="Refer"/>).</summary>
-    public const string Referring = "Referring";
+    /// <summary>Marker protocol whose coercion mints a referring borrow (<see cref="Access"/>).</summary>
+    public const string Accessing = "Accessing";
 
     /// <summary>All wrapper types recognized for layout/dispatch. Mirrors WrapperForwardingPass.WrapperTypes
     /// and LLVMCodeGenerator.WrapperTypeNames.</summary>

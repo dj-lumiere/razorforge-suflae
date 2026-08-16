@@ -30,14 +30,14 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// True if the protocol declares no methods other than the implicit-coercion markers
-    /// refer/control. Such protocols (Referring[T], Controlling[T]) are transparent for
+    /// refer/control. Such protocols (Accessing[T], Controlling[T]) are transparent for
     /// member access — `param.member` falls through to the inner T.
     /// </summary>
     private static bool HasOnlyMarkerCoercionMethods(ProtocolTypeInfo proto)
     {
         foreach (ProtocolMethodInfo m in proto.Methods)
         {
-            if (m.Name != "refer" && m.Name != "control") return false;
+            if (m.Name != "access" && m.Name != "control") return false;
         }
         return true;
     }
@@ -45,7 +45,7 @@ public sealed partial class SemanticVerifier
     private static bool IsReadOnlyTransparentProtocol(TypeSymbol type)
     {
         return type is ProtocolTypeInfo proto &&
-               (proto.GenericDefinition ?? proto).BareName == Compiler.Resolution.RuntimeContract.Referring;
+               (proto.GenericDefinition ?? proto).BareName == Compiler.Resolution.RuntimeContract.Accessing;
     }
 
     /// <summary>
@@ -366,13 +366,13 @@ public sealed partial class SemanticVerifier
             ownerType: getItem.OwnerType);
 
         // The index param is frequently a by-reference marker wrapper — `Dict.getitem!(key:
-        // Referring[K])` / `Controlling[K]` — the `refer`/`control` coercion the container declares on
+        // Accessing[K])` / `Controlling[K]` — the `refer`/`control` coercion the container declares on
         // its key. That wrapper is TRANSPARENT: the caller passes a bare `K`. Unwrap it to the inner key
         // type so a bare integer key literal (`d[1]`) conforms to e.g. S64 instead of stalling at the
         // Suflae `Integer` default (RF escapes this only because its default already IS S64). Inferring
         // the key type through the coercion wrapper is the compiler's job.
         if (paramType.TypeArguments is { Count: >= 1 } referArgs &&
-            GetTypeBaseName(type: paramType) is Compiler.Resolution.RuntimeContract.Referring
+            GetTypeBaseName(type: paramType) is Compiler.Resolution.RuntimeContract.Accessing
                 or Compiler.Resolution.RuntimeContract.Controlling)
         {
             paramType = referArgs[index: 0];

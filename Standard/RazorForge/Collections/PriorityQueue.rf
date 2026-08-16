@@ -338,7 +338,7 @@ routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, T
 ### Only pairs up to the length of the shorter list are inserted; any extra values are ignored.
 ### :param elements: The elements to enqueue.
 ### :param priorities: The priorities to assign at matching positions.
-routine PriorityQueue[TPriority, TElement].add_all(elements: Referring[List[TElement]], priorities: Referring[List[TPriority]])
+routine PriorityQueue[TPriority, TElement].add_all(elements: Accessing[List[TElement]], priorities: Accessing[List[TPriority]])
 needs TElement obeys Copyable
 needs TPriority obeys Copyable
   var i = 0u64

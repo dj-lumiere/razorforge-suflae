@@ -9,7 +9,7 @@ using TypeModel.Types;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
-/// Rewrites Referring[T]/Controlling[T] parameter types to the inner entity T
+/// Rewrites Accessing[T]/Controlling[T] parameter types to the inner entity T
 /// and injects implicit .refer()/.control() coercion at matching call-site arguments.
 /// After this pass runs, no marker-protocol types remain in routine signatures or
 /// argument expression types — bodies see entity T directly, and call sites pass
@@ -17,13 +17,13 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class MarkerProtocolDesugarPass
 {
-    private enum MarkerKind { None, Refer, Control }
+    private enum MarkerKind { None, Access, Control }
 
     private readonly TypeRegistry _registry;
     private readonly Dictionary<RoutineInfo, List<ParamInfo>> _snapshot = new();
     private readonly Dictionary<string, Statement>? _variantBodies;
     private readonly Dictionary<string, Statement>? _synthesizedBodies;
-    private readonly ProtocolTypeInfo? _referringProto;
+    private readonly ProtocolTypeInfo? _accessingProto;
     private readonly ProtocolTypeInfo? _controllingProto;
 
     private readonly record struct ParamInfo(int Index, string Name, MarkerKind Kind, TypeInfo InnerType);
@@ -33,7 +33,7 @@ internal sealed class MarkerProtocolDesugarPass
         _registry = ctx.Registry;
         _variantBodies = ctx.VariantBodies;
         _synthesizedBodies = ctx.SynthesizedBodies;
-        _referringProto = _registry.LookupType(RuntimeContract.Referring) as ProtocolTypeInfo;
+        _accessingProto = _registry.LookupType(RuntimeContract.Accessing) as ProtocolTypeInfo;
         _controllingProto = _registry.LookupType(RuntimeContract.Controlling) as ProtocolTypeInfo;
         Snapshot();
     }
@@ -43,7 +43,7 @@ internal sealed class MarkerProtocolDesugarPass
         if (t is not ProtocolTypeInfo p) return MarkerKind.None;
         ProtocolTypeInfo def = p.GenericDefinition ?? p;
         if (ReferenceEquals(def, _controllingProto)) return MarkerKind.Control;
-        if (ReferenceEquals(def, _referringProto)) return MarkerKind.Refer;
+        if (ReferenceEquals(def, _accessingProto)) return MarkerKind.Access;
         return MarkerKind.None;
     }
 
@@ -162,7 +162,7 @@ internal sealed class MarkerProtocolDesugarPass
     /// <summary>
     /// Catches routine resolutions created AFTER the initial snapshot (e.g. by
     /// GenericMonomorphizationPass during Phase 7/8). Walks the live registry, rewrites
-    /// any surviving Referring[T]/Controlling[T] params in-place to inner T, and re-keys
+    /// any surviving Accessing[T]/Controlling[T] params in-place to inner T, and re-keys
     /// the resolutions dict so callers can look up the routine under its new RegistryKey.
     /// Safe to call multiple times — idempotent on already-rewritten routines.
     /// </summary>
@@ -199,7 +199,7 @@ internal sealed class MarkerProtocolDesugarPass
     }
 
     /// <summary>
-    /// Rewrites Referring[T]/Controlling[T] params on each MonomorphizedBody.Info in place
+    /// Rewrites Accessing[T]/Controlling[T] params on each MonomorphizedBody.Info in place
     /// to their inner T. GMP creates these RoutineInfos in Phase 7 from the gen-def's param
     /// types via plain `ResolveSubstitutedType` (which does not peel marker wrappers), so
     /// the body.Info used at definition emission keeps wrappers — while call-site mangling
@@ -263,7 +263,7 @@ internal sealed class MarkerProtocolDesugarPass
     }
 
     /// <summary>
-    /// Rewrites Referring[T]/Controlling[T] parameter type expressions on AST routine
+    /// Rewrites Accessing[T]/Controlling[T] parameter type expressions on AST routine
     /// declarations to inner T. Codegen looks up routines from the AST by parameter type
     /// name, so the AST must agree with the RoutineInfo signature after RewriteAllSignatures.
     /// </summary>
@@ -305,7 +305,7 @@ internal sealed class MarkerProtocolDesugarPass
     private static TypeExpression? UnwrapMarker(TypeExpression? t)
     {
         if (t == null) return null;
-        if ((t.Name == RuntimeContract.Referring || t.Name == RuntimeContract.Controlling)
+        if ((t.Name == RuntimeContract.Accessing || t.Name == RuntimeContract.Controlling)
             && t.GenericArguments is { Count: > 0 } args)
             return args[0];
         return null;
@@ -315,7 +315,7 @@ internal sealed class MarkerProtocolDesugarPass
     {
         if (t is not ProtocolTypeInfo p) return null;
         ProtocolTypeInfo def = p.GenericDefinition ?? p;
-        if (!ReferenceEquals(def, _referringProto) && !ReferenceEquals(def, _controllingProto))
+        if (!ReferenceEquals(def, _accessingProto) && !ReferenceEquals(def, _controllingProto))
             return null;
         if (p.TypeArguments is { Count: > 0 } args) return args[0];
         return null;
@@ -385,7 +385,7 @@ internal sealed class MarkerProtocolDesugarPass
         }
     }
 
-    // Walk for side effects: retags expr.ResolvedType from Referring[T]/Controlling[T]
+    // Walk for side effects: retags expr.ResolvedType from Accessing[T]/Controlling[T]
     // to inner T so codegen sees no marker types anywhere in expression metadata.
     private void WalkExpression(Expression expr)
     {
@@ -513,10 +513,10 @@ internal sealed class MarkerProtocolDesugarPass
 
             // Skip if arg already coerces to inner T explicitly.
             if (valueExpr is CallExpression { Callee: MemberExpression mem }
-                && (mem.MemberName == "refer" || mem.MemberName == "control"))
+                && (mem.MemberName == "access" || mem.MemberName == "control"))
                 continue;
 
-            string methodName = mk.Kind == MarkerKind.Control ? "control" : "refer";
+            string methodName = mk.Kind == MarkerKind.Control ? "control" : "access";
             var coerced = new CallExpression(
                 Callee: new MemberExpression(
                     Object: valueExpr,

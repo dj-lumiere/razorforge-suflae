@@ -140,7 +140,7 @@ routine List[T].add_last(value: T)
 ### NOTE: Stub signature — implementation pending. Tracking:
 ###       memory/bytes_io_api_plan.md (v0.1.0 first additions).
 @migratable
-routine List[T].add_range(you: Referring[Iterable[T]])
+routine List[T].add_range(you: Accessing[Iterable[T]])
   # TODO(fast-io): hoist capacity-reserve when `you` exposes a known count.
   # For now, fall back to per-element append so the routine type-checks while the
   # optimized path is being designed.
@@ -357,7 +357,7 @@ routine ListEmittable[T].emit!() -> T
 ### :param you: The other list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine List[T].eq(you: Referring[List[T]]) -> Bool
+routine List[T].eq(you: Accessing[List[T]]) -> Bool
 needs T obeys Equatable
   if me.count() != you.count()
     return false
@@ -373,7 +373,7 @@ needs T obeys Equatable
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
-routine List[T].contains(value: Referring[T]) -> Bool
+routine List[T].contains(value: Accessing[T]) -> Bool
 needs T obeys Equatable
   var i = 0u64
   while i < me.count()
@@ -413,7 +413,7 @@ routine List[T].diagnose() -> Text
 ### :param count: The number of elements to copy.
 ### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
 @migratable
-routine List[T].add_range!(source: Referring[List[T]], from: U64, count: U64)
+routine List[T].add_range!(source: Accessing[List[T]], from: U64, count: U64)
 needs T obeys Copyable
   if count == 0u64
     return

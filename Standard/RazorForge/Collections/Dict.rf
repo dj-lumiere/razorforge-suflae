@@ -340,13 +340,13 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # ============================================================================
 
 @readonly
-routine Dict[K, V].getitem!(key: Referring[K]) -> V
+routine Dict[K, V].getitem!(key: Accessing[K]) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
   return me.read_val_at(me.read_index(slot))
 
-routine Dict[K, V].setitem!(key: Referring[K], value: V)
+routine Dict[K, V].setitem!(key: Accessing[K], value: V)
   if key notin me
     absent
   var slot = me.find_slot(key)
@@ -484,7 +484,7 @@ routine Dict[K, V].diagnose() -> Text
 # ============================================================================
 
 @readonly
-routine Dict[K, V].eq(you: Referring[Dict[K, V]]) -> Bool
+routine Dict[K, V].eq(you: Accessing[Dict[K, V]]) -> Bool
 needs V obeys Equatable
   if me.count != you.count
     return false

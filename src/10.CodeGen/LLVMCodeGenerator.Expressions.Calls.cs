@@ -559,7 +559,7 @@ public partial class LlvmCodeGenerator
     /// Inline when no create was resolved, OR when the resolved routine's parameter LLVM
     /// type differs from the wrapper's backend type (a scalar primitive cast like U64(s8)).
     /// Otherwise call the routine — same LLVM type with a resolved create indicates a real
-    /// conversion (e.g. CStr.create(from: Referring[Text])), which a reinterpret would skip.
+    /// conversion (e.g. CStr.create(from: Accessing[Text])), which a reinterpret would skip.
     /// </summary>
     private bool ShouldInlineDirectBackendConstruction(RecordTypeInfo record, Expression arg,
         RoutineInfo? resolvedRoutine)
@@ -574,7 +574,7 @@ public partial class LlvmCodeGenerator
         // that routine IS the conversion: its body does the correct thing for every backend
         // shape — a scalar cast for @llvm primitives, a real BID/IEEE encode for carrier records
         // (F128/F256/D32/D64/D128/Decimal store a bit-ENCODING, not the value), a UTF-8 encode
-        // for CStr(Referring[Text]), and so on. Honor it; never inline a scalar cast, which would
+        // for CStr(Accessing[Text]), and so on. Honor it; never inline a scalar cast, which would
         // bypass the encoding and corrupt carriers (e.g. `D128(42)` as a raw i128 decodes to
         // 4.2E-6175). The backend must not re-decide a conversion the resolver already settled.
         if (resolvedRoutine is { IsSynthesized: false, Name: "create" or "create!", Parameters.Count: 1 })
@@ -721,7 +721,7 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Transparent protocol (e.g., Referring[Text] with no declared methods): dispatch through
+        // Transparent protocol (e.g., Accessing[Text] with no declared methods): dispatch through
         // the first concrete type argument T. Both representations are ptr in LLVM, so no cast needed.
         if (receiverType is ProtocolTypeInfo { Methods.Count: 0, TypeArguments.Count: > 0 } transparentProto)
         {

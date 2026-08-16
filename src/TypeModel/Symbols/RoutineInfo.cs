@@ -241,7 +241,7 @@ public sealed class RoutineInfo
     public List<TypeSymbol>? TypeArguments { get; init; }
 
     /// <summary>
-    /// Parameter indices whose declared type is a marker protocol (<c>Referring[T]</c> or
+    /// Parameter indices whose declared type is a marker protocol (<c>Accessing[T]</c> or
     /// <c>Controlling[T]</c>). These slots participate in monomorphization: each concrete
     /// argument type at a call site produces a distinct specialization, so the protocol
     /// name never appears in mangled symbols or LLVM IR.
@@ -269,7 +269,7 @@ public sealed class RoutineInfo
             return false;
         }
         string baseName = (proto.GenericDefinition ?? proto).BareName;
-        return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
+        return baseName is RuntimeContract.Accessing or RuntimeContract.Controlling;
     }
 
     /// <summary>Visibility modifier.</summary>

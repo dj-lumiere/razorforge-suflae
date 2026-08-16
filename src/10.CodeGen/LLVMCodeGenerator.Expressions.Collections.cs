@@ -61,7 +61,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Resolves an owned collection parameter type to its concrete collection type for emitting a
     /// collection-literal default. Unwraps the transparent <c>Owned</c> wrapper; a borrow or
-    /// reference-counting wrapper (Referring/Viewing/Modifying/Controlling/Retained/Tracked) is NOT
+    /// reference-counting wrapper (Accessing/Viewing/Modifying/Controlling/Retained/Tracked) is NOT
     /// plainly owned and returns false — for those we do not inline-construct a default (the callee
     /// would not free it, so a temporary would leak). Returns true with <paramref name="collType"/>
     /// set for a plainly-owned collection.

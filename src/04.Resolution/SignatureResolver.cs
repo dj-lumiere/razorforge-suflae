@@ -197,7 +197,7 @@ internal sealed class SignatureResolver
             }
 
             // Protocol-as-type desugaring: routine foo(x: Displayable) -> routine foo[T obeys Displayable](x: T)
-            // Exception: marker protocols Referring[T]/Controlling[T] use transparent dispatch
+            // Exception: marker protocols Accessing[T]/Controlling[T] use transparent dispatch
             // (see TryGetTransparentProtocolTarget). Desugaring them into __TN strips the inner T,
             // breaking member lookup like `scores.count()` / `for s in scores` on the parameter.
             if (paramType is ProtocolTypeInfo paramProto &&
@@ -1001,6 +1001,6 @@ internal sealed class SignatureResolver
             return false;
         }
         string baseName = (proto.GenericDefinition ?? proto).BareName;
-        return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
+        return baseName is RuntimeContract.Accessing or RuntimeContract.Controlling;
     }
 }

@@ -62,7 +62,7 @@ entity FieldInfo
 ### :param you: The other field to compare against.
 ### :returns: `true` if both fields have the same name.
 @readonly
-routine FieldInfo.eq(you: Referring[FieldInfo]) -> Bool
+routine FieldInfo.eq(you: Accessing[FieldInfo]) -> Bool
   return me.name == you.name
 
 ### Describes a protocol implemented by a type.
@@ -79,7 +79,7 @@ entity ProtocolInfo
 ### :param you: The other protocol info to compare against.
 ### :returns: `true` if both have the same name.
 @readonly
-routine ProtocolInfo.eq(you: Referring[ProtocolInfo]) -> Bool
+routine ProtocolInfo.eq(you: Accessing[ProtocolInfo]) -> Bool
   return me.name == you.name
 
 ### Describes a routine declared on a type.
@@ -104,7 +104,7 @@ entity RoutineInfo
 ### :param you: The other routine info to compare against.
 ### :returns: `true` if both have the same name.
 @readonly
-routine RoutineInfo.eq(you: Referring[RoutineInfo]) -> Bool
+routine RoutineInfo.eq(you: Accessing[RoutineInfo]) -> Bool
   return me.name == you.name
 
 # ============================================================================

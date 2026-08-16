@@ -62,7 +62,7 @@ routine run_process(command: Text) -> ProcessResult
 ### :param env: Environment overrides, MERGED into the parent environment (so PATH etc. stay intact);
 ###   the default empty `{:}` inherits the parent environment unchanged.
 ### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
-routine run_program(file: Text, args: Referring[List[Text]], cwd: Text = "",
+routine run_program(file: Text, args: Accessing[List[Text]], cwd: Text = "",
                     env: Dict[Text, Text] = {:}) -> ProcessResult
   var fcstr = CStr(from: file)
   var builder = rf_proc_begin(file: fcstr, file_len: fcstr.count().S32!())

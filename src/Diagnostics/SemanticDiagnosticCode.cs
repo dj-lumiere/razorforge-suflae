@@ -747,7 +747,7 @@ public enum SemanticDiagnosticCode
     /// <summary>An annotation was used in an invalid context or with invalid arguments.</summary>
     InvalidAnnotation = 706,
 
-    /// <summary>Type declares 'obeys Referring[T]' or 'obeys Controlling[T]' but is not in the
+    /// <summary>Type declares 'obeys Accessing[T]' or 'obeys Controlling[T]' but is not in the
     /// stdlib closed allowlist (Retained/Viewing/Modifying/Hijacked/Tracked + deferred concurrency
     /// wrappers + entity-T auto-conformance). Marker-protocol obeyers type-erase to ptr layout, so
     /// the allowlist is the soundness fence preventing user types with incompatible layouts from

@@ -737,7 +737,7 @@ internal sealed class TypeResolver
     {
         // Protocol type arguments are allowed: any concrete value bound to the
         // parameter at the call site will itself be an entity (or fail S152 at
-        // that point). Without this, `Referring[Iterable[T]]` and similar
+        // that point). Without this, `Accessing[Iterable[T]]` and similar
         // protocol-as-type-argument shapes can't satisfy the entity constraint
         // even though every value they accept is structurally an entity.
         if (typeArg is ProtocolTypeInfo)

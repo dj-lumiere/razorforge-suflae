@@ -391,7 +391,7 @@ routine FastDict[K, V].get_or_default(key: K, default_value: V) -> V
 ### :returns: The value mapped to `key`.
 ### :absent: The key is not present in the dictionary.
 @readonly
-routine FastDict[K, V].getitem!(key: Referring[K]) -> V
+routine FastDict[K, V].getitem!(key: Accessing[K]) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
@@ -402,7 +402,7 @@ routine FastDict[K, V].getitem!(key: Referring[K]) -> V
 ### :param key: The key to update.
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
-routine FastDict[K, V].setitem!(key: Referring[K], value: V)
+routine FastDict[K, V].setitem!(key: Accessing[K], value: V)
   if key notin me
     absent
   var slot = me.find_slot(key)
@@ -542,7 +542,7 @@ routine FastDict[K, V].diagnose() -> Text
 ### :param you: The other dictionary to compare against.
 ### :returns: `true` if both have the same count and every key-value pair is equal.
 @readonly
-routine FastDict[K, V].eq(you: Referring[FastDict[K, V]]) -> Bool
+routine FastDict[K, V].eq(you: Accessing[FastDict[K, V]]) -> Bool
 needs V obeys Equatable
   if me.count != you.count
     return false

@@ -48,7 +48,7 @@ needs T obeys Hashable, Comparable
 ### :param you: The iterable that defines the membership set.
 ### :returns: The resulting `IntersectIterable[T, Me, SO]` value.
 @readonly
-routine Iterable[T].intersect[SO](you: Referring[SO]) -> IntersectIterable[T, Me, SO]
+routine Iterable[T].intersect[SO](you: Accessing[SO]) -> IntersectIterable[T, Me, SO]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   danger
@@ -102,7 +102,7 @@ needs T obeys Hashable, Comparable
 ### :param you: The iterable that defines the exclusion set.
 ### :returns: The resulting `ExcludeIterable[T, Me, SO]` value.
 @readonly
-routine Iterable[T].exclude[SO](you: Referring[SO]) -> ExcludeIterable[T, Me, SO]
+routine Iterable[T].exclude[SO](you: Accessing[SO]) -> ExcludeIterable[T, Me, SO]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   danger
@@ -113,7 +113,7 @@ needs T obeys Hashable, Comparable
 ### :param you: The iterable to concatenate before deduplication.
 ### :returns: The resulting `DistinctIterable[T, ExtendIterable[T, Me, SO]]` value.
 @readonly
-routine Iterable[T].union[SO](you: Referring[SO]) -> DistinctIterable[T, ExtendIterable[T, Me, SO]]
+routine Iterable[T].union[SO](you: Accessing[SO]) -> DistinctIterable[T, ExtendIterable[T, Me, SO]]
 needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   return me.extend(you).distinct()

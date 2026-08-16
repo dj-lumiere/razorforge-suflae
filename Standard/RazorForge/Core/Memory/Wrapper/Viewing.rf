@@ -7,7 +7,7 @@ import BuilderService
 ### :typeparam T: The entity type being viewed.
 ### :see: {Modifying[T]}, {Claiming[T]}, {Inspecting[T]}, {Access-Types}
 @llvm("ptr")
-record Viewing[T] obeys Referring[T], Enterable
+record Viewing[T] obeys Accessing[T], Enterable
   pass
 
 ### Produces a temporary read-only view of `me`.
@@ -38,14 +38,14 @@ routine Viewing[T].exit()
   return
 
 # ============================================================================
-# Marker-protocol coercion (refer) — yields the inner entity as T
+# Marker-protocol coercion (access) — yields the inner entity as T
 # ============================================================================
 
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
 ### :returns: The inner entity as `T`.
 @[readonly, inline]
-routine Viewing[T].refer() -> T
+routine Viewing[T].access() -> T
   danger
     return Hijacked[T](me).as_entity()
 

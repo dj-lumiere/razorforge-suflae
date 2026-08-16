@@ -384,7 +384,7 @@ public partial class LlvmCodeGenerator
         TypeInfo? argType = GetExpressionType(expr: argExpr);
 
         // An entity-arg wrapper with a `pass` body (0 declared fields) is a real conversion, not a
-        // passthrough. Example: `CStr(from: text)` must call `CStr.create(from: Referring[Text])` to
+        // passthrough. Example: `CStr(from: text)` must call `CStr.create(from: Accessing[Text])` to
         // UTF-8-encode — otherwise `rf_console_show` dumps raw entity-struct bytes.
         if (argType is EntityTypeInfo && record.MemberVariables.Count == 0 &&
             argType.FullName != record.FullName &&
