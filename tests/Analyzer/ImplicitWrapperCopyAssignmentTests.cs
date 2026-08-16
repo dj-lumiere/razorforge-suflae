@@ -22,8 +22,8 @@ public class ImplicitWrapperCopyAssignmentTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
                           rb = ra
                           return
                         """;
@@ -45,9 +45,9 @@ public class ImplicitWrapperCopyAssignmentTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
-                          rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
+                          rb = ra.share()
                           return
                         """;
 
@@ -104,8 +104,8 @@ public class ImplicitWrapperCopyAssignmentTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
                           rb = ra.observe()
                           return
                         """;

@@ -25,7 +25,7 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           show(a.value)
                           return
                         """;
@@ -56,7 +56,7 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var b = Box(inner: Node(value: 1))
-                          var ra = b.inner.retain()
+                          var ra = Retained(from: steal b.inner)
                           show(b.inner.value)
                           return
                         """;
@@ -85,8 +85,8 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var r1 = a.retain()
-                          var r2 = a.retain()
+                          var r1 = Retained(from: steal a)
+                          var r2 = Retained(from: steal a)
                           return
                         """;
 
@@ -105,8 +105,8 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
                           show(ra.value)
                           return
                         """;
@@ -126,7 +126,7 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           var t = ra.observe()
                           show(ra.value)
                           return

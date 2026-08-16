@@ -136,7 +136,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = Box(handle: a.retain())
+                          var b = Box(handle: Retained(from: steal a))
                           var c = b
                           return
                         """;
@@ -158,7 +158,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = TrackedBox(handle: a.retain().observe())
+                          var b = TrackedBox(handle: Retained(from: steal a).observe())
                           var c = b
                           return
                         """;
@@ -177,7 +177,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var t = (1_s32, a.retain())
+                          var t = (1_s32, Retained(from: steal a))
                           var u = t
                           return
                         """;
@@ -258,7 +258,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = Box(handle: a.retain(), tag: 0)
+                          var b = Box(handle: Retained(from: steal a), tag: 0)
                           var c = b with .tag = 42
                           return
                         """;
@@ -303,7 +303,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = Box(handle: a.retain(), tag: 0)
+                          var b = Box(handle: Retained(from: steal a), tag: 0)
                           var c = b with .tag = 42
                           return
                         """;
@@ -334,7 +334,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = Box(handle: a.retain())
+                          var b = Box(handle: Retained(from: steal a))
                           take(box: b)
                           return
                         """;
@@ -440,7 +440,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = Box(handle: a.retain())
+                          var b = Box(handle: Retained(from: steal a))
                           var c = b.store()
                           return
                         """;
@@ -544,7 +544,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = Box(handle: a.retain())
+                          var b = Box(handle: Retained(from: steal a))
                           var c = b.copy()
                           return
                         """;

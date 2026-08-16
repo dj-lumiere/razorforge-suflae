@@ -92,7 +92,7 @@ public class ThreadArgShareabilityTests
                                     return 0_s64
 
                                   routine start()
-                                    var s = Node(value: 1).share[ReadOnly]()
+                                    var s = Shared[Node, ReadOnly](from: Node(value: 1))
                                     var t = work(s: s.share())
                                     discard t.retrieve!()
                                     return
@@ -135,7 +135,7 @@ public class ThreadArgShareabilityTests
                                     return 0_s64
 
                                   routine start()
-                                    var h = Holder(node: Node(value: 1).retain())
+                                    var h = Holder(node: Retained(from: Node(value: 1)))
                                     var t = work(h: h)
                                     discard t.retrieve!()
                                     return
@@ -198,7 +198,7 @@ public class ThreadArgShareabilityTests
                                     return 0_s64
 
                                   routine start()
-                                    var h = Holder(node: Node(value: 1).retain())
+                                    var h = Holder(node: Retained(from: Node(value: 1)))
                                     var t = work(h: h)
                                     discard t.retrieve!()
                                     return
@@ -222,7 +222,7 @@ public class ThreadArgShareabilityTests
                                     return r.value
 
                                   routine start()
-                                    var r = Node(value: 1).retain()
+                                    var r = Retained(from: Node(value: 1))
                                     var t = work(r: steal r)
                                     discard t.retrieve!()
                                     return
@@ -249,7 +249,7 @@ public class ThreadArgShareabilityTests
                                     return 0_s64
 
                                   routine start()
-                                    var h = Holder(node: Node(value: 1).retain())
+                                    var h = Holder(node: Retained(from: Node(value: 1)))
                                     var t = work(h: steal h)
                                     discard t.retrieve!()
                                     return

@@ -83,7 +83,7 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Counter(value: 1).share[ReadOnly]()
+                                        var s = Shared[Counter, ReadOnly](from: Counter(value: 1))
                                         using s.claim() as c
                                           show("nope")
                                         return
@@ -100,7 +100,7 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Counter(value: 1).share[Exclusive]()
+                                        var s = Shared[Counter, Exclusive](from: Counter(value: 1))
                                         using s.inspect() as v
                                           show("nope")
                                         return
@@ -119,7 +119,7 @@ public class ReceiverInheritedConstraintTests
                                         return
 
                                       routine start()
-                                        var s = Counter(value: 10).share[MultiRead]()
+                                        var s = Shared[Counter, MultiRead](from: Counter(value: 10))
                                         using s.inspect() as v
                                           show(f"value: {v.value}")
                                         using s.claim() as c
@@ -140,7 +140,7 @@ public class ReceiverInheritedConstraintTests
                                         return
 
                                       routine start()
-                                        var s = Counter(value: 1).share[Exclusive]()
+                                        var s = Shared[Counter, Exclusive](from: Counter(value: 1))
                                         using s.claim() as c
                                           c.bump(inc: 1)
                                         return
@@ -155,7 +155,7 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Counter(value: 1).share[ReadOnly]()
+                                        var s = Shared[Counter, ReadOnly](from: Counter(value: 1))
                                         using s.inspect() as v
                                           show(f"{v.value}")
                                         return

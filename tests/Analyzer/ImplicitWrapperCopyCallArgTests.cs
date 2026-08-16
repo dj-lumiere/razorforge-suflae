@@ -25,7 +25,7 @@ public class ImplicitWrapperCopyCallArgTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           consume(handle: ra)
                           return
                         """;
@@ -50,8 +50,8 @@ public class ImplicitWrapperCopyCallArgTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          consume(handle: ra.retain())
+                          var ra = Retained(from: steal a)
+                          consume(handle: ra.share())
                           return
                         """;
 
@@ -118,7 +118,7 @@ public class ImplicitWrapperCopyCallArgTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           consume(tag: 7, handle: ra)
                           return
                         """;

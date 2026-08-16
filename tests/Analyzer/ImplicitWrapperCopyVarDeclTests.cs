@@ -23,7 +23,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           var rb = ra
                           return
                         """;
@@ -49,7 +49,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = Box(handle: a.retain())
+                          var b = Box(handle: Retained(from: steal a))
                           var taken = b.handle
                           return
                         """;
@@ -70,8 +70,8 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
                           return
                         """;
 
@@ -112,7 +112,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           return
                         """;
 
@@ -194,7 +194,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           var t = ra.observe()
                           return
                         """;
@@ -220,7 +220,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var w = Wrapper(ref: a.retain())
+                          var w = Wrapper(ref: Retained(from: steal a))
                           var b = Box(inner: w)
                           var taken = b.inner.ref
                           return

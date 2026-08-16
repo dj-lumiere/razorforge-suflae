@@ -27,7 +27,7 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     using s.claim() as c1
                                       using s.claim() as c2
                                         show("nested")
@@ -45,7 +45,7 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     using s.claim() as c
                                       using s.inspect() as v
                                         show("nested")
@@ -63,7 +63,7 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     using s.inspect() as v
                                       using s.claim() as c
                                         show("nested")
@@ -82,7 +82,7 @@ public class RxwBorrowCheckerTests
         // Readers coexist — multiple inspect holds on the same handle are allowed.
         string source = Prelude + """
                                   routine start()
-                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     using s.inspect() as v1
                                       using s.inspect() as v2
                                         show(f"{v1.value} {v2.value}")
@@ -99,8 +99,8 @@ public class RxwBorrowCheckerTests
         // Distinct handles do not conflict (name-based).
         string source = Prelude + """
                                   routine start()
-                                    var s1 = Counter(value: 1).share[MultiRead]()
-                                    var s2 = Counter(value: 2).share[MultiRead]()
+                                    var s1 = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s2 = Shared[Counter, MultiRead](from: Counter(value: 2))
                                     using s1.claim() as c1
                                       using s2.claim() as c2
                                         show("two handles")
@@ -121,7 +121,7 @@ public class RxwBorrowCheckerTests
                                     return
 
                                   routine start()
-                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     using s.claim() as c1
                                       c1.bump(inc: 1)
                                     using s.claim() as c2
@@ -141,7 +141,7 @@ public class RxwBorrowCheckerTests
         // the handle names differ.
         string source = Prelude + """
                                   routine start()
-                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
                                     using s.claim() as c1
                                       using s2.claim() as c2
@@ -161,7 +161,7 @@ public class RxwBorrowCheckerTests
         // A reader on a clone still conflicts with a writer on the original (same controller).
         string source = Prelude + """
                                   routine start()
-                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
                                     using s.claim() as c
                                       using s2.inspect() as v
@@ -181,7 +181,7 @@ public class RxwBorrowCheckerTests
         // Two readers coexist even on the same controller — readers-XOR-writer permits shared reads.
         string source = Prelude + """
                                   routine start()
-                                    var s = Counter(value: 1).share[MultiRead]()
+                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
                                     using s.inspect() as v1
                                       using s2.inspect() as v2
