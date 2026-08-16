@@ -11,7 +11,7 @@ routine start()
   show(f"n payload: {n.payload}")
 
   # move into Retained (constructor form; explicit steal marks the ownership transfer)
-  var r1 = Retained[Node](from: steal n)
+  var r1 = Retained(from: steal n)
   show(f"r1 type: {r1.type_name()}")
   show(f"r1 payload (forwarded): {r1.payload}")
   show(f"r1 strong_count: {r1.strong_count()}")

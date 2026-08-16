@@ -442,6 +442,36 @@ public sealed partial class SemanticVerifier
                         baseName: $"{callableType.FullName}.create",
                         argTypes: creatorArgTypes);
 
+                    // Generic-def constructor routed through a user `create`: infer the wrapper's type args
+                    // from the creator's params so callableType becomes the CONCRETE instance and the creator
+                    // re-resolves to its instantiated form. `Retained(from: n)` (n: Node) → creator
+                    // `Retained[T].create(from: T)` binds T = Node ⇒ `Retained[Node]`, so ConstructedType,
+                    // ResolvedRoutine, and result type all match the explicit `Retained[Node](from: n)` path
+                    // (else codegen calls an uninstantiated create → AccessViolation). Reuses the already-
+                    // analyzed creatorArgTypes so `steal`-marked args are not re-analyzed (no double deadref).
+                    if (creator != null && callableType.IsGenericDefinition
+                        && callableType.GenericParameters is { Count: > 0 } ctorDefParams)
+                    {
+                        var ctorInferred = new TypeSymbol?[ctorDefParams.Count];
+                        int ctorArgN = Math.Min(val1: creator.Parameters.Count, val2: creatorArgTypes.Count);
+                        for (int ci = 0; ci < ctorArgN; ci++)
+                        {
+                            InferMethodTypeArgumentsFromTypes(paramType: creator.Parameters[index: ci].Type,
+                                argType: creatorArgTypes[index: ci],
+                                genericParameters: ctorDefParams,
+                                inferred: ctorInferred);
+                        }
+                        if (ctorInferred.All(predicate: t => t is not null)
+                            && _registry.GetOrCreateResolution(genericDef: callableType,
+                                typeArguments: ctorInferred.Select(selector: t => (TypeInfo)t!).ToList())
+                                is { } ctorConcrete)
+                        {
+                            callableType = ctorConcrete;
+                            creator = _registry.LookupMethodOverload(type: callableType,
+                                methodName: "create", argTypes: creatorArgTypes) ?? creator;
+                        }
+                    }
+
                     if (creator != null && creator.Parameters.Count == creatorArgTypes.Count &&
                         !creator.Parameters.Any(predicate: p => p.IsVariadicParam))
                     {
