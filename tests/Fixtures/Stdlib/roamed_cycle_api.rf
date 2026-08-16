@@ -23,7 +23,7 @@ entity Node
 # then rewires it (COPY semantics: the field takes a strong reference).
 routine build_self_cycle()
   danger
-    var a = Node(next: roamed_none(), mark: Beacon(id: 7_s64), id: 7_s64).roam()
+    var a = Roamed(from: Node(next: roamed_none(), mark: Beacon(id: 7_s64), id: 7_s64))
     a.raw_inner().next = a
   return
 

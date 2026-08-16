@@ -16,7 +16,7 @@ dangerous routine Tracer.destroy()
 routine inner()
   show(" inner enter")
   var t = Tracer(tag: 99s32)
-  var r1 = t.retain()
+  var r1 = Retained(from: steal t)
   show(f" after retain, strong={r1.strong_count()}")
 
   var r2 = r1.share()

@@ -18,7 +18,7 @@ dangerous routine Tracer.destroy()
 routine make_weak() -> Tracked[Tracer]
   show(" make_weak: create strong")
   var t = Tracer(tag: 7s32)
-  var r = t.retain()
+  var r = Retained(from: steal t)
   show(f"  strong={r.strong_count()}")
   var w = r.observe()
   show(f"  weak={r.weak_count()}, is_alive={w.is_alive()}")

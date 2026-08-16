@@ -10,7 +10,7 @@ routine Counter.bump(inc: S64)
   return
 
 routine start()
-  var s = Counter(value: 10).share[MultiRead]()
+  var s = Shared[Counter, MultiRead](from: Counter(value: 10))
 
   # shared (multi-reader) access
   using s.inspect() as v

@@ -10,7 +10,7 @@ entity Pt
 
 routine start()
   danger
-    var p = Pt(x: 3, y: 4).roam()
+    var p = Roamed(from: Pt(x: 3, y: 4))
     show(f"p: {p}")
     show(f"diag: {p.diagnose()}")
   show("DONE")
