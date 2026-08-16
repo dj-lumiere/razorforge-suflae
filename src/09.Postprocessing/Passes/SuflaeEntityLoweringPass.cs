@@ -546,8 +546,11 @@ internal sealed class SuflaeEntityLoweringPass
         if (expr is (IdentifierExpression or MemberExpression) && IsRoamedType(expr.ResolvedType))
         {
             TypeInfo roamed = expr.ResolvedType!;
+            // Copy a borrowed Roamed value by bumping its biased refcount via the RC copy verb `.share()`
+            // (renamed from the old construction-masquerading `.roam()` — Roamed[T].share() is the real
+            // same-strength co-owner mint).
             return new CallExpression(
-                Callee: new MemberExpression(Object: expr, MemberName: RuntimeContract.RefCount.Roam,
+                Callee: new MemberExpression(Object: expr, MemberName: "share",
                     Location: expr.Location) { ResolvedType = roamed },
                 Arguments: new List<Expression>(),
                 Location: expr.Location) { ResolvedType = roamed };
