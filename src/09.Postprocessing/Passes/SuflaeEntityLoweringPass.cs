@@ -146,6 +146,27 @@ internal sealed class SuflaeEntityLoweringPass
                 return ReferenceEquals(v, ret.Value) ? stmt : ret with { Value = v };
             }
 
+            // A statement-level assignment `target = value` parses as an ExpressionStatement wrapping a
+            // BinaryExpression{Assign} (NOT an AssignmentStatement — the parser only emits BinaryExpression
+            // for `=`). SF implicit share: a borrowed Roamed RHS bound into a persistent slot (local var OR a
+            // Roamed entity FIELD) must retain so the slot owns its own count. The former RcRetainLoweringPass
+            // .RoamBump only fired for RF BARE-entity field writes (its `IsRoamedEntityField` requires the
+            // object to be a bare EntityTypeInfo) — it NEVER fired for SF's `roamed_obj.field = x` (object is
+            // Roamed), so SF field reassignment had NO retain-new: the field aliased the RHS handle without a
+            // count → double-free at teardown. Inserting the share HERE (the SF lowering, the home of implicit
+            // sharing) fixes it. MaybeRoamCopy self-gates on a Roamed borrow value; a fresh rvalue / non-Roamed
+            // is untouched. The release-old on field overwrite stays in codegen (reassignment ≠ scope exit).
+            case ExpressionStatement { Expression: BinaryExpression { Operator: BinaryOperator.Assign } bin } es:
+            {
+                Expression left = LowerExpression(bin.Left);
+                Expression right = LowerExpression(bin.Right);
+                if (bin.Left is IdentifierExpression or MemberExpression)
+                    right = MaybeRoamCopy(right);
+                return ReferenceEquals(left, bin.Left) && ReferenceEquals(right, bin.Right)
+                    ? stmt
+                    : es with { Expression = bin with { Left = left, Right = right } };
+            }
+
             case ExpressionStatement es:
             {
                 Expression e = LowerExpression(es.Expression);
