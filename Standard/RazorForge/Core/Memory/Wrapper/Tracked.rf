@@ -22,12 +22,6 @@ routine Tracked[T].share() -> Tracked[T]
     ctrl.increase_weak_count()
   return me
 
-### Decrements the weak count, destroying the controller when both counts reach zero.
-dangerous routine Tracked[T].release()
-  var ctrl_ptr = hijacked_from[RetainController[T]](me.get_address())
-  var ctrl = ctrl_ptr.as_entity()
-  ctrl.decrease_weak_count()
-  return
 
 ### Attempts to upgrade to a strong reference.
 ### :returns: A new strong handle to the entity if it is still alive.
@@ -85,6 +79,9 @@ routine Tracked[T].diagnose() -> Text
     var weak = ctrl.weak_count()
     return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", alive: " + (rc > 0).represent() + ")"
 
+### Decrements the weak count, tearing down the controller when both counts reach zero. This IS the
+### decrement — no separate `release` verb; `destroy` is the teardown.
 dangerous routine Tracked[T].destroy()
-  me.release()
+  var ctrl = hijacked_from[RetainController[T]](me.get_address()).as_entity()
+  ctrl.decrease_weak_count()
   return

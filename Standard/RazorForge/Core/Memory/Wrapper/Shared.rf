@@ -42,14 +42,6 @@ routine Shared[T, P].share() -> Shared[T, P]
     ctrl.increase_strong_count()
   return me
 
-### Decrements the strong count, destroying the entity when it reaches zero.
-### Destroys the controller when both strong and weak counts reach zero.
-dangerous routine Shared[T, P].release()
-  var ctrl_ptr = Hijacked[ShareController[T, P]](me)
-  var ctrl = ctrl_ptr.as_entity()
-  ctrl.decrease_strong_count()
-  return
-
 ### Creates a weak reference to the same entity.
 ### :returns: A new weak handle to the same entity's controller.
 routine Shared[T, P].observe() -> Watched[T, P]
@@ -143,6 +135,9 @@ routine Shared[T, P].diagnose() -> Text
     var addr = ctrl.borrow_data().get_address()
     return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ")"
 
+### Decrements the strong count, tearing down the entity at zero (and the controller when both counts
+### reach zero). This IS the decrement — no separate `release` verb; `destroy` is the teardown.
 dangerous routine Shared[T, P].destroy()
-  me.release()
+  var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+  ctrl.decrease_strong_count()
   return

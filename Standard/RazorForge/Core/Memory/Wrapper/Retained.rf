@@ -34,14 +34,6 @@ routine Retained[T].share() -> Retained[T]
     ctrl.increase_strong_count()
   return me
 
-### Decrements the strong count, destroying the entity when it reaches zero.
-### Destroys the controller when both strong and weak counts reach zero.
-dangerous routine Retained[T].release()
-  var ctrl_ptr = Hijacked[RetainController[T]](me)
-  var ctrl = ctrl_ptr.as_entity()
-  ctrl.decrease_strong_count()
-  return
-
 ### Creates a weak reference to the same entity.
 ### :returns: A new weak handle to the same entity's controller.
 routine Retained[T].observe() -> Tracked[T]
@@ -113,6 +105,9 @@ routine Retained[T].diagnose() -> Text
     var addr = ctrl.borrow_data().get_address()
     return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ", " + ctrl.borrow_data().as_entity().diagnose() + ")"
 
+### Decrements the strong count, tearing down the entity at zero (and the controller when both counts
+### reach zero). This IS the decrement — there is no separate `release` verb; `destroy` is the teardown.
 dangerous routine Retained[T].destroy()
-  me.release()
+  var ctrl = Hijacked[RetainController[T]](me).as_entity()
+  ctrl.decrease_strong_count()
   return

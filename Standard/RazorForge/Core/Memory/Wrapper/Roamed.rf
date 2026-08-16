@@ -82,13 +82,6 @@ routine Roamed[T].share() -> Roamed[T]
       ctrl.retain()
   return me
 
-### Decrements the strong count, destroying the entity at zero. A no-op on the absent handle.
-dangerous routine Roamed[T].release()
-  if me.controller_address() == 0_addr
-    return
-  var ctrl = Hijacked[RoamController[T]](me).as_entity()
-  ctrl.release()
-  return
 
 # ============================================================================
 # Escape + access lock. In Stage 2 the compiler inserts these automatically (promote at the
@@ -191,6 +184,12 @@ routine Roamed[T].control() -> T
 # to the INNER value's display routine (never showing "Roamed[...]"). Declaring them here would shadow
 # the inner and reintroduce the opaque-wrapper rendering.
 
+### Decrements the biased count, tearing down the entity at zero. A no-op on the absent handle. This IS
+### the decrement — no separate `release` verb; `destroy` is the teardown (calls the RoamController's
+### own `release` count primitive, a different type — no recursion).
 dangerous routine Roamed[T].destroy()
-  me.release()
+  if me.controller_address() == 0_addr
+    return
+  var ctrl = Hijacked[RoamController[T]](me).as_entity()
+  ctrl.release()
   return
