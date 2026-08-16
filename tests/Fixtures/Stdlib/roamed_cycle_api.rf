@@ -33,6 +33,6 @@ routine start()
   # The node now leaks under refcounting alone. Run the Bacon-Rajan cycle collector: it traces the
   # `next` edge, finds the node unreachable from outside, and reaps it — running the Beacon destructor.
   show("collecting")
-  cc_collect()
+  cyclic_collect()
   show("DONE")
   return

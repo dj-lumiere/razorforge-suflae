@@ -1,16 +1,16 @@
 module Core
 
-### Cycle-collector color for the Bacon-Rajan synchronous recycler (see
+### Cycle-collector state for the Bacon-Rajan synchronous recycler (see
 ### internal-wiki/v0.4.x-cycle-collector.md). Touched only by the single-threaded collector.
-choice RoamColor
+choice RoamState
   ### In use — not garbage.
-  BLACK: 0
+  LIVE: 0
   ### Being traced this cycle-collection pass.
-  GRAY: 1
+  SCANNING: 1
   ### Garbage candidate (provisionally unreachable).
-  WHITE: 2
+  GARBAGE: 2
   ### Buffered as a possible cycle root.
-  PURPLE: 3
+  SUSPECTED: 3
 
 ### Compiler intrinsic: yields a closure over this type's synthesized `roam_trace_impl` cycle-collector
 ### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
@@ -55,8 +55,8 @@ needs T is EntityType
   secret holder_task: Atomic[U64]
   ### Reentrancy depth. Only ever touched by the holder under mutual exclusion, so non-atomic.
   secret depth: U64
-  ### Cycle-collector color (Bacon-Rajan). Touched only by the single-threaded collector.
-  secret color: RoamColor
+  ### Cycle-collector state (Bacon-Rajan). Touched only by the single-threaded collector.
+  secret state: RoamState
   ### `true` while this controller sits in the collector's roots buffer — dedups `mark_cycle_candidate`.
   secret buffered: Bool
   ### Address of the compiler-generated per-type trace function for `T` (visits `T`'s `Roamed`
@@ -64,7 +64,7 @@ needs T is EntityType
   ### Called as `fn(controller_address)`; reinterprets and `rf_cyclic_visit_child`s each `Roamed` field.
   secret trace_hook: CPtr
   ### Address of the compiler-generated per-type free function for `T`. Called as
-  ### `fn(controller_address)` when the collector reaps a white (garbage) node: runs the managed
+  ### `fn(controller_address)` when the collector reaps a GARBAGE node: runs the managed
   ### entity's `destroy` (type-correct) then frees the controller. `cptr_none()` until wired.
   secret free_hook: CPtr
 
@@ -79,7 +79,7 @@ dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
     locked: Atomic[U8](initial: 0_u8),
     holder_task: Atomic[U64](initial: 0_u64),
     depth: 0_u64,
-    color: RoamColor.BLACK,
+    state: RoamState.LIVE,
     buffered: false,
     trace_hook: data.as_entity().roam_trace_ref(),
     free_hook: data.as_entity().roam_free_ref()
@@ -136,11 +136,11 @@ dangerous routine RoamController[T].mark_cycle_candidate()
   if me.buffered
     return
   me.buffered = true
-  me.color = RoamColor.PURPLE
+  me.state = RoamState.SUSPECTED
   C::rf_cyclic_add_candidate(obj: me.hijack().get_address())
   # Auto-collect once the candidate set crosses the threshold (guarded against re-entry).
   if C::rf_cyclic_should_collect()
-    cc_collect()
+    cyclic_collect()
   return
 
 # ============================================================================
@@ -148,57 +148,57 @@ dangerous routine RoamController[T].mark_cycle_candidate()
 # type-erased `RoamController[RoamErased]` — every field below sits at a T-independent offset, so these
 # read/write correctly through the erased view. Count adjustment is non-atomic: the collector runs
 # single-threaded (core-local), so trial deletion touches the same count the RC uses without atomics.
-# `cc_set_hooks` is a test/wiring hatch (compiler auto-wires trace_hook/free_hook in Stage 2).
+# `cyclic_set_hooks` is a test/wiring hatch (compiler auto-wires trace_hook/free_hook in Stage 2).
 # ============================================================================
 
 ### The address of the managed entity — the collector passes this to the entity-based trace/free
 ### hooks (`roam_trace_impl` / `roam_free_impl`, whose `me` is the entity). :returns: the entity address.
-routine RoamController[T].cc_data_addr() -> Address
+routine RoamController[T].cyclic_data_addr() -> Address
   danger
     return me.data.get_address()
 
-### The collector color. :returns: this controller's `RoamColor`.
-routine RoamController[T].cc_color() -> RoamColor
-  return me.color
+### The collector state. :returns: this controller's `RoamState`.
+routine RoamController[T].cyclic_state() -> RoamState
+  return me.state
 
-### Sets the collector color. :param c: the new color.
-dangerous routine RoamController[T].cc_set_color(c: RoamColor)
-  me.color = c
+### Sets the collector state. :param c: the new state.
+dangerous routine RoamController[T].cyclic_set_state(c: RoamState)
+  me.state = c
   return
 
 ### Whether this controller is buffered as a root. :returns: the `buffered` flag.
-routine RoamController[T].cc_buffered() -> Bool
+routine RoamController[T].cyclic_buffered() -> Bool
   return me.buffered
 
 ### Sets the buffered flag. :param b: the new value.
-dangerous routine RoamController[T].cc_set_buffered(b: Bool)
+dangerous routine RoamController[T].cyclic_set_buffered(b: Bool)
   me.buffered = b
   return
 
 ### Non-atomic strong count. :returns: the current count.
-routine RoamController[T].cc_count() -> U64
+routine RoamController[T].cyclic_count() -> U64
   return me.count
 
 ### Trial-deletion decrement (non-atomic).
-dangerous routine RoamController[T].cc_dec()
+dangerous routine RoamController[T].cyclic_dec()
   me.count = me.count - 1
   return
 
 ### Trial-deletion restore increment (non-atomic).
-dangerous routine RoamController[T].cc_inc()
+dangerous routine RoamController[T].cyclic_inc()
   me.count = me.count + 1
   return
 
 ### The per-type trace function address. :returns: `trace_hook`.
-routine RoamController[T].cc_trace_hook() -> CPtr
+routine RoamController[T].cyclic_trace_hook() -> CPtr
   return me.trace_hook
 
 ### The per-type free function address. :returns: `free_hook`.
-routine RoamController[T].cc_free_hook() -> CPtr
+routine RoamController[T].cyclic_free_hook() -> CPtr
   return me.free_hook
 
 ### Wires the per-type trace/free hooks (test/Stage-1 hatch). :param trace: trace fn. :param free: free fn.
-dangerous routine RoamController[T].cc_set_hooks(trace: CPtr, free: CPtr)
+dangerous routine RoamController[T].cyclic_set_hooks(trace: CPtr, free: CPtr)
   me.trace_hook = trace
   me.free_hook = free
   return
@@ -242,7 +242,7 @@ dangerous routine RoamController[T].promote_reachable()
   if me.trace_hook.is_none()
     return
   # Snapshot THIS node's child controllers before recursing — tracing fills a shared native scratch that
-  # a nested promote would clobber (same discipline as the collector's `cc_children`).
+  # a nested promote would clobber (same discipline as the collector's `cyclic_children`).
   var kids = List[Address]()
   C::rf_cyclic_scratch_reset()
   C::rf_cyclic_trace_into_scratch(trace_hook: me.trace_hook.get_address(), controller: me.data.get_address())

@@ -27,7 +27,7 @@ import BuilderService
 ### `.raw_inner()` by hand). Display is TRANSPARENT: `Roamed` declares no `represent`/`diagnose` —
 ### codegen's `RoamedTransparency` re-resolves `f"{roamed}"` to the inner value's.
 ### The cycle collector (`Core/Memory/CycleCollector.rf`) is a COMPLETE Bacon-Rajan trial-deletion
-### recycler; its trace hooks are auto-synthesized, but `cc_collect` is still invoked explicitly
+### recycler; its trace hooks are auto-synthesized, but `cyclic_collect` is still invoked explicitly
 ### (no auto-scheduling yet), so cycles are reclaimed only where the collector is actually run.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
