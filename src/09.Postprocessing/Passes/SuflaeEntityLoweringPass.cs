@@ -572,10 +572,23 @@ internal sealed class SuflaeEntityLoweringPass
     {
         WrapperTypeInfo roamed = _registry.GetOrCreateWrapperType(
             wrapperName: RuntimeContract.Roamed, innerType: entity, isReadOnly: false);
+        // Build the resolved `Roamed[E](from: inner)` CONSTRUCTOR call (routes to `Roamed[T].create(from:T)`)
+        // instead of the construction-masquerading `inner.roam()` — mirrors what the SA path produces for a
+        // bare `Roamed(from: n)` (Calls.cs). `inner` is a FRESH entity rvalue (creator/literal/call), so it
+        // moves into the handle with no `steal`. Callee is the type-name identifier; codegen constructs via
+        // ConstructedType + ResolvedRoutine (see GenericCallLoweringPass wrapper-construction lowering).
+        RoutineInfo? create = _registry.LookupMethodOverload(type: roamed, methodName: "create",
+            argTypes: [entity]);
         return new CallExpression(
-            Callee: new MemberExpression(Object: inner, MemberName: RuntimeContract.RefCount.Roam,
-                Location: inner.Location) { ResolvedType = roamed },
-            Arguments: new List<Expression>(),
-            Location: inner.Location) { ResolvedType = roamed };
+            Callee: new IdentifierExpression(Name: RuntimeContract.Roamed, Location: inner.Location)
+                { ResolvedType = roamed },
+            Arguments: [new NamedArgumentExpression(Name: "from", Value: inner, Location: inner.Location)],
+            Location: inner.Location)
+        {
+            LoweringKind = CallLoweringKind.WrapperConstruction,
+            ConstructedType = roamed,
+            ResolvedRoutine = create,
+            ResolvedType = roamed
+        };
     }
 }
