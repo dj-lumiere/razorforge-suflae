@@ -1028,6 +1028,18 @@ public sealed partial class SemanticVerifier
                 typeArgs.Add(item: ResolveType(typeExpr: typeArg));
             }
 
+            // Arity guard: a wrong count of explicit type args (e.g. `Shared[ReadOnly](from: n)` — one arg
+            // for a two-param `Shared[T, P]`) must be a clean diagnostic. Without the early return,
+            // GetOrCreateResolution → RecordTypeInfo.CreateInstance zips params↔args and crashes.
+            if (type.GenericParameters is { } creatorParams && creatorParams.Count != typeArgs.Count)
+            {
+                ReportError(code: SemanticDiagnosticCode.WrongTypeArgumentCount,
+                    message:
+                    $"Type '{type.Name}' expects {creatorParams.Count} type arguments, got {typeArgs.Count}.",
+                    location: creator.Location);
+                return ErrorTypeInfo.Instance;
+            }
+
             ValidateGenericConstraints(genericDef: type,
                 typeArgs: typeArgs,
                 location: creator.Location);

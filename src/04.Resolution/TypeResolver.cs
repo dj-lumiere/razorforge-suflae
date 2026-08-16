@@ -553,6 +553,18 @@ internal sealed class TypeResolver
     internal void ValidateGenericConstraints(TypeSymbol genericDef, List<TypeSymbol> typeArgs,
         SourceLocation location)
     {
+        // Arity guard: a caller that skips ResolveGenericType's own count check (e.g. the creator path
+        // `Shared[ReadOnly](from: n)` — one type arg for a two-param `Shared[T, P]`) must get a clean
+        // WrongTypeArgumentCount diagnostic, NOT an IndexOutOfRange crash in the param↔arg zip below.
+        if (genericDef.GenericParameters is { } arityParams && arityParams.Count != typeArgs.Count)
+        {
+            _sa.ReportError(code: SemanticDiagnosticCode.WrongTypeArgumentCount,
+                message:
+                $"Type '{genericDef.Name}' expects {arityParams.Count} type arguments, got {typeArgs.Count}.",
+                location: location);
+            return;
+        }
+
         if (genericDef.GenericConstraints == null || genericDef.GenericConstraints.Count == 0)
         {
             return; // No constraints to validate
