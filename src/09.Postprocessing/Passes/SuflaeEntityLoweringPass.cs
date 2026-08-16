@@ -121,9 +121,12 @@ internal sealed class SuflaeEntityLoweringPass
             case AssignmentStatement assign:
             {
                 Expression v = LowerExpression(assign.Value);
-                // Retain a borrowed Roamed value only for a LOCAL target — codegen does NOT auto-retain
-                // an RC-wrapper var reassignment. A FIELD target (`o.inner = x`) is already handled by
-                // codegen's Roamed-field write (release-old + retain-new), so retaining here double-counts.
+                // SF implicit share: a borrowed Roamed RHS bound into a LOCAL slot retains so the slot owns
+                // its own count. FIELD-target writes (`o.inner = x`) are NOT handled here — SF entity field
+                // REASSIGNMENT has a separate pre-existing codegen crash (baseline AVs with or without the
+                // former RoamBump), so the share placement for that path is deferred until that bug is fixed.
+                // The former RcRetainLoweringPass.RoamBump auto-share for field targets is removed (it was the
+                // compiler hand-simulating the refcount; RF now spells the co-owner explicitly `x.share()`).
                 if (assign.Target is IdentifierExpression)
                     v = MaybeRoamCopy(v);
                 return ReferenceEquals(v, assign.Value) ? stmt : assign with { Value = v };

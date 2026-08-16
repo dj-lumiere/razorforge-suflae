@@ -145,15 +145,13 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
         return RcFieldBumps(target: target);
     }
 
-    // A record copy (var-decl / reassignment to a local) bumps each RC-wrapper field; a Roamed
-    // ENTITY-field write bumps the stored handle. Both key off the TARGET lvalue codegen stored into.
+    // A record copy (var-decl / reassignment to a local) bumps each RC-wrapper field. The retain-new for a
+    // Roamed ENTITY-field write is NO LONGER auto-injected here — that was the compiler hand-simulating the
+    // refcount up. RF spells the co-owner explicitly (`field = x.share()`); SF's implicit share is inserted
+    // by SuflaeEntityLoweringPass. The release-old on overwrite still lives in codegen (not a scope exit).
     private List<Statement> AssignBumps(Expression target, Expression value)
     {
-        if (target is MemberExpression member && IsRoamedEntityField(member))
-        {
-            _ = value;
-            return RoamBump(target: member) is { } roam ? [roam] : [];
-        }
+        _ = value;
         return RcFieldBumps(target: target);
     }
 
@@ -187,21 +185,6 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
         var fieldAccess = new MemberExpression(Object: target, MemberName: field.Name,
             Location: target.Location) { ResolvedType = wrapper };
         return MakeBumpStatement(receiver: fieldAccess, receiverType: wrapper, copy: store);
-    }
-
-    // ---- Roamed entity-field write --------------------------------------------------------------
-
-    private bool IsRoamedEntityField(MemberExpression member) =>
-        member.Object.ResolvedType is EntityTypeInfo &&
-        member.ResolvedType is RecordTypeInfo rec &&
-        LlvmCodeGenerator.GetGenericBaseNameStatic(type: rec) == RuntimeContract.Roamed;
-
-    private Statement? RoamBump(MemberExpression target)
-    {
-        if (target.ResolvedType is not RecordTypeInfo rec) return null;
-        RoutineInfo? store = Registry.LookupMethod(type: rec, methodName: RuntimeContract.RefCount.Share);
-        if (store is null) return null;
-        return MakeBumpStatement(receiver: target, receiverType: rec, copy: store);
     }
 
     // ---- Shared node construction ---------------------------------------------------------------

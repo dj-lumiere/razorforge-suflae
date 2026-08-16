@@ -24,7 +24,7 @@ entity Node
 routine build_self_cycle()
   danger
     var a = Roamed(from: Node(next: roamed_none(), mark: Beacon(id: 7_s64), id: 7_s64))
-    a.raw_inner().next = a
+    a.raw_inner().next = a.share()
   return
 
 routine start()
