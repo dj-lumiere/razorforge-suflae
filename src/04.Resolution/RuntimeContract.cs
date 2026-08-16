@@ -58,16 +58,14 @@ public static class RuntimeContract
     {
         /// <summary><c>RetainController[T].borrow_data()</c> — read the controlled payload.</summary>
         public const string BorrowData = "borrow_data";
-        /// <summary>Strong-count increment (also the <c>Retained</c> copy verb).</summary>
+        /// <summary>Controller strong-count increment primitive (<c>RetainController.retain()</c>).</summary>
         public const string Retain = "retain";
-        /// <summary>Strong-count decrement.</summary>
+        /// <summary>Controller strong-count decrement primitive (<c>RetainController.release()</c>).</summary>
         public const string Release = "release";
-        /// <summary>Weak-count increment (also the <c>Tracked</c> copy verb).</summary>
-        public const string Track = "track";
-        /// <summary>Multi-threaded strong-count increment (the <c>Shared</c> copy verb).</summary>
+        /// <summary>The UNIFIED RC copy verb: a same-strength co-owner mint on any RC wrapper handle
+        /// (Retained/Tracked/Shared/Watched/Roamed) — strong→strong, weak→weak, biased→biased. This is the
+        /// user-facing `.share()` and the verb codegen/lowering inserts implicitly for RC copy sites.</summary>
         public const string Share = "share";
-        /// <summary>Multi-threaded weak-count increment (the <c>Watched</c> copy verb).</summary>
-        public const string Watch = "watch";
     }
 
     /// <summary><c>Roamed[T]</c> methods that codegen inserts implicitly (no surface AST call),

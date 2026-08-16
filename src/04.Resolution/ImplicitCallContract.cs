@@ -37,7 +37,7 @@ internal static class ImplicitCallContract
         // reachability runs). Renamed from the STEP-3 unified `store` — RC's copy is the explicit-share op,
         // distinct from value-record `store`; seeded here (not via the WiredRoutineCatalog Storable entry).
         if (ownerBase != null)
-            yield return (liveType, "share");
+            yield return (liveType, RuntimeContract.RefCount.Share);
 
         if (ownerBase != RuntimeContract.Roamed)
             yield break;

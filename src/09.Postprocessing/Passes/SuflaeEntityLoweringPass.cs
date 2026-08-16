@@ -550,7 +550,7 @@ internal sealed class SuflaeEntityLoweringPass
             // (renamed from the old construction-masquerading `.roam()` — Roamed[T].share() is the real
             // same-strength co-owner mint).
             return new CallExpression(
-                Callee: new MemberExpression(Object: expr, MemberName: "share",
+                Callee: new MemberExpression(Object: expr, MemberName: RuntimeContract.RefCount.Share,
                     Location: expr.Location) { ResolvedType = roamed },
                 Arguments: new List<Expression>(),
                 Location: expr.Location) { ResolvedType = roamed };

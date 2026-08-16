@@ -24,14 +24,6 @@ public sealed partial class SemanticVerifier
             typeArgs.Add(item: ResolveType(typeExpr: typeArg));
         }
 
-        // #19: Track lock policy from share[Policy]() on entities — stored temporarily
-        // on the source variable; propagated to the declared variable in AnalyzeVariableDeclaration
-        if (generic.MethodName == "share" && typeArgs.Count > 0 &&
-            generic.Object is IdentifierExpression shareTarget)
-        {
-            _lastSharePolicy = (shareTarget.Name, typeArgs[index: 0].Name);
-        }
-
         if (generic.IsCollectionLiteral)
             generic.LoweringKind = CallLoweringKind.CollectionConstruction;
 

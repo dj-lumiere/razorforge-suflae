@@ -785,15 +785,6 @@ public sealed partial class SemanticVerifier
                 location: varDecl.Location);
         }
 
-        // #19: Propagate lock policy from share[Policy]() to the declared variable
-        if (_lastSharePolicy != null && varDecl.Initializer is GenericMethodCallExpression
-            {
-                MethodName: "share"
-            })
-        {
-            _variableLockPolicies[key: varDecl.Name] = _lastSharePolicy.Value.Policy;
-            _lastSharePolicy = null;
-        }
 
         // RF-S630: track the controller identity of a Shared/Watched handle so the
         // readers-XOR-writer check keys on the shared DATA, not the variable name — a clone

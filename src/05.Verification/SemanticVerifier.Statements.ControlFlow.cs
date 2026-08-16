@@ -868,26 +868,23 @@ public sealed partial class SemanticVerifier
     /// <summary>Records the controller identity of a freshly declared Shared/Watched handle from its
     /// initializer, so later aliases and access-token receivers resolve to the same controller:
     /// <list type="bullet">
-    /// <item>a fresh Arc (<c>node.share[P]()</c> — a generic-call) mints a NEW identity;</item>
-    /// <item>a clone (<c>s.share()</c>/<c>s.watch()</c>) or a plain copy (<c>var s2 = s</c>)
-    /// INHERITS the source handle's identity;</item>
-    /// <item>anything else gets a fresh identity (conservative — a missed alias only weakens the
-    /// check, never a false positive).</item>
+    /// <item>a clone (<c>s.share()</c> RC copy / <c>s.observe()</c> strong→weak) or a plain copy
+    /// (<c>var s2 = s</c>) INHERITS the source handle's identity;</item>
+    /// <item>anything else — including a fresh Arc construction <c>Shared[T, P](from: n)</c> — gets a
+    /// fresh identity (conservative — a missed alias only weakens the check, never a false positive).</item>
     /// </list></summary>
     private void RecordSharedHandleIdentity(string name, Expression? initializer)
     {
         int identity = initializer switch
         {
-            // Fresh Arc: `node.share[P]()` / `node.watch[P]()` — an explicit-generic call.
-            GenericMethodCallExpression { MethodName: "share" or "watch" } =>
-                _nextSharedHandleIdentity++,
             // Clone: `s.share()` (RC copy verb — mint a co-owner) / `s.observe()` (strong→weak conversion)
             // — inherit the receiver handle's identity (both alias the same controller).
             CallExpression
                 {
                     Callee: MemberExpression
                     {
-                        Object: var receiver, MemberName: "share" or "observe"
+                        Object: var receiver,
+                        MemberName: Compiler.Resolution.RuntimeContract.RefCount.Share or "observe"
                     }
                 } when BuildAccessPath(expr: receiver) is { } recvPath =>
                 GetOrAssignHandleIdentity(path: recvPath),

@@ -1872,7 +1872,7 @@ public sealed partial class TypeRegistry
         {
             // RC copy verb is `share` (the refcount-bump co-owner mint) — renamed from the STEP-3 unified
             // `store` so it reads as the explicit-share op and is distinct from value-record `store`.
-            store = LookupMethod(type: type, methodName: "share");
+            store = LookupMethod(type: type, methodName: RuntimeContract.RefCount.Share);
         }
         else if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
         {
