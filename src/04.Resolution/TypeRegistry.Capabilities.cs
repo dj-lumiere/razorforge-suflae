@@ -218,6 +218,11 @@ public sealed partial class TypeRegistry
         if (wrapperBase != null && RuntimeContract.WrapperTypes.Contains(item: wrapperBase))
             return false;
 
+        // NOTE: an RC-handle field makes the containing record NON-storable — the RC wrappers no longer
+        // obey `Storable` and are NOT recognised structurally here. This is intended: `var b = rc` is
+        // rejected (explicit `.share()` only), so a record HOLDING an RC must likewise not be implicitly
+        // copied (that would silently share the handle). Reconstruct it explicitly instead
+        // (WithBaseNotAssignable / RF-S420).
         bool FieldStorable(TypeInfo f) =>
             CanAutoDeriveAssignable(type: f)
             || CanAutoDeriveStorable(type: f)
@@ -248,12 +253,27 @@ public sealed partial class TypeRegistry
     /// <paramref name="type"/> obeys <paramref name="protocol"/> structurally IFF EVERY member
     /// (memvarof per kind) obeys it — ∀-only, concrete-only. Per-member verdict uses the declared
     /// conformance query (<see cref="TypeObeysProtocol"/>), matching how <c>needs T obeys P</c> is
-    /// checked. Empty member set (field-less record, choice/flags) ⇒ vacuously true. Dormant until the
-    /// ④-4 wiring makes it the standard-impl eligibility gate; <c>@llvm</c> types declare their
-    /// conformance explicitly (no members ⇒ <c>everywhere</c> does not apply to them).
+    /// checked. Empty member set (field-less record, choice/flags) ⇒ vacuously true.
+    /// <para>
+    /// WRAPPER types (RC handles, raw-pointer <c>Hijacked</c>/<c>CPtr</c>, scope-bound access tokens) are
+    /// excluded up front — a raw/shared handle is never structurally copyable (bitwise dup would alias →
+    /// double-free), and the storable wrappers declare their conformance explicitly (so the gate would skip
+    /// them anyway). An <c>@llvm</c> aggregate (Array[T,N], Vector[E,N]) has NO AST member variables — its
+    /// elements live in the layout string — so <see cref="MemberProjection"/> cascades to its type-KIND
+    /// generic args, making <c>Array[Entity]</c> correctly NON-conforming rather than vacuously true.
+    /// </para>
     /// </summary>
     public bool EverywhereObeys(TypeInfo type, string protocol)
     {
+        string? wrapperBase = type switch
+        {
+            RecordTypeInfo { GenericDefinition: { } gd } => gd.Name,
+            RecordTypeInfo r => r.Name,
+            _ => null
+        };
+        if (wrapperBase != null && RuntimeContract.WrapperTypes.Contains(item: wrapperBase))
+            return false;
+
         return MemberProjection(type: type)
             .All(predicate: m => TypeObeysProtocol(type: m, protocolName: protocol));
     }
@@ -276,7 +296,13 @@ public sealed partial class TypeRegistry
         VariantTypeInfo { IsGenericDefinition: false } v =>
             v.Members.Where(predicate: m => m.Type != null).Select(selector: m => m.Type!),
         RecordTypeInfo { IsGenericDefinition: false } r =>
-            r.MemberVariables?.Select(selector: m => m.Type) ?? [],
+            r.MemberVariables is { Count: > 0 } mv
+                ? mv.Select(selector: m => m.Type)
+                // No AST members: an `@llvm` inline-storage record (Array[T,N], Vector[E,N]) stores its
+                // type-KIND generic args INLINE — cascade to them (const-generic N filtered) so Array[Entity]
+                // is NOT vacuously conforming. A truly field-less record with no type args ⇒ [] ⇒ vacuous.
+                : (r.TypeArguments ?? [])
+                    .Where(predicate: a => a.Category != TypeModel.Enums.TypeCategory.ConstGenericValue),
         EntityTypeInfo { IsGenericDefinition: false } e =>
             e.MemberVariables.Select(selector: m => m.Type),
         _ => []

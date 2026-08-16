@@ -92,8 +92,82 @@ internal sealed class ProtocolConformanceAnalyzer
         }
 
         ApplyAutoAssignableConformance();
-        ApplyAutoStorableConformance();
         ApplyAutoStorableCascadeConformance();
+        ApplyEverywhereConformance();
+    }
+
+    /// <summary>
+    /// Generic <c>needs P everywhere</c> gate (④ standard-impl eligibility): for every protocol that declares
+    /// an <c>everywhere</c> self-constraint, auto-derive conformance to any concrete member-bearing type all
+    /// of whose members obey P (<see cref="TypeRegistry.EverywhereObeys"/>). This is NOT a per-protocol
+    /// bespoke pass — it reads the rule from the stdlib protocol declaration, so Copyable (and later Storable/
+    /// Equatable/…) opt in by writing <c>needs P everywhere</c> rather than growing new C# passes. The BASE
+    /// case is the leaf types' own explicit/auto conformance (scalars bitwise, Text/Integer declare Copyable,
+    /// <c>@llvm</c> aggregates cascade to their element via EverywhereObeys); this gate is the INDUCTIVE step
+    /// over composition. Runs LAST so leaf + Storable-cascade conformances are already in place for the member
+    /// walk to see. A type already declaring P is skipped (idempotent).
+    /// </summary>
+    private void ApplyEverywhereConformance()
+    {
+        // Collect protocols carrying an `everywhere` self-constraint (subject `Me`, ConstraintKind.Everywhere).
+        var everywhereProtocols = new List<ProtocolTypeInfo>();
+        foreach (TypeSymbol type in _sa._registry.GetAllTypes())
+        {
+            if (type is ProtocolTypeInfo proto && ProtocolHasEverywhereSelfConstraint(proto: proto))
+            {
+                everywhereProtocols.Add(item: proto);
+            }
+        }
+        if (everywhereProtocols.Count == 0)
+        {
+            return;
+        }
+
+        foreach (ProtocolTypeInfo proto in everywhereProtocols)
+        {
+            foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
+            {
+                if (type.IsGenericDefinition)
+                {
+                    continue;
+                }
+
+                // Entities stay OPT-IN for Copyable (STEP 4: "entity is NOT always copyable") — a simple
+                // `entity Point{x,y}` must not silently become copyable. Entity auto-derive is a separate,
+                // deliberate increment; this gate covers value composition (record/tuple/variant/…) only.
+                if (type is EntityTypeInfo)
+                {
+                    continue;
+                }
+
+                List<TypeSymbol> existing = GetImplementedProtocols(type: type);
+                if (existing.Any(predicate: p => p.Name == proto.Name))
+                {
+                    continue;
+                }
+
+                if (!_sa._registry.EverywhereObeys(type: type, protocol: proto.Name))
+                {
+                    continue;
+                }
+
+                var merged = new List<TypeSymbol>(collection: existing) { proto };
+                _sa._implicitProtocolConformances.Add(item: (type.FullName, proto.Name));
+                UpdateTypeProtocols(type: type, protocols: merged);
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when a protocol declares an <c>everywhere</c> self-constraint (<c>needs P everywhere</c>, which
+    /// the parser records as a <see cref="ConstraintKind.Everywhere"/> constraint with subject <c>Me</c> and
+    /// the protocol's own name as the constraint target) — the opt-in that makes
+    /// <see cref="ApplyEverywhereConformance"/> structurally cascade the protocol over composition.
+    /// </summary>
+    private static bool ProtocolHasEverywhereSelfConstraint(ProtocolTypeInfo proto)
+    {
+        return proto.GenericConstraints is { } cs &&
+               cs.Any(predicate: c => c.ConstraintType == SyntaxTree.ConstraintKind.Everywhere);
     }
 
     /// <summary>
@@ -184,51 +258,12 @@ internal sealed class ProtocolConformanceAnalyzer
         }
     }
 
-    /// <summary>
-    /// Auto-derives <c>Storable</c> (NOT <c>Copyable</c>) for the RC wrapper family — the types in
-    /// <see cref="RuntimeContract.RcCopyVerb"/> (Retained/Tracked/Shared/Watched/Roamed). Their
-    /// assignment-copy is a refcount SHARE (retain/track/share/watch/roam), i.e. exactly the
-    /// <c>store</c> operation — never a deep, independent <c>copy</c> (you cannot duplicate a shared
-    /// handle's referent). So they are Storable but not Copyable, and a generic <c>T: Storable</c>
-    /// accepts them while <c>T: Copyable</c> correctly rejects them. The <c>RcCopyVerb</c> mapping is
-    /// the structural "storable" marker — no <c>@storable</c> annotation is needed.
-    /// </summary>
-    private void ApplyAutoStorableConformance()
-    {
-        if (_sa._registry.LookupType(name: "Storable") is not ProtocolTypeInfo storable)
-        {
-            return;
-        }
-
-        foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
-        {
-            if (type.IsGenericDefinition)
-            {
-                continue;
-            }
-
-            string? baseName = type switch
-            {
-                RecordTypeInfo { GenericDefinition: { } gd } => gd.Name,
-                RecordTypeInfo r => r.Name,
-                _ => null
-            };
-            if (baseName is null || !RuntimeContract.RcWrapperBaseNames.Contains(item: baseName))
-            {
-                continue;
-            }
-
-            List<TypeSymbol> existing = GetImplementedProtocols(type: type);
-            if (existing.Any(predicate: p => p.Name is "Storable" or "Copyable"))
-            {
-                continue;
-            }
-
-            var merged = new List<TypeSymbol>(collection: existing) { storable };
-            _sa._implicitProtocolConformances.Add(item: (type.FullName, storable.Name));
-            UpdateTypeProtocols(type: type, protocols: merged);
-        }
-    }
+    // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) deliberately do NOT obey `Storable` — an RC
+    // handle is not implicitly copyable (that would silently mint a co-owner). Duplication is the explicit
+    // `.share()` member routine, and a bare `var b = rc` is rejected (RF-S420). A record that HOLDS an RC
+    // field is likewise NON-storable (its FieldStorable fails on the RC field) — copying it would silently
+    // share the handle, so it must be reconstructed explicitly (WithBaseNotAssignable). (The former
+    // `ApplyAutoStorableConformance` that stamped `Storable` on the 5 RC wrappers is removed.)
 
     /// <summary>
     /// Recursively collects all transitive parent protocols from a protocol's obeys chain.

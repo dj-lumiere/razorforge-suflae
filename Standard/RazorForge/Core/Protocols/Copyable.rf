@@ -8,6 +8,7 @@ module Core
 ### bound). `copy` is inserted wherever an independent duplicate is required — at assignment and at
 ### every materialization point (e.g. building a value into a collection).
 protocol Copyable
+needs Copyable everywhere
   ### Returns a deep, independent copy of this value.
   ### :returns: A copy of this value with its own valid lifetime and invariants.
   @readonly
