@@ -39,17 +39,6 @@ needs T is EntityType
 # Construction
 # ============================================================================
 
-### Wraps this entity in a {Roamed[T]} (LOCAL mode: non-atomic, unlocked). Named `roam` to match the
-### {Retained} pattern (`T.retain()` constructs, `Retained.retain()` copies): here `T.roam()`
-### constructs and `Roamed.roam()` copies, so the RC machinery's single copy-verb model applies.
-### Ownership transfers to the RC system; the original binding is invalidated.
-### :returns: The resulting `Roamed[T]` value.
-routine T.roam() -> Roamed[T]
-needs T is EntityType
-  danger
-    var ctrl = RoamController[T](data: me.hijack()).hijack()
-    return Roamed[T](ctrl)
-
 ### Constructor form: `Roamed[T](from: n)` routes here. Ownership of the entity moves into the RC system.
 ### This is what an SF `entity` slot lowers to (SuflaeEntityLoweringPass builds this constructor call).
 routine Roamed[T].create(from: T) -> Roamed[T]
