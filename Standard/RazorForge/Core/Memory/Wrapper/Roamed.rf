@@ -50,6 +50,14 @@ needs T is EntityType
     var ctrl = RoamController[T](data: me.hijack()).hijack()
     return Roamed[T](ctrl)
 
+### Constructor form: `Roamed[T](from: n)` routes here. Ownership of the entity moves into the RC system.
+### This is what an SF `entity` slot lowers to (SuflaeEntityLoweringPass builds this constructor call).
+routine Roamed[T].create(from: T) -> Roamed[T]
+needs T is EntityType
+  danger
+    var ctrl = RoamController[T](data: from.hijack()).hijack()
+    return Roamed[T](ctrl)
+
 ### The absent `Roamed[T]` — a null handle owning nothing. Lets an entity with a `Roamed[T]` field be
 ### constructed before the field's target exists (e.g. building a cyclic graph): initialize the field
 ### with `roamed_none()`, then assign the real handle once it is available. Retaining, releasing, and

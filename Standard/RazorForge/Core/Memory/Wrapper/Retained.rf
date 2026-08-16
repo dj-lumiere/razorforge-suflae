@@ -23,6 +23,14 @@ needs T is EntityType
     var ctrl = RetainController[T](data: me.hijack()).hijack()
     return Retained[T](ctrl)
 
+### Constructor form: wraps `from` in a reference-counted {Retained[T]}. `Retained[T](from: n)` routes
+### here (bare `Type(...)` → user `create`). Ownership of the entity moves into the RC system.
+routine Retained[T].create(from: T) -> Retained[T]
+needs T is EntityType
+  danger
+    var ctrl = RetainController[T](data: from.hijack()).hijack()
+    return Retained[T](ctrl)
+
 # ============================================================================
 # Reference counting
 # ============================================================================

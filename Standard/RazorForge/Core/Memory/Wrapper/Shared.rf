@@ -32,6 +32,13 @@ needs T is EntityType, P obeys LockPolicy
     var ctrl = ShareController[T, P](data: me.hijack()).hijack()
     return Shared[T, P](ctrl)
 
+### Constructor form: `Shared[T, P](from: n)` routes here. Ownership of the entity moves into the RC system.
+routine Shared[T, P].create(from: T) -> Shared[T, P]
+needs T is EntityType, P obeys LockPolicy
+  danger
+    var ctrl = ShareController[T, P](data: from.hijack()).hijack()
+    return Shared[T, P](ctrl)
+
 # ============================================================================
 # Reference counting
 # ============================================================================
