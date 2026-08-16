@@ -39,7 +39,7 @@ needs T is EntityType, P obeys LockPolicy
 routine Shared[T, P].share() -> Shared[T, P]
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-    ctrl.increase_strong_count()
+    ctrl.hold()
   return me
 
 ### Creates a weak reference to the same entity.
@@ -47,7 +47,7 @@ routine Shared[T, P].share() -> Shared[T, P]
 routine Shared[T, P].observe() -> Watched[T, P]
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-    ctrl.increase_weak_count()
+    ctrl.observe()
     return Watched[T, P](me)
 
 # ============================================================================
@@ -139,5 +139,5 @@ routine Shared[T, P].diagnose() -> Text
 ### reach zero). This IS the decrement — no separate `release` verb; `destroy` is the teardown.
 dangerous routine Shared[T, P].destroy()
   var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-  ctrl.decrease_strong_count()
+  ctrl.unhold()
   return

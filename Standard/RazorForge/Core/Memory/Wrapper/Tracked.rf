@@ -19,7 +19,7 @@ needs T is EntityType
 routine Tracked[T].share() -> Tracked[T]
   danger
     var ctrl = hijacked_from[RetainController[T]](me.get_address()).as_entity()
-    ctrl.increase_weak_count()
+    ctrl.observe()
   return me
 
 
@@ -31,7 +31,7 @@ routine Tracked[T].hold!() -> Retained[T]
     var ctrl = hijacked_from[RetainController[T]](me.get_address()).as_entity()
     if ctrl.strong_count() == 0
       absent
-    ctrl.increase_strong_count()
+    ctrl.hold()
     return LLVM::reinterpret_bits[Tracked[T], Retained[T]](me)
 
 # ============================================================================
@@ -83,5 +83,5 @@ routine Tracked[T].diagnose() -> Text
 ### decrement — no separate `release` verb; `destroy` is the teardown.
 dangerous routine Tracked[T].destroy()
   var ctrl = hijacked_from[RetainController[T]](me.get_address()).as_entity()
-  ctrl.decrease_weak_count()
+  ctrl.unobserve()
   return

@@ -21,7 +21,7 @@ needs T is EntityType, P obeys LockPolicy
 routine Watched[T, P].share() -> Watched[T, P]
   danger
     var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
-    ctrl.increase_weak_count()
+    ctrl.observe()
   return me
 
 
@@ -33,7 +33,7 @@ routine Watched[T, P].hold!() -> Shared[T, P]
     var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
     if ctrl.strong_count() == 0_u64
       absent
-    ctrl.increase_strong_count()
+    ctrl.hold()
     return LLVM::reinterpret_bits[Watched[T, P], Shared[T, P]](me)
 
 # ============================================================================
@@ -85,5 +85,5 @@ routine Watched[T, P].diagnose() -> Text
 ### decrement — no separate `release` verb; `destroy` is the teardown.
 dangerous routine Watched[T, P].destroy()
   var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
-  ctrl.decrease_weak_count()
+  ctrl.unobserve()
   return

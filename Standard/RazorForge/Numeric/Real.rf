@@ -80,14 +80,14 @@ common routine Real.from_literal(text: Text) -> Real
 routine Real.store() -> Real
   danger
     if not me.ctrl.is_none()
-      me.ctrl.as_entity().increase_strong_count()
+      me.ctrl.as_entity().hold()
   return Real(handle: me.handle, ctrl: me.ctrl)
 
 ### Releases this reference; frees the handle when this was the last live ref.
 dangerous routine Real.destroy()
   if me.ctrl.is_none()
     return
-  var prev = me.ctrl.as_entity().decrease_strong_count()
+  var prev = me.ctrl.as_entity().unhold()
   if prev <= 1_u64
     rf_real_clear(handle: me.handle)
     me.ctrl.invalidate()

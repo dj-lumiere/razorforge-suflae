@@ -144,7 +144,7 @@ common routine Integer.from_literal(text: Text) -> Integer
 routine Integer.store() -> Integer
   danger
     if not me.ctrl.is_none()
-      me.ctrl.as_entity().increase_strong_count()
+      me.ctrl.as_entity().hold()
   return Integer(handle: me.handle, ctrl: me.ctrl)
 
 ### Releases this value's reference. Frees the handle + controller when this
@@ -152,7 +152,7 @@ routine Integer.store() -> Integer
 dangerous routine Integer.destroy()
   if me.ctrl.is_none()
     return
-  var prev = me.ctrl.as_entity().decrease_strong_count()
+  var prev = me.ctrl.as_entity().unhold()
   if prev <= 1_u64
     rf_bigint_clear(me.handle)
     me.ctrl.invalidate()

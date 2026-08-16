@@ -23,12 +23,12 @@ dangerous routine RetainController[T](data: Hijacked[T]) -> RetainController[T]
   )
 
 ### Increments the strong reference count when a new `Retained` handle is cloned.
-routine RetainController[T].increase_strong_count()
+routine RetainController[T].hold()
   me.strong_count = me.strong_count + 1
   return
 
 ### Decrements the strong reference count when a `Retained` handle is dropped.
-routine RetainController[T].decrease_strong_count()
+routine RetainController[T].unhold()
   me.strong_count = me.strong_count - 1
   if me.should_deallocate_data()
     danger
@@ -39,12 +39,12 @@ routine RetainController[T].decrease_strong_count()
   return
 
 ### Increments the weak reference count when a new `Tracked` handle is cloned.
-routine RetainController[T].increase_weak_count()
+routine RetainController[T].observe()
   me.weak_count = me.weak_count + 1
   return
 
 ### Decrements the weak reference count when a `Tracked` handle is dropped.
-routine RetainController[T].decrease_weak_count()
+routine RetainController[T].unobserve()
   me.weak_count = me.weak_count - 1
   if me.should_deallocate_controller()
     danger

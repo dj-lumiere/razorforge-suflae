@@ -32,7 +32,7 @@ record Bytes obeys Storable, Copyable, Iterable[Byte], Equatable
 routine Bytes.store() -> Bytes
   danger
     if not me.ctrl.is_none()
-      me.ctrl.as_entity().increase_strong_count()
+      me.ctrl.as_entity().hold()
   return Bytes(data: me.data, count: me.count, ctrl: me.ctrl)
 
 ### Releases this value's reference. Frees the buffer + controller when this
@@ -40,7 +40,7 @@ routine Bytes.store() -> Bytes
 dangerous routine Bytes.destroy()
   if me.ctrl.is_none()
     return
-  var prev = me.ctrl.as_entity().decrease_strong_count()
+  var prev = me.ctrl.as_entity().unhold()
   if prev <= 1_u64
     me.data.invalidate()
     me.ctrl.invalidate()

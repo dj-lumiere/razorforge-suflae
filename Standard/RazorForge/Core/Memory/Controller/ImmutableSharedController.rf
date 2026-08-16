@@ -31,14 +31,14 @@ dangerous routine ImmutableSharedController() -> ImmutableSharedController
 # intrinsics mutate the genuine shared counter.
 
 ### Atomically increments the strong reference count when a handle is cloned.
-dangerous routine ImmutableSharedController.increase_strong_count()
+dangerous routine ImmutableSharedController.hold()
   discard LLVM::atomic_add(ptr: me.strong_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the strong reference count when a handle is dropped.
 ### :returns: The previous count. The caller deallocates the payload + controller
 ###          when this returns `1` (i.e. the cell is now zero).
-dangerous routine ImmutableSharedController.decrease_strong_count() -> U64
+dangerous routine ImmutableSharedController.unhold() -> U64
   return LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
 
 ### Returns the current number of live strong handles.
