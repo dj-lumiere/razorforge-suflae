@@ -1320,30 +1320,10 @@ public sealed partial class SemanticVerifier
                     // P1: Store fully resolved RoutineInfo (with owner-level generic substitution)
                     call.ResolvedRoutine = method;
 
-                    // Move-on-consume: `a.retain()` / `a.track()` on an `T` receiver
-                    // transfers ownership into the RC handle; the source variable is dead after.
-                    // `.retain()` on an already-RC handle (Retained / Shared / ...) is a refcount
-                    // bump that leaves the source intact, so we only mark deadref for Owned sources.
-                    // `T` is declared as a `record` in stdlib (not WrapperTypeInfo), so we
-                    // check the base name rather than the runtime category.
-                    // Move-on-consume: `a.retain()` / `a.track()` transfers ownership into a
-                    // new RC handle when the receiver is a raw entity (the canonical fresh
-                    // form) or an `T`. After the call the source name is dead — any
-                    // later use is a hard error (UseAfterSteal). `.retain()` on an existing
-                    // RC handle (`Retained[T]`, `Shared[T]`, ...) is a refcount bump and the
-                    // source remains valid.
-                    // STRUCTURAL move-on-consume (name-agnostic): constructing an RC wrapper FROM a bare
-                    // entity (or an `Owned`) moves ownership into the handle, so the source name is dead
-                    // after. Signalled by receiver = bare entity/`Owned` and the call result = an RC
-                    // wrapper. A copy/observe on an existing WRAPPER receiver leaves the source valid.
-                    if (member.Object is IdentifierExpression consumedId
-                        && (objectType is EntityTypeInfo
-                            || objectType.BareName == Compiler.Resolution.RuntimeContract.Owned)
-                        && method.ReturnType is { } uasResultType
-                        && Compiler.Resolution.TypeRegistry.GetRcWrapperBaseName(type: uasResultType) is not null)
-                    {
-                        _deadrefVariables.Add(item: consumedId.Name);
-                    }
+                    // (Removed: the member-call move-on-consume for `a.retain()`/`a.share[P]()` — the
+                    // entity→wrapper construction verbs are abolished. Entity→RC is now the constructor
+                    // `Wrapper(from: steal n)`, whose `steal` consumes the source through the normal steal
+                    // deadref path; a member call can no longer produce an RC wrapper from a bare entity.)
 
                     // #68: Real-to-Complex promotion — only add/sub allow float↔complex cross-type
                     if (IsOperatorWired(name: member.MemberName) &&

@@ -68,9 +68,6 @@ public static class RuntimeContract
         public const string Share = "share";
         /// <summary>Multi-threaded weak-count increment (the <c>Watched</c> copy verb).</summary>
         public const string Watch = "watch";
-        /// <summary>Biased-refcount alias verb (the <c>Roamed</c> copy verb; the same name also
-        /// constructs from an entity, mirroring <see cref="Retain"/>'s dual role).</summary>
-        public const string Roam = "roam";
     }
 
     /// <summary><c>Roamed[T]</c> methods that codegen inserts implicitly (no surface AST call),
