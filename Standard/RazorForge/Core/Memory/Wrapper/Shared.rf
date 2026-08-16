@@ -23,15 +23,6 @@ needs T is EntityType, P obeys LockPolicy
 # Construction
 # ============================================================================
 
-### Wraps this entity in an atomically reference-counted {Shared[T, P]} under discipline `P`.
-### Ownership transfers to the RC system; the original binding is invalidated.
-### :returns: The resulting `Shared[T, P]` value.
-routine T.share[P]() -> Shared[T, P]
-needs T is EntityType, P obeys LockPolicy
-  danger
-    var ctrl = ShareController[T, P](data: me.hijack()).hijack()
-    return Shared[T, P](ctrl)
-
 ### Constructor form: `Shared[T, P](from: n)` routes here. Ownership of the entity moves into the RC system.
 routine Shared[T, P].create(from: T) -> Shared[T, P]
 needs T is EntityType, P obeys LockPolicy

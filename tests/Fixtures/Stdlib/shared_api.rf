@@ -26,6 +26,6 @@ routine start()
   show(f"alive: {w.is_alive()}")
 
   # Exclusive discipline carries a real lock in the controller (an atomic flag).
-  var ex = Node(id: 9).share[Exclusive]()
+  var ex = Shared[Node, Exclusive](from: Node(id: 9))
   show(f"ex strong: {ex.strong_count()}")
   return
