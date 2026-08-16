@@ -16,7 +16,7 @@ needs T is EntityType
 
 ### Returns a new weak reference to the same controller, incrementing the weak count.
 ### :returns: A new weak handle to the same entity's controller.
-routine Tracked[T].store() -> Tracked[T]
+routine Tracked[T].share() -> Tracked[T]
   danger
     var ctrl = hijacked_from[RetainController[T]](me.get_address()).as_entity()
     ctrl.increase_weak_count()

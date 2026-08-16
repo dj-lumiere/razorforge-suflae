@@ -181,7 +181,7 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
             return null;
         }
 
-        RoutineInfo? store = Registry.LookupMethod(type: wrapper, methodName: "store");
+        RoutineInfo? store = Registry.LookupMethod(type: wrapper, methodName: "share");
         if (store is null) return null;
 
         var fieldAccess = new MemberExpression(Object: target, MemberName: field.Name,
@@ -199,7 +199,7 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
     private Statement? RoamBump(MemberExpression target)
     {
         if (target.ResolvedType is not RecordTypeInfo rec) return null;
-        RoutineInfo? store = Registry.LookupMethod(type: rec, methodName: "store");
+        RoutineInfo? store = Registry.LookupMethod(type: rec, methodName: "share");
         if (store is null) return null;
         return MakeBumpStatement(receiver: target, receiverType: rec, copy: store);
     }

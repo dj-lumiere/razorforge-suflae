@@ -29,7 +29,7 @@ needs T is EntityType
 
 ### Returns a new strong reference to the same entity, incrementing the strong count.
 ### :returns: A new strong handle sharing the same underlying entity.
-routine Retained[T].store() -> Retained[T]
+routine Retained[T].share() -> Retained[T]
   danger
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
     ctrl.increase_strong_count()

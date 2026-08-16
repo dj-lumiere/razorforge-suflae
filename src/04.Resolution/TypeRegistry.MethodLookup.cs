@@ -1870,7 +1870,9 @@ public sealed partial class TypeRegistry
         // roamed_cycle_api), so auto-retain here would double-count and leak. Gate to the SF compile.
         if (Language == TypeModel.Enums.Language.Suflae && GetRcWrapperBaseName(type: type) is not null)
         {
-            store = LookupMethod(type: type, methodName: "store");
+            // RC copy verb is `share` (the refcount-bump co-owner mint) — renamed from the STEP-3 unified
+            // `store` so it reads as the explicit-share op and is distinct from value-record `store`.
+            store = LookupMethod(type: type, methodName: "share");
         }
         else if (type is VariantTypeInfo variant && VariantHasDestructibleArm(variant: variant))
         {

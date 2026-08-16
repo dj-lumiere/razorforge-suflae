@@ -19,7 +19,7 @@ routine inner()
   var r1 = t.retain()
   show(f" after retain, strong={r1.strong_count()}")
 
-  var r2 = r1.store()
+  var r2 = r1.share()
   show(f" after r2 = r1.retain(), strong={r1.strong_count()}")
 
   # When inner() returns, r1 and r2 both go out of scope — refcount goes 2->1->0,

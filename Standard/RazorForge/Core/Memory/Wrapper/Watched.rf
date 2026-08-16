@@ -18,7 +18,7 @@ needs T is EntityType, P obeys LockPolicy
 
 ### Returns a new weak reference to the same controller, atomically incrementing the weak count.
 ### :returns: A new weak handle to the same entity's controller.
-routine Watched[T, P].store() -> Watched[T, P]
+routine Watched[T, P].share() -> Watched[T, P]
   danger
     var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
     ctrl.increase_weak_count()
