@@ -79,7 +79,7 @@ routine Roamed[T].share() -> Roamed[T]
   danger
     if me.controller_address() != 0_addr
       var ctrl = Hijacked[RoamController[T]](me).as_entity()
-      ctrl.retain()
+      ctrl.hold()
   return me
 
 
@@ -191,5 +191,5 @@ dangerous routine Roamed[T].destroy()
   if me.controller_address() == 0_addr
     return
   var ctrl = Hijacked[RoamController[T]](me).as_entity()
-  ctrl.release()
+  ctrl.unhold()
   return

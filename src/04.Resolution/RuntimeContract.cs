@@ -52,16 +52,13 @@ public static class RuntimeContract
     }
 
     /// <summary>Reference-counting controller surface (<c>RetainController[T]</c> and the RC wrappers).</summary>
-    /// <remarks>Sites: WrapperForwardingPass, LLVMCodeGenerator.Statements (retain lookup + RcCopyVerb),
-    /// ScopeTeardownLoweringPass / TemporaryTeardownPass (consuming-receiver heuristic).</remarks>
+    /// <remarks>The controllers' count primitives are the canonical vocabulary <c>hold</c>/<c>unhold</c>
+    /// (strong ±1) and <c>observe</c>/<c>unobserve</c> (weak ±1) — plain stdlib method names, called only
+    /// from wrapper <c>.rf</c> bodies, so they need no constants here.</remarks>
     public static class RefCount
     {
         /// <summary><c>RetainController[T].borrow_data()</c> — read the controlled payload.</summary>
         public const string BorrowData = "borrow_data";
-        /// <summary>Controller strong-count increment primitive (<c>RetainController.retain()</c>).</summary>
-        public const string Retain = "retain";
-        /// <summary>Controller strong-count decrement primitive (<c>RetainController.release()</c>).</summary>
-        public const string Release = "release";
         /// <summary>The UNIFIED RC copy verb: a same-strength co-owner mint on any RC wrapper handle
         /// (Retained/Tracked/Shared/Watched/Roamed) — strong→strong, weak→weak, biased→biased. This is the
         /// user-facing `.share()` and the verb codegen/lowering inserts implicitly for RC copy sites.</summary>
@@ -159,7 +156,7 @@ public static class RuntimeContract
     [
         RawPointer.Peek, RawPointer.Poke, RawPointer.AsEntity, RawPointer.IsNone,
         RawPointer.Invalidate, RawPointer.Hijack,
-        RefCount.BorrowData, RefCount.Retain, RefCount.Release,
+        RefCount.BorrowData,
         Collection.Count, Collection.Add, Collection.AddLast, Collection.Replace,
         Resolve, CrashMessage,
     ];

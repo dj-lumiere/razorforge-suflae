@@ -90,7 +90,7 @@ dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
 # ============================================================================
 
 ### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED.
-routine RoamController[T].retain()
+routine RoamController[T].hold()
   danger
     if me.escaped.load() == 1_u8
       discard LLVM::atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
@@ -100,7 +100,7 @@ routine RoamController[T].retain()
 
 ### Drops an alias. At zero the managed entity is destroyed immediately (deterministic teardown).
 ### A decrement that does NOT reach zero registers the object as a cycle-collection candidate.
-routine RoamController[T].release()
+routine RoamController[T].unhold()
   danger
     if me.escaped.load() == 1_u8
       var previous = LLVM::atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)

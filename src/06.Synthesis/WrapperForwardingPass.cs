@@ -68,8 +68,6 @@ internal sealed class WrapperForwardingPass
     /// </summary>
     private static readonly HashSet<string> ImplicitlyInvokedMethods =
     [
-        RuntimeContract.RefCount.Retain,
-        RuntimeContract.RefCount.Release,
         "destroy",
         // Operators/hashing/display: invoked from generic stdlib container
         // bodies after monomorphization, so they bypass SA's lazy synthesis
