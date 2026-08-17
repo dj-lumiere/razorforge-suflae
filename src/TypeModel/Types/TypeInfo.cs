@@ -197,6 +197,18 @@ public abstract class TypeInfo
     public virtual int SizeBytes(int pointerSize) => pointerSize;
 
     /// <summary>
+    /// Natural (ABI) alignment in bytes of a value of this type — the C-ABI alignment the emitted LLVM
+    /// type is laid out at. The default is <c>min(SizeBytes, 16)</c>, correct for every pointer-shaped or
+    /// scalar kind (a scalar's alignment equals its size, capped at 16). <see cref="RecordTypeInfo"/>
+    /// overrides it: a composite's alignment is the MAX of its members' alignments (NOT its total size),
+    /// so a nested struct — whose size can exceed its alignment — pads its parent correctly. Using size as
+    /// a proxy for alignment (the old formula) over-aligns nested aggregates and diverges from the LLVM /
+    /// C layout that codegen actually emits.
+    /// </summary>
+    public virtual int Alignment(int pointerSize) =>
+        System.Math.Max(val1: System.Math.Min(val1: SizeBytes(pointerSize: pointerSize), val2: 16), val2: 1);
+
+    /// <summary>
     /// Aligns <paramref name="size"/> up to the next multiple of <paramref name="alignment"/>.
     /// </summary>
     protected static int AlignTo(int size, int alignment) =>
@@ -231,7 +243,7 @@ public abstract class TypeInfo
             foreach (string field in SplitTopLevelCommas(input: llvmType[1..^1]))
             {
                 int fieldSize = SizeOfLlvmType(llvmType: field, pointerSize: pointerSize);
-                int alignment = Math.Max(val1: Math.Min(val1: fieldSize, val2: 16), val2: 1);
+                int alignment = AlignOfLlvmType(llvmType: field, pointerSize: pointerSize);
                 maxAlignment = Math.Max(val1: maxAlignment, val2: alignment);
                 size = AlignTo(size: size, alignment: alignment);
                 size += fieldSize;
@@ -254,6 +266,50 @@ public abstract class TypeInfo
             "ptr" => pointerSize,
             "void" => 0,
             _ => SizeOfArbitraryInt(llvmType: llvmType)
+        };
+    }
+
+    /// <summary>
+    /// Natural (ABI) alignment in bytes of an LLVM type expressed as a string — the alignment counterpart
+    /// of <see cref="SizeOfLlvmType"/>. Array <c>[N x T]</c> → alignment of the element T; inline struct
+    /// literal <c>{ T1, T2, … }</c> → the MAX of its field alignments; a scalar → its own natural
+    /// alignment (equal to its size, capped at 16 for wide integers). Never uses field SIZE as a proxy for
+    /// alignment, so a nested aggregate pads its parent per the real C/LLVM layout.
+    /// </summary>
+    public static int AlignOfLlvmType(string llvmType, int pointerSize)
+    {
+        llvmType = llvmType.Trim();
+
+        if (llvmType.StartsWith('[') && llvmType.EndsWith(']') && llvmType.Contains(" x "))
+        {
+            string inner = llvmType[1..^1];
+            int sep = inner.IndexOf(value: " x ", comparisonType: StringComparison.Ordinal);
+            return AlignOfLlvmType(llvmType: inner[(sep + 3)..], pointerSize: pointerSize);
+        }
+
+        if (llvmType.StartsWith('{') && llvmType.EndsWith('}'))
+        {
+            int maxAlignment = 1;
+            foreach (string field in SplitTopLevelCommas(input: llvmType[1..^1]))
+            {
+                maxAlignment = Math.Max(val1: maxAlignment,
+                    val2: AlignOfLlvmType(llvmType: field, pointerSize: pointerSize));
+            }
+
+            return maxAlignment;
+        }
+
+        return llvmType switch
+        {
+            "i1" or "i8" => 1,
+            "i16" or "half" => 2,
+            "i32" or "float" => 4,
+            "i64" or "double" => 8,
+            "i128" or "fp128" => 16,
+            "ptr" => pointerSize,
+            "void" => 1,
+            // Wide integers (i256/i512/…): align to size, capped at 16 (the max useful struct alignment).
+            _ => Math.Max(val1: 1, val2: Math.Min(val1: SizeOfArbitraryInt(llvmType: llvmType), val2: 16))
         };
     }
 

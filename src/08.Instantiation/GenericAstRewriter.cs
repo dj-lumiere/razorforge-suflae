@@ -1926,10 +1926,20 @@ internal static class GenericAstRewriter
         catch { return 0; }
     }
 
+    /// <summary>Natural (ABI) alignment of <paramref name="type"/> with the same non-throwing guard as
+    /// <see cref="SafeSizeBytes"/> (a non-concrete <c>@llvm</c> template hole yields 1, not a throw).</summary>
+    private static int SafeAlignment(TypeInfo? type)
+    {
+        if (type is null) return 1;
+        try { return type.Alignment(pointerSize: PointerSize); }
+        catch { return 1; }
+    }
+
     /// <summary>
     /// Computes each member's byte OFFSET within the parent struct using the repr-C layout formula
-    /// (<c>alignment = Max(Min(memberSize,16),1); size = AlignTo(size, alignment); offset = size; size
-    /// += memberSize</c>), matching <see cref="RecordTypeInfo.SizeBytes"/>. Keyed by member identity so
+    /// (<c>alignment = member natural alignment; size = AlignTo(size, alignment); offset = size; size
+    /// += memberSize</c>), matching <see cref="RecordTypeInfo.SizeBytes"/> — so <c>placeof(m)</c> equals C
+    /// <c>offsetof</c> even for nested aggregates. Keyed by member identity so
     /// the caller can look up an offset after filtering the iteration set. Empty when the source carries
     /// no member list.
     /// </summary>
@@ -1942,7 +1952,7 @@ internal static class GenericAstRewriter
         foreach (MemberVariableInfo mv in members)
         {
             int memberSize = SafeSizeBytes(type: mv.Type);
-            int alignment = Math.Max(val1: Math.Min(val1: memberSize, val2: 16), val2: 1);
+            int alignment = SafeAlignment(type: mv.Type);
             size = AlignTo(size: size, alignment: alignment);
             offsets[key: mv] = size;
             size += memberSize;

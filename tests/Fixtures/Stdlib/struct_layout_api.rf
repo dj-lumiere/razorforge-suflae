@@ -1,0 +1,32 @@
+module Tests/Stdlib/StructLayout
+import IO/Console
+import BuilderService
+
+# Locks record memory layout against the C ABI: a member is padded to its NATURAL alignment (max of
+# its own fields' alignments for a nested struct), NOT to its total size. Before the fix the layout
+# formula used `alignment = min(memberSize, 16)`, which over-aligned nested aggregates (Outer read as
+# 16 bytes with `inner` at offset 8) and diverged from the LLVM/C layout codegen actually emits (12
+# bytes, `inner` at offset 4). data_size() folds to the same size formula that placeof()/sizeof() use.
+
+record Sc     # {S16, S8} -> C size 4
+  posted a: S16
+  posted b: S8
+
+record Wide   # {S8, S64} -> C size 16 (char padded to the 8-byte field)
+  posted a: S8
+  posted b: S64
+
+record Inner  # {S32, S8} -> C size 8, natural alignment 4
+  posted a: S32
+  posted b: S8
+
+record Outer  # {S8, Inner} -> C size 12, inner at offset 4 (NOT 8: Inner aligns to 4, not to its size 8)
+  posted x: S8
+  posted inner: Inner
+
+routine start()
+  show(f"Sc={Sc(a: 1_s16, b: 2_s8).data_size()}")
+  show(f"Wide={Wide(a: 1_s8, b: 2_s64).data_size()}")
+  show(f"Inner={Inner(a: 7_s32, b: 2_s8).data_size()}")
+  show(f"Outer={Outer(x: 1_s8, inner: Inner(a: 7_s32, b: 2_s8)).data_size()}")
+  return

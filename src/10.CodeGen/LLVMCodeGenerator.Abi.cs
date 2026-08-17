@@ -198,8 +198,8 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Flattens a by-value struct into its scalar leaf fields — <c>(byte offset, byte size, llvm type)</c>
     /// each — recursing through nested by-value structs/tuples and replicating the record layout formula
-    /// (<see cref="RecordTypeInfo.SizeBytes"/>: <c>alignment = max(min(memberSize,16),1)</c>). Feeds the
-    /// per-eightbyte SSE/INTEGER classification and the HFA test.
+    /// (<see cref="RecordTypeInfo.SizeBytes"/>: each member padded to its natural
+    /// <see cref="TypeInfo.Alignment"/>). Feeds the per-eightbyte SSE/INTEGER classification and the HFA test.
     /// </summary>
     private void CollectLeafFields(TypeInfo type, int baseOffset,
         List<(int Off, int Size, string Llvm)> leaves)
@@ -210,7 +210,7 @@ public partial class LlvmCodeGenerator
             foreach (MemberVariableInfo mv in members)
             {
                 int memberSize = GetTypeSize(type: mv.Type);
-                int alignment = System.Math.Max(val1: System.Math.Min(val1: memberSize, val2: 16), val2: 1);
+                int alignment = mv.Type.Alignment(pointerSize: _pointerSizeBytes);
                 size = AlignTo(size: size, alignment: alignment);
                 CollectLeafFields(type: mv.Type, baseOffset: baseOffset + size, leaves: leaves);
                 size += memberSize;

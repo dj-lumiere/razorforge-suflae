@@ -1,0 +1,4 @@
+Sc=4B
+Wide=16B
+Inner=8B
+Outer=12B
