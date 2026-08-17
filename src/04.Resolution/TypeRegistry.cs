@@ -1803,14 +1803,20 @@ public sealed partial class TypeRegistry
         IEnumerable<TypeInfo> tupleTypes =
             _resolutions.Values.Where(predicate: t => t is TupleTypeInfo);
 
-        return namedTypes.Concat(second: tupleTypes);
+        // Materialize: callers (e.g. WiredRoutinePass wired-body synthesis) register new resolutions
+        // WHILE iterating this, which would invalidate a lazy enumerator over the live `_types`/
+        // `_resolutions` dictionaries ("Collection was modified"). A snapshot is the current type set.
+        return namedTypes.Concat(second: tupleTypes).ToList();
     }
 
     /// <summary>Concrete routine types from the resolutions cache (structural — never in <c>_types</c>).
     /// WiredRoutinePass iterates these to synthesize their wired bodies (serialize) regardless of the
     /// GetAllRoutines liveness filter, mirroring the tuple path.</summary>
     public IEnumerable<TypeInfo> GetResolvedRoutineTypes()
-        => _resolutions.Values.Where(predicate: t => t is RoutineTypeInfo { IsGenericDefinition: false });
+        // Materialized: like GetTypesWithMethods, wired-body synthesis registers resolutions while
+        // iterating this, which would invalidate a lazy enumerator over the live `_resolutions`.
+        => _resolutions.Values.Where(predicate: t => t is RoutineTypeInfo { IsGenericDefinition: false })
+            .ToList();
 
     /// <summary>
     /// Gets all registered types.
