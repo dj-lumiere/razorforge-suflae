@@ -109,24 +109,23 @@ public sealed partial class TypeRegistry
                 byName[key: routine.Name] = list;
             }
 
-            // Dedup by (RegistryKey, IsFailable): a re-registered routine (same owner, signature,
-            // and failability) REPLACES its prior list entry instead of appending. Appending
-            // duplicates here let method resolution iterate stale-and-fresh copies of the same
-            // overload and pick order-dependently — a non-determinism that manifested as
-            // platform-specific codegen. Failability is part of the identity because `mul` and
-            // `mul!` share a RegistryKey (the `!` is not in it) yet are distinct overloads that
-            // must coexist. The dedup scan only runs when the RegistryKey was already present
-            // (`keyExisted`); a key's first registration stays an O(1) append. User-written
-            // routines are never replaced by a synthesized same-identity routine.
+            // Dedup by (RegistryKey, Me-constraint set): a re-registered routine (same owner and
+            // signature) REPLACES its prior list entry instead of appending. Appending duplicates
+            // here let method resolution iterate stale-and-fresh copies of the same overload and pick
+            // order-dependently — a non-determinism that manifested as platform-specific codegen.
+            // Failability is NOT part of the identity: a name maps to at most one routine (declaring
+            // both `mul` and `mul!` is a name collision, not two coexisting routines), and `!` is
+            // never in the name. The dedup scan only runs when the RegistryKey was already present
+            // (`keyExisted`); a key's first registration stays an O(1) append. User-written routines
+            // are never replaced by a synthesized same-identity routine.
             if (keyExisted)
             {
-                // Identity also includes the Me-constraint set: several `needs Me is VariantType` /
+                // Identity includes the Me-constraint set: several `needs Me is VariantType` /
                 // `obeys X`-gated protocol-default bodies share a RegistryKey (same signature) yet are
                 // DISTINCT overloads that must coexist so within-dispatch can pick the kind-matched
                 // one. Only a truly same-signature, same-constraint re-registration replaces in place.
                 int existingIdx = list.FindIndex(match: r =>
-                    r.IsFailable == routine.IsFailable && r.RegistryKey == registryKey &&
-                    SameMeConstraintSet(a: r, b: routine));
+                    r.RegistryKey == registryKey && SameMeConstraintSet(a: r, b: routine));
                 if (existingIdx < 0)
                     list.Add(item: routine);
                 else if (!(!list[index: existingIdx].IsSynthesized && routine.IsSynthesized))
