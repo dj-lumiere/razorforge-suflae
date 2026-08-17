@@ -224,8 +224,18 @@ public sealed partial class TypeRegistry
     /// <summary>Routines indexed by owner type for fast method lookup.</summary>
     private readonly Dictionary<string, List<RoutineInfo>> _routinesByOwner = new();
 
-    /// <summary>Methods on GenericParameterTypeInfo owners, indexed by method name for O(1) universal lookup.</summary>
+    /// <summary>Genuine UNIVERSAL RUNTIME methods on a bare-`T` owner — a real routine available on every
+    /// type that codegen emits/intercepts (access-token coercions view/modify/claim/inspect, hijack/
+    /// get_address, the derive templates). Indexed by name for O(1) fallback resolution. NOT the
+    /// BuilderService comptime fold-intrinsics — those live in <see cref="_innateMethods"/>.</summary>
     private readonly Dictionary<string, RoutineInfo> _universalMethods = new();
+
+    /// <summary>`@innate` BuilderService comptime FOLD-INTRINSICS on a bare-`T` owner (data_size, type_name,
+    /// full_type_name, type_id, member_variable_count, type_kind, protocols, …). These NEVER emit a routine
+    /// body — <c>BuilderServiceInliningPass</c> folds each call to a constant (number/string). Indexed
+    /// separately so <see cref="_universalMethods"/> is NOT a grab-bag: this dict's sole job is to give SA a
+    /// resolvable signature (return type) for a call the compiler will fold, then discard.</summary>
+    private readonly Dictionary<string, RoutineInfo> _innateMethods = new();
 
     /// <summary>Derive method NAMES that are OPT-IN (capability-conferred): any `@overridable/@override
     /// T.m()` whose gate is a `needs P everywhere` / `needs T obeys P` capability constraint. Once a method

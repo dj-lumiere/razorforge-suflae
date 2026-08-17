@@ -132,10 +132,16 @@ public sealed partial class TypeRegistry
                 list.Add(item: routine);
             }
 
-            // Index universal methods (on GenericParameterTypeInfo owners) by name for O(1) lookup
+            // Index bare-`T`-owner methods by name for O(1) fallback lookup, SPLIT by role: an `@innate`
+            // BuilderService comptime fold-intrinsic (data_size/type_name/…) goes to _innateMethods (SA-
+            // signature only, folded+discarded by BuilderServiceInliningPass); everything else — genuine
+            // universal runtime methods — to _universalMethods. Keeps the latter from being a grab-bag.
             if (routine.OwnerType is GenericParameterTypeInfo)
             {
-                _universalMethods.TryAdd(key: routine.Name, value: routine);
+                if (routine.Annotations.Contains(item: "innate"))
+                    _innateMethods.TryAdd(key: routine.Name, value: routine);
+                else
+                    _universalMethods.TryAdd(key: routine.Name, value: routine);
             }
         }
 
@@ -874,11 +880,16 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // Fallback: check methods registered on generic type parameters (e.g., routine T.view())
-        // These methods are available on all types — O(1) lookup via _universalMethods index
+        // Fallback: bare-`T`-owner methods available on all types — a genuine universal runtime method,
+        // or an `@innate` BuilderService fold-intrinsic (resolved here for its signature, then folded to a
+        // constant by BuilderServiceInliningPass so no body is ever emitted).
         if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
         {
             return SubstituteMethodForOwner(method: universalMethod, resolvedOwner: type);
+        }
+        if (_innateMethods.TryGetValue(key: methodName, value: out RoutineInfo? innateMethod))
+        {
+            return SubstituteMethodForOwner(method: innateMethod, resolvedOwner: type);
         }
 
         // Generic parameter receivers route through caller-supplied constraints — see
@@ -1540,7 +1551,8 @@ public sealed partial class TypeRegistry
             }
         }
 
-        if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
+        if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod)
+            || _innateMethods.TryGetValue(key: methodName, value: out universalMethod))
         {
             candidates.Add(item: SubstituteMethodForOwner(method: universalMethod,
                 resolvedOwner: type)!);
