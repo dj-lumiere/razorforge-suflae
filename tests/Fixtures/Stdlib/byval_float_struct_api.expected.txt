@@ -1,0 +1,6 @@
+add2: 4,6
+dot2: 17
+scale2d: 3,5
+bump: 42,2.5
+rot3: 2,3,1
+orig unchanged: 1,2

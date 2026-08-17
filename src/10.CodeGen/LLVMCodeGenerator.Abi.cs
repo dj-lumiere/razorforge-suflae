@@ -26,7 +26,7 @@ public partial class LlvmCodeGenerator
     /// <summary>How a struct-record value is passed/returned across a call boundary.</summary>
     internal enum AbiKind
     {
-        /// <summary>Pass/return the value as-is (scalars, @llvm records, float-bearing small structs).</summary>
+        /// <summary>Pass/return the value as-is (scalars, @llvm records, empty structs).</summary>
         Direct,
 
         /// <summary>
@@ -105,14 +105,18 @@ public partial class LlvmCodeGenerator
     /// Classifies how <paramref name="type"/> crosses a call boundary on the current target.
     /// <list type="bullet">
     /// <item>Not an in-scope by-value struct (scalars/@llvm/entities/wrappers) → <see cref="AbiKind.Direct"/>.</item>
-    /// <item>Float-bearing struct → Direct for now (Phase 3 / HFA handles the FP register file).</item>
-    /// <item><b>Win-x64 MSVC:</b> all-integer struct of size 1/2/4/8 → <see cref="AbiKind.Coerce"/> to
-    ///   the exact <c>iN</c>; any other size (3/5/6/7 or &gt; 8) → <see cref="AbiKind.Indirect"/>.</item>
-    /// <item><b>SysV / AAPCS64:</b> ≤ 8 bytes → Coerce to one integer chunk; 9–16 bytes → Coerce to an
-    ///   inline <c>{i64, iM}</c> pair; &gt; 16 bytes → Indirect.</item>
+    /// <item><b>Win-x64 MSVC:</b> a struct of size 1/2/4/8 (float-bearing or not — MS x64 never puts a
+    ///   plain struct in XMM) → <see cref="AbiKind.Coerce"/> to the exact <c>iN</c>; any other size
+    ///   (3/5/6/7 or &gt; 8) → <see cref="AbiKind.Indirect"/>.</item>
+    /// <item><b>AAPCS64:</b> a Homogeneous Floating-point Aggregate (1–4 members all the same fp type) →
+    ///   Coerce to <c>[N x float]</c>/<c>[N x double]</c> (consecutive SIMD regs); every other ≤16-byte
+    ///   composite → integer chunks (GP regs); &gt; 16 bytes → Indirect.</item>
+    /// <item><b>SysV x86-64:</b> per-eightbyte INTEGER/SSE classification — each 8-byte chunk becomes
+    ///   <c>i64</c>/<c>iM</c> (any integer/pointer field present) or <c>double</c>/<c>float</c> (all-fp
+    ///   chunk); ≤ 8 bytes → one chunk, 9–16 → a <c>{ T0, T1 }</c> pair, &gt; 16 → Indirect.</item>
     /// </list>
-    /// Integer coercion reinterprets the struct's bytes as word chunks, eliminating sub-word fields
-    /// at the boundary (the aarch64 spill class) while keeping the value in registers.
+    /// Coercion reinterprets the struct's bytes as the ABI register form (via a stack round-trip),
+    /// placing each chunk in the correct register file (Phase 3 adds the SSE/FP + HFA classes).
     /// </summary>
     private AbiPassing AbiClassify(TypeInfo type)
     {
@@ -128,22 +132,56 @@ public partial class LlvmCodeGenerator
             return AbiPassing.Direct(llvm: GetLlvmType(type: type));
         }
 
-        // Float-bearing aggregates use the SSE/FP register file (and may be HFAs); integer coercion
-        // would misplace them. Deferred to Phase 3 — keep LLVM's natural lowering for now.
-        if (StructHasFloatField(type: type))
-        {
-            return AbiPassing.Direct(llvm: GetLlvmType(type: type));
-        }
-
+        // MS x64: a struct rides a GP integer register iff its size is 1/2/4/8 (a plain struct is NEVER
+        // passed in XMM — only scalar float/double / __m128 do); any other size goes indirect. This holds
+        // for float-bearing structs too, so it must run BEFORE the SSE classification below.
         if (_target.TargetOS == "windows")
         {
-            // MS x64: only sizes 1/2/4/8 ride in a register (as that exact integer); all else indirect.
             return size is 1 or 2 or 4 or 8
                 ? AbiPassing.Coerce(llvm: ChunkIntType(bytes: size))
                 : AbiPassing.Indirect;
         }
 
-        // SysV / AAPCS64: up to two eightbyte integer chunks in registers, else memory.
+        // AAPCS64: a Homogeneous Floating-point Aggregate rides consecutive SIMD/FP registers; every
+        // other composite (all-integer OR non-HFA float-mixed) rides GP integer registers as chunks.
+        if (_target.TargetArch == "aarch64")
+        {
+            return StructHasFloatField(type: type) && TryClassifyHfa(type: type, coerce: out string hfa)
+                ? AbiPassing.Coerce(llvm: hfa)
+                : IntegerChunks(size: size);
+        }
+
+        // SysV x86-64: all-integer structs take the integer-chunk fast path; float-bearing structs need
+        // per-eightbyte INTEGER/SSE classification (a mixed int+float eightbyte is INTEGER — GP reg).
+        if (!StructHasFloatField(type: type))
+        {
+            return IntegerChunks(size: size);
+        }
+
+        if (size > 16)
+        {
+            return AbiPassing.Indirect;
+        }
+
+        var leaves = new List<(int Off, int Size, string Llvm)>();
+        CollectLeafFields(type: type, baseOffset: 0, leaves: leaves);
+        if (size <= 8)
+        {
+            return AbiPassing.Coerce(llvm: EightbyteType(leaves: leaves, start: 0, chunkBytes: size));
+        }
+
+        string t0 = EightbyteType(leaves: leaves, start: 0, chunkBytes: 8);
+        string t1 = EightbyteType(leaves: leaves, start: 8, chunkBytes: size - 8);
+        return AbiPassing.Coerce(llvm: $"{{ {t0}, {t1} }}");
+    }
+
+    /// <summary>
+    /// The GP-integer-register form of a by-value struct: ≤ 8 bytes → one <c>iN</c> chunk; 9–16 bytes →
+    /// an inline <c>{ i64, iM }</c> pair; &gt; 16 bytes → <see cref="AbiKind.Indirect"/>. Shared by the
+    /// all-integer SysV path and every non-HFA AAPCS64 composite.
+    /// </summary>
+    private static AbiPassing IntegerChunks(int size)
+    {
         if (size <= 8)
         {
             return AbiPassing.Coerce(llvm: ChunkIntType(bytes: size));
@@ -155,6 +193,105 @@ public partial class LlvmCodeGenerator
         }
 
         return AbiPassing.Indirect;
+    }
+
+    /// <summary>
+    /// Flattens a by-value struct into its scalar leaf fields — <c>(byte offset, byte size, llvm type)</c>
+    /// each — recursing through nested by-value structs/tuples and replicating the record layout formula
+    /// (<see cref="RecordTypeInfo.SizeBytes"/>: <c>alignment = max(min(memberSize,16),1)</c>). Feeds the
+    /// per-eightbyte SSE/INTEGER classification and the HFA test.
+    /// </summary>
+    private void CollectLeafFields(TypeInfo type, int baseOffset,
+        List<(int Off, int Size, string Llvm)> leaves)
+    {
+        if (IsByValueStructRecord(type: type) && type is RecordTypeInfo { MemberVariables: { } members })
+        {
+            int size = 0;
+            foreach (MemberVariableInfo mv in members)
+            {
+                int memberSize = GetTypeSize(type: mv.Type);
+                int alignment = System.Math.Max(val1: System.Math.Min(val1: memberSize, val2: 16), val2: 1);
+                size = AlignTo(size: size, alignment: alignment);
+                CollectLeafFields(type: mv.Type, baseOffset: baseOffset + size, leaves: leaves);
+                size += memberSize;
+            }
+
+            return;
+        }
+
+        leaves.Add(item: (baseOffset, GetTypeSize(type: type), GetLlvmType(type: type)));
+    }
+
+    /// <summary>Whether an llvm type name is a floating-point (SSE-class) scalar.</summary>
+    private static bool IsFpLlvm(string llvm) => llvm is "half" or "float" or "double" or "fp128";
+
+    /// <summary>
+    /// The ABI register type for the eightbyte <c>[start, start+8)</c> of a struct given its leaf fields:
+    /// SSE (all overlapping leaves are fp) → <c>half</c>/<c>float</c>/<c>double</c> sized to the chunk;
+    /// otherwise INTEGER → <c>iN</c>. Mirrors the SysV rule that any integer/pointer field in an eightbyte
+    /// makes the whole eightbyte INTEGER.
+    /// </summary>
+    private static string EightbyteType(List<(int Off, int Size, string Llvm)> leaves, int start,
+        int chunkBytes)
+    {
+        bool anyInt = false;
+        bool anySse = false;
+        foreach ((int off, int sz, string llvm) in leaves)
+        {
+            if (off >= start + 8 || off + sz <= start)
+            {
+                continue; // no overlap with this eightbyte window
+            }
+
+            if (IsFpLlvm(llvm: llvm))
+            {
+                anySse = true;
+            }
+            else
+            {
+                anyInt = true;
+            }
+        }
+
+        if (anyInt || !anySse)
+        {
+            return ChunkIntType(bytes: chunkBytes);
+        }
+
+        return chunkBytes <= 2 ? "half" : chunkBytes <= 4 ? "float" : "double";
+    }
+
+    /// <summary>
+    /// AAPCS64 Homogeneous Floating-point Aggregate test: a struct whose 1–4 leaf fields are ALL the same
+    /// floating-point type (float/double/half). On success <paramref name="coerce"/> is <c>[N x elem]</c>,
+    /// which the AArch64 backend passes in N consecutive SIMD/FP registers.
+    /// </summary>
+    private bool TryClassifyHfa(TypeInfo type, out string coerce)
+    {
+        coerce = "";
+        var leaves = new List<(int Off, int Size, string Llvm)>();
+        CollectLeafFields(type: type, baseOffset: 0, leaves: leaves);
+        if (leaves.Count is 0 or > 4)
+        {
+            return false;
+        }
+
+        string elem = leaves[index: 0].Llvm;
+        if (elem is not ("half" or "float" or "double"))
+        {
+            return false;
+        }
+
+        foreach ((int _, int _, string llvm) in leaves)
+        {
+            if (llvm != elem)
+            {
+                return false;
+            }
+        }
+
+        coerce = $"[{leaves.Count} x {elem}]";
+        return true;
     }
 
     /// <summary>
