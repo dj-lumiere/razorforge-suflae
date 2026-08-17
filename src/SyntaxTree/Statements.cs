@@ -449,8 +449,18 @@ public record EachStatement(
 /// <summary>The comptime source an <see cref="ExpandStatement"/> iterates over.</summary>
 public enum ExpandSourceKind
 {
-    /// <summary><c>memvarof(T)</c> — the member variables (fields) of a record, declaration order.</summary>
+    /// <summary><c>memvarof(T)</c> — the member variables (fields) of a record, declaration order.
+    /// LEGACY (pre-2026-08-17 surface); superseded by <see cref="OpenMemberVariables"/> /
+    /// <see cref="AllMemberVariables"/>. Kept during the parallel-add migration.</summary>
     MemberVariables,
+
+    /// <summary><c>openmemvarof(T)</c> — the OPEN ∪ POSTED (publicly readable) member variables,
+    /// declaration order. Filters out <c>secret</c> fields. Use for public serialization.</summary>
+    OpenMemberVariables,
+
+    /// <summary><c>allmemvarof(T)</c> — ALL member variables incl <c>secret</c>, declaration order.
+    /// Use for full-state internal derives (hash/cmp/represent/diagnose/destroy).</summary>
+    AllMemberVariables,
 
     /// <summary><c>branchof(T)</c> — the arms of a variant, tag order. Used inside a <c>when</c> to
     /// generate one type-dispatch clause per arm.</summary>

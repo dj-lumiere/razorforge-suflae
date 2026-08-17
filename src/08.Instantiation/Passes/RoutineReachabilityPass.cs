@@ -1066,6 +1066,25 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 RoutineInfo? diag = ctx.Registry.LookupMethod(type: owner, methodName: DiagnoseMethodName);
                 if (diag != null) EnqueueCallee(callee: diag);
             }
+
+            // (2b) A live `destroy` runs the auto-derived teardown, which walks EVERY member and calls
+            // its `.destroy()` (`expand m in memvarof(T): me.$nameof(m).destroy()`). Reachability runs
+            // BEFORE that expand unrolls, so it cannot see the per-field `.destroy()` calls; without help
+            // it prunes a member's destroy that nothing ELSE calls — notably a trivially-destructible
+            // `Hijacked[U]`/leaf whose destroy is elided at every ordinary teardown, leaving the
+            // unconditional derive as its sole (invisible) caller ("declared+called but never defined").
+            // Seed destroy on each concrete member type so the stdlib-defined (possibly no-op) destroy is
+            // emitted. Recurses naturally: a member's destroy going live seeds ITS members' destroys.
+            if (name == DestroyMethodName)
+            {
+                foreach (MemberVariableInfo mv in MemberVariablesOf(type: owner))
+                {
+                    if (mv.Type is null or GenericParameterTypeInfo) continue;
+                    RoutineInfo? memberDestroy =
+                        ctx.Registry.LookupMethod(type: mv.Type, methodName: DestroyMethodName);
+                    if (memberDestroy != null) EnqueueCallee(callee: memberDestroy);
+                }
+            }
         }
 
         // (4) Free generic function (no owner) with type arguments — e.g. `show[T]`
@@ -1103,6 +1122,18 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             }
         }
     }
+
+    /// <summary>
+    /// The member variables of a record/entity owner (concrete instances carry substituted member
+    /// types via <c>CreateInstance</c>), used to seed per-member teardown in rule (2b). Other type
+    /// kinds (variants, tuples, @llvm leaves, generic defs) yield none.
+    /// </summary>
+    private static IReadOnlyList<MemberVariableInfo> MemberVariablesOf(TypeInfo type) => type switch
+    {
+        RecordTypeInfo r => r.MemberVariables,
+        EntityTypeInfo e => e.MemberVariables,
+        _ => []
+    };
 
     /// <summary>
     /// Maps a concrete-owner routine (e.g. <c>Range[U64].iter</c>) to its generic-def

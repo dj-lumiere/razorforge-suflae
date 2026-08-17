@@ -1824,14 +1824,22 @@ internal static class GenericAstRewriter
         if (expand.SourceKind == ExpandSourceKind.Cases)
             return RewriteCaseExpand(expand: expand, source: source, ctx: ctx);
 
-        // memvarof works over any field-carrying aggregate: records, tuples (a RecordTypeInfo
-        // subtype), and entities (their own MemberVariables list).
+        // memvarof/openmemvarof/allmemvarof work over any field-carrying aggregate: records, tuples (a
+        // RecordTypeInfo subtype), and entities (their own MemberVariables list).
         List<MemberVariableInfo>? members = source switch
         {
             RecordTypeInfo record => record.MemberVariables,
             EntityTypeInfo entity => entity.MemberVariables,
             _ => null
         };
+
+        // openmemvarof(T) yields only the publicly-readable members (OPEN ∪ POSTED) — a `secret` field is
+        // filtered out. allmemvarof(T) and legacy memvarof(T) yield every member. This visibility split is
+        // the sole filter (the old `if not m.is_secret` gate is gone — pick the intrinsic instead).
+        if (members != null && expand.SourceKind == ExpandSourceKind.OpenMemberVariables)
+            members = members
+                     .Where(predicate: mv => mv.Visibility != VisibilityModifier.Secret)
+                     .ToList();
 
         var outStmts = new List<Statement>();
         if (members != null)

@@ -240,16 +240,14 @@ needs T is VariantType
 @overridable
 routine T.destroy()
   expand m in memvarof(T)
-    if not m.is_inert
-      me.${m.name}.destroy()
+    me.${m.name}.destroy()
   return
 
 @override
 routine T.destroy()
 needs T is EntityType
   expand m in memvarof(T)
-    if not m.is_inert
-      me.${m.name}.destroy()
+    me.${m.name}.destroy()
   danger
     me.hijack().invalidate()
   return
@@ -265,8 +263,7 @@ needs T is VariantType
     is None => return
     expand m in branchof(T)
       is ${m.type} v =>
-        if not m.is_inert
-          v.destroy()
+        v.destroy()
         return
     else => return
 

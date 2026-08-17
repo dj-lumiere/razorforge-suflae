@@ -398,8 +398,17 @@ public enum TokenType
     /// <summary>Comptime member-expansion loop keyword (`expand m in memvarof(T)`)</summary>
     Expand,
 
-    /// <summary>Comptime member-variable reflection source keyword (`memvarof(T)`)</summary>
+    /// <summary>Comptime member-variable reflection source keyword (`memvarof(T)`) — LEGACY, superseded
+    /// by <see cref="OpenMemVarOf"/> / <see cref="AllMemVarOf"/>. Kept during the parallel-add migration.</summary>
     MemVarOf,
+
+    /// <summary>Comptime member-variable reflection source keyword (`openmemvarof(T)`) — OPEN ∪ POSTED
+    /// (publicly-readable) members only.</summary>
+    OpenMemVarOf,
+
+    /// <summary>Comptime member-variable reflection source keyword (`allmemvarof(T)`) — ALL members
+    /// incl `secret`.</summary>
+    AllMemVarOf,
 
     /// <summary>Comptime variant-arm reflection source keyword (`branchof(T)`)</summary>
     BranchOf,

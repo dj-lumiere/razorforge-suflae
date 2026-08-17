@@ -235,6 +235,8 @@ public partial class Tokenizer
             // wholesale Core reuse, so it never needs the `expand`/`memvarof` keywords itself.
             _keywords[key: "expand"] = TokenType.Expand;
             _keywords[key: "memvarof"] = TokenType.MemVarOf;
+            _keywords[key: "openmemvarof"] = TokenType.OpenMemVarOf;
+            _keywords[key: "allmemvarof"] = TokenType.AllMemVarOf;
             _keywords[key: "branchof"] = TokenType.BranchOf;
             _keywords[key: "caseof"] = TokenType.CaseOf;
             _keywords[key: "everywhere"] = TokenType.Everywhere;

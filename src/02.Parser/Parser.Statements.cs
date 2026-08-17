@@ -271,10 +271,21 @@ public partial class Parser
             sourceKind = ExpandSourceKind.Cases;
             sourceName = "caseof";
         }
+        else if (Match(type: TokenType.OpenMemVarOf))
+        {
+            sourceKind = ExpandSourceKind.OpenMemberVariables;
+            sourceName = "openmemvarof";
+        }
+        else if (Match(type: TokenType.AllMemVarOf))
+        {
+            sourceKind = ExpandSourceKind.AllMemberVariables;
+            sourceName = "allmemvarof";
+        }
         else
         {
             Consume(type: TokenType.MemVarOf,
-                errorMessage: "Expected 'memvarof' or 'caseof' after 'in' in expand loop");
+                errorMessage:
+                "Expected 'openmemvarof', 'allmemvarof', 'memvarof' or 'caseof' after 'in' in expand loop");
             sourceKind = ExpandSourceKind.MemberVariables;
             sourceName = "memvarof";
         }

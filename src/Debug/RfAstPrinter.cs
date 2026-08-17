@@ -1007,6 +1007,8 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string source = node.SourceKind switch
         {
             ExpandSourceKind.MemberVariables => "memvarof",
+            ExpandSourceKind.OpenMemberVariables => "openmemvarof",
+            ExpandSourceKind.AllMemberVariables => "allmemvarof",
             ExpandSourceKind.Arms => "branchof",
             ExpandSourceKind.Cases => "caseof",
             _ => node.SourceKind.ToString()
