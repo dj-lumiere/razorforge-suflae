@@ -221,24 +221,20 @@ public sealed partial class TypeRegistry
     /// <summary>Routines indexed by module-qualified name for unambiguous lookup.</summary>
     private readonly Dictionary<string, RoutineInfo> _routinesByQualifiedName = new();
 
-    /// <summary>Routines indexed by owner type for fast method lookup.</summary>
-    private readonly Dictionary<string, List<RoutineInfo>> _routinesByOwner = new();
+    /// <summary>Routines indexed by owner type FullName, then by method name → overload list. The nested
+    /// by-name level makes `owner.method` lookup O(1) (no list scan), and — because a bare generic-param
+    /// owner (`routine T.m()`) is stored under the canonical key <see cref="GenericOwnerKey"/> — lets a
+    /// receiver-agnostic default-impl member routine resolve by name off the SAME store, no separate index.</summary>
+    private readonly Dictionary<string, Dictionary<string, List<RoutineInfo>>> _routinesByOwner = new();
 
-    /// <summary>
-    /// By-NAME resolution index for MEMBER ROUTINES whose owner is a bare generic parameter
-    /// (`routine T.method()`) — member routines carrying a DEFAULT/base impl applicable to any receiver:
-    /// the derive templates (represent/diagnose/serialize/destroy/eq/…), access-token coercions
-    /// (view/modify/claim/inspect), hijack/get_address, and the `@innate` BuilderService fold-intrinsics
-    /// (data_size/type_name/type_id/…). NOT a special "universal method" species — they are ordinary member
-    /// routines already stored in <see cref="_routinesByOwner"/> under their generic-param owner; this dict is
-    /// only a name-keyed lookup path so `x.method()` on a CONCRETE receiver can resolve one (owner-keyed
-    /// lookup can't, the owner being `T`), PARALLEL to <see cref="_routineOverloads"/> (by-name index for free
-    /// functions). The `@overridable`/`@override` overwrite is an AST/synthesis concern (GetDeriveTemplate),
-    /// the fold/interception is BuilderServiceInliningPass/codegen — this index just resolves.
-    /// [LookupMethod overhaul step 1: the former `@innate`/runtime split is collapsed here; the "universal"
-    /// concept is retired in the docs. Field name kept to limit churn.]
-    /// </summary>
-    private readonly Dictionary<string, RoutineInfo> _universalMethods = new();
+    /// <summary>Canonical owner key for a bare generic-parameter owner (`routine T.m()` / `E.m()` / …): the
+    /// param name is arbitrary for a default-impl member routine, so they all share one key so `x.m()` on a
+    /// concrete receiver resolves them by name via <see cref="_routinesByOwner"/>.</summary>
+    internal const string GenericOwnerKey = "$T";
+
+    /// <summary>The flattened method list for an owner (all overloads across all method names), or empty.</summary>
+    private static IEnumerable<RoutineInfo> OwnerMethods(Dictionary<string, List<RoutineInfo>>? byName)
+        => byName?.Values.SelectMany(selector: l => l) ?? Enumerable.Empty<RoutineInfo>();
 
     /// <summary>Derive method NAMES that are OPT-IN (capability-conferred): any `@overridable/@override
     /// T.m()` whose gate is a `needs P everywhere` / `needs T obeys P` capability constraint. Once a method

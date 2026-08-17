@@ -38,10 +38,9 @@ partial class TypeRegistry
         public Dictionary<string, RoutineInfo> Routines { get; init; } = null!;
         /// <summary>Routines keyed by qualified name.</summary>
         public Dictionary<string, RoutineInfo> RoutinesByQualifiedName { get; init; } = null!;
-        /// <summary>Routines grouped by owner type full name.</summary>
-        public Dictionary<string, List<RoutineInfo>> RoutinesByOwner { get; init; } = null!;
-        /// <summary>Universal methods (generic-parameter owner) keyed by method name.</summary>
-        public Dictionary<string, RoutineInfo> UniversalMethods { get; init; } = null!;
+        /// <summary>Routines grouped by owner type full name, then by method name → overloads (a bare
+        /// generic-param owner is stored under the canonical GenericOwnerKey).</summary>
+        public Dictionary<string, Dictionary<string, List<RoutineInfo>>> RoutinesByOwner { get; init; } = null!;
         /// <summary>Resolved routine instances (concrete-owner substitutions) keyed by RegistryKey.</summary>
         public Dictionary<string, RoutineInfo> RoutineResolutions { get; init; } = null!;
         /// <summary>Generic free functions grouped by base name.</summary>
@@ -85,8 +84,9 @@ partial class TypeRegistry
             RoutinesByQualifiedName = new Dictionary<string, RoutineInfo>(_routinesByQualifiedName),
             RoutinesByOwner = _routinesByOwner.ToDictionary(
                 keySelector: kv => kv.Key,
-                elementSelector: kv => new List<RoutineInfo>(kv.Value)),
-            UniversalMethods = new Dictionary<string, RoutineInfo>(_universalMethods),
+                elementSelector: kv => kv.Value.ToDictionary(
+                    keySelector: m => m.Key,
+                    elementSelector: m => new List<RoutineInfo>(m.Value))),
             RoutineResolutions = new Dictionary<string, RoutineInfo>(_routineResolutions),
             GenericFreeFunctions = _genericFreeFunctions.ToDictionary(
                 keySelector: kv => kv.Key,
@@ -124,8 +124,9 @@ partial class TypeRegistry
         // Restore routine storage — list-valued dicts get new lists so test mutations don't leak
         foreach (var kv in snapshot.Routines) _routines[kv.Key] = kv.Value;
         foreach (var kv in snapshot.RoutinesByQualifiedName) _routinesByQualifiedName[kv.Key] = kv.Value;
-        foreach (var kv in snapshot.RoutinesByOwner) _routinesByOwner[kv.Key] = new List<RoutineInfo>(kv.Value);
-        foreach (var kv in snapshot.UniversalMethods) _universalMethods[kv.Key] = kv.Value;
+        foreach (var kv in snapshot.RoutinesByOwner)
+            _routinesByOwner[kv.Key] = kv.Value.ToDictionary(
+                keySelector: m => m.Key, elementSelector: m => new List<RoutineInfo>(m.Value));
         foreach (var kv in snapshot.RoutineResolutions) _routineResolutions[kv.Key] = kv.Value;
         foreach (var kv in snapshot.GenericFreeFunctions) _genericFreeFunctions[kv.Key] = new List<RoutineInfo>(kv.Value);
         foreach (var kv in snapshot.RoutinesByNameAndFailability) _routinesByNameAndFailability[kv.Key] = kv.Value;

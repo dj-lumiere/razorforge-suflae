@@ -89,14 +89,24 @@ public sealed partial class TypeRegistry
             _routinesByQualifiedName.TryAdd(key: qualifiedName, value: routine);
         }
 
-        // Index by owner type for fast method lookup
+        // Index by owner type → method name → overloads for fast O(1) `owner.method` lookup. A bare
+        // generic-param owner (`routine T.m()`) is normalized to the canonical GenericOwnerKey so its
+        // default-impl member routines resolve by name off this same store (no separate index) — see the
+        // fallback in LookupMethod. The param name (T/E/…) is arbitrary for such a routine.
         if (routine.OwnerType != null)
         {
-            string ownerKey = routine.OwnerType.FullName;
-            if (!_routinesByOwner.TryGetValue(key: ownerKey, value: out List<RoutineInfo>? list))
+            string ownerKey = routine.OwnerType is GenericParameterTypeInfo
+                ? GenericOwnerKey
+                : routine.OwnerType.FullName;
+            if (!_routinesByOwner.TryGetValue(key: ownerKey, value: out Dictionary<string, List<RoutineInfo>>? byName))
+            {
+                byName = new Dictionary<string, List<RoutineInfo>>(comparer: StringComparer.Ordinal);
+                _routinesByOwner[key: ownerKey] = byName;
+            }
+            if (!byName.TryGetValue(key: routine.Name, value: out List<RoutineInfo>? list))
             {
                 list = [];
-                _routinesByOwner[key: ownerKey] = list;
+                byName[key: routine.Name] = list;
             }
 
             // Dedup by (RegistryKey, IsFailable): a re-registered routine (same owner, signature,
@@ -125,15 +135,6 @@ public sealed partial class TypeRegistry
             else
             {
                 list.Add(item: routine);
-            }
-
-            // A member routine on a bare generic-param owner (`routine T.m()`) — a default-impl member
-            // routine applicable to any receiver. Index by name so `x.m()` on a concrete receiver resolves
-            // (owner-keyed lookup can't reach a `T`-owner). No role split (derive/coercion/fold-intrinsic all
-            // resolve the same); AST/synthesis + fold layers decide the rest.
-            if (routine.OwnerType is GenericParameterTypeInfo)
-            {
-                _universalMethods.TryAdd(key: routine.Name, value: routine);
             }
         }
 
@@ -487,8 +488,11 @@ public sealed partial class TypeRegistry
         // Update the routines-by-owner index if this is a method
         if (routine.OwnerType != null)
         {
-            string ownerKey = routine.OwnerType.FullName;
-            if (_routinesByOwner.TryGetValue(key: ownerKey, value: out List<RoutineInfo>? list))
+            string ownerKey = routine.OwnerType is GenericParameterTypeInfo
+                ? GenericOwnerKey
+                : routine.OwnerType.FullName;
+            if (_routinesByOwner.TryGetValue(key: ownerKey, value: out Dictionary<string, List<RoutineInfo>>? byName)
+                && byName.TryGetValue(key: baseName, value: out List<RoutineInfo>? list))
             {
                 int index = list.FindIndex(match: r => r.BaseName == baseName);
                 if (index >= 0)
@@ -681,6 +685,18 @@ public sealed partial class TypeRegistry
     /// same-signature templates coexist (distinguished by their gate set) because selection is
     /// per-type at SYNTHESIS time — this store never goes through the signature-keyed registry.
     /// </summary>
+    /// <summary>The default-impl member routine named <paramref name="methodName"/> declared on a bare
+    /// generic-param owner (`routine T.m()`), or null. Found under the canonical GenericOwnerKey in
+    /// _routinesByOwner — the by-name resolution path that replaced the old separate _universalMethods index.
+    /// First overload wins (matching the prior first-registration-wins TryAdd).</summary>
+    private RoutineInfo? DefaultMemberRoutine(string methodName)
+        => _routinesByOwner.TryGetValue(key: GenericOwnerKey,
+               value: out Dictionary<string, List<RoutineInfo>>? byName)
+           && byName.TryGetValue(key: methodName, value: out List<RoutineInfo>? list)
+           && list.Count > 0
+            ? list[index: 0]
+            : null;
+
     public void RegisterDeriveTemplate(string method, string ownerParam, int arity,
         List<GenericConstraintDeclaration>? constraints, Statement body)
     {
@@ -778,12 +794,12 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // First check the type's own methods
-        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
+        // First check the type's own methods (O(1) by name via the nested store)
+        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out Dictionary<string, List<RoutineInfo>>? ownByName)
+            && ownByName.TryGetValue(key: methodName, value: out List<RoutineInfo>? methods))
         {
             List<RoutineInfo> nameMatches = methods.Where(predicate: m =>
-                m.Name == methodName &&
-                (isFailable == null || m.IsFailable == isFailable)).ToList();
+                isFailable == null || m.IsFailable == isFailable).ToList();
 
             // `within`-dispatch: when a protocol declares several same-name default bodies gated by
             // `needs Me is VariantType` / `is ChoiceType` / `obeys X`, pick the MOST-SPECIFIC one whose
@@ -862,12 +878,13 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // Fallback: a default-impl member routine on a bare generic-param owner (`routine T.m()`),
-        // resolved by name and substituted onto the concrete receiver (derive template / access coercion /
-        // hijack / `@innate` fold-intrinsic — the AST/synthesis + fold layers decide what happens next).
-        if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
+        // Fallback: a default-impl member routine on a bare generic-param owner (`routine T.m()`), found by
+        // name under the canonical GenericOwnerKey in the same _routinesByOwner store and substituted onto the
+        // concrete receiver (derive template / access coercion / hijack / `@innate` fold-intrinsic — the
+        // AST/synthesis + fold layers decide what happens next). No separate "universal methods" index.
+        if (DefaultMemberRoutine(methodName: methodName) is { } defaultMember)
         {
-            return SubstituteMethodForOwner(method: universalMethod, resolvedOwner: type);
+            return SubstituteMethodForOwner(method: defaultMember, resolvedOwner: type);
         }
 
         // Generic parameter receivers route through caller-supplied constraints — see
@@ -1482,9 +1499,10 @@ public sealed partial class TypeRegistry
 
     internal void CollectMemberRoutineCandidates(TypeInfo type, string methodName, List<RoutineInfo> candidates)
     {
-        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
+        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out Dictionary<string, List<RoutineInfo>>? byName)
+            && byName.TryGetValue(key: methodName, value: out List<RoutineInfo>? methods))
         {
-            candidates.AddRange(methods.Where(predicate: m => m.Name == methodName));
+            candidates.AddRange(methods);
         }
 
         if (type is ProtocolTypeInfo proto)
@@ -1529,9 +1547,9 @@ public sealed partial class TypeRegistry
             }
         }
 
-        if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
+        if (DefaultMemberRoutine(methodName: methodName) is { } defaultMember)
         {
-            candidates.Add(item: SubstituteMethodForOwner(method: universalMethod,
+            candidates.Add(item: SubstituteMethodForOwner(method: defaultMember,
                 resolvedOwner: type)!);
         }
 
@@ -1682,12 +1700,9 @@ public sealed partial class TypeRegistry
     /// <returns>An enumerable of all methods for the type.</returns>
     public IEnumerable<RoutineInfo> GetMethodsForType(TypeInfo type)
     {
-        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
-        {
-            return methods;
-        }
-
-        return [];
+        return _routinesByOwner.TryGetValue(key: type.FullName, value: out Dictionary<string, List<RoutineInfo>>? byName)
+            ? OwnerMethods(byName: byName)
+            : [];
     }
 
     private readonly Dictionary<string, List<RoutineInfo>> _methodsForTypeCache =
@@ -1708,8 +1723,8 @@ public sealed partial class TypeRegistry
     /// </summary>
     public IEnumerable<RoutineInfo> GetOwnMethodsResolved(TypeInfo type)
     {
-        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
-            return methods;
+        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out Dictionary<string, List<RoutineInfo>>? ownByName))
+            return OwnerMethods(byName: ownByName);
 
         if (!type.IsGenericResolution ||
             type.TypeArguments is null ||
@@ -1729,9 +1744,9 @@ public sealed partial class TypeRegistry
             _ => null
         };
         if (genericDef != null && !ReferenceEquals(objA: genericDef, objB: type) &&
-            _routinesByOwner.TryGetValue(key: genericDef.FullName, value: out List<RoutineInfo>? defMethods))
+            _routinesByOwner.TryGetValue(key: genericDef.FullName, value: out Dictionary<string, List<RoutineInfo>>? defByName))
         {
-            foreach (RoutineInfo m in defMethods)
+            foreach (RoutineInfo m in OwnerMethods(byName: defByName))
             {
                 // Universal (T-owned) methods are not the type's OWN methods — skip them so the
                 // no-owner T.destroy stub never leaks in for a borrowed referent.
@@ -2127,9 +2142,9 @@ public sealed partial class TypeRegistry
     /// </summary>
     public List<RoutineInfo> GetMethodsForOwner(TypeInfo ownerType)
     {
-        if (_routinesByOwner.TryGetValue(key: ownerType.FullName, value: out List<RoutineInfo>? list))
-            return list;
-        return [];
+        return _routinesByOwner.TryGetValue(key: ownerType.FullName, value: out Dictionary<string, List<RoutineInfo>>? byName)
+            ? OwnerMethods(byName: byName).ToList()
+            : [];
     }
 
     /// <summary>
@@ -2141,8 +2156,8 @@ public sealed partial class TypeRegistry
     public IEnumerable<RoutineInfo> EnumerateMemberRoutines()
     {
         var seen = new HashSet<RoutineInfo>(comparer: ReferenceEqualityComparer.Instance);
-        foreach (List<RoutineInfo> list in _routinesByOwner.Values)
-            foreach (RoutineInfo r in list)
+        foreach (Dictionary<string, List<RoutineInfo>> byName in _routinesByOwner.Values)
+            foreach (RoutineInfo r in OwnerMethods(byName: byName))
                 if (seen.Add(item: r))
                     yield return r;
     }
