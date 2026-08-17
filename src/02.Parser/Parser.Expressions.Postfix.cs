@@ -128,6 +128,17 @@ public partial class Parser
                 expr = new SpliceMemberExpression(Object: expr, Selector: selector,
                     Location: expr.Location);
             }
+            else if (Check(type: TokenType.Dot) &&
+                     PeekToken(offset: 1).Type == TokenType.Dollar)
+            {
+                // Brace-less comptime splice selector: obj.$nameof(m). Same SpliceMemberExpression as the
+                // legacy obj.${m.name}; the monomorphizer folds nameof(m) to the concrete field name.
+                Advance(); // consume '.'
+                Advance(); // consume '$'
+                SpliceExpression selector = ParseDollarSplice(kind: SpliceKind.Selector);
+                expr = new SpliceMemberExpression(Object: expr, Selector: selector,
+                    Location: expr.Location);
+            }
             else if (Match(type: TokenType.Dot))
             {
                 // Member access. The wired marker `$` (me.store(), me.emit!()) is a separate Dollar

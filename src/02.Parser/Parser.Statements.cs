@@ -619,17 +619,34 @@ public partial class Parser
 
         SourceLocation clauseLoc = GetLocation();
         Consume(type: TokenType.Is,
-            errorMessage: "Expected 'is ${m.type} ...' clause in an branchof-expand");
-        Consume(type: TokenType.SpliceOpen,
-            errorMessage: "Expected '${m.type}' type splice after 'is'");
-        // The splice inner must be the handle's `.type` projection; parsed and validated, then the
-        // optional payload binding follows.
-        SpliceExpression splice = ParseSplice(kind: SpliceKind.Value);
-        if (splice.Inner is not MemberExpression { Object: IdentifierExpression spliceHandle, MemberName: "type" }
-            || spliceHandle.Name != handle)
+            errorMessage: "Expected 'is $typeof(m) ...' clause in an branchof-expand");
+        // The arm pattern's type is the handle's arm type — the brace-less `$typeof(m)` splice (or the
+        // legacy `${m.type}`); parsed and validated, then the optional payload binding follows.
+        SpliceExpression splice;
+        if (Match(type: TokenType.Dollar))
         {
-            throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
-                message: $"An branchof-expand arm pattern must be 'is ${{{handle}.type}} ...'.");
+            splice = ParseDollarSplice(kind: SpliceKind.Value);
+            if (splice.Inner is not CallExpression
+                {
+                    Callee: IdentifierExpression { Name: "typeof" },
+                    Arguments: [IdentifierExpression spliceHandleNew]
+                } || spliceHandleNew.Name != handle)
+            {
+                throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                    message: $"An branchof-expand arm pattern must be 'is $typeof({handle}) ...'.");
+            }
+        }
+        else
+        {
+            Consume(type: TokenType.SpliceOpen,
+                errorMessage: "Expected '$typeof(m)' type splice after 'is'");
+            splice = ParseSplice(kind: SpliceKind.Value);
+            if (splice.Inner is not MemberExpression { Object: IdentifierExpression spliceHandle, MemberName: "type" }
+                || spliceHandle.Name != handle)
+            {
+                throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                    message: $"An branchof-expand arm pattern must be 'is $typeof({handle}) ...'.");
+            }
         }
 
         string? binding = Check(type: TokenType.Identifier)

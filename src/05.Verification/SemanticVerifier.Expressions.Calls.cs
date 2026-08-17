@@ -60,8 +60,46 @@ public sealed partial class SemanticVerifier
         return true;
     }
 
+    /// <summary>
+    /// The comptime metadata-reflection intrinsics (`nameof`/`orderof`/`typeof`/`typeidof`/`valueof`/
+    /// `placeof`/`sizeof`). Each reads a comptime property off the active `expand` handle (or, for
+    /// `sizeof`/`typeof`, a type). Folded off the unroll context at monomorphization; see
+    /// <c>GenericAstRewriter.FoldMetadataIntrinsic</c>.
+    /// </summary>
+    internal static bool IsMetadataIntrinsic(string name) => name is
+        "nameof" or "orderof" or "typeof" or "typeidof" or "valueof" or "placeof" or "sizeof";
+
+    /// <summary>
+    /// Analyzes a comptime metadata intrinsic call (`nameof(m)`, `sizeof(T)`, …). The argument is an
+    /// expand handle or a type name; either way its concrete value only exists at monomorphization, so
+    /// the intrinsic types leniently (like the old dot-projection) and the real fold runs at instantiation.
+    /// </summary>
+    private TypeSymbol AnalyzeMetadataIntrinsic(string name)
+    {
+        return name switch
+        {
+            "nameof" => _registry.LookupType(name: "Text") ?? ErrorTypeInfo.Instance,
+            "orderof" or "typeidof" or "placeof" or "sizeof" =>
+                _registry.LookupType(name: "U64") ?? ErrorTypeInfo.Instance,
+            "valueof" => _registry.LookupType(name: "S32") ?? ErrorTypeInfo.Instance,
+            // `typeof(m)` in expression position is a comptime typewise receiver (deferred, like the
+            // old `${m.type}`): the real type only exists post-monomorph.
+            _ => ErrorTypeInfo.Instance
+        };
+    }
+
     private TypeSymbol AnalyzeCallExpression(CallExpression call, TypeSymbol? expectedType = null)
     {
+        // Comptime metadata intrinsic (`nameof(m)` / `sizeof(T)` / …): a call whose callee is one of the
+        // reserved `*of` names with a single argument. Intercepted before ordinary routine resolution —
+        // these have no RoutineInfo; they fold off the expand-unroll context at monomorphization.
+        if (call.Callee is IdentifierExpression { Name: var ofName }
+            && IsMetadataIntrinsic(name: ofName)
+            && call.Arguments is { Count: 1 })
+        {
+            return AnalyzeMetadataIntrinsic(name: ofName);
+        }
+
         switch (call.Callee)
         {
             // Get the callee type/routine

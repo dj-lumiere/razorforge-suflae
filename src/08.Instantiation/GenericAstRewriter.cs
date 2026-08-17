@@ -115,6 +115,12 @@ internal static class GenericAstRewriter
         /// <summary>Whether the current member is secret-visibility during expand unrolling.</summary>
         public bool ActiveMemberIsSecret { get; set; }
 
+        /// <summary>The current member's byte OFFSET within its parent struct (repr-C layout, folded by
+        /// <c>placeof(m)</c>). Computed over the FULL declaration-order member list — a <c>secret</c>/
+        /// <c>posted</c> field ahead still pushes the offset — so it is layout-faithful even when
+        /// <c>openmemvarof</c> filtered the iteration.</summary>
+        public long ActiveMemberOffset { get; set; }
+
         /// <summary>The current case's numeric constant during a <c>caseof</c> expand unrolling — a
         /// choice's S32 discriminant or a flags member's U64 bit value — folded by <c>${c.value}</c>.</summary>
         public long ActiveCaseValue { get; set; }
@@ -987,6 +993,14 @@ internal static class GenericAstRewriter
                      obeysHandle.Name == ctx.ActiveExpandHandle
                 => FoldHandleObeys(call: obeysCall, ctx: ctx),
 
+            // Comptime metadata intrinsic: nameof(m) / orderof(m) / typeof(m) / typeidof(m) / valueof(c) /
+            // placeof(m) / sizeof(m|T) -> folded off the active expand-unroll context. Placed BEFORE the
+            // generic CallExpression clone so it never resolves as a real routine call.
+            CallExpression { Callee: IdentifierExpression ofId, Arguments: [Expression ofArg] } ofCall
+                when Verification.SemanticVerifier.IsMetadataIntrinsic(name: ofId.Name)
+                     && IsFoldableMetadataArg(name: ofId.Name, arg: ofArg, ctx: ctx)
+                => FoldMetadataIntrinsic(name: ofId.Name, arg: ofArg, ctx: ctx, location: ofCall.Location),
+
             CallExpression call => CloneCall(call, ctx),
 
             // Comptime expand-handle projection: m.name / m.id -> folded literal (only inside an
@@ -1833,6 +1847,11 @@ internal static class GenericAstRewriter
             _ => null
         };
 
+        // Byte offset of each member within the parent struct (repr-C layout), keyed by member identity.
+        // Computed over the FULL declaration-order list BEFORE the openmemvarof filter, so a `secret`/
+        // `posted` field ahead still pushes the offsets `placeof(m)` folds to.
+        Dictionary<MemberVariableInfo, long> offsets = ComputeMemberOffsets(members: members);
+
         // openmemvarof(T) yields only the publicly-readable members (OPEN ∪ POSTED) — a `secret` field is
         // filtered out. allmemvarof(T) and legacy memvarof(T) yield every member. This visibility split is
         // the sole filter (the old `if not m.is_secret` gate is gone — pick the intrinsic instead).
@@ -1850,6 +1869,7 @@ internal static class GenericAstRewriter
             long prevIndex = ctx.ActiveMemberIndex;
             TypeInfo? prevType = ctx.ActiveMemberType;
             bool prevSecret = ctx.ActiveMemberIsSecret;
+            long prevOffset = ctx.ActiveMemberOffset;
 
             ctx.ActiveExpandHandle = expand.HandleName;
             foreach (MemberVariableInfo mv in members)
@@ -1858,6 +1878,7 @@ internal static class GenericAstRewriter
                 ctx.ActiveMemberIndex = mv.Index;
                 ctx.ActiveMemberType = mv.Type;
                 ctx.ActiveMemberIsSecret = mv.Visibility == VisibilityModifier.Secret;
+                ctx.ActiveMemberOffset = offsets.TryGetValue(key: mv, value: out long off) ? off : 0;
 
                 Statement clone = RewriteStatement(stmt: expand.Body, ctx: ctx);
                 if (clone is BlockStatement block)
@@ -1875,9 +1896,55 @@ internal static class GenericAstRewriter
             ctx.ActiveMemberIndex = prevIndex;
             ctx.ActiveMemberType = prevType;
             ctx.ActiveMemberIsSecret = prevSecret;
+            ctx.ActiveMemberOffset = prevOffset;
         }
 
         return new BlockStatement(Statements: outStmts, Location: expand.Location);
+    }
+
+    /// <summary>Byte size of a member/type for repr-C layout, guarded: a non-concrete <c>@llvm</c>
+    /// template hole (a generic-def body being cloned before substitution) throws inside
+    /// <see cref="TypeInfo.SizeBytes"/>, so treat it as 0 rather than detonating the whole rewrite.</summary>
+    private const int PointerSize = 8;
+
+    private static int SafeSizeBytes(TypeInfo? type)
+    {
+        if (type is null) return 0;
+        try { return type.SizeBytes(pointerSize: PointerSize); }
+        catch { return 0; }
+    }
+
+    /// <summary>
+    /// Computes each member's byte OFFSET within the parent struct using the repr-C layout formula
+    /// (<c>alignment = Max(Min(memberSize,16),1); size = AlignTo(size, alignment); offset = size; size
+    /// += memberSize</c>), matching <see cref="RecordTypeInfo.SizeBytes"/>. Keyed by member identity so
+    /// the caller can look up an offset after filtering the iteration set. Empty when the source carries
+    /// no member list.
+    /// </summary>
+    private static Dictionary<MemberVariableInfo, long> ComputeMemberOffsets(
+        List<MemberVariableInfo>? members)
+    {
+        var offsets = new Dictionary<MemberVariableInfo, long>();
+        if (members == null) return offsets;
+        long size = 0;
+        foreach (MemberVariableInfo mv in members)
+        {
+            int memberSize = SafeSizeBytes(type: mv.Type);
+            int alignment = Math.Max(val1: Math.Min(val1: memberSize, val2: 16), val2: 1);
+            size = AlignTo(size: size, alignment: alignment);
+            offsets[key: mv] = size;
+            size += memberSize;
+        }
+        return offsets;
+    }
+
+    /// <summary>Rounds <paramref name="size"/> up to the next multiple of <paramref name="alignment"/>
+    /// (repr-C member alignment); mirrors <c>RecordTypeInfo.AlignTo</c>.</summary>
+    private static long AlignTo(long size, int alignment)
+    {
+        if (alignment <= 1) return size;
+        long rem = size % alignment;
+        return rem == 0 ? size : size + (alignment - rem);
     }
 
     /// <summary>
@@ -2153,6 +2220,87 @@ internal static class GenericAstRewriter
         {
             ResolvedType = ctx.Registry?.LookupType(name: "U64")
         };
+    }
+
+    /// <summary>
+    /// True when a metadata intrinsic's argument can be folded in the current context: the argument
+    /// names the active expand handle (member/case metadata), or — for <c>sizeof</c>/<c>typeof</c> — a
+    /// resolvable type. Otherwise the call is left for ordinary resolution (e.g. a same-named local).
+    /// </summary>
+    private static bool IsFoldableMetadataArg(string name, Expression arg, RewriteContext ctx)
+    {
+        if (arg is IdentifierExpression argId && ctx.ActiveExpandHandle != null &&
+            argId.Name == ctx.ActiveExpandHandle)
+            return true;
+        if (name is "sizeof" or "typeof" && arg is IdentifierExpression typeId)
+            return ResolveMetadataType(typeName: typeId.Name, ctx: ctx) != null;
+        return false;
+    }
+
+    /// <summary>Resolves a metadata intrinsic type argument (a type param like <c>T</c> or a concrete
+    /// type name) to a concrete <see cref="TypeInfo"/> for <c>sizeof(T)</c>/<c>typeof(T)</c>.</summary>
+    private static TypeInfo? ResolveMetadataType(string typeName, RewriteContext ctx)
+    {
+        if (ctx.TypeSubs != null && ctx.TypeSubs.TryGetValue(key: typeName, value: out TypeInfo? sub))
+            return ConcretizeGenericDef(type: sub, ctx: ctx);
+        TypeInfo? t = ctx.Registry?.LookupType(name: typeName);
+        return t != null ? ConcretizeGenericDef(type: t, ctx: ctx) : null;
+    }
+
+    /// <summary>The concrete type a metadata intrinsic argument denotes: the active member's type when
+    /// the argument is the expand handle, else a resolved type name (for <c>sizeof(T)</c>/<c>typeof(T)</c>).</summary>
+    private static TypeInfo? MetadataArgType(Expression arg, RewriteContext ctx)
+    {
+        if (arg is IdentifierExpression argId)
+        {
+            if (ctx.ActiveExpandHandle != null && argId.Name == ctx.ActiveExpandHandle)
+                return ctx.ActiveMemberType;
+            return ResolveMetadataType(typeName: argId.Name, ctx: ctx);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Folds a comptime metadata intrinsic (<c>nameof</c>/<c>orderof</c>/<c>typeof</c>/<c>typeidof</c>/
+    /// <c>valueof</c>/<c>placeof</c>/<c>sizeof</c>) to a literal or typewise receiver off the active
+    /// expand-unroll context. The name/order/type/type_id/value cases delegate to
+    /// <see cref="FoldHandleProjection"/> (same folds as the retired dot-projection); <c>placeof</c> and
+    /// <c>sizeof</c> are new repr-C layout reads.
+    /// </summary>
+    private static Expression FoldMetadataIntrinsic(string name, Expression arg, RewriteContext ctx,
+        SourceLocation location)
+    {
+        switch (name)
+        {
+            case "nameof":
+                return FoldHandleProjection(projection: "name", ctx: ctx, location: location);
+            case "orderof":
+                return FoldHandleProjection(projection: "id", ctx: ctx, location: location);
+            case "typeidof":
+                return FoldHandleProjection(projection: "type_id", ctx: ctx, location: location);
+            case "valueof":
+                return FoldHandleProjection(projection: "value", ctx: ctx, location: location);
+            case "placeof":
+                return new LiteralExpression(Value: (ulong)ctx.ActiveMemberOffset,
+                    LiteralType: TokenType.U64Literal, Location: location)
+                {
+                    ResolvedType = ctx.Registry?.LookupType(name: "U64")
+                };
+            case "sizeof":
+                return new LiteralExpression(Value: (ulong)SafeSizeBytes(type: MetadataArgType(arg: arg, ctx: ctx)),
+                    LiteralType: TokenType.U64Literal, Location: location)
+                {
+                    ResolvedType = ctx.Registry?.LookupType(name: "U64")
+                };
+            default: // "typeof" — a typewise receiver naming the concrete member/type (see FoldHandleProjection "type").
+            {
+                TypeInfo? t = MetadataArgType(arg: arg, ctx: ctx);
+                return new IdentifierExpression(Name: t?.Name ?? "None", Location: location)
+                {
+                    ResolvedType = t
+                };
+            }
+        }
     }
 
     /// <summary>

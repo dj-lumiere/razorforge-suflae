@@ -171,6 +171,22 @@ public partial class Parser
                 ComptimeValue: spliced);
         }
 
+        // Brace-less comptime type splice: `$typeof(m)` (a TYPE splice of an expand handle's member type)
+        // or `$sizeof(m)` etc. (a comptime VALUE splice used as a const-generic argument).
+        if (Match(type: TokenType.Dollar))
+        {
+            Expression spliced = ParseDollarSpliceInner();
+            if (spliced is CallExpression
+                {
+                    Callee: IdentifierExpression { Name: "typeof" },
+                    Arguments: [IdentifierExpression handle]
+                })
+                return new TypeExpression(Name: "splice", GenericArguments: null, Location: location,
+                    SpliceHandle: handle.Name);
+            return new TypeExpression(Name: "splice_value", GenericArguments: null, Location: location,
+                ComptimeValue: spliced);
+        }
+
         // ═══════════════════════════════════════════════════════════════════════════
         // CASE 2: Tuple type - (T, U) or (T,)
         // ═══════════════════════════════════════════════════════════════════════════

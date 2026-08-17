@@ -42,14 +42,56 @@ public partial class Parser
         return new SpliceExpression(Inner: inner, RequiredKind: kind, Location: loc);
     }
 
+    /// <summary>
+    /// Parses a brace-less comptime splice <c>$primary</c> after the leading <c>$</c> has been consumed.
+    /// The <c>$</c> binds to a single self-delimiting primary — an identifier optionally followed by one
+    /// call (<c>$nameof(m)</c>, <c>$typeof(m)</c>, <c>$valueof(c)</c>) — and stops at a following <c>.</c>
+    /// (chaining continues on the splice RESULT: <c>me.$nameof(m).foo</c> → <c>me.x.foo</c>).
+    /// </summary>
+    /// <param name="kind">The required fold kind, fixed by the syntactic position.</param>
+    private SpliceExpression ParseDollarSplice(SpliceKind kind)
+    {
+        SourceLocation loc = GetLocation(token: PeekToken(offset: -1));
+        Expression inner = ParseDollarSpliceInner();
+        return new SpliceExpression(Inner: inner, RequiredKind: kind, Location: loc);
+    }
+
+    /// <summary>The self-delimiting primary a <c>$</c> splice binds to: an identifier, optionally with a
+    /// single call argument list. Deliberately does NOT consume a trailing <c>.member</c> — that chains
+    /// on the splice result.</summary>
+    private Expression ParseDollarSpliceInner()
+    {
+        SourceLocation loc = GetLocation();
+        if (!Check(type: TokenType.Identifier) && !IsKeywordValidAsMethodName(CurrentToken.Type))
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
+                message: "Expected a primary (e.g. 'nameof(m)') after a '$' comptime splice.");
+        }
+        string name = CurrentToken.Text;
+        Advance();
+        Expression expr = new IdentifierExpression(Name: name, Location: loc);
+        if (Match(type: TokenType.LeftParen))
+        {
+            List<Expression> args = ParseArgumentList();
+            Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
+            expr = new CallExpression(Callee: expr, Arguments: args, Location: loc);
+        }
+        return expr;
+    }
+
     private Expression ParsePrimary()
     {
         SourceLocation location = GetLocation();
 
-        // Comptime splice in expression position: ${expr}
+        // Comptime splice in expression position: ${expr} (legacy) or $primary (brace-less).
         if (Match(type: TokenType.SpliceOpen))
         {
             return ParseSplice(kind: SpliceKind.Value);
+        }
+
+        if (Match(type: TokenType.Dollar))
+        {
+            return ParseDollarSplice(kind: SpliceKind.Value);
         }
 
         // Boolean and none literals
