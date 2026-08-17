@@ -151,12 +151,42 @@ public sealed partial class SemanticVerifier
                 location: external.Location);
         }
 
+        // Resolve the parameter + return types — WITHOUT this the routine registers with zero
+        // parameters, so every `C::foo(arg)` call fails RF-S501 "expects at most 0 arguments" (the
+        // stdlib load path already does this in RegisterExternalDeclaration; the user-file path had
+        // silently dropped them). A generic-param context stub lets ResolveType recognize the
+        // external's own `[T]` params; ordinary FFI param types (S32/U64/CStr/Hijacked[T]/a choice)
+        // are already registered by the time this Phase-1 collection runs.
+        RoutineInfo? prevRoutine = _currentRoutine;
+        _currentRoutine = new RoutineInfo(name: external.Name)
+        {
+            GenericParameters = external.GenericParameters
+        };
+
+        var parameters = new List<ParameterInfo>();
+        foreach (Parameter param in external.Parameters)
+        {
+            TypeSymbol paramType = ResolveType(typeExpr: param.Type);
+            parameters.Add(item: new ParameterInfo(name: param.Name, type: paramType)
+            {
+                DefaultValue = param.DefaultValue, IsVariadicParam = param.IsVariadic
+            });
+        }
+
+        TypeSymbol? returnType = external.ReturnType != null
+            ? ResolveType(typeExpr: external.ReturnType)
+            : null;
+
+        _currentRoutine = prevRoutine;
+
         var routineInfo = new RoutineInfo(name: external.Name)
         {
             // Foreign-ness is now carried by RoutineInfo.Realm (derived from CallingConvention).
             IsFailable = external.IsFailable,
             CallingConvention = external.CallingConvention,
             IsVariadic = external.IsVariadic,
+            Parameters = parameters,
+            ReturnType = returnType,
             Visibility = VisibilityModifier.Open, // External declarations are always open
             Location = external.Location,
             Module = GetCurrentModuleName(),
