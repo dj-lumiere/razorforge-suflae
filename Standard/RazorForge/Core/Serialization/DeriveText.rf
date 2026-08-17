@@ -6,18 +6,17 @@ import Collections
 ### The auto-derived default `represent()` for any record: `TypeName(field: value, …)`. Written as a
 ### universal `@overridable routine T.represent()` — the compiler uses it as the represent for any
 ### record that doesn't provide its own (a hand-written `T.represent` or a kind-specialized
-### `@override` takes precedence). Secret fields are hidden; each value renders via its own
-### `represent`. The field-walk is the comptime `expand` — this replaces the hand-written C# builder.
+### `@override` takes precedence). Secret fields are hidden — the `openmemvarof` walk yields only the
+### publicly-readable (OPEN ∪ POSTED) members. Each value renders via its own `represent`.
 @overridable
 routine T.represent() -> Text
   var result = me.type_name() + "("
   var first = true
-  expand m in memvarof(T)
-    if not m.is_secret
-      if not first
-        result = result + ", "
-      result = result + m.name + ": " + me.${m.name}.represent()
-      first = false
+  expand m in openmemvarof(T)
+    if not first
+      result = result + ", "
+    result = result + nameof(m) + ": " + me.$nameof(m).represent()
+    first = false
   result = result + ")"
   return result
 
@@ -31,10 +30,10 @@ needs T is VariantType
   when me
     is None => return me.type_name() + "(none)"
     expand m in branchof(T)
-      is ${m.type} v => return me.type_name() + "(" + v.represent() + ")"
+      is $typeof(m) v => return me.type_name() + "(" + v.represent() + ")"
 
 ### Variant `diagnose()`: `Module.Variant(type_id: <arm id>, <arm diagnose>)` — TAG-dispatch via
-### `branchof`; the live arm's `m.type_id` (its stable type id) and the payload's `diagnose()`. The absent
+### `branchof`; the live arm's `typeidof(m)` (its stable type id) and the payload's `diagnose()`. The absent
 ### `None` arm shows `(type_id: 0, none)`. (No `None`/void arms exist — `None` is the canonical empty
 ### branch — so no bindingless-arm form is needed.)
 @override
@@ -43,17 +42,17 @@ needs T is VariantType
   when me
     is None => return me.full_type_name() + "(type_id: 0, none)"
     expand m in branchof(T)
-      is ${m.type} v => return me.full_type_name() + "(type_id: " + m.type_id.represent() + ", " + v.diagnose() + ")"
+      is $typeof(m) v => return me.full_type_name() + "(type_id: " + typeidof(m).represent() + ", " + v.diagnose() + ")"
 
 ### Choice `represent()`: VALUE-dispatch on the S32 discriminant via `caseof`, returning the bare case
-### name (`READ`). `S32(from: me)` reads the discriminant; `${c.value}` is each case's constant. The
+### name (`READ`). `S32(from: me)` reads the discriminant; `$valueof(c)` is each case's constant. The
 ### walk is exhaustive (one case always matches), so the trailing `pierce` is unreachable.
 @override
 routine T.represent() -> Text
 needs T is ChoiceType
   expand c in caseof(T)
-    if S32(from: me) == ${c.value}
-      return c.name
+    if S32(from: me) == $valueof(c)
+      return nameof(c)
   pierce LogicBreachedError()
 
 ### Choice `diagnose()`: `Module.ChoiceName(id: <discriminant>, CaseName)`, matching the C# builder.
@@ -61,24 +60,24 @@ needs T is ChoiceType
 routine T.diagnose() -> Text
 needs T is ChoiceType
   expand c in caseof(T)
-    if S32(from: me) == ${c.value}
-      return me.full_type_name() + "(id: " + S32(from: me).represent() + ", " + c.name + ")"
+    if S32(from: me) == $valueof(c)
+      return me.full_type_name() + "(id: " + S32(from: me).represent() + ", " + nameof(c) + ")"
   pierce LogicBreachedError()
 
 ### Flags `represent()`: the ON members joined by `" and "` (`READ and WRITE`), or `<none>` if the
 ### bitmask is empty. A flags value is a COMBINATION, so `caseof` ACCUMULATES (no `when`): a SUBSET
-### test per member `(U64(from: me) & ${c.value}) != 0` appends its name.
+### test per member `(U64(from: me) & $valueof(c)) != 0` appends its name.
 @override
 routine T.represent() -> Text
 needs T is FlagsType
   var result = ""
   var first = true
   expand c in caseof(T)
-    if (U64(from: me) & ${c.value}) != 0u64
+    if (U64(from: me) & $valueof(c)) != 0u64
       if first
-        result = c.name
+        result = nameof(c)
       else
-        result = result + " and " + c.name
+        result = result + " and " + nameof(c)
       first = false
   if first
     result = "<none>"
@@ -93,11 +92,11 @@ needs T is FlagsType
   var first = true
   var bits = "%"
   expand c in caseof(T)
-    if (U64(from: me) & ${c.value}) != 0u64
+    if (U64(from: me) & $valueof(c)) != 0u64
       if first
-        result = c.name
+        result = nameof(c)
       else
-        result = result + " and " + c.name
+        result = result + " and " + nameof(c)
       first = false
       bits = bits + "1"
     else
@@ -114,10 +113,10 @@ routine T.represent() -> Text
 needs T is TupleType
   var result = "("
   var first = true
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     if not first
       result = result + ", "
-    result = result + me.${m.name}.represent()
+    result = result + me.$nameof(m).represent()
     first = false
   return result + ")"
 
@@ -128,26 +127,26 @@ routine T.diagnose() -> Text
 needs T is TupleType
   var result = me.full_type_name() + "("
   var first = true
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     if not first
       result = result + ", "
-    result = result + me.${m.name}.represent()
+    result = result + me.$nameof(m).represent()
     first = false
   return result + ")"
 
 ### The auto-derived default `diagnose()` for any record: `Module.TypeName(field: value, …)`. Uses the
-### fully-qualified name and shows ALL fields (secret ones prefixed `[secret] `); each value still
-### renders via `represent` (never `diagnose`) to avoid exponentially verbose nested output.
+### fully-qualified name and shows ALL fields (secret ones prefixed `[secret] ` via `visibilityof`); each
+### value still renders via `represent` (never `diagnose`) to avoid exponentially verbose nested output.
 @overridable
 routine T.diagnose() -> Text
   var result = me.full_type_name() + "("
   var first = true
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     if not first
       result = result + ", "
-    if m.is_secret
+    if visibilityof(m) is SECRET
       result = result + "[secret] "
-    result = result + m.name + ": " + me.${m.name}.represent()
+    result = result + nameof(m) + ": " + me.$nameof(m).represent()
     first = false
   result = result + ")"
   return result
@@ -158,8 +157,8 @@ routine T.diagnose() -> Text
 ### builder — a zero-field type expands to no comparisons and returns `true`.
 @overridable
 routine T.eq(you: T) -> Bool
-  expand m in memvarof(T)
-    if me.${m.name} != you.${m.name}
+  expand m in allmemvarof(T)
+    if me.$nameof(m) != you.$nameof(m)
       return false
   return true
 
@@ -169,9 +168,9 @@ routine T.eq(you: T) -> Bool
 ### zero-field type expands to no comparisons and returns `SAME`.
 @overridable
 routine T.cmp(you: T) -> ComparisonSign
-  expand m in memvarof(T)
-    if me.${m.name}.cmp(you: you.${m.name}) isnot SAME
-      return me.${m.name}.cmp(you: you.${m.name})
+  expand m in allmemvarof(T)
+    if me.$nameof(m).cmp(you: you.$nameof(m)) isnot SAME
+      return me.$nameof(m).cmp(you: you.$nameof(m))
   return SAME
 
 ### The auto-derived fast `hash()` for any record/entity/tuple: XOR-fold each member variable's fast
@@ -180,8 +179,8 @@ routine T.cmp(you: T) -> ComparisonSign
 @overridable
 routine T.hash() -> U64
   var acc = 0u64
-  expand m in memvarof(T)
-    acc = acc.bitxor(you: me.${m.name}.hash())
+  expand m in allmemvarof(T)
+    acc = acc.bitxor(you: me.$nameof(m).hash())
   return acc
 
 ### The auto-derived keyed `hash(k0, k1)`: same XOR-fold, threading the seed keys through each member
@@ -189,27 +188,28 @@ routine T.hash() -> U64
 @overridable
 routine T.hash(k0: U64, k1: U64) -> U64
   var acc = 0u64
-  expand m in memvarof(T)
-    acc = acc.bitxor(you: me.${m.name}.hash(k0: k0, k1: k1))
+  expand m in allmemvarof(T)
+    acc = acc.bitxor(you: me.$nameof(m).hash(k0: k0, k1: k1))
   return acc
 
 ### The auto-derived default `serialize()` for a composite record/entity: field-walk into a
-### `Dict[Text, SerialValue]` arm. A member whose type obeys `Serializable` (scalars box their scalar
-### arm, aggregate records/entities/variants recurse) is lowered through its OWN `serialize()`. Every
-### OTHER member type has no `serialize` and boxes its `represent()` Text instead: a routine-typed
-### member (entities may hold one — records can't, RF-S412) whose serialized code is meaningless, an
-### enum-like `choice`/`flags` (Diagnosable but not Serializable — e.g. BuilderService's `Visibility`),
-### and any opaque @llvm leaf. The comptime `m.obeying(Serializable)` gate prunes to exactly one arm per
-### member at monomorph, so codegen never sees a `.serialize()` on a type that has none. Keys are the
-### field names in declaration order; `Dict` iteration is insertion-ordered, so the output is stable.
+### `Dict[Text, SerialValue]` arm over the publicly-readable (`openmemvarof`) members. A member whose
+### type obeys `Serializable` (scalars box their scalar arm, aggregate records/entities/variants recurse)
+### is lowered through its OWN `serialize()`. Every OTHER member type has no `serialize` and boxes its
+### `represent()` Text instead: a routine-typed member (entities may hold one — records can't, RF-S412)
+### whose serialized code is meaningless, an enum-like `choice`/`flags` (Diagnosable but not Serializable
+### — e.g. BuilderService's `Visibility`), and any opaque @llvm leaf. The comptime `m.obeying(Serializable)`
+### gate prunes to exactly one arm per member at monomorph, so codegen never sees a `.serialize()` on a
+### type that has none. Keys are the field names in declaration order; `Dict` iteration is
+### insertion-ordered, so the output is stable.
 @overridable
 routine T.serialize() -> SerialValue
   var __sv = Dict[Text, SerialValue]()
-  expand m in memvarof(T)
+  expand m in openmemvarof(T)
     if m.obeying(Serializable)
-      discard __sv.add(key: m.name, value: me.${m.name}.serialize())
+      discard __sv.add(key: nameof(m), value: me.$nameof(m).serialize())
     else
-      discard __sv.add(key: m.name, value: SerialValue(me.${m.name}.represent()))
+      discard __sv.add(key: nameof(m), value: SerialValue(me.$nameof(m).represent()))
   return SerialValue(steal __sv)
 
 ### The auto-derived deep `copy()` (Copyable): forwards to `store` — a bitwise copy for a pure value
@@ -228,41 +228,39 @@ needs T is VariantType
   when me
     is None => return me
     expand m in branchof(T)
-      is ${m.type} v =>
+      is $typeof(m) v =>
         return T(from: v.copy())
     else => return me
 
-### The auto-derived `destroy()`: tear down each owned member (skipping inert ones — raw-pointer /
-### scalar / borrow fields whose `destroy` is a no-op and may not even be defined). Records/tuples stop
-### here (stack values); an ENTITY additionally frees its heap allocation via `hijack().invalidate()`,
-### mirroring a hand-written entity destructor. Variants (tag-dispatch) and @llvm leaves keep the C#
-### builder (the wiring gates on owner kind).
+### The auto-derived `destroy()`: tear down each member (unconditionally — every type has a `destroy`,
+### a no-op for a raw-pointer / scalar / borrow leaf). Records/tuples stop here (stack values); an ENTITY
+### additionally frees its heap allocation via `hijack().invalidate()`, mirroring a hand-written entity
+### destructor. The `allmemvarof` walk covers every owned member incl `secret`.
 @overridable
 routine T.destroy()
-  expand m in memvarof(T)
-    me.${m.name}.destroy()
+  expand m in allmemvarof(T)
+    me.$nameof(m).destroy()
   return
 
 @override
 routine T.destroy()
 needs T is EntityType
-  expand m in memvarof(T)
-    me.${m.name}.destroy()
+  expand m in allmemvarof(T)
+    me.$nameof(m).destroy()
   danger
     me.hijack().invalidate()
   return
 
 ### Variant `destroy()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,
-### one arm live at a time). `branchof` generates one `is ${m.type} v =>` clause per payload arm; the
-### inert-arm skip (`m.is_inert`) drops no-op teardowns; the explicit `is None` + `else` cover the
-### payload-less / void arms (nothing to destroy).
+### one arm live at a time). `branchof` generates one `is $typeof(m) v =>` clause per payload arm; the
+### explicit `is None` + `else` cover the payload-less / void arms (nothing to destroy).
 @override
 routine T.destroy()
 needs T is VariantType
   when me
     is None => return
     expand m in branchof(T)
-      is ${m.type} v =>
+      is $typeof(m) v =>
         v.destroy()
         return
     else => return
@@ -278,7 +276,7 @@ needs T is VariantType
 @overridable
 routine T.store() -> Me
   var result = me
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     if m.is_retaining
-      result.${m.name} = me.${m.name}.store()
+      result.$nameof(m) = me.$nameof(m).store()
   return result

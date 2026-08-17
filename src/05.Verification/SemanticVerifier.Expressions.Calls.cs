@@ -67,7 +67,8 @@ public sealed partial class SemanticVerifier
     /// <c>GenericAstRewriter.FoldMetadataIntrinsic</c>.
     /// </summary>
     internal static bool IsMetadataIntrinsic(string name) => name is
-        "nameof" or "orderof" or "typeof" or "typeidof" or "valueof" or "placeof" or "sizeof";
+        "nameof" or "orderof" or "typeof" or "typeidof" or "valueof" or "placeof" or "sizeof"
+        or "visibilityof";
 
     /// <summary>
     /// Analyzes a comptime metadata intrinsic call (`nameof(m)`, `sizeof(T)`, …). The argument is an
@@ -81,6 +82,9 @@ public sealed partial class SemanticVerifier
             "nameof" => _registry.LookupType(name: "Text") ?? ErrorTypeInfo.Instance,
             "orderof" or "typeidof" or "placeof" or "sizeof" =>
                 _registry.LookupType(name: "U64") ?? ErrorTypeInfo.Instance,
+            // `visibilityof(m)` yields the member's OPEN/POSTED/SECRET visibility as the existing
+            // `Visibility` choice (BuilderService), narrowed by `is SECRET` etc. at the use site.
+            "visibilityof" => _registry.LookupType(name: "Visibility") ?? ErrorTypeInfo.Instance,
             "valueof" => _registry.LookupType(name: "S32") ?? ErrorTypeInfo.Instance,
             // `typeof(m)` in expression position is a comptime typewise receiver (deferred, like the
             // old `${m.type}`): the real type only exists post-monomorph.

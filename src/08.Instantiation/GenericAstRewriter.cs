@@ -115,6 +115,10 @@ internal static class GenericAstRewriter
         /// <summary>Whether the current member is secret-visibility during expand unrolling.</summary>
         public bool ActiveMemberIsSecret { get; set; }
 
+        /// <summary>The current member's full OPEN/POSTED/SECRET visibility during expand unrolling,
+        /// folded by <c>visibilityof(m)</c> to the matching <c>Visibility</c> choice case.</summary>
+        public VisibilityModifier ActiveMemberVisibility { get; set; }
+
         /// <summary>The current member's byte OFFSET within its parent struct (repr-C layout, folded by
         /// <c>placeof(m)</c>). Computed over the FULL declaration-order member list — a <c>secret</c>/
         /// <c>posted</c> field ahead still pushes the offset — so it is layout-faithful even when
@@ -1869,6 +1873,7 @@ internal static class GenericAstRewriter
             long prevIndex = ctx.ActiveMemberIndex;
             TypeInfo? prevType = ctx.ActiveMemberType;
             bool prevSecret = ctx.ActiveMemberIsSecret;
+            VisibilityModifier prevVis = ctx.ActiveMemberVisibility;
             long prevOffset = ctx.ActiveMemberOffset;
 
             ctx.ActiveExpandHandle = expand.HandleName;
@@ -1878,6 +1883,7 @@ internal static class GenericAstRewriter
                 ctx.ActiveMemberIndex = mv.Index;
                 ctx.ActiveMemberType = mv.Type;
                 ctx.ActiveMemberIsSecret = mv.Visibility == VisibilityModifier.Secret;
+                ctx.ActiveMemberVisibility = mv.Visibility;
                 ctx.ActiveMemberOffset = offsets.TryGetValue(key: mv, value: out long off) ? off : 0;
 
                 Statement clone = RewriteStatement(stmt: expand.Body, ctx: ctx);
@@ -1896,6 +1902,7 @@ internal static class GenericAstRewriter
             ctx.ActiveMemberIndex = prevIndex;
             ctx.ActiveMemberType = prevType;
             ctx.ActiveMemberIsSecret = prevSecret;
+            ctx.ActiveMemberVisibility = prevVis;
             ctx.ActiveMemberOffset = prevOffset;
         }
 
@@ -2278,6 +2285,21 @@ internal static class GenericAstRewriter
                 return FoldHandleProjection(projection: "id", ctx: ctx, location: location);
             case "typeidof":
                 return FoldHandleProjection(projection: "type_id", ctx: ctx, location: location);
+            case "visibilityof":
+            {
+                // Fold to the matching `Visibility` choice case (OPEN/POSTED/SECRET), a bare case
+                // reference annotated with the choice type so a following `is SECRET` narrows correctly.
+                string caseName = ctx.ActiveMemberVisibility switch
+                {
+                    VisibilityModifier.Secret => "SECRET",
+                    VisibilityModifier.Posted => "POSTED",
+                    _ => "OPEN"
+                };
+                return new IdentifierExpression(Name: caseName, Location: location)
+                {
+                    ResolvedType = ctx.Registry?.LookupType(name: "Visibility")
+                };
+            }
             case "valueof":
                 return FoldHandleProjection(projection: "value", ctx: ctx, location: location);
             case "placeof":
