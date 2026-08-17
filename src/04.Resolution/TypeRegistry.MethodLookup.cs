@@ -156,14 +156,6 @@ public sealed partial class TypeRegistry
             if (!overloadList.Contains(item: routine))
                 overloadList.Add(item: routine);
         }
-
-        // Secondary (name, failability) index for O(1) isFailable-aware lookup.
-        // First-registration wins per (BaseName, IsFailable) and (QualifiedName, IsFailable).
-        var nameFailKey = (routine.BaseName, routine.IsFailable);
-        _routinesByNameAndFailability.TryAdd(key: nameFailKey, value: routine);
-        var qualFailKey = (routine.QualifiedName, routine.IsFailable);
-        if (qualFailKey != nameFailKey)
-            _routinesByNameAndFailability.TryAdd(key: qualFailKey, value: routine);
     }
 
     /// <summary>
@@ -283,52 +275,28 @@ public sealed partial class TypeRegistry
         _routines.TryGetValue(key: registryKey, value: out RoutineInfo? routine) ? routine : null;
 
     /// <summary>
-    /// Looks up a routine by its full name.
+    /// Looks up a routine by its full name. A routine's identity is (owner, bare-name) — the
+    /// failable `!` is NOT part of the name, so a name maps to at most ONE routine and failability
+    /// is an attribute read off that routine, never a lookup key. When <paramref name="isFailable"/>
+    /// is given it filters the found routine (returns null on a failability mismatch) so a bare call
+    /// can retry for the failable-only form; it never selects between two same-named variants
+    /// (declaring both `foo` and `foo!` is a name collision, not two coexisting routines).
     /// </summary>
     /// <param name="fullName">The fully qualified name of the routine.</param>
+    /// <param name="isFailable">If non-null, require the routine's failability to match.</param>
     /// <returns>The routine info if found, null otherwise.</returns>
-    /// <param name="isFailable">Whether this is failable.</param>
-    public RoutineInfo? LookupRoutine(string fullName, bool? isFailable = null) // NOSONAR S3776
+    public RoutineInfo? LookupRoutine(string fullName, bool? isFailable = null)
     {
-        if (isFailable == null)
-        {
-            if (_routines.TryGetValue(key: fullName, value: out RoutineInfo? routine)) return routine;
-            if (_routineResolutions.TryGetValue(key: fullName, value: out routine)) return routine;
-            if (_routinesByQualifiedName.TryGetValue(key: fullName, value: out routine)) return routine;
-            if (!fullName.Contains(value: '.') &&
-                _routines.TryGetValue(key: $"Core.{fullName}", value: out routine))
-                return routine;
-            return null;
-        }
+        RoutineInfo? routine =
+            _routines.GetValueOrDefault(key: fullName)
+            ?? _routineResolutions.GetValueOrDefault(key: fullName)
+            ?? _routinesByQualifiedName.GetValueOrDefault(key: fullName)
+            ?? (!fullName.Contains(value: '.')
+                ? _routines.GetValueOrDefault(key: $"Core.{fullName}")
+                : null);
 
-        // isFailable != null: SA is disambiguating between failable and non-failable variants of
-        // the same logical name. The parser strips '!' from routine names and tracks failability
-        // separately, so fullName is always without '!' here (e.g., "parse", "List.getitem").
-        // Use the (BaseName, IsFailable) secondary index for O(1) lookup.
-        bool wantsFailable = isFailable.Value;
-        var nameFailKey = (fullName, wantsFailable);
-        if (_routinesByNameAndFailability.TryGetValue(key: nameFailKey, value: out RoutineInfo? found))
-            return found;
-
-        // Also try resolution cache (monomorphized instances) with failability check
-        if (_routineResolutions.TryGetValue(key: fullName, value: out found) &&
-            found.IsFailable == wantsFailable)
-            return found;
-
-        // Core prefix: try "Core.{name}" (auto-imported Core routines looked up bare)
-        if (!fullName.Contains(value: '.'))
-        {
-            var coreFailKey = ($"Core.{fullName}", wantsFailable);
-            if (_routinesByNameAndFailability.TryGetValue(key: coreFailKey, value: out found))
-                return found;
-        }
-
-        // Last resort: check if the non-qualified fast path already has a matching-failability entry
-        if (_routines.TryGetValue(key: fullName, value: out found) &&
-            found.IsFailable == wantsFailable)
-            return found;
-
-        return null;
+        if (routine == null) return null;
+        return isFailable != null && routine.IsFailable != isFailable.Value ? null : routine;
     }
 
     /// <summary>
@@ -487,13 +455,6 @@ public sealed partial class TypeRegistry
                 }
             }
         }
-
-        // Update (name, failability) index with the resolved version
-        var updatedNameFailKey = (updatedRoutine.BaseName, updatedRoutine.IsFailable);
-        _routinesByNameAndFailability[key: updatedNameFailKey] = updatedRoutine;
-        var updatedQualFailKey = (updatedRoutine.QualifiedName, updatedRoutine.IsFailable);
-        if (updatedQualFailKey != updatedNameFailKey)
-            _routinesByNameAndFailability[key: updatedQualFailKey] = updatedRoutine;
 
         // Update the free-function overload entry (now under FreeOwnerKey) — replace old instance by reference
         if (updatedRoutine.OwnerType == null &&

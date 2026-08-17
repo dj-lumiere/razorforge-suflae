@@ -43,8 +43,6 @@ partial class TypeRegistry
         public Dictionary<string, Dictionary<string, List<RoutineInfo>>> RoutinesByOwner { get; init; } = null!;
         /// <summary>Resolved routine instances (concrete-owner substitutions) keyed by RegistryKey.</summary>
         public Dictionary<string, RoutineInfo> RoutineResolutions { get; init; } = null!;
-        /// <summary>Routines keyed by (name, isFailable) for fast lookup.</summary>
-        public Dictionary<(string Name, bool IsFailable), RoutineInfo> RoutinesByNameAndFailability { get; init; } = null!;
 
         // Preset storage
         /// <summary>Preset variables keyed by short name.</summary>
@@ -84,8 +82,6 @@ partial class TypeRegistry
                     keySelector: m => m.Key,
                     elementSelector: m => new List<RoutineInfo>(m.Value))),
             RoutineResolutions = new Dictionary<string, RoutineInfo>(_routineResolutions),
-            RoutinesByNameAndFailability =
-                new Dictionary<(string, bool), RoutineInfo>(_routinesByNameAndFailability),
             Presets = new Dictionary<string, VariableInfo>(_presets),
             PresetsByQualifiedName = new Dictionary<string, VariableInfo>(_presetsByQualifiedName),
             LoadedModules = new HashSet<string>(_loadedModules, StringComparer.OrdinalIgnoreCase),
@@ -118,7 +114,6 @@ partial class TypeRegistry
             _routinesByOwner[kv.Key] = kv.Value.ToDictionary(
                 keySelector: m => m.Key, elementSelector: m => new List<RoutineInfo>(m.Value));
         foreach (var kv in snapshot.RoutineResolutions) _routineResolutions[kv.Key] = kv.Value;
-        foreach (var kv in snapshot.RoutinesByNameAndFailability) _routinesByNameAndFailability[kv.Key] = kv.Value;
 
         // Restore preset storage
         foreach (var kv in snapshot.Presets) _presets[kv.Key] = kv.Value;

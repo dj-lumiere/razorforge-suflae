@@ -276,16 +276,6 @@ public sealed partial class TypeRegistry
     private readonly HashSet<string> _prunedGenericBases = [];
 
     /// <summary>
-    /// Secondary index for O(1) failability-aware lookup.
-    /// Key = (BaseName, IsFailable). First-registration wins per (name, failability) pair.
-    /// Populated in <see cref="RegisterRoutine"/> and <see cref="UpdateRoutine"/>.
-    /// Eliminates the O(N) linear scan in <c>LookupRoutine(fullName, isFailable != null)</c>.
-    /// </summary>
-    private readonly Dictionary<(string Name, bool IsFailable), RoutineInfo>
-        _routinesByNameAndFailability = new();
-
-
-    /// <summary>
     /// Lazy cache for bare-name type lookups (e.g., "List" -> Collections.List).
     /// Populated on first miss in <see cref="LookupType"/> to amortize the O(N) scan.
     /// </summary>
