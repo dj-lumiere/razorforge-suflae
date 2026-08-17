@@ -14,12 +14,6 @@ public sealed partial class TypeRegistry
     #region Routine Registration and Lookup
 
     /// <summary>
-    /// Registers a routine in the registry.
-    /// Uses RegistryKey (BaseName + param types) as the primary key for overload-specific lookup,
-    /// and BaseName for first-overload-wins unqualified lookup.
-    /// </summary>
-    /// <param name="routine">The routine to register.</param>
-    /// <summary>
     /// Divergent cross-file duplicate constructors found during registration: two creators sharing a
     /// signature but with DIFFERENT bodies, defined in DIFFERENT files. Registration is last-wins, so
     /// one silently shadows the other — the hazard class that made <c>F64(from: F128)</c> resolve to a
@@ -42,6 +36,7 @@ public sealed partial class TypeRegistry
                    .GetHashCode(comparisonType: StringComparison.Ordinal);
     }
 
+    /// <summary>Registers a routine by its <see cref="RoutineInfo.RegistryKey"/> (overload-exact) and <see cref="RoutineInfo.BaseName"/> (first-match unqualified).</summary>
     public void RegisterRoutine(RoutineInfo routine) // NOSONAR S3776
     {
         string registryKey = routine.RegistryKey;
@@ -574,18 +569,12 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Looks up a method on a type. Returns a fully-resolved RoutineInfo with type parameters
-    /// substituted for generic owners and protocol methods.
-    /// </summary>
-    /// <param name="type">The type to search for the method.</param>
-    /// <param name="methodName">The name of the method to look up.</param>
-    /// <returns>The routine info if found, null otherwise.</returns>
-    /// <param name="isFailable">Whether this is failable.</param>
-    /// <summary>
     /// True when two routines carry the same set of <c>needs Me …</c> gate constraints (compared by
     /// kind + constraint-type names, order-insensitive). Differently-gated same-signature protocol
     /// defaults are DISTINCT overloads and must not dedup each other in the owner method list.
     /// </summary>
+    /// <param name="a">First routine to compare.</param>
+    /// <param name="b">Second routine to compare.</param>
     private static bool SameMeConstraintSet(RoutineInfo a, RoutineInfo b)
     {
         static List<string> MeGates(RoutineInfo r) =>
@@ -689,15 +678,6 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Returns the universal derive-template routine registered as <c>routine T.name()</c> (owner is
-    /// a type-parameter placeholder), or null. Used by the wired-routine synthesizer to materialize a
-    /// type's <c>represent</c>/<c>diagnose</c> from the RazorForge <c>@overridable routine T.…</c>
-    /// template instead of building the body in C#.
-    /// </summary>
-    public RoutineInfo? GetUniversalMethod(string name)
-        => _universalMethods.TryGetValue(key: name, value: out RoutineInfo? m) ? m : null;
-
-    /// <summary>
     /// Registers an auto-derive template captured directly from a stdlib <c>@overridable/@override
     /// routine T.method()</c> declaration: the owner type-parameter name (<c>T</c>), the method's
     /// kind gate constraints (<c>needs T is VariantType/…</c>), and its AST body. Several
@@ -776,6 +756,11 @@ public sealed partial class TypeRegistry
                 .Select(selector: c => c.ConstraintType.ToString())
                 .OrderBy(keySelector: s => s, comparer: StringComparer.Ordinal));
 
+    /// <summary>Looks up a method on a type, returning a fully-resolved <see cref="RoutineInfo"/> with type parameters substituted for generic owners and protocol methods.</summary>
+    /// <param name="type">The type to search.</param>
+    /// <param name="methodName">The method name to look up.</param>
+    /// <param name="isFailable">Filter by failability; null = accept either.</param>
+    /// <param name="forImplementer">Concrete implementer for protocol method substitution.</param>
     public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null,
         TypeInfo? forImplementer = null)
     {
@@ -1793,7 +1778,7 @@ public sealed partial class TypeRegistry
     /// If <paramref name="type"/> is an RC wrapper (Retained/Tracked/Shared/Watched/Roamed) — matched
     /// by its generic base name — returns that base name, else null. Used to redirect the abstract
     /// <c>store</c> hook to the wrapper's concrete refcount copy verb (see
-    /// <see cref="RuntimeContract.RcCopyVerb"/>).
+    /// <c>RuntimeContract.RcCopyVerb</c>).
     /// </summary>
     internal static string? GetRcWrapperBaseName(TypeInfo type)
     {
@@ -1850,6 +1835,7 @@ public sealed partial class TypeRegistry
         return true;
     }
 
+    /// <summary>Returns the <see cref="Lifecycle"/> (store/destroy hooks) for <paramref name="type"/>, or a borrow-tier sentinel for generic/protocol types.</summary>
     public Lifecycle GetLifecycle(TypeInfo type)
     {
         if (IsBorrowTier(type: type))

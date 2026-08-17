@@ -225,6 +225,7 @@ public record TupleLiteralExpression(List<Expression> Elements, SourceLocation L
 /// </summary>
 /// <param name="Name">The identifier name to look up in the symbol table</param>
 /// <param name="Location">Source location information</param>
+/// <param name="Realm">Optional cross-language realm qualifier (e.g. <c>"RF"</c>) from a <c>Realm::Name</c> prefix.</param>
 /// <remarks>
 /// Identifier resolution follows lexical scoping rules:
 /// <list type="bullet">
@@ -249,7 +250,7 @@ public record IdentifierExpression(string Name, SourceLocation Location, string?
     /// codegen materializes it as a closure directly, skipping name-based lookup. Used for
     /// references a lowering pass constructs (e.g. an unbound member-routine reference for a cycle-
     /// collector trace/free hook), where the bare name cannot be resolved by lookup because it needs
-    /// the owner type. <see cref="ResolvedType"/> must be the matching <c>RoutineTypeInfo</c>.
+    /// the owner type. <see cref="Expression.ResolvedType"/> must be the matching <c>RoutineTypeInfo</c>.
     /// </summary>
     public RoutineInfo? ResolvedRoutine { get; set; }
 
@@ -874,6 +875,9 @@ public record Parameter(
 /// <param name="GenericArguments">Optional list of type arguments for generic types</param>
 /// <param name="Location">Source location information</param>
 /// <param name="IsRvalue">True if this type was written with the `T` prefix mark (entity rvalue, return-position only). SA enforces position validity.</param>
+/// <param name="Realm">Optional cross-language realm qualifier (e.g. <c>"RF"</c>); null = ambient realm of the file.</param>
+/// <param name="SpliceHandle">Comptime type-position splice handle name (e.g. from <c>$typeof(m)</c>); null for ordinary types.</param>
+/// <param name="ComptimeValue">Comptime const-generic expression for a value type-arg slot; null for ordinary type-args.</param>
 /// <remarks>
 /// Type expression patterns:
 /// <list type="bullet">

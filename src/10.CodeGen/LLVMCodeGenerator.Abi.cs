@@ -243,7 +243,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// A type whose store is trivial — a plain bitwise duplicate is sound, with no managed
     /// <c>store</c> to bump a refcount and no managed <c>destroy</c> to balance. Decided by the
-    /// SAME oracle the copy-lowering and teardown passes use: <see cref="TypeRegistry.GetLifecycle"/>
+    /// SAME oracle the copy-lowering and teardown passes use: <see cref="Compiler.Resolution.TypeRegistry.GetLifecycle(TypeModel.Types.TypeInfo)"/>
     /// returns a non-null <c>Store</c> exactly when the type (or, recursively, a field of it) is a
     /// managed leaf like <c>Text</c>/<c>Decimal</c>; a null <c>Store</c> means trivially storable.
     /// Tuples and composite records are handled by the recursion inside GetLifecycle.

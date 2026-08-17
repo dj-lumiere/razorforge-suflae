@@ -274,6 +274,7 @@ public partial class LlvmCodeGenerator
     /// <param name="synthesizedBodies">The synthesized bodies.</param>
     /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
     /// <param name="liveOwnerTypeNames">Live owner type full-names from RoutineReachabilityPass; empty disables filtering.</param>
+    /// <param name="maySuspendRoutineKeys">Routine keys that may suspend (used for coroutine frame layout).</param>
     public LlvmCodeGenerator(Program program, TypeRegistry registry,
         List<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
@@ -309,6 +310,7 @@ public partial class LlvmCodeGenerator
     /// <param name="synthesizedBodies">The synthesized bodies.</param>
     /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
     /// <param name="liveOwnerTypeNames">Live owner type full-names from RoutineReachabilityPass; empty disables filtering.</param>
+    /// <param name="maySuspendRoutineKeys">Routine keys that may suspend (used for coroutine frame layout).</param>
     public LlvmCodeGenerator(
         List<(Program Program, string FilePath, string Module)> userPrograms,
         TypeRegistry registry,

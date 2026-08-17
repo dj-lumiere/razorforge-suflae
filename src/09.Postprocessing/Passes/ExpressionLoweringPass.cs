@@ -2222,7 +2222,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         hoisted.Add(new DeclarationStatement(Declaration: decl, Location: loc));
     }
 
-    /// <summary>Adds <c>var name: T</c> (no initializer) to <paramref name="hoisted"/>.</summary>
     /// <summary>
     /// Picks the first candidate type that is concrete (not a generic-definition record/entity,
     /// which would lower to <c>ptr</c>), falling back to the first non-null candidate. Used to type

@@ -433,6 +433,14 @@ public sealed partial class TypeRegistry
         _userPrograms.Add(item: (program, filePath, module));
 
     /// <summary>
+    /// Every MODULE registered under the namespace <paramref name="prefix"/> (strict descendants:
+    /// `prefix/Sub`, `prefix/Sub/Deep`, …), for the prefix/package import `import A/B`. Empty when the
+    /// resolver isn't injected or the prefix is a leaf module with no submodules.
+    /// </summary>
+    public IReadOnlyList<string> EnumerateSubmodules(string prefix)
+        => _moduleResolver?.EnumerateSubmodulePaths(prefix: prefix) ?? [];
+
+    /// <summary>
     /// Loads a module on-demand by its import path.
     /// Handles both stdlib modules and project modules.
     /// </summary>
@@ -441,14 +449,6 @@ public sealed partial class TypeRegistry
     /// <param name="location">Source location for error reporting.</param>
     /// <param name="effectiveModule">The effective module name of the loaded module, or null on failure.</param>
     /// <returns>True if the module was loaded successfully or was already loaded, false on error.</returns>
-    /// <summary>
-    /// Every MODULE registered under the namespace <paramref name="prefix"/> (strict descendants:
-    /// `prefix/Sub`, `prefix/Sub/Deep`, …), for the prefix/package import `import A/B`. Empty when the
-    /// resolver isn't injected or the prefix is a leaf module with no submodules.
-    /// </summary>
-    public IReadOnlyList<string> EnumerateSubmodules(string prefix)
-        => _moduleResolver?.EnumerateSubmodulePaths(prefix: prefix) ?? [];
-
     public bool LoadModule(string importPath, string currentFile, SourceLocation location,
         out string? effectiveModule)
     {
@@ -2013,8 +2013,9 @@ public sealed partial class TypeRegistry
     /// <param name="name">The name of the variable.</param>
     /// <param name="type">The type of the variable.</param>
     /// <param name="isPreset">Whether this is a preset (build-time constant).</param>
-    /// <returns>True if successful, false if already declared in this scope.</returns>
     /// <param name="presetValue">The preset value.</param>
+    /// <param name="isNullable">Whether the variable is nullable.</param>
+    /// <returns>True if successful, false if already declared in this scope.</returns>
     public bool DeclareVariable(string name, TypeInfo type, bool isPreset = false,
         Expression? presetValue = null, bool isNullable = false)
     {
@@ -2035,6 +2036,7 @@ public sealed partial class TypeRegistry
     /// <param name="type">The type of the preset.</param>
     /// <param name="module">The module this preset belongs to.</param>
     /// <param name="value">The value.</param>
+    /// <param name="isSecret">Whether the preset is file-private (secret).</param>
     public void RegisterPreset(string name, TypeInfo type, string? module = null,
         Expression? value = null, bool isSecret = false)
     {

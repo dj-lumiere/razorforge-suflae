@@ -648,12 +648,7 @@ public sealed partial class SemanticVerifier
                && _registry.LookupRoutineByName(name: id.Name) != null;
     }
 
-    /// <summary>
-    /// Returns true if a value of type <paramref name="source"/> can be assigned to a variable of type <paramref name="target"/>.
-    /// Handles error types (to suppress cascading errors), generic resolution matching, and protocol conformance.
-    /// No implicit numeric or widening conversions are performed.
-    /// </summary>
-    /// <summary>True when <paramref name="type"/> is `Roamed[E]` (record or wrapper form) for the given
+    /// <summary>True when <paramref name="type"/> is <c>Roamed[E]</c> (record or wrapper form) for the given
     /// entity — used to treat a bare SF entity and its Roamed handle as mutually assignable.</summary>
     private static bool IsRoamedOfEntity(TypeSymbol type, EntityTypeInfo entity)
     {
@@ -668,6 +663,11 @@ public sealed partial class SemanticVerifier
             && inner.FullName == entity.FullName;
     }
 
+    /// <summary>
+    /// Returns true if a value of type <paramref name="source"/> can be assigned to a variable of type <paramref name="target"/>.
+    /// Handles error types (to suppress cascading errors), generic resolution matching, and protocol conformance.
+    /// No implicit numeric or widening conversions are performed.
+    /// </summary>
     private bool IsAssignableTo(TypeSymbol source, TypeSymbol target)
     {
         // Same type

@@ -199,6 +199,7 @@ public record BecomesStatement(Expression Value, SourceLocation Location)
 /// </summary>
 /// <param name="Error">Expression that evaluates to a Crashable error type</param>
 /// <param name="Location">Source location information</param>
+/// <param name="IsFatal">When true this is a <c>pierce</c> (fatal, uncatchable); when false a recoverable <c>throw</c>.</param>
 /// <remarks>
 /// The throw statement is used for expected throwures that should be handled:
 /// <code>
@@ -530,6 +531,7 @@ public record BlockStatement(List<Statement> Statements, SourceLocation Location
 /// <param name="Expression">Expression whose value will be matched against patterns</param>
 /// <param name="Clauses">List of pattern-action pairs with optional guard conditions</param>
 /// <param name="Location">Source location information</param>
+/// <param name="ArmExpansion">Comptime arm-expansion template; when set, clauses are unrolled per variant arm at monomorphization. Null for ordinary <c>when</c>.</param>
 /// <remarks>
 /// Advanced pattern matching features:
 /// <list type="bullet">

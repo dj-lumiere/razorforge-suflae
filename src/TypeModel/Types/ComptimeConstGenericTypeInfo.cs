@@ -12,7 +12,7 @@ namespace TypeModel.Types;
 ///
 /// While the enclosing type is still generic (<c>T</c> unbound) this stays symbolic — it reports as
 /// "contains a generic parameter" so the layout is not emitted. At monomorphization
-/// <see cref="RoutineInfo.SubstituteType"/> calls <see cref="TryFold"/> with the concrete substitution
+/// <c>RoutineInfo.SubstituteType</c> calls <see cref="TryFold"/> with the concrete substitution
 /// (<c>T → S64</c>, …) to collapse it into a plain <see cref="ConstGenericValueTypeInfo"/>.
 ///
 /// The comptime grammar is deliberately tiny (only what the carrier buffer needs): integer literals,
@@ -27,6 +27,7 @@ public sealed class ComptimeConstGenericTypeInfo : TypeInfo
     /// <summary>The unevaluated comptime scalar expression (from a <c>${…}</c> type-position splice).</summary>
     public Expression ComptimeExpr { get; }
 
+    /// <summary>Creates a symbolic comptime const-generic wrapping <paramref name="comptimeExpr"/>.</summary>
     public ComptimeConstGenericTypeInfo(Expression comptimeExpr) : base(name: "${comptime}")
     {
         ComptimeExpr = comptimeExpr;

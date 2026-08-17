@@ -914,6 +914,7 @@ public sealed partial class SemanticVerifier
     /// the structural operator-protocol gate (which needs full-pipeline derived operators) is suppressed.</summary>
     private bool _isReducedStdlibValidation;
 
+    /// <summary>Runs a reduced-phase semantic check over stdlib routine bodies; returns the errors found.</summary>
     public List<SemanticError> ValidateStdlibBodies()
     {
         int errorsBefore = _errors.Count;

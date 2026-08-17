@@ -20,12 +20,19 @@ public partial class SemanticVerifier
     /// </summary>
     public sealed class CompiledStdlibState
     {
+        /// <summary>The language mode (RF or SF) the stdlib was compiled under.</summary>
         public required Language Language { get; init; }
+        /// <summary>The post-SA type registry snapshot (all stdlib types and routines).</summary>
         public required TypeRegistry.StdlibSnapshot Registry { get; init; }
+        /// <summary>The fully-lowered stdlib program ASTs, shared read-only across warm compiles.</summary>
         public required List<(Program Program, string FilePath, string Module)> StdlibPrograms { get; init; }
+        /// <summary>Synthesized (wired/builder-generated) routine bodies keyed by registry key.</summary>
         public required Dictionary<string, (RoutineInfo Routine, Statement Body)> SynthesizedBodies { get; init; }
+        /// <summary>Variant-generated routine bodies keyed by registry key.</summary>
         public required Dictionary<string, Statement> VariantBodies { get; init; }
+        /// <summary>Monomorphized generic instantiation bodies keyed by instantiation key.</summary>
         public required Dictionary<string, MonomorphizedBody> InstantiatedGenericBodies { get; init; }
+        /// <summary>All other stdlib routine bodies keyed by registry key.</summary>
         public required Dictionary<string, Statement> RoutineBodies { get; init; }
     }
 

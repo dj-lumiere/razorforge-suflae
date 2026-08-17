@@ -483,12 +483,6 @@ internal static class NativeToolchain
     }
 
     /// <summary>
-    /// Links the optimized IR <paramref name="optFile"/> into the native executable
-    /// <paramref name="exeFile"/> via clang, resolving compiler-rt builtins, the platform CRT,
-    /// libm/pthread/dl, and the bundled runtime in <paramref name="runtimeLibDir"/>. Returns 0 on
-    /// success or 1 if linking fails.
-    /// </summary>
-    /// <summary>
     /// Target-architecture codegen feature flags for the clang codegen/link step.
     ///
     /// On x86-64, `F16` (LLVM `half`) requires the F16C hardware conversion instructions
@@ -514,6 +508,7 @@ internal static class NativeToolchain
         };
     }
 
+    /// <summary>Links the optimized IR <paramref name="optFile"/> into the native executable <paramref name="exeFile"/> via clang, bundling the runtime from <paramref name="runtimeLibDir"/>. Returns 0 on success.</summary>
     internal static int LinkExecutable(string optFile, string exeFile, string runtimeLibDir,
         RfBuildMode buildMode)
     {

@@ -186,6 +186,7 @@ public record ExpandMemberDeclaration(
 /// <param name="Storage">Storage class for the routine.</param>
 /// <param name="Async">Suspended or threaded routine mode.</param>
 /// <param name="IsDangerous">Whether the routine requires a <c>danger</c> context.</param>
+/// <param name="IsWiredMemberRoutine">Whether the routine is a wired (compiler-synthesized) member routine.</param>
 /// <remarks>
 /// Function declarations support:
 /// <list type="bullet">
