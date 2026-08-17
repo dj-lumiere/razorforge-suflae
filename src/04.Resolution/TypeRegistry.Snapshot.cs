@@ -42,10 +42,6 @@ partial class TypeRegistry
         public Dictionary<string, List<RoutineInfo>> RoutinesByOwner { get; init; } = null!;
         /// <summary>Universal methods (generic-parameter owner) keyed by method name.</summary>
         public Dictionary<string, RoutineInfo> UniversalMethods { get; init; } = null!;
-
-        /// <summary>`@innate` BuilderService fold-intrinsics on bare-`T` owners (data_size/type_name/…),
-        /// indexed separately from genuine universal runtime methods.</summary>
-        public Dictionary<string, RoutineInfo> InnateMethods { get; init; } = null!;
         /// <summary>Resolved routine instances (concrete-owner substitutions) keyed by RegistryKey.</summary>
         public Dictionary<string, RoutineInfo> RoutineResolutions { get; init; } = null!;
         /// <summary>Generic free functions grouped by base name.</summary>
@@ -91,7 +87,6 @@ partial class TypeRegistry
                 keySelector: kv => kv.Key,
                 elementSelector: kv => new List<RoutineInfo>(kv.Value)),
             UniversalMethods = new Dictionary<string, RoutineInfo>(_universalMethods),
-            InnateMethods = new Dictionary<string, RoutineInfo>(_innateMethods),
             RoutineResolutions = new Dictionary<string, RoutineInfo>(_routineResolutions),
             GenericFreeFunctions = _genericFreeFunctions.ToDictionary(
                 keySelector: kv => kv.Key,
@@ -131,7 +126,6 @@ partial class TypeRegistry
         foreach (var kv in snapshot.RoutinesByQualifiedName) _routinesByQualifiedName[kv.Key] = kv.Value;
         foreach (var kv in snapshot.RoutinesByOwner) _routinesByOwner[kv.Key] = new List<RoutineInfo>(kv.Value);
         foreach (var kv in snapshot.UniversalMethods) _universalMethods[kv.Key] = kv.Value;
-        foreach (var kv in snapshot.InnateMethods) _innateMethods[kv.Key] = kv.Value;
         foreach (var kv in snapshot.RoutineResolutions) _routineResolutions[kv.Key] = kv.Value;
         foreach (var kv in snapshot.GenericFreeFunctions) _genericFreeFunctions[kv.Key] = new List<RoutineInfo>(kv.Value);
         foreach (var kv in snapshot.RoutinesByNameAndFailability) _routinesByNameAndFailability[kv.Key] = kv.Value;

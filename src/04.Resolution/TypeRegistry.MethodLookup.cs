@@ -127,16 +127,13 @@ public sealed partial class TypeRegistry
                 list.Add(item: routine);
             }
 
-            // Index bare-`T`-owner methods by name for O(1) fallback lookup, SPLIT by role: an `@innate`
-            // BuilderService comptime fold-intrinsic (data_size/type_name/…) goes to _innateMethods (SA-
-            // signature only, folded+discarded by BuilderServiceInliningPass); everything else — genuine
-            // universal runtime methods — to _universalMethods. Keeps the latter from being a grab-bag.
+            // A member routine on a bare generic-param owner (`routine T.m()`) — a default-impl member
+            // routine applicable to any receiver. Index by name so `x.m()` on a concrete receiver resolves
+            // (owner-keyed lookup can't reach a `T`-owner). No role split (derive/coercion/fold-intrinsic all
+            // resolve the same); AST/synthesis + fold layers decide the rest.
             if (routine.OwnerType is GenericParameterTypeInfo)
             {
-                if (routine.Annotations.Contains(item: "innate"))
-                    _innateMethods.TryAdd(key: routine.Name, value: routine);
-                else
-                    _universalMethods.TryAdd(key: routine.Name, value: routine);
+                _universalMethods.TryAdd(key: routine.Name, value: routine);
             }
         }
 
@@ -865,16 +862,12 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // Fallback: bare-`T`-owner methods available on all types — a genuine universal runtime method,
-        // or an `@innate` BuilderService fold-intrinsic (resolved here for its signature, then folded to a
-        // constant by BuilderServiceInliningPass so no body is ever emitted).
+        // Fallback: a default-impl member routine on a bare generic-param owner (`routine T.m()`),
+        // resolved by name and substituted onto the concrete receiver (derive template / access coercion /
+        // hijack / `@innate` fold-intrinsic — the AST/synthesis + fold layers decide what happens next).
         if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
         {
             return SubstituteMethodForOwner(method: universalMethod, resolvedOwner: type);
-        }
-        if (_innateMethods.TryGetValue(key: methodName, value: out RoutineInfo? innateMethod))
-        {
-            return SubstituteMethodForOwner(method: innateMethod, resolvedOwner: type);
         }
 
         // Generic parameter receivers route through caller-supplied constraints — see
@@ -1536,8 +1529,7 @@ public sealed partial class TypeRegistry
             }
         }
 
-        if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod)
-            || _innateMethods.TryGetValue(key: methodName, value: out universalMethod))
+        if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
         {
             candidates.Add(item: SubstituteMethodForOwner(method: universalMethod,
                 resolvedOwner: type)!);

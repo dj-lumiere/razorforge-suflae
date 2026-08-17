@@ -224,18 +224,21 @@ public sealed partial class TypeRegistry
     /// <summary>Routines indexed by owner type for fast method lookup.</summary>
     private readonly Dictionary<string, List<RoutineInfo>> _routinesByOwner = new();
 
-    /// <summary>Genuine UNIVERSAL RUNTIME methods on a bare-`T` owner — a real routine available on every
-    /// type that codegen emits/intercepts (access-token coercions view/modify/claim/inspect, hijack/
-    /// get_address, the derive templates). Indexed by name for O(1) fallback resolution. NOT the
-    /// BuilderService comptime fold-intrinsics — those live in <see cref="_innateMethods"/>.</summary>
+    /// <summary>
+    /// By-NAME resolution index for MEMBER ROUTINES whose owner is a bare generic parameter
+    /// (`routine T.method()`) — member routines carrying a DEFAULT/base impl applicable to any receiver:
+    /// the derive templates (represent/diagnose/serialize/destroy/eq/…), access-token coercions
+    /// (view/modify/claim/inspect), hijack/get_address, and the `@innate` BuilderService fold-intrinsics
+    /// (data_size/type_name/type_id/…). NOT a special "universal method" species — they are ordinary member
+    /// routines already stored in <see cref="_routinesByOwner"/> under their generic-param owner; this dict is
+    /// only a name-keyed lookup path so `x.method()` on a CONCRETE receiver can resolve one (owner-keyed
+    /// lookup can't, the owner being `T`), PARALLEL to <see cref="_routineOverloads"/> (by-name index for free
+    /// functions). The `@overridable`/`@override` overwrite is an AST/synthesis concern (GetDeriveTemplate),
+    /// the fold/interception is BuilderServiceInliningPass/codegen — this index just resolves.
+    /// [LookupMethod overhaul step 1: the former `@innate`/runtime split is collapsed here; the "universal"
+    /// concept is retired in the docs. Field name kept to limit churn.]
+    /// </summary>
     private readonly Dictionary<string, RoutineInfo> _universalMethods = new();
-
-    /// <summary>`@innate` BuilderService comptime FOLD-INTRINSICS on a bare-`T` owner (data_size, type_name,
-    /// full_type_name, type_id, member_variable_count, type_kind, protocols, …). These NEVER emit a routine
-    /// body — <c>BuilderServiceInliningPass</c> folds each call to a constant (number/string). Indexed
-    /// separately so <see cref="_universalMethods"/> is NOT a grab-bag: this dict's sole job is to give SA a
-    /// resolvable signature (return type) for a call the compiler will fold, then discard.</summary>
-    private readonly Dictionary<string, RoutineInfo> _innateMethods = new();
 
     /// <summary>Derive method NAMES that are OPT-IN (capability-conferred): any `@overridable/@override
     /// T.m()` whose gate is a `needs P everywhere` / `needs T obeys P` capability constraint. Once a method
