@@ -1261,16 +1261,21 @@ internal static class GenericAstRewriter
                 resolvedType = result.ResolvedType;
             }
 
-            // A folded comptime handle projection (`${m.type}` → RewriteExpression(`m.type`) yields a
-            // TYPEWISE IdentifierExpression carrying the concrete member type) must keep that concrete
-            // type: the original `m.type` MemberExpression and its wrapping SpliceExpression both carry a
-            // deferred `ErrorTypeInfo` placeholder (SA can't resolve a splice pre-monomorph), which would
-            // otherwise clobber it here — breaking a following `.data_size()`/`.type_id()` fold (the
+            // A folded comptime type projection yields a TYPEWISE IdentifierExpression carrying the
+            // concrete member type; it must keep that concrete type. The source node — the legacy
+            // `${m.type}` (a SpliceExpression wrapping the `m.type` MemberExpression) OR the new
+            // `$typeof(m)` / bare `typeof(m)` (a metadata-intrinsic CallExpression) — carries a deferred
+            // `ErrorTypeInfo` placeholder (SA can't resolve it pre-monomorph), which would otherwise
+            // clobber the folded type here, breaking a following `.data_size()`/`.type_id()` fold (the
             // BuilderService pass reads the receiver's ResolvedType). Only fires when the rewrite genuinely
             // produced a concrete type from an error placeholder, so real error nodes are untouched.
+            bool exprFoldsTypewise = expr is SpliceExpression
+                or MemberExpression { Object: IdentifierExpression }
+                || (expr is CallExpression { Callee: IdentifierExpression ofCallId }
+                    && Verification.SemanticVerifier.IsMetadataIntrinsic(name: ofCallId.Name));
             if (resolvedType is null or ErrorTypeInfo
                 && result.ResolvedType is not (null or ErrorTypeInfo)
-                && expr is SpliceExpression or MemberExpression { Object: IdentifierExpression })
+                && exprFoldsTypewise)
             {
                 resolvedType = result.ResolvedType;
             }

@@ -11,7 +11,7 @@ import BuilderService
 ### `@llvm` primitives / raw pointers with no custom store/destroy), so each column is a flat blittable
 ### buffer that grows by reallocation without per-element lifecycle.
 ###
-### Storage is realized by a decl-position `expand m in memvarof(T)`: one `Hijacked[${m.type}]` column per
+### Storage is realized by a decl-position `expand m in allmemvarof(T)`: one `Hijacked[$typeof(m)]` column per
 ### field, materialized per concrete instantiation.
 ###
 ### :typeparam T: The record element type (must be `is SplittableType`).
@@ -19,9 +19,9 @@ import BuilderService
 entity SplitList[T] obeys Iterable[T], MutableIndexable[T], Sized, Container
 needs T is SplittableType
 relates SplitListEmittable[T] as Iter
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     ### One contiguous column buffer holding this field across every element.
-    secret ${m.name}: Hijacked[${m.type}]
+    secret $nameof(m): Hijacked[$typeof(m)]
   ### The number of elements currently stored.
   secret count: U64
   ### The number of elements each column can hold without reallocating.
@@ -76,11 +76,11 @@ needs T obeys Equatable
 ### :param new_capacity: The per-column capacity to reserve.
 routine SplitList[T].reserve(new_capacity: U64)
   if new_capacity > me.capacity
-    expand m in memvarof(T)
+    expand m in allmemvarof(T)
       danger
-        var bytes = ${m.type}.data_size() * new_capacity
-        var ptr = rf_reallocate_dynamic(ptr: me.${m.name}.get_address(), size: bytes)
-        me.${m.name} = hijacked_from[${m.type}](ptr)
+        var bytes = $typeof(m).data_size() * new_capacity
+        var ptr = rf_reallocate_dynamic(ptr: me.$nameof(m).get_address(), size: bytes)
+        me.$nameof(m) = hijacked_from[$typeof(m)](ptr)
     me.capacity = new_capacity
   return
 
@@ -90,9 +90,9 @@ routine SplitList[T].add_last(value: T)
   if me.count >= me.capacity
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
     me.reserve(new_capacity: new_capacity)
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     danger
-      me.${m.name}.poke_at_offset(at: ${m.type}.data_size() * me.count, value: value.${m.name})
+      me.$nameof(m).poke_at_offset(at: $typeof(m).data_size() * me.count, value: value.$nameof(m))
   me.count = me.count +% 1u64
   return
 
@@ -105,9 +105,9 @@ routine SplitList[T].getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var result = blank[T]()
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     danger
-      result.${m.name} = me.${m.name}.peek_at_offset(offset: ${m.type}.data_size() * index)
+      result.$nameof(m) = me.$nameof(m).peek_at_offset(offset: $typeof(m).data_size() * index)
   return result
 
 ### Overwrites the element at `index`, scattering each field into its column. Enables `list[i] = value`.
@@ -117,17 +117,17 @@ routine SplitList[T].getitem!(index: U64) -> T
 routine SplitList[T].setitem!(index: U64, value: T)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     danger
-      me.${m.name}.poke_at_offset(at: ${m.type}.data_size() * index, value: value.${m.name})
+      me.$nameof(m).poke_at_offset(at: $typeof(m).data_size() * index, value: value.$nameof(m))
   return
 
 ### Frees every column buffer, then the entity itself. Elements are `is SplittableType` (trivially
 ### destructible), so no per-element teardown is needed — only the raw column allocations are released.
 dangerous routine SplitList[T].destroy()
-  expand m in memvarof(T)
-    if not me.${m.name}.is_none()
-      me.${m.name}.invalidate()
+  expand m in allmemvarof(T)
+    if not me.$nameof(m).is_none()
+      me.$nameof(m).invalidate()
   me.hijack().invalidate()
   return
 
@@ -141,8 +141,8 @@ dangerous routine SplitList[T].destroy()
 routine SplitList[T].iter() -> SplitListEmittable[T]
   danger
     var it = hollow[SplitListEmittable[T]]()
-    expand m in memvarof(T)
-      it.${m.name} = me.${m.name}
+    expand m in allmemvarof(T)
+      it.$nameof(m) = me.$nameof(m)
     it.count = me.count
     it.index = 0u64
     return it
@@ -151,9 +151,9 @@ routine SplitList[T].iter() -> SplitListEmittable[T]
 ### captured count and current position. Emits whole `T` values gathered one field at a time.
 entity SplitListEmittable[T] obeys Emittable[T]
 needs T is SplittableType
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     ### Borrowed alias of the source list's column for this field.
-    secret ${m.name}: Hijacked[${m.type}]
+    secret $nameof(m): Hijacked[$typeof(m)]
   ### Element count captured when the iterator was created.
   secret count: U64
   ### Current iteration position.
@@ -166,8 +166,8 @@ routine SplitListEmittable[T].emit!() -> T
   if me.index >= me.count
     absent
   var result = blank[T]()
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     danger
-      result.${m.name} = me.${m.name}.peek_at_offset(offset: ${m.type}.data_size() * me.index)
+      result.$nameof(m) = me.$nameof(m).peek_at_offset(offset: $typeof(m).data_size() * me.index)
   me.index = me.index +% 1u64
   return result

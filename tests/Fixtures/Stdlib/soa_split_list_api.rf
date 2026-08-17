@@ -5,7 +5,7 @@ import Collections
 # Exercises the growable struct-of-arrays `SplitList[T]` (Standard/RazorForge/Collections/SplitList.rf):
 # each field of `Particle` lives in its own `Hijacked[fieldType]` column, grown by reallocation. Drives
 # append (past the initial capacity, forcing a grow), get, set, count — proving the decl-position `expand`
-# columns + `${m.type}` type-arg splices (`hijacked_from[${m.type}]`) + `${m.type}.data_size()` offsets all
+# columns + `$typeof(m)` type-arg splices (`hijacked_from[$typeof(m)]`) + `$typeof(m).data_size()` offsets all
 # work through a real reallocating collection.
 
 record Particle obeys Equatable

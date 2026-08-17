@@ -2,8 +2,8 @@ module Tests/Stdlib/ExpandMtypeExprApi
 import IO/Console
 import BuilderService
 
-# Exercises `${m.type}` in EXPRESSION position: inside an `expand m in memvarof(T)` loop, the comptime
-# member type splices into a typewise receiver for a static/universal method — here `${m.type}.data_size()`
+# Exercises `$typeof(m)` in EXPRESSION position: inside an `expand m in allmemvarof(T)` loop, the comptime
+# member type splices into a typewise receiver for a static/universal method — here `$typeof(m).data_size()`
 # (a `@innate` BuilderService constant). Each field's type folds to its concrete byte size at
 # monomorphization (S64 -> 8, F32 -> 4, Bool -> 1, U16 -> 2).
 
@@ -15,10 +15,10 @@ record Mixed
 
 routine field_sizes[T]() -> Text
   var out = ""
-  expand m in memvarof(T)
-    if m.id > 0u64
+  expand m in allmemvarof(T)
+    if orderof(m) > 0u64
       out = out + ", "
-    out = out + m.name + "=" + ${m.type}.data_size().represent()
+    out = out + nameof(m) + "=" + $typeof(m).data_size().represent()
   return out
 
 routine start()

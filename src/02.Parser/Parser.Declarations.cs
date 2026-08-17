@@ -94,11 +94,17 @@ public partial class Parser
         Consume(type: TokenType.Expand, errorMessage: "Expected 'expand'");
         string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand directive");
-        Consume(type: TokenType.MemVarOf,
-            errorMessage: "A decl-position expand only supports 'memvarof(T)'");
-        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'memvarof'");
+        // A decl-position expand lays a column per member and always covers EVERY field, so it accepts
+        // `allmemvarof(T)` (canonical) or legacy `memvarof(T)` — both yield all members. `openmemvarof`
+        // (a public-only filter) has no decl-position use case and would need visibility threading.
+        if (!Match(TokenType.AllMemVarOf, TokenType.MemVarOf))
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: "A decl-position expand only supports 'allmemvarof(T)' (or legacy 'memvarof(T)').");
+        }
+        Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'allmemvarof'");
         TypeExpression sourceType = ParseType();
-        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after memvarof type");
+        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after allmemvarof type");
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after expand header");
 
         var templates = new List<ExpandMemberTemplate>();
@@ -140,8 +146,30 @@ public partial class Parser
         SourceLocation loc = GetLocation();
         (VisibilityModifier visibility, _) = ParseModifiers();
 
+        // Brace-less form: `[secret] $nameof(m): Type`. The name is the field name; no prefix.
+        if (Match(type: TokenType.Dollar))
+        {
+            Expression inner = ParseDollarSpliceInner();
+            if (inner is not CallExpression
+                {
+                    Callee: IdentifierExpression { Name: "nameof" },
+                    Arguments: [IdentifierExpression nameHandleNew]
+                } || nameHandleNew.Name != handle)
+            {
+                throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedToken,
+                    message: $"An expand-column name must be '$nameof({handle})'.");
+            }
+            Consume(type: TokenType.Colon, errorMessage: "Expected ':' after '$nameof(m)' column name");
+            TypeExpression colType = ParseType();
+            ConsumeStatementTerminator();
+            return new ExpandMemberTemplate(NamePrefix: "",
+                Type: colType,
+                Visibility: visibility,
+                Location: loc);
+        }
+
         Consume(type: TokenType.SpliceOpen,
-            errorMessage: "Expected a '${...}' member-name splice in the expand body");
+            errorMessage: "Expected a '$nameof(m)' member-name splice in the expand body");
 
         // Optional literal prefix: `${"inner_" + m.name}` — else bare `${m.name}`.
         string prefix = "";

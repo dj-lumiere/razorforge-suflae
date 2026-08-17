@@ -3,9 +3,9 @@ import IO/Console
 import BuilderService
 import Collections
 
-# Exercises `${m.type}` in TYPE-ARGUMENT position (the sibling of the expression-position splice): inside
-# `expand m in memvarof(T)`, the comptime member type splices into a generic argument — `Hijacked[${m.type}]`
-# and `hijacked_from[${m.type}]` — folding to the field's concrete type at monomorphization ($Col ->
+# Exercises `$typeof(m)` in TYPE-ARGUMENT position (the sibling of the expression-position splice): inside
+# `expand m in allmemvarof(T)`, the comptime member type splices into a generic argument — `Hijacked[$typeof(m)]`
+# and `hijacked_from[$typeof(m)]` — folding to the field's concrete type at monomorphization ($Col ->
 # S64/F32/Bool). Allocates a 1-slot typed raw buffer per field, pokes the field value in, peeks it back.
 
 record Trio
@@ -15,13 +15,13 @@ record Trio
 
 routine roundtrip[T](value: T) -> Text
   var out = ""
-  expand m in memvarof(T)
-    if m.id > 0u64
+  expand m in allmemvarof(T)
+    if orderof(m) > 0u64
       out = out + ", "
     danger
-      var buf = hijacked_from[${m.type}](rf_allocate_dynamic_uninit(${m.type}.data_size()))
-      buf.poke(value.${m.name})
-      out = out + m.name + "=" + buf.peek().represent()
+      var buf = hijacked_from[$typeof(m)](rf_allocate_dynamic_uninit($typeof(m).data_size()))
+      buf.poke(value.$nameof(m))
+      out = out + nameof(m) + "=" + buf.peek().represent()
   return out
 
 routine start()

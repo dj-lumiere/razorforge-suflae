@@ -1,9 +1,9 @@
 module Tests/Stdlib/ExpandMemvarofApi
 import IO/Console
 
-# Exercises the comptime `expand m in memvarof(T)` loop + `${...}` splice: a single generic
+# Exercises the comptime `expand m in allmemvarof(T)` loop + `$nameof(m)` splice: a single generic
 # `dump_fields[T]` reflects over any record's member variables, unrolled per field at
-# monomorphization (m.name -> field name, m.id -> ordinal, x.${m.name} -> real field access).
+# monomorphization (nameof(m) -> field name, orderof(m) -> ordinal, x.$nameof(m) -> real field access).
 
 record Point
   x: S64
@@ -20,10 +20,10 @@ record Trio
 
 routine dump_fields[T](x: T) -> Text
   var result = ""
-  expand m in memvarof(T)
-    if m.id > 0u64
+  expand m in allmemvarof(T)
+    if orderof(m) > 0u64
       result = result + ", "
-    result = result + m.name + "=" + x.${m.name}.represent()
+    result = result + nameof(m) + "=" + x.$nameof(m).represent()
   return result
 
 routine start()

@@ -17,11 +17,11 @@ record Probe
 # Every field's type has a synthesized `serialize()`, so all obey Serializable structurally.
 routine ser_report[T](value: T) -> Text
   var out = ""
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     if m.obeying(Serializable)
-      out = out + m.name + ":ser "
+      out = out + nameof(m) + ":ser "
     else
-      out = out + m.name + ":raw "
+      out = out + nameof(m) + ":raw "
   return out
 
 # `S32` obeys Comparable; the plain record `Blob` does not (no `cmp`). The `.cmp()` call in the THEN
@@ -29,12 +29,12 @@ routine ser_report[T](value: T) -> Text
 # codegen error. Compiling at all proves the prune.
 routine cmp_report[T](value: T) -> Text
   var out = ""
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     if m.obeying(Comparable)
-      discard value.${m.name}.cmp(you: value.${m.name})
-      out = out + m.name + ":cmp "
+      discard value.$nameof(m).cmp(you: value.$nameof(m))
+      out = out + nameof(m) + ":cmp "
     else
-      out = out + m.name + ":nocmp "
+      out = out + nameof(m) + ":nocmp "
   return out
 
 routine start()

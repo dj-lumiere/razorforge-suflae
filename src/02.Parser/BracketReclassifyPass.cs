@@ -195,6 +195,22 @@ internal static class BracketReclassifyPass
                     Location: se.Location,
                     SpliceHandle: spliceHandle.Name);
 
+            // The brace-less form of the same TYPE splice: `$typeof(m)` as a generic argument, e.g.
+            // `hijacked_from[$typeof(m)]`. The splice wraps a `typeof(handle)` call; mirror the `${m.type}`
+            // reclassification above by producing the SpliceHandle TypeExpression the resolver expects.
+            case SpliceExpression
+            {
+                Inner: CallExpression
+                {
+                    Callee: IdentifierExpression { Name: "typeof" },
+                    Arguments: [IdentifierExpression typeofHandle]
+                }
+            } seOf:
+                return new TypeExpression(Name: "splice",
+                    GenericArguments: null,
+                    Location: seOf.Location,
+                    SpliceHandle: typeofHandle.Name);
+
             // A comptime VALUE-position splice as a const-generic argument, e.g.
             // `Array[U8, ${max(T.data_size().byte_size(), 8)}]`. Unlike the `${m.type}` TYPE splice above,
             // the inner is a scalar comptime expression; carry it on ComptimeValue for the monomorphizer

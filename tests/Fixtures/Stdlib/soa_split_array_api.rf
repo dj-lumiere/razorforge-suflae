@@ -2,9 +2,9 @@ module Tests/Stdlib/SoaSplitArrayApi
 import IO/Console
 import Collections
 
-# Exercises decl-position `expand m in memvarof(T)` (struct-of-arrays): `SplitArray[T, N]` turns each
+# Exercises decl-position `expand m in allmemvarof(T)` (struct-of-arrays): `SplitArray[T, N]` turns each
 # field of the element record `T` into its own `Array[fieldType, N]` column. Indexing a column inside a
-# monomorphized SoA method — `me.${m.name}[index]` (get/setitem) and `me.${m.name}.count()` — must
+# monomorphized SoA method — `me.$nameof(m)[index]` (get/setitem) and `me.$nameof(m).count()` — must
 # resolve the concrete column accessor post-monomorphization (the type-clobber + late-liveness fixes).
 
 record Point
@@ -14,25 +14,25 @@ record Point
 record SplitArray[T, N] obeys Sized
 needs T is SplittableType
 needs N is U64
-  expand m in memvarof(T)
-    secret ${m.name}: Array[${m.type}, N]
+  expand m in allmemvarof(T)
+    secret $nameof(m): Array[$typeof(m), N]
 
 @readonly
 routine SplitArray[T, N].count() -> U64
   return N
 
 routine SplitArray[T, N].set(index: U64, value: T)
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     danger
-      me.${m.name}[index] = value.${m.name}
+      me.$nameof(m)[index] = value.$nameof(m)
   return
 
 @readonly
 routine SplitArray[T, N].get(index: U64) -> T
   var result = blank[T]()
-  expand m in memvarof(T)
+  expand m in allmemvarof(T)
     danger
-      result.${m.name} = me.${m.name}[index]
+      result.$nameof(m) = me.$nameof(m)[index]
   return result
 
 routine start()
