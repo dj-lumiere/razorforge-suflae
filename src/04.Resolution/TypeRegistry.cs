@@ -232,6 +232,11 @@ public sealed partial class TypeRegistry
     /// concrete receiver resolves them by name via <see cref="_routinesByOwner"/>.</summary>
     internal const string GenericOwnerKey = "$T";
 
+    /// <summary>Canonical owner key for OWNER-LESS (free / independent) routines — folded into
+    /// <see cref="_routinesByOwner"/> under this key (by base name → overloads) so the old separate
+    /// `_routineOverloads` index is no longer needed. Excluded from member-routine enumeration.</summary>
+    internal const string FreeOwnerKey = "$free";
+
     /// <summary>The flattened method list for an owner (all overloads across all method names), or empty.</summary>
     private static IEnumerable<RoutineInfo> OwnerMethods(Dictionary<string, List<RoutineInfo>>? byName)
         => byName?.Values.SelectMany(selector: l => l) ?? Enumerable.Empty<RoutineInfo>();
@@ -286,13 +291,6 @@ public sealed partial class TypeRegistry
     private readonly Dictionary<(string Name, bool IsFailable), RoutineInfo>
         _routinesByNameAndFailability = new();
 
-    /// <summary>
-    /// All overloads for each free-function base name, enabling structural candidate search
-    /// in <see cref="LookupRoutineOverload"/> without silent first-wins fallback.
-    /// Key = BaseName (e.g., "Core.gcd"). Member-routine overloads are indexed by
-    /// <see cref="_routinesByOwner"/> instead.
-    /// </summary>
-    private readonly Dictionary<string, List<RoutineInfo>> _routineOverloads = new();
 
     /// <summary>
     /// Lazy cache for bare-name type lookups (e.g., "List" -> Collections.List).

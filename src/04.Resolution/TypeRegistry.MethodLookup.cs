@@ -153,15 +153,20 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // Index all free-function overloads by base name for structural matching in LookupRoutineOverload
+        // Free-function (owner-less) overloads: fold into _routinesByOwner under the canonical FreeOwnerKey,
+        // keyed by base name → overloads (append + reference-dedup, matching the old _routineOverloads).
         if (routine.OwnerType == null)
         {
-            if (!_routineOverloads.TryGetValue(key: baseName, value: out List<RoutineInfo>? overloadList))
+            if (!_routinesByOwner.TryGetValue(key: FreeOwnerKey, value: out Dictionary<string, List<RoutineInfo>>? freeByName))
+            {
+                freeByName = new Dictionary<string, List<RoutineInfo>>(comparer: StringComparer.Ordinal);
+                _routinesByOwner[key: FreeOwnerKey] = freeByName;
+            }
+            if (!freeByName.TryGetValue(key: baseName, value: out List<RoutineInfo>? overloadList))
             {
                 overloadList = [];
-                _routineOverloads[key: baseName] = overloadList;
+                freeByName[key: baseName] = overloadList;
             }
-
             if (!overloadList.Contains(item: routine))
                 overloadList.Add(item: routine);
         }
@@ -249,11 +254,10 @@ public sealed partial class TypeRegistry
         // Structural candidate search: iterate all overloads registered for this base name and
         // match positionally by full type identity (module-qualified, includes generic args).
         // Runs before the first-wins fallback so multi-overload disambiguation is type-correct.
-        List<RoutineInfo>? overloadCandidates;
-        if (!_routineOverloads.TryGetValue(key: baseName, value: out overloadCandidates) &&
-            !baseName.Contains(value: '.'))
+        List<RoutineInfo>? overloadCandidates = FreeOverloads(baseName: baseName);
+        if (overloadCandidates == null && !baseName.Contains(value: '.'))
         {
-            _routineOverloads.TryGetValue(key: $"Core.{baseName}", value: out overloadCandidates);
+            overloadCandidates = FreeOverloads(baseName: $"Core.{baseName}");
         }
         if (overloadCandidates is { Count: > 1 })
         {
@@ -527,9 +531,9 @@ public sealed partial class TypeRegistry
         if (updatedQualFailKey != updatedNameFailKey)
             _routinesByNameAndFailability[key: updatedQualFailKey] = updatedRoutine;
 
-        // Update _routineOverloads entry for free functions (replace old instance by reference)
+        // Update the free-function overload entry (now under FreeOwnerKey) — replace old instance by reference
         if (updatedRoutine.OwnerType == null &&
-            _routineOverloads.TryGetValue(key: baseName, value: out List<RoutineInfo>? overloadList))
+            FreeOverloads(baseName: baseName) is { } overloadList)
         {
             int idx = overloadList.FindIndex(match: r => ReferenceEquals(r, routine));
             if (idx >= 0)
@@ -695,6 +699,14 @@ public sealed partial class TypeRegistry
            && byName.TryGetValue(key: methodName, value: out List<RoutineInfo>? list)
            && list.Count > 0
             ? list[index: 0]
+            : null;
+
+    /// <summary>The free-function (owner-less) overload list for <paramref name="baseName"/>, or null —
+    /// stored under the canonical FreeOwnerKey in _routinesByOwner (replaced the old _routineOverloads).</summary>
+    private List<RoutineInfo>? FreeOverloads(string baseName)
+        => _routinesByOwner.TryGetValue(key: FreeOwnerKey, value: out Dictionary<string, List<RoutineInfo>>? byName)
+           && byName.TryGetValue(key: baseName, value: out List<RoutineInfo>? list)
+            ? list
             : null;
 
     public void RegisterDeriveTemplate(string method, string ownerParam, int arity,
@@ -2156,10 +2168,13 @@ public sealed partial class TypeRegistry
     public IEnumerable<RoutineInfo> EnumerateMemberRoutines()
     {
         var seen = new HashSet<RoutineInfo>(comparer: ReferenceEqualityComparer.Instance);
-        foreach (Dictionary<string, List<RoutineInfo>> byName in _routinesByOwner.Values)
+        foreach ((string ownerKey, Dictionary<string, List<RoutineInfo>> byName) in _routinesByOwner)
+        {
+            if (ownerKey == FreeOwnerKey) continue; // free functions are not member routines
             foreach (RoutineInfo r in OwnerMethods(byName: byName))
                 if (seen.Add(item: r))
                     yield return r;
+        }
     }
 
     #endregion

@@ -47,8 +47,6 @@ partial class TypeRegistry
         public Dictionary<string, List<RoutineInfo>> GenericFreeFunctions { get; init; } = null!;
         /// <summary>Routines keyed by (name, isFailable) for fast lookup.</summary>
         public Dictionary<(string Name, bool IsFailable), RoutineInfo> RoutinesByNameAndFailability { get; init; } = null!;
-        /// <summary>Overload groups keyed by base routine name.</summary>
-        public Dictionary<string, List<RoutineInfo>> RoutineOverloads { get; init; } = null!;
 
         // Preset storage
         /// <summary>Preset variables keyed by short name.</summary>
@@ -93,9 +91,6 @@ partial class TypeRegistry
                 elementSelector: kv => new List<RoutineInfo>(kv.Value)),
             RoutinesByNameAndFailability =
                 new Dictionary<(string, bool), RoutineInfo>(_routinesByNameAndFailability),
-            RoutineOverloads = _routineOverloads.ToDictionary(
-                keySelector: kv => kv.Key,
-                elementSelector: kv => new List<RoutineInfo>(kv.Value)),
             Presets = new Dictionary<string, VariableInfo>(_presets),
             PresetsByQualifiedName = new Dictionary<string, VariableInfo>(_presetsByQualifiedName),
             LoadedModules = new HashSet<string>(_loadedModules, StringComparer.OrdinalIgnoreCase),
@@ -130,7 +125,6 @@ partial class TypeRegistry
         foreach (var kv in snapshot.RoutineResolutions) _routineResolutions[kv.Key] = kv.Value;
         foreach (var kv in snapshot.GenericFreeFunctions) _genericFreeFunctions[kv.Key] = new List<RoutineInfo>(kv.Value);
         foreach (var kv in snapshot.RoutinesByNameAndFailability) _routinesByNameAndFailability[kv.Key] = kv.Value;
-        foreach (var kv in snapshot.RoutineOverloads) _routineOverloads[kv.Key] = new List<RoutineInfo>(kv.Value);
 
         // Restore preset storage
         foreach (var kv in snapshot.Presets) _presets[kv.Key] = kv.Value;
