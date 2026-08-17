@@ -138,20 +138,6 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // Index generic free functions (no owner, has generic parameters) for O(1) generic overload lookup
-        if (routine.OwnerType == null && routine.IsGenericDefinition)
-        {
-            if (!_genericFreeFunctions.TryGetValue(key: routine.Name, value: out List<RoutineInfo>? list))
-            {
-                list = [];
-                _genericFreeFunctions[key: routine.Name] = list;
-            }
-
-            if (!list.Contains(item: routine))
-            {
-                list.Add(item: routine);
-            }
-        }
 
         // Free-function (owner-less) overloads: fold into _routinesByOwner under the canonical FreeOwnerKey,
         // keyed by base name → overloads (append + reference-dedup, matching the old _routineOverloads).
@@ -360,8 +346,8 @@ public sealed partial class TypeRegistry
     /// </summary>
     public RoutineInfo? LookupRoutineByName(string name, bool? isFailable = null)
     {
-        // Fast path: _genericFreeFunctions covers the generic-definition case callers commonly need.
-        // For non-generic free functions, try Core prefix and module-qualified name index.
+        // Fast path: the primary _routines index covers the common case; fall back to a Core prefix
+        // and finally a targeted linear scan for codegen short-name lookups.
         if (_routines.TryGetValue(key: name, value: out RoutineInfo? found) &&
             found.OwnerType == null &&
             (isFailable == null || found.IsFailable == isFailable))
@@ -393,13 +379,14 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Finds a generic overload of a free function by name (e.g., show[T] for "show").
-    /// O(1): backed by <see cref="_genericFreeFunctions"/> index populated in <see cref="RegisterRoutine"/>.
+    /// Backed by <see cref="GenericFreeFunctions"/>, which scans the FreeOwnerKey store.
     /// </summary>
     /// <param name="name">The routine name (without generic params).</param>
     /// <param name="preferredArity">Expected argument count; -1 means any arity is acceptable.</param>
     public RoutineInfo? LookupGenericOverload(string name, int preferredArity = -1)
     {
-        if (!_genericFreeFunctions.TryGetValue(key: name, value: out List<RoutineInfo>? candidates))
+        List<RoutineInfo> candidates = GenericFreeFunctions(name: name);
+        if (candidates.Count == 0)
             return null;
 
         // Prefer non-variadic overloads matching the preferred arity first.
@@ -417,15 +404,10 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Finds a variadic generic overload of a free function by name (e.g., show[T](values...: T) for "show").
-    /// O(1): backed by <see cref="_genericFreeFunctions"/> index populated in <see cref="RegisterRoutine"/>.
+    /// Backed by <see cref="GenericFreeFunctions"/>, which scans the FreeOwnerKey store.
     /// </summary>
     public RoutineInfo? LookupVariadicGenericOverload(string name)
-    {
-        if (!_genericFreeFunctions.TryGetValue(key: name, value: out List<RoutineInfo>? candidates))
-            return null;
-
-        return candidates.FirstOrDefault(routine => routine.IsVariadic);
-    }
+        => GenericFreeFunctions(name: name).FirstOrDefault(routine => routine.IsVariadic);
 
     /// <summary>
     /// Updates a routine with resolved parameters and return type.
@@ -504,24 +486,6 @@ public sealed partial class TypeRegistry
                     list[index: index] = updatedRoutine;
                 }
             }
-        }
-
-        // Update the generic free functions index if this routine is/became a generic definition
-        if (updatedRoutine.OwnerType == null && updatedRoutine.IsGenericDefinition)
-        {
-            if (!_genericFreeFunctions.TryGetValue(key: updatedRoutine.Name,
-                    value: out List<RoutineInfo>? genericList))
-            {
-                genericList = [];
-                _genericFreeFunctions[key: updatedRoutine.Name] = genericList;
-            }
-
-            // Replace stale entry for this base name
-            int idx = genericList.FindIndex(match: r => r.BaseName == baseName);
-            if (idx >= 0)
-                genericList[index: idx] = updatedRoutine;
-            else
-                genericList.Add(item: updatedRoutine);
         }
 
         // Update (name, failability) index with the resolved version
@@ -708,6 +672,14 @@ public sealed partial class TypeRegistry
            && byName.TryGetValue(key: baseName, value: out List<RoutineInfo>? list)
             ? list
             : null;
+
+    /// <summary>Generic-definition free functions with the bare name <paramref name="name"/> — filtered off
+    /// the FreeOwnerKey store (which is keyed by BaseName = Module.Name), replacing the old separate
+    /// _genericFreeFunctions by-Name index. Matches the old semantics (all modules' same-named generics).</summary>
+    private List<RoutineInfo> GenericFreeFunctions(string name)
+        => _routinesByOwner.TryGetValue(key: FreeOwnerKey, value: out Dictionary<string, List<RoutineInfo>>? byName)
+            ? OwnerMethods(byName: byName).Where(predicate: r => r.Name == name && r.IsGenericDefinition).ToList()
+            : [];
 
     public void RegisterDeriveTemplate(string method, string ownerParam, int arity,
         List<GenericConstraintDeclaration>? constraints, Statement body)

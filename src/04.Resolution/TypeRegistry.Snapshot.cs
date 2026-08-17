@@ -43,8 +43,6 @@ partial class TypeRegistry
         public Dictionary<string, Dictionary<string, List<RoutineInfo>>> RoutinesByOwner { get; init; } = null!;
         /// <summary>Resolved routine instances (concrete-owner substitutions) keyed by RegistryKey.</summary>
         public Dictionary<string, RoutineInfo> RoutineResolutions { get; init; } = null!;
-        /// <summary>Generic free functions grouped by base name.</summary>
-        public Dictionary<string, List<RoutineInfo>> GenericFreeFunctions { get; init; } = null!;
         /// <summary>Routines keyed by (name, isFailable) for fast lookup.</summary>
         public Dictionary<(string Name, bool IsFailable), RoutineInfo> RoutinesByNameAndFailability { get; init; } = null!;
 
@@ -86,9 +84,6 @@ partial class TypeRegistry
                     keySelector: m => m.Key,
                     elementSelector: m => new List<RoutineInfo>(m.Value))),
             RoutineResolutions = new Dictionary<string, RoutineInfo>(_routineResolutions),
-            GenericFreeFunctions = _genericFreeFunctions.ToDictionary(
-                keySelector: kv => kv.Key,
-                elementSelector: kv => new List<RoutineInfo>(kv.Value)),
             RoutinesByNameAndFailability =
                 new Dictionary<(string, bool), RoutineInfo>(_routinesByNameAndFailability),
             Presets = new Dictionary<string, VariableInfo>(_presets),
@@ -123,7 +118,6 @@ partial class TypeRegistry
             _routinesByOwner[kv.Key] = kv.Value.ToDictionary(
                 keySelector: m => m.Key, elementSelector: m => new List<RoutineInfo>(m.Value));
         foreach (var kv in snapshot.RoutineResolutions) _routineResolutions[kv.Key] = kv.Value;
-        foreach (var kv in snapshot.GenericFreeFunctions) _genericFreeFunctions[kv.Key] = new List<RoutineInfo>(kv.Value);
         foreach (var kv in snapshot.RoutinesByNameAndFailability) _routinesByNameAndFailability[kv.Key] = kv.Value;
 
         // Restore preset storage

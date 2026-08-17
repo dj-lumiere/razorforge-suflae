@@ -276,13 +276,6 @@ public sealed partial class TypeRegistry
     private readonly HashSet<string> _prunedGenericBases = [];
 
     /// <summary>
-    /// Generic free functions indexed by short name for O(1) lookup in
-    /// <see cref="LookupGenericOverload"/> and <see cref="LookupVariadicGenericOverload"/>.
-    /// Key = routine Name (e.g., "show"). Each entry is one or two routines (non-variadic preferred).
-    /// </summary>
-    private readonly Dictionary<string, List<RoutineInfo>> _genericFreeFunctions = new();
-
-    /// <summary>
     /// Secondary index for O(1) failability-aware lookup.
     /// Key = (BaseName, IsFailable). First-registration wins per (name, failability) pair.
     /// Populated in <see cref="RegisterRoutine"/> and <see cref="UpdateRoutine"/>.
