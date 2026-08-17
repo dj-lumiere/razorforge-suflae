@@ -768,22 +768,32 @@ public sealed partial class StdlibLoader
             Storage = routine.Storage
         };
 
-        // An OPT-IN-capability derive template (`@overridable/@override routine T.eq/cmp` with a
-        // bare-generic-param owner) must NOT become a live universal method: unlike represent/
-        // diagnose (conferred on ALL types), eq/cmp are opt-in, so a live `T.eq` would be
-        // force-instantiated by GMP for non-conforming types (or types whose fields lack ne/cmp,
-        // e.g. Integer's CPtr handle) → "declared but never defined" codegen crashes. The per-type
-        // body still comes from the derive-template store via WiredRoutinePass.CloneUniversalDeriveBody,
-        // so dropping the universal registration is safe.
-        // OPT-IN derive templates (capability conferred only via explicit conformance) must not become
-        // live universals. Classification is protocol-grounded in the wired catalog (auto-conferred =
-        // Representable/Diagnosable → represent/diagnose stay universal; everything else is opt-in) —
-        // no per-method name list. The GenericParameterTypeInfo owner already means a bare-`T` template.
-        bool isOptInDeriveTemplate = ownerType is GenericParameterTypeInfo
-            && !WiredRoutineCatalog.IsAutoConferredDerive(method: methodName)
+        // A derive template's UNIVERSAL-vs-OPT-IN status is read straight off its stdlib constraints —
+        // NOT a C# name list. A derive is OPT-IN (must NOT become a live universal, else it is force-
+        // instantiated for a type whose fields lack the capability → "declared but never defined" codegen
+        // crash) IFF it carries a CAPABILITY gate: `needs T is P everywhere` (∀-structural conformance) or
+        // `needs T obeys P`. A derive with NO gate (represent/diagnose/serialize/destroy/copy/store), or
+        // only a KIND gate (`needs T is VariantType` — that just selects WHICH override body wins in
+        // GetDeriveTemplate, not eligibility), is UNIVERSAL: it applies to every type. The per-type body
+        // always comes from the derive-template store via WiredRoutinePass.CloneUniversalDeriveBody, so a
+        // universal registration only supplies the resolvable signature — the kind-specialized override
+        // (e.g. `is RoutineType`) still supplies the body.
+        bool isDeriveTemplate = ownerType is GenericParameterTypeInfo
             && (routine.Annotations.Contains(item: "overridable")
                 || routine.Annotations.Contains(item: "override"));
-        if (isOptInDeriveTemplate)
+        bool hasCapabilityGate = (routine.GenericConstraints ?? []).Any(predicate: c =>
+            c.ConstraintType is ConstraintKind.Everywhere or ConstraintKind.Obeys);
+        if (isDeriveTemplate && hasCapabilityGate)
+            registry.MarkOptInDeriveMethod(method: methodName);
+        // Opt-in status is per METHOD, not per template: once `copy`'s capability-gated base
+        // (`needs Copyable everywhere`) marks `copy` opt-in, its KIND-gated variant override
+        // (`needs T is VariantType`) must ALSO stay opt-in — else the override, being a bare-`T`-owner
+        // routine, lands in `_universalMethods` and makes `copy` resolve for EVERY type (leaking `-> Me`/
+        // ProtocolSelf, bypassing the Copyable gate). The `@overridable` base precedes its `@override`s in
+        // DeriveText, so the method is already marked when the override is seen. A truly universal derive
+        // (represent/diagnose/serialize/destroy — never capability-gated) is never marked, so its kind
+        // overrides register normally.
+        if (isDeriveTemplate && (hasCapabilityGate || registry.IsOptInDeriveMethod(method: methodName)))
             return;
 
         // Pin the decl → info binding (see RoutineDeclaration.ResolvedInfo) so codegen reads it

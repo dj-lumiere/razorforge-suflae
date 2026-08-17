@@ -227,6 +227,19 @@ public sealed partial class TypeRegistry
     /// <summary>Methods on GenericParameterTypeInfo owners, indexed by method name for O(1) universal lookup.</summary>
     private readonly Dictionary<string, RoutineInfo> _universalMethods = new();
 
+    /// <summary>Derive method NAMES that are OPT-IN (capability-conferred): any `@overridable/@override
+    /// T.m()` whose gate is a `needs P everywhere` / `needs T obeys P` capability constraint. Once a method
+    /// is opt-in, ALL its derive templates — including KIND-gated overrides (`needs T is VariantType`) —
+    /// stay opt-in (must NOT become live universals). Keyed by name so a kind-override registered AFTER its
+    /// capability-gated base is classified consistently. Populated during stdlib load.</summary>
+    private readonly HashSet<string> _optInDeriveMethods = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Marks a derive method name opt-in (capability-conferred) — see <see cref="_optInDeriveMethods"/>.</summary>
+    public void MarkOptInDeriveMethod(string method) => _optInDeriveMethods.Add(item: method);
+
+    /// <summary>True if a derive method name was marked opt-in via a capability gate.</summary>
+    public bool IsOptInDeriveMethod(string method) => _optInDeriveMethods.Contains(item: method);
+
     /// <summary>
     /// Auto-derive templates: universal <c>@overridable routine T.method()</c> bodies, plus their
     /// kind-specialized <c>@override … needs T is VariantType/ChoiceType/FlagsType/…</c> variants. Keyed by
@@ -1412,6 +1425,29 @@ public sealed partial class TypeRegistry
             };
         _resolutions[key: key] = newType;
 
+        // A routine VALUE is Serializable — like a tuple registers its methods at creation (structural
+        // types never reach the AutoWiredRegistrationPass named-type loop). Serializing executable code is
+        // meaningless, but a routine has a first-class `represent` (its signature), so serialize boxes that
+        // Text. Registering the per-type method lets the universal serialize walk over a routine-typed
+        // member (`entity Callback { f: Routine[...] }`) resolve; the BODY is the zero-field
+        // BuildSerializeBody path, synthesized in WiredRoutinePass's routine-type loop.
+        TypeInfo? routineSerialValue = LookupType(name: "SerialValue");
+        if (routineSerialValue != null)
+        {
+            RegisterRoutine(routine: new RoutineInfo(name: "serialize")
+            {
+                Kind = RoutineKind.MemberRoutine,
+                OwnerType = newType,
+                Parameters = [],
+                ReturnType = routineSerialValue,
+                IsFailable = false,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
+                Visibility = VisibilityModifier.Open,
+                IsSynthesized = true
+            });
+        }
+
         return newType;
     }
 
@@ -1779,6 +1815,12 @@ public sealed partial class TypeRegistry
 
         return namedTypes.Concat(second: tupleTypes);
     }
+
+    /// <summary>Concrete routine types from the resolutions cache (structural — never in <c>_types</c>).
+    /// WiredRoutinePass iterates these to synthesize their wired bodies (serialize) regardless of the
+    /// GetAllRoutines liveness filter, mirroring the tuple path.</summary>
+    public IEnumerable<TypeInfo> GetResolvedRoutineTypes()
+        => _resolutions.Values.Where(predicate: t => t is RoutineTypeInfo { IsGenericDefinition: false });
 
     /// <summary>
     /// Gets all registered types.

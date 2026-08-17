@@ -95,10 +95,14 @@ internal sealed class AutoWiredRegistrationPass
                     existingMethods: existingMethods);
             }
 
-            // Serializable: serialize() -> SerialValue, auto-derived (overridable) for the aggregate
-            // categories that obey Serializable. Body synthesized in WiredRoutinePass (field walk).
+            // Serializable: serialize() -> SerialValue is UNIVERSAL — every value has one so the derived
+            // composite walk can call `me.field.serialize()` unconditionally (no `obeying` gate). Aggregate
+            // categories (Record/Entity/Variant) field-walk or scalar-box; a `choice`/`flags` enum has zero
+            // RF fields, so WiredRoutinePass's fields.Count==0 path boxes its `represent()` Text — the exact
+            // fallback the old gate's else-branch produced. Body synthesized in WiredRoutinePass.
             if (serialValueType != null &&
-                type.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Variant)
+                type.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Variant
+                    or TypeCategory.Choice or TypeCategory.Flags)
             {
                 MaybeRegisterWired(owner: type,
                     name: "serialize",

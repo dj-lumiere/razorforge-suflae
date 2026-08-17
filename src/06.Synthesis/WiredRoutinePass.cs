@@ -208,6 +208,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                                 textType: textType,
                                 boolType: boolType);
                             break;
+
+                        case RoutineTypeInfo routineOwner
+                            when routine.Name == "serialize" && !routineOwner.IsGenericDefinition:
+                            // A routine VALUE boxes its `represent()` signature Text as its serialize (the
+                            // zero-field path) — a resolved CreatorExpression, unlike the RF template's
+                            // `SerialValue(...)` which doesn't re-resolve when cloned for a structural type.
+                            ctx.VariantBodies[key: routine.RegistryKey] =
+                                BuildSerializeBody(owner: routineOwner, fields: [], textType: textType);
+                            break;
                     }
 
                     break;
@@ -233,6 +242,24 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     s32Type: s32Type);
             }
         }
+
+        // Routine types are structural (never a declared owner), so — like tuples — they never reach the
+        // GetAllRoutines dispatch above; iterate them from the resolutions cache. A routine VALUE serializes
+        // by boxing its `represent()` signature Text (the zero-field BuildSerializeBody path) — the universal
+        // serialize walk (now unconditional) over a routine-typed member calls it. represent/diagnose come
+        // from the `is RoutineType` DeriveText overrides (simple `type_name()`, no constructor to re-resolve).
+        foreach (TypeInfo type in ctx.Registry.GetResolvedRoutineTypes())
+        {
+            foreach (RoutineInfo routine in ctx.Registry.GetMethodsForType(type))
+            {
+                if (routine.Name != "serialize") continue;
+                if (ctx.RoutineBodies.ContainsKey(key: routine.RegistryKey)) continue;
+                if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
+                Statement? body = BuildSerializeBody(owner: type, fields: [], textType: textType);
+                if (body != null) ctx.VariantBodies[key: routine.RegistryKey] = body;
+            }
+        }
+
 
         // GetAllRoutines() filters out generic-definition owner types to prevent T/K,V placeholders
         // in LLVM. However, BuilderService routines on generic defs return only fixed literals or
@@ -791,6 +818,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         methodName: DiagnoseMethodName)
                     ?? BuildChoiceDiagnoseBody(choice: choice, textType: textType,
                         logicBreachedErrorType: logicBreachedErrorType);
+                break;
+
+            case "serialize" when !choice.IsGenericDefinition:
+                // A `choice` has no serializable payload, so it boxes its `represent()` Text (the zero-field
+                // path of BuildSerializeBody) — the fallback the derived composite's `obeying` else-branch
+                // used to produce, now that serialize is universal.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildSerializeBody(owner: choice, fields: [], textType: textType);
                 break;
 
             case "create!":
@@ -1888,6 +1923,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     CloneUniversalDeriveBody(ownerType: flags, synthesized: routine,
                         methodName: DiagnoseMethodName)
                     ?? BuildFlagsDiagnoseBody(flags: flags, textType: textType, boolType: boolType);
+                break;
+
+            case "serialize" when !flags.IsGenericDefinition:
+                // A `flags` mask boxes its `represent()` Text (zero-field BuildSerializeBody path) — the
+                // universal-serialize fallback that replaces the composite derive's `obeying` else-branch.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildSerializeBody(owner: flags, fields: [], textType: textType);
                 break;
 
             case "all_off":

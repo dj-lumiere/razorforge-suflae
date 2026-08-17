@@ -3,7 +3,10 @@ module Core
 ### Represents the protocol for total or partial value ordering.
 ### Types that obey `Comparable` define a comparison operation that is
 ### consistent with equality and can drive the relational operator family.
+### `needs Comparable everywhere` auto-confers Comparable on any member-bearing type all of whose
+### members are themselves Comparable — the structural gate that drives the auto-derived `cmp`.
 protocol Comparable obeys Equatable
+needs Comparable everywhere
   ### Compares this value with the other value.
   ### Implementations should return a result consistent with `eq` and stable
   ### across repeated calls for the same operands.

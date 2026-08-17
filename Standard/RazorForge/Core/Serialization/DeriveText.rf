@@ -134,6 +134,21 @@ needs T is TupleType
     first = false
   return result + ")"
 
+### Routine values: `represent`/`diagnose` show the SIGNATURE (the routine type's name, e.g.
+### `Routine[(S32,), S32]`) — executable code has no field structure to walk. `serialize` boxes that same
+### signature Text: serializing code is meaningless, but the signature is the useful view. These make a
+### routine-typed member (an entity may hold one — `entity Callback { f: Routine[...] }`) serialize
+### uniformly through the universal walk, no capability gate.
+@override
+routine T.represent() -> Text
+needs T is RoutineType
+  return me.type_name()
+
+@override
+routine T.diagnose() -> Text
+needs T is RoutineType
+  return me.full_type_name()
+
 ### The auto-derived default `diagnose()` for any record: `Module.TypeName(field: value, …)`. Uses the
 ### fully-qualified name and shows ALL fields (secret ones prefixed `[secret] ` via `visibilityof`); each
 ### value still renders via `represent` (never `diagnose`) to avoid exponentially verbose nested output.
@@ -157,6 +172,7 @@ routine T.diagnose() -> Text
 ### builder — a zero-field type expands to no comparisons and returns `true`.
 @overridable
 routine T.eq(you: T) -> Bool
+needs Equatable everywhere
   expand m in allmemvarof(T)
     if me.$nameof(m) != you.$nameof(m)
       return false
@@ -168,6 +184,7 @@ routine T.eq(you: T) -> Bool
 ### zero-field type expands to no comparisons and returns `SAME`.
 @overridable
 routine T.cmp(you: T) -> ComparisonSign
+needs Comparable everywhere
   expand m in allmemvarof(T)
     if me.$nameof(m).cmp(you: you.$nameof(m)) isnot SAME
       return me.$nameof(m).cmp(you: you.$nameof(m))
@@ -178,6 +195,7 @@ routine T.cmp(you: T) -> ComparisonSign
 ### and a zero-field type hashes to `0` — matching the hand-written C# builder. `expand` field-walk.
 @overridable
 routine T.hash() -> U64
+needs Hashable everywhere
   var acc = 0u64
   expand m in allmemvarof(T)
     acc = acc.bitxor(you: me.$nameof(m).hash())
@@ -187,6 +205,7 @@ routine T.hash() -> U64
 ### variable's keyed hash.
 @overridable
 routine T.hash(k0: U64, k1: U64) -> U64
+needs Hashable everywhere
   var acc = 0u64
   expand m in allmemvarof(T)
     acc = acc.bitxor(you: me.$nameof(m).hash(k0: k0, k1: k1))
@@ -202,20 +221,22 @@ routine T.hash(k0: U64, k1: U64) -> U64
 ### gate prunes to exactly one arm per member at monomorph, so codegen never sees a `.serialize()` on a
 ### type that has none. Keys are the field names in declaration order; `Dict` iteration is
 ### insertion-ordered, so the output is stable.
+###
+### `serialize` is UNIVERSAL — EVERY type has one (a scalar boxes its own SerialValue arm; an aggregate
+### recurses; a `choice`/`flags` or zero-field opaque leaf boxes its `represent()` Text as ITS serialize),
+### so the walk calls `me.field.serialize()` UNCONDITIONALLY — no capability gate, no comptime prune.
 @overridable
 routine T.serialize() -> SerialValue
   var __sv = Dict[Text, SerialValue]()
   expand m in openmemvarof(T)
-    if m.obeying(Serializable)
-      discard __sv.add(key: nameof(m), value: me.$nameof(m).serialize())
-    else
-      discard __sv.add(key: nameof(m), value: SerialValue(me.$nameof(m).represent()))
+    discard __sv.add(key: nameof(m), value: me.$nameof(m).serialize())
   return SerialValue(steal __sv)
 
 ### The auto-derived deep `copy()` (Copyable): forwards to `store` — a bitwise copy for a pure value
 ### type, or the retaining store for a managed-leaf / retaining-field record. Same as the C# builder.
 @overridable
 routine T.copy() -> Me
+needs Copyable everywhere
   return me.store()
 
 ### Variant `copy()`: TAG-dispatch DEEP copy — reconstruct the live arm with a copied payload, so a
@@ -275,6 +296,7 @@ needs T is VariantType
 ### reconstruction `T(f: me.f.store(), …)` with a mutation walk — no creator arg-list needed.
 @overridable
 routine T.store() -> Me
+needs Storable everywhere
   var result = me
   expand m in allmemvarof(T)
     if m.is_retaining

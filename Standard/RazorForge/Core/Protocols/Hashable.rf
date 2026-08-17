@@ -5,7 +5,10 @@ module Core
 ### form (SipHash-2-4 semantics) makes the probe sequence unpredictable to external
 ### attackers, so it is safe to use with untrusted input. For trusted keys where
 ### every cycle matters, use `FastHashable` and `FastSet`/`FastDict` instead.
+### `needs Hashable everywhere` auto-confers Hashable on any member-bearing type all of whose
+### members are themselves Hashable — the structural gate that drives the auto-derived `hash`.
 protocol Hashable
+needs Hashable everywhere
   ### Returns a keyed hash of this value using SipHash-2-4 semantics.
   ### Implementations should incorporate the full logical value and produce the
   ### same result for equal values when called with the same key pair.

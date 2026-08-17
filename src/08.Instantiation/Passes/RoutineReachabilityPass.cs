@@ -24,6 +24,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private const string RepresentMethodName = "represent";
     private const string DiagnoseMethodName = "diagnose";
     private const string DestroyMethodName = "destroy";
+    private const string SerializeMethodName = "serialize";
 
     private readonly HashSet<string> _live = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> _visited = new(comparer: StringComparer.Ordinal);
@@ -1058,7 +1059,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             }
 
             // (2) Display routines: codegen emits represent/diagnose for every owner that has any
-            // method emitted. Force them live so transitive callers of show()/alert() resolve.
+            // method emitted. Force them live so transitive callers of show()/alert() resolve. (serialize
+            // is NOT owner-seeded here — unlike represent/diagnose it is not truly universal: a
+            // routine-typed member has represent but no serialize, so blanket-seeding serialize on every
+            // live type would force it onto never-serialized routine-holding entities and fail to link.
+            // The now-unconditional serialize derive is instead seeded transitively per-member below (2c).)
             if (name != RepresentMethodName && name != DiagnoseMethodName)
             {
                 RoutineInfo? rep = ctx.Registry.LookupMethod(type: owner, methodName: RepresentMethodName);
@@ -1083,6 +1088,23 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     RoutineInfo? memberDestroy =
                         ctx.Registry.LookupMethod(type: mv.Type, methodName: DestroyMethodName);
                     if (memberDestroy != null) EnqueueCallee(callee: memberDestroy);
+                }
+            }
+
+            // (2c) The now-UNCONDITIONAL `serialize` derive walks every OPEN member calling
+            // `me.$nameof(m).serialize()`. Reachability runs BEFORE that expand unrolls, so seed serialize
+            // TRANSITIVELY on each concrete member type — precise (only members of an actually-live
+            // serialize), unlike a blanket owner-seed which would wrongly force serialize onto a
+            // never-serialized entity holding a routine-typed field (routines have no serialize). Recurses
+            // naturally: a member's serialize going live seeds ITS members' serializes.
+            if (name == SerializeMethodName)
+            {
+                foreach (MemberVariableInfo mv in MemberVariablesOf(type: owner))
+                {
+                    if (mv.Type is null or GenericParameterTypeInfo) continue;
+                    RoutineInfo? memberSerialize =
+                        ctx.Registry.LookupMethod(type: mv.Type, methodName: SerializeMethodName);
+                    if (memberSerialize != null) EnqueueCallee(callee: memberSerialize);
                 }
             }
         }

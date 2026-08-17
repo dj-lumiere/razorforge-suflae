@@ -41,11 +41,11 @@ public class MarkerConformanceTests
     [Fact]
     public void Analyze_Record_HasTransitiveProtocols()
     {
-        // RecordType obeys only Diagnosable (which transitively obeys Representable). It does NOT
-        // imply Equatable/Hashable: equality and hashing are capabilities a record opts into
-        // explicitly (`obeys Equatable`/`Hashable` + a hand-written `$eq`/`$hash`), never an
-        // automatic consequence of being a record (otherwise the conformance is a promise with no
-        // body, and constrained generics like `List[T].$eq` LINKERR on a non-equatable element).
+        // RecordType always obeys Diagnosable (→ Representable). Equatable/Comparable/Hashable are NOT
+        // universal — they are conferred by the `needs P everywhere` structural gate on each protocol:
+        // a record auto-obeys P iff EVERY member obeys P, and the auto-derived `eq`/`cmp`/`hash` supply a
+        // real body (so there is no bodyless-promise LINKERR). `Point{x: S32, y: S32}` — S32 obeys
+        // Ordered (→ Equatable, Comparable) and Hashable — so Point auto-conforms all three.
         string source = """
                         record Point
                           x: S32
@@ -57,14 +57,36 @@ public class MarkerConformanceTests
 
         var record = (RecordTypeInfo)result.Registry.LookupType(name: "Point")!;
 
-        // RecordType's only transitive protocol is Diagnosable (and Representable below it).
         Assert.Contains(collection: record.ImplementedProtocols,
             filter: p => p.Name == "Diagnosable");
-        // Equatable/Hashable are NOT implied — Point declares no `obeys Equatable`.
+        // Equatable/Comparable/Hashable ARE conferred via `needs P everywhere` (all members are S32,
+        // which obeys them) — the auto-derive gives each a real body.
+        Assert.Contains(collection: record.ImplementedProtocols,
+            filter: p => p.Name == "Equatable");
+        Assert.Contains(collection: record.ImplementedProtocols,
+            filter: p => p.Name == "Hashable");
+    }
+
+    [Fact]
+    public void Analyze_Record_WithNonEquatableMember_DoesNotAutoConform()
+    {
+        // The `needs P everywhere` gate is STRUCTURAL: a record whose member does NOT obey Equatable
+        // (an `entity` — entities are excluded from the everywhere cascade) does NOT auto-conform, so
+        // there is no bodyless-promise: `==` on it fails to resolve rather than LINKERR downstream.
+        string source = """
+                        entity Node
+                          value: S64
+
+                        record Holder
+                          node: Retained[Node]
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+
+        var record = (RecordTypeInfo)result.Registry.LookupType(name: "Holder")!;
         Assert.DoesNotContain(collection: record.ImplementedProtocols,
             filter: p => p.Name == "Equatable");
-        Assert.DoesNotContain(collection: record.ImplementedProtocols,
-            filter: p => p.Name == "Hashable");
     }
     /// <summary>
     /// Verifies semantic analysis behavior for entity has entity type conformance.
