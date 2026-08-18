@@ -627,11 +627,11 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts none coalescing with method call.
+    /// Verifies that the parser accepts none coalescing with memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_NoneCoalescingWithMethodCall()
+    public void Parse_NoneCoalescingWithMemberRoutineCall()
     {
         string source = """
                         routine test() -> User

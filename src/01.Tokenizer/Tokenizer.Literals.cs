@@ -6,7 +6,7 @@ using Compiler.Diagnostics;
 namespace Compiler.Tokenizer;
 
 /// <summary>
-/// Partial class containing string and character literal scanning methods for the unified tokenizer.
+/// Partial class containing string and character literal scanning memberRoutines for the unified tokenizer.
 /// </summary>
 public partial class Tokenizer
 {

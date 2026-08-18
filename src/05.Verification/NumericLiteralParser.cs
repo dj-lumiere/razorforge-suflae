@@ -576,7 +576,7 @@ public static class NumericLiteralParser
 
     #endregion
 
-    #region Helper methods for managed types
+    #region Helper memberRoutines for managed types
 
     /// <summary>
     /// Parses an arbitrary precision integer and returns it as a managed byte array.

@@ -119,9 +119,9 @@ public sealed partial class SemanticVerifier
         Dictionary<string, TypeSymbol> substitutions)
     {
         // Associated-type projection (`S/Iter`): substitute the base, then resolve via its binding.
-        // Done at the call site so a method return like `?EnumerateEmitter[T, S/Iter]` resolves to
+        // Done at the call site so a memberRoutine return like `?EnumerateEmitter[T, S/Iter]` resolves to
         // the CONCRETE emitter (EnumerateEmitter[Text, ListEmitter[Text]]) — otherwise reachability
-        // marks the unresolved-projection emitter's methods and the concrete ones never generate.
+        // marks the unresolved-projection emitter's memberRoutines and the concrete ones never generate.
         if (type is AssociatedProjectionTypeInfo proj)
         {
             TypeSymbol newBase = SubstituteWithMapping(type: proj.Base, substitutions: substitutions);
@@ -319,7 +319,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.StealSharedOwnership,
                 message:
                 $"Cannot steal '{operandType.Name}' - a reference-counted handle is shared ownership, " +
-                "not unique, so it cannot be exclusively moved. Copy it with `.store()`, " +
+                "not unique, so it cannot be exclusively moved. Copy it with `.assign()`, " +
                 "or use `Shared`/`Watched` to move ownership across a coroutine/thread boundary.",
                 location: steal.Location);
             steal.ResolvedType = operandType;

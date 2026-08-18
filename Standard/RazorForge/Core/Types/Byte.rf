@@ -4,7 +4,7 @@ module Core
 ### `Byte` is a binary payload type, not a text character, so its display form
 ### always uses an escaped hexadecimal representation.
 @llvm("i8")
-record Byte obeys ConstCompatible, Storable, Copyable
+record Byte obeys ConstCompatible, Assignable, Copyable
   pass
 
 # Creators

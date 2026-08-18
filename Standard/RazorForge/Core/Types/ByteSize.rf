@@ -25,7 +25,7 @@ preset BYTES_PER_PB: U64 = 1_000_000_000_000_000u64
 ### It supports both binary units such as KiB/MiB and decimal units such as KB/MB.
 ### :see: {Address}, {Memory-Types}
 @llvm("i64")
-record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible, Scalable, ScalarFloorDivisible, Storable, Copyable
+record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible, Scalable, ScalarFloorDivisible, Assignable, Copyable
   pass
 
 # ============================================================================

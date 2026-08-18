@@ -50,7 +50,7 @@ public sealed partial class StdlibLoader
     /// Registers protocol declarations from a program.
     /// This is pass 1a — protocols must be registered before other types so 'obeys' clauses can resolve.
     /// Uses two passes: first registers protocol type shells (names + generic params), then fills in
-    /// method signatures. This ensures forward references between protocols resolve correctly
+    /// memberRoutine signatures. This ensures forward references between protocols resolve correctly
     /// (e.g., Iterable[T].iter() -> Iterator[T] where Iterator is another protocol).
     /// </summary>
     /// <summary>
@@ -352,8 +352,8 @@ public sealed partial class StdlibLoader
 
         string name = routine.Name;
         int dot = name.IndexOf(value: '.');
-        string method = dot > 0 ? name[(dot + 1)..] : name;
-        if (BuilderServiceClosureCascadingRoutines.Contains(item: method))
+        string memberRoutine = dot > 0 ? name[(dot + 1)..] : name;
+        if (BuilderServiceClosureCascadingRoutines.Contains(item: memberRoutine))
         {
             return true;
         }
@@ -407,8 +407,8 @@ public sealed partial class StdlibLoader
                     {
                         if (member is RoutineDeclaration memberRoutine)
                         {
-                            // Prefix the method name with the type name so RegisterRoutine
-                            // treats it as a member method (e.g., "DivisionByZeroError.crash_message")
+                            // Prefix the memberRoutine name with the type name so RegisterRoutine
+                            // treats it as a member memberRoutine (e.g., "DivisionByZeroError.crash_message")
                             var prefixed = memberRoutine with
                             {
                                 Name = $"{crashable.Name}.{memberRoutine.Name}"
@@ -542,15 +542,15 @@ public sealed partial class StdlibLoader
     }
 
     /// <summary>
-    /// Registers a routine from stdlib (including type methods like S32.add).
+    /// Registers a routine from stdlib (including type memberRoutines like S32.add).
     /// </summary>
     private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine,
         string moduleName)
     {
-        // Parse method names like "S32.add" or "Type.method"
+        // Parse memberRoutine names like "S32.add" or "Type.MemberRoutine"
         string routineName = routine.Name;
         TypeInfo? ownerType = null;
-        string methodName = routineName;
+        string memberRoutineName = routineName;
         // Receiver text for a GENERIC specialization (e.g. "List[Agent[V]]"); resolved into MeType
         // once the generic context is built, so `me` is typed as the specialized receiver.
         string? meTypeName = null;
@@ -559,7 +559,7 @@ public sealed partial class StdlibLoader
         if (dotIndex > 0)
         {
             string typeName = routineName[..dotIndex];
-            methodName = routineName[(dotIndex + 1)..]; // Just the method part (e.g., "add")
+            memberRoutineName = routineName[(dotIndex + 1)..]; // Just the memberRoutine part (e.g., "add")
 
             int bracketIndex = typeName.IndexOf(value: '[');
             if (bracketIndex > 0)
@@ -571,8 +571,8 @@ public sealed partial class StdlibLoader
                 string baseName = typeName[..bracketIndex];
                 // Own-module FIRST: `routine List[T].add_last` in `module Suflae` owns `Suflae.List`,
                 // not the earlier-registered context-free `Core.List`. Bare-first bound the Suflae
-                // overlay's List methods to Core.List, so dispatch on `Roamed[Suflae.List]` found no
-                // such method (RF-S458). Falls back to bare for a Core type used from another module.
+                // overlay's List memberRoutines to Core.List, so dispatch on `Roamed[Suflae.List]` found no
+                // such memberRoutine (RF-S458). Falls back to bare for a Core type used from another module.
                 TypeInfo? baseDef = registry.LookupType(name: $"{moduleName}.{baseName}") ??
                                     registry.LookupType(name: baseName);
 
@@ -609,7 +609,7 @@ public sealed partial class StdlibLoader
                         // text so `me` is typed as the specialized receiver (MeType) below — making
                         // member access like `me[i]` yield Agent[V] instead of List's raw element.
                         ownerType = baseDef;
-                        meTypeName = methodName is "create" or "create!" ? null : typeName;
+                        meTypeName = memberRoutineName is "create" or "create!" ? null : typeName;
                     }
                     else
                     {
@@ -623,7 +623,7 @@ public sealed partial class StdlibLoader
                 // Own-module FIRST (mirrors the constructor path + LookupTypeWithImports): a member
                 // `routine List[T].add_last` in `module Suflae` owns `Suflae.List`, not the earlier-
                 // registered context-free `Core.List`. Falls back to the bare context-free type for a
-                // Core type referenced from another module (e.g. `Collections` methods on `Core.List`).
+                // Core type referenced from another module (e.g. `Collections` memberRoutines on `Core.List`).
                 ownerType = registry.LookupType(name: $"{moduleName}.{typeName}") ??
                             registry.LookupType(name: typeName);
 
@@ -653,7 +653,7 @@ public sealed partial class StdlibLoader
             if (ctorOwner != null)
             {
                 ownerType = ctorOwner;
-                methodName = "create";
+                memberRoutineName = "create";
             }
         }
 
@@ -677,7 +677,7 @@ public sealed partial class StdlibLoader
             // contents from owner receivers like `Iterable[Text]` and stuffs them into
             // routine.GenericParameters, but concrete args (Text) must not shadow the real type
             // — otherwise `separator: Text` resolves to GenericParameterTypeInfo("Text")
-            // instead of Core.Text, breaking method lookup in the body.
+            // instead of Core.Text, breaking memberRoutine lookup in the body.
             foreach (string gp in routine.GenericParameters)
             {
                 if (registry.LookupType(name: gp) is null &&
@@ -747,8 +747,8 @@ public sealed partial class StdlibLoader
             }
         }
 
-        // Use just the method name (not "S32.add", just "add")
-        var routineInfo = new RoutineInfo(name: methodName)
+        // Use just the memberRoutine name (not "S32.add", just "add")
+        var routineInfo = new RoutineInfo(name: memberRoutineName)
         {
             OwnerType = ownerType,
             MeType = meType,
@@ -784,16 +784,16 @@ public sealed partial class StdlibLoader
         bool hasCapabilityGate = (routine.GenericConstraints ?? []).Any(predicate: c =>
             c.ConstraintType is ConstraintKind.Everywhere or ConstraintKind.Obeys);
         if (isDeriveTemplate && hasCapabilityGate)
-            registry.MarkOptInDeriveMethod(method: methodName);
-        // Opt-in status is per METHOD, not per template: once `copy`'s capability-gated base
+            registry.MarkOptInDeriveMemberRoutine(memberRoutine: memberRoutineName);
+        // Opt-in status is per memberRoutine, not per template: once `copy`'s capability-gated base
         // (`needs Copyable everywhere`) marks `copy` opt-in, its KIND-gated variant override
         // (`needs T is VariantType`) must ALSO stay opt-in — else the override, being a bare-`T`-owner
-        // routine, lands in `_universalMethods` and makes `copy` resolve for EVERY type (leaking `-> Me`/
+        // routine, lands in `_universalMemberRoutines` and makes `copy` resolve for EVERY type (leaking `-> Me`/
         // ProtocolSelf, bypassing the Copyable gate). The `@overridable` base precedes its `@override`s in
-        // DeriveText, so the method is already marked when the override is seen. A truly universal derive
+        // DeriveText, so the memberRoutine is already marked when the override is seen. A truly universal derive
         // (represent/diagnose/serialize/destroy — never capability-gated) is never marked, so its kind
         // overrides register normally.
-        if (isDeriveTemplate && (hasCapabilityGate || registry.IsOptInDeriveMethod(method: methodName)))
+        if (isDeriveTemplate && (hasCapabilityGate || registry.IsOptInDeriveMemberRoutine(memberRoutine: memberRoutineName)))
             return;
 
         // Pin the decl → info binding (see RoutineDeclaration.ResolvedInfo) so codegen reads it
@@ -803,7 +803,7 @@ public sealed partial class StdlibLoader
         // Constructor divergent-duplicate guard: hash the body so RegisterRoutine can distinguish a
         // benign identical cross-file duplicate creator from a divergent one (see
         // TypeRegistry.DivergentDuplicateCreators).
-        if (methodName == "create")
+        if (memberRoutineName == "create")
             routineInfo.BodyHash = TypeRegistry.ComputeCreatorBodyHash(body: routine.Body);
 
         try
@@ -1074,7 +1074,7 @@ public sealed partial class StdlibLoader
         // Skip if THIS module's type is already registered (idempotency). The check must be
         // module-qualified: a bare-name check would skip a Suflae-realm overlay `entity List` merely
         // because the RazorForge-realm `Core.List` (loaded earlier) shares the bare name, leaving
-        // `Suflae.List` unregistered — its constructor/methods then mis-bind to `Core.List` (spurious
+        // `Suflae.List` unregistered — its constructor/memberRoutines then mis-bind to `Core.List` (spurious
         // RF-S406). Different modules own distinct same-named types.
         string qualifiedName = string.IsNullOrEmpty(value: moduleName)
             ? entity.Name
@@ -1394,20 +1394,20 @@ public sealed partial class StdlibLoader
     }
 
     /// <summary>
-    /// Registers a protocol type from stdlib (single-pass: registers type and methods together).
+    /// Registers a protocol type from stdlib (single-pass: registers type and memberRoutines together).
     /// Used by RegisterProgramTypes (pass 1b) for protocols encountered outside the two-pass path.
     /// </summary>
     private static void RegisterProtocolType(TypeRegistry registry, ProtocolDeclaration protocol,
         string moduleName)
     {
         RegisterProtocolTypeShell(registry: registry, protocol: protocol, moduleName: moduleName);
-        FillProtocolMethods(registry: registry, protocol: protocol);
+        FillProtocolMemberRoutines(registry: registry, protocol: protocol);
     }
 
     /// <summary>
-    /// Registers a protocol type shell (name, generic params) without method signatures.
+    /// Registers a protocol type shell (name, generic params) without memberRoutine signatures.
     /// This is the first pass of protocol registration — ensures all protocol types exist
-    /// before method signatures are resolved (which may reference other protocols).
+    /// before memberRoutine signatures are resolved (which may reference other protocols).
     /// </summary>
     private static void RegisterProtocolTypeShell(TypeRegistry registry,
         ProtocolDeclaration protocol, string moduleName)
@@ -1422,7 +1422,7 @@ public sealed partial class StdlibLoader
         {
             Module = moduleName,
             Visibility = protocol.Visibility,
-            Methods = [], // Filled in by FillProtocolMethods
+            MemberRoutines = [], // Filled in by FillProtocolMemberRoutines
             GenericParameters = protocol.GenericParameters,
             GenericConstraints = protocol.GenericConstraints
         };
@@ -1449,12 +1449,12 @@ public sealed partial class StdlibLoader
     }
 
     /// <summary>
-    /// Re-resolves protocol method return types that failed to resolve during the initial pass
+    /// Re-resolves protocol memberRoutine return types that failed to resolve during the initial pass
     /// due to forward references (e.g., Crashable.crash_message() -> Text where Text was not
     /// yet registered when protocols were first processed).
     /// Analogous to ResolveProgramMemberVariables for record/entity member variables.
     /// </summary>
-    private static void ResolveProtocolMethodReturnTypes(TypeRegistry registry, Program program) // NOSONAR S3776
+    private static void ResolveProtocolMemberRoutineReturnTypes(TypeRegistry registry, Program program) // NOSONAR S3776
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
@@ -1464,41 +1464,41 @@ public sealed partial class StdlibLoader
             }
 
             var existing = registry.LookupType(name: protocolDecl.Name) as ProtocolTypeInfo;
-            if (existing == null || existing.Methods.Count == 0)
+            if (existing == null || existing.MemberRoutines.Count == 0)
             {
                 continue;
             }
 
-            // Check if any method has a null return type where the declaration declares one
+            // Check if any memberRoutine has a null return type where the declaration declares one
             bool needsRefresh = false;
-            foreach (RoutineSignature method in protocolDecl.Methods)
+            foreach (RoutineSignature memberRoutine in protocolDecl.MemberRoutines)
             {
-                bool isFailable = method.IsFailable;
-                string fullName = method.Name;
+                bool isFailable = memberRoutine.IsFailable;
+                string fullName = memberRoutine.Name;
                 bool isInstance = fullName.StartsWith(value: "Me.");
-                string methodName = isInstance ? fullName[3..] : fullName;
+                string memberRoutineName = isInstance ? fullName[3..] : fullName;
 
-                ProtocolMethodInfo? protoMethod = existing.Methods.FirstOrDefault(predicate: m =>
-                    m.Name == methodName && m.IsFailable == isFailable);
+                ProtocolMemberRoutineInfo? protoMemberRoutine = existing.MemberRoutines.FirstOrDefault(predicate: m =>
+                    m.Name == memberRoutineName && m.IsFailable == isFailable);
 
                 // A param whose type was a forward reference (e.g. a concrete `index: U64` before
-                // U64 was registered) is silently dropped by FillProtocolMethods, leaving the proto
-                // method with fewer params than declared. Detect the count mismatch and re-fill now
+                // U64 was registered) is silently dropped by FillProtocolMemberRoutines, leaving the proto
+                // memberRoutine with fewer params than declared. Detect the count mismatch and re-fill now
                 // that all type shells exist, so conformance (S703) sees the real arity. This must
-                // run for void methods too (e.g. `setitem!`), so it precedes the return-type check.
-                int declParamCount = method.Parameters.Count(predicate: p => p.Name != "me");
-                if (protoMethod != null && protoMethod.ParameterTypes.Count != declParamCount)
+                // run for void memberRoutines too (e.g. `setitem!`), so it precedes the return-type check.
+                int declParamCount = memberRoutine.Parameters.Count(predicate: p => p.Name != "me");
+                if (protoMemberRoutine != null && protoMemberRoutine.ParameterTypes.Count != declParamCount)
                 {
                     needsRefresh = true;
                     break;
                 }
 
-                if (method.ReturnType == null)
+                if (memberRoutine.ReturnType == null)
                 {
                     continue; // Intentionally void — nothing more to check for return type
                 }
 
-                if (protoMethod?.ReturnType == null)
+                if (protoMemberRoutine?.ReturnType == null)
                 {
                     needsRefresh = true;
                     break;
@@ -1511,11 +1511,11 @@ public sealed partial class StdlibLoader
             }
 
             // Reset and re-fill with all type shells now registered
-            existing.Methods = [];
-            FillProtocolMethods(registry: registry, protocol: protocolDecl);
+            existing.MemberRoutines = [];
+            FillProtocolMemberRoutines(registry: registry, protocol: protocolDecl);
 
             // Cached protocol instances (e.g. MutableIndexable[T] created during List's earlier
-            // stdlib registration) copied the pre-refill stale methods. Refresh them in place so
+            // stdlib registration) copied the pre-refill stale memberRoutines. Refresh them in place so
             // user types obeying the protocol see the corrected arity instead of failing S703.
             registry.RefreshProtocolResolutions(genericDef: existing);
         }
@@ -1541,13 +1541,13 @@ public sealed partial class StdlibLoader
                 continue;
             }
 
-            string methodName = routine.Name;
+            string memberRoutineName = routine.Name;
             TypeInfo? ownerType = null;
             int dotIndex = routine.Name.IndexOf(value: '.');
             if (dotIndex > 0)
             {
                 string ownerName = routine.Name[..dotIndex];
-                methodName = routine.Name[(dotIndex + 1)..];
+                memberRoutineName = routine.Name[(dotIndex + 1)..];
                 ownerType = registry.LookupType(name: ownerName) ??
                             registry.LookupType(name: $"{moduleName}.{ownerName}");
                 if (ownerType == null)
@@ -1608,7 +1608,7 @@ public sealed partial class StdlibLoader
             RoutineInfo? existingRoutine;
             if (ownerType != null)
             {
-                string baseName = $"{ownerType.Name}.{methodName}";
+                string baseName = $"{ownerType.Name}.{memberRoutineName}";
                 existingRoutine = parameters.Count > 0
                     ? registry.LookupRoutineOverload(baseName: baseName,
                         argTypes: parameters.Select(selector: p => p.Type).ToList())
@@ -1618,8 +1618,8 @@ public sealed partial class StdlibLoader
             else
             {
                 string baseName = string.IsNullOrEmpty(value: moduleName)
-                    ? methodName
-                    : $"{moduleName}.{methodName}";
+                    ? memberRoutineName
+                    : $"{moduleName}.{memberRoutineName}";
                 existingRoutine = parameters.Count > 0
                     ? registry.LookupRoutineOverload(baseName: baseName,
                         argTypes: parameters.Select(selector: p => p.Type).ToList())
@@ -1654,37 +1654,37 @@ public sealed partial class StdlibLoader
     }
 
     /// <summary>
-    /// Fills in method signatures for a previously registered protocol type.
+    /// Fills in memberRoutine signatures for a previously registered protocol type.
     /// This is the second pass — all protocols are registered, so cross-references resolve.
     /// </summary>
-    private static void FillProtocolMethods(TypeRegistry registry, ProtocolDeclaration protocol) // NOSONAR S3776
+    private static void FillProtocolMemberRoutines(TypeRegistry registry, ProtocolDeclaration protocol) // NOSONAR S3776
     {
         var existing = registry.LookupType(name: protocol.Name) as ProtocolTypeInfo;
-        if (existing == null || existing.Methods.Count > 0)
+        if (existing == null || existing.MemberRoutines.Count > 0)
         {
-            return; // Already has methods or not found
+            return; // Already has memberRoutines or not found
         }
 
-        var methods = new List<ProtocolMethodInfo>();
-        foreach (RoutineSignature method in protocol.Methods)
+        var memberRoutines = new List<ProtocolMemberRoutineInfo>();
+        foreach (RoutineSignature memberRoutine in protocol.MemberRoutines)
         {
-            bool isFailable = method.IsFailable;
-            string fullName = method.Name;
+            bool isFailable = memberRoutine.IsFailable;
+            string fullName = memberRoutine.Name;
             bool isInstance = fullName.StartsWith(value: "Me.");
-            string methodName = isInstance
+            string memberRoutineName = isInstance
                 ? fullName[3..]
                 : fullName;
 
-            TypeInfo? returnType = method.ReturnType != null
+            TypeInfo? returnType = memberRoutine.ReturnType != null
                 ? ResolveSimpleType(registry: registry,
-                    typeExpr: method.ReturnType,
+                    typeExpr: memberRoutine.ReturnType,
                     genericParams: protocol.GenericParameters)
                 : null;
 
             var parameterTypes = new List<TypeInfo>();
             var parameterNames = new List<string>();
 
-            foreach (Parameter param in method.Parameters)
+            foreach (Parameter param in memberRoutine.Parameters)
             {
                 if (param.Name == "me")
                 {
@@ -1703,26 +1703,26 @@ public sealed partial class StdlibLoader
                 }
             }
 
-            TypeInfo? resolvedReturnType = method.ReturnType?.Name == "Me"
+            TypeInfo? resolvedReturnType = memberRoutine.ReturnType?.Name == "Me"
                 ? ProtocolSelfTypeInfo.Instance
                 : returnType;
 
-            methods.Add(item: new ProtocolMethodInfo(name: methodName)
+            memberRoutines.Add(item: new ProtocolMemberRoutineInfo(name: memberRoutineName)
             {
-                IsInstanceMethod = isInstance,
+                IsInstanceMemberRoutine = isInstance,
                 ParameterTypes = parameterTypes,
                 ParameterNames = parameterNames,
                 ReturnType = resolvedReturnType,
                 IsFailable = isFailable
             });
 
-            // For failable methods, also expose a `try_X` non-failable variant returning
+            // For failable memberRoutines, also expose a `try_X` non-failable variant returning
             // Maybe[T] (or Bool when T is None), so call sites typed against the bare
             // protocol (e.g. for-loop desugaring's `iter.try_emit()` where `iter: Iterator[T]`)
             // can resolve. Mirrors ErrorHandlingGenerator.GenerateTryVariant's shape.
             if (isFailable)
             {
-                string tryName = "try_" + methodName.TrimStart(trimChar: '$');
+                string tryName = "try_" + memberRoutineName.TrimStart(trimChar: '$');
                 TypeInfo? tryReturnType;
                 if (resolvedReturnType == null || resolvedReturnType.Name == "None")
                 {
@@ -1738,9 +1738,9 @@ public sealed partial class StdlibLoader
                         : null;
                 }
 
-                methods.Add(item: new ProtocolMethodInfo(name: tryName)
+                memberRoutines.Add(item: new ProtocolMemberRoutineInfo(name: tryName)
                 {
-                    IsInstanceMethod = isInstance,
+                    IsInstanceMemberRoutine = isInstance,
                     ParameterTypes = parameterTypes,
                     ParameterNames = parameterNames,
                     ReturnType = tryReturnType,
@@ -1750,6 +1750,6 @@ public sealed partial class StdlibLoader
             }
         }
 
-        existing.Methods = methods;
+        existing.MemberRoutines = memberRoutines;
     }
 }

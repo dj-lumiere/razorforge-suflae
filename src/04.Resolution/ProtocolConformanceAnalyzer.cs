@@ -29,7 +29,7 @@ internal sealed class ProtocolConformanceAnalyzer
     /// </summary>
     internal void ApplyImplicitMarkerConformance() // NOSONAR S3776
     {
-        foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
+        foreach (TypeSymbol type in _sa._registry.GetTypesWithMemberRoutines())
         {
             // Skip generic definitions — their resolutions inherit conformance
             if (type.IsGenericDefinition)
@@ -92,7 +92,7 @@ internal sealed class ProtocolConformanceAnalyzer
         }
 
         ApplyAutoAssignableConformance();
-        ApplyAutoStorableCascadeConformance();
+        ApplyAutoAssignableCascadeConformance();
         ApplyEverywhereConformance();
     }
 
@@ -100,11 +100,11 @@ internal sealed class ProtocolConformanceAnalyzer
     /// Generic <c>needs P everywhere</c> gate (④ standard-impl eligibility): for every protocol that declares
     /// an <c>everywhere</c> self-constraint, auto-derive conformance to any concrete member-bearing type all
     /// of whose members obey P (<see cref="TypeRegistry.EverywhereObeys"/>). This is NOT a per-protocol
-    /// bespoke pass — it reads the rule from the stdlib protocol declaration, so Copyable (and later Storable/
+    /// bespoke pass — it reads the rule from the stdlib protocol declaration, so Copyable (and later Assignable/
     /// Equatable/…) opt in by writing <c>needs P everywhere</c> rather than growing new C# passes. The BASE
     /// case is the leaf types' own explicit/auto conformance (scalars bitwise, Text/Integer declare Copyable,
     /// <c>@llvm</c> aggregates cascade to their element via EverywhereObeys); this gate is the INDUCTIVE step
-    /// over composition. Runs LAST so leaf + Storable-cascade conformances are already in place for the member
+    /// over composition. Runs LAST so leaf + Assignable-cascade conformances are already in place for the member
     /// walk to see. A type already declaring P is skipped (idempotent).
     /// </summary>
     private void ApplyEverywhereConformance()
@@ -125,7 +125,7 @@ internal sealed class ProtocolConformanceAnalyzer
 
         foreach (ProtocolTypeInfo proto in everywhereProtocols)
         {
-            foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
+            foreach (TypeSymbol type in _sa._registry.GetTypesWithMemberRoutines())
             {
                 if (type.IsGenericDefinition)
                 {
@@ -171,23 +171,23 @@ internal sealed class ProtocolConformanceAnalyzer
     }
 
     /// <summary>
-    /// Auto-derives <c>Storable</c> (NOT <c>Copyable</c>) for a value aggregate whose every field/element is
-    /// itself storable — even when some are MANAGED (Text/Integer/RC wrapper), which <see
+    /// Auto-derives <c>Assignable</c> (NOT <c>Copyable</c>) for a value aggregate whose every field/element is
+    /// itself Assignable — even when some are MANAGED (Text/Integer/RC wrapper), which <see
     /// cref="ApplyAutoAssignableConformance"/> cannot handle (a managed field has a ptr → not bitwise
     /// Copyable). Its <c>store</c> is a FIELD-WALK (each field's <c>store</c>), synthesized by
-    /// <c>WiredRoutinePass.BuildRecordCopyBody</c>. This completes storability so <c>.store()</c> resolves for
-    /// every identity-less type — the store-based replacement for the arbitrary <c>IsTriviallyStorable</c>
+    /// <c>WiredRoutinePass.BuildRecordCopyBody</c>. This completes storability so <c>.assign()</c> resolves for
+    /// every identity-less type — the store-based replacement for the arbitrary <c>IsTriviallyAssignable</c>
     /// heuristic. Entities (identity) and the borrow/access tokens (scope-bound) are correctly left out —
-    /// <see cref="TypeRegistry.CanAutoDeriveStorable"/> excludes them.
+    /// <see cref="TypeRegistry.CanMemberVariableWalkAssignable"/> excludes them.
     /// </summary>
-    private void ApplyAutoStorableCascadeConformance()
+    private void ApplyAutoAssignableCascadeConformance()
     {
-        if (_sa._registry.LookupType(name: "Storable") is not ProtocolTypeInfo storable)
+        if (_sa._registry.LookupType(name: "Assignable") is not ProtocolTypeInfo Assignable)
         {
             return;
         }
 
-        foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
+        foreach (TypeSymbol type in _sa._registry.GetTypesWithMemberRoutines())
         {
             if (type.IsGenericDefinition)
             {
@@ -195,18 +195,18 @@ internal sealed class ProtocolConformanceAnalyzer
             }
 
             List<TypeSymbol> existing = GetImplementedProtocols(type: type);
-            if (existing.Any(predicate: p => p.Name is "Storable" or "Copyable"))
+            if (existing.Any(predicate: p => p.Name is "Assignable" or "Copyable"))
             {
                 continue;
             }
 
-            if (!_sa._registry.CanAutoDeriveStorable(type: type))
+            if (!_sa._registry.CanMemberVariableWalkAssignable(type: type))
             {
                 continue;
             }
 
-            var merged = new List<TypeSymbol>(collection: existing) { storable };
-            _sa._implicitProtocolConformances.Add(item: (type.FullName, storable.Name));
+            var merged = new List<TypeSymbol>(collection: existing) { Assignable };
+            _sa._implicitProtocolConformances.Add(item: (type.FullName, Assignable.Name));
             UpdateTypeProtocols(type: type, protocols: merged);
         }
     }
@@ -216,7 +216,7 @@ internal sealed class ProtocolConformanceAnalyzer
     /// contains no <c>ptr</c>. Runs after marker-protocol conformance so the new
     /// entry sits alongside <c>RecordType</c>/<c>EntityType</c>/etc. in the
     /// type's <c>ImplementedProtocols</c>. Types that already declare
-    /// <c>obeys Storable</c> (whether user-written for opt-in records, or
+    /// <c>obeys Assignable</c> (whether user-written for opt-in records, or
     /// trivially for raw-pointer wrappers like <c>Hijacked[T]</c>/<c>CPtr</c>)
     /// are left untouched — <see cref="TypeRegistry.CanAutoDeriveAssignable"/>
     /// is only consulted when the type does not already obey the protocol.
@@ -224,16 +224,16 @@ internal sealed class ProtocolConformanceAnalyzer
     private void ApplyAutoAssignableConformance()
     {
         // A no-ptr layout is a bitwise duplicate — which is BOTH a valid cheap `store` AND a valid
-        // deep `copy` (nothing heap is shared). `Storable` and `Copyable` are ORTHOGONAL (no hierarchy),
+        // deep `copy` (nothing heap is shared). `Assignable` and `Copyable` are ORTHOGONAL (no hierarchy),
         // so derive BOTH explicitly. Raw-pointer opt-in types (Hijacked/CPtr) have a ptr, so
-        // CanAutoDeriveAssignable is false and they keep their hand-written `obeys Storable` only.
+        // CanAutoDeriveAssignable is false and they keep their hand-written `obeys Assignable` only.
         if (_sa._registry.LookupType(name: "Copyable") is not ProtocolTypeInfo copyable
-            || _sa._registry.LookupType(name: "Storable") is not ProtocolTypeInfo storable)
+            || _sa._registry.LookupType(name: "Assignable") is not ProtocolTypeInfo Assignable)
         {
             return;
         }
 
-        foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
+        foreach (TypeSymbol type in _sa._registry.GetTypesWithMemberRoutines())
         {
             if (type.IsGenericDefinition)
             {
@@ -241,7 +241,7 @@ internal sealed class ProtocolConformanceAnalyzer
             }
 
             List<TypeSymbol> existing = GetImplementedProtocols(type: type);
-            if (existing.Any(predicate: p => p.Name is "Copyable" or "Storable"))
+            if (existing.Any(predicate: p => p.Name is "Copyable" or "Assignable"))
             {
                 continue;
             }
@@ -251,19 +251,19 @@ internal sealed class ProtocolConformanceAnalyzer
                 continue;
             }
 
-            var merged = new List<TypeSymbol>(collection: existing) { storable, copyable };
-            _sa._implicitProtocolConformances.Add(item: (type.FullName, storable.Name));
+            var merged = new List<TypeSymbol>(collection: existing) { Assignable, copyable };
+            _sa._implicitProtocolConformances.Add(item: (type.FullName, Assignable.Name));
             _sa._implicitProtocolConformances.Add(item: (type.FullName, copyable.Name));
             UpdateTypeProtocols(type: type, protocols: merged);
         }
     }
 
-    // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) deliberately do NOT obey `Storable` — an RC
+    // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) deliberately do NOT obey `Assignable` — an RC
     // handle is not implicitly copyable (that would silently mint a co-owner). Duplication is the explicit
     // `.share()` member routine, and a bare `var b = rc` is rejected (RF-S420). A record that HOLDS an RC
-    // field is likewise NON-storable (its FieldStorable fails on the RC field) — copying it would silently
+    // field is likewise NON-Assignable (its MemberVariableAssignable fails on the RC field) — copying it would silently
     // share the handle, so it must be reconstructed explicitly (WithBaseNotAssignable). (The former
-    // `ApplyAutoStorableConformance` that stamped `Storable` on the 5 RC wrappers is removed.)
+    // `ApplyAutoAssignableConformance` that stamped `Assignable` on the 5 RC wrappers is removed.)
 
     /// <summary>
     /// Recursively collects all transitive parent protocols from a protocol's obeys chain.

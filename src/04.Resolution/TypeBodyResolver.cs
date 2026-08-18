@@ -51,7 +51,7 @@ internal sealed class TypeBodyResolver
     }
 
     /// <summary>
-    /// Resolves type bodies including member variables and method signatures.
+    /// Resolves type bodies including member variables and memberRoutine signatures.
     /// </summary>
     /// <param name="program">The program to resolve.</param>
     internal void ResolveTypeBodies(Program program)
@@ -106,7 +106,7 @@ internal sealed class TypeBodyResolver
         }
 
         TypeSymbol? previousType = _sa._currentType;
-        HashSet<string>? previousFieldNames = _sa._currentTypeMemberVariableNames;
+        HashSet<string>? previousMemberVariableNames = _sa._currentTypeMemberVariableNames;
 
         _sa._currentType = LookupTypeInCurrentModule(name: record.Name);
         _sa._currentTypeMemberVariableNames = [];
@@ -163,8 +163,8 @@ internal sealed class TypeBodyResolver
 
                 // Records can contain: value types, entity/crashable REFERENCE fields (entities are
                 // pointer-shaped reference types, so the field stores a reference), generic parameters,
-                // and storable wrappers (Hijacked, Retained, Shared, Tracked, Watched). Scoped access
-                // tokens (Viewing, Modifying, Inspecting, Claiming) are wrappers NOT in the storable set.
+                // and Assignable wrappers (Hijacked, Retained, Shared, Tracked, Watched). Scoped access
+                // tokens (Viewing, Modifying, Inspecting, Claiming) are wrappers NOT in the Assignable set.
                 bool isReferenceTyped =
                     memberVariableType?.Category == TypeCategory.Entity ||
                     memberVariableType?.Category == TypeCategory.Crashable;
@@ -174,7 +174,7 @@ internal sealed class TypeBodyResolver
                     !TypeRegistry.IsValueType(type: memberVariableType) &&
                     !isReferenceTyped &&
                     !(memberVariableType is WrapperTypeInfo wrapper &&
-                      StorableWrapperTypes.Contains(item: wrapper.BareName)))
+                      AssignableWrapperTypes.Contains(item: wrapper.BareName)))
                 {
                     _sa.ReportError(code: SemanticDiagnosticCode.RecordContainsNonValueType,
                         message:
@@ -216,7 +216,7 @@ internal sealed class TypeBodyResolver
         }
 
         _sa._currentType = previousType;
-        _sa._currentTypeMemberVariableNames = previousFieldNames;
+        _sa._currentTypeMemberVariableNames = previousMemberVariableNames;
     }
 
     /// <summary>
@@ -250,7 +250,7 @@ internal sealed class TypeBodyResolver
         }
 
         TypeSymbol? previousType = _sa._currentType;
-        HashSet<string>? previousFieldNames = _sa._currentTypeMemberVariableNames;
+        HashSet<string>? previousMemberVariableNames = _sa._currentTypeMemberVariableNames;
 
         _sa._currentType = LookupTypeInCurrentModule(name: entity.Name);
         _sa._currentTypeMemberVariableNames = [];
@@ -339,13 +339,13 @@ internal sealed class TypeBodyResolver
         }
 
         _sa._currentType = previousType;
-        _sa._currentTypeMemberVariableNames = previousFieldNames;
+        _sa._currentTypeMemberVariableNames = previousMemberVariableNames;
     }
 
     private void ResolveCrashableBody(CrashableDeclaration crashable)
     {
         TypeSymbol? previousType = _sa._currentType;
-        HashSet<string>? previousFieldNames = _sa._currentTypeMemberVariableNames;
+        HashSet<string>? previousMemberVariableNames = _sa._currentTypeMemberVariableNames;
 
         _sa._currentType = LookupTypeInCurrentModule(name: crashable.Name);
         _sa._currentTypeMemberVariableNames = [];
@@ -383,7 +383,7 @@ internal sealed class TypeBodyResolver
         }
 
         _sa._currentType = previousType;
-        _sa._currentTypeMemberVariableNames = previousFieldNames;
+        _sa._currentTypeMemberVariableNames = previousMemberVariableNames;
     }
 
     private void ResolveProtocolBody(ProtocolDeclaration protocol)
@@ -417,22 +417,22 @@ internal sealed class TypeBodyResolver
             }
         }
 
-        // Convert method signatures to ProtocolMethodInfo
-        var methods = new List<ProtocolMethodInfo>();
-        foreach (RoutineSignature sig in protocol.Methods)
+        // Convert memberRoutine signatures to ProtocolMemberRoutineInfo
+        var memberRoutines = new List<ProtocolMemberRoutineInfo>();
+        foreach (RoutineSignature sig in protocol.MemberRoutines)
         {
             bool isFailable = sig.IsFailable;
             string fullName = sig.Name;
 
-            // Check if this is an instance method (has "Me." prefix).
-            // Protocol methods: "Me.methodName" = instance, "methodName" = type-level.
+            // Check if this is an instance memberRoutine (has "Me." prefix).
+            // Protocol memberRoutines: "Me.MemberRoutineName" = instance, "memberRoutineName" = type-level.
             // The `common` qualifier overrides this — `common routine Me.identity()` is a
-            // type-level method even with the `Me.` prefix, matching the impl-side syntax
+            // type-level memberRoutine even with the `Me.` prefix, matching the impl-side syntax
             // `common routine NumericSumAdd[T].identity() -> T`.
-            bool isCommonMethod = sig.Annotations?.Contains(item: "common") == true;
+            bool isCommonMemberRoutine = sig.Annotations?.Contains(item: "common") == true;
             bool hasMePrefix = fullName.StartsWith(value: "Me.");
-            bool isInstanceMethod = hasMePrefix && !isCommonMethod;
-            string methodName = hasMePrefix
+            bool isInstanceMemberRoutine = hasMePrefix && !isCommonMemberRoutine;
+            string memberRoutineName = hasMePrefix
                 ? fullName[3..]
                 : fullName;
 
@@ -441,7 +441,7 @@ internal sealed class TypeBodyResolver
             var paramNames = new List<string>();
             foreach (Parameter param in sig.Parameters)
             {
-                // Skip the 'me' parameter - it's implicit for instance methods
+                // Skip the 'me' parameter - it's implicit for instance memberRoutines
                 if (param.Name == "me")
                 {
                     continue;
@@ -483,26 +483,26 @@ internal sealed class TypeBodyResolver
                 generationKind = ProtocolRoutineKind.Generated;
             }
 
-            var methodInfo = new ProtocolMethodInfo(name: methodName)
+            var memberRoutineInfo = new ProtocolMemberRoutineInfo(name: memberRoutineName)
             {
-                IsInstanceMethod = isInstanceMethod,
+                IsInstanceMemberRoutine = isInstanceMemberRoutine,
                 Mutation = modification,
                 GenerationKind = generationKind,
                 ParameterTypes = paramTypes,
                 ParameterNames = paramNames,
                 ReturnType = returnType,
                 IsFailable = isFailable,
-                HasDefaultImplementation = false, // Abstract protocol methods have no default
+                HasDefaultImplementation = false, // Abstract protocol memberRoutines have no default
                 Location = sig.Location
             };
 
-            methods.Add(item: methodInfo);
+            memberRoutines.Add(item: memberRoutineInfo);
         }
 
-        // Update the protocol with resolved methods and parent protocols
+        // Update the protocol with resolved memberRoutines and parent protocols
         var updatedProtocol = new ProtocolTypeInfo(name: protocol.Name)
         {
-            Methods = methods,
+            MemberRoutines = memberRoutines,
             ParentProtocols = parentProtocols,
             GenericParameters = protocolInfo.GenericParameters,
             GenericConstraints = protocolInfo.GenericConstraints,
@@ -898,7 +898,7 @@ internal sealed class TypeBodyResolver
 
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
 
-    private static readonly HashSet<string> StorableWrapperTypes =
+    private static readonly HashSet<string> AssignableWrapperTypes =
     [
         RuntimeContract.Hijacked, // Unmanaged raw pointer handle
         RuntimeContract.Retained, // Reference-counted handle

@@ -17,8 +17,8 @@ public enum WiredView
     /// (name → primary protocol + canonical wired routine).</summary>
     Capability = 1,
 
-    /// <summary>In <c>SemanticVerifier.KnownWiredMethods</c>: the set of valid <c>$</c>-prefixed
-    /// routine names a user may declare (drives the "unknown wired method" diagnostic).</summary>
+    /// <summary>In <c>SemanticVerifier.KnownWiredMemberRoutines</c>: the set of valid <c>$</c>-prefixed
+    /// routine names a user may declare (drives the "unknown wired member routine" diagnostic).</summary>
     KnownWired = 2,
 
     /// <summary>In <c>SemanticVerifier.WiredToProtocols</c>: operator-declaration protocol
@@ -142,8 +142,8 @@ public static class WiredRoutineCatalog
         new() { Name = "enter",   Kind = WiredKind.Context, Views = Known },
         new() { Name = "exit",    Kind = WiredKind.Context, Views = Known },
         new() { Name = "destroy", Kind = WiredKind.Lifecycle, Views = Known, AlwaysLive = true },
-        new() { Name = "store",    Kind = WiredKind.Copy, Views = Cap | Seed,
-                Protocols = ["Storable"], AlwaysLive = true },
+        new() { Name = "assign",    Kind = WiredKind.Copy, Views = Cap | Seed,
+                Protocols = ["Assignable"], AlwaysLive = true },
         // Deep `copy` (Copyable). Like `store`, it is INJECTED during postprocessing (the record/
         // collection/variant deep-copy point in RecordCopyLoweringPass) — after reachability has run —
         // so it must be AlwaysLive to bypass the GMP reachability gate and Seed to be marked live per
@@ -264,8 +264,8 @@ public static class WiredRoutineCatalog
         return map;
     }
 
-    /// <summary>Valid declarable <c>$</c>-names. Reproduces <c>SemanticVerifier.KnownWiredMethods</c>.</summary>
-    public static HashSet<string> BuildKnownWiredMethods() =>
+    /// <summary>Valid declarable <c>$</c>-names. Reproduces <c>SemanticVerifier.KnownWiredMemberRoutines</c>.</summary>
+    public static HashSet<string> BuildKnownWiredMemberRoutines() =>
         new(collection: All.Where(predicate: e => e.Views.HasFlag(flag: Known)).Select(selector: e => e.Name),
             comparer: StringComparer.Ordinal);
 
@@ -304,16 +304,16 @@ public static class WiredRoutineCatalog
 
     /// <summary>Protocols whose derived capability is conferred on EVERY type: <c>Representable</c>
     /// (<c>represent</c>) and <c>Diagnosable</c> (<c>diagnose</c>) are structurally satisfied by all
-    /// types, so <c>AutoWiredRegistrationPass</c> registers their methods on every type. A universal
-    /// derive template for one of these IS a live universal method and stays SA-analyzed.</summary>
+    /// types, so <c>AutoWiredRegistrationPass</c> registers their memberRoutines on every type. A universal
+    /// derive template for one of these IS a live universal memberRoutine and stays SA-analyzed.</summary>
     private static readonly HashSet<string> _autoConferredProtocols =
         new(comparer: StringComparer.Ordinal) { "Representable", "Diagnosable", "CycleTraceable" };
 
     /// <summary>
-    /// True when the universal derive method <paramref name="method"/> (from an
-    /// <c>@overridable/@override routine T.&lt;method&gt;()</c> template) is auto-conferred on EVERY
+    /// True when the universal derive memberRoutine <paramref name="member routine"/> (from an
+    /// <c>@overridable/@override routine T.&lt;memberRoutine&gt;()</c> template) is auto-conferred on EVERY
     /// type — i.e. backed solely by an auto-conferred protocol (<c>Representable</c>/<c>Diagnosable</c>).
-    /// Such a template is registered as a live universal method and its body is SA-analyzed.
+    /// Such a template is registered as a live universal memberRoutine and its body is SA-analyzed.
     /// <para>
     /// The complement — <c>!IsAutoConferredDerive</c> — is the OPT-IN derive predicate used by the
     /// registration/verification layers: a derive whose capability is conferred only via explicit
@@ -321,12 +321,12 @@ public static class WiredRoutineCatalog
     /// capability) must NOT become a live universal (it would be force-instantiated for non-conformers)
     /// and its raw pre-monomorph body must not be SA-analyzed — the per-type body comes from the
     /// derive-template store via <c>WiredRoutinePass.CloneUniversalDeriveBody</c> instead. This is
-    /// protocol-grounded (no per-method name list): a method absent from the catalog, or backed by a
+    /// protocol-grounded (no per-memberRoutine name list): a memberRoutine absent from the catalog, or backed by a
     /// non-auto-conferred protocol, is opt-in by default.
     /// </para>
     /// </summary>
-    public static bool IsAutoConferredDerive(string method) =>
-        _byName.TryGetValue(key: method, value: out WiredEntry? e) && e.Protocols.Count > 0 &&
+    public static bool IsAutoConferredDerive(string memberRoutine) =>
+        _byName.TryGetValue(key: memberRoutine, value: out WiredEntry? e) && e.Protocols.Count > 0 &&
         e.Protocols.All(predicate: p => _autoConferredProtocols.Contains(item: p));
 
 #if DEBUG
@@ -352,7 +352,7 @@ public static class WiredRoutineCatalog
                 throw new InvalidOperationException(message: m);
             }
         }
-        AssertSetEquals(label: "KnownWired", expected: _legacyKnownWired, actual: BuildKnownWiredMethods());
+        AssertSetEquals(label: "KnownWired", expected: _legacyKnownWired, actual: BuildKnownWiredMemberRoutines());
         AssertSetEquals(label: "WiredToProtocols-keys", expected: _legacyWiredToProtocols.Keys,
             actual: BuildWiredToProtocols().Keys);
         foreach (var (k, v) in _legacyWiredToProtocols)
@@ -418,7 +418,7 @@ public static class WiredRoutineCatalog
             ["add_unchecked"] = ("UncheckedAddable", "add_unchecked"), ["sub_unchecked"] = ("UncheckedSubtractable", "sub_unchecked"),
             ["mul_unchecked"] = ("UncheckedMultiplicable", "mul_unchecked"), ["truediv_unchecked"] = ("UncheckedTrueDivisible", "truediv_unchecked"),
             ["floordiv_unchecked"] = ("UncheckedFloorDivisible", "floordiv_unchecked"), ["mod_unchecked"] = ("UncheckedFloorDivisible", "floordiv_unchecked"),
-            ["pow_unchecked"] = ("UncheckedExponentiable", "pow_unchecked"), ["store"] = ("Storable", "store"),
+            ["pow_unchecked"] = ("UncheckedExponentiable", "pow_unchecked"), ["assign"] = ("Assignable", "assign"),
             ["copy"] = ("Copyable", "copy"),
         };
 
@@ -462,7 +462,7 @@ public static class WiredRoutineCatalog
     private static readonly string[] _legacyReachabilitySeed =
     [
         "from_literal",
-        "represent", "diagnose", "cyclic_visit", "hash", "store", "copy", "eq", "ne", "cmp", "lt", "le", "gt", "ge",
+        "represent", "diagnose", "cyclic_visit", "hash", "assign", "copy", "eq", "ne", "cmp", "lt", "le", "gt", "ge",
         "contains", "notcontains", "iter", "emit", "try_emit",
         "add", "sub", "mul", "truediv", "floordiv", "mod", "pow", "neg",
         "add_wrap", "sub_wrap", "mul_wrap", "pow_wrap",

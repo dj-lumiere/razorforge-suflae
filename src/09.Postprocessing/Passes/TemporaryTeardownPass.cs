@@ -27,14 +27,14 @@ namespace Compiler.Postprocessing.Passes;
 /// codegen's emit-on-demand picks up the referenced concrete <c>destroy</c>.</para>
 ///
 /// <para><b>What is spilled (deliberately narrow — correctness over coverage, never a double-free).</b>
-/// Exactly one shape: the <b>receiver of a method call where (a) the receiver is a fresh RC-record
+/// Exactly one shape: the <b>receiver of a memberRoutine call where (a) the receiver is a fresh RC-record
 /// producer and (b) the call result is not a borrow/view wrapper</b> (so it cannot alias the
 /// receiver). <c>retain</c>/<c>track</c> verbs (which consume the receiver) are excluded. This covers
 /// both <c>x.represent().count()</c> (scalar result) and the intermediate <c>Text</c> of a
 /// concatenation chain <c>a + "-" + b</c> (each <c>add</c> result is the receiver of the next).</para>
 ///
 /// <para><b>Why this is safe.</b> An RC-record <c>destroy</c> releases a <i>refcounted</i>
-/// controller, so a balanced release is harmless. A method's record/RC-record return is always
+/// controller, so a balanced release is harmless. A memberRoutine's record/RC-record return is always
 /// <i>independent</i> of the receiver — freshly allocated (string concat builds a new buffer) or a
 /// retaining +1 copy (<see cref="ScopeTeardownLoweringPass"/>'s sibling RecordCopyLoweringPass injects
 /// <c>store</c> on <c>me</c>/lvalue returns) — so freeing the receiver leaves the result valid. The
@@ -68,7 +68,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// <see cref="ScopeTeardownLoweringPass"/>'s view-verb exclusion.</summary>
     private static readonly IReadOnlySet<string> ViewVerbs = RuntimeContract.ViewVerbs;
 
-    /// <summary>Borrow/view wrapper names whose value points INTO another value, so a method
+    /// <summary>Borrow/view wrapper names whose value points INTO another value, so a memberRoutine
     /// returning one may alias its receiver — freeing the receiver would then dangle it. The owning
     /// RC wrappers (Retained/Tracked/Shared/Watched) are NOT here: they carry a refcounted controller,
     /// so an aliasing owned result is balanced by refcount.</summary>
@@ -250,7 +250,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// may still reference those temps. So the value is first computed into a moved-out result temp,
     /// the spills are destroyed, and only then does control transfer:
     /// <code>var __ret = EXPR ; &lt;destroy spills LIFO&gt; ; return __ret</code>
-    /// The result temp is fresh/independent of the spilled receivers (a method's record return never
+    /// The result temp is fresh/independent of the spilled receivers (a memberRoutine's record return never
     /// aliases its receiver — the same invariant that makes spilling the receivers safe), so freeing
     /// them after computing it is sound.</para>
     /// </summary>
@@ -297,7 +297,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     /// <c>store</c>; computed results are fresh), so the rewrite is:
     /// <code>var __rv = RHS ; target.destroy() ; target = __rv</code>
     /// computing RHS (which may read the old target) BEFORE the destroy. For other targets the old
-    /// value is released elsewhere (entities by ScopeTeardownLoweringPass; HasRCFields / RC-wrapper
+    /// value is released elsewhere (entities by ScopeTeardownLoweringPass; HasRCMemberVariables / RC-wrapper
     /// records by codegen's EmitVariableAssignment; scalars need nothing), so we only spill receivers.
     /// </summary>
     private Statement LowerReassign(Statement owner, Expression rhs, IdentifierExpression target,
@@ -336,12 +336,12 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
 
     /// <summary>True for a managed-leaf record target whose old value codegen does NOT release on
     /// reassignment: a record with a retaining <c>store</c> (Text/Decimal, or one carrying such a
-    /// field) that is neither a <c>HasRCFields</c> record nor an RC wrapper (both released by
+    /// field) that is neither a <c>HasRCMemberVariables</c> record nor an RC wrapper (both released by
     /// codegen). Scalars (no retaining copy) and entities (handled by ScopeTeardownLoweringPass) are
     /// excluded.</summary>
     private bool IsManagedLeafReassignTarget(TypeInfo? t)
     {
-        if (t is not RecordTypeInfo rec || rec.HasRCFields)
+        if (t is not RecordTypeInfo rec || rec.HasRCMemberVariables)
             return false;
         string baseName = TypeInfo.StripTypeArgs(name: rec.Name);
         if (RcWrapperBaseNames.Contains(item: baseName))
@@ -369,12 +369,12 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // value — so the receiver is a value being copied FROM (an lvalue read, or the raw `peek`
                 // an `a[i]` desugars to), never a fresh owned producer to tear down here. The minted copy
                 // (the call result) is what gets torn down. This is uniform: nothing about `getitem` is
-                // special — any copy-verb receiver is left alone. (No `freshProducer().store()` is ever
+                // special — any copy-verb receiver is left alone. (No `freshProducer().assign()` is ever
                 // emitted — the copy pass injects `store` only onto lvalue reads and `a[i]`.)
                 // A COPY verb (`store`/`copy`) reads its receiver, and constructing an RC wrapper FROM a
                 // bare entity (STRUCTURAL: entity receiver + RC-wrapper result) moves it into the
                 // controller — in both cases the receiver is not a fresh producer to tear down here.
-                bool receiverConsumed = m.MemberName is "store" or "copy"
+                bool receiverConsumed = m.MemberName is "assign" or "copy"
                                         || (m.Object.ResolvedType is EntityTypeInfo
                                             && call.ResolvedType is { } rcCtorRes
                                             && TypeRegistry.GetRcWrapperBaseName(type: rcCtorRes) is not null);
@@ -383,7 +383,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // Spill the receiver iff it is a fresh heap-owning RC-record producer, the verb does
                 // not consume it (retain/track move it into the RC controller), and the call result
                 // cannot be a borrow/view aliasing it. An RC-record receiver is safe to free even when
-                // the result is another owned value: a method's RC-record/record return is always
+                // the result is another owned value: a memberRoutine's RC-record/record return is always
                 // independent of the receiver — fresh (e.g. string concat allocates a new buffer) or a
                 // retaining +1 copy (RecordCopyLoweringPass injects store on lvalue/`me` returns) — so
                 // the controller refcount stays balanced. The only hazard is a borrow/view result
@@ -400,7 +400,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
                 // A CONSTRUCTOR/conversion call (ConstructedType != null) persists its args into the new
                 // value's fields (a destination that RETAINS via RecordCopyLoweringPass), and a store
                 // primitive MOVES its value into storage — in both cases the arg lives on, so it must NOT
-                // be torn down at the caller. Only a plain routine/method borrows a fresh rvalue arg.
+                // be torn down at the caller. Only a plain routine/memberRoutine borrows a fresh rvalue arg.
                 bool argsOwned = call.ConstructedType is null && !IsStorePrimitiveCall(m.MemberName);
                 List<Expression> newArgs = call.Arguments
                     .Select(a => Visit(a, objectPos: argsOwned, spills)).ToList();
@@ -426,7 +426,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
 
             case MemberExpression m:
             {
-                // Field read / method-group object: descend (to catch nested call receivers) but do
+                // Field read / memberRoutine-group object: descend (to catch nested call receivers) but do
                 // not spill the object itself (v1 limitation — see class doc).
                 Expression newObj = Visit(m.Object, objectPos: false, spills);
                 return m with { Object = newObj };
@@ -503,7 +503,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         // an extra balanced release is always safe. Entities are deliberately excluded for now (their
         // single-owner lifetime and fluent `me` returns are trickier to prove alias-free); plain value
         // records / scalars have a no-op destroy and would only bloat the IR.
-        return t is RecordTypeInfo rec && (lc.Store != null || rec.HasRCFields);
+        return t is RecordTypeInfo rec && (lc.Store != null || rec.HasRCMemberVariables);
     }
 
     /// <summary>True when a call result MAY be a borrow/view pointing into the receiver, so freeing
@@ -533,7 +533,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         {
             ResolvedRoutine = destroy,
             ResolvedType = _blankType,
-            LoweringKind = CallClassifier.ClassifyMethodCall(method: destroy)
+            LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: destroy)
         };
         return new ExpressionStatement(Expression: call, Location: loc);
     }

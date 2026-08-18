@@ -78,7 +78,7 @@ internal static class MonomorphizationCompletenessAssertionPass
         RoutineInfo? callee = expr switch
         {
             CallExpression { ResolvedRoutine: { } cr } => cr,
-            GenericMethodCallExpression { ResolvedRoutine: { } gr } => gr,
+            GenericMemberRoutineCallExpression { ResolvedRoutine: { } gr } => gr,
             CreatorExpression { ResolvedCreatorRoutine: { } ccr } => ccr,
             _ => null
         };

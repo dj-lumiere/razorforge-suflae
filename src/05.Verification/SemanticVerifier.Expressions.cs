@@ -64,7 +64,7 @@ public sealed partial class SemanticVerifier
             DictEntryLiteralExpression dictEntry => AnalyzeDictEntryLiteralExpression(
                 dictEntry: dictEntry,
                 expectedType: expectedType),
-            GenericMethodCallExpression generic => AnalyzeGenericMethodCallExpression(
+            GenericMemberRoutineCallExpression generic => AnalyzeGenericMemberRoutineCallExpression(
                 generic: generic),
             GenericMemberExpression genericMember => AnalyzeGenericMemberExpression(
                 genericMember: genericMember),
@@ -80,7 +80,7 @@ public sealed partial class SemanticVerifier
         };
 
         // Compiler-generated bodies are re-analyzed in a synthetic scope where some calls
-        // cannot be re-resolved (generic-def owners, method-generic locals, wired routines,
+        // cannot be re-resolved (generic-def owners, memberRoutine-generic locals, wired routines,
         // type names outside their import snapshot). Their synthesizer/cloner annotations are
         // correct by construction — never make an annotation WORSE there: don't replace a good
         // annotation with <error>, and don't replace a concrete type with one that still
@@ -136,11 +136,11 @@ public sealed partial class SemanticVerifier
             case "me" when _currentType != null:
                 return _currentType;
             case "me" when _currentRoutine?.OwnerType == null:
-                ReportError(code: SemanticDiagnosticCode.MeOutsideTypeMethod,
-                    message: "'me' can only be used inside a type method.",
+                ReportError(code: SemanticDiagnosticCode.MeOutsideTypeMemberRoutine,
+                    message: "'me' can only be used inside a type member routine.",
                     location: id.Location);
                 return ErrorTypeInfo.Instance;
-            // For extension methods (routine Type.method), check the routine's owner type
+            // For extension memberRoutines (routine Type.MemberRoutine), check the routine's owner type
             case "me":
             {
                 // Specialized-receiver member (e.g. `routine List[Agent[V]].gather!()`): `me` is the
@@ -322,8 +322,8 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Analyzes binary expressions that remain as BinaryExpression nodes after parsing.
-    /// Note: Most arithmetic, comparison, and bitwise operators are desugared to method calls
-    /// in the parser (e.g., a + b -> a.add(b)). This method only handles operators that
+    /// Note: Most arithmetic, comparison, and bitwise operators are desugared to memberRoutine calls
+    /// in the parser (e.g., a + b -> a.add(b)). This memberRoutine only handles operators that
     /// are NOT desugared:
     /// - Assignment (=)
     /// - Logical operators (and, or) — require short-circuit evaluation
@@ -422,8 +422,8 @@ public sealed partial class SemanticVerifier
         // Check for operator prohibitions on choice and flags types
         // Choices do not support ANY overloadable operators — use 'is' for case matching
         // Flags do not support arithmetic/comparison/bitwise operators — use 'is'/'isnot'/'but'
-        string? operatorMethod = binary.Operator.GetMethodName();
-        if (operatorMethod != null)
+        string? operatorMemberRoutine = binary.Operator.GetMemberRoutineName();
+        if (operatorMemberRoutine != null)
         {
             switch (leftType)
             {
@@ -447,17 +447,17 @@ public sealed partial class SemanticVerifier
             }
 
             // An overloadable operator binds ONLY to a type that satisfies the operator's protocol —
-            // it must not bind to a method merely NAMED the same on a non-conforming type (e.g.
+            // it must not bind to a memberRoutine merely NAMED the same on a non-conforming type (e.g.
             // `Set.add(value:)->Bool` inserts an element; its signature does not match
             // `Addable.add(other:Self)->Self`, so `set + x` must be an error, not a silent insert).
-            // Conformance here is STRUCTURAL (ImplementsProtocol checks the required method signatures),
+            // Conformance here is STRUCTURAL (ImplementsProtocol checks the required memberRoutine signatures),
             // so a type need not spell `obeys` just to use `==`/`in`/`<` — but a coincidental name with
             // the wrong signature is correctly rejected. Only Record/Entity types are checked (that is
             // where ImplementsProtocol resolves structurally); tuples/numerically-intrinsic and generic
             // parameters (conformance via `needs` constraints, checked at instantiation) are deferred.
             // An overloadable operator binds ONLY to a type that satisfies the operator's protocol —
-            // never to a coincidental same-named method with the wrong shape (`set + x` must NOT lower
-            // to `Set.add`). Conformance is STRUCTURAL (ImplementsProtocol checks the required method
+            // never to a coincidental same-named memberRoutine with the wrong shape (`set + x` must NOT lower
+            // to `Set.add`). Conformance is STRUCTURAL (ImplementsProtocol checks the required memberRoutine
             // signatures), so a type need not spell `obeys` to use `==`/`in`/`+`, but a wrong-signature
             // name is rejected. Only Record/Entity types are checked (where ImplementsProtocol resolves
             // structurally); built-in structural types (tuples) and generic parameters (conformance via
@@ -467,7 +467,7 @@ public sealed partial class SemanticVerifier
             TypeSymbol operatorReceiverType = operatorIsReversed ? rightType : leftType;
             if (!_isReducedStdlibValidation
                 && operatorReceiverType is RecordTypeInfo or EntityTypeInfo
-                && GetRequiredProtocols(wiredName: operatorMethod) is { Count: > 0 } requiredProtocols
+                && GetRequiredProtocols(wiredName: operatorMemberRoutine) is { Count: > 0 } requiredProtocols
                 && !requiredProtocols.Any(predicate: p =>
                     ImplementsProtocol(type: operatorReceiverType, protocolName: p)))
             {
@@ -551,12 +551,12 @@ public sealed partial class SemanticVerifier
                 return leftType.TypeArguments[index: 0];
             }
 
-            // User type — look up unwrap_or method
-            RoutineInfo? unwrapOrMethod =
-                _registry.LookupMethod(type: leftType, methodName: "unwrap_or");
-            if (unwrapOrMethod != null)
+            // User type — look up unwrap_or memberRoutine
+            RoutineInfo? unwrapOrMemberRoutine =
+                _registry.LookupMemberRoutine(type: leftType, memberRoutineName: "unwrap_or");
+            if (unwrapOrMemberRoutine != null)
             {
-                return unwrapOrMethod.ReturnType ?? rightType;
+                return unwrapOrMemberRoutine.ReturnType ?? rightType;
             }
 
             ReportError(code: SemanticDiagnosticCode.TypeDoesNotSupportOperator,
@@ -566,24 +566,24 @@ public sealed partial class SemanticVerifier
             return ErrorTypeInfo.Instance;
         }
 
-        // Validate RHS type against the operator method's parameter type
-        string? methodName = binary.Operator.GetMethodName();
-        if (methodName == null)
+        // Validate RHS type against the operator memberRoutine's parameter type
+        string? memberRoutineName = binary.Operator.GetMemberRoutineName();
+        if (memberRoutineName == null)
         {
             return leftType;
         }
 
-        RoutineInfo? method =
-            _registry.LookupMethodOverload(type: leftType,
-                methodName: methodName,
+        RoutineInfo? memberRoutine =
+            _registry.LookupMemberRoutineOverload(type: leftType,
+                memberRoutineName: memberRoutineName,
                 argTypes: [rightType]) ??
-            _registry.LookupMethod(type: leftType, methodName: methodName);
+            _registry.LookupMemberRoutine(type: leftType, memberRoutineName: memberRoutineName);
 
         // Apply failable-call checking for integer arithmetic operators.
         // Floats (F16/F32/F64/F128) and software decimals (D32/D64/D128) are excluded
         // because the codegen emits raw float instructions (fadd/fmul/...) for them,
         // bypassing the checked dispatch path.
-        bool isIntegerCheckedOp = method is { IsFailable: true } && leftType is RecordTypeInfo
+        bool isIntegerCheckedOp = memberRoutine is { IsFailable: true } && leftType is RecordTypeInfo
                                   {
                                       HasDirectBackendType: true, LlvmType: { } ltIr
                                   } &&
@@ -603,14 +603,14 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        if (method is not { Parameters.Count: > 0 })
+        if (memberRoutine is not { Parameters.Count: > 0 })
         {
             return leftType;
         }
 
-        TypeSymbol paramType = method.Parameters[index: 0].Type;
+        TypeSymbol paramType = memberRoutine.Parameters[index: 0].Type;
 
-        // Substitute Me -> leftType for protocol-sourced methods
+        // Substitute Me -> leftType for protocol-sourced memberRoutines
         if (paramType is ProtocolSelfTypeInfo)
         {
             paramType = leftType;
@@ -637,8 +637,8 @@ public sealed partial class SemanticVerifier
             return ErrorTypeInfo.Instance;
         }
 
-        // Return the method's actual return type instead of blindly returning leftType
-        TypeSymbol returnType = method.ReturnType ?? leftType;
+        // Return the memberRoutine's actual return type instead of blindly returning leftType
+        TypeSymbol returnType = memberRoutine.ReturnType ?? leftType;
         if (returnType is ProtocolSelfTypeInfo)
         {
             returnType = leftType;
@@ -786,13 +786,13 @@ public sealed partial class SemanticVerifier
                         value: value, optionalHint: $"{writeField.Name}: <Type>?");
                 }
 
-                // Check if we're in a @readonly method trying to modify 'me'
+                // Check if we're in a @readonly memberRoutine trying to modify 'me'
                 if (_currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" })
                 {
-                    ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
+                    ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
                         message:
-                        $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
+                        $"Cannot mutate member variable '{member.MemberName}' in a @readonly member routine. " +
                         "Use @migratable to allow mutations.",
                         location: location);
                 }
@@ -809,9 +809,9 @@ public sealed partial class SemanticVerifier
                 // non-failable caller must mark HasFailableCalls so its `!` decl is justified.
                 TryGetTransparentProtocolTarget(type: indexedObjectType,
                     targetType: out TypeSymbol setLookupType);
-                RoutineInfo? setItem = _registry.LookupMethod(type: setLookupType,
-                    methodName: "setitem") ?? _registry.LookupMethod(type: setLookupType,
-                    methodName: "setitem", isFailable: true);
+                RoutineInfo? setItem = _registry.LookupMemberRoutine(type: setLookupType,
+                    memberRoutineName: "setitem") ?? _registry.LookupMemberRoutine(type: setLookupType,
+                    memberRoutineName: "setitem", isFailable: true);
                 if (setItem is { IsFailable: true } && _currentRoutine != null)
                 {
                     _currentRoutine.HasFailableCalls = true;
@@ -859,12 +859,12 @@ public sealed partial class SemanticVerifier
         // copyable. See AnalyzeVariableDeclaration for the same rule applied to var initializers.
         if (_registry.Language == Language.RazorForge &&
             value is IdentifierExpression or MemberExpression &&
-            !IsTriviallyStorable(type: valueType))
+            !IsTriviallyAssignable(type: valueType))
         {
-            var hint = FindNonTriviallyStorableWrapper(type: valueType);
+            var hint = FindNonTriviallyAssignableWrapper(type: valueType);
             if (hint != null)
             {
-                string verb = NonTriviallyStorableWrappers[key: hint.Value.Wrapper];
+                string verb = NonTriviallyAssignableWrappers[key: hint.Value.Wrapper];
                 string fieldNote = hint.Value.Path == "<value>"
                     ? $"value of type '{valueType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
                     : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";
@@ -949,9 +949,9 @@ public sealed partial class SemanticVerifier
                 if (_currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" })
                 {
-                    ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
+                    ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
                         message:
-                        $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
+                        $"Cannot mutate member variable '{member.MemberName}' in a @readonly member routine. " +
                         "Use @migratable to allow mutations.",
                         location: compound.Location);
                 }
@@ -1023,17 +1023,17 @@ public sealed partial class SemanticVerifier
                 return ErrorTypeInfo.Instance;
         }
 
-        string? inPlaceMethod = compound.Operator.GetInPlaceMethodName();
-        string? regularMethod = compound.Operator.GetMethodName();
+        string? inPlaceMemberRoutine = compound.Operator.GetInPlaceMemberRoutineName();
+        string? regularMemberRoutine = compound.Operator.GetMemberRoutineName();
 
         // Step 1: Try in-place wired (iadd, etc.)
-        if (inPlaceMethod != null)
+        if (inPlaceMemberRoutine != null)
         {
             RoutineInfo? inPlaceRoutine =
-                _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMethod}");
+                _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMemberRoutine}");
             if (inPlaceRoutine != null)
             {
-                // In-place method found — returns None (modifies in-place)
+                // In-place memberRoutine found — returns None (modifies in-place)
                 return _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
             }
         }
@@ -1045,25 +1045,25 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.CompoundAssignmentNotSupported,
                 message:
                 $"Entity type '{targetType.Name}' does not support compound assignment '{opSymbol}='. " +
-                $"Define in-place operator '{inPlaceMethod}' (with @migratable) to allow compound assignment.",
+                $"Define in-place operator '{inPlaceMemberRoutine}' (with @migratable) to allow compound assignment.",
                 location: compound.Location);
             return ErrorTypeInfo.Instance;
         }
 
-        if (regularMethod == null)
+        if (regularMemberRoutine == null)
         {
             string opSymbol = compound.Operator.ToStringRepresentation();
             ReportError(code: SemanticDiagnosticCode.CompoundAssignmentNotSupported,
                 message:
                 $"Type '{targetType.Name}' does not support compound assignment '{opSymbol}='. " +
-                $"Define in-place operator '{inPlaceMethod}' or regular operator '{regularMethod}'.",
+                $"Define in-place operator '{inPlaceMemberRoutine}' or regular operator '{regularMemberRoutine}'.",
                 location: compound.Location);
 
             return ErrorTypeInfo.Instance;
         }
 
         RoutineInfo? regularRoutine =
-            _registry.LookupRoutine(fullName: $"{targetType.Name}.{regularMethod}");
+            _registry.LookupRoutine(fullName: $"{targetType.Name}.{regularMemberRoutine}");
         if (regularRoutine != null)
         {
             TypeSymbol returnType = regularRoutine.ReturnType ?? targetType;
@@ -1071,7 +1071,7 @@ public sealed partial class SemanticVerifier
             {
                 ReportError(code: SemanticDiagnosticCode.AssignmentTypeMismatch,
                     message:
-                    $"Compound assignment: return type '{returnType.Name}' of '{regularMethod}' " +
+                    $"Compound assignment: return type '{returnType.Name}' of '{regularMemberRoutine}' " +
                     $"is not assignable to target type '{targetType.Name}'.",
                     location: compound.Location);
             }
@@ -1083,7 +1083,7 @@ public sealed partial class SemanticVerifier
         ReportError(code: SemanticDiagnosticCode.CompoundAssignmentNotSupported,
             message:
             $"Type '{targetType.Name}' does not support compound assignment '{compound.Operator.ToStringRepresentation()}='. " +
-            $"Define in-place operator '{inPlaceMethod}' or regular operator '{regularMethod}'.",
+            $"Define in-place operator '{inPlaceMemberRoutine}' or regular operator '{regularMemberRoutine}'.",
             location: compound.Location);
         return ErrorTypeInfo.Instance;
     }
@@ -1111,7 +1111,7 @@ public sealed partial class SemanticVerifier
             case UnaryOperator.Minus:
                 if (operandType != ErrorTypeInfo.Instance &&
                     !IsNumericType(type: operandType) &&
-                    _registry.LookupMethod(type: operandType, methodName: "neg") == null)
+                    _registry.LookupMemberRoutine(type: operandType, memberRoutineName: "neg") == null)
                 {
                     ReportError(code: SemanticDiagnosticCode.NegationRequiresNumeric,
                         message: "Negation operator requires a numeric operand.",
@@ -1149,13 +1149,13 @@ public sealed partial class SemanticVerifier
                     return inner;
                 }
 
-                // User type — look up unwrap method
+                // User type — look up unwrap memberRoutine
             {
-                RoutineInfo? unwrapMethod =
-                    _registry.LookupMethod(type: operandType, methodName: "unwrap");
-                if (unwrapMethod != null)
+                RoutineInfo? unwrapMemberRoutine =
+                    _registry.LookupMemberRoutine(type: operandType, memberRoutineName: "unwrap");
+                if (unwrapMemberRoutine != null)
                 {
-                    return unwrapMethod.ReturnType ?? ErrorTypeInfo.Instance;
+                    return unwrapMemberRoutine.ReturnType ?? ErrorTypeInfo.Instance;
                 }
 
                 ReportError(code: SemanticDiagnosticCode.TypeDoesNotSupportOperator,

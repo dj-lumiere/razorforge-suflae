@@ -187,7 +187,7 @@ public sealed partial class SemanticVerifier
                 if (!decl.Name.Contains('.'))
                     continue;
 
-                // Auto-derive template: `@overridable/@override routine T.method()`. Captured
+                // Auto-derive template: `@overridable/@override routine T.MemberRoutine()`. Captured
                 // straight from the decl (owner param + kind gates + body), NOT via a resolved
                 // RoutineInfo — the owner is a type-parameter placeholder that doesn't resolve, and
                 // several same-signature kind-gated templates must coexist in the derive-template
@@ -196,7 +196,7 @@ public sealed partial class SemanticVerifier
                     || decl.Annotations.Contains(item: "override"))
                 {
                     int dot = decl.Name.IndexOf(value: '.');
-                    _registry.RegisterDeriveTemplate(method: decl.Name[(dot + 1)..],
+                    _registry.RegisterDeriveTemplate(memberRoutine: decl.Name[(dot + 1)..],
                         ownerParam: decl.Name[..dot],
                         arity: decl.Parameters.Count,
                         constraints: decl.GenericConstraints,
@@ -235,17 +235,17 @@ public sealed partial class SemanticVerifier
         {
             int dotIdx = decl.Name.LastIndexOf('.');
             string ownerTypeName = decl.Name[..dotIdx];
-            string methodName = decl.Name[(dotIdx + 1)..];
+            string memberRoutineName = decl.Name[(dotIdx + 1)..];
 
             // Stdlib protocol-extension decls like `Iterable[Text].join` register their routines
             // under the bracketed-owner bucket (FullName = "Core.Iterable[Text]"). Try the
             // bracketed form first, falling back to the gen-def name. Both lookups can succeed
-            // on different types: prefer the one that actually has the candidate method.
+            // on different types: prefer the one that actually has the candidate memberRoutine.
             string bareLookupName = TypeInfo.StripTypeArgs(name: ownerTypeName);
 
             // Own-module FIRST: a member decl `routine List[T].add_last` in `module Suflae` owns
             // `Suflae.List`, not the earlier-registered context-free `Core.List`. Resolving bare first
-            // collected candidates only from `Core.List`, so the Suflae overlay's method body was keyed
+            // collected candidates only from `Core.List`, so the Suflae overlay's memberRoutine body was keyed
             // under (and monomorphized as) Core.List's — the wrapper forwarder body was lost, and the
             // Suflae instantiation ran Core.List's `add_last` (with its `reserve` call) instead.
             TypeSymbol? bareOwner = (moduleName != null
@@ -258,7 +258,7 @@ public sealed partial class SemanticVerifier
             }
 
             var candidates = new List<RoutineInfo>();
-            _registry.CollectMemberRoutineCandidates(type: bareOwner, methodName: methodName,
+            _registry.CollectMemberRoutineCandidates(type: bareOwner, memberRoutineName: memberRoutineName,
                 candidates: candidates);
 
             // Protocol-extension decls like `Iterable[Text].join` register their routines under
@@ -270,7 +270,7 @@ public sealed partial class SemanticVerifier
                 TypeSymbol? bracketed = _registry.LookupType(name: ownerTypeName);
                 if (bracketed != null && !ReferenceEquals(bracketed, bareOwner))
                 {
-                    _registry.CollectMemberRoutineCandidates(type: bracketed, methodName: methodName,
+                    _registry.CollectMemberRoutineCandidates(type: bracketed, memberRoutineName: memberRoutineName,
                         candidates: candidates);
                 }
             }
@@ -345,7 +345,7 @@ public sealed partial class SemanticVerifier
             // PARENTHESIZED — `(T,)` for one element, `(A, B)` for several — and the return type
             // directly, NOT as `Tuple[...]` (see RoutineTypeInfo.BuildName). The AST instead parses
             // the param-list as a generic `Tuple[...]`. Render the Routine form to match exactly, so
-            // lambda-taking protocol-extension methods (Iterable[T].where/select/accumulate/...) match
+            // lambda-taking protocol-extension memberRoutines (Iterable[T].where/select/accumulate/...) match
             // their registered RoutineInfo signature; otherwise their bodies aren't collected and
             // ProtocolDefaultImplLoweringPass can't synthesize per-implementer instances → "undefined
             // symbol" at codegen. Scoped to the Routine param-list ONLY — a standalone `Tuple[...]`

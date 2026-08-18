@@ -251,7 +251,7 @@ public class DiscardTests
     #region RazorForge - Discard Chained And Constructed Calls
 
     /// <summary>
-    /// Verifies that the parser accepts discard on a chained method call.
+    /// Verifies that the parser accepts discard on a chained memberRoutine call.
     /// </summary>
     [Fact]
     public void Parse_DiscardChainedCall_Succeeds()

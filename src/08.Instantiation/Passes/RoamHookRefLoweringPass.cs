@@ -18,7 +18,7 @@ namespace Compiler.Instantiation.Passes;
 /// <see cref="IdentifierExpression"/> whose <see cref="IdentifierExpression.ResolvedRoutine"/> is the
 /// concrete <c>roam_trace_impl</c> / <c>roam_free_impl</c> on the concrete entity. Codegen then takes
 /// the routine as a value through its existing pre-resolved-routine path
-/// (<c>EmitRoutineValueClosure</c>) with NO <c>LookupMethod</c> of its own — the pass, not codegen,
+/// (<c>EmitRoutineValueClosure</c>) with NO <c>LookupMemberRoutine</c> of its own — the pass, not codegen,
 /// picks the routine.</para>
 ///
 /// <para>The <c>as_entity()</c> receiver is a pure reinterpret whose only purpose was to name the
@@ -211,7 +211,7 @@ internal sealed class RoamHookRefLoweringPass
         if (recv is not EntityTypeInfo ent) return null;
 
         string implName = member.MemberName == TraceRef ? TraceImpl : FreeImpl;
-        RoutineInfo? impl = _registry.LookupMethod(type: ent, methodName: implName);
+        RoutineInfo? impl = _registry.LookupMemberRoutine(type: ent, memberRoutineName: implName);
         if (impl is not { Parameters.Count: 0 }) return null;
 
         // A routine-value reference: bare name + ResolvedRoutine (codegen's pre-resolved path).

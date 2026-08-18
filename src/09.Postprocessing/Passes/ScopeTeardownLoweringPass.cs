@@ -141,7 +141,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     /// Lowers a statement. <paramref name="live"/> is the ordered list of owned bindings live on
     /// entry (params + enclosing-block locals). <paramref name="loopBoundary"/> is the index in
     /// <paramref name="live"/> marking the nearest enclosing loop's entry (locals at index &gt;=
-    /// boundary were declared inside the loop). The caller owns <paramref name="live"/>; this method
+    /// boundary were declared inside the loop). The caller owns <paramref name="live"/>; this memberRoutine
     /// copies before recursing into nested scopes.
     /// </summary>
     private Statement LowerStatement(Statement stmt, List<Owned> live, int loopBoundary)
@@ -409,7 +409,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         {
             ResolvedRoutine = owned.Destroy,
             ResolvedType = _blankType,
-            LoweringKind = CallClassifier.ClassifyMethodCall(method: owned.Destroy)
+            LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: owned.Destroy)
         };
         return new ExpressionStatement(Expression: call, Location: loc);
     }
@@ -419,7 +419,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     /// <see cref="TypeRegistry.GetLifecycle"/> — the SAME decision the copy pass (<c>NeedsRetainingCopy</c>)
     /// drives off, so a value is either both retaining-copied and balanced-destroyed or neither (the
     /// asymmetry that double-freed before). <c>GetLifecycle</c> resolves through
-    /// <c>GetOwnMethodsResolved</c> (own-methods-only, generic-resolution aware), so it finds e.g.
+    /// <c>GetOwnMemberRoutinesResolved</c> (own-memberRoutines-only, generic-resolution aware), so it finds e.g.
     /// <c>Retained[Tracer].destroy</c> without surfacing the no-owner universal <c>T.destroy</c> stub,
     /// and excludes the abstract tier.
     /// </summary>
@@ -550,7 +550,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                 // `T.retain()` / `T.track()` on a bare ENTITY consumes it (ownership moves into the
                 // Constructing an RC wrapper FROM a bare entity moves the entity into the controller —
                 // STRUCTURAL (name-agnostic): a call whose receiver is a bare entity and whose result is
-                // an RC wrapper. `Retained.store()` / `.observe()` mint a handle from an existing WRAPPER
+                // an RC wrapper. `Retained.assign()` / `.observe()` mint a handle from an existing WRAPPER
                 // receiver (not a bare entity), so they are correctly excluded and still released.
                 case CallExpression
                 {

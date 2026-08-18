@@ -288,7 +288,7 @@ internal sealed class TypeResolver
             // owner applied to its OWN generic parameters (`Box[T]`), not the bare definition.
             // Otherwise `Me` used as a type argument (`Wrapper[T, Me]`) drops the params, and
             // monomorphization can't substitute them — yielding a malformed `Wrapper[S64, Box]`
-            // whose methods never get instantiated. For a non-generic owner this is a no-op.
+            // whose memberRoutines never get instantiated. For a non-generic owner this is a no-op.
             if (meOwner is { IsGenericDefinition: true, GenericParameters: { } ownerParams })
             {
                 var selfArgs = ownerParams
@@ -894,14 +894,14 @@ internal sealed class TypeResolver
             return true;
         }
 
-        // Extension methods (routine Foo[T].bar()) — T is the owner type's generic param,
+        // Extension memberRoutines (routine Foo[T].bar()) — T is the owner type's generic param,
         // not the routine's own, so we also check the owner type's generic parameters.
         if (_sa._currentRoutine?.OwnerType?.GenericParameters?.Contains(value: name) == true)
         {
             return true;
         }
 
-        // Universal methods (routine T.bar()) — owner IS the generic parameter itself.
+        // Universal memberRoutines (routine T.bar()) — owner IS the generic parameter itself.
         if (_sa._currentRoutine?.OwnerType is GenericParameterTypeInfo gp &&
             gp.Name == name)
         {
@@ -975,7 +975,7 @@ internal sealed class TypeResolver
             return slot;
         }
 
-        // Universal method (`routine T.bar()`): the owner IS the parameter — a single-slot scope.
+        // Universal memberRoutine (`routine T.bar()`): the owner IS the parameter — a single-slot scope.
         if (_sa._currentRoutine?.OwnerType is GenericParameterTypeInfo or
                 WrapperTypeInfo { InnerType: GenericParameterTypeInfo })
         {
@@ -1011,7 +1011,7 @@ internal sealed class TypeResolver
         }
 
         // The routine's OWN declared parameters (a free generic `identity[T]` or a member routine's
-        // method-generic `Holder[A].mapped[U]`) shadow too — but ONLY on the genuine TEMPLATE, whose
+        // memberRoutine-generic `Holder[A].mapped[U]`) shadow too — but ONLY on the genuine TEMPLATE, whose
         // GenericDefinition is null. A monomorphized instance (GenericDefinition set) can carry
         // substituted concrete argument names in its GenericParameters list (e.g. `List[Byte].create`
         // holding "Byte"); treating those as parameters is exactly the leak this guard prevents.

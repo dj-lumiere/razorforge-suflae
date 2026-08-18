@@ -25,7 +25,7 @@ namespace Compiler.Resolution;
 /// </remarks>
 public sealed partial class TypeRegistry
 {
-    private const string ContainsMethodName = "contains";
+    private const string ContainsMemberRoutineName = "contains";
 
     private readonly Dictionary<(string FullName, string Protocol), bool> _capabilityCache =
         new();
@@ -73,7 +73,7 @@ public sealed partial class TypeRegistry
     /// <summary>Returns true if the type implements <c>Equatable</c> (eq).</summary>
     public bool TypeHasEquality(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "eq");
     /// <summary>Returns true if the type implements <c>Containable</c> (contains).</summary>
-    public bool TypeHasContainment(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: ContainsMethodName);
+    public bool TypeHasContainment(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: ContainsMemberRoutineName);
     /// <summary>Returns true if the type implements <c>Hashable</c> (hash).</summary>
     public bool TypeHasHashing(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "hash");
     /// <summary>Returns true if the type implements <c>Comparable</c> (cmp).</summary>
@@ -103,12 +103,12 @@ public sealed partial class TypeRegistry
         if (type is GenericParameterTypeInfo or ErrorTypeInfo || type.IsNone) return true;
 
         // No backend-type shortcut: scalar primitives still define `eq`/`hash` explicitly
-        // (see Core/Numerics/*.rf) and will be picked up by the LookupMethod fallback below.
+        // (see Core/Numerics/*.rf) and will be picked up by the LookupMemberRoutine fallback below.
         // The shortcut used to fire on every `@llvm("…")`-backed record — including aggregate-
         // backed records like `Array[T, N]` (`@llvm("[{N} x {T}]")`) — which masked the
         // generic-constraint check we need for correctness.
 
-        // For a generic resolution G[T1, T2, ...], the generic def's wired-method may carry
+        // For a generic resolution G[T1, T2, ...], the generic def's wired-memberRoutine may carry
         // `Ti obeys P` constraints. Each must hold for the corresponding type arg, where
         // the capability being demanded is keyed by P (not by the outer `protocol` we're
         // currently evaluating) — e.g. Array.contains demands `T obeys Equatable`, so we
@@ -123,8 +123,8 @@ public sealed partial class TypeRegistry
             genericDef.GenericParameters is { Count: > 0 } gParams &&
             gParams.Count == typeArgs.Count)
         {
-            RoutineInfo? defMethod = LookupMethod(type: genericDef, methodName: wiredName);
-            if (defMethod is { GenericConstraints: { Count: > 0 } constraints })
+            RoutineInfo? defMemberRoutine = LookupMemberRoutine(type: genericDef, memberRoutineName: wiredName);
+            if (defMemberRoutine is { GenericConstraints: { Count: > 0 } constraints })
             {
                 foreach (GenericConstraintDeclaration c in constraints)
                 {
@@ -154,13 +154,13 @@ public sealed partial class TypeRegistry
             }
         }
 
-        // Direct support: type has a CONCRETE impl of the method (explicit or synthesised).
-        // A lookup that resolves to the ABSTRACT protocol method (e.g. `Equatable.eq` for a
+        // Direct support: type has a CONCRETE impl of the memberRoutine (explicit or synthesised).
+        // A lookup that resolves to the ABSTRACT protocol memberRoutine (e.g. `Equatable.eq` for a
         // plain record that neither defines `eq` nor obeys Equatable) does NOT count — it has no
         // body, so reporting capability here would let callers emit a call to the unimplemented
         // abstract symbol (LINKERR). Genuine conformance is established by the TypeObeysProtocol
         // check below (concrete impl) or by obeying the protocol.
-        RoutineInfo? direct = LookupMethod(type: type, methodName: wiredName);
+        RoutineInfo? direct = LookupMemberRoutine(type: type, memberRoutineName: wiredName);
         if (direct != null && direct.OwnerType is not ProtocolTypeInfo) return true;
 
         // Marker conformance: the type obeys the named protocol — we expect a body to
@@ -182,7 +182,7 @@ public sealed partial class TypeRegistry
     ///   <item><description>Generic parameters: false (decision deferred to instantiation).</description></item>
     /// </list>
     /// Raw-pointer types like <c>Hijacked[T]</c> and <c>CPtr</c> are ptr-shaped and
-    /// therefore must opt in manually with a trivial <c>store() -> Me  return me</c>.
+    /// therefore must opt in manually with a trivial <c>assign() -> Me  return me</c>.
     /// </summary>
     public bool CanAutoDeriveAssignable(TypeInfo type)
     {
@@ -197,17 +197,17 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Returns true iff <paramref name="type"/> can auto-derive <c>Storable</c> by FIELD-WALK: every field /
-    /// element is itself storable — it obeys <c>Storable</c> (a managed leaf <c>Text</c>/<c>Integer</c>, or
+    /// Returns true iff <paramref name="type"/> can auto-derive <c>Assignable</c> by FIELD-WALK: every field /
+    /// element is itself Assignable — it obeys <c>Assignable</c> (a managed leaf <c>Text</c>/<c>Integer</c>, or
     /// an RC wrapper) or cascades. Unlike <see cref="CanAutoDeriveAssignable"/> (no-ptr → a bitwise copy that
     /// is also <c>Copyable</c>), this PERMITS managed (ptr) fields — the synthesized <c>store</c> field-walks
     /// them, calling each field's <c>store</c>. Blocked by an <c>entity</c> or access-token field (no store).
-    /// Wrapper types are excluded here — RC wrappers derive <c>Storable</c> via
-    /// <c>ProtocolConformanceAnalyzer.ApplyAutoStorableConformance</c>, and the borrow/access tokens are
-    /// deliberately unstorable (scope-bound). This is the "identity-less → freely copyable" predicate,
-    /// structural — the store-based replacement for the arbitrary <c>IsTriviallyStorable</c> heuristic.
+    /// Wrapper types are excluded here — RC wrappers derive <c>Assignable</c> via
+    /// <c>ProtocolConformanceAnalyzer.ApplyAutoAssignableConformance</c>, and the borrow/access tokens are
+    /// deliberately unAssignable (scope-bound). This is the "identity-less → freely copyable" predicate,
+    /// structural — the store-based replacement for the arbitrary <c>IsTriviallyAssignable</c> heuristic.
     /// </summary>
-    public bool CanAutoDeriveStorable(TypeInfo type)
+    public bool CanMemberVariableWalkAssignable(TypeInfo type)
     {
         string? wrapperBase = type switch
         {
@@ -218,32 +218,32 @@ public sealed partial class TypeRegistry
         if (wrapperBase != null && RuntimeContract.WrapperTypes.Contains(item: wrapperBase))
             return false;
 
-        // NOTE: an RC-handle field makes the containing record NON-storable — the RC wrappers no longer
-        // obey `Storable` and are NOT recognised structurally here. This is intended: `var b = rc` is
+        // NOTE: an RC-handle field makes the containing record NON-Assignable — the RC wrappers no longer
+        // obey `Assignable` and are NOT recognised structurally here. This is intended: `var b = rc` is
         // rejected (explicit `.share()` only), so a record HOLDING an RC must likewise not be implicitly
         // copied (that would silently share the handle). Reconstruct it explicitly instead
         // (WithBaseNotAssignable / RF-S420).
-        bool FieldStorable(TypeInfo f) =>
+        bool MemberVariableAssignable(TypeInfo f) =>
             CanAutoDeriveAssignable(type: f)
-            || CanAutoDeriveStorable(type: f)
-            || TypeObeysProtocol(type: f, protocolName: "Storable");
+            || CanMemberVariableWalkAssignable(type: f)
+            || TypeObeysProtocol(type: f, protocolName: "Assignable");
 
         return type switch
         {
             ChoiceTypeInfo or FlagsTypeInfo => true,
-            TupleTypeInfo t => t.ElementTypes.All(predicate: FieldStorable),
+            TupleTypeInfo t => t.ElementTypes.All(predicate: MemberVariableAssignable),
             RecordTypeInfo { IsGenericDefinition: false } r =>
                 r.MemberVariables is { Count: > 0 }
-                    ? r.MemberVariables.All(predicate: m => FieldStorable(m.Type))
+                    ? r.MemberVariables.All(predicate: m => MemberVariableAssignable(m.Type))
                     // No AST member variables: an `@llvm` inline-storage record (Array[T,N], Vector[T,N])
                     // stores its type-KIND generic args INLINE — cascade storability to them so
-                    // Array[Text] is storable (Text is) but Array[SomeEntity] is NOT (entity has no
+                    // Array[Text] is Assignable (Text is) but Array[SomeEntity] is NOT (entity has no
                     // store). A const-generic VALUE arg (N) stores nothing → filtered out. Wrapper
                     // records are excluded above. A field-less record with no type args ⇒ vacuously
-                    // storable (All over empty).
+                    // Assignable (All over empty).
                     : (r.TypeArguments ?? [])
                         .Where(predicate: a => a.Category != TypeModel.Enums.TypeCategory.ConstGenericValue)
-                        .All(predicate: FieldStorable),
+                        .All(predicate: MemberVariableAssignable),
             _ => false
         };
     }
@@ -257,7 +257,7 @@ public sealed partial class TypeRegistry
     /// <para>
     /// WRAPPER types (RC handles, raw-pointer <c>Hijacked</c>/<c>CPtr</c>, scope-bound access tokens) are
     /// excluded up front — a raw/shared handle is never structurally copyable (bitwise dup would alias →
-    /// double-free), and the storable wrappers declare their conformance explicitly (so the gate would skip
+    /// double-free), and the Assignable wrappers declare their conformance explicitly (so the gate would skip
     /// them anyway). An <c>@llvm</c> aggregate (Array[T,N], Vector[T,N]) has NO AST member variables — its
     /// elements live in the layout string — so <see cref="MemberProjection"/> cascades to its type-KIND
     /// generic args, making <c>Array[Entity]</c> correctly NON-conforming rather than vacuously true.
@@ -321,11 +321,11 @@ public sealed partial class TypeRegistry
     /// Public conformance probe by protocol NAME — backs the comptime <c>m.obeys(Protocol)</c> expand
     /// projection. Returns true when <paramref name="type"/> either DECLARES the protocol (walks
     /// <c>ImplementedProtocols</c> transitively) OR STRUCTURALLY satisfies it by supplying a concrete
-    /// (non-abstract) impl of every method the protocol requires. The structural arm matters for
+    /// (non-abstract) impl of every memberRoutine the protocol requires. The structural arm matters for
     /// synthesized capabilities that aren't spelled as an explicit <c>obeys</c>: e.g. every
     /// Record/Entity/Variant gets a synthesized <c>serialize()</c>, so a scalar field like <c>S32</c>
-    /// satisfies <c>Serializable</c> (it has the method) even though it lists only numeric protocols.
-    /// A positive result therefore guarantees the protocol's wired method resolves to a real body —
+    /// satisfies <c>Serializable</c> (it has the memberRoutine) even though it lists only numeric protocols.
+    /// A positive result therefore guarantees the protocol's wired memberRoutine resolves to a real body —
     /// safe for a derive template to gate a <c>me.field.serialize()</c> call on (else fall back to
     /// <c>represent</c>), and the comptime-if prune then drops the untaken branch before codegen.
     /// </summary>
@@ -333,27 +333,27 @@ public sealed partial class TypeRegistry
     {
         if (TypeObeysProtocol(type: type, protocolName: protocolName)) return true;
 
-        // Structural satisfaction: the type has a concrete impl of every method the protocol declares.
-        // The required names come from the protocol's OWN declared Methods (plus those it inherits from
-        // parent protocols), NOT from GetMethodsForType(...).Where(OwnerType is ProtocolTypeInfo) — the
-        // latter can be empty for a protocol whose sole method was substituted onto a non-protocol owner
+        // Structural satisfaction: the type has a concrete impl of every memberRoutine the protocol declares.
+        // The required names come from the protocol's OWN declared memberRoutines (plus those it inherits from
+        // parent protocols), NOT from GetMemberRoutinesForType(...).Where(OwnerType is ProtocolTypeInfo) — the
+        // latter can be empty for a protocol whose sole memberRoutine was substituted onto a non-protocol owner
         // (e.g. Serializable's `serialize`), which then wrongly reported EVERY structural implementer as
         // NON-conforming. That masked itself for records/entities that obey via a declared bundle
         // (RecordType/EntityType), but broke a type like `List[Text]` that carries a conditionally-
         // available `serialize` without declaring Serializable — its derived `serialize()` field-walk
         // then boxed `represent()` instead of recursing (the json_encode `tags` regression).
         if (LookupType(name: protocolName) is not ProtocolTypeInfo proto) return false;
-        HashSet<string> requiredNames = CollectProtocolMethodNames(proto: proto);
+        HashSet<string> requiredNames = CollectProtocolMemberRoutineNames(proto: proto);
         return requiredNames.Count > 0 && requiredNames.All(predicate: name =>
-            LookupMethod(type: type, methodName: name) is { OwnerType: not ProtocolTypeInfo });
+            LookupMemberRoutine(type: type, memberRoutineName: name) is { OwnerType: not ProtocolTypeInfo });
     }
 
     /// <summary>
-    /// The set of method names a protocol requires an implementer to provide — its own declared
-    /// <see cref="ProtocolTypeInfo.Methods"/> plus every name inherited from its parent protocols
+    /// The set of memberRoutine names a protocol requires an implementer to provide — its own declared
+    /// <see cref="ProtocolTypeInfo.MemberRoutines"/> plus every name inherited from its parent protocols
     /// (transitively). Used by the structural-conformance path of <see cref="DoesTypeObeyProtocol"/>.
     /// </summary>
-    private static HashSet<string> CollectProtocolMethodNames(ProtocolTypeInfo proto)
+    private static HashSet<string> CollectProtocolMemberRoutineNames(ProtocolTypeInfo proto)
     {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -363,7 +363,7 @@ public sealed partial class TypeRegistry
         {
             ProtocolTypeInfo current = stack.Pop();
             if (!seen.Add(item: current.Name)) continue;
-            foreach (ProtocolMethodInfo m in current.Methods)
+            foreach (ProtocolMemberRoutineInfo m in current.MemberRoutines)
                 names.Add(item: m.Name);
             foreach (ProtocolTypeInfo parent in current.ParentProtocols)
                 stack.Push(item: parent);

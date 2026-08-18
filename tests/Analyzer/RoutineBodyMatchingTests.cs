@@ -71,13 +71,13 @@ public class RoutineBodyMatchingTests
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for generic method level param body matches.
+    /// Verifies semantic analysis behavior for generic memberRoutine level param body matches.
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericMethodLevelParam_BodyMatches()
+    public void Analyze_GenericMemberRoutineLevelParam_BodyMatches()
     {
-        // Method-level generic params (Box[T].convert[U]) should match correctly
+        // memberRoutine-level generic params (Box[T].convert[U]) should match correctly
         string source = """
                         record Box[T]
                           value: T

@@ -11,7 +11,7 @@ namespace Compiler.Synthesis;
 
 /// <summary>
 /// Phase D synthesizer: lazily generates transparent-forwarding routines on wrapper
-/// types (T, Viewing[T], Modifying[T], etc.) when user code calls a method that
+/// types (T, Viewing[T], Modifying[T], etc.) when user code calls a memberRoutine that
 /// exists on the inner type T but not directly on the wrapper.
 ///
 /// Synthesis anchors on the wrapper's generic definition (e.g. T) so that
@@ -19,22 +19,22 @@ namespace Compiler.Synthesis;
 ///
 ///   danger
 ///     var raw = Hijacked[T](me)
-///     return raw.extract().method(arg1: arg1, ...)
+///     return raw.extract().MemberRoutine(arg1: arg1, ...)
 ///
 /// where T is the wrapper's generic parameter.  When monomorphized with T->List[Byte],
 /// the body's Hijacked[T] becomes Hijacked[List[Byte]], and expression types resolve
 /// transitively through raw.extract() to the concrete inner type.
 ///
 /// Policy:
-///   - Read-only wrappers (Viewing, Inspecting) forward ONLY @readonly methods of T.
+///   - Read-only wrappers (Viewing, Inspecting) forward ONLY @readonly memberRoutines of T.
 ///   - All other wrappers forward any modification category.
 ///
-/// Signature synthesis: params/return are taken from the inner method's signature
+/// Signature synthesis: params/return are taken from the inner memberRoutine's signature
 /// on the inner-generic-def type (e.g. List[T].getitem!).  GMP's
 /// BuildConcreteRoutineInfo performs name-based substitution at monomorphization
-/// time.  For methods whose return depends on the inner's generic param (e.g.
+/// time.  For memberRoutines whose return depends on the inner's generic param (e.g.
 /// List[T].getitem! returning T), the forwarder is marked with
-/// <see cref="RoutineInfo.WrapperForwarderInnerMethod"/> so GMP can re-resolve the
+/// <see cref="RoutineInfo.WrapperForwarderInnerMemberRoutine"/> so GMP can re-resolve the
 /// signature against the concrete inner type.
 /// </summary>
 internal sealed class WrapperForwardingPass
@@ -53,7 +53,7 @@ internal sealed class WrapperForwardingPass
     private static readonly IReadOnlySet<string> WrapperTypes = RuntimeContract.WrapperTypes;
 
     /// <summary>
-    /// Wrapper types that transparently forward inner-type methods. Hijacked[T] is the
+    /// Wrapper types that transparently forward inner-type memberRoutines. Hijacked[T] is the
     /// raw-pointer escape hatch — callers must explicitly use peek() / as_entity() — so
     /// it is excluded here even though it is a wrapper for layout purposes.
     /// </summary>
@@ -61,12 +61,12 @@ internal sealed class WrapperForwardingPass
         RuntimeContract.ForwardingWrapperTypes;
 
     /// <summary>
-    /// Method names that codegen invokes implicitly on wrappers without going through
+    /// memberRoutine names that codegen invokes implicitly on wrappers without going through
     /// semantic analysis (so the lazy synthesis path in member-access / call dispatch
     /// will not fire for them). RunEager seeds these for every concrete wrapper instance;
-    /// all other methods are synthesized lazily on first reference.
+    /// all other memberRoutines are synthesized lazily on first reference.
     /// </summary>
-    private static readonly HashSet<string> ImplicitlyInvokedMethods =
+    private static readonly HashSet<string> ImplicitlyInvokedMemberRoutines =
     [
         "destroy",
         // Operators/hashing/display: invoked from generic stdlib container
@@ -86,12 +86,12 @@ internal sealed class WrapperForwardingPass
     ];
 
     /// <summary>
-    /// Exposes the wrapper type base names so GMP can detect wrapper methods during body selection.
+    /// Exposes the wrapper type base names so GMP can detect wrapper memberRoutines during body selection.
     /// </summary>
     internal static IReadOnlySet<string> WrapperTypeNames => WrapperTypes;
 
     /// <summary>
-    /// Read-only wrapper types that can only access @readonly methods.
+    /// Read-only wrapper types that can only access @readonly memberRoutines.
     /// </summary>
     private static readonly IReadOnlySet<string> ReadOnlyWrapperTypes =
         RuntimeContract.ReadOnlyWrapperTypes;
@@ -107,8 +107,8 @@ internal sealed class WrapperForwardingPass
 
     /// <summary>
     /// Eagerly synthesizes forwarders on all concrete wrapper-type instantiations for every
-    /// method found on their inner type.  Called after stdlib body analysis so that wrapper
-    /// methods used only implicitly (e.g. release() via scope cleanup) are still forwarded.
+    /// memberRoutine found on their inner type.  Called after stdlib body analysis so that wrapper
+    /// memberRoutines used only implicitly (e.g. release() via scope cleanup) are still forwarded.
     /// </summary>
     public void RunEager()
     {
@@ -133,39 +133,39 @@ internal sealed class WrapperForwardingPass
                 _ => innerType
             };
 
-            // Narrow to implicit-call methods only. User-visible calls hit the lazy path
-            // (TrySynthesizeWrapperForwarder in member-access / call dispatch); only methods
+            // Narrow to implicit-call memberRoutines only. User-visible calls hit the lazy path
+            // (TrySynthesizeWrapperForwarder in member-access / call dispatch); only memberRoutines
             // codegen invokes without semantic analysis (scope cleanup, RC ops) need eager
-            // seeding. This avoids fanning out a forwarder per (wrapper × every method of T).
-            foreach (RoutineInfo innerMethod in _registry.GetMethodsForOwner(ownerType: innerLookupType))
+            // seeding. This avoids fanning out a forwarder per (wrapper × every memberRoutine of T).
+            foreach (RoutineInfo innerMemberRoutine in _registry.GetMemberRoutinesForOwner(ownerType: innerLookupType))
             {
-                if (!ImplicitlyInvokedMethods.Contains(item: innerMethod.Name))
+                if (!ImplicitlyInvokedMemberRoutines.Contains(item: innerMemberRoutine.Name))
                     continue;
-                if (innerMethod.Annotations.Contains(value: "innate")) continue;
+                if (innerMemberRoutine.Annotations.Contains(value: "innate")) continue;
                 TrySynthesize(wrapperType: wrapperType,
-                    methodName: innerMethod.Name,
-                    isFailable: innerMethod.IsFailable);
+                    memberRoutineName: innerMemberRoutine.Name,
+                    isFailable: innerMemberRoutine.IsFailable);
             }
         }
     }
 
     /// <summary>
     /// Attempts to synthesize a forwarding routine on a wrapper type that delegates to
-    /// a matching method on the wrapper's inner type T. Returns null if synthesis is
-    /// not applicable (not a wrapper, no inner T, no matching inner method, or read-only
-    /// wrapper rejecting a non-readonly inner method).
+    /// a matching memberRoutine on the wrapper's inner type T. Returns null if synthesis is
+    /// not applicable (not a wrapper, no inner T, no matching inner memberRoutine, or read-only
+    /// wrapper rejecting a non-readonly inner memberRoutine).
     /// </summary>
-    public RoutineInfo? TrySynthesize(TypeSymbol wrapperType, string methodName, bool isFailable)
+    public RoutineInfo? TrySynthesize(TypeSymbol wrapperType, string memberRoutineName, bool isFailable)
     {
         if (!IsWrapperType(type: wrapperType))
         {
             return null;
         }
 
-        // create and destroy are type-lifecycle methods, not instance methods.
+        // create and destroy are type-lifecycle memberRoutines, not instance memberRoutines.
         // Forwarding them would generate `Hijacked[T](me)` in the body but `me` is
-        // not set up for create (constructor) methods — skip unconditionally.
-        if (methodName is "create" or "destroy")
+        // not set up for create (constructor) memberRoutines — skip unconditionally.
+        if (memberRoutineName is "create" or "destroy")
             return null;
 
         TypeSymbol? wrapperDef = wrapperType switch
@@ -197,35 +197,35 @@ internal sealed class WrapperForwardingPass
             _ => innerType
         };
 
-        // Resolve the method against the CONCRETE inner type first (e.g. `Box[S64]`, `List[S64]`) so a
+        // Resolve the memberRoutine against the CONCRETE inner type first (e.g. `Box[S64]`, `List[S64]`) so a
         // generic entity's owner type parameters bind (`Box[T].get` → `Box[S64].get -> S64`). Falling
         // straight to the generic DEFINITION (innerLookupType = `Box[T]`) would return an
-        // un-monomorphized `-> T` method, which codegen rejects ("no concrete SA-resolved return type").
+        // un-monomorphized `-> T` memberRoutine, which codegen rejects ("no concrete SA-resolved return type").
         // Non-generic inners have innerType == innerLookupType, so this is a no-op there.
-        RoutineInfo? innerMethod =
-            _registry.LookupMethod(type: innerType, methodName: methodName, isFailable: isFailable)
-            ?? _registry.LookupMethod(type: innerLookupType, methodName: methodName,
+        RoutineInfo? innerMemberRoutine =
+            _registry.LookupMemberRoutine(type: innerType, memberRoutineName: memberRoutineName, isFailable: isFailable)
+            ?? _registry.LookupMemberRoutine(type: innerLookupType, memberRoutineName: memberRoutineName,
                 isFailable: isFailable);
-        if (innerMethod == null)
+        if (innerMemberRoutine == null)
         {
             return null;
         }
 
-        // Representation-unified Suflae entity method: its `me` is ALREADY `Roamed[E]` (SignatureResolver
-        // sets MeType), so the "bare" method IS the Roamed method — it does its own lock_enter + project
+        // Representation-unified Suflae entity memberRoutine: its `me` is ALREADY `Roamed[E]` (SignatureResolver
+        // sets MeType), so the "bare" memberRoutine IS the Roamed memberRoutine — it does its own lock_enter + project
         // through RoamController.data. Wrapping it in the projecting forwarder below would project the
-        // controller to the entity and hand a BARE entity to a method that projects AGAIN → double
+        // controller to the entity and hand a BARE entity to a memberRoutine that projects AGAIN → double
         // projection → the controller header is read as entity fields → crash. So resolve a `Roamed[E]`
-        // receiver call straight to the inner method (passing the Roamed handle as `me`), exactly as a
+        // receiver call straight to the inner memberRoutine (passing the Roamed handle as `me`), exactly as a
         // receiver that was still bare at SA already does. No forwarder is registered.
         if (wrapperType.BareName == RuntimeContract.Roamed
-            && innerMethod.MeType is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed }
+            && innerMemberRoutine.MeType is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed }
                                   or WrapperTypeInfo { Name: RuntimeContract.Roamed })
         {
-            return innerMethod;
+            return innerMemberRoutine;
         }
 
-        if (IsReadOnlyWrapper(type: wrapperType) && !innerMethod.IsReadOnly)
+        if (IsReadOnlyWrapper(type: wrapperType) && !innerMemberRoutine.IsReadOnly)
         {
             return null;
         }
@@ -236,45 +236,45 @@ internal sealed class WrapperForwardingPass
         // defined"); the seed attempt in RoutineReachabilityPass (LookupType("Crashable")) did not
         // resolve it. Re-enable by fixing that seed (find the correct crash_message owner/lookup).
         if (wrapperType.BareName == RuntimeContract.Roamed
-            && innerMethod.IsFailable)
+            && innerMemberRoutine.IsFailable)
         {
             return null;
         }
 
 
-        string cacheKey = $"{wrapperDef.Name}.{methodName}#{(isFailable ? "!" : "")}";
+        string cacheKey = $"{wrapperDef.Name}.{memberRoutineName}#{(isFailable ? "!" : "")}";
         if (!_synthesizedForwarderKeys.Add(item: cacheKey))
         {
-            var cached = _registry.LookupMethod(type: wrapperType,
-                methodName: methodName,
+            var cached = _registry.LookupMemberRoutine(type: wrapperType,
+                memberRoutineName: memberRoutineName,
                 isFailable: isFailable) ??
-                _registry.LookupMethod(type: wrapperDef,
-                    methodName: methodName,
+                _registry.LookupMemberRoutine(type: wrapperDef,
+                    memberRoutineName: memberRoutineName,
                     isFailable: isFailable);
             return cached;
         }
 
-        // Don't overwrite a method already defined on the wrapper's generic def
+        // Don't overwrite a memberRoutine already defined on the wrapper's generic def
         // (source-defined routines like represent, diagnose, destroy take precedence).
-        var existingOnDef = _registry.LookupMethod(type: wrapperDef,
-                methodName: methodName,
+        var existingOnDef = _registry.LookupMemberRoutine(type: wrapperDef,
+                memberRoutineName: memberRoutineName,
                 isFailable: isFailable);
         if (existingOnDef != null)
         {
-            return _registry.LookupMethod(type: wrapperType,
-                methodName: methodName,
+            return _registry.LookupMemberRoutine(type: wrapperType,
+                memberRoutineName: memberRoutineName,
                 isFailable: isFailable);
         }
 
-        // Filter out owner-level generics from the inner method's GenericParameters.
+        // Filter out owner-level generics from the inner memberRoutine's GenericParameters.
         // `BTreeSetNode[T].keys_add_last(value: T)` registers a RoutineInfo whose
         // GenericParameters carries `T` (the owner-level param) — propagating that onto the
-        // forwarder makes the forwarder look method-generic in T, so GMP later mangles it as
+        // forwarder makes the forwarder look memberRoutine-generic in T, so GMP later mangles it as
         // `Owned[BTreeSetNode[S64]].keys_add_last[S64]` while codegen call sites use the
         // un-suffixed `Owned[BTreeSetNode[S64]].keys_add_last`. Strip owner-level params so
-        // only true method-level generics (e.g. `Hijacked[T].recast_as[U]` -> `[U]`) survive.
+        // only true memberRoutine-level generics (e.g. `Hijacked[T].recast_as[U]` -> `[U]`) survive.
         List<string>? innerOwnerParams = innerLookupType.GenericParameters;
-        List<string>? filteredGenericParams = innerMethod.GenericParameters;
+        List<string>? filteredGenericParams = innerMemberRoutine.GenericParameters;
         if (filteredGenericParams is { Count: > 0 } && innerOwnerParams is { Count: > 0 })
         {
             filteredGenericParams = filteredGenericParams
@@ -282,7 +282,7 @@ internal sealed class WrapperForwardingPass
                 .ToList();
             if (filteredGenericParams.Count == 0) filteredGenericParams = null;
         }
-        List<GenericConstraintDeclaration>? filteredConstraints = innerMethod.GenericConstraints;
+        List<GenericConstraintDeclaration>? filteredConstraints = innerMemberRoutine.GenericConstraints;
         if (filteredConstraints is { Count: > 0 } && innerOwnerParams is { Count: > 0 })
         {
             filteredConstraints = filteredConstraints
@@ -291,9 +291,9 @@ internal sealed class WrapperForwardingPass
             if (filteredConstraints.Count == 0) filteredConstraints = null;
         }
 
-        // Resolve name collisions between the wrapper's generic params and the inner method's
+        // Resolve name collisions between the wrapper's generic params and the inner memberRoutine's
         // owner-level generic params (both commonly use `T`). The forwarder's signature carries
-        // the inner method's parameter types verbatim, which reference inner-T by name. Without
+        // the inner memberRoutine's parameter types verbatim, which reference inner-T by name. Without
         // distinct names, GMP's typeSubs dict gets a single key `T` mapping to the wrapper's
         // inner instance (e.g. `T -> BTreeSetNode[S64]`) and never registers `inner-T -> S64`.
         // Result: a value-of-T parameter codegens as ptr instead of i64 → ABI mismatch.
@@ -320,11 +320,11 @@ internal sealed class WrapperForwardingPass
             }
         }
 
-        List<ParameterInfo> forwarderParameters = innerMethod.Parameters;
-        TypeSymbol? forwarderReturnType = innerMethod.ReturnType;
+        List<ParameterInfo> forwarderParameters = innerMemberRoutine.Parameters;
+        TypeSymbol? forwarderReturnType = innerMemberRoutine.ReturnType;
         if (innerRename is { Count: > 0 })
         {
-            forwarderParameters = innerMethod.Parameters
+            forwarderParameters = innerMemberRoutine.Parameters
                 .Select(selector: p => p.WithSubstitutedType(
                     newType: RoutineInfo.SubstituteType(type: p.Type, substitution: innerRename)))
                 .ToList();
@@ -335,21 +335,21 @@ internal sealed class WrapperForwardingPass
             }
         }
 
-        var forwarder = new RoutineInfo(name: innerMethod.Name)
+        var forwarder = new RoutineInfo(name: innerMemberRoutine.Name)
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = wrapperDef,
             Parameters = forwarderParameters,
             ReturnType = forwarderReturnType,
-            IsFailable = innerMethod.IsFailable,
-            DeclaredMutation = innerMethod.DeclaredMutation,
-            MutationCategory = innerMethod.MutationCategory,
-            Visibility = innerMethod.Visibility,
-            Location = innerMethod.Location,
-            Module = innerMethod.Module,
-            Annotations = innerMethod.Annotations,
+            IsFailable = innerMemberRoutine.IsFailable,
+            DeclaredMutation = innerMemberRoutine.DeclaredMutation,
+            MutationCategory = innerMemberRoutine.MutationCategory,
+            Visibility = innerMemberRoutine.Visibility,
+            Location = innerMemberRoutine.Location,
+            Module = innerMemberRoutine.Module,
+            Annotations = innerMemberRoutine.Annotations,
             IsSynthesized = true,
-            WrapperForwarderInnerMethod = innerMethod,
+            WrapperForwarderInnerMemberRoutine = innerMemberRoutine,
             WrapperForwarderInnerGenericDef = innerLookupType,
             GenericParameters = filteredGenericParams,
             GenericConstraints = filteredConstraints,
@@ -365,21 +365,21 @@ internal sealed class WrapperForwardingPass
 
         Statement body = BuildWrapperForwarderBody(
             wrapperType: wrapperDef,
-            innerMethod: innerMethod,
+            innerMemberRoutine: innerMemberRoutine,
             genericParamName: genericParamName,
-            methodName: innerMethod.Name,
-            isFailable: innerMethod.IsFailable,
-            parameters: innerMethod.Parameters,
-            hasReturnValue: innerMethod.ReturnType != null &&
-                innerMethod.ReturnType.Name != "None",
+            memberRoutineName: innerMemberRoutine.Name,
+            isFailable: innerMemberRoutine.IsFailable,
+            parameters: innerMemberRoutine.Parameters,
+            hasReturnValue: innerMemberRoutine.ReturnType != null &&
+                innerMemberRoutine.ReturnType.Name != "None",
             dataFieldName: dataFieldName,
             innerIsEntity: innerType is EntityTypeInfo);
 
         _registry.RegisterRoutine(routine: forwarder);
         _synthesizedBodies[key: forwarder.RegistryKey] = (forwarder, body);
 
-        return _registry.LookupMethod(type: wrapperType,
-            methodName: methodName,
+        return _registry.LookupMemberRoutine(type: wrapperType,
+            memberRoutineName: memberRoutineName,
             isFailable: isFailable) ?? forwarder;
     }
 
@@ -389,22 +389,22 @@ internal sealed class WrapperForwardingPass
     ///   Pointer wrappers (dataFieldName == null):
     ///     danger
     ///       var raw = Hijacked[T](me)
-    ///       [return] raw.extract().methodName(param1: param1, ...)
+    ///       [return] raw.extract().MemberRoutineName(param1: param1, ...)
     ///
     ///   Record-struct wrappers (dataFieldName == "data"):
     ///     danger
-    ///       [return] me.data.extract().methodName(param1: param1, ...)
+    ///       [return] me.data.extract().MemberRoutineName(param1: param1, ...)
     ///
     /// where T is the wrapper's generic parameter name.
     /// </summary>
-    private DangerStatement BuildWrapperForwarderBody(TypeSymbol wrapperType, RoutineInfo innerMethod,
+    private DangerStatement BuildWrapperForwarderBody(TypeSymbol wrapperType, RoutineInfo innerMemberRoutine,
         string genericParamName,
-        string methodName, bool isFailable, List<ParameterInfo> parameters,
+        string memberRoutineName, bool isFailable, List<ParameterInfo> parameters,
         bool hasReturnValue, string? dataFieldName = null, bool innerIsEntity = false) // NOSONAR S3776
     {
         // The forwarded call's name is always bare; its failability is carried structurally on the
         // callee MemberExpression (IsFailable), never appended to the name.
-        string callPropertyName = methodName;
+        string callPropertyName = memberRoutineName;
         TypeSymbol innerType = wrapperType.TypeArguments is { Count: > 0 }
             ? wrapperType.TypeArguments[0]
             : new GenericParameterTypeInfo(name: genericParamName);
@@ -426,7 +426,7 @@ internal sealed class WrapperForwardingPass
 
         if (dataFieldName != null)
         {
-            // Record-struct wrapper: me.data.peek().method(...)
+            // Record-struct wrapper: me.data.peek().MemberRoutine(...)
             // Skip the `raw` variable entirely — no type inference needed.
             var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
                 { ResolvedType = wrapperType };
@@ -437,8 +437,8 @@ internal sealed class WrapperForwardingPass
             {
                 ResolvedType = wrapperDataType
             };
-            RoutineInfo? extractMethod = wrapperDataType != null
-                ? _registry.LookupMethod(type: wrapperDataType, methodName: RuntimeContract.RawPointer.Peek)
+            RoutineInfo? extractMemberRoutine = wrapperDataType != null
+                ? _registry.LookupMemberRoutine(type: wrapperDataType, memberRoutineName: RuntimeContract.RawPointer.Peek)
                 : null;
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
@@ -448,7 +448,7 @@ internal sealed class WrapperForwardingPass
                 Arguments: [],
                 Location: _synthLoc)
             {
-                ResolvedRoutine = extractMethod,
+                ResolvedRoutine = extractMemberRoutine,
                 ResolvedType = innerType
             };
             var innerCall = new CallExpression(
@@ -460,12 +460,12 @@ internal sealed class WrapperForwardingPass
                 Location: _synthLoc)
             {
                 // ResolvedRoutine intentionally left null: this forwarder is generated once
-                // per wrapperDef and reused across all inner T. Baking innerMethod here would
+                // per wrapperDef and reused across all inner T. Baking innerMemberRoutine here would
                 // freeze the call to whichever inner type was resolved first (e.g. binding
                 // to BTreeListNode.keys_add_last forever, even when monomorphized for
                 // Modifying[BTreeSetNode[S64]]). Leaving it null lets RoutineReachabilityPass
                 // re-resolve the call from the substituted receiver type at monomorphization.
-                ResolvedType = innerMethod.ReturnType
+                ResolvedType = innerMemberRoutine.ReturnType
             };
             Statement callStmt = hasReturnValue
                 ? new ReturnStatement(Value: innerCall, Location: _synthLoc)
@@ -480,10 +480,10 @@ internal sealed class WrapperForwardingPass
             //   danger
             //     var raw  = Hijacked[RetainController[T]](me)
             //     var ctrl = raw.as_entity()              # RetainController[T] ptr
-            //     [return] ctrl.borrow_data().as_entity().method(args...)
+            //     [return] ctrl.borrow_data().as_entity().MemberRoutine(args...)
             //
             // Without this branch, the pointer-wrapper branch below would emit
-            // `Hijacked[T](me).as_entity().method(...)`, treating the controller's strong+weak
+            // `Hijacked[T](me).as_entity().MemberRoutine(...)`, treating the controller's strong+weak
             // counts (first 8 bytes) as if they were T's first 8 bytes.
             // A `Roaming` guard indirects through `RoamController.data_ptr()`; Retained/Tracked through
             // `RetainController.borrow_data()`. Both just reach the inner entity — for `Roaming` the
@@ -544,13 +544,13 @@ internal sealed class WrapperForwardingPass
                 wrapperName: RuntimeContract.Hijacked,
                 innerType: innerType,
                 isReadOnly: false);
-            RoutineInfo? ctrlRevealMethod = _registry.LookupMethod(
-                type: hijackedCtrlType, methodName: RuntimeContract.RawPointer.AsEntity);
-            RoutineInfo? borrowDataMethod = retainControllerType != null
-                ? _registry.LookupMethod(type: retainControllerType, methodName: dataRevealName)
+            RoutineInfo? ctrlRevealMemberRoutine = _registry.LookupMemberRoutine(
+                type: hijackedCtrlType, memberRoutineName: RuntimeContract.RawPointer.AsEntity);
+            RoutineInfo? borrowDataMemberRoutine = retainControllerType != null
+                ? _registry.LookupMemberRoutine(type: retainControllerType, memberRoutineName: dataRevealName)
                 : null;
-            RoutineInfo? innerRevealMethod = _registry.LookupMethod(
-                type: hijackedInnerType, methodName: RuntimeContract.RawPointer.AsEntity);
+            RoutineInfo? innerRevealMemberRoutine = _registry.LookupMemberRoutine(
+                type: hijackedInnerType, memberRoutineName: RuntimeContract.RawPointer.AsEntity);
 
             var ctrlCall = new CallExpression(
                 Callee: new MemberExpression(
@@ -561,7 +561,7 @@ internal sealed class WrapperForwardingPass
                 Arguments: [],
                 Location: _synthLoc)
             {
-                ResolvedRoutine = ctrlRevealMethod,
+                ResolvedRoutine = ctrlRevealMemberRoutine,
                 ResolvedType = retainControllerType
             };
             var ctrlDecl = new DeclarationStatement(
@@ -581,7 +581,7 @@ internal sealed class WrapperForwardingPass
                 Arguments: [],
                 Location: _synthLoc)
             {
-                ResolvedRoutine = borrowDataMethod,
+                ResolvedRoutine = borrowDataMemberRoutine,
                 ResolvedType = hijackedInnerType
             };
             var innerRevealCall = new CallExpression(
@@ -592,7 +592,7 @@ internal sealed class WrapperForwardingPass
                 Arguments: [],
                 Location: _synthLoc)
             {
-                ResolvedRoutine = innerRevealMethod,
+                ResolvedRoutine = innerRevealMemberRoutine,
                 ResolvedType = innerType
             };
             var innerCall = new CallExpression(
@@ -604,14 +604,14 @@ internal sealed class WrapperForwardingPass
                 Location: _synthLoc)
             {
                 // ResolvedRoutine intentionally null — see record-struct branch for reasoning.
-                ResolvedType = innerMethod.ReturnType
+                ResolvedType = innerMemberRoutine.ReturnType
             };
             if (isRoamed)
             {
                 // Mode-checked lock, released EXPLICITLY (synthesized forwarder bodies are not run
                 // through ScopeTeardownLoweringPass, so an owned-guard destroy would never be inserted).
-                RoutineInfo? lockEnter = _registry.LookupMethod(type: wrapperType, methodName: "lock_enter");
-                RoutineInfo? lockExit = _registry.LookupMethod(type: wrapperType, methodName: "lock_exit");
+                RoutineInfo? lockEnter = _registry.LookupMemberRoutine(type: wrapperType, memberRoutineName: "lock_enter");
+                RoutineInfo? lockExit = _registry.LookupMemberRoutine(type: wrapperType, memberRoutineName: "lock_exit");
                 ExpressionStatement MkLock(RoutineInfo? m, string verb) => new ExpressionStatement(
                     Expression: new CallExpression(
                         Callee: new MemberExpression(
@@ -632,11 +632,11 @@ internal sealed class WrapperForwardingPass
                         RecordTypeInfo { GenericDefinition: { } rd } => rd,
                         _ => innerType
                     };
-                    RoutineInfo? checkM = _registry.LookupMethod(type: innerDef,
-                        methodName: "check_" + methodName, isFailable: false);
+                    RoutineInfo? checkM = _registry.LookupMemberRoutine(type: innerDef,
+                        memberRoutineName: "check_" + memberRoutineName, isFailable: false);
                     var checkSubject = new CallExpression(
                         Callee: new MemberExpression(Object: innerRevealCall,
-                            MemberName: "check_" + methodName, Location: _synthLoc),
+                            MemberName: "check_" + memberRoutineName, Location: _synthLoc),
                         Arguments: forwardedArgs, Location: _synthLoc)
                     { ResolvedType = checkM?.ReturnType };
                     var whenStmt = new WhenStatement(
@@ -669,7 +669,7 @@ internal sealed class WrapperForwardingPass
                         Location: _synthLoc);
                     Statement retStmt = new ReturnStatement(
                         Value: new IdentifierExpression(Name: "__rf_locked", Location: _synthLoc)
-                            { ResolvedType = innerMethod.ReturnType },
+                            { ResolvedType = innerMemberRoutine.ReturnType },
                         Location: _synthLoc);
                     innerStatements = [MkLock(lockEnter, "lock_enter"), rawDecl, ctrlDecl, resultDecl, MkLock(lockExit, "lock_exit"), retStmt];
                 }
@@ -689,15 +689,15 @@ internal sealed class WrapperForwardingPass
         }
         else
         {
-            // Pointer wrapper: var raw = Hijacked[T](me); raw.as_entity()/peek().method(...)
+            // Pointer wrapper: var raw = Hijacked[T](me); raw.as_entity()/peek().MemberRoutine(...)
             // Entity inner types: as_entity() reinterprets the ptr directly as T (no dereference)
             //   — correct for T where me IS the entity ptr, not a slot holding one.
             // Record inner types: peek() dereferences the ptr to load the value — correct
             //   for Hijacked[RecordType] where the ptr points to a heap/stack slot.
             // innerIsEntity is determined from the concrete inner type at the call site so
             //   generic-def forwarder bodies (where innerType is GenericParameterTypeInfo)
-            //   get the correct access method even before T is substituted.
-            string accessMethodName = innerIsEntity ? RuntimeContract.RawPointer.AsEntity : RuntimeContract.RawPointer.Peek;
+            //   get the correct access memberRoutine even before T is substituted.
+            string accessMemberRoutineName = innerIsEntity ? RuntimeContract.RawPointer.AsEntity : RuntimeContract.RawPointer.Peek;
             var hijackedCall = new CreatorExpression(
                 TypeName: RuntimeContract.Hijacked,
                 TypeArguments:
@@ -720,18 +720,18 @@ internal sealed class WrapperForwardingPass
                 wrapperName: RuntimeContract.Hijacked,
                 innerType: innerType,
                 isReadOnly: false);
-            RoutineInfo? accessMethod = _registry.LookupMethod(type: hijackedInnerType,
-                methodName: accessMethodName);
+            RoutineInfo? accessMemberRoutine = _registry.LookupMemberRoutine(type: hijackedInnerType,
+                memberRoutineName: accessMemberRoutineName);
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "raw", Location: _synthLoc)
                         { ResolvedType = hijackedInnerType },
-                    MemberName: accessMethodName,
+                    MemberName: accessMemberRoutineName,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
             {
-                ResolvedRoutine = accessMethod,
+                ResolvedRoutine = accessMemberRoutine,
                 ResolvedType = innerType
             };
             var innerCall = new CallExpression(
@@ -744,7 +744,7 @@ internal sealed class WrapperForwardingPass
             {
                 // ResolvedRoutine intentionally left null — see the record-struct branch above
                 // for the full reasoning. Same issue applies to pointer wrappers.
-                ResolvedType = innerMethod.ReturnType
+                ResolvedType = innerMemberRoutine.ReturnType
             };
             Statement callStmt = hasReturnValue
                 ? new ReturnStatement(Value: innerCall, Location: _synthLoc)
@@ -760,7 +760,7 @@ internal sealed class WrapperForwardingPass
     /// <summary>
     /// Checks if a type is a forwarding wrapper (Viewing, Modifying, Shared, etc.).
     /// Hijacked is intentionally excluded — its API is the explicit extract/as_entity/inject
-    /// surface, not transparent forwarding of T's methods.
+    /// surface, not transparent forwarding of T's memberRoutines.
     /// </summary>
     private static bool IsWrapperType(TypeSymbol type)
     {

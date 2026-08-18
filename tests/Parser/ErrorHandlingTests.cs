@@ -48,11 +48,11 @@ public class ErrorHandlingTests
         Assert.Single(collection: routine.Parameters);
     }
     /// <summary>
-    /// Verifies that the parser accepts failable method with bang.
+    /// Verifies that the parser accepts failable memberRoutine with bang.
     /// </summary>
 
     [Fact]
-    public void Parse_FailableMethod_WithBang()
+    public void Parse_FailableMemberRoutine_WithBang()
     {
         string source = """
                         routine User.validate!() -> bool

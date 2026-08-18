@@ -56,9 +56,9 @@ public class ImplicitWrapperCopyAssignmentTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>Assignment of a trivially-storable record copies bitwise — no error.</summary>
+    /// <summary>Assignment of a trivially-Assignable record copies bitwise — no error.</summary>
     [Fact]
-    public void Analyze_Assignment_TriviallyStorableRecord_IsAccepted()
+    public void Analyze_Assignment_TriviallyAssignableRecord_IsAccepted()
     {
         string source = """
                         record Point

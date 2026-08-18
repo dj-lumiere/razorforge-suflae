@@ -16,7 +16,7 @@ namespace RazorForge.Tests;
 using TypeInfo = TypeInfo;
 
 /// <summary>
-/// Helper methods for parsing and analyzing test code.
+/// Helper memberRoutines for parsing and analyzing test code.
 /// </summary>
 public static class TestHelpers
 {
@@ -351,7 +351,7 @@ public static class TestHelpers
 }
 
 /// <summary>
-/// Extension methods for TypeRegistry to make tests more readable.
+/// Extension memberRoutines for TypeRegistry to make tests more readable.
 /// </summary>
 public static class TypeRegistryExtensions
 {

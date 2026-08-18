@@ -16,7 +16,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <c>is Crashable err =&gt; body</c> into one TypePattern arm per registered
 /// crashable type — each arm gets its own clone of <c>body</c> with
 /// <c>err</c>'s <c>ResolvedType</c> set to that arm's concrete crashable, and
-/// every <c>err.method(...)</c> re-resolved against the concrete type.
+/// every <c>err.MemberRoutine(...)</c> re-resolved against the concrete type.
 /// </summary>
 internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
 {
@@ -60,13 +60,13 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
 
     public bool VisitCallExpression(CallExpression node)
     {
-        // err.method(args) -> re-resolve ResolvedRoutine on concrete crashable.
+        // err.MemberRoutine(args) -> re-resolve ResolvedRoutine on concrete crashable.
         if (node.Callee is MemberExpression { Object: IdentifierExpression id } me
             && id.Name == _bindingName)
         {
             bool? isFailable = node.ResolvedRoutine?.IsFailable;
-            RoutineInfo? resolved = _registry.LookupMethod(type: _concreteType,
-                methodName: me.MemberName, isFailable: isFailable);
+            RoutineInfo? resolved = _registry.LookupMemberRoutine(type: _concreteType,
+                memberRoutineName: me.MemberName, isFailable: isFailable);
             if (resolved != null)
             {
                 node.ResolvedRoutine = resolved;
@@ -158,7 +158,7 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
     { Visit(e: node.Body); return false; }
     public bool VisitTypeConversionExpression(TypeConversionExpression node)
     { Visit(e: node.Expression); return false; }
-    public bool VisitGenericMethodCallExpression(GenericMethodCallExpression node)
+    public bool VisitGenericMemberRoutineCallExpression(GenericMemberRoutineCallExpression node)
     { Visit(e: node.Object); VisitAll(xs: node.Arguments); return false; }
     public bool VisitGenericMemberExpression(GenericMemberExpression node)
     { Visit(e: node.Object); return false; }

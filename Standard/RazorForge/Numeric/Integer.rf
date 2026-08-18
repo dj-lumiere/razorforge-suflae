@@ -12,7 +12,7 @@ module Numerics
 ### atomic-refcounted LibTomMath handle. Copying bumps the underlying refcount
 ### via SeqCst atomic; the last drop frees the handle + controller.
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
-record Integer obeys Storable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable, FastHashable
+record Integer obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable, FastHashable
   ### Stores the native big-integer handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count controller (null for transient stack values is not
@@ -141,7 +141,7 @@ common routine Integer.from_literal(text: Text) -> Integer
 ### controller (transient zero) the copy is a bitwise duplicate with no atomic op.
 ### :returns: The resulting `Integer` value.
 @[readonly, inline]
-routine Integer.store() -> Integer
+routine Integer.assign() -> Integer
   danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().hold()
@@ -415,8 +415,8 @@ routine Integer.bit_length() -> U64
 @readonly
 routine Integer.min(other: Integer) -> Integer
   if me.cmp(you: other) is ME_LARGE
-    return other.store()
-  return me.store()
+    return other.assign()
+  return me.assign()
 
 ### Returns the larger of this value and `other`.
 ### :param other: The value to compare against.
@@ -424,8 +424,8 @@ routine Integer.min(other: Integer) -> Integer
 @readonly
 routine Integer.max(other: Integer) -> Integer
   if me.cmp(you: other) is ME_SMALL
-    return other.store()
-  return me.store()
+    return other.assign()
+  return me.assign()
 
 ### Clamps this value into the inclusive range `[low, high]`.
 ### :param low: The lower bound.
@@ -434,10 +434,10 @@ routine Integer.max(other: Integer) -> Integer
 @readonly
 routine Integer.clamp(low: Integer, high: Integer) -> Integer
   if me.cmp(you: low) is ME_SMALL
-    return low.store()
+    return low.assign()
   if me.cmp(you: high) is ME_LARGE
-    return high.store()
-  return me.store()
+    return high.assign()
+  return me.assign()
 
 ### Divides by `other`, returning the Euclidean quotient and remainder together.
 ### :param other: The non-zero divisor.
@@ -466,7 +466,7 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
     throw NumericDomainError(description: "modpow: negative exponent")
   var result = Integer.one()
   var base = me.mod(other: modulus)
-  var e = exp.store()
+  var e = exp.assign()
   while not e.is_zero()
     if e.is_odd()
       result = result.mul(other: base).mod(other: modulus)

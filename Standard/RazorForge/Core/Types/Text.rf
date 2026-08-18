@@ -15,7 +15,7 @@ import BuilderService
 ### frees the buffer + controller. When `ctrl` is null (`hijacked_none[...]()`),
 ### the value represents an empty or static-literal string and `store`/`destroy`
 ### are no-ops.
-record Text obeys Storable, Copyable, Addable, Ordered, FastHashable, Hashable, TextRepeatable, Iterable[Character], Container
+record Text obeys Assignable, Copyable, Addable, Ordered, FastHashable, Hashable, TextRepeatable, Iterable[Character], Container
   ### Stores the character buffer.
   secret data: Hijacked[Character]
   ### Stores the number of characters in the buffer.
@@ -29,7 +29,7 @@ record Text obeys Storable, Copyable, Addable, Ordered, FastHashable, Hashable, 
 ### no atomic op.
 ### :returns: The resulting `Text` value.
 @[readonly, inline]
-routine Text.store() -> Text
+routine Text.assign() -> Text
   danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().hold()

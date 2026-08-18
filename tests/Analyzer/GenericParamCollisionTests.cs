@@ -88,11 +88,11 @@ public class GenericParamCollisionTests
     }
 
     /// <summary>
-    /// A member routine's OWN method-generic parameter must shadow a user type of the same name:
-    /// `record U` plus `routine Holder[A].mapped[U](u: U) -> U` — the method's `U` is its parameter.
+    /// A member routine's OWN memberRoutine-generic parameter must shadow a user type of the same name:
+    /// `record U` plus `routine Holder[A].mapped[U](u: U) -> U` — the memberRoutine's `U` is its parameter.
     /// </summary>
     [Fact]
-    public void MethodGenericParam_CoexistsWith_UserRecordOfSameName()
+    public void memberRoutineGenericParam_CoexistsWith_UserRecordOfSameName()
     {
         AssertAnalyzes(source: """
                                record Holder[A]

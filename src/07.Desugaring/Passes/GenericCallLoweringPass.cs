@@ -10,19 +10,19 @@ using TypeModel.Types;
 namespace Compiler.Desugaring.Passes;
 
 /// <summary>
-/// Lowers <see cref="GenericMethodCallExpression"/> nodes to plain <see cref="CallExpression"/>
+/// Lowers <see cref="GenericMemberRoutineCallExpression"/> nodes to plain <see cref="CallExpression"/>
 /// nodes where possible. Runs after <see cref="ExpressionLoweringPass"/> in the per-file pipeline.
 ///
 /// <para>Lowered cases (require <c>ResolvedRoutine != null</c> from Phase 4):</para>
 /// <list type="bullet">
 /// <item><b>Type constructor with resolved <c>create</c></b>:
 /// <c>Maybe[S64](value: x)</c> -> <c>CallExpression(IdentifierExpression("create"), args)</c></item>
-/// <item><b>Generic method call on receiver</b>:
+/// <item><b>Generic memberRoutine call on receiver</b>:
 /// <c>buf.read![U8](offset)</c> ??
 /// <c>CallExpression(MemberExpression(buf, "read!"), args, TypeArguments=[U8])</c></item>
 /// </list>
 ///
-/// <para>Kept as <see cref="GenericMethodCallExpression"/> (not lowered):</para>
+/// <para>Kept as <see cref="GenericMemberRoutineCallExpression"/> (not lowered):</para>
 /// <list type="bullet">
 /// <item>Collection literals -> <c>IsCollectionLiteral == true</c>;
 /// codegen emits <c>create + add_last</c> loops.</item>
@@ -236,7 +236,7 @@ internal sealed class GenericCallLoweringPass
             case AssignmentStatement a:
             {
                 Expression val = LowerExpression(a.Value);
-                // Target is usually not a GenericMethodCallExpression; walk it anyway
+                // Target is usually not a GenericMemberRoutineCallExpression; walk it anyway
                 Expression tgt = LowerExpression(a.Target);
                 bool changed = !ReferenceEquals(val, a.Value) || !ReferenceEquals(tgt, a.Target);
                 return changed ? a with { Target = tgt, Value = val } : stmt;
@@ -292,7 +292,7 @@ internal sealed class GenericCallLoweringPass
     {
         switch (expr)
         {
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
                 return TryLowerGenericCall(gmc) ?? LowerGenericCallChildren(gmc);
 
             case CallExpression call:
@@ -363,9 +363,9 @@ internal sealed class GenericCallLoweringPass
 
             case InsertedTextExpression inserted:
             {
-                // f-string interpolations: a `{ expr }` part can hold a GenericMethodCallExpression
+                // f-string interpolations: a `{ expr }` part can hold a GenericMemberRoutineCallExpression
                 // (e.g. `f"…{words.min_by[U64](selector: …)}…"`). Without recursing into the parts
-                // that GMCE survives to codegen and trips the "GenericMethodCallExpression survived
+                // that GMCE survives to codegen and trips the "GenericMemberRoutineCallExpression survived
                 // postprocessing" guard.
                 bool partChanged = false;
                 var newParts = new List<InsertedTextPart>(capacity: inserted.Parts.Count);
@@ -391,7 +391,7 @@ internal sealed class GenericCallLoweringPass
                 // Constructor arguments can themselves be GMCEs (e.g.
                 // `Limbs[4](d: Array[U32, 4]())`). Without recursing into the member
                 // values, a nested GMCE survives to codegen and trips the
-                // "GenericMethodCallExpression reached codegen" guard.
+                // "GenericMemberRoutineCallExpression reached codegen" guard.
                 bool membersChanged = false;
                 var newMembers =
                     new List<(string Name, Expression Value)>(capacity: creator.MemberVariables.Count);
@@ -433,10 +433,10 @@ internal sealed class GenericCallLoweringPass
     }
 
     /// <summary>
-    /// Tries to lower a <see cref="GenericMethodCallExpression"/> to a plain
+    /// Tries to lower a <see cref="GenericMemberRoutineCallExpression"/> to a plain
     /// <see cref="CallExpression"/>. Returns <c>null</c> if the node cannot be safely lowered.
     /// </summary>
-    private Expression? TryLowerGenericCall(GenericMethodCallExpression gmc)
+    private Expression? TryLowerGenericCall(GenericMemberRoutineCallExpression gmc)
     {
         // Collection literals need special codegen (create + add_last loop).
         if (gmc.IsCollectionLiteral) return null;
@@ -460,10 +460,10 @@ internal sealed class GenericCallLoweringPass
         // (e.g. the variant-arm extractor `Dict[Text, SerialValue].create!(from: sv)`). Leave it as a
         // GMC so SA resolves the creator; SA-time lowering (below, once ResolvedRoutine is set) or the
         // creator-routing path handles it.
-        if (gmc.Object is IdentifierExpression literalId && literalId.Name == gmc.MethodName
+        if (gmc.Object is IdentifierExpression literalId && literalId.Name == gmc.MemberRoutineName
             && !gmc.IsMemoryOperation
             && gmc.ResolvedRoutine == null
-            && _registry.LookupType(name: gmc.MethodName) != null
+            && _registry.LookupType(name: gmc.MemberRoutineName) != null
             && (gmc.Arguments.Count > 0
                 || HasZeroMemberVariables(type: gmc.ConstructedType)))
         {
@@ -483,7 +483,7 @@ internal sealed class GenericCallLoweringPass
                     members.Add(("", LowerExpression(arg)));
             }
             return new CreatorExpression(
-                TypeName: gmc.MethodName,
+                TypeName: gmc.MemberRoutineName,
                 TypeArguments: gmc.TypeArguments.Count > 0 ? gmc.TypeArguments : null,
                 MemberVariables: members,
                 Location: gmc.Location)
@@ -498,11 +498,11 @@ internal sealed class GenericCallLoweringPass
         // Only lower when SA has resolved the routine -> provides the concrete call target.
         if (gmc.ResolvedRoutine == null) return null;
 
-        // A method-generic call (`recast_as[T]`) whose ResolvedRoutine is still the generic-def
+        // A memberRoutine-generic call (`recast_as[T]`) whose ResolvedRoutine is still the generic-def
         // (its type param comes from the explicit `[T]` arg, so owner substitution alone can't
         // concretize it) must be re-instantiated from its now-concrete type arguments before it is
         // baked into a plain CallExpression — otherwise codegen receives a generic-def callee.
-        gmc = gmc with { ResolvedRoutine = ConcretizeMethodGenericRoutine(gmc) };
+        gmc = gmc with { ResolvedRoutine = ConcretizeMemberRoutineGenericRoutine(gmc) };
 
         // Lower arguments first.
         var loweredArgs = new List<Expression>(capacity: gmc.Arguments.Count);
@@ -512,13 +512,13 @@ internal sealed class GenericCallLoweringPass
         // -----------------------------------------------------------------------------
         // e.g., Maybe[S64](present: true, value: x) -> SA resolved create and set ResolvedRoutine.
         // Also handles standalone generic free routines and LLVM intrinsic free functions where
-        // Object.Name == MethodName but there is no constructable type.
-        // A failable generic construction `Type![Args](args)` parses with a BARE MethodName equal to
+        // Object.Name == memberRoutineName but there is no constructable type.
+        // A failable generic construction `Type![Args](args)` parses with a BARE memberRoutineName equal to
         // the type name plus the structured IsMemoryOperation failable flag; treat it like the
         // construction case (same as `Type[Args](args)`) so its arguments are passed straight to the
         // resolved `create!` instead of being mis-lowered into a member call whose receiver (the type
         // name) becomes a null first argument.
-        if (gmc.Object is IdentifierExpression id && id.Name == gmc.MethodName)
+        if (gmc.Object is IdentifierExpression id && id.Name == gmc.MemberRoutineName)
         {
             bool isTypeConstruction = gmc.ConstructedType != null ||
                                       gmc.LoweringKind is CallLoweringKind.TypeConstructor
@@ -555,7 +555,7 @@ internal sealed class GenericCallLoweringPass
         return new CallExpression(
             Callee: new MemberExpression(
                 Object: loweredObj,
-                MemberName: gmc.MethodName,
+                MemberName: gmc.MemberRoutineName,
                 Location: gmc.Location)
             {
                 ResolvedType = gmc.Object.ResolvedType,
@@ -575,14 +575,14 @@ internal sealed class GenericCallLoweringPass
     }
 
     /// <summary>
-    /// Re-instantiates a method-generic <c>ResolvedRoutine</c> from the call's explicit type
+    /// Re-instantiates a memberRoutine-generic <c>ResolvedRoutine</c> from the call's explicit type
     /// arguments when it is still a generic definition (or owned by one). Returns the original
     /// routine when it is already concrete or the type args can't be resolved.
     /// </summary>
-    private RoutineInfo? ConcretizeMethodGenericRoutine(GenericMethodCallExpression gmc)
+    private RoutineInfo? ConcretizeMemberRoutineGenericRoutine(GenericMemberRoutineCallExpression gmc)
     {
         RoutineInfo? routine = gmc.ResolvedRoutine;
-        if (!IsUnconcretizedMethodGeneric(routine))
+        if (!IsUnconcretizedMemberRoutineGeneric(routine))
         {
             return routine;
         }
@@ -608,12 +608,12 @@ internal sealed class GenericCallLoweringPass
     }
 
     /// <summary>
-    /// True when a resolved routine still needs its method-level type param bound from an explicit
+    /// True when a resolved routine still needs its memberRoutine-level type param bound from an explicit
     /// call type-argument: it is a generic definition, is owned by one, OR (the concrete-owner case
     /// like <c>Hijacked[BTreeListNode[S64]].recast_as() -&gt; Hijacked[U]</c>) still carries a
     /// generic parameter in its return or parameter types.
     /// </summary>
-    private static bool IsUnconcretizedMethodGeneric(RoutineInfo? routine)
+    private static bool IsUnconcretizedMemberRoutineGeneric(RoutineInfo? routine)
     {
         if (routine is null or { IsGenericDefinition: true } or { OwnerType.IsGenericDefinition: true })
             return routine != null;
@@ -631,9 +631,9 @@ internal sealed class GenericCallLoweringPass
 
     /// <summary>
     /// Falls through to just lowering the children of an un-lowerable
-    /// <see cref="GenericMethodCallExpression"/>.
+    /// <see cref="GenericMemberRoutineCallExpression"/>.
     /// </summary>
-    private GenericMethodCallExpression LowerGenericCallChildren(GenericMethodCallExpression gmc)
+    private GenericMemberRoutineCallExpression LowerGenericCallChildren(GenericMemberRoutineCallExpression gmc)
     {
         Expression loweredObj = LowerExpression(gmc.Object);
         bool argsChanged = false;

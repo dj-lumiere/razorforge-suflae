@@ -13,7 +13,7 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
-    private TypeSymbol AnalyzeGenericMethodCallExpression(GenericMethodCallExpression generic)
+    private TypeSymbol AnalyzeGenericMemberRoutineCallExpression(GenericMemberRoutineCallExpression generic)
     {
         TypeSymbol objectType = AnalyzeExpression(expression: generic.Object);
 
@@ -28,18 +28,18 @@ public sealed partial class SemanticVerifier
             generic.LoweringKind = CallLoweringKind.CollectionConstruction;
 
         // Check if this is a generic type constructor call (e.g., Hijacked[U8](addr))
-        // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args).
-        // A FAILABLE construction `Type![Args](args)` parses with a BARE MethodName equal to the
+        // The parser creates GenericMemberRoutineCallExpression for both Type[Args](args) and obj.MemberRoutine[Args](args).
+        // A FAILABLE construction `Type![Args](args)` parses with a BARE memberRoutineName equal to the
         // type name plus the structured `IsMemoryOperation` failable flag — recognize it here and
         // route to the type's failable `create` overload (e.g. the auto-generated variant arm
         // extractor `Dict[Text, SerialValue].create!(from: sv)`).
         bool isFailableCtor = generic.IsMemoryOperation &&
                               generic.Object is IdentifierExpression fctorId &&
-                              generic.MethodName == fctorId.Name;
+                              generic.MemberRoutineName == fctorId.Name;
         if (generic.Object is IdentifierExpression typeId && objectType is TypeInfo
             {
                 IsGenericDefinition: true
-            } typeInfo && (typeId.Name == generic.MethodName || isFailableCtor))
+            } typeInfo && (typeId.Name == generic.MemberRoutineName || isFailableCtor))
         {
             // Resolve the generic type with the provided type arguments
             TypeInfo resolvedType = _registry.GetOrCreateResolution(genericDef: typeInfo,
@@ -52,17 +52,17 @@ public sealed partial class SemanticVerifier
             // For field-init style (named args matching field names), pre-compute a
             // field-name → field-type map so `none` and other literals see the field's
             // declared type as their contextual expected type.
-            List<MemberVariableInfo>? resolvedFields = resolvedType switch
+            List<MemberVariableInfo>? resolvedMemberVariables = resolvedType switch
             {
                 RecordTypeInfo r => r.MemberVariables,
                 EntityTypeInfo e => e.MemberVariables,
                 _ => null
             };
             Dictionary<string, TypeSymbol>? fieldTypeByName = null;
-            if (resolvedFields != null)
+            if (resolvedMemberVariables != null)
             {
                 fieldTypeByName = new Dictionary<string, TypeSymbol>();
-                foreach (MemberVariableInfo mv in resolvedFields)
+                foreach (MemberVariableInfo mv in resolvedMemberVariables)
                 {
                     TypeSymbol ft = mv.Type;
                     if (resolvedType is { IsGenericResolution: true, TypeArguments: not null })
@@ -86,8 +86,8 @@ public sealed partial class SemanticVerifier
             }
 
             {
-                RoutineInfo? creator = _registry.LookupMethodOverload(type: resolvedType,
-                    methodName: "create",
+                RoutineInfo? creator = _registry.LookupMemberRoutineOverload(type: resolvedType,
+                    memberRoutineName: "create",
                     argTypes: argTypes);
                 creator ??= _registry.LookupRoutineOverload(
                     baseName: $"{resolvedType.Name}.create",
@@ -104,7 +104,7 @@ public sealed partial class SemanticVerifier
                     // creator.ReturnType for Hijacked[T].create is "Hijacked[T]" — a resolution
                     // whose TypeArguments contain GenericParameterTypeInfo placeholders.  Returning
                     // that causes downstream callers (.extract(), etc.) to see an unresolved type and
-                    // mangle method names as "Core.Hijacked[T].extract" instead of the correct
+                    // mangle memberRoutine names as "Core.Hijacked[T].extract" instead of the correct
                     // "Core.Hijacked[Core.Byte].extract".
                     bool returnTypeIsGenericOrUnresolved =
                         creator.ReturnType is null or { IsGenericDefinition: true } ||
@@ -139,56 +139,56 @@ public sealed partial class SemanticVerifier
             return resolvedType;
         }
 
-        // Look up the method on receiver type — LookupMethod handles generic resolutions
-        RoutineInfo? method =
-            _registry.LookupMethod(type: objectType, methodName: generic.MethodName);
-        if (method != null)
+        // Look up the memberRoutine on receiver type — LookupMemberRoutine handles generic resolutions
+        RoutineInfo? memberRoutine =
+            _registry.LookupMemberRoutine(type: objectType, memberRoutineName: generic.MemberRoutineName);
+        if (memberRoutine != null)
         {
-            generic.LoweringKind = ClassifyMethodCall(method: method);
+            generic.LoweringKind = ClassifyMemberRoutineCall(memberRoutine: memberRoutine);
 
-            // Resolve the method's generics from the explicit type arguments BEFORE analyzing the
-            // arguments, so a lambda argument whose parameter binds a method-level generic receives a
+            // Resolve the memberRoutine's generics from the explicit type arguments BEFORE analyzing the
+            // arguments, so a lambda argument whose parameter binds a memberRoutine-level generic receives a
             // concrete expected type (e.g. `select_many[S64](transform: x => …)` types `x` as S64
             // instead of the unbound generic, which would collapse to <error> and cascade S503/S450/S505).
-            if (method.IsGenericDefinition)
+            if (memberRoutine.IsGenericDefinition)
             {
                 // Owner-level generic params (e.g. T from Hijacked[T]) are bound by the receiver.
-                // Compare typeArgs only against method-level params (e.g. U from recast_as[U]).
+                // Compare typeArgs only against memberRoutine-level params (e.g. U from recast_as[U]).
                 var ownerGenericParamNames = GetOwnerGenericParameterNames(ownerType: objectType);
-                List<string> methodOnlyParams =
-                    method.GenericParameters?
+                List<string> memberRoutineOnlyParams =
+                    memberRoutine.GenericParameters?
                           .Where(predicate: gp => !ownerGenericParamNames.Contains(item: gp))
                           .ToList() ?? new List<string>();
 
-                if (methodOnlyParams.Count != typeArgs.Count)
+                if (memberRoutineOnlyParams.Count != typeArgs.Count)
                 {
                     ReportError(code: SemanticDiagnosticCode.WrongTypeArgumentCount,
                         message:
-                        $"Method '{method.Name}' expects {methodOnlyParams.Count} type arguments, got {typeArgs.Count}.",
+                        $"member routine '{memberRoutine.Name}' expects {memberRoutineOnlyParams.Count} type arguments, got {typeArgs.Count}.",
                         location: generic.Location);
                     return ErrorTypeInfo.Instance;
                 }
 
-                // Build full type-argument list aligned to method.GenericParameters order.
+                // Build full type-argument list aligned to memberRoutine.GenericParameters order.
                 // For owner-level params, take the binding from the receiver's TypeArguments;
-                // for method-level params, take from the user-supplied typeArgs in order.
+                // for memberRoutine-level params, take from the user-supplied typeArgs in order.
                 List<TypeSymbol> fullTypeArgs;
-                if (method.GenericParameters != null &&
-                    method.GenericParameters.Count != typeArgs.Count)
+                if (memberRoutine.GenericParameters != null &&
+                    memberRoutine.GenericParameters.Count != typeArgs.Count)
                 {
-                    fullTypeArgs = new List<TypeSymbol>(capacity: method.GenericParameters.Count);
-                    int methodArgIdx = 0;
+                    fullTypeArgs = new List<TypeSymbol>(capacity: memberRoutine.GenericParameters.Count);
+                    int memberRoutineArgIdx = 0;
                     var ownerBindings = BuildOwnerBindingMap(ownerType: objectType);
-                    foreach (string paramName in method.GenericParameters)
+                    foreach (string paramName in memberRoutine.GenericParameters)
                     {
                         if (ownerGenericParamNames.Contains(item: paramName) &&
                             ownerBindings.TryGetValue(key: paramName, value: out TypeInfo? ownerArg))
                         {
                             fullTypeArgs.Add(item: ownerArg);
                         }
-                        else if (methodArgIdx < typeArgs.Count)
+                        else if (memberRoutineArgIdx < typeArgs.Count)
                         {
-                            fullTypeArgs.Add(item: typeArgs[index: methodArgIdx++]);
+                            fullTypeArgs.Add(item: typeArgs[index: memberRoutineArgIdx++]);
                         }
                     }
                 }
@@ -197,31 +197,31 @@ public sealed partial class SemanticVerifier
                     fullTypeArgs = typeArgs.ToList();
                 }
 
-                method = _registry.GetOrCreateRoutineResolution(genericDef: method,
+                memberRoutine = _registry.GetOrCreateRoutineResolution(genericDef: memberRoutine,
                     typeArguments: fullTypeArgs);
             }
 
-            // Analyze arguments against the resolved method (param types now concrete), so lambda
-            // parameters bound to method generics are typed correctly. AnalyzeCallArguments also binds
+            // Analyze arguments against the resolved memberRoutine (param types now concrete), so lambda
+            // parameters bound to memberRoutine generics are typed correctly. AnalyzeCallArguments also binds
             // named/positional args and applies any remaining owner-generic substitution.
-            AnalyzeCallArguments(routine: method, arguments: generic.Arguments,
+            AnalyzeCallArguments(routine: memberRoutine, arguments: generic.Arguments,
                 location: generic.Location, callObjectType: objectType);
 
             ValidateExclusiveTokenUniqueness(arguments: generic.Arguments,
                 location: generic.Location);
 
-            generic.ResolvedRoutine = method;
-            generic.LoweringKind = ClassifyMethodCall(method: method);
-            generic.IsInFlight = method.IsInFlightReturn;
+            generic.ResolvedRoutine = memberRoutine;
+            generic.LoweringKind = ClassifyMemberRoutineCall(memberRoutine: memberRoutine);
+            generic.IsInFlight = memberRoutine.IsInFlightReturn;
 
-            if (method.ReturnType == null)
+            if (memberRoutine.ReturnType == null)
             {
                 return _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
             }
 
-            TypeSymbol returnType = method.ReturnType;
+            TypeSymbol returnType = memberRoutine.ReturnType;
 
-            // Bind ProtocolSelf (`Me`) in the return type to the receiver. A protocol-extension method
+            // Bind ProtocolSelf (`Me`) in the return type to the receiver. A protocol-extension memberRoutine
             // like `select_many[U] -> ?SelectManyIterator[T, U, Me]` leaves `Me` in its return; left
             // unbound it leaks into the per-implementer collector symbol (SelectManyIterator[.., Me].List)
             // and never resolves. Rebuild the resolution explicitly — a ProtocolSelf argument suppresses
@@ -237,15 +237,15 @@ public sealed partial class SemanticVerifier
                 returnType = _registry.GetOrCreateResolution(genericDef: retDef, typeArguments: boundArgs);
             }
 
-            // Substitute method's own generic params (U from obtain_as[U])
-            // GenericParameters now contains only method-level params (owner-level params
-            // are stripped by SubstituteMethodForOwner), so indices map directly to typeArgs.
-            if (method.GenericParameters != null)
+            // Substitute memberRoutine's own generic params (U from obtain_as[U])
+            // GenericParameters now contains only memberRoutine-level params (owner-level params
+            // are stripped by SubstituteMemberRoutineForOwner), so indices map directly to typeArgs.
+            if (memberRoutine.GenericParameters != null)
             {
                 // Direct param (return type is just U)
                 if (returnType is GenericParameterTypeInfo)
                 {
-                    int paramIndex = method.GenericParameters
+                    int paramIndex = memberRoutine.GenericParameters
                                            .ToList()
                                            .IndexOf(item: returnType.Name);
                     if (paramIndex >= 0 && paramIndex < typeArgs.Count &&
@@ -255,14 +255,14 @@ public sealed partial class SemanticVerifier
                     }
                 }
 
-                // Resolution containing method's params (e.g., Hijacked[U])
+                // Resolution containing memberRoutine's params (e.g., Hijacked[U])
                 if (returnType is { IsGenericResolution: true, TypeArguments: not null })
                 {
                     var substitutedArgs = new List<TypeInfo>();
                     bool anySubstituted = false;
                     foreach (TypeInfo typeArg in returnType.TypeArguments)
                     {
-                        int idx = method.GenericParameters
+                        int idx = memberRoutine.GenericParameters
                                         .ToList()
                                         .IndexOf(item: typeArg.Name);
                         if (idx >= 0 && idx < typeArgs.Count &&
@@ -469,7 +469,7 @@ public sealed partial class SemanticVerifier
         // Typewise receiver: `Ident[T]` parsed as GenericMemberExpression(Ident, Ident.Name, [T])
         // — the parser sets MemberName == Object.Name when the source was `Ident[Args]`, not
         // `obj.field[i]`. When that holds and Object resolves to a generic type, return the
-        // monomorphized type so the outer `.method()` call has a proper typewise receiver type.
+        // monomorphized type so the outer `.MemberRoutine()` call has a proper typewise receiver type.
         if (genericMember.Object is IdentifierExpression idReceiver &&
             idReceiver.Name == genericMember.MemberName &&
             objectType.IsGenericDefinition &&
@@ -513,9 +513,9 @@ public sealed partial class SemanticVerifier
                 return memberType.TypeArguments[index: 0];
             }
 
-            // If the member type has a getitem method, use its return type
+            // If the member type has a getitem memberRoutine, use its return type
             RoutineInfo? getItem =
-                _registry.LookupMethod(type: memberType, methodName: "getitem");
+                _registry.LookupMemberRoutine(type: memberType, memberRoutineName: "getitem");
             if (getItem?.ReturnType != null)
             {
                 return getItem.ReturnType;

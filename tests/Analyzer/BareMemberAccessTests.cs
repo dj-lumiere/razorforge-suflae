@@ -7,19 +7,19 @@ using static TestHelpers;
 
 /// <summary>
 /// A bare member access (<c>x.name</c>, no parentheses) reads a member VARIABLE; it must not
-/// silently resolve to and auto-call a zero-arg method <c>name()</c>. Auto-calling masked real
+/// silently resolve to and auto-call a zero-arg memberRoutine <c>name()</c>. Auto-calling masked real
 /// bugs — e.g. a record that drops a <c>sign</c> field but keeps a <c>sign()</c> accessor let
 /// <c>var s = w.sign</c> typecheck as the call result, so SA passed code that only failed at
-/// codegen ("Member variable 'sign' not found"). See the .field-vs-.method() distinction.
+/// codegen ("Member variable 'sign' not found"). See the .field-vs-.MemberRoutine() distinction.
 /// </summary>
 public class BareMemberAccessTests
 {
     /// <summary>
-    /// Bare <c>w.tag</c> where <c>tag</c> is a zero-arg method (not a member variable) must be a
+    /// Bare <c>w.tag</c> where <c>tag</c> is a zero-arg memberRoutine (not a member variable) must be a
     /// hard error, not an implicit call.
     /// </summary>
     [Fact]
-    public void Analyze_BareAccessToZeroArgMethod_ReportsMemberNotFound()
+    public void Analyze_BareAccessToZeroArgMemberRoutine_ReportsMemberNotFound()
     {
         string source = """
                         record Widget
@@ -41,7 +41,7 @@ public class BareMemberAccessTests
     /// The explicit call form <c>w.tag()</c> is correct and must NOT be flagged.
     /// </summary>
     [Fact]
-    public void Analyze_ExplicitCallToZeroArgMethod_NoError()
+    public void Analyze_ExplicitCallToZeroArgMemberRoutine_NoError()
     {
         string source = """
                         record Widget

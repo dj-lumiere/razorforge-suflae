@@ -224,7 +224,7 @@ public class OperatorProtocolTests
 
     #endregion
 
-    #region Wrong Method Signature
+    #region Wrong memberRoutine Signature
 
     /// <summary>
     /// Verifies that implementing $eq with the wrong return type produces an error.
@@ -276,13 +276,13 @@ public class OperatorProtocolTests
 
     #endregion
 
-    #region Mixed Operator and Normal Methods
+    #region Mixed Operator and Normal memberRoutines
 
     /// <summary>
-    /// Verifies that a type can define both operator wired methods and regular business methods.
+    /// Verifies that a type can define both operator wired memberRoutines and regular business memberRoutines.
     /// </summary>
     [Fact]
-    public void Analyze_MixedOperatorAndNormalMethods_NoError()
+    public void Analyze_MixedOperatorAndNormalMemberRoutines_NoError()
     {
         string source = """
                         protocol Addable
@@ -308,7 +308,7 @@ public class OperatorProtocolTests
 
     #endregion
 
-    #region Non-Operator Methods (No Protocol Required)
+    #region Non-Operator memberRoutines (No Protocol Required)
     /// <summary>
     /// Verifies semantic analysis behavior for create without protocol without unexpected diagnostics.
     /// </summary>
@@ -348,11 +348,11 @@ public class OperatorProtocolTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for regular method without protocol without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for regular memberRoutine without protocol without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_RegularMethodWithoutProtocol_NoError()
+    public void Analyze_RegularMemberRoutineWithoutProtocol_NoError()
     {
         string source = """
                         record Point

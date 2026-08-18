@@ -7,7 +7,7 @@ namespace Compiler.Instantiation;
 
 /// <summary>
 /// A pre-computed monomorphization result produced at synthesis time (Phase 7).
-/// Contains everything the code generator needs to emit a concrete generic method body
+/// Contains everything the code generator needs to emit a concrete generic memberRoutine body
 /// without re-doing any AST search or type-substitution building.
 /// </summary>
 /// <param name="Ast">The AST.</param>

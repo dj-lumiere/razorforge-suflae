@@ -103,7 +103,7 @@ public partial class Parser
                 if (node is RoutineDeclaration)
                 {
                     throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
-                        message: "Routines cannot be declared inside entity bodies. Use 'routine EntityName.method()' syntax instead.");
+                        message: "Routines cannot be declared inside entity bodies. Use 'routine EntityName.MemberRoutine()' syntax instead.");
                 }
 
                 if (node is SyntaxTree.Declaration member)
@@ -247,7 +247,7 @@ public partial class Parser
                 if (node is RoutineDeclaration)
                 {
                     throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
-                        message: "Routines cannot be declared inside record bodies. Use 'routine RecordName.method()' syntax instead.");
+                        message: "Routines cannot be declared inside record bodies. Use 'routine RecordName.MemberRoutine()' syntax instead.");
                 }
 
                 if (node is SyntaxTree.Declaration member)
@@ -306,7 +306,7 @@ public partial class Parser
         string name = ConsumeIdentifier(errorMessage: "Expected choice name");
 
         var variants = new List<ChoiceCase>();
-        var methods = new List<RoutineDeclaration>();
+        var memberRoutines = new List<RoutineDeclaration>();
 
         // Parse choice body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after choice header");
@@ -315,7 +315,7 @@ public partial class Parser
         {
             return new ChoiceDeclaration(Name: name,
                 Cases: variants,
-                Methods: methods,
+                MemberRoutines: memberRoutines,
                 Visibility: visibility,
                 Location: location);
         }
@@ -330,11 +330,11 @@ public partial class Parser
             }
 
             // Inline routines are not allowed in choice bodies.
-            // Use 'routine ChoiceName.method()' external syntax instead.
+            // Use 'routine ChoiceName.MemberRoutine()' external syntax instead.
             if (Check(type: TokenType.Routine))
             {
                 throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
-                    message: "Routines cannot be declared inside choice bodies. Use 'routine ChoiceName.method()' syntax instead.");
+                    message: "Routines cannot be declared inside choice bodies. Use 'routine ChoiceName.MemberRoutine()' syntax instead.");
             }
             else
             {
@@ -369,7 +369,7 @@ public partial class Parser
 
         return new ChoiceDeclaration(Name: name,
             Cases: variants,
-            Methods: methods,
+            MemberRoutines: memberRoutines,
             Visibility: visibility,
             Location: location);
     }
@@ -639,7 +639,7 @@ public partial class Parser
         // Associated-type slot declarations: `relates Iter obeys Iterator[T]` (needs-sibling clause).
         List<AssociatedTypeDeclaration>? associatedTypes = ParseRelatesClauses();
 
-        var methods = new List<RoutineSignature>();
+        var memberRoutines = new List<RoutineSignature>();
 
         // Parse protocol body as indented block
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after protocol header");
@@ -649,7 +649,7 @@ public partial class Parser
             return new ProtocolDeclaration(Name: name,
                 GenericParameters: genericParams,
                 ParentProtocols: parentProtocols,
-                Methods: methods,
+                MemberRoutines: memberRoutines,
                 Visibility: visibility,
                 Location: location,
                 GenericConstraints: constraints)
@@ -667,7 +667,7 @@ public partial class Parser
                 continue;
             }
 
-            // 'pass' is valid in a protocol body that defines no methods (marker protocol)
+            // 'pass' is valid in a protocol body that defines no memberRoutines (marker protocol)
             if (Match(type: TokenType.Pass))
             {
                 Match(type: TokenType.Newline);
@@ -675,34 +675,34 @@ public partial class Parser
             }
 
             // Parse optional annotations on routine signatures (e.g., @readonly)
-            List<string> methodAnnotations = ParseAnnotations();
+            List<string> memberRoutineAnnotations = ParseAnnotations();
 
             // Skip newlines between annotations and routine keyword
             while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
-            // Optional `common` storage-class qualifier — type-level (static) protocol method,
+            // Optional `common` storage-class qualifier — type-level (static) protocol memberRoutine,
             // e.g. `common routine Me.identity() -> V`. Strips down to a regular `routine` parse
             // afterwards, with the `common` flag pushed into the annotations list so downstream
-            // resolution (TypeBodyResolver) can promote it to `IsInstanceMethod = false`.
-            bool methodIsCommon = false;
+            // resolution (TypeBodyResolver) can promote it to `IsInstanceMemberRoutine = false`.
+            bool memberRoutineIsCommon = false;
             if (Match(type: TokenType.Common))
             {
-                methodIsCommon = true;
+                memberRoutineIsCommon = true;
             }
 
-            // Optional `dangerous` qualifier — marks the protocol method as requiring a `danger`
+            // Optional `dangerous` qualifier — marks the protocol memberRoutine as requiring a `danger`
             // block at the call site (mirrors the impl-side `dangerous routine` syntax).
-            bool methodIsDangerous = false;
+            bool memberRoutineIsDangerous = false;
             if (Match(type: TokenType.Dangerous))
             {
-                methodIsDangerous = true;
+                memberRoutineIsDangerous = true;
             }
 
             // Allow either qualifier order: `dangerous common routine` is just as valid as
             // `common dangerous routine`.
-            if (!methodIsCommon && Match(type: TokenType.Common))
+            if (!memberRoutineIsCommon && Match(type: TokenType.Common))
             {
-                methodIsCommon = true;
+                memberRoutineIsCommon = true;
             }
 
             // Associated-type slot declaration inside protocol body: `relates Key` or `relates Key obeys Hashable`
@@ -733,22 +733,22 @@ public partial class Parser
                 {
                     _routineNameWired = true;
                 }
-                var methodNameSb = new System.Text.StringBuilder(
+                var memberRoutineNameSb = new System.Text.StringBuilder(
                     ConsumeIdentifier(errorMessage: "Expected member routine name"));
 
-                // Handle Me.methodName syntax for instance member routines
-                // Protocol member routines can be: "routine Me.methodName()" or "routine methodName()"
+                // Handle Me.MemberRoutineName syntax for instance member routines
+                // Protocol member routines can be: "routine Me.MemberRoutineName()" or "routine memberRoutineName()"
                 while (Match(type: TokenType.Dot))
                 {
-                    methodNameSb.Append('.');
-                    methodNameSb.Append(ConsumeMethodName(errorMessage: "Expected member routine name after '.'"));
+                    memberRoutineNameSb.Append('.');
+                    memberRoutineNameSb.Append(ConsumeMemberRoutineName(errorMessage: "Expected member routine name after '.'"));
                 }
 
-                string methodName = methodNameSb.ToString();
+                string memberRoutineName = memberRoutineNameSb.ToString();
 
                 // Support failable member routines: "routine!". The `!` is a STRUCTURED flag on
                 // the RoutineSignature — the name stays bare.
-                bool methodIsFailable = Match(type: TokenType.Bang);
+                bool memberRoutineIsFailable = Match(type: TokenType.Bang);
 
                 // Parameters
                 Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after member routine name");
@@ -802,24 +802,24 @@ public partial class Parser
                     returnType = ParseType();
                 }
 
-                if (methodIsCommon)
+                if (memberRoutineIsCommon)
                 {
-                    methodAnnotations.Add(item: "common");
+                    memberRoutineAnnotations.Add(item: "common");
                 }
-                if (methodIsDangerous)
+                if (memberRoutineIsDangerous)
                 {
-                    methodAnnotations.Add(item: "dangerous");
+                    memberRoutineAnnotations.Add(item: "dangerous");
                 }
 
-                methods.Add(item: new RoutineSignature(Name: methodName,
+                memberRoutines.Add(item: new RoutineSignature(Name: memberRoutineName,
                     Parameters: parameters,
                     ReturnType: returnType,
-                    Annotations: methodAnnotations.Count > 0
-                        ? methodAnnotations
+                    Annotations: memberRoutineAnnotations.Count > 0
+                        ? memberRoutineAnnotations
                         : null,
                     Location: GetLocation())
                 {
-                    IsFailable = methodIsFailable
+                    IsFailable = memberRoutineIsFailable
                 });
                 Match(type: TokenType.Newline);
             }
@@ -844,7 +844,7 @@ public partial class Parser
         return new ProtocolDeclaration(Name: name,
             GenericParameters: genericParams,
             ParentProtocols: parentProtocols,
-            Methods: methods,
+            MemberRoutines: memberRoutines,
             Visibility: visibility,
             Location: location,
             GenericConstraints: constraints)

@@ -251,15 +251,15 @@ public record RoutineDeclaration(
     /// <summary>
     /// For a member routine (dotted name like <c>T.serialize</c> or <c>List[T].append</c>), the bare
     /// owner segment BEFORE the type-args and the dot (<c>"T"</c>, <c>"List"</c>); null for a free
-    /// routine. Captured structurally by the parser from the separate owner/method tokens so consumers
+    /// routine. Captured structurally by the parser from the separate owner/memberRoutine tokens so consumers
     /// (SA template detection, registration) never re-split <see cref="Name"/> with <c>IndexOf('.')</c>
     /// — the name-canonicalization discipline: the dotted string is a rendering, these are the truth.
     /// </summary>
     public string? OwnerName { get; set; }
 
-    /// <summary>The method segment AFTER the final dot (<c>"serialize"</c>, <c>"append"</c>); null for
-    /// a free routine (whose method name is simply <see cref="Name"/>).</summary>
-    public string? MethodName { get; set; }
+    /// <summary>The memberRoutine segment AFTER the final dot (<c>"serialize"</c>, <c>"append"</c>); null for
+    /// a free routine (whose memberRoutine name is simply <see cref="Name"/>).</summary>
+    public string? MemberRoutineName { get; set; }
 
     /// <summary>True when the owner carried type-args (<c>List[T].append</c>) — i.e. a real
     /// generic-instance receiver, not a bare type-parameter placeholder like <c>T.serialize</c>.</summary>
@@ -285,12 +285,12 @@ public record RoutineDeclaration(
 
 /// <summary>
 /// Entity (class) declaration that defines reference types with inheritance.
-/// Represents object-oriented classes with member variables, methods, and inheritance.
+/// Represents object-oriented classes with member variables, memberRoutines, and inheritance.
 /// </summary>
 /// <param name="Name">Class identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="Protocols">List of protocols to implement (obeys)</param>
-/// <param name="Members">List of member declarations (member variables, methods, properties)</param>
+/// <param name="Members">List of member declarations (member variables, memberRoutines, properties)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericConstraints">Optional generic constraints.</param>
@@ -301,8 +301,8 @@ public record RoutineDeclaration(
 /// <item>Single protocol implementation: entity Dog obeys Animal</item>
 /// <item>Multiple protocol implementation: entity Dog obeys Nameable, Trainable</item>
 /// <item>Generic classes: entity Container[T]</item>
-/// <item>Member visibility: public, private, internal member variables/methods</item>
-/// <item>Creators: defined as special routine methods</item>
+/// <item>Member visibility: public, private, internal member variables/memberRoutines</item>
+/// <item>Creators: defined as special routine memberRoutines</item>
 /// </list>
 /// </remarks>
 public record EntityDeclaration(
@@ -332,7 +332,7 @@ public record EntityDeclaration(
 /// <param name="Name">Record identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="Protocols">List of protocols to implement (obeys)</param>
-/// <param name="Members">List of member declarations (member variables and methods)</param>
+/// <param name="Members">List of member declarations (member variables and memberRoutines)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericConstraints">Optional generic constraints.</param>
@@ -375,7 +375,7 @@ public record RecordDeclaration(
 /// </summary>
 /// <param name="Name">Choice identifier name</param>
 /// <param name="Cases">List of choice variant definitions with optional values</param>
-/// <param name="Methods">List of methods that can be called on choice values</param>
+/// <param name="member routines">List of memberRoutines that can be called on choice values</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
@@ -383,14 +383,14 @@ public record RecordDeclaration(
 /// <list type="bullet">
 /// <item>Simple enums: choice Status { Ok, Error, Pending }</item>
 /// <item>Explicit values: choice HttpCode { Ok = 200, NotFound = 404 }</item>
-/// <item>Methods: choices can have associated behavior</item>
+/// <item>memberRoutines: choices can have associated behavior</item>
 /// <item>Pattern matching: used with when statements</item>
 /// </list>
 /// </remarks>
 public record ChoiceDeclaration(
     string Name,
     List<ChoiceCase> Cases,
-    List<RoutineDeclaration> Methods,
+    List<RoutineDeclaration> MemberRoutines,
     VisibilityModifier Visibility,
     SourceLocation Location) : Declaration(Location: Location)
 {
@@ -493,12 +493,12 @@ public record VariantDeclaration(
 
 /// <summary>
 /// Protocol (trait/interface) declaration that defines behavioral contracts.
-/// Specifies method signatures that implementing types must provide.
+/// Specifies memberRoutine signatures that implementing types must provide.
 /// </summary>
 /// <param name="Name">Protocol identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="ParentProtocols">List of parent protocols this protocol extends (obeys)</param>
-/// <param name="Methods">List of method signatures (without implementations)</param>
+/// <param name="member routines">List of memberRoutine signatures (without implementations)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericConstraints">Optional generic constraints.</param>
@@ -508,7 +508,7 @@ public record VariantDeclaration(
 /// <item>Interface contracts: protocol Drawable { routine Me.draw() }</item>
 /// <item>Generic protocols: protocol Comparable[T] { routine Me.cmp(you: Me) -> ComparisonSign }</item>
 /// <item>Multiple implementation: types can implement multiple protocols</item>
-/// <item>Default methods: protocols can provide default implementations</item>
+/// <item>Default memberRoutines: protocols can provide default implementations</item>
 /// <item>Protocol bounds: generic constraints (where T obeys Comparable)</item>
 /// <item>Protocol inheritance: protocol DetailedPrintable obeys Printable { ... }</item>
 /// </list>
@@ -517,7 +517,7 @@ public record ProtocolDeclaration(
     string Name,
     List<string>? GenericParameters,
     List<TypeExpression> ParentProtocols,
-    List<RoutineSignature> Methods,
+    List<RoutineSignature> MemberRoutines,
     VisibilityModifier Visibility,
     SourceLocation Location,
     List<GenericConstraintDeclaration>? GenericConstraints = null)
@@ -686,17 +686,17 @@ public record VariantMember(TypeExpression Type, SourceLocation Location);
 
 /// <summary>
 /// Routine (function) signature used within Protocol (trait) declarations.
-/// Specifies method contract without implementation.
+/// Specifies memberRoutine contract without implementation.
 /// </summary>
-/// <param name="Name">Method identifier name</param>
+/// <param name="Name">memberRoutine identifier name</param>
 /// <param name="Parameters">List of parameter definitions</param>
-/// <param name="ReturnType">Optional return type; null for void methods</param>
+/// <param name="ReturnType">Optional return type; null for void memberRoutines</param>
 /// <param name="Location">Source location information</param>
 /// <param name="Annotations">Optional protocol annotations.</param>
 /// <remarks>
 /// Function signatures define the contract that implementers must fulfill:
 /// <list type="bullet">
-/// <item>Abstract methods: no body, just signature</item>
+/// <item>Abstract memberRoutines: no body, just signature</item>
 /// <item>Parameter names: used for documentation and named arguments</item>
 /// <item>Type constraints: can include generic bounds</item>
 /// <item>Default implementations: traits can provide default bodies</item>

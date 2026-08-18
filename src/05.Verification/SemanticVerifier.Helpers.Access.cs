@@ -205,7 +205,7 @@ public sealed partial class SemanticVerifier
             }
 
             (string Wrapper, string Path)? offender =
-                isEntity ? null : FindNonTriviallyStorableWrapper(type: type);
+                isEntity ? null : FindNonTriviallyAssignableWrapper(type: type);
             if (!isEntity && offender == null)
             {
                 continue;
@@ -376,7 +376,7 @@ public sealed partial class SemanticVerifier
     /// Validates access to a member based on visibility rules.
     /// </summary>
     /// <param name="visibility">The visibility modifier of the member.</param>
-    /// <param name="memberKind">The kind of member (member variable, method, etc.) for error messages.</param>
+    /// <param name="memberKind">The kind of member (member variable, memberRoutine, etc.) for error messages.</param>
     /// <param name="memberName">The name of the member.</param>
     /// <param name="ownerType">The type that owns this member, if any.</param>
     /// <param name="accessLocation">Source location of the access site.</param>

@@ -18,7 +18,7 @@ namespace Verification.Results;
 /// <param name="SynthesizedBodies">AST bodies for compiler-generated routines (derived operators + variant bodies),
 /// keyed by RoutineInfo.RegistryKey. Includes both ne/lt/etc. operators and pre-transformed
 /// try_/check_/lookup_ variant bodies produced by <see cref="ErrorHandlingVariantPass"/>.</param>
-/// <param name="InstantiatedGenericBodies">Concrete generic method bodies produced by
+/// <param name="InstantiatedGenericBodies">Concrete generic memberRoutine bodies produced by
 /// <see cref="GenericMonomorphizationPass"/>, keyed by the concrete
 /// RoutineInfo.RegistryKey. Codegen uses these to skip AST search and re-rewriting
 /// for all generic instantiations visible during semantic analysis.</param>

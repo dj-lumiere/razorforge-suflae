@@ -13,12 +13,12 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
-    private const string GetItemMethodName = "getitem";
+    private const string GetItemMemberRoutineName = "getitem";
 
     private static bool TryGetTransparentProtocolTarget(TypeSymbol type, out TypeSymbol targetType)
     {
         if (type is ProtocolTypeInfo { TypeArguments: { Count: > 0 } } proto
-            && HasOnlyMarkerCoercionMethods(proto))
+            && HasOnlyMarkerCoercionMemberRoutines(proto))
         {
             targetType = proto.TypeArguments![index: 0]!;
             return true;
@@ -29,13 +29,13 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// True if the protocol declares no methods other than the implicit-coercion markers
+    /// True if the protocol declares no memberRoutines other than the implicit-coercion markers
     /// refer/control. Such protocols (Accessing[T], Controlling[T]) are transparent for
     /// member access — `param.member` falls through to the inner T.
     /// </summary>
-    private static bool HasOnlyMarkerCoercionMethods(ProtocolTypeInfo proto)
+    private static bool HasOnlyMarkerCoercionMemberRoutines(ProtocolTypeInfo proto)
     {
-        foreach (ProtocolMethodInfo m in proto.Methods)
+        foreach (ProtocolMemberRoutineInfo m in proto.MemberRoutines)
         {
             if (m.Name != "access" && m.Name != "control") return false;
         }
@@ -113,7 +113,7 @@ public sealed partial class SemanticVerifier
                 case "type":
                     // `${m.type}` in EXPRESSION position — the member/arm type as a comptime typewise
                     // receiver (e.g. `${m.type}.data_size()` / `.type_id()`, or a column-buffer size in a
-                    // SoA method). Deferred like the type/pattern-position splice: the real type only
+                    // SoA memberRoutine). Deferred like the type/pattern-position splice: the real type only
                     // exists at monomorphization, so a bare projection types leniently and the static
                     // call on it is re-resolved on the folded concrete type post-monomorph.
                     return ErrorTypeInfo.Instance;
@@ -133,7 +133,7 @@ public sealed partial class SemanticVerifier
             return ErrorTypeInfo.Instance;
         }
 
-        // Suflae flow typing: dereferencing (member access / method call) a possibly-none entity
+        // Suflae flow typing: dereferencing (member access / memberRoutine call) a possibly-none entity
         // reference is rejected until it has been null-checked. Covers both a nullable local/param
         // (`x.field` on an unchecked `x: E?`) and a nullable field-chain (`a.b.c` where `b: E?`) — a
         // field read is never flow-narrowed (Kotlin doesn't smart-cast mutable fields either), so it
@@ -185,18 +185,18 @@ public sealed partial class SemanticVerifier
                     return innerMemberVariable.Type;
                 }
 
-                RoutineInfo? innerMethod =
+                RoutineInfo? innerMemberRoutine =
                     TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                        methodName: member.MemberName, isFailable: false)
-                    ?? _registry.LookupMethod(type: lookupType,
-                        methodName: member.MemberName);
-                if (innerMethod != null)
+                        memberRoutineName: member.MemberName, isFailable: false)
+                    ?? _registry.LookupMemberRoutine(type: lookupType,
+                        memberRoutineName: member.MemberName);
+                if (innerMemberRoutine != null)
                 {
-                    ValidateReadOnlyWrapperMethodAccess(wrapperType: lookupType,
-                        method: innerMethod,
+                    ValidateReadOnlyWrapperMemberRoutineAccess(wrapperType: lookupType,
+                        memberRoutine: innerMemberRoutine,
                         location: member.Location);
-                    ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
-                    return innerMethod.ReturnType ??
+                    ValidateRoutineAccess(routine: innerMemberRoutine, accessLocation: member.Location);
+                    return innerMemberRoutine.ReturnType ??
                            _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
                 }
             }
@@ -251,21 +251,21 @@ public sealed partial class SemanticVerifier
                 return innerMemberVariable.Type;
             }
 
-            // Try to forward method access to the inner type via Phase D synthesized forwarders
-            RoutineInfo? innerMethod =
+            // Try to forward memberRoutine access to the inner type via Phase D synthesized forwarders
+            RoutineInfo? innerMemberRoutine =
                 TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                    methodName: member.MemberName, isFailable: false)
-                ?? _registry.LookupMethod(type: lookupType, methodName: member.MemberName);
-            if (innerMethod != null)
+                    memberRoutineName: member.MemberName, isFailable: false)
+                ?? _registry.LookupMemberRoutine(type: lookupType, memberRoutineName: member.MemberName);
+            if (innerMemberRoutine != null)
             {
                 // Validate read-only wrapper restrictions
-                ValidateReadOnlyWrapperMethodAccess(wrapperType: lookupType,
-                    method: innerMethod,
+                ValidateReadOnlyWrapperMemberRoutineAccess(wrapperType: lookupType,
+                    memberRoutine: innerMemberRoutine,
                     location: member.Location);
-                // Validate method access
-                ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
+                // Validate memberRoutine access
+                ValidateRoutineAccess(routine: innerMemberRoutine, accessLocation: member.Location);
                 // Return type is None if not specified
-                return innerMethod.ReturnType ??
+                return innerMemberRoutine.ReturnType ??
                        _registry.LookupType(name: "None") ?? ErrorTypeInfo.Instance;
             }
         }
@@ -280,7 +280,7 @@ public sealed partial class SemanticVerifier
                 return choice; // Color.RED has type Color
             }
 
-            // Fall through to method lookup — choice types can have methods
+            // Fall through to memberRoutine lookup — choice types can have memberRoutines
         }
 
         // Flags member access: Permissions.READ -> FlagsTypeInfo
@@ -293,25 +293,25 @@ public sealed partial class SemanticVerifier
                 return flags; // Permissions.READ has type Permissions
             }
 
-            // Fall through to method lookup — flags types can have builder service methods
+            // Fall through to memberRoutine lookup — flags types can have builder service memberRoutines
         }
 
-        // Could be a member-routine reference - use LookupMethod which handles generic resolutions.
+        // Could be a member-routine reference - use LookupMemberRoutine which handles generic resolutions.
         // MemberName is always bare; failability is carried structurally in member.IsFailable.
         string lookupName = member.MemberName;
-        RoutineInfo? method = _registry.LookupMethod(type: lookupType, methodName: lookupName);
-        if (method != null)
+        RoutineInfo? memberRoutine = _registry.LookupMemberRoutine(type: lookupType, memberRoutineName: lookupName);
+        if (memberRoutine != null)
         {
             // A BARE member access (`x.name`, no `()`) reads a member VARIABLE — it must not silently
-            // invoke a zero-arg method. (Method calls `x.name()` are resolved in AnalyzeCallExpression,
+            // invoke a zero-arg memberRoutine. (memberRoutine calls `x.name()` are resolved in AnalyzeCallExpression,
             // which never routes through here.) Auto-calling masked real bugs: e.g. after a record drops
             // a `sign` field but keeps a `sign()` accessor, `var s = w.sign` typechecked as the call
             // result here, so validate-stdlib passed code that only failed at codegen
             // ("Member variable 'sign' not found"). Keep `.name` (field) and `.name()` (call) distinct.
             ReportError(code: SemanticDiagnosticCode.MemberNotFound,
                 message:
-                $"'{lookupName}' is a method on '{objectType.Name}', not a member variable. " +
-                $"Bare `.{lookupName}` reads a member variable; call the method as `{member.MemberName}()`.",
+                $"'{lookupName}' is a member routine on '{objectType.Name}', not a member variable. " +
+                $"Bare `.{lookupName}` reads a member variable; call the member routine as `{member.MemberName}()`.",
                 location: member.Location);
             return ErrorTypeInfo.Instance;
         }
@@ -437,21 +437,21 @@ public sealed partial class SemanticVerifier
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
-        // Look for getitem method — LookupMethod handles generic resolutions
-        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: GetItemMethodName);
+        // Look for getitem memberRoutine — LookupMemberRoutine handles generic resolutions
+        RoutineInfo? getItem = _registry.LookupMemberRoutine(type: lookupType, memberRoutineName: GetItemMemberRoutineName);
         // Try failable variant if non-failable not found
         if (getItem == null)
         {
-            getItem = _registry.LookupMethod(type: lookupType, methodName: GetItemMethodName,
+            getItem = _registry.LookupMemberRoutine(type: lookupType, memberRoutineName: GetItemMemberRoutineName,
                 isFailable: true);
         }
         // Phase D: synthesize a wrapper forwarder if still not found
         if (getItem == null && IsWrapperType(type: lookupType))
         {
             getItem = TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                methodName: GetItemMethodName, isFailable: false)
+                memberRoutineName: GetItemMemberRoutineName, isFailable: false)
                 ?? TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                    methodName: GetItemMethodName, isFailable: true);
+                    memberRoutineName: GetItemMemberRoutineName, isFailable: true);
         }
 
         // Analyze the index expression with the indexer parameter type as expected type so
@@ -487,9 +487,9 @@ public sealed partial class SemanticVerifier
             // (S64 mentions no param) but corrupts `List[Box[T]]`: the owner's formal param name "T"
             // collides with the routine's own "T" inside the element `Box[T]`, yielding a wrongly
             // nested `Box[Box[T]]`. Guard on the owner carrying type arguments (= already resolved).
-            bool methodAlreadyResolved = getItem.OwnerType is { TypeArguments.Count: > 0 };
+            bool memberRoutineAlreadyResolved = getItem.OwnerType is { TypeArguments.Count: > 0 };
 
-            if (!methodAlreadyResolved &&
+            if (!memberRoutineAlreadyResolved &&
                 lookupType.TypeArguments is { Count: > 0 } &&
                 ownerGenericParams is { Count: > 0 })
             {
@@ -514,7 +514,7 @@ public sealed partial class SemanticVerifier
         // No `getitem` resolved. If the lookup type is fully concrete (no unresolved generic
         // parameters), it genuinely does not support indexing — report it cleanly here rather
         // than letting `arr[i]` slip through to codegen, which would crash with
-        // "reached codegen ... but no resolved method". Types that removed their `getitem`
+        // "reached codegen ... but no resolved member routine". Types that removed their `getitem`
         // (e.g. SortedList, replaced by the named `get_by_rank!`) land here.
         if (getItem == null && !ContainsUnresolvedTypeParameter(type: lookupType))
         {
@@ -537,7 +537,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// True when <paramref name="type"/> is or contains an unresolved generic parameter,
-    /// protocol self-type, or error type — cases where method resolution may legitimately
+    /// protocol self-type, or error type — cases where memberRoutine resolution may legitimately
     /// complete only after monomorphization, so a missing routine is not yet a hard error.
     /// </summary>
     private static bool ContainsUnresolvedTypeParameter(TypeSymbol type)
@@ -921,7 +921,7 @@ public sealed partial class SemanticVerifier
                 CollectIdentifiersRecursive(expression: dictEntry.Value, identifiers: identifiers);
                 break;
 
-            case GenericMethodCallExpression generic:
+            case GenericMemberRoutineCallExpression generic:
                 CollectIdentifiersRecursive(expression: generic.Object, identifiers: identifiers);
                 foreach (Expression arg in generic.Arguments)
                 {
@@ -1085,25 +1085,25 @@ public sealed partial class SemanticVerifier
     {
         var providedNames = creator.MemberVariables.Select(selector: mv => mv.Name).ToList();
 
-        // Name-based match against create overloads. Iterate type's methods looking for ones
+        // Name-based match against create overloads. Iterate type's memberRoutines looking for ones
         // named `create` whose parameter names match the provided set exactly. If multiple
         // overloads share the same param names (e.g. `S64.create(from: S8)` vs
         // `S64.create(from: ComparisonSign)`), bail out — disambiguation by arg type is the
         // job of the legacy path and we don't want to silently pick the wrong overload.
         // Use CollectMemberRoutineCandidates: it walks the generic definition for
-        // generic resolutions (e.g. List[V] → List[T]) and runs SubstituteMethodForOwner
+        // generic resolutions (e.g. List[V] → List[T]) and runs SubstituteMemberRoutineForOwner
         // so parameter types come back resolved to the receiver's concrete type args.
         var providedNameSet = new HashSet<string>(collection: providedNames);
         var nameMatches = new List<RoutineInfo>();
         var candidates = new List<RoutineInfo>();
-        _registry.CollectMemberRoutineCandidates(type: type, methodName: "create",
+        _registry.CollectMemberRoutineCandidates(type: type, memberRoutineName: "create",
             candidates: candidates);
-        _registry.CollectMemberRoutineCandidates(type: type, methodName: "create!",
+        _registry.CollectMemberRoutineCandidates(type: type, memberRoutineName: "create!",
             candidates: candidates);
         // Also pull the concrete type's own routines directly — CollectMemberRoutineCandidates
-        // can miss a user-declared `create` on an entity, while GetMethodsForType returns it
+        // can miss a user-declared `create` on an entity, while GetMemberRoutinesForType returns it
         // (this is how the entity `destroy` resolves correctly elsewhere).
-        candidates.AddRange(collection: _registry.GetMethodsForType(type: type)
+        candidates.AddRange(collection: _registry.GetMemberRoutinesForType(type: type)
             .Where(predicate: m => m.Name is "create" or "create!"));
         foreach (RoutineInfo m in candidates)
         {

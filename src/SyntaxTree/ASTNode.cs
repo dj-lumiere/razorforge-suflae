@@ -70,12 +70,12 @@ public record SourceLocation(string FileName, int Line, int Column, int Position
 public abstract record SyntaxTreeNode(SourceLocation Location) : ISyntaxTreeNode
 {
     /// <summary>
-    /// Abstract method that must be implemented by all concrete AST node types.
-    /// Routes the visitor to the appropriate visit method for this node type.
+    /// Abstract memberRoutine that must be implemented by all concrete AST node types.
+    /// Routes the visitor to the appropriate visit memberRoutine for this node type.
     /// </summary>
     /// <typeparam name="T">Return type of the visitor operation</typeparam>
     /// <param name="visitor">Visitor instance to accept</param>
-    /// <returns>Result of the appropriate visitor method</returns>
+    /// <returns>Result of the appropriate visitor memberRoutine</returns>
     public abstract T Accept<T>(ISyntaxTreeVisitor<T> visitor);
 }
 
@@ -88,7 +88,7 @@ public abstract record SyntaxTreeNode(SourceLocation Location) : ISyntaxTreeNode
 /// Enables implementation of various builder passes, analyzers, and transformations
 /// without modifying the AST node classes themselves.
 /// </summary>
-/// <typeparam name="T">Return type for visitor methods, enabling flexible operation results</typeparam>
+/// <typeparam name="T">Return type for visitor memberRoutines, enabling flexible operation results</typeparam>
 /// <remarks>
 /// The visitor pattern provides several benefits:
 /// <list type="bullet">
@@ -108,7 +108,7 @@ public abstract record SyntaxTreeNode(SourceLocation Location) : ISyntaxTreeNode
 /// </remarks>
 public interface ISyntaxTreeVisitor<T>
 {
-    // Expression visitor methods - handle all expression node types
+    // Expression visitor memberRoutines - handle all expression node types
 
     /// <summary>Visits a literal expression node (constants like 42, "hello", true)</summary>
     /// <param name="node">The literal expression to visit</param>
@@ -155,7 +155,7 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the unary expression</returns>
     T VisitUnaryExpression(UnaryExpression node);
 
-    /// <summary>Visits a call expression node (function/method invocations)</summary>
+    /// <summary>Visits a call expression node (function/memberRoutine invocations)</summary>
     /// <param name="node">The call expression to visit</param>
     /// <returns>Result of visiting the call expression</returns>
     T VisitCallExpression(CallExpression node);
@@ -240,10 +240,10 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the type conversion expression</returns>
     T VisitTypeConversionExpression(TypeConversionExpression node);
 
-    /// <summary>Visits a generic method call expression node (methods with type parameters)</summary>
-    /// <param name="node">The generic method call expression to visit</param>
-    /// <returns>Result of visiting the generic method call expression</returns>
-    T VisitGenericMethodCallExpression(GenericMethodCallExpression node);
+    /// <summary>Visits a generic memberRoutine call expression node (memberRoutines with type parameters)</summary>
+    /// <param name="node">The generic memberRoutine call expression to visit</param>
+    /// <returns>Result of visiting the generic memberRoutine call expression</returns>
+    T VisitGenericMemberRoutineCallExpression(GenericMemberRoutineCallExpression node);
 
     /// <summary>Visits a generic member expression node (members with type parameters)</summary>
     /// <param name="node">The generic member expression to visit</param>
@@ -255,7 +255,7 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the bracket-access expression</returns>
     /// <remarks>
     /// This node is a transient parser output; the reclassify pass rewrites it into an
-    /// IndexExpression / GenericMethodCallExpression / GenericMemberExpression before analysis.
+    /// IndexExpression / GenericMemberRoutineCallExpression / GenericMemberExpression before analysis.
     /// Any visitor reaching it indicates the reclassify pass was skipped.
     /// </remarks>
     T VisitBracketAccessExpression(BracketAccessExpression node);
@@ -314,7 +314,7 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the inserted text expression</returns>
     T VisitInsertedTextExpression(InsertedTextExpression node);
 
-    // Statement visitor methods - handle all statement node types
+    // Statement visitor memberRoutines - handle all statement node types
 
     /// <summary>Visits an expression statement node (expressions executed for side effects)</summary>
     /// <param name="node">The expression statement to visit</param>
@@ -420,7 +420,7 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the discard statement</returns>
     T VisitDiscardStatement(DiscardStatement node);
 
-    // Declaration visitor methods - handle all declaration node types
+    // Declaration visitor memberRoutines - handle all declaration node types
 
     /// <summary>Visits a variable declaration node (var declarations)</summary>
     /// <param name="node">The variable declaration to visit</param>
@@ -507,7 +507,7 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the pass statement</returns>
     T VisitPassStatement(PassStatement node);
 
-    // Program visitor method - handle the root program node
+    // Program visitor memberRoutine - handle the root program node
 
     /// <summary>Visits the root program node (build unit)</summary>
     /// <param name="node">The program node to visit</param>

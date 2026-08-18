@@ -80,9 +80,9 @@ public class ImplicitWrapperCopyVarDeclTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>Trivially-storable record (all-primitive) bitwise copies — no error.</summary>
+    /// <summary>Trivially-Assignable record (all-primitive) bitwise copies — no error.</summary>
     [Fact]
-    public void Analyze_VarDecl_TriviallyStorableRecord_IsAccepted()
+    public void Analyze_VarDecl_TriviallyAssignableRecord_IsAccepted()
     {
         string source = """
                         record Point

@@ -22,7 +22,7 @@ import Collections
 ### (raw 128-bit container, no LLVM `fp128`), so results are bit-identical on every
 ### platform without relying on compiler-rt `__*tf*` libcalls.
 @llvm("i128")
-record F128 obeys Numeric, Ordered, Storable, Copyable
+record F128 obeys Numeric, Ordered, Assignable, Copyable
   pass
 
 # ============================================================================

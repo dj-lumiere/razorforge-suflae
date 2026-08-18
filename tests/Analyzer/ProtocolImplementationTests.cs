@@ -12,11 +12,11 @@ public class ProtocolImplementationTests
 {
     #region Basic Protocol Implementation
     /// <summary>
-    /// Verifies semantic analysis behavior for implements all methods without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for implements all memberRoutines without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_ImplementsAllMethods_NoError()
+    public void Analyze_ImplementsAllMemberRoutines_NoError()
     {
         string source = """
                         protocol Displayable
@@ -37,11 +37,11 @@ public class ProtocolImplementationTests
         // Should validate protocol implementation
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for missing protocol method and reports the expected error.
+    /// Verifies semantic analysis behavior for missing protocol memberRoutine and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_MissingProtocolMethod_ReportsError()
+    public void Analyze_MissingProtocolMemberRoutine_ReportsError()
     {
         string source = """
                         protocol Displayable
@@ -57,11 +57,11 @@ public class ProtocolImplementationTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for wrong method signature and reports the expected error.
+    /// Verifies semantic analysis behavior for wrong memberRoutine signature and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_WrongMethodSignature_ReportsError()
+    public void Analyze_WrongMemberRoutineSignature_ReportsError()
     {
         string source = """
                         protocol Displayable
@@ -83,13 +83,13 @@ public class ProtocolImplementationTests
 
     #endregion
 
-    #region Protocol Method Annotations
+    #region Protocol memberRoutine Annotations
     /// <summary>
-    /// Verifies semantic analysis behavior for method missing readonly and reports the expected error.
+    /// Verifies semantic analysis behavior for memberRoutine missing readonly and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_MethodMissingReadonly_ReportsError()
+    public void Analyze_memberRoutineMissingReadonly_ReportsError()
     {
         string source = """
                         protocol Displayable
@@ -109,11 +109,11 @@ public class ProtocolImplementationTests
         // Should warn about missing @readonly annotation
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for method with writable when protocol readonly and reports the expected error.
+    /// Verifies semantic analysis behavior for memberRoutine with writable when protocol readonly and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_MethodWithWritableWhenProtocolReadonly_ReportsError()
+    public void Analyze_memberRoutineWithWritableWhenProtocolReadonly_ReportsError()
     {
         string source = """
                         protocol Displayable
@@ -223,13 +223,13 @@ public class ProtocolImplementationTests
 
     #endregion
 
-    #region Protocol Method Parameters
+    #region Protocol memberRoutine Parameters
     /// <summary>
-    /// Verifies semantic analysis behavior for protocol method with parameters without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for protocol memberRoutine with parameters without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_ProtocolMethodWithParameters_NoError()
+    public void Analyze_ProtocolMemberRoutineWithParameters_NoError()
     {
         string source = """
                         protocol Addable
@@ -249,11 +249,11 @@ public class ProtocolImplementationTests
         Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for protocol method wrong parameter type and reports the expected error.
+    /// Verifies semantic analysis behavior for protocol memberRoutine wrong parameter type and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_ProtocolMethodWrongParameterType_ReportsError()
+    public void Analyze_ProtocolMemberRoutineWrongParameterType_ReportsError()
     {
         string source = """
                         protocol Addable
@@ -336,11 +336,11 @@ public class ProtocolImplementationTests
         Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for protocol extends missing parent method and reports the expected error.
+    /// Verifies semantic analysis behavior for protocol extends missing parent memberRoutine and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_ProtocolExtends_MissingParentMethod_ReportsError()
+    public void Analyze_ProtocolExtends_MissingParentMemberRoutine_ReportsError()
     {
         string source = """
                         protocol Displayable
@@ -574,11 +574,11 @@ public class ProtocolImplementationTests
 
     #region Protocol with Default Values
     /// <summary>
-    /// Verifies semantic analysis behavior for protocol method with default parameter without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for protocol memberRoutine with default parameter without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_ProtocolMethodWithDefaultParameter_NoError()
+    public void Analyze_ProtocolMemberRoutineWithDefaultParameter_NoError()
     {
         string source = """
                         protocol Configurable

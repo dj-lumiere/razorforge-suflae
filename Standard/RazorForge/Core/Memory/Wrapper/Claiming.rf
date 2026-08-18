@@ -3,7 +3,7 @@ module Core
 import BuilderService
 
 ### Represents temporary thread-safe exclusive (read/write) access to data guarded by a {Shared[T, P]}.
-### `Claiming[T]` is the non-storable token produced by `Shared.claim()` for exclusive access. It holds
+### `Claiming[T]` is the non-Assignable token produced by `Shared.claim()` for exclusive access. It holds
 ### the shared {ShareController[T, P]} pointer; entering its `using` scope (`enter`) acquires the
 ### exclusive claimer hold on the controller's access-discipline lock and exiting (`exit`) releases it,
 ### so the lock spans exactly the `using` block. At most one claimer may exist, with no concurrent

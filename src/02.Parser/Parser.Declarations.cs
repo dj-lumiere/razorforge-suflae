@@ -341,19 +341,19 @@ public partial class Parser
         // ===============================================================================
         var nameSb = new System.Text.StringBuilder(name);
 
-        // Structural owner/method capture (name-canonicalization): the parser knows the owner base
-        // identifier (`name`) and each method segment as SEPARATE tokens; record them so consumers
+        // Structural owner/memberRoutine capture (name-canonicalization): the parser knows the owner base
+        // identifier (`name`) and each memberRoutine segment as SEPARATE tokens; record them so consumers
         // never re-split the concatenated `Name` string. `name` still holds the bare owner base here
         // (it isn't reassigned to nameSb.ToString() until after this loop).
         string? memberOwnerName = null;
-        string? memberMethodName = null;
+        string? memberMemberRoutineName = null;
         bool memberHasReceiverTypeArgs = false;
 
         while (Match(type: TokenType.Dot))
         {
-            string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
+            string part = ConsumeMemberRoutineName(errorMessage: "Expected member routine name after '.'");
             memberOwnerName ??= name;
-            memberMethodName = part;
+            memberMemberRoutineName = part;
 
             // If we parsed generic params before the dot, embed them in the name
             // This transforms: name="List", generics=["T"], part="append"
@@ -444,7 +444,7 @@ public partial class Parser
         // PHASE 2c: Parse failable marker (!)
         // ===============================================================================
         // Support ! suffix for failable routines (can appear after qualified name).
-        // The `!` is a separate Bang token — ConsumeIdentifier/ConsumeMethodName never fold it
+        // The `!` is a separate Bang token — ConsumeIdentifier/ConsumeMemberRoutineName never fold it
         // into the name, so the stored name is always bare and only this flag records failability.
         bool isFailable = Match(type: TokenType.Bang);
 
@@ -585,7 +585,7 @@ public partial class Parser
             IsWiredMemberRoutine: _routineNameWired)
         {
             OwnerName = memberOwnerName,
-            MethodName = memberMethodName,
+            MemberRoutineName = memberMemberRoutineName,
             HasReceiverTypeArgs = memberHasReceiverTypeArgs,
             ReceiverType = memberOwnerName != null
                 ? new TypeExpression(Name: memberOwnerName, GenericArguments: receiverArgExprs,

@@ -8,7 +8,7 @@ module Core
 ### implement `AtomicType` because hardware atomic operations on 256-bit values
 ### are not available.
 @llvm("i256")
-record S256 obeys SignedIntegral, Ordered, ConstCompatible, Storable, Copyable
+record S256 obeys SignedIntegral, Ordered, ConstCompatible, Assignable, Copyable
   pass
 
 # Constants for S256 limits

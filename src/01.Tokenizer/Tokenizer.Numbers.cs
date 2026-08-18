@@ -3,7 +3,7 @@ using Compiler.Diagnostics;
 namespace Compiler.Tokenizer;
 
 /// <summary>
-/// Partial class containing numeric literal scanning methods for the unified tokenizer.
+/// Partial class containing numeric literal scanning memberRoutines for the unified tokenizer.
 /// </summary>
 /// <remarks>
 /// Key language-conditional: unsuffixed defaults differ between RF and SF.

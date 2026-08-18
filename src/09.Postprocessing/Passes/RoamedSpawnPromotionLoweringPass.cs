@@ -164,12 +164,12 @@ internal sealed class RoamedSpawnPromotionLoweringPass(PostprocessingContext ctx
             return null;
         }
 
-        RoutineInfo? promote = Registry.LookupMethod(type: rec,
-            methodName: RuntimeContract.RoamedMethod.Promote);
+        RoutineInfo? promote = Registry.LookupMemberRoutine(type: rec,
+            memberRoutineName: RuntimeContract.RoamedMemberRoutine.Promote);
         if (promote is null) return null;
 
         var callee = new MemberExpression(Object: handle,
-            MemberName: RuntimeContract.RoamedMethod.Promote, Location: handle.Location)
+            MemberName: RuntimeContract.RoamedMemberRoutine.Promote, Location: handle.Location)
         {
             ResolvedType = rec
         };

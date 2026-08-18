@@ -242,10 +242,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for monomorphized method call has concrete return metadata.
+    /// Verifies semantic analysis behavior for monomorphized memberRoutine call has concrete return metadata.
     /// </summary>
     [Fact]
-    public void Analyze_MonomorphizedMethodCall_HasConcreteReturnMetadata()
+    public void Analyze_MonomorphizedMemberRoutineCall_HasConcreteReturnMetadata()
     {
         string source = """
                         record Box[T]
@@ -763,10 +763,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies code generation behavior for chained method call on call receiver and emits the expected IR.
+    /// Verifies code generation behavior for chained memberRoutine call on call receiver and emits the expected IR.
     /// </summary>
     [Fact]
-    public void Codegen_ChainedMethodCall_OnCallReceiver_GeneratesIr()
+    public void Codegen_ChainedMemberRoutineCall_OnCallReceiver_GeneratesIr()
     {
         string source = """
                         record Box[T]
@@ -800,10 +800,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies code generation behavior for wrapper method call uses concrete generic return type.
+    /// Verifies code generation behavior for wrapper memberRoutine call uses concrete generic return type.
     /// </summary>
     [Fact]
-    public void Codegen_WrapperMethodCall_UsesConcreteGenericReturnType()
+    public void Codegen_WrapperMemberRoutineCall_UsesConcreteGenericReturnType()
     {
         string source = """
                         dangerous routine test(ptr: Hijacked[S64]) -> S64
@@ -830,10 +830,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies code generation behavior for method conversion call uses semantic return type.
+    /// Verifies code generation behavior for memberRoutine conversion call uses semantic return type.
     /// </summary>
     [Fact]
-    public void Codegen_MethodConversionCall_UsesSemanticReturnType()
+    public void Codegen_memberRoutineConversionCall_UsesSemanticReturnType()
     {
         string source = """
                         routine helper(value: S32) -> S32
@@ -1189,10 +1189,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies code generation behavior for typewise builder service method uses semantic receiver type.
+    /// Verifies code generation behavior for typewise builder service memberRoutine uses semantic receiver type.
     /// </summary>
     [Fact]
-    public void Codegen_TypewiseBuilderServiceMethod_UsesSemanticReceiverType()
+    public void Codegen_TypewiseBuilderServiceMemberRoutine_UsesSemanticReceiverType()
     {
         string source = """
                         import BuilderService
@@ -1259,10 +1259,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for universal owner method is monomorphized on demand.
+    /// Verifies semantic analysis behavior for universal owner memberRoutine is monomorphized on demand.
     /// </summary>
     [Fact]
-    public void Analyze_UniversalOwnerMethod_IsMonomorphizedOnDemand()
+    public void Analyze_UniversalOwnerMemberRoutine_IsMonomorphizedOnDemand()
     {
         string source = """
                         dangerous routine start(value: S64) -> Hijacked[S64]
@@ -1488,7 +1488,7 @@ public class CompilerPipelineLoweringTests
                 ContainsLambda(expression: conditional.FalseExpression),
             CreatorExpression creator => creator.MemberVariables.Any(predicate: mv =>
                 ContainsLambda(expression: mv.Value)),
-            GenericMethodCallExpression generic => ContainsLambda(expression: generic.Object) ||
+            GenericMemberRoutineCallExpression generic => ContainsLambda(expression: generic.Object) ||
                                                    generic.Arguments.Any(ContainsLambda),
             NamedArgumentExpression named => ContainsLambda(expression: named.Value),
             WithExpression withExpr => ContainsLambda(expression: withExpr.Base) ||

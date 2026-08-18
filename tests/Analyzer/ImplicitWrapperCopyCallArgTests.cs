@@ -79,9 +79,9 @@ public class ImplicitWrapperCopyCallArgTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>Passing a trivially-storable record by name is accepted.</summary>
+    /// <summary>Passing a trivially-Assignable record by name is accepted.</summary>
     [Fact]
-    public void Analyze_CallArg_TriviallyStorableRecord_IsAccepted()
+    public void Analyze_CallArg_TriviallyAssignableRecord_IsAccepted()
     {
         string source = """
                         record Point

@@ -610,7 +610,7 @@ public partial class LlvmCodeGenerator
     {
         TypeInfo? textType = _registry.LookupType(name: "Text");
         RoutineInfo? textEq = textType != null
-            ? _registry.LookupMethod(type: textType, methodName: "eq")
+            ? _registry.LookupMemberRoutine(type: textType, memberRoutineName: "eq")
             : null;
         string eqFuncName = textEq != null ? MangleRoutineName(routine: textEq) : "Text_eq";
         EmitLine(sb: sb,
@@ -763,7 +763,7 @@ public partial class LlvmCodeGenerator
 
         // Result/Lookup `is Crashable` is expanded by CrashableExpansionPass into per-error-type
         // `type_id == …` checks (and payload extraction via CarrierPayloadExpression) before codegen,
-        // so a carrier subject must not reach this method with its hardcoded { i64, i64 } layout.
+        // so a carrier subject must not reach this memberRoutine with its hardcoded { i64, i64 } layout.
         if (subjectType != null && IsCarrierType(type: subjectType))
         {
             throw new InvalidOperationException(
@@ -968,7 +968,7 @@ public partial class LlvmCodeGenerator
         // Result/Lookup narrowed-else extraction is lowered by PatternLoweringPass into a
         // CarrierPayloadExpression (which loads the inner value at its TRUE width via the carrier's own
         // LLVM type — see EmitCarrierPayloadExpression), so a Result/Lookup subject must not reach this
-        // method. The old inline path here assumed a { i64, i64 } layout and `trunc i64`-truncated wide
+        // memberRoutine. The old inline path here assumed a { i64, i64 } layout and `trunc i64`-truncated wide
         // inner values — exactly the layout assumption codegen must never make.
         else
         {

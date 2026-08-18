@@ -25,7 +25,7 @@ public partial class Parser
             // list or a value index. It parses the bracket contents uniformly as expressions
             // and emits a BracketAccessExpression; the BracketReclassifyPass (run before the
             // main semantic resolve) rewrites this into an IndexExpression /
-            // GenericMethodCallExpression / GenericMemberExpression.
+            // GenericMemberRoutineCallExpression / GenericMemberExpression.
             //
             // A failable `!` may precede the brackets (func![T](x)); it is recorded as
             // BracketAccessExpression.IsFailable, never baked into a name.
@@ -111,7 +111,7 @@ public partial class Parser
             else if (Match(type: TokenType.QuestionDot))
             {
                 // Optional chaining: obj?.member
-                string member = ConsumeMethodName(errorMessage: "Expected member name after '?.'");
+                string member = ConsumeMemberRoutineName(errorMessage: "Expected member name after '?.'");
                 expr = new OptionalMemberExpression(Object: expr,
                     MemberName: member,
                     Location: expr.Location);
@@ -141,16 +141,16 @@ public partial class Parser
             }
             else if (Match(type: TokenType.Dot))
             {
-                // Member access. The wired marker `$` (me.store(), me.emit!()) is a separate Dollar
+                // Member access. The wired marker `$` (me.assign(), me.emit!()) is a separate Dollar
                 // token — consume it here; the resolved routine's own IsWiredMemberRoutine carries the
                 // wired attribute, and lookup keys on the BARE name, so the call name stays bare.
                 Match(type: TokenType.Dollar);
                 // Consume the bare member name WITHOUT folding a trailing `!` into it (unlike
-                // ConsumeMethodName, which the declaration parser still uses): the `!` stays a separate
+                // ConsumeMemberRoutineName, which the declaration parser still uses): the `!` stays a separate
                 // Bang token so the failable-call / generic-failable handling below records it as a
-                // structured MemberExpression.IsFailable / GenericMethodCallExpression flag.
+                // structured MemberExpression.IsFailable / GenericMemberRoutineCallExpression flag.
                 if (!Check(type: TokenType.Identifier) &&
-                    !IsKeywordValidAsMethodName(CurrentToken.Type))
+                    !IsKeywordValidAsMemberRoutineName(CurrentToken.Type))
                 {
                     throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
                         message: "Expected member name after '.'");
@@ -159,11 +159,11 @@ public partial class Parser
                 string member = CurrentToken.Text;
                 Advance();
 
-                // Generic member access / call: obj.method[T](...) or obj.method![T](...).
-                // Parsed uniformly (no generic-vs-index decision): the `.method` folds into a
+                // Generic member access / call: obj.MemberRoutine[T](...) or obj.MemberRoutine![T](...).
+                // Parsed uniformly (no generic-vs-index decision): the `.MemberRoutine` folds into a
                 // MemberExpression and the brackets attach as a BracketAccessExpression whose
                 // Object is that MemberExpression. BracketReclassifyPass rewrites this into a
-                // GenericMethodCallExpression / GenericMemberExpression. A `!` before the
+                // GenericMemberRoutineCallExpression / GenericMemberExpression. A `!` before the
                 // brackets is the memory-op marker, recorded as BracketAccessExpression.IsFailable.
                 if ((Check(type: TokenType.Bang) && PeekToken(offset: 1)
                         .Type == TokenType.LeftBracket) ||
@@ -202,10 +202,10 @@ public partial class Parser
                 }
 
                 // Regular member access
-                // Check for failable method call with ! suffix
+                // Check for failable memberRoutine call with ! suffix
                 if (Match(type: TokenType.Bang) && Match(type: TokenType.LeftParen))
                 {
-                    // Failable method call: obj.method!(args)
+                    // Failable memberRoutine call: obj.MemberRoutine!(args)
                     // Represented as CallExpression with MemberExpression callee
                     List<Expression> args = ParseArgumentList();
                     Consume(type: TokenType.RightParen,
@@ -220,7 +220,7 @@ public partial class Parser
                 }
                 else if (Match(type: TokenType.LeftParen))
                 {
-                    // Regular method call: obj.method(args)
+                    // Regular memberRoutine call: obj.MemberRoutine(args)
                     // Represented as CallExpression with MemberExpression callee
                     List<Expression> args = ParseArgumentList();
                     Consume(type: TokenType.RightParen,

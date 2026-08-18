@@ -7,7 +7,7 @@ namespace Compiler.Parser;
 
 /// <summary>
 /// Reclassifies the parser's uniform <see cref="BracketAccessExpression"/> nodes into the existing
-/// downstream node types (<see cref="IndexExpression"/>, <see cref="GenericMethodCallExpression"/>,
+/// downstream node types (<see cref="IndexExpression"/>, <see cref="GenericMemberRoutineCallExpression"/>,
 /// <see cref="GenericMemberExpression"/>).
 ///
 /// The parser deliberately does NOT decide whether <c>foo[...]</c> is a generic instantiation or a
@@ -58,7 +58,7 @@ internal static class BracketReclassifyPass
             .Select(selector: ExpressionToTypeArg)
             .ToList();
 
-        // When the parser folded a `.member` into the Object (obj.method[T](...)), the receiver and
+        // When the parser folded a `.member` into the Object (obj.MemberRoutine[T](...)), the receiver and
         // member name are recovered from that MemberExpression; otherwise this is a free reference
         // (foo[T](x)) whose Object is the identifier and whose member name is that identifier.
         Expression receiver;
@@ -83,8 +83,8 @@ internal static class BracketReclassifyPass
 
         if (node.CallArgs is not null)
         {
-            return new GenericMethodCallExpression(Object: receiver,
-                MethodName: memberName,
+            return new GenericMemberRoutineCallExpression(Object: receiver,
+                MemberRoutineName: memberName,
                 TypeArguments: typeArgs,
                 Arguments: node.CallArgs,
                 IsMemoryOperation: node.IsFailable,
@@ -109,7 +109,7 @@ internal static class BracketReclassifyPass
             BinaryExpression { Operator: BinaryOperator.TrueDivide } => true,
             // A nested generic instantiation used as a type argument (Array[U64, N]).
             GenericMemberExpression => true,
-            GenericMethodCallExpression => true,
+            GenericMemberRoutineCallExpression => true,
             _ => false
         };
     }
@@ -145,8 +145,8 @@ internal static class BracketReclassifyPass
                     GenericArguments: gme.TypeArguments,
                     Location: gme.Location);
 
-            case GenericMethodCallExpression gmc:
-                return new TypeExpression(Name: gmc.MethodName,
+            case GenericMemberRoutineCallExpression gmc:
+                return new TypeExpression(Name: gmc.MemberRoutineName,
                     GenericArguments: gmc.TypeArguments,
                     Location: gmc.Location);
 

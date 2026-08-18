@@ -22,7 +22,7 @@ public partial class LlvmCodeGenerator
     /// correct field); otherwise the positional argument at the field's index is used. Returns null
     /// when neither is available (the field keeps its zero value).
     /// </summary>
-    private static Expression? FindConstructorArgForField(List<Expression> arguments,
+    private static Expression? FindConstructorArgForMemberVariable(List<Expression> arguments,
         string fieldName, int positionalIndex)
     {
         foreach (Expression a in arguments)
@@ -183,7 +183,7 @@ public partial class LlvmCodeGenerator
             line: $"  {tagPtr} = getelementptr {variantLlvm}, ptr {slot}, i32 0, i32 0");
         EmitLine(sb: sb, line: $"  store i64 {typeId}, ptr {tagPtr}");
 
-        // None arm (or any zero-sized payload type) carries no storable value — only the
+        // None arm (or any zero-sized payload type) carries no Assignable value — only the
         // tag matters. Skip both value emission and the payload store. The user-level form
         // `None()` parses as a CreatorExpression but has nothing to construct; treating it
         // as a pure marker mirrors how the None type behaves elsewhere.
@@ -214,7 +214,7 @@ public partial class LlvmCodeGenerator
         // Empty creator (e.g. `Set[T]()` from collection-literal lowering) must route through
         // the type's no-arg `create()` overload — entities like Set/Dict allocate heap buffers
         // (ctrl/slot arrays) inside create that a raw rf_allocate_dynamic + zero-init would skip,
-        // leaving the entity in an invalid state that crashes on the first method call.
+        // leaving the entity in an invalid state that crashes on the first memberRoutine call.
         if (expr.MemberVariables.Count == 0)
         {
             return EmitCollectionCreate(sb: sb, resolvedType: entity);
@@ -445,7 +445,7 @@ public partial class LlvmCodeGenerator
         return EmitMemberwiseRecordStruct(sb: sb, record: record,
             valueForField: (i, field) =>
             {
-                Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
+                Expression? fieldArg = FindConstructorArgForMemberVariable(arguments: arguments,
                     fieldName: field.Name, positionalIndex: i);
                 if (fieldArg == null) return null;
                 Expression arg = fieldArg is NamedArgumentExpression named ? named.Value : fieldArg;
@@ -478,7 +478,7 @@ public partial class LlvmCodeGenerator
         for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
             MemberVariableInfo field = entity.MemberVariables[index: i];
-            Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
+            Expression? fieldArg = FindConstructorArgForMemberVariable(arguments: arguments,
                 fieldName: field.Name, positionalIndex: i);
             if (fieldArg == null)
                 continue;
@@ -519,7 +519,7 @@ public partial class LlvmCodeGenerator
         for (int i = 0; i < crashable.MemberVariables.Count; i++)
         {
             // Named arguments may be written in any order; bind each field by matching name.
-            Expression? fieldArg = FindConstructorArgForField(arguments: arguments,
+            Expression? fieldArg = FindConstructorArgForMemberVariable(arguments: arguments,
                 fieldName: crashable.MemberVariables[index: i].Name, positionalIndex: i);
             if (fieldArg == null)
                 continue;
@@ -620,7 +620,7 @@ public partial class LlvmCodeGenerator
                 return loaded;
             }
             // Field not on inner record — fall through to entity branch below in case the
-            // wrapper has a method forwarder for this name.
+            // wrapper has a memberRoutine forwarder for this name.
         }
 
         // Wrapper type forwarding: Viewing[T], Modifying[T], etc.

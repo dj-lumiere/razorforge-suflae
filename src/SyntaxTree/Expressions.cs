@@ -22,7 +22,7 @@ namespace SyntaxTree;
 /// <item>Variable access and function calls</item>
 /// <item>Arithmetic and logical operations</item>
 /// <item>Complex operations: member access, indexing, type conversions</item>
-/// <item>Memory operations: slice creators, memory slice method calls</item>
+/// <item>Memory operations: slice creators, memory slice memberRoutine calls</item>
 /// <item>Danger zone operations: raw memory access, type punning</item>
 /// </list>
 /// After semantic analysis, ResolvedType contains the computed type of this expression.
@@ -267,7 +267,7 @@ public record IdentifierExpression(string Name, SourceLocation Location, string?
 
 /// <summary>
 /// Expression representing a compound assignment operation (e.g., a += b).
-/// The semantic analyzer dispatches this to an in-place wired method (iadd, etc.)
+/// The semantic analyzer dispatches this to an in-place wired memberRoutine (iadd, etc.)
 /// or falls back to create-and-assign (a = a.add(b)) when no in-place operator exists.
 /// </summary>
 /// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
@@ -344,20 +344,20 @@ public record UnaryExpression(UnaryOperator Operator, Expression Operand, Source
 }
 
 /// <summary>
-/// Expression that invokes a function or method with zero or more arguments.
-/// Represents function calls, method invocations, and creator calls.
+/// Expression that invokes a function or memberRoutine with zero or more arguments.
+/// Represents function calls, memberRoutine invocations, and creator calls.
 /// </summary>
-/// <param name="Callee">Expression that evaluates to a callable (function, method, lambda)</param>
+/// <param name="Callee">Expression that evaluates to a callable (function, memberRoutine, lambda)</param>
 /// <param name="Arguments">List of argument expressions to pass to the callable</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Supports various call patterns:
 /// <list type="bullet">
 /// <item>Function calls: routine(a, b, c)</item>
-/// <item>Method calls: me.method(x, y)</item>
+/// <item>memberRoutine calls: me.MemberRoutine(x, y)</item>
 /// <item>Creator calls: Point(x, y)</item>
 /// <item>Lambda calls: ((x) => x + 1)(42)</item>
-/// <item>Operator method calls: me.add(you)</item>
+/// <item>Operator memberRoutine calls: me.add(you)</item>
 /// </list>
 /// </remarks>
 public record CallExpression(
@@ -400,7 +400,7 @@ public record CallExpression(
 
     /// <summary>
     /// The target type being constructed or converted to, when this call-like node represents
-    /// construction rather than a plain routine/method invocation.
+    /// construction rather than a plain routine/memberRoutine invocation.
     /// </summary>
     public TypeInfo? ConstructedType { get; set; }
 
@@ -411,10 +411,10 @@ public record CallExpression(
     public bool IsCollectionLiteral { get; set; }
 
     /// <summary>
-    /// Method-level type arguments, set by <c>GenericCallLoweringPass</c> when lowering a
-    /// <c>GenericMethodCallExpression</c> that has explicit type parameters at the call site
+    /// memberRoutine-level type arguments, set by <c>GenericCallLoweringPass</c> when lowering a
+    /// <c>GenericMemberRoutineCallExpression</c> that has explicit type parameters at the call site
     /// (e.g., <c>buf.read![U8](offset)</c> -> <c>TypeArguments = [U8]</c>).
-    /// Null for calls with no method-level type args.
+    /// Null for calls with no memberRoutine-level type args.
     /// </summary>
     public List<TypeExpression>? TypeArguments { get; set; }
 
@@ -422,7 +422,7 @@ public record CallExpression(
     /// True when this call was synthesized by a compiler lowering pass (e.g.
     /// <c>ControlFlowLoweringPass</c> emitting <c>iter.iter()</c> / <c>iter.try_emit()</c>
     /// for a for-loop). SA uses this to skip checks meant to gate user code from invoking
-    /// dunder-private methods directly.
+    /// dunder-private memberRoutines directly.
     /// </summary>
     public bool IsSynthesizedLowering { get; set; }
 }
@@ -677,8 +677,8 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
 
     /// <summary>
     /// When this IndexExpression is the target of an assignment, set by OperatorLoweringPass
-    /// to the method-generic-resolved <c>setitem</c>/<c>setitem!</c> routine. Codegen uses
-    /// this in place of a fresh registry lookup so method-level generics (e.g.
+    /// to the memberRoutine-generic-resolved <c>setitem</c>/<c>setitem!</c> routine. Codegen uses
+    /// this in place of a fresh registry lookup so memberRoutine-level generics (e.g.
     /// <c>BitList.setitem![I]</c> -> <c>BitList.setitem![S64]</c>) dispatch to the
     /// monomorphized entry.
     /// </summary>
@@ -839,7 +839,7 @@ public record LambdaExpression(
 #region Function Call and Access Expressions
 
 /// <summary>
-/// Represents a parameter definition for functions, methods, and lambdas.
+/// Represents a parameter definition for functions, memberRoutines, and lambdas.
 /// Includes optional type annotation and default value for flexible parameter handling.
 /// </summary>
 /// <param name="Name">Parameter name used for binding in the function body</param>
@@ -915,17 +915,17 @@ public record TypeExpression(
 
 /// <summary>
 /// Expression that performs explicit type conversion between compatible types.
-/// Supports both function-style and method-style conversion syntax.
+/// Supports both function-style and memberRoutine-style conversion syntax.
 /// </summary>
 /// <param name="TargetType">Name of the target type to convert to</param>
 /// <param name="Expression">Source expression to convert</param>
-/// <param name="IsMethodStyle">true for method-style (x.s32!()), false for function-style (s32!(x))</param>
+/// <param name="IsMemberRoutineStyle">true for memberRoutine-style (x.s32!()), false for function-style (s32!(x))</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Type conversion styles:
 /// <list type="bullet">
 /// <item>Function-style: s32!(3.14), bool!(1)</item>
-/// <item>Method-style: 3.14.s32!(), 1.bool!()</item>
+/// <item>memberRoutine-style: 3.14.s32!(), 1.bool!()</item>
 /// <item>Safety: explicit conversions may fail at runtime</item>
 /// <item>Checked: conversion failures throw exceptions</item>
 /// </list>
@@ -934,7 +934,7 @@ public record TypeExpression(
 public record TypeConversionExpression(
     string TargetType,
     Expression Expression,
-    bool IsMethodStyle,
+    bool IsMemberRoutineStyle,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -959,26 +959,26 @@ public record TypeConversionExpression(
 #region Memory Operation Expressions
 
 /// <summary>
-/// Expression representing generic method calls with type parameters.
+/// Expression representing generic memberRoutine calls with type parameters.
 /// Used for generic operations like read!&lt;T&gt;() and write!&lt;T&gt;().
 /// </summary>
 /// <param name="Object">Expression representing the object being called</param>
-/// <param name="MethodName">Name of the generic method</param>
-/// <param name="TypeArguments">List of type arguments for the generic method</param>
-/// <param name="Arguments">List of argument expressions passed to the method</param>
-/// <param name="IsMemoryOperation">Whether this method call uses ! syntax (memory operation)</param>
+/// <param name="memberRoutineName">Name of the generic memberRoutine</param>
+/// <param name="TypeArguments">List of type arguments for the generic memberRoutine</param>
+/// <param name="Arguments">List of argument expressions passed to the memberRoutine</param>
+/// <param name="IsMemoryOperation">Whether this memberRoutine call uses ! syntax (memory operation)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Generic method calls enable type-safe slice operations:
+/// Generic memberRoutine calls enable type-safe slice operations:
 /// <list type="bullet">
 /// <item>buffer.read!&lt;s32&gt;(0) - read s32 at offset 0</item>
 /// <item>buffer.write!&lt;f64&gt;(8, 3.14) - write f64 at offset 8</item>
 /// <item>Type arguments specify the data type for the operation</item>
 /// </list>
 /// </remarks>
-public record GenericMethodCallExpression(
+public record GenericMemberRoutineCallExpression(
     Expression Object,
-    string MethodName,
+    string MemberRoutineName,
     List<TypeExpression> TypeArguments,
     List<Expression> Arguments,
     bool IsMemoryOperation,
@@ -987,7 +987,7 @@ public record GenericMethodCallExpression(
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
-        return visitor.VisitGenericMethodCallExpression(node: this);
+        return visitor.VisitGenericMemberRoutineCallExpression(node: this);
     }
 
     /// <summary>
@@ -997,8 +997,8 @@ public record GenericMethodCallExpression(
     public bool IsCollectionLiteral { get; set; }
 
     /// <summary>
-    /// The fully resolved RoutineInfo from semantic analysis (with owner-level and method-level
-    /// generic substitution applied). Set for generic method calls on objects (e.g., obj.method[U](args)).
+    /// The fully resolved RoutineInfo from semantic analysis (with owner-level and memberRoutine-level
+    /// generic substitution applied). Set for generic memberRoutine calls on objects (e.g., obj.MemberRoutine[U](args)).
     /// </summary>
     public RoutineInfo? ResolvedRoutine { get; set; }
 
@@ -1040,7 +1040,7 @@ public record GenericMemberExpression(
 /// brackets are a generic type-argument list or a value index — it parses the bracket contents
 /// uniformly as expressions and the <c>BracketReclassifyPass</c>
 /// reclassifies every such node into an existing <see cref="IndexExpression"/>,
-/// <see cref="GenericMethodCallExpression"/>, or <see cref="GenericMemberExpression"/> before the
+/// <see cref="GenericMemberRoutineCallExpression"/>, or <see cref="GenericMemberExpression"/> before the
 /// main semantic resolve runs. No downstream consumer should ever observe this node.
 /// </summary>
 /// <param name="Object">Expression the brackets apply to (identifier, member access, etc.).</param>
@@ -1055,8 +1055,8 @@ public record BracketAccessExpression(
 {
     /// <summary>
     /// True when the failable <c>!</c> marker preceded the brackets or the call parens
-    /// (e.g. <c>foo![T](x)</c> / <c>obj.method![T](x)</c>). Maps to
-    /// <see cref="GenericMethodCallExpression.IsMemoryOperation"/> after reclassification.
+    /// (e.g. <c>foo![T](x)</c> / <c>obj.MemberRoutine![T](x)</c>). Maps to
+    /// <see cref="GenericMemberRoutineCallExpression.IsMemoryOperation"/> after reclassification.
     /// </summary>
     public bool IsFailable { get; init; }
 

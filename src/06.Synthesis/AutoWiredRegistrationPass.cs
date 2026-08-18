@@ -21,7 +21,7 @@ namespace Compiler.Synthesis;
 internal sealed class AutoWiredRegistrationPass
 {
     private const string EquatableProtocolName = "Equatable";
-    private const string CreateMethodName = "create";
+    private const string CreateMemberRoutineName = "create";
 
     private readonly TypeRegistry _registry;
 
@@ -77,9 +77,9 @@ internal sealed class AutoWiredRegistrationPass
                 : null;
         }
 
-        foreach (TypeSymbol type in _registry.GetTypesWithMethods())
+        foreach (TypeSymbol type in _registry.GetTypesWithMemberRoutines())
         {
-            var existingMethods = _registry.GetMethodsForType(type: type)
+            var existingMemberRoutines = _registry.GetMemberRoutinesForType(type: type)
                                            .ToList();
 
             // All types: represent(), diagnose() — auto-generated, overridable
@@ -88,11 +88,11 @@ internal sealed class AutoWiredRegistrationPass
                 MaybeRegisterWired(owner: type,
                     name: "represent",
                     returnType: textType,
-                    existingMethods: existingMethods);
+                    existingMemberRoutines: existingMemberRoutines);
                 MaybeRegisterWired(owner: type,
                     name: "diagnose",
                     returnType: textType,
-                    existingMethods: existingMethods);
+                    existingMemberRoutines: existingMemberRoutines);
             }
 
             // Serializable: serialize() -> SerialValue is UNIVERSAL — every value has one so the derived
@@ -107,7 +107,7 @@ internal sealed class AutoWiredRegistrationPass
                 MaybeRegisterWired(owner: type,
                     name: "serialize",
                     returnType: serialValueType,
-                    existingMethods: existingMethods);
+                    existingMemberRoutines: existingMemberRoutines);
             }
 
             // Unified destructor: every non-wrapper type gets a `dangerous` `destroy()`.
@@ -118,7 +118,7 @@ internal sealed class AutoWiredRegistrationPass
             if (noneType != null && !IsWrapperType(type: type))
             {
                 MaybeRegisterDestroy(owner: type, noneType: noneType,
-                    existingMethods: existingMethods);
+                    existingMemberRoutines: existingMemberRoutines);
             }
 
             // Cycle-collector per-type hooks: every non-wrapper entity gets `roam_trace_impl()`
@@ -128,14 +128,14 @@ internal sealed class AutoWiredRegistrationPass
             if (noneType != null && type.Category == TypeCategory.Entity && !IsWrapperType(type: type))
             {
                 MaybeRegisterRoamHook(owner: type, name: "roam_trace_impl", noneType: noneType,
-                    existingMethods: existingMethods);
+                    existingMemberRoutines: existingMemberRoutines);
                 MaybeRegisterRoamHook(owner: type, name: "roam_free_impl", noneType: noneType,
-                    existingMethods: existingMethods);
+                    existingMemberRoutines: existingMemberRoutines);
             }
 
             // All types: BuilderService metadata routines
             BuilderInfoProvider.RegisterRoutinesOnType(type: type,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: _registry,
                 textType: textType,
                 boolType: boolType,
@@ -162,33 +162,33 @@ internal sealed class AutoWiredRegistrationPass
                                                ?? type.Name);
                     // DECISION (2026-06-14): records do NOT auto-derive eq / hash. `obeys Equatable`
                     // / `Hashable` on a record is a PROMISE the author fulfils by HAND-WRITING the
-                    // method — field-delegated synthesis is fragile (breaks when a field type lacks the
-                    // method, e.g. an Atomic / lock-flag field) and is semantically wrong for opaque /
+                    // memberRoutine — field-delegated synthesis is fragile (breaks when a field type lacks the
+                    // memberRoutine, e.g. an Atomic / lock-flag field) and is semantically wrong for opaque /
                     // container types whose logical value is not their field tuple. Auto eq / hash is
                     // reserved for tuple / choice / flags (simple, unambiguous tag/element compare). The
                     // stdlib's equatable/hashable struct records (Complex, Integer, Decimal, C32/64/128)
                     // already hand-write these. store (below) + represent / diagnose stay auto-derived.
 
                     // `store` / `clone` (Assignable): their bodies are `return me` /
-                    // `return me.store()` — NOT field-based — so they are safe even for @llvm-backed
+                    // `return me.assign()` — NOT field-based — so they are safe even for @llvm-backed
                     // opaque primitives (S64, Bool, F64, …), unlike the field-based hash/eq above.
                     // Registering them for primitives lets explicit `clone()`/`store()` calls (e.g.
                     // from `List.add_range`) link; the trivial body is inlined away by LLVM. Wrapper
                     // types (Retained/Tracked/…) keep their own custom retain-aware copy, so excluded.
-                    // `store` is registered for any Storable-obeyer (incl. Copyable types, which obey
-                    // Storable transitively). Deep `copy` is Copyable-ONLY — Storable-only raw-pointer
+                    // `store` is registered for any Assignable-obeyer (incl. Copyable types, which obey
+                    // Assignable transitively). Deep `copy` is Copyable-ONLY — Assignable-only raw-pointer
                     // types (Hijacked/CPtr) can bitwise-`store` but have no meaningful deep copy.
                     if (!type.IsNone && !isWrapper &&
-                        ObeysProtocol(type: type, protocolName: "Storable"))
+                        ObeysProtocol(type: type, protocolName: "Assignable"))
                     {
-                        MaybeRegisterWired(owner: type, name: "store",
-                            returnType: type, existingMethods: existingMethods);
+                        MaybeRegisterWired(owner: type, name: "assign",
+                            returnType: type, existingMemberRoutines: existingMemberRoutines);
                     }
                     if (!type.IsNone && !isWrapper &&
                         ObeysProtocol(type: type, protocolName: "Copyable"))
                     {
                         MaybeRegisterWired(owner: type, name: "copy",
-                            returnType: type, existingMethods: existingMethods);
+                            returnType: type, existingMemberRoutines: existingMemberRoutines);
                     }
 
                     // A record that OPTS IN via `obeys Equatable` / `Hashable` gets a field-walk `eq` /
@@ -203,7 +203,7 @@ internal sealed class AutoWiredRegistrationPass
                         ObeysProtocol(type: type, protocolName: EquatableProtocolName))
                     {
                         MaybeRegisterWiredWithParam(owner: type, name: "eq", paramName: "you",
-                            paramType: type, returnType: boolType, existingMethods: existingMethods);
+                            paramType: type, returnType: boolType, existingMemberRoutines: existingMemberRoutines);
                     }
                     // `Hashable` requires ONLY the keyed `hash(k0, k1)` (what Set/Dict use); there is no
                     // 0-arg `hash()` on value types (scalars supply only the keyed form), so field-walking
@@ -212,7 +212,7 @@ internal sealed class AutoWiredRegistrationPass
                         ObeysProtocol(type: type, protocolName: "Hashable"))
                     {
                         MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     break;
@@ -230,13 +230,13 @@ internal sealed class AutoWiredRegistrationPass
                     // Skip generic definitions (their resolved instances get synthesis).
                     if (type is EntityTypeInfo entityForCreate &&
                         !type.IsGenericDefinition &&
-                        !existingMethods.Any(predicate: m =>
-                            m.Name == CreateMethodName &&
+                        !existingMemberRoutines.Any(predicate: m =>
+                            m.Name == CreateMemberRoutineName &&
                             m.Parameters.Count == entityForCreate.MemberVariables.Count &&
                             entityForCreate.MemberVariables.Select(selector: mv => mv.Name)
                                            .SequenceEqual(second: m.Parameters.Select(selector: p => p.Name))))
                     {
-                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMemberRoutineName)
                         {
                             Kind = RoutineKind.Creator,
                             OwnerType = type,
@@ -266,9 +266,9 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "hash",
                             returnType: u64Type,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                         MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     if (boolType != null)
@@ -278,25 +278,25 @@ internal sealed class AutoWiredRegistrationPass
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     // Choices auto-derive Assignable (scalar tag layout).
                     MaybeRegisterWired(owner: type,
-                        name: "store",
+                        name: "assign",
                         returnType: type,
-                        existingMethods: existingMethods);
+                        existingMemberRoutines: existingMemberRoutines);
                     MaybeRegisterWired(owner: type,
                         name: "copy",
                         returnType: type,
-                        existingMethods: existingMethods);
+                        existingMemberRoutines: existingMemberRoutines);
 
                     // S64.create(from: ChoiceType) — choice_val.S64() desugars to S64.create(from: choice_val)
                     if (s64Type != null && !type.IsGenericDefinition &&
                         _registry.LookupRoutineOverload(baseName: "S64.create",
                             argTypes: [type]) == null)
                     {
-                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMemberRoutineName)
                         {
                             Kind = RoutineKind.Creator,
                             OwnerType = s64Type,
@@ -315,7 +315,7 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWiredFailable(owner: type,
                             name: "create!",
                             returnType: type,
-                            existingMethods: existingMethods,
+                            existingMemberRoutines: existingMemberRoutines,
                             param: ("from", textType),
                             kind: RoutineKind.Creator);
                     }
@@ -328,7 +328,7 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "all_cases",
                             returnType: listMeType,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     break;
@@ -340,14 +340,14 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "crash_title",
                             returnType: textType,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     // Synthesize create(field1: T1, ...) -> CrashableType for construction via throw
                     if (type is CrashableTypeInfo crashableForCreate &&
-                        !existingMethods.Any(predicate: m => m.Name == CreateMethodName))
+                        !existingMemberRoutines.Any(predicate: m => m.Name == CreateMemberRoutineName))
                     {
-                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMemberRoutineName)
                         {
                             Kind = RoutineKind.Creator,
                             OwnerType = type,
@@ -386,9 +386,9 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "hash",
                             returnType: u64Type,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                         MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     if (boolType != null)
@@ -398,7 +398,7 @@ internal sealed class AutoWiredRegistrationPass
                             paramName: "you",
                             paramType: type,
                             returnType: boolType,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     // Bitwise combinators (`a and b`/`a but b` lower to bitor/bitand; `bitxor` for
@@ -412,25 +412,25 @@ internal sealed class AutoWiredRegistrationPass
                             paramName: "you",
                             paramType: type,
                             returnType: type,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     // Flags auto-derive Assignable (scalar bitset layout).
                     MaybeRegisterWired(owner: type,
-                        name: "store",
+                        name: "assign",
                         returnType: type,
-                        existingMethods: existingMethods);
+                        existingMemberRoutines: existingMemberRoutines);
                     MaybeRegisterWired(owner: type,
                         name: "copy",
                         returnType: type,
-                        existingMethods: existingMethods);
+                        existingMemberRoutines: existingMemberRoutines);
 
                     // U64.create(from: FlagsType) — flags_val.U64() desugars to U64.create(from: flags_val)
                     if (u64Type != null && !type.IsGenericDefinition &&
                         _registry.LookupRoutineOverload(baseName: "U64.create",
                             argTypes: [type]) == null)
                     {
-                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMemberRoutineName)
                         {
                             Kind = RoutineKind.Creator,
                             OwnerType = u64Type,
@@ -447,11 +447,11 @@ internal sealed class AutoWiredRegistrationPass
                     MaybeRegisterWired(owner: type,
                         name: "all_on",
                         returnType: type,
-                        existingMethods: existingMethods);
+                        existingMemberRoutines: existingMemberRoutines);
                     MaybeRegisterWired(owner: type,
                         name: "all_off",
                         returnType: type,
-                        existingMethods: existingMethods);
+                        existingMemberRoutines: existingMemberRoutines);
                     if (listDef != null)
                     {
                         TypeSymbol listMeType = _registry.GetOrCreateResolution(
@@ -460,7 +460,7 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "all_cases",
                             returnType: listMeType,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     break;
@@ -476,11 +476,11 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "represent",
                             returnType: textType,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                         MaybeRegisterWired(owner: type,
                             name: "diagnose",
                             returnType: textType,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     // A variant with a destructible arm (a heap/managed payload that double-frees on
@@ -494,7 +494,7 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "copy",
                             returnType: type,
-                            existingMethods: existingMethods);
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     // Bidirectional per-arm constructors, auto-generated for every variant:
@@ -526,8 +526,8 @@ internal sealed class AutoWiredRegistrationPass
         // This makes every type structurally satisfy Representable[T]
         if (textType != null)
         {
-            var textCreateMethods = _registry.GetMethodsForType(type: textType)
-                                             .Where(predicate: m => m.Name == CreateMethodName)
+            var textCreateMemberRoutines = _registry.GetMemberRoutinesForType(type: textType)
+                                             .Where(predicate: m => m.Name == CreateMemberRoutineName)
                                              .ToList();
 
             foreach (TypeSymbol type in _registry.GetAllTypes())
@@ -547,7 +547,7 @@ internal sealed class AutoWiredRegistrationPass
                     continue;
                 }
 
-                bool alreadyDefined = textCreateMethods.Any(predicate: m =>
+                bool alreadyDefined = textCreateMemberRoutines.Any(predicate: m =>
                     m.Parameters.Count == 1 &&
                     m.Parameters[index: 0].Type.FullName == type.FullName);
                 if (alreadyDefined)
@@ -555,7 +555,7 @@ internal sealed class AutoWiredRegistrationPass
                     continue;
                 }
 
-                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMemberRoutineName)
                 {
                     Kind = RoutineKind.Creator,
                     OwnerType = textType,
@@ -570,13 +570,13 @@ internal sealed class AutoWiredRegistrationPass
             }
         }
 
-        // Register BS per-type routines + represent/diagnose as universal methods.
+        // Register BS per-type routines + represent/diagnose as universal memberRoutines.
         // This allows T.data_size(), K.type_id(), T.represent(), etc. to resolve in
         // generic function bodies where the receiver is a GenericParameterTypeInfo.
         var tParam = new GenericParameterTypeInfo(name: "T");
         var universalExisting = new List<RoutineInfo>();
         BuilderInfoProvider.RegisterRoutinesOnType(type: tParam,
-            existingMethods: universalExisting,
+            existingMemberRoutines: universalExisting,
             registry: _registry,
             textType: textType,
             boolType: boolType,
@@ -592,19 +592,19 @@ internal sealed class AutoWiredRegistrationPass
             MaybeRegisterWired(owner: tParam,
                 name: "represent",
                 returnType: textType,
-                existingMethods: universalExisting);
+                existingMemberRoutines: universalExisting);
             MaybeRegisterWired(owner: tParam,
                 name: "diagnose",
                 returnType: textType,
-                existingMethods: universalExisting);
+                existingMemberRoutines: universalExisting);
         }
 
-        // `destroy` as a universal method too — so `v.destroy()` resolves on a generic `T`
+        // `destroy` as a universal memberRoutine too — so `v.destroy()` resolves on a generic `T`
         // (e.g. element teardown loops in `List[T].destroy`).
         if (noneType != null)
         {
             MaybeRegisterDestroy(owner: tParam, noneType: noneType,
-                existingMethods: universalExisting);
+                existingMemberRoutines: universalExisting);
         }
     }
 
@@ -612,9 +612,9 @@ internal sealed class AutoWiredRegistrationPass
     /// Registers a no-parameter readonly wired routine if not already defined.
     /// </summary>
     private void MaybeRegisterWired(TypeSymbol owner, string name, TypeSymbol returnType,
-        List<RoutineInfo> existingMethods)
+        List<RoutineInfo> existingMemberRoutines)
     {
-        if (existingMethods.Any(predicate: m => m.Name == name))
+        if (existingMemberRoutines.Any(predicate: m => m.Name == name))
         {
             return;
         }
@@ -639,9 +639,9 @@ internal sealed class AutoWiredRegistrationPass
     /// management. The body is synthesized by <see cref="WiredRoutinePass"/>.
     /// </summary>
     private void MaybeRegisterDestroy(TypeSymbol owner, TypeSymbol noneType,
-        List<RoutineInfo> existingMethods)
+        List<RoutineInfo> existingMemberRoutines)
     {
-        if (existingMethods.Any(predicate: m => m.Name == "destroy"))
+        if (existingMemberRoutines.Any(predicate: m => m.Name == "destroy"))
         {
             return;
         }
@@ -662,14 +662,14 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// Registers a cycle-collector hook method (<c>roam_trace_impl</c> / <c>roam_free_impl</c>) if
+    /// Registers a cycle-collector hook memberRoutine (<c>roam_trace_impl</c> / <c>roam_free_impl</c>) if
     /// not already user-defined. Marked <c>dangerous</c> (raw controller/pointer work). No params,
     /// void return; the body is synthesized by <see cref="WiredRoutinePass"/>.
     /// </summary>
     private void MaybeRegisterRoamHook(TypeSymbol owner, string name, TypeSymbol noneType,
-        List<RoutineInfo> existingMethods)
+        List<RoutineInfo> existingMemberRoutines)
     {
-        if (existingMethods.Any(predicate: m => m.Name == name))
+        if (existingMemberRoutines.Any(predicate: m => m.Name == name))
         {
             return;
         }
@@ -709,9 +709,9 @@ internal sealed class AutoWiredRegistrationPass
     /// Distinct from the unkeyed `hash()` by parameter count, so both can coexist.
     /// </summary>
     private void MaybeRegisterKeyedHash(TypeSymbol owner, TypeSymbol u64Type,
-        List<RoutineInfo> existingMethods)
+        List<RoutineInfo> existingMemberRoutines)
     {
-        if (existingMethods.Any(predicate: m => m is { Name: "hash", Parameters.Count: 2 }))
+        if (existingMemberRoutines.Any(predicate: m => m is { Name: "hash", Parameters.Count: 2 }))
         {
             return;
         }
@@ -738,9 +738,9 @@ internal sealed class AutoWiredRegistrationPass
     /// Registers a single-parameter readonly wired routine if not already defined.
     /// </summary>
     private void MaybeRegisterWiredWithParam(TypeSymbol owner, string name, string paramName,
-        TypeSymbol paramType, TypeSymbol returnType, List<RoutineInfo> existingMethods)
+        TypeSymbol paramType, TypeSymbol returnType, List<RoutineInfo> existingMemberRoutines)
     {
-        if (existingMethods.Any(predicate: m => m.Name == name))
+        if (existingMemberRoutines.Any(predicate: m => m.Name == name))
         {
             return;
         }
@@ -780,12 +780,12 @@ internal sealed class AutoWiredRegistrationPass
             TypeSymbol armType = arm.Type;
 
             // V.create(from: Arm) -> V
-            bool ctorExists = _registry.GetMethodsForType(type: variant).Any(predicate: m =>
-                m is { Name: CreateMethodName, Parameters.Count: 1 } &&
+            bool ctorExists = _registry.GetMemberRoutinesForType(type: variant).Any(predicate: m =>
+                m is { Name: CreateMemberRoutineName, Parameters.Count: 1 } &&
                 m.Parameters[index: 0].Type?.FullName == armType.FullName);
             if (!ctorExists)
             {
-                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMemberRoutineName)
                 {
                     Kind = RoutineKind.Creator,
                     OwnerType = variant,
@@ -801,12 +801,12 @@ internal sealed class AutoWiredRegistrationPass
 
             // Arm.create!(from: V) -> Arm  (name "create" + IsFailable; a `.create!(…)` call resolves
             // against "create" and the `from: V` param type disambiguates from numeric conversions).
-            bool extractExists = _registry.GetMethodsForType(type: armType).Any(predicate: m =>
-                m is { Name: CreateMethodName, Parameters.Count: 1, IsFailable: true } &&
+            bool extractExists = _registry.GetMemberRoutinesForType(type: armType).Any(predicate: m =>
+                m is { Name: CreateMemberRoutineName, Parameters.Count: 1, IsFailable: true } &&
                 m.Parameters[index: 0].Type?.FullName == variant.FullName);
             if (!extractExists)
             {
-                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMemberRoutineName)
                 {
                     Kind = RoutineKind.Creator,
                     OwnerType = armType,
@@ -823,10 +823,10 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     private void MaybeRegisterWiredFailable(TypeSymbol owner, string name, TypeSymbol returnType,
-        List<RoutineInfo> existingMethods, (string name, TypeSymbol type)? param = null,
+        List<RoutineInfo> existingMemberRoutines, (string name, TypeSymbol type)? param = null,
         RoutineKind kind = RoutineKind.MemberRoutine)
     {
-        if (existingMethods.Any(predicate: m => m.Name == name))
+        if (existingMemberRoutines.Any(predicate: m => m.Name == name))
         {
             return;
         }
@@ -855,12 +855,12 @@ internal sealed class AutoWiredRegistrationPass
     /// </summary>
     /// <summary>
     /// Returns true when every member-variable type on <paramref name="type"/> supports `eq`
-    /// — either it obeys `Equatable`, has an explicit `eq` method, or is a primitive /
+    /// — either it obeys `Equatable`, has an explicit `eq` memberRoutine, or is a primitive /
     /// `@llvm("...")`-backed record (whose equality is a built-in instruction). Used to gate
     /// auto-derivation of `eq` so entities holding non-equatable fields (e.g. `Array[T, N]`)
     /// don't get a synthesised body whose recursion dead-ends at link time.
     /// </summary>
-    private bool AllFieldsHaveEquality(TypeSymbol type)
+    private bool AllMemberVariablesHaveEquality(TypeSymbol type)
     {
         List<MemberVariableInfo>? members = type switch
         {
@@ -881,8 +881,8 @@ internal sealed class AutoWiredRegistrationPass
     /// <summary>
     /// Recursive check for whether <paramref name="type"/> supports `eq`. Handles three layers:
     /// (1) primitives / `@llvm` records — built-in IR equality;
-    /// (2) explicit `eq` method or obeys `Equatable` — registered conformance;
-    /// (3) generic resolution like `Array[T, N]` — looks up the generic def's `eq` method
+    /// (2) explicit `eq` memberRoutine or obeys `Equatable` — registered conformance;
+    /// (3) generic resolution like `Array[T, N]` — looks up the generic def's `eq` memberRoutine
     /// and recursively verifies every `T obeys Equatable` constraint against the substituted
     /// type args. Without (3), `Array[X, 64]` passes the check (because `Array.eq` exists
     /// on the generic def) even though the body's recursion into `X.ne` link-errors.
@@ -900,7 +900,7 @@ internal sealed class AutoWiredRegistrationPass
         // Cycle guard — recursive record / entity types must not loop here.
         if (!seen.Add(item: type.FullName)) return true;
 
-        // For a generic resolution, the generic def's `eq` method may carry
+        // For a generic resolution, the generic def's `eq` memberRoutine may carry
         // `T obeys Equatable` constraints. Each such constraint must hold for the
         // corresponding type argument.
         TypeSymbol? genericDef = type switch
@@ -913,7 +913,7 @@ internal sealed class AutoWiredRegistrationPass
             genericDef.GenericParameters is { Count: > 0 } gParams &&
             gParams.Count == typeArgs.Count)
         {
-            RoutineInfo? defEq = _registry.LookupMethod(type: genericDef, methodName: "eq");
+            RoutineInfo? defEq = _registry.LookupMemberRoutine(type: genericDef, memberRoutineName: "eq");
             if (defEq is { GenericConstraints: { } constraints })
             {
                 foreach (GenericConstraintDeclaration c in constraints)
@@ -936,8 +936,8 @@ internal sealed class AutoWiredRegistrationPass
             }
         }
 
-        // Explicit `eq` method on the type (either user-defined or already auto-derived).
-        if (_registry.LookupMethod(type: type, methodName: "eq") != null) return true;
+        // Explicit `eq` memberRoutine on the type (either user-defined or already auto-derived).
+        if (_registry.LookupMemberRoutine(type: type, memberRoutineName: "eq") != null) return true;
 
         // Type declares obeys Equatable — we expect a `eq` will eventually be synthesised.
         if (ObeysProtocol(type: type, protocolName: EquatableProtocolName)) return true;

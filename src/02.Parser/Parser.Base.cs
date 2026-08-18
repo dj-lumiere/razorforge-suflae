@@ -8,7 +8,7 @@ using SyntaxTree;
 namespace Compiler.Parser;
 
 /// <summary>
-/// Partial class containing base parser methods (token management, precedence, operators).
+/// Partial class containing base parser memberRoutines (token management, precedence, operators).
 /// </summary>
 public partial class Parser
 {

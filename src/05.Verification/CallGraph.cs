@@ -4,7 +4,7 @@ using TypeModel.Symbols;
 namespace Verification;
 
 /// <summary>
-/// Represents a call graph for analyzing method dependencies.
+/// Represents a call graph for analyzing memberRoutine dependencies.
 /// Used for modification inference and migratable inference.
 /// </summary>
 public sealed class CallGraph

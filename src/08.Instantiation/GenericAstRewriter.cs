@@ -18,7 +18,7 @@ namespace Compiler.Instantiation;
 /// </summary>
 internal static class GenericAstRewriter
 {
-    private const string CreateMethodName = "create";
+    private const string CreateMemberRoutineName = "create";
     /// <summary>
     /// Rewrites a generic routine declaration by substituting all type parameter references
     /// with concrete type names. Returns a deep clone -> the original is not modified.
@@ -156,7 +156,7 @@ internal static class GenericAstRewriter
         /// as the abstract protocol return (`Iterator[S64]`), but after `__T0 → Range[S64]` the call
         /// re-dispatches to `Range[S64].iter` returning the CONCRETE `RangeIterator[S64]`. Recording
         /// that here lets later references (`it.try_emit()`) re-dispatch against the concrete iterator
-        /// instead of the abstract protocol method (which has no body → linker error). Only used to
+        /// instead of the abstract protocol memberRoutine (which has no body → linker error). Only used to
         /// concretize references whose stale type is itself a protocol, so other locals are untouched.
         /// </summary>
         public Dictionary<string, TypeInfo> LocalReinferredTypes { get; } = new();
@@ -364,50 +364,50 @@ internal static class GenericAstRewriter
                                                   ResolveTypeForLookup(selector.Type) ??
                                                   selector.Type)
                                              .ToList();
-            // Prefer concrete call-site arg types for method-generic inference — routine's own
+            // Prefer concrete call-site arg types for memberRoutine-generic inference — routine's own
             // Parameters still carry generic param refs (e.g., I) that ResolveTypeForLookup
-            // can't concretize since they're method-level, not owner-level.
-            List<TypeInfo> methodInferArgTypes = callArgTypes is { Count: > 0 }
+            // can't concretize since they're memberRoutine-level, not owner-level.
+            List<TypeInfo> memberRoutineInferArgTypes = callArgTypes is { Count: > 0 }
                 ? callArgTypes
                 : resolvedParamTypes;
 
             if (resolvedOwner != null)
             {
-                RoutineInfo? resolvedMethod = ResolveMethodOnConcreteOwner(ownerType: resolvedOwner,
-                    methodName: original.Name,
+                RoutineInfo? resolvedMemberRoutine = ResolveMemberRoutineOnConcreteOwner(ownerType: resolvedOwner,
+                    memberRoutineName: original.Name,
                     argTypes: resolvedParamTypes,
                     isFailable: original.IsFailable);
-                if (resolvedMethod != null)
+                if (resolvedMemberRoutine != null)
                 {
-                    // If LookupMethod returned the generic-definition form of a method-generic
+                    // If LookupMemberRoutine returned the generic-definition form of a memberRoutine-generic
                     // routine (e.g., Array[T,N].getitem[I]), monomorphize it using the
                     // substituted argument types so codegen gets a concrete routine, not a
                     // generic-def one.
-                    if (resolvedMethod is { IsGenericDefinition: true, GenericParameters.Count: > 0 })
+                    if (resolvedMemberRoutine is { IsGenericDefinition: true, GenericParameters.Count: > 0 })
                     {
-                        RoutineInfo? methodResolved = TryResolveMethodGeneric(
-                            routine: resolvedMethod,
-                            argTypes: methodInferArgTypes);
-                        if (methodResolved != null)
+                        RoutineInfo? memberRoutineResolved = TryResolveMemberRoutineGeneric(
+                            routine: resolvedMemberRoutine,
+                            argTypes: memberRoutineInferArgTypes);
+                        if (memberRoutineResolved != null)
                         {
-                            return methodResolved;
+                            return memberRoutineResolved;
                         }
                     }
 
-                    if (resolvedMethod.OwnerType is not { IsGenericDefinition: true })
+                    if (resolvedMemberRoutine.OwnerType is not { IsGenericDefinition: true })
                     {
-                        return resolvedMethod;
+                        return resolvedMemberRoutine;
                     }
                 }
             }
 
-            if (original.Name == CreateMethodName)
+            if (original.Name == CreateMemberRoutineName)
             {
                 TypeInfo? resolvedTarget = ResolveTypeForLookup(expressionType);
                 if (resolvedTarget != null)
                 {
-                    RoutineInfo? resolvedCreator = ResolveMethodOnConcreteOwner(ownerType: resolvedTarget,
-                        methodName: CreateMethodName,
+                    RoutineInfo? resolvedCreator = ResolveMemberRoutineOnConcreteOwner(ownerType: resolvedTarget,
+                        memberRoutineName: CreateMemberRoutineName,
                         argTypes: resolvedParamTypes,
                         isFailable: original.IsFailable);
                     resolvedCreator ??= Registry.LookupRoutineOverload(
@@ -450,9 +450,9 @@ internal static class GenericAstRewriter
             return original;
         }
 
-        // Mirrors OperatorLoweringPass.ResolveMethodGenericRoutine: infer method-level
+        // Mirrors OperatorLoweringPass.ResolveMemberRoutineGenericRoutine: infer memberRoutine-level
         // generic arguments from call-site param types, then GetOrCreateRoutineResolution.
-        private RoutineInfo? TryResolveMethodGeneric(RoutineInfo routine,
+        private RoutineInfo? TryResolveMemberRoutineGeneric(RoutineInfo routine,
             List<TypeInfo> argTypes)
         {
             if (Registry == null || !routine.IsGenericDefinition ||
@@ -465,7 +465,7 @@ internal static class GenericAstRewriter
             int count = Math.Min(val1: routine.Parameters.Count, val2: argTypes.Count);
             for (int i = 0; i < count; i++)
             {
-                InferMethodParam(paramType: routine.Parameters[index: i].Type,
+                InferMemberRoutineParam(paramType: routine.Parameters[index: i].Type,
                     argType: argTypes[index: i],
                     genericParams: routine.GenericParameters,
                     inferred: inferred);
@@ -480,7 +480,7 @@ internal static class GenericAstRewriter
                 typeArguments: inferred.Select(selector: t => t!).ToList());
         }
 
-        private static void InferMethodParam(TypeInfo? paramType, TypeInfo argType,
+        private static void InferMemberRoutineParam(TypeInfo? paramType, TypeInfo argType,
             List<string> genericParams, TypeInfo?[] inferred) // NOSONAR S3776
         {
             if (paramType == null) return;
@@ -503,7 +503,7 @@ internal static class GenericAstRewriter
                 int n = Math.Min(val1: pArgs.Count, val2: aArgs.Count);
                 for (int i = 0; i < n; i++)
                 {
-                    InferMethodParam(paramType: pArgs[index: i],
+                    InferMemberRoutineParam(paramType: pArgs[index: i],
                         argType: aArgs[index: i],
                         genericParams: genericParams,
                         inferred: inferred);
@@ -547,31 +547,31 @@ internal static class GenericAstRewriter
                 typeArguments: resolvedTypeArgs);
         }
 
-        private RoutineInfo? ResolveMethodOnConcreteOwner(TypeInfo ownerType, string methodName,
+        private RoutineInfo? ResolveMemberRoutineOnConcreteOwner(TypeInfo ownerType, string memberRoutineName,
             List<TypeInfo> argTypes, bool isFailable)
         {
-            string lookupMethodName = NormalizeMethodLookupName(methodName: methodName);
-            RoutineInfo? overload = Registry!.LookupMethodOverload(type: ownerType,
-                methodName: lookupMethodName,
+            string lookupMemberRoutineName = NormalizeMemberRoutineLookupName(memberRoutineName: memberRoutineName);
+            RoutineInfo? overload = Registry!.LookupMemberRoutineOverload(type: ownerType,
+                memberRoutineName: lookupMemberRoutineName,
                 argTypes: argTypes);
             if (overload?.OwnerType is not { IsGenericDefinition: true })
             {
-                return overload ?? Registry.LookupMethod(type: ownerType,
-                    methodName: lookupMethodName,
+                return overload ?? Registry.LookupMemberRoutine(type: ownerType,
+                    memberRoutineName: lookupMemberRoutineName,
                     isFailable: isFailable);
             }
 
-            return Registry.LookupMethod(type: ownerType,
-                methodName: lookupMethodName,
+            return Registry.LookupMemberRoutine(type: ownerType,
+                memberRoutineName: lookupMemberRoutineName,
                 isFailable: isFailable);
         }
 
-        private static string NormalizeMethodLookupName(string methodName)
+        private static string NormalizeMemberRoutineLookupName(string memberRoutineName)
         {
-            int dotIndex = methodName.LastIndexOf('.');
-            return dotIndex >= 0 && dotIndex + 1 < methodName.Length
-                ? methodName[(dotIndex + 1)..]
-                : methodName;
+            int dotIndex = memberRoutineName.LastIndexOf('.');
+            return dotIndex >= 0 && dotIndex + 1 < memberRoutineName.Length
+                ? memberRoutineName[(dotIndex + 1)..]
+                : memberRoutineName;
         }
 
         public RoutineInfo? ResolveCallRoutine(CallExpression call, TypeInfo? expressionType,
@@ -599,7 +599,7 @@ internal static class GenericAstRewriter
         {
             TypeInfo? receiverType = ResolveTypeForLookup(member.Object.ResolvedType);
             // A const-generic value receiver (e.g. `N` in `Array[T, N]` monomorphized to the value 4)
-            // has no methods of its own — arithmetic/comparison resolves on its underlying numeric
+            // has no memberRoutines of its own — arithmetic/comparison resolves on its underlying numeric
             // type. Mirror CallOverloadResolutionPass's const-generic handling so `N - 1` lowers to a
             // real `U64.sub!` instead of leaving `.sub` unresolved in the monomorphized body.
             if (receiverType is ConstGenericValueTypeInfo constRecv && Registry != null)
@@ -612,8 +612,8 @@ internal static class GenericAstRewriter
                 return null;
             }
 
-            return ResolveMethodOnConcreteOwner(ownerType: receiverType,
-                methodName: member.MemberName,
+            return ResolveMemberRoutineOnConcreteOwner(ownerType: receiverType,
+                memberRoutineName: member.MemberName,
                 argTypes: callArgTypes,
                 isFailable: member.IsFailable);
         }
@@ -660,13 +660,13 @@ internal static class GenericAstRewriter
                 return InstantiateFreeRoutine(candidate: routine);
             }
 
-            if (callName == CreateMethodName && expressionType != null)
+            if (callName == CreateMemberRoutineName && expressionType != null)
             {
                 TypeInfo? resolvedTarget = ResolveTypeForLookup(expressionType);
                 if (resolvedTarget != null)
                 {
-                    return ResolveMethodOnConcreteOwner(ownerType: resolvedTarget,
-                        methodName: CreateMethodName,
+                    return ResolveMemberRoutineOnConcreteOwner(ownerType: resolvedTarget,
+                        memberRoutineName: CreateMemberRoutineName,
                         argTypes: callArgTypes,
                         isFailable: isFailable);
                 }
@@ -676,14 +676,14 @@ internal static class GenericAstRewriter
         }
 
         /// <summary>
-        /// Re-instantiates a method-level generic routine (e.g. <c>Hijacked[T].recast_as[U]</c>) from
+        /// Re-instantiates a memberRoutine-level generic routine (e.g. <c>Hijacked[T].recast_as[U]</c>) from
         /// its EXPLICIT rewritten type-argument expressions. The generic-def <c>recast_as</c> stays
         /// bound after owner substitution because its <c>U</c> comes from the call's own
         /// <c>[U]</c> type-argument, not from an operand type — so resolve those args to concrete
         /// TypeInfos and materialize the concrete routine. Returns null when the routine is not a
-        /// method-generic definition or the args can't be fully resolved.
+        /// memberRoutine-generic definition or the args can't be fully resolved.
         /// </summary>
-        public RoutineInfo? ResolveMethodGenericFromTypeArgs(RoutineInfo? routine,
+        public RoutineInfo? ResolveMemberRoutineGenericFromTypeArgs(RoutineInfo? routine,
             IReadOnlyList<TypeExpression>? typeArgExprs)
         {
             if (Registry == null || routine == null || typeArgExprs is not { Count: > 0 })
@@ -701,13 +701,13 @@ internal static class GenericAstRewriter
                 explicitArgs.Add(item: arg);
             }
 
-            // Re-home the method on the CONCRETE owner first (so its owner is already bound), then
-            // bind its own method-generic params from the explicit args. LookupMethod on a concrete
-            // owner returns a form whose GenericParameters are just the method's own params (e.g.
+            // Re-home the memberRoutine on the CONCRETE owner first (so its owner is already bound), then
+            // bind its own memberRoutine-generic params from the explicit args. LookupMemberRoutine on a concrete
+            // owner returns a form whose GenericParameters are just the memberRoutine's own params (e.g.
             // `[U]`), so CreateInstance keeps the concrete owner — unlike resolving the combined
-            // owner+method gen-def, which would leave the owner as `Hijacked[T]`.
+            // owner+memberRoutine gen-def, which would leave the owner as `Hijacked[T]`.
             RoutineInfo? ownerBound = routine.OwnerType is { IsGenericDefinition: false } concreteOwner
-                ? Registry.LookupMethod(type: concreteOwner, methodName: routine.Name,
+                ? Registry.LookupMemberRoutine(type: concreteOwner, memberRoutineName: routine.Name,
                     isFailable: routine.IsFailable)
                 : null;
             RoutineInfo? target = ownerBound ?? routine.GenericDefinition ?? routine;
@@ -883,7 +883,7 @@ internal static class GenericAstRewriter
         {
             TypeExpression te => RewriteType(type: te, ctx: ctx),
 
-            GenericMethodCallExpression gmc => gmc with
+            GenericMemberRoutineCallExpression gmc => gmc with
             {
                 Object = RewriteExpression(expr: gmc.Object, ctx: ctx),
                 TypeArguments = gmc.TypeArguments
@@ -1235,7 +1235,7 @@ internal static class GenericAstRewriter
             // Concretize a reference to a local whose type was re-inferred from a re-dispatched
             // initializer (see RewriteContext.LocalReinferredTypes). Guarded to only replace a stale
             // PROTOCOL type, so concrete-typed references are left untouched. This must run before the
-            // member-call re-dispatch below so the receiver type drives concrete method resolution.
+            // member-call re-dispatch below so the receiver type drives concrete memberRoutine resolution.
             if (result is IdentifierExpression localRef &&
                 resolvedType is ProtocolTypeInfo &&
                 ctx.LocalReinferredTypes.TryGetValue(key: localRef.Name, value: out TypeInfo? concreteLocal))
@@ -1311,10 +1311,10 @@ internal static class GenericAstRewriter
                             callArgTypes: callArgTypes) ?? rewrittenRoutine;
                     }
 
-                    // A method-generic callee whose type param is supplied by an explicit
-                    // `.method[U]()` type-argument (e.g. `recast_as[T]`) stays generic after
+                    // A memberRoutine-generic callee whose type param is supplied by an explicit
+                    // `.MemberRoutine[U]()` type-argument (e.g. `recast_as[T]`) stays generic after
                     // owner/arg resolution — re-instantiate from the callee's rewritten type args.
-                    rewrittenRoutine = ReinstantiateMethodGenericCallee(
+                    rewrittenRoutine = ReinstantiateMemberRoutineGenericCallee(
                         call: call, resolved: rewrittenRoutine, ctx: ctx);
 
                     call.ResolvedRoutine = rewrittenRoutine ?? call.ResolvedRoutine;
@@ -1338,7 +1338,7 @@ internal static class GenericAstRewriter
                     RoutineInfo? plainResolved = ctx.ResolveCallRoutine(call: call,
                         expressionType: routineResultType,
                         callArgTypes: callArgTypes) ?? call.ResolvedRoutine;
-                    call.ResolvedRoutine = ReinstantiateMethodGenericCallee(
+                    call.ResolvedRoutine = ReinstantiateMemberRoutineGenericCallee(
                         call: call, resolved: plainResolved, ctx: ctx) ?? plainResolved;
                     break;
                 }
@@ -1378,7 +1378,7 @@ internal static class GenericAstRewriter
                 // must still have its ConstructedType concretized here — otherwise the generic-def
                 // struct name reaches codegen's GEP. Resolve it, falling back to the already-concrete
                 // ResolvedType when the bare def can't be resolved from this position.
-                case GenericMethodCallExpression { ResolvedRoutine: null } ctorCall
+                case GenericMemberRoutineCallExpression { ResolvedRoutine: null } ctorCall
                     when ctorCall.ConstructedType is { } ctorCt:
                     ctorCall.ConstructedType = ctx.ResolveType(original: ctorCt)
                         ?? (ctorCt.IsGenericResolution || ctorCt.IsGenericDefinition
@@ -1386,23 +1386,23 @@ internal static class GenericAstRewriter
                             : ctorCt);
                     break;
 
-                case GenericMethodCallExpression { ResolvedRoutine: not null } genericCall:
+                case GenericMemberRoutineCallExpression { ResolvedRoutine: not null } genericCall:
                     genericCall.ConstructedType =
                         ctx.ResolveType(original: genericCall.ConstructedType) ??
                         genericCall.ConstructedType ??
-                        (expr is GenericMethodCallExpression originalGenericCall
+                        (expr is GenericMemberRoutineCallExpression originalGenericCall
                             ? originalGenericCall.ConstructedType
                             : null);
                     RoutineInfo? gcResolved =
                         ctx.ResolveRoutine(original: genericCall.ResolvedRoutine,
                             expressionType: routineResultType);
-                    // If the routine is a method-generic (`recast_as[U]`) whose `U` comes from the
+                    // If the routine is a memberRoutine-generic (`recast_as[U]`) whose `U` comes from the
                     // explicit `[U]` type-argument, owner-based resolution can't concretize it —
                     // re-instantiate from the (rewritten) explicit type-argument expressions.
                     if (gcResolved is null or { IsGenericDefinition: true }
                         or { OwnerType.IsGenericDefinition: true })
                     {
-                        gcResolved = ctx.ResolveMethodGenericFromTypeArgs(
+                        gcResolved = ctx.ResolveMemberRoutineGenericFromTypeArgs(
                             routine: genericCall.ResolvedRoutine,
                             typeArgExprs: genericCall.TypeArguments) ?? gcResolved;
                     }
@@ -1415,7 +1415,7 @@ internal static class GenericAstRewriter
             // may arrive with ResolvedType=null when the SA annotation on the generic
             // body's call was not preserved through cloning.  If GMP resolved the routine
             // after the switch, propagate its ReturnType so downstream chained calls
-            // (outer .method() or CallOverloadResolutionPass) can see the receiver type.
+            // (outer .MemberRoutine() or CallOverloadResolutionPass) can see the receiver type.
             if (result.ResolvedType == null &&
                 result is CallExpression { ResolvedRoutine.ReturnType: { } inferredReturnType })
             {
@@ -1427,15 +1427,15 @@ internal static class GenericAstRewriter
     }
 
     /// <summary>
-    /// When a call's resolved routine is still a method-generic definition (its type param comes
-    /// from an explicit <c>.method[U]()</c> type-argument, not an operand), re-instantiate it from
+    /// When a call's resolved routine is still a memberRoutine-generic definition (its type param comes
+    /// from an explicit <c>.MemberRoutine[U]()</c> type-argument, not an operand), re-instantiate it from
     /// the callee's rewritten type arguments. Returns <paramref name="resolved"/> unchanged when it
     /// is already concrete or no explicit type arguments are available.
     /// </summary>
-    private static RoutineInfo? ReinstantiateMethodGenericCallee(CallExpression call,
+    private static RoutineInfo? ReinstantiateMemberRoutineGenericCallee(CallExpression call,
         RoutineInfo? resolved, RewriteContext ctx)
     {
-        if (!IsUnconcretizedMethodGeneric(routine: resolved))
+        if (!IsUnconcretizedMemberRoutineGeneric(routine: resolved))
         {
             return resolved;
         }
@@ -1445,17 +1445,17 @@ internal static class GenericAstRewriter
             GenericMemberExpression gme => gme.TypeArguments,
             _ => call.TypeArguments
         };
-        return ctx.ResolveMethodGenericFromTypeArgs(routine: resolved ?? call.ResolvedRoutine,
+        return ctx.ResolveMemberRoutineGenericFromTypeArgs(routine: resolved ?? call.ResolvedRoutine,
             typeArgExprs: typeArgs) ?? resolved;
     }
 
     /// <summary>
-    /// True when a resolved routine still needs its method-level type param bound from an explicit
+    /// True when a resolved routine still needs its memberRoutine-level type param bound from an explicit
     /// call type-argument: a generic definition, owned by one, or (concrete-owner case like
     /// <c>Hijacked[BTreeListNode[S64]].recast_as() -&gt; Hijacked[U]</c>) still carrying a generic
     /// parameter in its return or parameter types.
     /// </summary>
-    private static bool IsUnconcretizedMethodGeneric(RoutineInfo? routine)
+    private static bool IsUnconcretizedMemberRoutineGeneric(RoutineInfo? routine)
     {
         if (routine is null or { IsGenericDefinition: true } or { OwnerType.IsGenericDefinition: true })
             return routine != null;
@@ -1513,7 +1513,7 @@ internal static class GenericAstRewriter
         // Substitute the member-access type through the type map: a field read `me.inner` typed
         // `Core.List[T]` on the generic def must become `Core.List[Core.S32]` in the instantiation.
         // Copying the raw generic-def type left `T` unsubstituted, so a downstream re-resolution of the
-        // unresolved-`T` receiver mis-bound the method to the shadowing same-named type (the SF-overlay
+        // unresolved-`T` receiver mis-bound the memberRoutine to the shadowing same-named type (the SF-overlay
         // wrapper) → self-recursion.
         rewritten.ResolvedType = ctx.ResolveType(original: me.ResolvedType) ?? me.ResolvedType;
         return rewritten;
@@ -1641,7 +1641,7 @@ internal static class GenericAstRewriter
         if (routine.IsGenericDefinition ||
             routine.OwnerType is GenericParameterTypeInfo or ProtocolTypeInfo or { IsGenericDefinition: true })
         {
-            // A protocol-owned method is abstract (no body) — after monomorphization the call must
+            // A protocol-owned memberRoutine is abstract (no body) — after monomorphization the call must
             // re-dispatch to the concrete implementer (e.g. Iterator[S64].try_emit, resolved via a
             // constrained generic param's iter, must rebind to RangeIterator[S64].try_emit).
             return true;
@@ -2193,7 +2193,7 @@ internal static class GenericAstRewriter
             // member would double-free at teardown, so the derived `store` must re-store it. Every
             // OTHER member (a pure value, or an @llvm-backed aggregate like `Array[T, N]` that has NO
             // `store` at all — even when its `destroy` walks elements) is copied bitwise and MUST be
-            // skipped: emitting `me.field.store()` on it would call a `store` that does not exist
+            // skipped: emitting `me.field.assign()` on it would call a `store` that does not exist
             // (the RoutineTrace `Array[RoutineRecord, 10]` codegen failure). This is the store-side
             // dual of `is_inert` (which keys off destructibility, the wrong axis for a copy).
             bool retaining = ctx.ActiveMemberType != null && ctx.Registry != null &&
@@ -2210,7 +2210,7 @@ internal static class GenericAstRewriter
         {
             // `${m.type}` in EXPRESSION position folds to a TYPEWISE receiver: an identifier naming the
             // concrete member/arm type, annotated with that type so a following static call
-            // (`.data_size()`, `.type_id()`, …) re-resolves as a universal method on it — exactly like a
+            // (`.data_size()`, `.type_id()`, …) re-resolves as a universal memberRoutine on it — exactly like a
             // hand-written `S64.data_size()`. (In TYPE/pattern position `${m.type}` is a different node,
             // TypeExpression.SpliceHandle / SpliceTypePattern, handled at parse/resolve time.)
             TypeInfo? memberType = ctx.ActiveMemberType;
@@ -2463,7 +2463,7 @@ internal static class GenericAstRewriter
 
     /// <summary>
     /// If <paramref name="type"/> is still an unbound generic definition (e.g. the owner
-    /// <c>SplitArray[T, N]</c> of a method under monomorphization), materialize the concrete instance
+    /// <c>SplitArray[T, N]</c> of a memberRoutine under monomorphization), materialize the concrete instance
     /// by binding its parameters through the current type-substitution map. This is what surfaces the
     /// decl-position expand columns (they live on the concrete instance, not the definition).
     /// </summary>
@@ -2640,7 +2640,7 @@ internal static class GenericAstRewriter
                 // owner (its return type is now non-protocol) but SA had typed the binding via an
                 // abstract protocol (e.g. `var it = r.iter()` : Iterator[S64] → RangeIterator[S64]).
                 // This lets later references concretize so subsequent member calls re-dispatch to a
-                // real implementer rather than the bodyless protocol method. Only record when the
+                // real implementer rather than the bodyless protocol memberRoutine. Only record when the
                 // SA-time type was a protocol and the new return type isn't, so we never demote a
                 // correctly-typed local.
                 if (vd.Type == null && newInit is CallExpression { ResolvedRoutine.ReturnType: { } reinferred }

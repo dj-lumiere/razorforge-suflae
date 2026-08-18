@@ -16,8 +16,8 @@ public sealed partial class SemanticVerifier
     private const string StartRoutineName = "start";
     private const string UseWhenHint = "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).";
     private const string NoneTypeName = "None";
-    private const string ModifyMethodName = "modify";
-    private const string InspectMethodName = "inspect";
+    private const string ModifyMemberRoutineName = "modify";
+    private const string InspectMemberRoutineName = "inspect";
 
     /// <summary>
     /// Enforces the realm gate at a free-routine call site: a FOREIGN routine (C extern / LLVM intrinsic)
@@ -344,7 +344,7 @@ public sealed partial class SemanticVerifier
                                 // Use GetOrCreateRoutineResolution so the monomorphisation lands
                                 // in `_routineResolutions`. CreateInstance alone produced a stray
                                 // instance that codegen mangled to `show(Point)` but
-                                // ProcessResolvedMethodGenericRoutines never picked up — no body
+                                // ProcessResolvedMemberRoutineGenericRoutines never picked up — no body
                                 // emitted, link errors followed.
                                 routine = inferred != null
                                     ? _registry.GetOrCreateRoutineResolution(
@@ -412,18 +412,18 @@ public sealed partial class SemanticVerifier
                         // this — gating on EntityTypeInfo alone left RECORD constructors (`Point(x: 1)`)
                         // with a null expected type → `1` stayed Integer → codegen `Integer`-into-`i64` /
                         // pruned `Integer.from_literal`. Inferring the field type is the compiler's job.
-                        List<MemberVariableInfo>? ctorFields = callableType switch
+                        List<MemberVariableInfo>? ctorMemberVariables = callableType switch
                         {
                             EntityTypeInfo entityCtor => entityCtor.MemberVariables,
                             RecordTypeInfo recordCtor => recordCtor.MemberVariables,
                             _ => null
                         };
-                        if (argExpected == null && ctorFields != null)
+                        if (argExpected == null && ctorMemberVariables != null)
                         {
                             MemberVariableInfo? field = arg is NamedArgumentExpression na
-                                ? ctorFields.FirstOrDefault(predicate: mv => mv.Name == na.Name)
-                                : (creatorPosIdx < ctorFields.Count
-                                    ? ctorFields[index: creatorPosIdx]
+                                ? ctorMemberVariables.FirstOrDefault(predicate: mv => mv.Name == na.Name)
+                                : (creatorPosIdx < ctorMemberVariables.Count
+                                    ? ctorMemberVariables[index: creatorPosIdx]
                                     : null);
                             argExpected = field?.Type;
                             // For a generic record/entity instantiation (Box[S64]), resolve the field's
@@ -477,8 +477,8 @@ public sealed partial class SemanticVerifier
                         }
                     }
 
-                    RoutineInfo? creator = _registry.LookupMethodOverload(type: callableType,
-                        methodName: "create",
+                    RoutineInfo? creator = _registry.LookupMemberRoutineOverload(type: callableType,
+                        memberRoutineName: "create",
                         argTypes: creatorArgTypes);
                     creator ??= _registry.LookupRoutineOverload(
                         baseName: $"{callableType.FullName}.create",
@@ -498,7 +498,7 @@ public sealed partial class SemanticVerifier
                         int ctorArgN = Math.Min(val1: creator.Parameters.Count, val2: creatorArgTypes.Count);
                         for (int ci = 0; ci < ctorArgN; ci++)
                         {
-                            InferMethodTypeArgumentsFromTypes(paramType: creator.Parameters[index: ci].Type,
+                            InferMemberRoutineTypeArgumentsFromTypes(paramType: creator.Parameters[index: ci].Type,
                                 argType: creatorArgTypes[index: ci],
                                 genericParameters: ctorDefParams,
                                 inferred: ctorInferred);
@@ -509,8 +509,8 @@ public sealed partial class SemanticVerifier
                                 is { } ctorConcrete)
                         {
                             callableType = ctorConcrete;
-                            creator = _registry.LookupMethodOverload(type: callableType,
-                                methodName: "create", argTypes: creatorArgTypes) ?? creator;
+                            creator = _registry.LookupMemberRoutineOverload(type: callableType,
+                                memberRoutineName: "create", argTypes: creatorArgTypes) ?? creator;
                         }
                     }
 
@@ -551,14 +551,14 @@ public sealed partial class SemanticVerifier
                         // An auto-generated variant arm EXTRACTOR `Arm.create!(from: V)` is synthesized
                         // but has a real pattern-matching body — it is NOT a memberwise field-init, and
                         // for a scalar arm (S32) `ClassifyConstruction` would tag it a value conversion,
-                        // making codegen bit-reinterpret the variant. Treat it as a normal method call and
+                        // making codegen bit-reinterpret the variant. Treat it as a normal memberRoutine call and
                         // route it through ResolvedRoutine below.
                         bool isVariantArmExtractor = creator is
                             { Name: "create", IsFailable: true, Parameters: [{ Type: VariantTypeInfo }] };
 
                         call.ConstructedType = callableType;
                         call.LoweringKind = isVariantArmExtractor
-                            ? ClassifyMethodCall(method: creator)
+                            ? ClassifyMemberRoutineCall(memberRoutine: creator)
                             : ClassifyConstruction(type: callableType,
                                 isCollectionLiteral: call.IsCollectionLiteral);
 
@@ -582,7 +582,7 @@ public sealed partial class SemanticVerifier
                         // is left to inline construction in codegen. A user `create` whose params
                         // match the fields only by name but differ by type (e.g.
                         // `Resource.create(tag: S32)` over field `tag: S64`) is the real
-                        // constructor and is selected by arg type via LookupMethodOverload above.
+                        // constructor and is selected by arg type via LookupMemberRoutineOverload above.
                         if (!insideOwnCreate && (!creator.IsSynthesized || isVariantArmExtractor))
                         {
                             call.ResolvedRoutine = creator;
@@ -682,7 +682,7 @@ public sealed partial class SemanticVerifier
 
                     // A `threaded routine` call spawns an OS thread and yields an `Agent[T]`
                     // handle (T = the routine's own return type, kind THREAD). The handle is awaited
-                    // via the stdlib `Agent[T].retrieve!()` / `.waitfor(deadline)` methods.
+                    // via the stdlib `Agent[T].retrieve!()` / `.waitfor(deadline)` memberRoutines.
                     if (routine.AsyncStatus == AsyncStatus.Threaded)
                     {
                         ValidateAsyncRoutineArguments(routine: routine,
@@ -744,18 +744,18 @@ public sealed partial class SemanticVerifier
                         // a bare `1` reset to the Suflae `Integer` default (this is the SECOND, final ctor
                         // block: it re-analyzes and would clobber the first block's conformance → the record
                         // literal ended up Integer → codegen `Integer`-into-`i64` / pruned from_literal).
-                        List<MemberVariableInfo>? ctorFields = type switch
+                        List<MemberVariableInfo>? ctorMemberVariables = type switch
                         {
                             EntityTypeInfo entityCtorType => entityCtorType.MemberVariables,
                             RecordTypeInfo recordCtorType => recordCtorType.MemberVariables,
                             _ => null
                         };
-                        if (argExpected == null && ctorFields != null)
+                        if (argExpected == null && ctorMemberVariables != null)
                         {
                             MemberVariableInfo? field = arg is NamedArgumentExpression na
-                                ? ctorFields.FirstOrDefault(predicate: mv => mv.Name == na.Name)
-                                : (ctorPosIdx < ctorFields.Count
-                                    ? ctorFields[index: ctorPosIdx]
+                                ? ctorMemberVariables.FirstOrDefault(predicate: mv => mv.Name == na.Name)
+                                : (ctorPosIdx < ctorMemberVariables.Count
+                                    ? ctorMemberVariables[index: ctorPosIdx]
                                     : null);
                             argExpected = field?.Type;
                             if (argExpected != null && type is { IsGenericResolution: true, TypeArguments: not null })
@@ -772,8 +772,8 @@ public sealed partial class SemanticVerifier
                     // e.g., BitList(32u64) -> BitList.create(capacity: U64) instead of collection literal
                     if (call.Arguments.Count > 0)
                     {
-                        RoutineInfo? creator = _registry.LookupMethodOverload(type: type,
-                            methodName: "create",
+                        RoutineInfo? creator = _registry.LookupMemberRoutineOverload(type: type,
+                            memberRoutineName: "create",
                             argTypes: argTypes);
                         creator ??= _registry.LookupRoutineOverload(
                             baseName: $"{type.FullName}.create",
@@ -1063,23 +1063,23 @@ public sealed partial class SemanticVerifier
                         : "pass the value to a routine whose parameter is typed " +
                           "Accessing[T] / Controlling[T] — the compiler coerces it for you.";
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
-                        message: $"Method '{member.MemberName}' is internal to the compiler — {hint}",
+                        message: $"member routine '{member.MemberName}' is internal to the compiler — {hint}",
                         location: call.Location);
                     return ErrorTypeInfo.Instance;
                 }
 
-                // Choice types cannot use any operator wired methods
+                // Choice types cannot use any operator wired memberRoutines
                 if (objectType is ChoiceTypeInfo && IsOperatorWired(name: member.MemberName))
                 {
                     ReportError(code: SemanticDiagnosticCode.ArithmeticOnChoiceType,
                         message:
                         $"Operator '{member.MemberName}' cannot be used with choice type '{objectType.Name}'. " +
-                        "Choice types do not support operators. Use 'is' for case matching and regular methods for additional behavior.",
+                        "Choice types do not support operators. Use 'is' for case matching and regular member routines for additional behavior.",
                         location: call.Location);
                     return ErrorTypeInfo.Instance;
                 }
 
-                // #134/#135: Flags types cannot use any operator wired methods
+                // #134/#135: Flags types cannot use any operator wired memberRoutines
                 if (objectType is FlagsTypeInfo && IsOperatorWired(name: member.MemberName))
                 {
                     ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
@@ -1090,9 +1090,9 @@ public sealed partial class SemanticVerifier
                     return ErrorTypeInfo.Instance;
                 }
 
-                // #137: Nested grasping detection — checked before method resolution
+                // #137: Nested grasping detection — checked before memberRoutine resolution
                 // since modify() is generic extension T.modify() that may not resolve by concrete type name
-                if (member.MemberName == ModifyMethodName && IsNestedModifying(source: member.Object))
+                if (member.MemberName == ModifyMemberRoutineName && IsNestedModifying(source: member.Object))
                 {
                     ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
                         message: "Cannot modify a member of an already-modified object. " +
@@ -1100,101 +1100,101 @@ public sealed partial class SemanticVerifier
                         location: call.Location);
                 }
 
-                bool isFailableMethodCall = member.IsFailable;
+                bool isFailableMemberRoutineCall = member.IsFailable;
                 string callLookupName = member.MemberName;
                 TypeSymbol dispatchType = objectType;
-                RoutineInfo? method =
-                    _registry.LookupMethod(type: dispatchType,
-                        methodName: callLookupName,
-                        isFailable: isFailableMethodCall);
+                RoutineInfo? memberRoutine =
+                    _registry.LookupMemberRoutine(type: dispatchType,
+                        memberRoutineName: callLookupName,
+                        isFailable: isFailableMemberRoutineCall);
 
                 // Call-site `!` is OPTIONAL: a bare (`x.retrieve()`) call may bind a failable
                 // routine when only the failable form exists. The name is BARE and failability is
                 // a structural flag, not part of the name — so a non-`!` call to a `!`-only routine
                 // resolves to the failable form and is crash-on-failure (the UnhandledCrashableCall
                 // warning is suppressed). Retry with isFailable: true when the bare lookup missed.
-                if (method == null && !isFailableMethodCall)
+                if (memberRoutine == null && !isFailableMemberRoutineCall)
                 {
-                    method = _registry.LookupMethod(type: dispatchType,
-                        methodName: callLookupName,
+                    memberRoutine = _registry.LookupMemberRoutine(type: dispatchType,
+                        memberRoutineName: callLookupName,
                         isFailable: true);
                 }
 
-                // Phase D: Transparent wrapper forwarding — if the method isn't found directly on
-                // the wrapper, synthesize a forwarder that delegates to the inner type's method
-                // via `Hijacked[T](me).extract().method(...)`.
-                if (method == null && IsWrapperType(type: dispatchType))
+                // Phase D: Transparent wrapper forwarding — if the memberRoutine isn't found directly on
+                // the wrapper, synthesize a forwarder that delegates to the inner type's memberRoutine
+                // via `Hijacked[T](me).extract().MemberRoutine(...)`.
+                if (memberRoutine == null && IsWrapperType(type: dispatchType))
                 {
-                    method = TrySynthesizeWrapperForwarder(wrapperType: dispatchType,
-                        methodName: callLookupName,
-                        isFailable: isFailableMethodCall);
+                    memberRoutine = TrySynthesizeWrapperForwarder(wrapperType: dispatchType,
+                        memberRoutineName: callLookupName,
+                        isFailable: isFailableMemberRoutineCall);
                 }
 
-                if (method == null &&
+                if (memberRoutine == null &&
                     TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol target))
                 {
                     dispatchType = target;
-                    method = _registry.LookupMethod(type: dispatchType,
-                        methodName: callLookupName,
-                        isFailable: isFailableMethodCall);
-                    if (method == null && !isFailableMethodCall)
+                    memberRoutine = _registry.LookupMemberRoutine(type: dispatchType,
+                        memberRoutineName: callLookupName,
+                        isFailable: isFailableMemberRoutineCall);
+                    if (memberRoutine == null && !isFailableMemberRoutineCall)
                     {
-                        method = _registry.LookupMethod(type: dispatchType,
-                            methodName: callLookupName,
+                        memberRoutine = _registry.LookupMemberRoutine(type: dispatchType,
+                            memberRoutineName: callLookupName,
                             isFailable: true);
                     }
                 }
 
                 // Generic-parameter receiver: resolve via Obeys constraints from the current
                 // routine and its owner type. e.g. `key.hash()` where `K obeys Hashable`
-                // dispatches through Hashable's protocol method.
-                if (method == null && dispatchType is GenericParameterTypeInfo genParam)
+                // dispatches through Hashable's protocol memberRoutine.
+                if (memberRoutine == null && dispatchType is GenericParameterTypeInfo genParam)
                 {
                     var constraints = ActiveConstraintsFor(paramName: genParam.Name).ToList();
-                    method = _registry.LookupMethodViaConstraints(param: genParam,
-                        methodName: callLookupName,
-                        isFailable: isFailableMethodCall,
+                    memberRoutine = _registry.LookupMemberRoutineViaConstraints(param: genParam,
+                        memberRoutineName: callLookupName,
+                        isFailable: isFailableMemberRoutineCall,
                         constraints: constraints);
-                    if (method == null && !isFailableMethodCall)
+                    if (memberRoutine == null && !isFailableMemberRoutineCall)
                     {
-                        method = _registry.LookupMethodViaConstraints(param: genParam,
-                            methodName: callLookupName,
+                        memberRoutine = _registry.LookupMemberRoutineViaConstraints(param: genParam,
+                            memberRoutineName: callLookupName,
                             isFailable: true,
                             constraints: constraints);
                     }
                 }
 
-                // Named-argument overload disambiguation. LookupMethod returns one overload by name;
+                // Named-argument overload disambiguation. LookupMemberRoutine returns one overload by name;
                 // when the call supplies a named argument that overload lacks — e.g.
                 // `get_count(predicate: …)` resolving to the zero-arg `get_count()` — prefer the
                 // overload whose parameters cover every named argument. This MUST run before the
                 // arguments are analyzed below: otherwise a callback argument is analyzed against a
                 // missing/wrong parameter type, collapses to <error>, and the later type-based
-                // overload retry can no longer recover the right method.
-                if (method != null && dispatchType != null && call.Arguments.Count > 0
+                // overload retry can no longer recover the right memberRoutine.
+                if (memberRoutine != null && dispatchType != null && call.Arguments.Count > 0
                     && call.Arguments.Any(predicate: a => a is NamedArgumentExpression))
                 {
                     var providedNames = call.Arguments
                         .OfType<NamedArgumentExpression>()
                         .Select(selector: n => n.Name)
                         .ToList();
-                    bool methodCoversNames = providedNames.All(predicate: n =>
-                        method.Parameters.Any(predicate: p => p.Name == n));
-                    if (!methodCoversNames)
+                    bool memberRoutineCoversNames = providedNames.All(predicate: n =>
+                        memberRoutine.Parameters.Any(predicate: p => p.Name == n));
+                    if (!memberRoutineCoversNames)
                     {
                         var candidates = new List<RoutineInfo>();
                         _registry.CollectMemberRoutineCandidates(type: dispatchType,
-                            methodName: callLookupName, candidates: candidates);
+                            memberRoutineName: callLookupName, candidates: candidates);
                         RoutineInfo? byName = candidates.FirstOrDefault(predicate: c =>
                             c.Parameters.Count == call.Arguments.Count
                             && providedNames.All(predicate: n =>
                                 c.Parameters.Any(predicate: p => p.Name == n)));
                         if (byName != null)
-                            method = byName;
+                            memberRoutine = byName;
                     }
                 }
 
-                if (method is { IsGenericDefinition: false } && call.Arguments.Count > 0)
+                if (memberRoutine is { IsGenericDefinition: false } && call.Arguments.Count > 0)
                 {
                     var resolvedArgTypes = new List<TypeSymbol>(capacity: call.Arguments.Count);
                     int posIdx = 0;
@@ -1204,21 +1204,21 @@ public sealed partial class SemanticVerifier
                         TypeSymbol? expectedParamType = null;
                         if (arg is NamedArgumentExpression namedArg)
                         {
-                            ParameterInfo? p = method.Parameters
+                            ParameterInfo? p = memberRoutine.Parameters
                                 .FirstOrDefault(predicate: pp => pp.Name == namedArg.Name);
                             if (p != null) expectedParamType = p.Type;
                         }
-                        else if (posIdx < method.Parameters.Count)
+                        else if (posIdx < memberRoutine.Parameters.Count)
                         {
-                            expectedParamType = method.Parameters[index: posIdx].Type;
+                            expectedParamType = memberRoutine.Parameters[index: posIdx].Type;
                         }
                         if (expectedParamType != null && dispatchType != null
-                            && method.OwnerType is { IsGenericDefinition: true })
+                            && memberRoutine.OwnerType is { IsGenericDefinition: true })
                         {
                             expectedParamType =
                                 SubstituteOwnerGenerics(paramType: expectedParamType,
                                     lookupType: dispatchType,
-                                    ownerType: method.OwnerType) ?? expectedParamType;
+                                    ownerType: memberRoutine.OwnerType) ?? expectedParamType;
                         }
                         TypeSymbol argType = AnalyzeExpression(expression: actualArg,
                             expectedType: expectedParamType);
@@ -1229,52 +1229,52 @@ public sealed partial class SemanticVerifier
                         posIdx++;
                     }
 
-                    bool arityMismatch = method.Parameters.Count != resolvedArgTypes.Count;
+                    bool arityMismatch = memberRoutine.Parameters.Count != resolvedArgTypes.Count;
                     bool firstArgMismatch = !arityMismatch &&
-                                            method.Parameters.Count > 0 &&
+                                            memberRoutine.Parameters.Count > 0 &&
                                             resolvedArgTypes.Count > 0 &&
                                             !IsAssignableTo(source: resolvedArgTypes[0],
-                                                target: method.Parameters[0].Type);
+                                                target: memberRoutine.Parameters[0].Type);
 
                     if (arityMismatch || firstArgMismatch)
                     {
-                        RoutineInfo? betterMethod = _registry.LookupMethodOverload(type: dispatchType!,
-                            methodName: callLookupName,
+                        RoutineInfo? betterMemberRoutine = _registry.LookupMemberRoutineOverload(type: dispatchType!,
+                            memberRoutineName: callLookupName,
                             argTypes: resolvedArgTypes);
-                        if (betterMethod != null)
+                        if (betterMemberRoutine != null)
                         {
-                            method = betterMethod;
+                            memberRoutine = betterMemberRoutine;
                         }
                     }
                 }
 
-                if (method != null)
+                if (memberRoutine != null)
                 {
-                    call.LoweringKind = ClassifyMethodCall(method: method);
+                    call.LoweringKind = ClassifyMemberRoutineCall(memberRoutine: memberRoutine);
 
                     // Import-gating: BuilderService routines require 'import BuilderService'
-                    if (method.IsSynthesized &&
-                        BuilderInfoProvider.IsBuilderServiceRoutine(name: method.Name) &&
+                    if (memberRoutine.IsSynthesized &&
+                        BuilderInfoProvider.IsBuilderServiceRoutine(name: memberRoutine.Name) &&
                         !_importedModules.Contains(item: "BuilderService"))
                     {
                         ReportError(code: SemanticDiagnosticCode.BuilderServiceImportRequired,
-                            message: $"'{method.Name}()' requires 'import BuilderService'.",
+                            message: $"'{memberRoutine.Name}()' requires 'import BuilderService'.",
                             location: call.Location);
                         return ErrorTypeInfo.Instance;
                     }
 
                     // Track failable calls for error handling variant generation
-                    if (method.IsFailable && _currentRoutine != null)
+                    if (memberRoutine.IsFailable && _currentRoutine != null)
                     {
                         _currentRoutine.HasFailableCalls = true;
-                        _currentRoutine.FailableCallees.Add(method);
+                        _currentRoutine.FailableCallees.Add(memberRoutine);
 
                         if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
                             !_currentRoutine.IsSynthesized)
                         {
                             ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
                                 message:
-                                $"Failable routine '{method.Name}!' called without error handling. " +
+                                $"Failable routine '{memberRoutine.Name}!' called without error handling. " +
                                 UseWhenHint,
                                 location: call.Location);
                         }
@@ -1283,84 +1283,84 @@ public sealed partial class SemanticVerifier
                     // #151: Static/instance mismatch — common routine called on instance.
                     // Generic type parameters (e.g., `T` inside `Dict[K, V]` body) are not
                     // registered as types but ARE valid receivers for common routines.
-                    if (method.IsCommon && member.Object is IdentifierExpression instanceId &&
+                    if (memberRoutine.IsCommon && member.Object is IdentifierExpression instanceId &&
                         LookupTypeWithImports(name: instanceId.Name) == null &&
                         !IsGenericParameter(name: instanceId.Name))
                     {
                         ReportError(code: SemanticDiagnosticCode.CommonRoutineMismatch,
                             message:
-                            $"Common routine '{method.Name}' must be called on the type '{objectType.Name}', not on an instance.",
+                            $"Common routine '{memberRoutine.Name}' must be called on the type '{objectType.Name}', not on an instance.",
                             location: call.Location);
                     }
 
-                    // Validate method access
-                    ValidateRoutineAccess(routine: method, accessLocation: call.Location);
+                    // Validate memberRoutine access
+                    ValidateRoutineAccess(routine: memberRoutine, accessLocation: call.Location);
 
                     if (!ReferenceEquals(objA: dispatchType, objB: objectType) &&
-                        IsReadOnlyTransparentProtocol(type: objectType) && !method.IsReadOnly)
+                        IsReadOnlyTransparentProtocol(type: objectType) && !memberRoutine.IsReadOnly)
                     {
-                        ReportError(code: SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
+                        ReportError(code: SemanticDiagnosticCode.WritableMemberRoutineThroughReadOnlyWrapper,
                             message:
-                            $"Cannot call writable method '{method.Name}' through read-only protocol '{objectType.Name}'. " +
+                            $"Cannot call writable member routine '{memberRoutine.Name}' through read-only protocol '{objectType.Name}'. " +
                             "Use Controlling[T] or a writable token instead.",
                             location: call.Location);
                     }
 
-                    // @readonly enforcement: cannot call mutating methods on 'me'
+                    // @readonly enforcement: cannot call mutating memberRoutines on 'me'
                     if (_currentRoutine is { IsReadOnly: true } &&
-                        member.Object is IdentifierExpression { Name: "me" } && !method.IsReadOnly)
+                        member.Object is IdentifierExpression { Name: "me" } && !memberRoutine.IsReadOnly)
                     {
-                        ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
+                        ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
                             message:
-                            $"Cannot call non-readonly method '{method.Name}' on 'me' in a @readonly method. " +
-                            "Mark the called method @readonly or use @migratable.",
+                            $"Cannot call non-readonly member routine '{memberRoutine.Name}' on 'me' in a @readonly member routine. " +
+                            "Mark the called member routine @readonly or use @migratable.",
                             location: call.Location);
                     }
 
-                    // Preset enforcement: cannot call mutating methods on preset variables
+                    // Preset enforcement: cannot call mutating memberRoutines on preset variables
                     if (member.Object is IdentifierExpression letTarget &&
-                        method.MutationCategory != MutationCategory.Readonly)
+                        memberRoutine.MutationCategory != MutationCategory.Readonly)
                     {
                         VariableInfo? targetVar = _registry.LookupVariable(name: letTarget.Name);
                         if (targetVar is { IsModifiable: false })
                         {
                             ReportError(code: SemanticDiagnosticCode.ModifyingCallOnImmutable,
                                 message:
-                                $"Cannot call modifying method '{method.Name}' on preset variable '{letTarget.Name}'.",
+                                $"Cannot call modifying member routine '{memberRoutine.Name}' on preset variable '{letTarget.Name}'.",
                                 location: call.Location);
                         }
                     }
 
-                    AnalyzeCallArguments(routine: method,
+                    AnalyzeCallArguments(routine: memberRoutine,
                         arguments: call.Arguments,
                         location: call.Location,
                         callObjectType: dispatchType);
 
-                    if (method.IsGenericDefinition)
+                    if (memberRoutine.IsGenericDefinition)
                     {
-                        List<TypeInfo>? inferredMethodTypeArgs =
-                            InferMethodGenericTypeArguments(genericMethod: method,
+                        List<TypeInfo>? inferredMemberRoutineTypeArgs =
+                            InferMemberRoutineGenericTypeArguments(genericMemberRoutine: memberRoutine,
                                 arguments: call.Arguments,
                                 receiverType: dispatchType);
-                        if (inferredMethodTypeArgs != null)
+                        if (inferredMemberRoutineTypeArgs != null)
                         {
-                            method = _registry.GetOrCreateRoutineResolution(genericDef: method,
-                                typeArguments: inferredMethodTypeArgs);
+                            memberRoutine = _registry.GetOrCreateRoutineResolution(genericDef: memberRoutine,
+                                typeArguments: inferredMemberRoutineTypeArgs);
                             // AnalyzeCallArguments above ran against the still-generic signature, so a
-                            // lambda argument whose parameter binds a method-level generic kept it
+                            // lambda argument whose parameter binds a memberRoutine-level generic kept it
                             // unresolved (e.g. `acc` in `accumulate[U](combiner: Routine[(U,T),U])`
-                            // stayed `U`). Now that the method generics are bound, re-analyze the
+                            // stayed `U`). Now that the memberRoutine generics are bound, re-analyze the
                             // lambda arguments against the resolved parameter types so their
                             // parameters become concrete — otherwise the lifted lambda mangles with an
                             // unbound generic (`[lambda]...(U,S64)`) and codegen cannot emit it.
-                            ReanalyzeLambdaArguments(resolvedMethod: method,
+                            ReanalyzeLambdaArguments(resolvedMemberRoutine: memberRoutine,
                                 arguments: call.Arguments,
                                 callObjectType: dispatchType);
                         }
                     }
 
                     // P1: Store fully resolved RoutineInfo (with owner-level generic substitution)
-                    call.ResolvedRoutine = method;
+                    call.ResolvedRoutine = memberRoutine;
 
                     // (Removed: the member-call move-on-consume for `a.retain()`/`a.share[P]()` — the
                     // entity→wrapper construction verbs are abolished. Entity→RC is now the constructor
@@ -1370,9 +1370,9 @@ public sealed partial class SemanticVerifier
                     // #68: Real-to-Complex promotion — only add/sub allow float↔complex cross-type
                     if (IsOperatorWired(name: member.MemberName) &&
                         member.MemberName is not ("add" or "sub" or "iadd" or "isub") &&
-                        call.Arguments.Count > 0 && method.Parameters.Count > 0)
+                        call.Arguments.Count > 0 && memberRoutine.Parameters.Count > 0)
                     {
-                        TypeSymbol argType = method.Parameters[index: 0].Type;
+                        TypeSymbol argType = memberRoutine.Parameters[index: 0].Type;
                         if (IsFloatType(type: objectType) && IsComplexType(type: argType) ||
                             IsComplexType(type: objectType) && IsFloatType(type: argType))
                         {
@@ -1385,7 +1385,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #12: Partial access rule — entity.field.view() is not allowed
-                    if (member.MemberName is "view" or ModifyMethodName &&
+                    if (member.MemberName is "view" or ModifyMemberRoutineName &&
                         member.Object is MemberExpression innerMember)
                     {
                         TypeSymbol innerObjectType =
@@ -1401,7 +1401,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #137: Nested grasping detection
-                    if (member.MemberName == ModifyMethodName && IsNestedModifying(source: member
+                    if (member.MemberName == ModifyMemberRoutineName && IsNestedModifying(source: member
                         .Object))
                     {
                         ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
@@ -1411,7 +1411,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #92: Re-grasping prohibition — cannot grasp an already-grasped token
-                    if (member.MemberName == ModifyMethodName && IsModifyingType(type: objectType))
+                    if (member.MemberName == ModifyMemberRoutineName && IsModifyingType(type: objectType))
                     {
                         ReportError(code: SemanticDiagnosticCode.ReHijackingProhibited,
                             message:
@@ -1430,10 +1430,10 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #97: A Hijacked[T] method requires a danger block ONLY when the method itself is
+                    // #97: A Hijacked[T] memberRoutine requires a danger block ONLY when the memberRoutine itself is
                     // `dangerous` (peek/poke/as_entity/invalidate/… — real deref/free/UB ops). That is
                     // already enforced uniformly by the `routine.IsDangerous` gate in
-                    // ValidateRoutineAccess, so there is NO blanket "any Hijacked method needs danger"
+                    // ValidateRoutineAccess, so there is NO blanket "any Hijacked member routine needs danger"
                     // rule: the pointer-value ops (address/type_name/is_none/cmp/hash/represent) read
                     // an integer without dereferencing and are safe outside danger (danger-audit).
 
@@ -1448,20 +1448,20 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // NOTE: `inspect()` / `claim()` are ordinary `Shared[T, P]` methods now —
+                    // NOTE: `inspect()` / `claim()` are ordinary `Shared[T, P]` memberRoutines now —
                     // resolution + the `needs P in [...]` type-equality constraint (RF-S160) enforce
                     // policy legality (inspect not on Exclusive, claim not on ReadOnly), and the
                     // scoped-token / `using`-binding rules enforce lifetime. The earlier ad-hoc
                     // inspect!/claim! validation (a variable→policy side-table that did not recognize
                     // the 2-arg `Shared[T, P]`) was removed in favour of the type system.
 
-                    // Enforce a method's `needs P in [...]` (TypeEquality) constraint when the
+                    // Enforce a memberRoutine's `needs P in [...]` (TypeEquality) constraint when the
                     // constrained parameter is INHERITED FROM THE RECEIVER (e.g.
                     // `Shared[T, P].claim() needs P in [Exclusive, MultiRead]`, with P bound by the
                     // receiver `Shared[Counter, ReadOnly]`). The general constraint validator only
                     // fires for explicitly-instantiated generics, so a receiver-bound param — which
                     // carries no explicit type args at the call site — is validated here instead.
-                    ValidateReceiverInheritedTypeEqualityConstraints(method: method,
+                    ValidateReceiverInheritedTypeEqualityConstraints(memberRoutine: memberRoutine,
                         receiverType: objectType, member: member, location: call.Location);
 
                     // A multi-threaded access token (Inspecting/Claiming, produced by
@@ -1469,7 +1469,7 @@ public sealed partial class SemanticVerifier
                     // so its lock spans exactly that scope. Reject every other position — inline use,
                     // a function argument, an unbound statement — with RF-S629. (The "cannot bind to a
                     // var" half is already enforced for inline-only tokens at var-declaration sites.)
-                    if (method.ReturnType is { } mtReturn &&
+                    if (memberRoutine.ReturnType is { } mtReturn &&
                         mtReturn.BareName is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
                         !ReferenceEquals(objA: call, objB: _usingResourceNode))
                     {
@@ -1484,18 +1484,18 @@ public sealed partial class SemanticVerifier
                     // #22: Reject migratable operations on collection being iterated
                     if (member.Object is IdentifierExpression iterTarget &&
                         _activeIterationSources.Contains(item: iterTarget.Name) &&
-                        method.MutationCategory == MutationCategory.Migratable)
+                        memberRoutine.MutationCategory == MutationCategory.Migratable)
                     {
                         ReportError(code: SemanticDiagnosticCode.MigratableDuringIteration,
                             message:
-                            $"Cannot call migratable method '{method.Name}' on '{iterTarget.Name}' while iterating over it. " +
+                            $"Cannot call migratable member routine '{memberRoutine.Name}' on '{iterTarget.Name}' while iterating over it. " +
                             "Collect changes and apply them after the loop.",
                             location: call.Location);
                     }
 
                     // #47: .grasp() on @initonly record warns — record is frozen after construction
                     // Check if the variable holding the record is @initonly bound
-                    if (member.MemberName == ModifyMethodName && objectType is RecordTypeInfo &&
+                    if (member.MemberName == ModifyMemberRoutineName && objectType is RecordTypeInfo &&
                         member.Object is IdentifierExpression graspTarget)
                     {
                         VariableInfo? targetVar =
@@ -1525,19 +1525,19 @@ public sealed partial class SemanticVerifier
                         location: call.Location);
 
                     // Return type is None if not specified
-                    TypeSymbol? callReturnType = method.ReturnType;
+                    TypeSymbol? callReturnType = memberRoutine.ReturnType;
                     if (callReturnType != null)
                     {
                         var substitutions = new Dictionary<string, TypeSymbol>();
 
                         // GenericParameterTypeInfo owner -> map param name to receiver type
-                        if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
+                        if (memberRoutine.OwnerType is GenericParameterTypeInfo genParamOwner)
                         {
                             substitutions[key: genParamOwner.Name] = dispatchType!;
                         }
 
                         // Protocol owner -> map protocol generic params to receiver's type args
-                        if (method.OwnerType is ProtocolTypeInfo protoOwner &&
+                        if (memberRoutine.OwnerType is ProtocolTypeInfo protoOwner &&
                             dispatchType is { IsGenericResolution: true, TypeArguments: not null })
                         {
                             ProtocolTypeInfo protoGenDef = protoOwner.GenericDefinition ?? protoOwner;
@@ -1556,13 +1556,13 @@ public sealed partial class SemanticVerifier
                         // receiver — e.g. `Iterable[T].enumerate() -> ?EnumerateIterator[T, Me]`.
                         // Bind it to the concrete receiver so the call's return type is the concrete
                         // adapter (`EnumerateIterator[Text, List[Text]]`). Unconditional: the
-                        // protocol-extension method is re-homed onto the implementer (owner =
+                        // protocol-extension memberRoutine is re-homed onto the implementer (owner =
                         // List[Text], not the protocol), so an owner-is-protocol gate would miss it;
-                        // for non-protocol methods no return type contains `Me`, so this is a no-op.
+                        // for non-protocol memberRoutines no return type contains `Me`, so this is a no-op.
                         substitutions[key: "Me"] = dispatchType!;
 
-                        // Protocol method resolved through a generic param's `obeys` constraint
-                        // (e.g. `r.iter()` where `r: __T0 obeys Iterable[S64]`). The resolved method
+                        // Protocol memberRoutine resolved through a generic param's `obeys` constraint
+                        // (e.g. `r.iter()` where `r: __T0 obeys Iterable[S64]`). The resolved memberRoutine
                         // is homed on the bare generic param, and its signature carries the PROTOCOL's
                         // own element param (`Iterator[T]`), which is distinct from `__T0` and so isn't
                         // bound by the branches above. Bind each obeys-constraint protocol's params from
@@ -1600,18 +1600,18 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = callReturnType ??
                                             _registry.LookupType(name: NoneTypeName) ??
                                             ErrorTypeInfo.Instance;
-                    call.IsInFlight = method.IsInFlightReturn;
+                    call.IsInFlight = memberRoutine.IsInFlightReturn;
                     return returnType;
                 }
 
-                // #78: Method-chain constructor — "42".S32!() -> S32.create!(from: "42").
+                // #78: memberRoutine-chain constructor — "42".S32!() -> S32.create!(from: "42").
                 // MemberName is bare; failability is carried structurally in member.IsFailable.
                 bool isFailable = member.IsFailable;
                 string potentialTypeName = member.MemberName;
 
                 TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
 
-                // Type-arg inference for a method-chain variant arm extractor: `sv.Dict!()` where `Dict`
+                // Type-arg inference for a memberRoutine-chain variant arm extractor: `sv.Dict!()` where `Dict`
                 // is a generic definition and the receiver is a variant — adopt the type arguments of the
                 // variant's arm whose generic base is `Dict` (mirrors the construction-form inference), so
                 // the concrete `Dict[Text, SerialValue].create!(from: sv)` is found instead of the def's
@@ -1636,15 +1636,15 @@ public sealed partial class SemanticVerifier
 
                 if (targetType != null)
                 {
-                    // Look up the creator on the target type, using method-overload resolution
+                    // Look up the creator on the target type, using memberRoutine-overload resolution
                     // to match the object type (e.g., Text -> S32.create!(from_text: Text)).
                     // Note: parser strips '!' from routine names — IsFailable is a separate flag.
                     // Always look up "create" and check IsFailable on the result.
-                    // create is owner-scoped, so LookupMethodOverload (not LookupRoutineOverload)
+                    // create is owner-scoped, so LookupMemberRoutineOverload (not LookupRoutineOverload)
                     // is the right entry point — the latter only indexes free functions.
                     RoutineInfo? creator =
-                        _registry.LookupMethodOverload(type: targetType,
-                            methodName: "create",
+                        _registry.LookupMemberRoutineOverload(type: targetType,
+                            memberRoutineName: "create",
                             argTypes: [objectType]);
                     // Fall back to default overload if no match by arg type
                     string creatorFullName = $"{targetType.FullName}.create";
@@ -1666,9 +1666,9 @@ public sealed partial class SemanticVerifier
 
                         if (nonMeParams.Count != 1)
                         {
-                            ReportError(code: SemanticDiagnosticCode.MethodChainMultiArg,
+                            ReportError(code: SemanticDiagnosticCode.MemberRoutineChainMultiArg,
                                 message:
-                                $"Method-chain constructor '{potentialTypeName}' requires exactly one non-'me' parameter, " +
+                                $"member routine-chain constructor '{potentialTypeName}' requires exactly one non-'me' parameter, " +
                                 $"but 'create' has {nonMeParams.Count}.",
                                 location: call.Location);
                             return ErrorTypeInfo.Instance;
@@ -1677,16 +1677,16 @@ public sealed partial class SemanticVerifier
                         // Validate no extra args passed in the call
                         if (call.Arguments.Count > 0)
                         {
-                            ReportError(code: SemanticDiagnosticCode.MethodChainMultiArg,
+                            ReportError(code: SemanticDiagnosticCode.MemberRoutineChainMultiArg,
                                 message:
-                                $"Method-chain constructor '{potentialTypeName}' takes no additional arguments — " +
+                                $"member routine-chain constructor '{potentialTypeName}' takes no additional arguments — " +
                                 "the object itself is the argument.",
                                 location: call.Location);
                             return ErrorTypeInfo.Instance;
                         }
 
                         // Type-check the object expression against the constructor parameter.
-                        // We only reach the failure branch when LookupMethodOverload found no
+                        // We only reach the failure branch when LookupMemberRoutineOverload found no
                         // create overload accepting objectType and the fallback above returned
                         // an arbitrary overload (e.g. create(from: S8)). Report the real problem
                         // — the missing conversion routine — rather than a misleading mismatch
@@ -1743,7 +1743,7 @@ public sealed partial class SemanticVerifier
                     MemberVariableInfo? namedField =
                         receiverFields.FirstOrDefault(predicate: mv => mv.Name == callLookupName);
 
-                    // A Routine-typed field is the only legitimate "method == null" member call:
+                    // A Routine-typed field is the only legitimate "member routine == null" member call:
                     // it is invoked indirectly through the stored closure pointer.
                     if (namedField is not { Type: RoutineTypeInfo })
                     {
@@ -1754,9 +1754,9 @@ public sealed partial class SemanticVerifier
                                 $" '{callLookupName}' is a field — access it as '.{callLookupName}' " +
                                 "(no parentheses), or define a routine of that name.";
                         }
-                        else if (!isFailableMethodCall &&
-                                 _registry.LookupMethod(type: objectType,
-                                     methodName: callLookupName, isFailable: true) != null)
+                        else if (!isFailableMemberRoutineCall &&
+                                 _registry.LookupMemberRoutine(type: objectType,
+                                     memberRoutineName: callLookupName, isFailable: true) != null)
                         {
                             hint = $" Did you mean the failable form '.{callLookupName}!()'?";
                         }
@@ -1765,7 +1765,7 @@ public sealed partial class SemanticVerifier
                             hint = "";
                         }
 
-                        ReportError(code: SemanticDiagnosticCode.MethodNotFound,
+                        ReportError(code: SemanticDiagnosticCode.MemberRoutineNotFound,
                             message:
                             $"No routine '{member.MemberName}()' is defined on '{objectType.Name}'.{hint}",
                             location: call.Location);
@@ -1912,12 +1912,12 @@ public sealed partial class SemanticVerifier
         return CallLoweringKind.DirectRoutine;
     }
 
-    private static CallLoweringKind ClassifyMethodCall(RoutineInfo method)
+    private static CallLoweringKind ClassifyMemberRoutineCall(RoutineInfo memberRoutine)
     {
-        if (method.LlvmIrTemplate != null)
+        if (memberRoutine.LlvmIrTemplate != null)
             return CallLoweringKind.LlvmIntrinsic;
 
-        if (method.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(name: method.Name))
+        if (memberRoutine.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(name: memberRoutine.Name))
             return CallLoweringKind.BuilderIntrinsic;
 
         return CallLoweringKind.DirectMemberRoutine;
@@ -1934,17 +1934,17 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Validates a called method's <c>needs P in [...]</c> (<see cref="ConstraintKind.TypeEquality"/>)
+    /// Validates a called memberRoutine's <c>needs P in [...]</c> (<see cref="ConstraintKind.TypeEquality"/>)
     /// constraints when the constrained parameter is inherited from the receiver type rather than
     /// supplied as an explicit type argument — e.g. <c>Shared[T, P].claim() needs P in [Exclusive,
     /// MultiRead]</c> called on a <c>Shared[Counter, ReadOnly]</c>. The standard constraint validator
-    /// (<c>TypeResolver.ValidateTypeEqualityConstraint</c>) only fires when a generic type/method is
+    /// (<c>TypeResolver.ValidateTypeEqualityConstraint</c>) only fires when a generic type/memberRoutine is
     /// explicitly instantiated, so receiver-bound parameters would otherwise go unchecked.
     /// </summary>
-    private void ValidateReceiverInheritedTypeEqualityConstraints(RoutineInfo method,
+    private void ValidateReceiverInheritedTypeEqualityConstraints(RoutineInfo memberRoutine,
         TypeSymbol receiverType, MemberExpression member, SourceLocation location)
     {
-        if (method.GenericConstraints is not { Count: > 0 } constraints)
+        if (memberRoutine.GenericConstraints is not { Count: > 0 } constraints)
             return;
 
         // Map the receiver's generic parameter names to its bound type arguments. The names live on

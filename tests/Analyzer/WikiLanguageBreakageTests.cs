@@ -476,6 +476,6 @@ public class WikiLanguageBreakageTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MeOutsideTypeMethod);
+            filter: e => e.Code == SemanticDiagnosticCode.MeOutsideTypeMemberRoutine);
     }
 }

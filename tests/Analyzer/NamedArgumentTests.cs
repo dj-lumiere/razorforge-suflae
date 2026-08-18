@@ -308,7 +308,7 @@ public class NamedArgumentTests
     /// </summary>
 
     [Fact]
-    public void Analyze_MemberRoutine_OneNonMeParam_Positional_NoS510()
+    public void Analyze_memberRoutine_OneNonMeParam_Positional_NoS510()
     {
         string source = """
                         record Point
@@ -336,7 +336,7 @@ public class NamedArgumentTests
     /// </summary>
 
     [Fact]
-    public void Analyze_MemberRoutine_ThreeNonMeParams_Positional_ReportsS510()
+    public void Analyze_memberRoutine_ThreeNonMeParams_Positional_ReportsS510()
     {
         // `me` is excluded from the param count; 3 explicit positional args trip S510.
         string source = """

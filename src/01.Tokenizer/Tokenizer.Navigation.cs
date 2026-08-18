@@ -3,7 +3,7 @@ using System.Text;
 namespace Compiler.Tokenizer;
 
 /// <summary>
-/// Partial class containing character navigation and token management methods for the unified tokenizer.
+/// Partial class containing character navigation and token management memberRoutines for the unified tokenizer.
 /// </summary>
 public partial class Tokenizer
 {
@@ -16,7 +16,7 @@ public partial class Tokenizer
     /// The character at the current position, or '\0' if at end of source.
     /// </returns>
     /// <remarks>
-    /// This method updates line and column tracking. When a newline is consumed,
+    /// This memberRoutine updates line and column tracking. When a newline is consumed,
     /// the line number increments and column resets to 1.
     /// </remarks>
     private char Advance()

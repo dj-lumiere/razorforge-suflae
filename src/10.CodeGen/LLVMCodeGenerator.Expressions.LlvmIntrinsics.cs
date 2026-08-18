@@ -71,7 +71,7 @@ public partial class LlvmCodeGenerator
         }
 
         string mold = routine.LlvmIrTemplate!;
-        return EmitFromTemplate(sb: sb, mold: mold, method: routine,
+        return EmitFromTemplate(sb: sb, mold: mold, memberRoutine: routine,
             llvmTypeArgs: llvmTypeArgs, args: argValues);
     }
 
@@ -81,7 +81,7 @@ public partial class LlvmCodeGenerator
     /// the simpler `{paramName}` substitutions, so anything that's still wrapped in braces
     /// and contains a known param-name token is treated as an arithmetic expression.
     /// </summary>
-    private static string ResolveArithmeticHoles(string template, RoutineInfo method,
+    private static string ResolveArithmeticHoles(string template, RoutineInfo memberRoutine,
         List<string> llvmTypeArgs)
     {
         if (!template.Contains(value: '{'))
@@ -90,14 +90,14 @@ public partial class LlvmCodeGenerator
         }
 
         List<string>? genericParameters =
-            method.GenericParameters ?? method.GenericDefinition?.GenericParameters;
+            memberRoutine.GenericParameters ?? memberRoutine.GenericDefinition?.GenericParameters;
         if (genericParameters is not { Count: > 0 })
         {
             return template;
         }
 
         Dictionary<string, long> paramValues = BuildConstParamValues(
-            genericParameters: genericParameters, routineTypeArgs: method.TypeArguments,
+            genericParameters: genericParameters, routineTypeArgs: memberRoutine.TypeArguments,
             llvmTypeArgs: llvmTypeArgs);
         if (paramValues.Count == 0)
         {
@@ -426,7 +426,7 @@ public partial class LlvmCodeGenerator
         return line;
     }
 
-    private string EmitFromTemplate(StringBuilder sb, string mold, RoutineInfo method,
+    private string EmitFromTemplate(StringBuilder sb, string mold, RoutineInfo memberRoutine,
         List<string> llvmTypeArgs, List<string> args)
     {
         string[] lines = mold.Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries);
@@ -453,7 +453,7 @@ public partial class LlvmCodeGenerator
 
             // {T}, {From}, {To}, etc. — named generic parameters -> LLVM types
             List<string>? genericParameters =
-                method.GenericParameters ?? method.GenericDefinition?.GenericParameters;
+                memberRoutine.GenericParameters ?? memberRoutine.GenericDefinition?.GenericParameters;
             if (genericParameters != null)
             {
                 for (int i = 0; i < genericParameters.Count && i < llvmTypeArgs.Count; i++)
@@ -473,9 +473,9 @@ public partial class LlvmCodeGenerator
             }
 
             // {paramName} -> emitted arg value (positional by parameter list order)
-            for (int i = 0; i < method.Parameters.Count && i < args.Count; i++)
+            for (int i = 0; i < memberRoutine.Parameters.Count && i < args.Count; i++)
             {
-                string paramName = method.Parameters[index: i].Name;
+                string paramName = memberRoutine.Parameters[index: i].Name;
                 substituted = substituted.Replace(oldValue: $"{{{paramName}}}",
                     newValue: args[index: i]);
             }
@@ -484,7 +484,7 @@ public partial class LlvmCodeGenerator
             // BackendType templates (resolved in RecordTypeInfo.CreateInstance) handle these
             // already; @llvm_ir templates need the same support so e.g. BitArray[N]'s
             // byte_at_bits intrinsic emits `[1 x i8]` for N=8 instead of `[{(N+7)//8} x i8]`.
-            substituted = ResolveArithmeticHoles(template: substituted, method: method,
+            substituted = ResolveArithmeticHoles(template: substituted, memberRoutine: memberRoutine,
                 llvmTypeArgs: llvmTypeArgs);
 
             substituted = FixIntPtrBitcast(line: substituted);
@@ -525,9 +525,9 @@ public partial class LlvmCodeGenerator
         }
 
         // Overflow intrinsics return anonymous struct types like { i128, i1 }.
-        // If the method's return type is a TupleTypeInfo, coerce via extractvalue/insertvalue
+        // If the memberRoutine's return type is a TupleTypeInfo, coerce via extractvalue/insertvalue
         // so the caller receives the named LLVM type (%"Record.Tuple[...]").
-        if (lastResult != null && method.ReturnType is TupleTypeInfo tupleReturn)
+        if (lastResult != null && memberRoutine.ReturnType is TupleTypeInfo tupleReturn)
         {
             string namedType = GetLlvmType(type: tupleReturn);
             string anonType =
@@ -605,19 +605,19 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Fallback handler for <see cref="GenericMethodCallExpression"/> nodes that reached codegen
+    /// Fallback handler for <see cref="GenericMemberRoutineCallExpression"/> nodes that reached codegen
     /// without being lowered. Handles LLVM intrinsic free-function GMCEs by looking up the routine
     /// in the registry. Throws for any non-intrinsic GMCE (contract violation).
     /// </summary>
-    private string EmitGmceFallback(StringBuilder sb, GenericMethodCallExpression gmc)
+    private string EmitGmceFallback(StringBuilder sb, GenericMemberRoutineCallExpression gmc)
     {
         RoutineInfo? routine = gmc.ResolvedRoutine;
 
-        // Try registry lookup for unresolved free-function calls (Object.Name == MethodName).
+        // Try registry lookup for unresolved free-function calls (Object.Name == memberRoutineName).
         if (routine == null && gmc.Object is IdentifierExpression freeId &&
-            freeId.Name == gmc.MethodName)
+            freeId.Name == gmc.MemberRoutineName)
         {
-            routine = _registry.LookupRoutineByName(name: gmc.MethodName);
+            routine = _registry.LookupRoutineByName(name: gmc.MemberRoutineName);
         }
 
         if (routine?.LlvmIrTemplate != null)
@@ -627,8 +627,8 @@ public partial class LlvmCodeGenerator
 
         string objectDesc = gmc.Object is IdentifierExpression id2 ? id2.Name : gmc.Object.GetType().Name;
         throw new InvalidOperationException(
-            $"GenericMethodCallExpression reached codegen — GenericCallLoweringPass must lower all GMCEs to CallExpression before codegen. " +
-            $"GMCE: {objectDesc}.{gmc.MethodName}[{string.Join(", ", gmc.TypeArguments?.Select(t => t.Name) ?? [])}], " +
+            $"GenericMemberRoutineCallExpression reached codegen — GenericCallLoweringPass must lower all GMCEs to CallExpression before codegen. " +
+            $"GMCE: {objectDesc}.{gmc.MemberRoutineName}[{string.Join(", ", gmc.TypeArguments?.Select(t => t.Name) ?? [])}], " +
             $"in routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})");
     }
 }

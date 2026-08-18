@@ -9,7 +9,7 @@ module Numerics
 ### the transcendentals round to a generous default working precision under
 ### round-to-nearest-ties-to-even.
 ### :see: {Integer}, {Decimal}
-record Real obeys Storable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable, FastHashable
+record Real obeys Assignable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable, FastHashable
   ### The native libbf handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count cell (or null) governing the shared handle lifetime.
@@ -77,7 +77,7 @@ common routine Real.from_literal(text: Text) -> Real
 ### Returns a copy with the underlying refcount bumped; the handle is shared.
 ### :returns: The resulting `Real` value.
 @[readonly, inline]
-routine Real.store() -> Real
+routine Real.assign() -> Real
   danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().hold()
@@ -159,7 +159,7 @@ routine Real.is_zero() -> Bool
 routine Real.abs() -> Real
   if me.is_negative()
     return me.neg()
-  return me.store()
+  return me.assign()
 
 # ============================================================================
 # Comparison
@@ -525,8 +525,8 @@ routine Real.signum() -> Real
 @readonly
 routine Real.min(you: Real) -> Real
   if me.cmp(you: you) is ME_LARGE
-    return you.store()
-  return me.store()
+    return you.assign()
+  return me.assign()
 
 ### Returns the larger of this value and `other`.
 ### :param you: The value to compare against.
@@ -534,8 +534,8 @@ routine Real.min(you: Real) -> Real
 @readonly
 routine Real.max(you: Real) -> Real
   if me.cmp(you: you) is ME_SMALL
-    return you.store()
-  return me.store()
+    return you.assign()
+  return me.assign()
 
 ### Returns this value's magnitude carrying the sign of `you`.
 ### :param you: The value supplying the sign.

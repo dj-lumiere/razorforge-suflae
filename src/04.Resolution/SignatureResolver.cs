@@ -124,7 +124,7 @@ internal sealed class SignatureResolver
         // carries any genuine receiver params, so they resolve via that scope).
         //
         // A param that is NOT receiver-derived — a free routine's own `[T]`, or a member routine's
-        // method-generic `[U]` — is an EXPLICIT declaration. It must NEVER be dropped just because a
+        // memberRoutine-generic `[U]` — is an EXPLICIT declaration. It must NEVER be dropped just because a
         // user type shares its name (`record T` + `identity[T]`, `record U` + `Holder[A].mapped[U]`):
         // its identity is its slot, not the label. Filtering it here was the RF-S502 half of the
         // name-as-identity collision (the resolver-side half is TypeResolver's slot-first shadowing).
@@ -267,7 +267,7 @@ internal sealed class SignatureResolver
                         collection: parameters.Select(selector: p => (p.Name, p.Type.FullName)))
                     .SetEquals(other: fields.Select(selector: f => (f.Name, f.Type.FullName))))
             {
-                _sa.ReportError(code: SemanticDiagnosticCode.AllFieldsCreatorReserved,
+                _sa.ReportError(code: SemanticDiagnosticCode.AllMemberVariablesCreatorReserved,
                     message:
                     $"'create' cannot take exactly the fields ({string.Join(separator: ", ", values: fields.Select(selector: f => $"{f.Name}: {f.Type.Name}"))}) " +
                     $"of '{refreshedOwnerType!.Name}' — that signature is the built-in memberwise constructor and " +
@@ -470,7 +470,7 @@ internal sealed class SignatureResolver
         // Post-registration validation
         ValidateOperatorProtocolConformance(routineInfo: finalRoutine,
             location: routine.Location);
-        ValidateProtocolMethodSignature(routineInfo: finalRoutine,
+        ValidateProtocolMemberRoutineSignature(routineInfo: finalRoutine,
             location: routine.Location);
     }
 
@@ -478,7 +478,7 @@ internal sealed class SignatureResolver
     /// Collects the leaf identifier names appearing in a member routine's RECEIVER type arguments
     /// (e.g. <c>List[DictEntry[K, V]]</c> → {K, V}, <c>Iterable[Text]</c> → {Text}). These are the
     /// receiver-DERIVED parameter names — the only ones the same-name-as-a-type filter may drop, since
-    /// a receiver slot can bind a concrete type. Method-generic and free-routine parameters are NOT in
+    /// a receiver slot can bind a concrete type. memberRoutine-generic and free-routine parameters are NOT in
     /// the receiver, so they never appear here and are never filtered. Empty for a free routine (null
     /// receiver) or a bare type-parameter receiver. Dotted (module-qualified) names are excluded.
     /// </summary>
@@ -623,11 +623,11 @@ internal sealed class SignatureResolver
     }
 
     /// <summary>
-    /// Validates that a method's signature matches the protocol method it implements.
+    /// Validates that a memberRoutine's signature matches the protocol memberRoutine it implements.
     /// </summary>
-    private void ValidateProtocolMethodSignature(RoutineInfo routineInfo, SourceLocation? location)
+    private void ValidateProtocolMemberRoutineSignature(RoutineInfo routineInfo, SourceLocation? location)
     {
-        // Only check methods (not functions)
+        // Only check memberRoutines (not functions)
         if (routineInfo.OwnerType == null)
         {
             return;
@@ -653,7 +653,7 @@ internal sealed class SignatureResolver
             return;
         }
 
-        // Check each protocol for a method with this name
+        // Check each protocol for a memberRoutine with this name
         foreach (TypeSymbol implemented in implementedProtocols)
         {
             if (implemented is not ProtocolTypeInfo protocol)
@@ -661,29 +661,29 @@ internal sealed class SignatureResolver
                 continue;
             }
 
-            // Find the protocol method with this name
-            ProtocolMethodInfo? protoMethod = protocol.Methods.FirstOrDefault(
+            // Find the protocol memberRoutine with this name
+            ProtocolMemberRoutineInfo? protoMemberRoutine = protocol.MemberRoutines.FirstOrDefault(
                 predicate: m => m.Name == routineInfo.Name);
 
-            if (protoMethod == null)
+            if (protoMemberRoutine == null)
             {
                 continue;
             }
 
             // Validate the signature matches
-            ValidateMethodAgainstProtocol(typeMethod: routineInfo,
-                protoMethod: protoMethod,
+            ValidateMemberRoutineAgainstProtocol(typeMemberRoutine: routineInfo,
+                protoMemberRoutine: protoMemberRoutine,
                 protocol: protocol,
                 location: location ?? new SourceLocation("", 0, 0, 0));
         }
     }
 
     /// <summary>
-    /// Validates that a type method matches the expected protocol method signature.
+    /// Validates that a type memberRoutine matches the expected protocol memberRoutine signature.
     /// Reports specific errors for mismatches.
     /// </summary>
-    private void ValidateMethodAgainstProtocol(RoutineInfo typeMethod,
-        ProtocolMethodInfo protoMethod, ProtocolTypeInfo protocol, SourceLocation? location)
+    private void ValidateMemberRoutineAgainstProtocol(RoutineInfo typeMemberRoutine,
+        ProtocolMemberRoutineInfo protoMemberRoutine, ProtocolTypeInfo protocol, SourceLocation? location)
     {
         // Build substitution map for generic protocols (e.g., Supplier[S32]: T -> S32)
         Dictionary<string, string>? substitution = null;
@@ -724,32 +724,32 @@ internal sealed class SignatureResolver
         // a safe substitute (a `using` resource whose `enter!` can fail is satisfied by a `enter`
         // that never does). The REVERSE is unsound: a failable implementation cannot satisfy a
         // non-failable requirement, because its failures would escape unhandled at call sites that
-        // assume the method cannot fail.
-        if (typeMethod.IsFailable && !protoMethod.IsFailable)
+        // assume the memberRoutine cannot fail.
+        if (typeMemberRoutine.IsFailable && !protoMemberRoutine.IsFailable)
         {
-            _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+            _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch,
                 message:
-                $"Method '{typeMethod.Name}' should be non-failable to match protocol '{protocol.Name}', " +
+                $"member routine '{typeMemberRoutine.Name}' should be non-failable to match protocol '{protocol.Name}', " +
                 "but is failable (!).",
                 location: location ?? new SourceLocation("", 0, 0, 0));
             return;
         }
 
         // Check parameter count (excluding 'me' parameter if present)
-        // In-body methods have explicit 'me' as first parameter
-        // Extension methods don't include 'me' in the parameter list
-        int expectedParamCount = protoMethod.ParameterTypes.Count;
-        bool hasMeParam = typeMethod.Parameters.Count > 0 &&
-                          typeMethod.Parameters[index: 0].Name == "me";
-        int actualParamCount = typeMethod.Parameters.Count - (hasMeParam
+        // In-body memberRoutines have explicit 'me' as first parameter
+        // Extension memberRoutines don't include 'me' in the parameter list
+        int expectedParamCount = protoMemberRoutine.ParameterTypes.Count;
+        bool hasMeParam = typeMemberRoutine.Parameters.Count > 0 &&
+                          typeMemberRoutine.Parameters[index: 0].Name == "me";
+        int actualParamCount = typeMemberRoutine.Parameters.Count - (hasMeParam
             ? 1
             : 0);
 
         if (actualParamCount != expectedParamCount)
         {
-            _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+            _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch,
                 message:
-                $"Method '{typeMethod.Name}' has {actualParamCount} parameter(s) but protocol '{protocol.Name}' expects {expectedParamCount}.",
+                $"member routine '{typeMemberRoutine.Name}' has {actualParamCount} parameter(s) but protocol '{protocol.Name}' expects {expectedParamCount}.",
                 location: location ?? new SourceLocation("", 0, 0, 0));
             return;
         }
@@ -760,19 +760,19 @@ internal sealed class SignatureResolver
             : 0;
         for (int i = 0; i < expectedParamCount; i++)
         {
-            TypeSymbol expectedType = protoMethod.ParameterTypes[index: i];
-            TypeSymbol actualType = typeMethod.Parameters[index: startIndex + i].Type;
+            TypeSymbol expectedType = protoMemberRoutine.ParameterTypes[index: i];
+            TypeSymbol actualType = typeMemberRoutine.Parameters[index: startIndex + i].Type;
 
             // Handle protocol self type (Me) - should match the owner type
             if (expectedType is ProtocolSelfTypeInfo)
             {
-                if (typeMethod.OwnerType != null &&
+                if (typeMemberRoutine.OwnerType != null &&
                     !MeTypeMatches(actualType: actualType,
-                        ownerType: typeMethod.OwnerType))
+                        ownerType: typeMemberRoutine.OwnerType))
                 {
-                    _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                    _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch,
                         message:
-                        $"Parameter '{protoMethod.ParameterNames[index: i]}' of '{typeMethod.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{typeMethod.OwnerType.Name}' (Me).",
+                        $"Parameter '{protoMemberRoutine.ParameterNames[index: i]}' of '{typeMemberRoutine.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{typeMemberRoutine.OwnerType.Name}' (Me).",
                         location: location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
@@ -791,30 +791,30 @@ internal sealed class SignatureResolver
                 }
                 if (actualType.Name != expectedName)
                 {
-                    _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                    _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch,
                         message:
-                        $"Parameter '{protoMethod.ParameterNames[index: i]}' of '{typeMethod.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{expectedName}'.",
+                        $"Parameter '{protoMemberRoutine.ParameterNames[index: i]}' of '{typeMemberRoutine.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{expectedName}'.",
                         location: location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
         }
 
         // Check return type
-        if (protoMethod.ReturnType != null && typeMethod.ReturnType != null)
+        if (protoMemberRoutine.ReturnType != null && typeMemberRoutine.ReturnType != null)
         {
-            TypeSymbol expectedReturn = protoMethod.ReturnType;
-            TypeSymbol actualReturn = typeMethod.ReturnType;
+            TypeSymbol expectedReturn = protoMemberRoutine.ReturnType;
+            TypeSymbol actualReturn = typeMemberRoutine.ReturnType;
 
             // Handle protocol self type (Me)
             if (expectedReturn is ProtocolSelfTypeInfo)
             {
-                if (typeMethod.OwnerType != null &&
+                if (typeMemberRoutine.OwnerType != null &&
                     !MeTypeMatches(actualType: actualReturn,
-                        ownerType: typeMethod.OwnerType))
+                        ownerType: typeMemberRoutine.OwnerType))
                 {
-                    _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                    _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch,
                         message:
-                        $"Method '{typeMethod.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{typeMethod.OwnerType.Name}' (Me).",
+                        $"member routine '{typeMemberRoutine.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{typeMemberRoutine.OwnerType.Name}' (Me).",
                         location: location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
@@ -833,9 +833,9 @@ internal sealed class SignatureResolver
                 }
                 if (actualReturn.Name != expectedReturnName)
                 {
-                    _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
+                    _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch,
                         message:
-                        $"Method '{typeMethod.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{expectedReturnName}'.",
+                        $"member routine '{typeMemberRoutine.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{expectedReturnName}'.",
                         location: location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
@@ -885,19 +885,19 @@ internal sealed class SignatureResolver
     }
 
     /// <summary>
-    /// Validates that a type obeys the required protocol when defining operator methods.
+    /// Validates that a type obeys the required protocol when defining operator memberRoutines.
     /// For example, defining add requires the type to obey Addable.
     /// </summary>
     private void ValidateOperatorProtocolConformance(RoutineInfo routineInfo,
         SourceLocation? location)
     {
-        // Only check methods (not functions)
+        // Only check memberRoutines (not functions)
         if (routineInfo.OwnerType == null)
         {
             return;
         }
 
-        // Only WIRED operator methods (add, sub, …) require the operator protocol. A plain user
+        // Only WIRED operator memberRoutines (add, sub, …) require the operator protocol. A plain user
         // routine that merely shares the bare name (e.g. `routine Counter.add(n)`) is NOT an operator
         // and must not be forced to obey Addable — the name alone no longer distinguishes them, so
         // gate on the structural wired attribute.
@@ -906,11 +906,11 @@ internal sealed class SignatureResolver
             return;
         }
 
-        // Get the required protocol for this wired method
+        // Get the required protocol for this wired memberRoutine
         List<string>? requiredProtocols = SemanticVerifier.GetRequiredProtocols(wiredName: routineInfo.Name);
         if (requiredProtocols == null || requiredProtocols.Count == 0)
         {
-            return; // Not an operator method or no protocol required
+            return; // Not an operator memberRoutine or no protocol required
         }
 
         // Re-lookup the owner type to get the updated version with protocols
@@ -944,7 +944,7 @@ internal sealed class SignatureResolver
 
     /// <summary>
     /// Checks if a type explicitly declares obeying a protocol (not structural conformance).
-    /// This is required for operator methods - you must explicitly declare "obeys Protocol".
+    /// This is required for operator memberRoutines - you must explicitly declare "obeys Protocol".
     /// </summary>
     private bool ExplicitlyFollowsProtocol(TypeSymbol type, string protocolName)
     {

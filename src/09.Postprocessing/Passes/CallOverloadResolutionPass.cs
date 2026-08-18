@@ -13,7 +13,7 @@ namespace Compiler.Postprocessing.Passes;
 /// Post-instantiation pass that resolves overloads and assigns <see cref="CallLoweringKind"/>
 /// for any <see cref="CallExpression"/> still marked <c>Unknown</c> after semantic analysis.
 ///
-/// <para>Runs after <see cref="GenericCallLoweringPass"/> so that all generic method calls
+/// <para>Runs after <see cref="GenericCallLoweringPass"/> so that all generic memberRoutine calls
 /// have already been lowered to plain <see cref="CallExpression"/> nodes with concrete
 /// receiver types. At that point every <c>ResolvedType</c> on expressions is module-qualified
 /// and structural (<c>FullName</c>-level) overload matching is safe.</para>
@@ -230,7 +230,7 @@ internal sealed class CallOverloadResolutionPass
                 WalkExpression(steal.Operand);
                 break;
 
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
                 WalkExpression(gmc.Object);
                 foreach (Expression arg in gmc.Arguments) WalkExpression(arg);
                 break;
@@ -309,12 +309,12 @@ internal sealed class CallOverloadResolutionPass
         if (call.LoweringKind != CallLoweringKind.Unknown) return;
 
         // Fast path: routine already resolved by DerivedOperatorPass or SA.
-        // Wired routines like ComparisonSign.eq may not be findable via LookupMethodOverload
+        // Wired routines like ComparisonSign.eq may not be findable via LookupMemberRoutineOverload
         // (they are handled by codegen directly, not registered as normal overloads).
         if (call.ResolvedRoutine != null)
         {
             call.LoweringKind = call.Callee is MemberExpression
-                ? CallClassifier.ClassifyMethodCall(method: call.ResolvedRoutine)
+                ? CallClassifier.ClassifyMemberRoutineCall(memberRoutine: call.ResolvedRoutine)
                 : CallClassifier.ClassifyStandaloneRoutineCall(routine: call.ResolvedRoutine);
             return;
         }
@@ -344,7 +344,7 @@ internal sealed class CallOverloadResolutionPass
 
                 // Const-generic value types (e.g. ConstGenericValueTypeInfo("63") = N=63 in Array[T, 63])
                 // are not registered in _routinesByOwner.  Resolve to the underlying numeric type so
-                // method lookup can find operators like sub!.
+                // memberRoutine lookup can find operators like sub!.
                 // Also, their arguments may lack ResolvedType (pre-SA stdlib bodies), so allow a
                 // type-less fallback lookup — there is typically only one overload for numeric operators.
                 bool isConstGenericReceiver = receiverType is ConstGenericValueTypeInfo;
@@ -361,30 +361,30 @@ internal sealed class CallOverloadResolutionPass
                     return;
                 }
 
-                RoutineInfo? method = allArgTypesKnown
-                    ? _registry.LookupMethodOverload(type: receiverType,
-                        methodName: member.MemberName, argTypes: argTypes)
+                RoutineInfo? memberRoutine = allArgTypesKnown
+                    ? _registry.LookupMemberRoutineOverload(type: receiverType,
+                        memberRoutineName: member.MemberName, argTypes: argTypes)
                     : null;
-                method ??= _registry.LookupMethod(type: receiverType,
-                    methodName: member.MemberName);
+                memberRoutine ??= _registry.LookupMemberRoutine(type: receiverType,
+                    memberRoutineName: member.MemberName);
 
                 // If the non-failable form isn't registered, try the failable form.
                 // E.g. U64.sub is not defined (underflow is undefined); only U64.sub! exists.
                 // MemberName is bare; failability is structural — retry with isFailable: true.
-                if (method == null && !member.IsFailable)
+                if (memberRoutine == null && !member.IsFailable)
                 {
-                    method = allArgTypesKnown
-                        ? _registry.LookupMethodOverload(type: receiverType,
-                            methodName: member.MemberName, argTypes: argTypes)
+                    memberRoutine = allArgTypesKnown
+                        ? _registry.LookupMemberRoutineOverload(type: receiverType,
+                            memberRoutineName: member.MemberName, argTypes: argTypes)
                         : null;
-                    method ??= _registry.LookupMethod(type: receiverType,
-                        methodName: member.MemberName, isFailable: true);
+                    memberRoutine ??= _registry.LookupMemberRoutine(type: receiverType,
+                        memberRoutineName: member.MemberName, isFailable: true);
                 }
 
-                if (method == null) return;
+                if (memberRoutine == null) return;
 
-                call.ResolvedRoutine = method;
-                call.LoweringKind = CallClassifier.ClassifyMethodCall(method: method);
+                call.ResolvedRoutine = memberRoutine;
+                call.LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: memberRoutine);
                 break;
             }
             case IdentifierExpression { Name: var name }:

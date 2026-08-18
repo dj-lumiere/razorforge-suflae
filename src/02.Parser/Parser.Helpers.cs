@@ -6,7 +6,7 @@ using SyntaxTree;
 namespace Compiler.Parser;
 
 /// <summary>
-/// Partial class containing helper methods: statement terminators,
+/// Partial class containing helper memberRoutines: statement terminators,
 /// identifier consumption, indentation handling, argument parsing, and collection literals.
 /// </summary>
 public partial class Parser
@@ -48,8 +48,8 @@ public partial class Parser
                .Text;
         }
 
-        // Allow 'me' or 'Me' (Self tokens) as a valid identifier for method parameters
-        // 'me' is lowercase self reference, 'Me' is the type of self (for protocol method signatures)
+        // Allow 'me' or 'Me' (Self tokens) as a valid identifier for memberRoutine parameters
+        // 'me' is lowercase self reference, 'Me' is the type of self (for protocol memberRoutine signatures)
         if (Match(TokenType.Me, TokenType.MyType))
         {
             return PeekToken(offset: -1)
@@ -71,20 +71,20 @@ public partial class Parser
             message: $"{errorMessage}. Expected Identifier, got {current.Type}.");
     }
 
-    /// <summary>Returns true when <paramref name="type"/> is a keyword token also valid as a method name (e.g. <c>none</c>).</summary>
+    /// <summary>Returns true when <paramref name="type"/> is a keyword token also valid as a memberRoutine name (e.g. <c>none</c>).</summary>
     /// <param name="type">The token type to test.</param>
-    private static bool IsKeywordValidAsMethodName(TokenType type) =>
+    private static bool IsKeywordValidAsMemberRoutineName(TokenType type) =>
         type == TokenType.NoneValue;
 
     /// <summary>
     /// Set true while parsing a routine-declaration name when a wired marker (`$`) token is consumed
-    /// on the method segment. Read (and reset) by the routine-declaration parsers to populate
+    /// on the memberRoutine segment. Read (and reset) by the routine-declaration parsers to populate
     /// <see cref="SyntaxTree.RoutineDeclaration.IsWiredMemberRoutine"/>. The `$` is NEVER folded into
     /// the decl name — the canonical name is the bare identifier.
     /// </summary>
     private bool _routineNameWired;
 
-    private string ConsumeMethodName(string errorMessage)
+    private string ConsumeMemberRoutineName(string errorMessage)
     {
         // Wired member-routine marker: `$` is a separate Dollar token, recorded structurally in
         // _routineNameWired and dropped from the name (bare canonical name).
@@ -93,10 +93,10 @@ public partial class Parser
             _routineNameWired = true;
         }
 
-        // Accept keyword tokens that are also valid identifiers as method names
+        // Accept keyword tokens that are also valid identifiers as memberRoutine names
         // (e.g. `BitArray[N].none()` — `none` is the absent-value keyword but reads
         // fine as a member-access name in postfix position).
-        if (!Check(type: TokenType.Identifier) && !IsKeywordValidAsMethodName(CurrentToken.Type))
+        if (!Check(type: TokenType.Identifier) && !IsKeywordValidAsMemberRoutineName(CurrentToken.Type))
         {
             throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
                 message: errorMessage);

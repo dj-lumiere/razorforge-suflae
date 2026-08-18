@@ -1,25 +1,25 @@
 namespace Verification.Enums;
 
 /// <summary>
-/// Mutation category for methods, inferred by the builder.
-/// Determines what token types can call a method.
+/// Mutation category for memberRoutines, inferred by the builder.
+/// Determines what token types can call a memberRoutine.
 /// </summary>
 /// <remarks>
 /// The builder automatically infers mutation categories using three-phase analysis:
 ///
 /// Step 1 (Direct Analysis):
-///   - If method writes to any member variable of me -> Writable
-///   - If method calls .grasp() on me member variables -> Writable
+///   - If memberRoutine writes to any member variable of me -> Writable
+///   - If memberRoutine calls .grasp() on me member variables -> Writable
 ///
 /// Step 2 (Call Graph Propagation):
-///   - If method calls a Writable method on me -> Writable
-///   - If method calls a Migratable method on me -> Migratable
+///   - If memberRoutine calls a Writable memberRoutine on me -> Writable
+///   - If memberRoutine calls a Migratable memberRoutine on me -> Migratable
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Step 3 (Token Checking):
-///   - Viewing/Inspecting tokens can only call Readonly methods
-///   - Modifying/Claiming tokens can call Readonly or Writable methods
-///   - Only owned/non-token access can call Migratable methods
+///   - Viewing/Inspecting tokens can only call Readonly memberRoutines
+///   - Modifying/Claiming tokens can call Readonly or Writable memberRoutines
+///   - Only owned/non-token access can call Migratable memberRoutines
 /// </remarks>
 public enum MutationCategory
 {

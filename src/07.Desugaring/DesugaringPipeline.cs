@@ -17,7 +17,7 @@ public sealed class DesugaringPipeline(DesugaringContext ctx)
     ///   <item><see cref="NoneReturnNormalizationPass"/> — fills null return types and bare returns with <c>None</c>.</item>
     ///   <item><see cref="PresetInliningPass"/> — substitutes preset identifiers with literal values.</item>
     ///   <item><see cref="ControlFlowLoweringPass"/> — lowers for-loops and while to loop+if primitives.</item>
-    ///   <item><see cref="GenericCallLoweringPass"/> — lowers <c>GenericMethodCallExpression</c> to <c>CallExpression</c>.</item>
+    ///   <item><see cref="GenericCallLoweringPass"/> — lowers <c>GenericMemberRoutineCallExpression</c> to <c>CallExpression</c>.</item>
     /// </list>
     /// </summary>
     public void Run(Program program)

@@ -36,7 +36,7 @@ public sealed class DesugaringContext
     /// Concrete generic bodies produced by <see cref="GenericMonomorphizationPass"/>,
     /// keyed by the concrete <see cref="TypeModel.Symbols.RoutineInfo.RegistryKey"/>.
     /// Codegen checks this map before doing its own AST search and rewriting, so most
-    /// generic method bodies are ready before the first IR line is emitted.
+    /// generic memberRoutine bodies are ready before the first IR line is emitted.
     /// </summary>
     public Dictionary<string, MonomorphizedBody> InstantiatedGenericBodies { get; } = new();
 

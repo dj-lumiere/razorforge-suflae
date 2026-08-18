@@ -19,7 +19,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <c>E(...)</c> (a <see cref="CreatorExpression"/> whose resolved type is a bare
 /// <see cref="EntityTypeInfo"/>) the value is rewritten to <c>E(...).roam()</c> and retyped to
 /// <c>Roamed[E]</c>; locals bound to such a value (or aliased from one) are tracked so their
-/// identifier references retype to <c>Roamed[E]</c>. The entity's own field layout and method
+/// identifier references retype to <c>Roamed[E]</c>. The entity's own field layout and memberRoutine
 /// receivers (<c>me</c>) stay bare <c>E</c> — the controller is peeled by the wrapper forwarder.
 /// Lock-wrapped access, promote-at-boundary, and cycle collection ride on later stages.</para>
 /// </summary>
@@ -331,12 +331,12 @@ internal sealed class SuflaeEntityLoweringPass
                 Expression callee = LowerExpression(call.Callee);
                 bool changed = !ReferenceEquals(callee, call.Callee);
 
-                // Receiver projection: a Roamed handle flowing as the RECEIVER into a BARE-`me` method
+                // Receiver projection: a Roamed handle flowing as the RECEIVER into a BARE-`me` memberRoutine
                 // must be projected through `.raw_inner()` to the real entity pointer. Stdlib entities
                 // (analyzed in RF mode — e.g. an iterator's `emit!`/`try_emit`) have a bare `me`
                 // (MeType is NOT Roamed), so passing the RoamController handle makes the callee read the
-                // controller as the entity and crash. USER SF entity methods have MeType=Roamed and
-                // correctly take the handle; methods declared on Roamed/RoamController itself
+                // controller as the entity and crash. USER SF entity memberRoutines have MeType=Roamed and
+                // correctly take the handle; memberRoutines declared on Roamed/RoamController itself
                 // (roam/raw_inner/is_none) own the handle too. Gate on the resolved routine owning a
                 // bare entity with a non-Roamed MeType. Mirrors the argument projection below.
                 if (callee is MemberExpression { Object: { } recv } calleeMember
@@ -370,19 +370,19 @@ internal sealed class SuflaeEntityLoweringPass
                 CallExpression lowered = changed ? call with { Callee = callee, Arguments = args } : call;
 
                 // Project each Roamed argument that flows into a BARE-entity parameter through
-                // `.raw_inner()`. SF routine/method parameters are NOT Roamed-substituted, so their slot
+                // `.raw_inner()`. SF routine/memberRoutine parameters are NOT Roamed-substituted, so their slot
                 // is a bare `E` and must receive the real entity pointer — passing the RoamController
                 // handle makes the callee read the controller as the entity (`x.field` → crash). Borrow
                 // semantics: no retain, the caller keeps ownership. Skips construction (call.ResolvedType
                 // is EntityTypeInfo), whose args are field stores needing a retained Roamed (handled
-                // above). Mirrors the method-receiver `raw_inner` interim below.
+                // above). Mirrors the memberRoutine-receiver `raw_inner` interim below.
                 if (call.ResolvedType is not EntityTypeInfo && lowered.ResolvedRoutine is { } argRoutine)
                 {
                     lowered = ProjectRoamedArgsIntoBareParams(call: lowered, routine: argRoutine);
                 }
 
                 // (The interim receiver `.raw_inner()` projection was removed with representation
-                // unification: an SF entity method's `me` now resolves as `Roamed[E]` — SignatureResolver
+                // unification: an SF entity memberRoutine's `me` now resolves as `Roamed[E]` — SignatureResolver
                 // sets MeType — so the call passes the Roamed handle directly and `me.field` routes through
                 // the Roamed access machinery. No projection needed.)
 
@@ -391,12 +391,12 @@ internal sealed class SuflaeEntityLoweringPass
                     : lowered;
             }
 
-            // A generic-instance construction like `List[Node]()` stays a GenericMethodCallExpression
+            // A generic-instance construction like `List[Node]()` stays a GenericMemberRoutineCallExpression
             // through codegen (the explicit `[T]` args keep it out of CallExpression form), so it must
             // be promoted here too — else a bare SF container never gets a RoamController and cycle
             // collection reads its raw buffer as a controller and crashes. Mirror the CallExpression
             // construction path: recurse args, retain Roamed-field args, then `.roam()` (promote).
-            case GenericMethodCallExpression gmce:
+            case GenericMemberRoutineCallExpression gmce:
             {
                 var gArgs = new List<Expression>(capacity: gmce.Arguments.Count);
                 bool gChanged = false;
@@ -413,7 +413,7 @@ internal sealed class SuflaeEntityLoweringPass
                     gChanged = true;
                 }
 
-                GenericMethodCallExpression loweredG =
+                GenericMemberRoutineCallExpression loweredG =
                     gChanged ? gmce with { Arguments = gArgs } : gmce;
                 return gmce.ResolvedType is EntityTypeInfo gEntity && !IsRfRealmRef(gmce.Object)
                     ? WrapInRoam(inner: loweredG, entity: gEntity)
@@ -601,7 +601,7 @@ internal sealed class SuflaeEntityLoweringPass
         // bare `Roamed(from: n)` (Calls.cs). `inner` is a FRESH entity rvalue (creator/literal/call), so it
         // moves into the handle with no `steal`. Callee is the type-name identifier; codegen constructs via
         // ConstructedType + ResolvedRoutine (see GenericCallLoweringPass wrapper-construction lowering).
-        RoutineInfo? create = _registry.LookupMethodOverload(type: roamed, methodName: "create",
+        RoutineInfo? create = _registry.LookupMemberRoutineOverload(type: roamed, memberRoutineName: "create",
             argTypes: [entity]);
         return new CallExpression(
             Callee: new IdentifierExpression(Name: RuntimeContract.Roamed, Location: inner.Location)

@@ -9,7 +9,7 @@ import Collections
 # ============================================================================
 
 @llvm("i512")
-secret record U512 obeys FloorDivisible, Storable, Copyable
+secret record U512 obeys FloorDivisible, Assignable, Copyable
   pass
 
 ### Assemble 8 U64 limbs (little-endian) into a U512.

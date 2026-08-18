@@ -5,7 +5,7 @@ module Core
 ### `U16` is commonly used for Unicode code units (UTF-16), audio samples,
 ### and other data that fits in 16 bits.
 @llvm("i16")
-record U16 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Storable, Copyable
+record U16 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable
   pass
 
 # Constants for U16 limits

@@ -306,7 +306,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <paramref name="original"/>'s OVERLOAD. A name-only lookup is wrong for heavily-overloaded
     /// routines (e.g. <c>U8.create!</c> from S8/S16/S32/S64/…): it returns an arbitrary
     /// <c>try_create</c> whose parameter type mismatches the original call's argument, producing
-    /// invalid IR. Match by the original's explicit parameter types via <c>LookupMethodOverload</c>;
+    /// invalid IR. Match by the original's explicit parameter types via <c>LookupMemberRoutineOverload</c>;
     /// fall back to name-only lookup when a parameter type isn't a concrete <see cref="TypeInfo"/>.
     /// </summary>
     private static RoutineInfo? LookupVariantForOverload(TypeRegistry registry, TypeInfo owner,
@@ -316,11 +316,11 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         foreach (ParameterInfo p in original.Parameters)
         {
             if (p.Type is TypeInfo ti) argTypes.Add(item: ti);
-            else return registry.LookupMethod(type: owner, methodName: variantName, isFailable: false);
+            else return registry.LookupMemberRoutine(type: owner, memberRoutineName: variantName, isFailable: false);
         }
 
-        return registry.LookupMethodOverload(type: owner, methodName: variantName, argTypes: argTypes)
-            ?? registry.LookupMethod(type: owner, methodName: variantName, isFailable: false);
+        return registry.LookupMemberRoutineOverload(type: owner, memberRoutineName: variantName, argTypes: argTypes)
+            ?? registry.LookupMemberRoutine(type: owner, memberRoutineName: variantName, isFailable: false);
     }
 
     /// <summary>
@@ -624,7 +624,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// (<see cref="Compiler.Instantiation.Passes.GenericMonomorphizationPass"/>), which has no
     /// per-pass rewriter instance. It rewrites a TAIL-position <c>return src.emit!()</c> into a
     /// passthrough call to the matching <c>try_/check_/lookup_emit</c> variant (resolved via
-    /// <see cref="TypeRegistry.LookupMethod"/> on the concrete callee owner). Restricted to
+    /// <see cref="TypeRegistry.LookupMemberRoutine"/> on the concrete callee owner). Restricted to
     /// <c>emit</c> for the same reason as <see cref="TryBuildTryPropagation"/>: <c>try_emit</c> is
     /// systematically emitted for live iterator instances, so the rewritten chain always links.
     /// </summary>
@@ -647,7 +647,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             if (baseName != "emit") return false;
             if (callee.OwnerType is not { } owner) return false;
 
-            RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"{prefix}_{baseName}",
+            RoutineInfo? variant = registry.LookupMemberRoutine(type: owner, memberRoutineName: $"{prefix}_{baseName}",
                 isFailable: false);
             if (variant == null) return false;
 

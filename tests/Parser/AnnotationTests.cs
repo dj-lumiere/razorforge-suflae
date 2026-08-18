@@ -254,11 +254,11 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts attributes on type and methods.
+    /// Verifies that the parser accepts attributes on type and memberRoutines.
     /// </summary>
 
     [Fact]
-    public void Parse_AttributesOnTypeAndMethods()
+    public void Parse_AttributesOnTypeAndMemberRoutines()
     {
         string source = """
                         @deprecated(message: "Use NewCalculator")
@@ -331,11 +331,11 @@ public class AttributeTests
 
     #region Protocol Member Routine Annotations
     /// <summary>
-    /// Verifies that the parser accepts protocol method attributes.
+    /// Verifies that the parser accepts protocol memberRoutine attributes.
     /// </summary>
 
     [Fact]
-    public void Parse_ProtocolMethodAttributes()
+    public void Parse_ProtocolMemberRoutineAttributes()
     {
         string source = """
                         protocol Container

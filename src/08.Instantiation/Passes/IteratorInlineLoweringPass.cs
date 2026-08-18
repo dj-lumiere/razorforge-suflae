@@ -227,7 +227,7 @@ internal sealed class IteratorInlineLoweringPass
 
         // Resolve the concrete `emit!` on the emitter and fetch its monomorphized body.
         RoutineInfo? nextRoutine =
-            _registry.LookupMethod(type: emitterType, methodName: "emit", isFailable: true);
+            _registry.LookupMemberRoutine(type: emitterType, memberRoutineName: "emit", isFailable: true);
         if (nextRoutine == null) return null;
         if (!_monoBodies.TryGetValue(key: nextRoutine.RegistryKey, out MonomorphizedBody? nextMono))
             return null;
@@ -605,7 +605,7 @@ internal sealed class IteratorInlineLoweringPass
                     Arguments = call.Arguments.Select(selector: a => CloneExpression(expr: a, ctx: ctx)).ToList()
                 };
 
-            case GenericMethodCallExpression gcall:
+            case GenericMemberRoutineCallExpression gcall:
                 return gcall with
                 {
                     Object = CloneExpression(expr: gcall.Object, ctx: ctx),
@@ -787,7 +787,7 @@ internal sealed class IteratorInlineLoweringPass
                 WalkExpr(e: call.Callee, visit: visit);
                 foreach (Expression a in call.Arguments) WalkExpr(e: a, visit: visit);
                 break;
-            case GenericMethodCallExpression gcall:
+            case GenericMemberRoutineCallExpression gcall:
                 WalkExpr(e: gcall.Object, visit: visit);
                 foreach (Expression a in gcall.Arguments) WalkExpr(e: a, visit: visit);
                 break;

@@ -577,7 +577,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                         .ToList()
                 }, withExpr);
 
-            case GenericMethodCallExpression genericCall:
+            case GenericMemberRoutineCallExpression genericCall:
                 return CopyResolvedType(genericCall with
                 {
                     Object = RewriteExpression(genericCall.Object,
@@ -1181,7 +1181,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             case TypeConversionExpression c:
                 yield return c.Expression;
                 break;
-            case GenericMethodCallExpression g:
+            case GenericMemberRoutineCallExpression g:
                 yield return g.Object;
                 foreach (Expression arg in g.Arguments) yield return arg;
                 break;
@@ -1492,7 +1492,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                 }
                 break;
 
-            case GenericMethodCallExpression genericCall:
+            case GenericMemberRoutineCallExpression genericCall:
                 CollectLocalCapturesRecursive(genericCall.Object, outerScope, parameterNames, captures);
                 foreach (Expression argument in genericCall.Arguments)
                 {

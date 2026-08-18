@@ -6,22 +6,22 @@ using TypeModel.Enums;
 namespace TypeModel.Types;
 
 /// <summary>
-/// Information about a method signature in a protocol.
+/// Information about a memberRoutine signature in a protocol.
 /// </summary>
-public sealed class ProtocolMethodInfo
+public sealed class ProtocolMemberRoutineInfo
 {
-    /// <summary>The name of the method.</summary>
+    /// <summary>The name of the memberRoutine.</summary>
     public string Name { get; }
 
     /// <summary>
-    /// Whether this is an instance method (has me parameter) or type-level method.
+    /// Whether this is an instance memberRoutine (has me parameter) or type-level memberRoutine.
     /// </summary>
-    public bool IsInstanceMethod { get; init; } = true;
+    public bool IsInstanceMemberRoutine { get; init; } = true;
 
-    /// <summary>The mutation category for this method.</summary>
+    /// <summary>The mutation category for this memberRoutine.</summary>
     public MutationCategory Mutation { get; init; } = MutationCategory.Migratable;
 
-    /// <summary>Parameter types (excluding me for instance methods).</summary>
+    /// <summary>Parameter types (excluding me for instance memberRoutines).</summary>
     public List<TypeInfo> ParameterTypes { get; init; } = [];
 
     /// <summary>Parameter names.</summary>
@@ -30,31 +30,31 @@ public sealed class ProtocolMethodInfo
     /// <summary>Return type, or null for void.</summary>
     public TypeInfo? ReturnType { get; init; }
 
-    /// <summary>Whether this method can fail (has ! suffix).</summary>
+    /// <summary>Whether this memberRoutine can fail (has ! suffix).</summary>
     public bool IsFailable { get; init; }
 
-    /// <summary>The generation kind for this method (None, Generated, or Innate).</summary>
+    /// <summary>The generation kind for this memberRoutine (None, Generated, or Innate).</summary>
     public ProtocolRoutineKind GenerationKind { get; init; } = ProtocolRoutineKind.None;
 
-    /// <summary>Whether this method has a default implementation.</summary>
+    /// <summary>Whether this memberRoutine has a default implementation.</summary>
     public bool HasDefaultImplementation { get; init; }
 
     /// <summary>
     /// True when this entry is an auto-derived failable variant (`try_X`, `check_X`,
-    /// `lookup_X`) synthesized by <c>FillProtocolMethods</c> from a failable original
+    /// `lookup_X`) synthesized by <c>FillProtocolMemberRoutines</c> from a failable original
     /// (`X!`). Such entries exist for call-site resolution but are NOT conformance
     /// obligations — the implementer only needs to provide the failable original.
     /// </summary>
     public bool IsAutoDerivedVariant { get; init; }
 
-    /// <summary>Source location where this method is defined.</summary>
+    /// <summary>Source location where this memberRoutine is defined.</summary>
     public SourceLocation? Location { get; init; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProtocolMethodInfo"/> class.
+    /// Initializes a new instance of the <see cref="ProtocolMemberRoutineInfo"/> class.
     /// </summary>
-    /// <param name="name">The name of the protocol method.</param>
-    public ProtocolMethodInfo(string name)
+    /// <param name="name">The name of the protocol memberRoutine.</param>
+    public ProtocolMemberRoutineInfo(string name)
     {
         Name = name;
     }

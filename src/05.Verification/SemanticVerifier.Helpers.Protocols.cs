@@ -75,7 +75,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Returns true if <paramref name="type"/> implements the named protocol.
     /// Checks explicit protocol declarations, parent protocol chains, and structural conformance
-    /// (i.e., whether the type has all required methods of the protocol).
+    /// (i.e., whether the type has all required memberRoutines of the protocol).
     /// </summary>
     internal bool ImplementsProtocol(TypeSymbol type, string protocolName)
     {
@@ -156,7 +156,7 @@ public sealed partial class SemanticVerifier
                  CheckParentProtocols(proto: proto, targetName: protocolName))))
             return true;
 
-        // Check if the type has all required methods of the protocol (structural conformance)
+        // Check if the type has all required memberRoutines of the protocol (structural conformance)
         if (protocol is ProtocolTypeInfo protoType)
         {
             // Entity T implicitly satisfies Accessing[T] and Controlling[T]
@@ -173,7 +173,7 @@ public sealed partial class SemanticVerifier
 
             // Transparent relay for Accessing[T] / Controlling[T]:
             // A wrapper type satisfies any readonly protocol that its inner entity type satisfies.
-            // All @readonly protocol methods are safe to delegate through both read-only
+            // All @readonly protocol memberRoutines are safe to delegate through both read-only
             // (Accessing) and read-write (Controlling) wrappers.
             if (IsAllReadOnlyProtocol(protoType))
             {
@@ -248,45 +248,45 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a type structurally conforms to a protocol by having all required methods.
+    /// Checks if a type structurally conforms to a protocol by having all required memberRoutines.
     /// </summary>
     private bool CheckStructuralConformance(TypeSymbol type, ProtocolTypeInfo protocol)
     {
-        // Marker protocols (no methods) require explicit conformance — never structurally satisfied
-        if (protocol.Methods.Count == 0)
+        // Marker protocols (no memberRoutines) require explicit conformance — never structurally satisfied
+        if (protocol.MemberRoutines.Count == 0)
         {
             return false;
         }
 
-        foreach (ProtocolMethodInfo requiredMethod in protocol.Methods)
+        foreach (ProtocolMemberRoutineInfo requiredMemberRoutine in protocol.MemberRoutines)
         {
-            // Skip methods with default implementations
-            if (requiredMethod.HasDefaultImplementation)
+            // Skip memberRoutines with default implementations
+            if (requiredMemberRoutine.HasDefaultImplementation)
             {
                 continue;
             }
 
-            // Look for the method on the type
-            RoutineInfo? typeMethod =
-                _registry.LookupMethod(type: type, methodName: requiredMethod.Name);
-            if (typeMethod == null)
+            // Look for the memberRoutine on the type
+            RoutineInfo? typeMemberRoutine =
+                _registry.LookupMemberRoutine(type: type, memberRoutineName: requiredMemberRoutine.Name);
+            if (typeMemberRoutine == null)
             {
-                // Method names are bare; the failable `!` is a structured flag. Retry matching a
+                // memberRoutine names are bare; the failable `!` is a structured flag. Retry matching a
                 // same-named failable implementation via the isFailable filter.
-                if (requiredMethod.IsFailable)
+                if (requiredMemberRoutine.IsFailable)
                 {
-                    typeMethod = _registry.LookupMethod(type: type,
-                        methodName: requiredMethod.Name, isFailable: true);
+                    typeMemberRoutine = _registry.LookupMemberRoutine(type: type,
+                        memberRoutineName: requiredMemberRoutine.Name, isFailable: true);
                 }
 
-                if (typeMethod == null)
+                if (typeMemberRoutine == null)
                 {
                     return false;
                 }
             }
 
-            // Verify method signature matches (basic check)
-            if (!MethodSignatureMatches(typeMethod: typeMethod, protoMethod: requiredMethod))
+            // Verify memberRoutine signature matches (basic check)
+            if (!memberRoutineSignatureMatches(typeMemberRoutine: typeMemberRoutine, protoMemberRoutine: requiredMemberRoutine))
             {
                 return false;
             }
@@ -296,23 +296,23 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a type's method signature matches a protocol method signature.
+    /// Checks if a type's memberRoutine signature matches a protocol memberRoutine signature.
     /// </summary>
-    private bool MethodSignatureMatches(RoutineInfo typeMethod, ProtocolMethodInfo protoMethod) // NOSONAR S3776
+    private bool memberRoutineSignatureMatches(RoutineInfo typeMemberRoutine, ProtocolMemberRoutineInfo protoMemberRoutine) // NOSONAR S3776
     {
         // Check failable matches
-        if (typeMethod.IsFailable != protoMethod.IsFailable)
+        if (typeMemberRoutine.IsFailable != protoMemberRoutine.IsFailable)
         {
             return false;
         }
 
         // Check parameter count (excluding 'me' parameter if present)
-        // In-body methods have explicit 'me' as first parameter
-        // Extension methods don't include 'me' in the parameter list
-        int expectedParamCount = protoMethod.ParameterTypes.Count;
-        bool hasMeParam = typeMethod.Parameters.Count > 0 &&
-                          typeMethod.Parameters[index: 0].Name == "me";
-        int actualParamCount = typeMethod.Parameters.Count - (hasMeParam
+        // In-body memberRoutines have explicit 'me' as first parameter
+        // Extension memberRoutines don't include 'me' in the parameter list
+        int expectedParamCount = protoMemberRoutine.ParameterTypes.Count;
+        bool hasMeParam = typeMemberRoutine.Parameters.Count > 0 &&
+                          typeMemberRoutine.Parameters[index: 0].Name == "me";
+        int actualParamCount = typeMemberRoutine.Parameters.Count - (hasMeParam
             ? 1
             : 0);
 
@@ -327,15 +327,15 @@ public sealed partial class SemanticVerifier
             : 0;
         for (int i = 0; i < expectedParamCount; i++)
         {
-            TypeSymbol expectedType = protoMethod.ParameterTypes[index: i];
-            TypeSymbol actualType = typeMethod.Parameters[index: startIndex + i].Type;
+            TypeSymbol expectedType = protoMemberRoutine.ParameterTypes[index: i];
+            TypeSymbol actualType = typeMemberRoutine.Parameters[index: startIndex + i].Type;
 
             // Handle protocol self type (Me) - should match the implementing type
             if (expectedType is ProtocolSelfTypeInfo)
             {
-                // 'Me' in protocol should match the owner type of the method
-                if (typeMethod.OwnerType != null &&
-                    !TypesMatch(actual: actualType, expected: typeMethod.OwnerType))
+                // 'Me' in protocol should match the owner type of the memberRoutine
+                if (typeMemberRoutine.OwnerType != null &&
+                    !TypesMatch(actual: actualType, expected: typeMemberRoutine.OwnerType))
                 {
                     return false;
                 }
@@ -347,14 +347,14 @@ public sealed partial class SemanticVerifier
         }
 
         // Check return type (if specified)
-        if (protoMethod.ReturnType != null && typeMethod.ReturnType != null)
+        if (protoMemberRoutine.ReturnType != null && typeMemberRoutine.ReturnType != null)
         {
-            if (!IsAssignableTo(source: typeMethod.ReturnType, target: protoMethod.ReturnType))
+            if (!IsAssignableTo(source: typeMemberRoutine.ReturnType, target: protoMemberRoutine.ReturnType))
             {
                 return false;
             }
         }
-        else if (protoMethod.ReturnType == null != (typeMethod.ReturnType == null))
+        else if (protoMemberRoutine.ReturnType == null != (typeMemberRoutine.ReturnType == null))
         {
             return false;
         }
@@ -363,18 +363,18 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Returns true if all required methods in <paramref name="protocol"/> and its parent chain
+    /// Returns true if all required memberRoutines in <paramref name="protocol"/> and its parent chain
     /// have <see cref="MutationCategory.Readonly"/> mutation. Marker protocols with no
-    /// methods return false — they require explicit declaration, not relay.
+    /// memberRoutines return false — they require explicit declaration, not relay.
     /// </summary>
     private bool IsAllReadOnlyProtocol(ProtocolTypeInfo protocol)
     {
-        if (protocol.Methods.Count == 0)
+        if (protocol.MemberRoutines.Count == 0)
             return false;
 
-        foreach (ProtocolMethodInfo method in protocol.Methods)
+        foreach (ProtocolMemberRoutineInfo memberRoutine in protocol.MemberRoutines)
         {
-            if (method.Mutation != MutationCategory.Readonly)
+            if (memberRoutine.Mutation != MutationCategory.Readonly)
                 return false;
         }
 

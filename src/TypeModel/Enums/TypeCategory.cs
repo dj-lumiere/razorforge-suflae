@@ -37,7 +37,7 @@ public enum TypeCategory
     /// <summary>Reference type, heap-allocated, single owner (RazorForge: entity).</summary>
     Entity,
 
-    /// <summary>Simple enumeration with optional integer values, CAN have methods.</summary>
+    /// <summary>Simple enumeration with optional integer values, CAN have memberRoutines.</summary>
     Choice,
 
     /// <summary>Bitmask type with named members, builder-generated operators only.</summary>
@@ -50,7 +50,7 @@ public enum TypeCategory
     /// </summary>
     Crashable,
 
-    /// <summary>Tagged union, local-only, unmodifiable, NO methods.</summary>
+    /// <summary>Tagged union, local-only, unmodifiable, NO memberRoutines.</summary>
     Variant,
 
     /// <summary>Interface/trait definition (protocol).</summary>

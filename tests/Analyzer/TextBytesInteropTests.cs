@@ -59,10 +59,10 @@ public class TextBytesInteropTests
                                            return
                                          """);
         // `is_letter()` calls a routine that does not exist on Character (the API is
-        // `is_alphabetic`), so it is a MethodNotFound — `.name()` is a routine call, distinct
+        // `is_alphabetic`), so it is a memberRoutineNotFound — `.name()` is a routine call, distinct
         // from `.name` member access, and an unresolved routine call is RF-S458.
         Assert.Contains(invalid.Errors,
-            e => e.Code == SemanticDiagnosticCode.MethodNotFound);
+            e => e.Code == SemanticDiagnosticCode.MemberRoutineNotFound);
     }
 
     /// <summary>

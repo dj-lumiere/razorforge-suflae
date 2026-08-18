@@ -38,8 +38,8 @@ public sealed partial class SourceFolderFailurePointTests
         },
         {
             "04.Resolution",
-            "type and method lookup handle missing symbols and overload ambiguity",
-            ["LookupTypeWithImports", "LookupRoutineWithImports", "LookupMethodOverload", "ValidateGenericConstraints"]
+            "type and memberRoutine lookup handle missing symbols and overload ambiguity",
+            ["LookupTypeWithImports", "LookupRoutineWithImports", "LookupMemberRoutineOverload", "ValidateGenericConstraints"]
         },
         {
             "05.Verification",

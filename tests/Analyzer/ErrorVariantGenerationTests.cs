@@ -143,13 +143,13 @@ public class ErrorVariantGenerationTests
 
     #endregion
 
-    #region Variant Generation for Methods
+    #region Variant Generation for memberRoutines
     /// <summary>
-    /// Verifies semantic analysis behavior for failable method generates variants.
+    /// Verifies semantic analysis behavior for failable memberRoutine generates variants.
     /// </summary>
 
     [Fact]
-    public void Analyze_FailableMethod_GeneratesVariants()
+    public void Analyze_FailableMemberRoutine_GeneratesVariants()
     {
         string source = """
                         entity Cache
@@ -163,7 +163,7 @@ public class ErrorVariantGenerationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Should generate try_get method variant
+        // Should generate try_get memberRoutine variant
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "Cache.try_get");
         Assert.NotNull(@object: tryVariant);
     }

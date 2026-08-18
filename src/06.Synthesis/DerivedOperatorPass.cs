@@ -36,7 +36,7 @@ internal sealed class DerivedOperatorPass
     /// </summary>
     public void Run()
     {
-        foreach (TypeSymbol type in _registry.GetTypesWithMethods())
+        foreach (TypeSymbol type in _registry.GetTypesWithMemberRoutines())
         {
             GenerateDerivedOperatorsForType(type: type);
         }
@@ -44,9 +44,9 @@ internal sealed class DerivedOperatorPass
         // Synthesize crash_title() bodies for all crashable types
         foreach (TypeSymbol type in _registry.GetTypesByCategory(category: TypeCategory.Crashable))
         {
-            RoutineInfo? titleMethod = _registry.GetMethodsForType(type: type)
+            RoutineInfo? titleMemberRoutine = _registry.GetMemberRoutinesForType(type: type)
                                                .FirstOrDefault(predicate: m => m.Name == "crash_title");
-            if (titleMethod == null || !titleMethod.IsSynthesized)
+            if (titleMemberRoutine == null || !titleMemberRoutine.IsSynthesized)
                 continue;
 
             string title = CrashableTypeInfo.SynthesizeCrashTitle(typeName: type.Name);
@@ -56,7 +56,7 @@ internal sealed class DerivedOperatorPass
                     Location: _synthLoc),
                 Location: _synthLoc);
 
-            _synthesizedBodies[key: titleMethod.RegistryKey] = (titleMethod, titleBody);
+            _synthesizedBodies[key: titleMemberRoutine.RegistryKey] = (titleMemberRoutine, titleBody);
         }
     }
 
@@ -65,33 +65,33 @@ internal sealed class DerivedOperatorPass
     /// </summary>
     private void GenerateDerivedOperatorsForType(TypeSymbol type)
     {
-        IEnumerable<RoutineInfo> methods = _registry.GetMethodsForType(type: type);
-        var methodList = methods.ToList();
+        IEnumerable<RoutineInfo> memberRoutines = _registry.GetMemberRoutinesForType(type: type);
+        var memberRoutineList = memberRoutines.ToList();
 
-        // Look for eq method
-        RoutineInfo? eqMethod = methodList.FirstOrDefault(predicate: m => m.Name == "eq");
-        if (eqMethod != null)
+        // Look for eq memberRoutine
+        RoutineInfo? eqMemberRoutine = memberRoutineList.FirstOrDefault(predicate: m => m.Name == "eq");
+        if (eqMemberRoutine != null)
         {
-            GenerateNeFromEq(type: type, eqMethod: eqMethod, existingMethods: methodList);
+            GenerateNeFromEq(type: type, eqMemberRoutine: eqMemberRoutine, existingMemberRoutines: memberRoutineList);
         }
 
-        // Look for cmp method
-        RoutineInfo? cmpMethod = methodList.FirstOrDefault(predicate: m => m.Name == "cmp");
-        if (cmpMethod != null)
+        // Look for cmp memberRoutine
+        RoutineInfo? cmpMemberRoutine = memberRoutineList.FirstOrDefault(predicate: m => m.Name == "cmp");
+        if (cmpMemberRoutine != null)
         {
             GenerateComparisonOperatorsFromCmp(type: type,
-                cmpMethod: cmpMethod,
-                existingMethods: methodList);
+                cmpMemberRoutine: cmpMemberRoutine,
+                existingMemberRoutines: memberRoutineList);
         }
 
-        // Look for contains method
-        RoutineInfo? containsMethod =
-            methodList.FirstOrDefault(predicate: m => m.Name == "contains");
-        if (containsMethod != null)
+        // Look for contains memberRoutine
+        RoutineInfo? containsMemberRoutine =
+            memberRoutineList.FirstOrDefault(predicate: m => m.Name == "contains");
+        if (containsMemberRoutine != null)
         {
             GenerateNotContainsFromContains(type: type,
-                containsMethod: containsMethod,
-                existingMethods: methodList);
+                containsMemberRoutine: containsMemberRoutine,
+                existingMemberRoutines: memberRoutineList);
         }
 
     }
@@ -100,10 +100,10 @@ internal sealed class DerivedOperatorPass
     /// Generates ne from eq.
     /// ne(you) = not me.eq(you: you)
     /// </summary>
-    private void GenerateNeFromEq(TypeSymbol type, RoutineInfo eqMethod,
-        List<RoutineInfo> existingMethods)
+    private void GenerateNeFromEq(TypeSymbol type, RoutineInfo eqMemberRoutine,
+        List<RoutineInfo> existingMemberRoutines)
     {
-        RoutineInfo? existingNe = existingMethods.FirstOrDefault(predicate: m => m.Name == "ne");
+        RoutineInfo? existingNe = existingMemberRoutines.FirstOrDefault(predicate: m => m.Name == "ne");
 
         if (existingNe != null)
         {
@@ -118,11 +118,11 @@ internal sealed class DerivedOperatorPass
             return;
         }
 
-        var neMethod = new RoutineInfo(name: "ne")
+        var neMemberRoutine = new RoutineInfo(name: "ne")
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = type,
-            Parameters = eqMethod.Parameters,
+            Parameters = eqMemberRoutine.Parameters,
             ReturnType = boolType,
             IsFailable = false,
             DeclaredMutation = MutationCategory.Readonly,
@@ -132,38 +132,38 @@ internal sealed class DerivedOperatorPass
             // unconditionally derivable even when eq requires `T obeys Equatable`,
             // and the synthesized `ne` body references a non-existent `eq` at link
             // time for instantiations that fail the constraint (e.g. Array[X,N]).
-            GenericParameters = eqMethod.GenericParameters,
-            GenericConstraints = eqMethod.GenericConstraints,
-            Visibility = eqMethod.Visibility,
-            Location = eqMethod.Location,
-            Module = eqMethod.Module,
+            GenericParameters = eqMemberRoutine.GenericParameters,
+            GenericConstraints = eqMemberRoutine.GenericConstraints,
+            Visibility = eqMemberRoutine.Visibility,
+            Location = eqMemberRoutine.Location,
+            Module = eqMemberRoutine.Module,
             Annotations = ["readonly"],
             IsSynthesized = true
         };
 
-        _registry.RegisterRoutine(routine: neMethod);
+        _registry.RegisterRoutine(routine: neMemberRoutine);
 
         // Build AST body: return not me.eq(you: you)
-        string paramName = eqMethod.Parameters.Count > 0
-            ? eqMethod.Parameters[index: 0].Name
+        string paramName = eqMemberRoutine.Parameters.Count > 0
+            ? eqMemberRoutine.Parameters[index: 0].Name
             : "you";
         var neBody = BuildNegatedDelegateBody(
             ownerType: type,
-            delegateMethod: eqMethod,
+            delegateMemberRoutine: eqMemberRoutine,
             boolType: boolType,
             paramName: paramName);
-        _synthesizedBodies[key: neMethod.RegistryKey] = (neMethod, neBody);
+        _synthesizedBodies[key: neMemberRoutine.RegistryKey] = (neMemberRoutine, neBody);
     }
 
     /// <summary>
     /// Generates notcontains from contains.
     /// notcontains(item) = not me.contains(item: item)
     /// </summary>
-    private void GenerateNotContainsFromContains(TypeSymbol type, RoutineInfo containsMethod,
-        List<RoutineInfo> existingMethods)
+    private void GenerateNotContainsFromContains(TypeSymbol type, RoutineInfo containsMemberRoutine,
+        List<RoutineInfo> existingMemberRoutines)
     {
         RoutineInfo? existingNotContains =
-            existingMethods.FirstOrDefault(predicate: m => m.Name == "notcontains");
+            existingMemberRoutines.FirstOrDefault(predicate: m => m.Name == "notcontains");
 
         if (existingNotContains != null)
         {
@@ -176,38 +176,38 @@ internal sealed class DerivedOperatorPass
             return;
         }
 
-        var notContainsMethod = new RoutineInfo(name: "notcontains")
+        var notContainsMemberRoutine = new RoutineInfo(name: "notcontains")
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = type,
-            Parameters = containsMethod.Parameters,
+            Parameters = containsMemberRoutine.Parameters,
             ReturnType = boolType,
             IsFailable = false,
             DeclaredMutation = MutationCategory.Readonly,
             MutationCategory = MutationCategory.Readonly,
             // Inherit `contains`'s constraints so `notcontains` is only available for
             // the same instantiations.
-            GenericParameters = containsMethod.GenericParameters,
-            GenericConstraints = containsMethod.GenericConstraints,
-            Visibility = containsMethod.Visibility,
-            Location = containsMethod.Location,
-            Module = containsMethod.Module,
+            GenericParameters = containsMemberRoutine.GenericParameters,
+            GenericConstraints = containsMemberRoutine.GenericConstraints,
+            Visibility = containsMemberRoutine.Visibility,
+            Location = containsMemberRoutine.Location,
+            Module = containsMemberRoutine.Module,
             Annotations = ["readonly"],
             IsSynthesized = true
         };
 
-        _registry.RegisterRoutine(routine: notContainsMethod);
+        _registry.RegisterRoutine(routine: notContainsMemberRoutine);
 
         // Build AST body: return not me.contains(item: item)
-        string paramName = containsMethod.Parameters.Count > 0
-            ? containsMethod.Parameters[index: 0].Name
+        string paramName = containsMemberRoutine.Parameters.Count > 0
+            ? containsMemberRoutine.Parameters[index: 0].Name
             : "item";
         var notContainsBody = BuildNegatedDelegateBody(
             ownerType: type,
-            delegateMethod: containsMethod,
+            delegateMemberRoutine: containsMemberRoutine,
             boolType: boolType,
             paramName: paramName);
-        _synthesizedBodies[key: notContainsMethod.RegistryKey] = (notContainsMethod, notContainsBody);
+        _synthesizedBodies[key: notContainsMemberRoutine.RegistryKey] = (notContainsMemberRoutine, notContainsBody);
     }
 
     /// <summary>
@@ -217,8 +217,8 @@ internal sealed class DerivedOperatorPass
     /// gt(you) = me.cmp(you: you) == ComparisonSign.ME_LARGE
     /// ge(you) = me.cmp(you: you) != ComparisonSign.ME_SMALL
     /// </summary>
-    private void GenerateComparisonOperatorsFromCmp(TypeSymbol type, RoutineInfo cmpMethod,
-        List<RoutineInfo> existingMethods)
+    private void GenerateComparisonOperatorsFromCmp(TypeSymbol type, RoutineInfo cmpMemberRoutine,
+        List<RoutineInfo> existingMemberRoutines)
     {
         TypeSymbol? boolType = _registry.LookupType(name: "Bool");
         if (boolType == null)
@@ -226,8 +226,8 @@ internal sealed class DerivedOperatorPass
             return;
         }
 
-        string cmpParamName = cmpMethod.Parameters.Count > 0
-            ? cmpMethod.Parameters[index: 0].Name
+        string cmpParamName = cmpMemberRoutine.Parameters.Count > 0
+            ? cmpMemberRoutine.Parameters[index: 0].Name
             : "you";
 
         // (opName, caseName, equal-or-notequal)
@@ -242,7 +242,7 @@ internal sealed class DerivedOperatorPass
         foreach ((string opName, string caseName, bool useEqual) in derivedOps)
         {
             RoutineInfo? existing =
-                existingMethods.FirstOrDefault(predicate: m => m.Name == opName);
+                existingMemberRoutines.FirstOrDefault(predicate: m => m.Name == opName);
 
             if (existing != null)
             {
@@ -250,44 +250,44 @@ internal sealed class DerivedOperatorPass
                 continue;
             }
 
-            var derivedMethod = new RoutineInfo(name: opName)
+            var derivedMemberRoutine = new RoutineInfo(name: opName)
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = type,
-                Parameters = cmpMethod.Parameters,
+                Parameters = cmpMemberRoutine.Parameters,
                 ReturnType = boolType,
                 IsFailable = false,
                 DeclaredMutation = MutationCategory.Readonly,
                 MutationCategory = MutationCategory.Readonly,
                 // Inherit `cmp`'s constraints so `lt/le/gt/ge` are only available for
                 // the same instantiations.
-                GenericParameters = cmpMethod.GenericParameters,
-                GenericConstraints = cmpMethod.GenericConstraints,
-                Visibility = cmpMethod.Visibility,
-                Location = cmpMethod.Location,
-                Module = cmpMethod.Module,
+                GenericParameters = cmpMemberRoutine.GenericParameters,
+                GenericConstraints = cmpMemberRoutine.GenericConstraints,
+                Visibility = cmpMemberRoutine.Visibility,
+                Location = cmpMemberRoutine.Location,
+                Module = cmpMemberRoutine.Module,
                 Annotations = ["readonly"],
                 IsSynthesized = true
             };
 
-            _registry.RegisterRoutine(routine: derivedMethod);
+            _registry.RegisterRoutine(routine: derivedMemberRoutine);
 
             // Build AST body: return me.cmp(you: you) == ComparisonSign.ME_SMALL  (or != ME_LARGE etc.)
             var cmpBody = BuildCmpDerivedBody(
                 ownerType: type,
-                cmpMethod: cmpMethod,
+                cmpMemberRoutine: cmpMemberRoutine,
                 boolType: boolType,
                 cmpParamName: cmpParamName,
                 caseName: caseName,
                 useEqual: useEqual);
-            _synthesizedBodies[key: derivedMethod.RegistryKey] = (derivedMethod, cmpBody);
+            _synthesizedBodies[key: derivedMemberRoutine.RegistryKey] = (derivedMemberRoutine, cmpBody);
         }
     }
 
     /// <summary>
-    /// Builds: return not me.{methodName}({paramName}: {paramName})
+    /// Builds: return not me.{memberRoutineName}({paramName}: {paramName})
     /// </summary>
-    private static BlockStatement BuildNegatedDelegateBody(TypeSymbol ownerType, RoutineInfo delegateMethod,
+    private static BlockStatement BuildNegatedDelegateBody(TypeSymbol ownerType, RoutineInfo delegateMemberRoutine,
         TypeSymbol boolType, string paramName)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
@@ -295,7 +295,7 @@ internal sealed class DerivedOperatorPass
         var call = new CallExpression(
             Callee: new MemberExpression(
                 Object: meRef,
-                MemberName: delegateMethod.Name,
+                MemberName: delegateMemberRoutine.Name,
                 Location: _synthLoc),
             Arguments:
             [
@@ -306,7 +306,7 @@ internal sealed class DerivedOperatorPass
             ],
             Location: _synthLoc)
         {
-            ResolvedRoutine = delegateMethod,
+            ResolvedRoutine = delegateMemberRoutine,
             ResolvedType = boolType
         };
 
@@ -333,7 +333,7 @@ internal sealed class DerivedOperatorPass
     /// Builds: return me.cmp({paramName}: {paramName}) == ComparisonSign.{caseName}
     /// or:     return me.cmp({paramName}: {paramName}) != ComparisonSign.{caseName}
     /// </summary>
-    private Statement BuildCmpDerivedBody(TypeSymbol ownerType, RoutineInfo cmpMethod,
+    private Statement BuildCmpDerivedBody(TypeSymbol ownerType, RoutineInfo cmpMemberRoutine,
         TypeSymbol boolType, string cmpParamName, string caseName, bool useEqual)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
@@ -352,11 +352,11 @@ internal sealed class DerivedOperatorPass
             ],
             Location: _synthLoc)
         {
-            ResolvedRoutine = cmpMethod,
-            ResolvedType = cmpMethod.ReturnType
+            ResolvedRoutine = cmpMemberRoutine,
+            ResolvedType = cmpMemberRoutine.ReturnType
         };
 
-        TypeSymbol cmpResultType = cmpMethod.ReturnType ?? ErrorTypeInfo.Instance;
+        TypeSymbol cmpResultType = cmpMemberRoutine.ReturnType ?? ErrorTypeInfo.Instance;
 
         // Use an integer literal for the ComparisonSign case value to avoid requiring
         // identifier resolution of 'ComparisonSign' in synthesized bodies.
@@ -369,7 +369,7 @@ internal sealed class DerivedOperatorPass
 
         // Always use eq (guaranteed registered by AutoWiredRegistrationPass before DerivedOperatorPass).
         // ne may not yet be registered when this body is built (ordering not guaranteed).
-        RoutineInfo? eqMethod = _registry.LookupMethod(type: cmpResultType, methodName: "eq");
+        RoutineInfo? eqMemberRoutine = _registry.LookupMemberRoutine(type: cmpResultType, memberRoutineName: "eq");
         var eqCall = new CallExpression(
             Callee: new MemberExpression(Object: cmpCall, MemberName: "eq", Location: _synthLoc),
             Arguments:
@@ -378,7 +378,7 @@ internal sealed class DerivedOperatorPass
             ],
             Location: _synthLoc)
         {
-            ResolvedRoutine = eqMethod,
+            ResolvedRoutine = eqMemberRoutine,
             ResolvedType = boolType
         };
 

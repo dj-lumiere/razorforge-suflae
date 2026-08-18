@@ -9,7 +9,7 @@ namespace Compiler.Resolution;
 ///
 /// <para><b>Why this exists.</b> Renaming a stdlib routine (e.g. the <c>extract</c>/<c>inject</c> →
 /// <c>peek</c>/<c>poke</c> rename, commit 1480acd) silently miscompiles: the compiler looks routines
-/// up by literal (<c>LookupMethod(type, "peek")</c>) and sometimes changes teardown/codegen behavior
+/// up by literal (<c>LookupMemberRoutine(type, "peek")</c>) and sometimes changes teardown/codegen behavior
 /// by matching a callee/type NAME. A rename compiles clean and breaks at runtime. Funnelling every
 /// such literal through this one file makes the coupling visible and gives a single place to add the
 /// <c>validate-stdlib</c> resolution check (Design 1 step 2, not yet wired).</para>
@@ -33,7 +33,7 @@ public static class RuntimeContract
     // =====================================================================================
 
     /// <summary>Raw-pointer / entity-escape surface on <c>Hijacked[T]</c> and bare entities.</summary>
-    /// <remarks>Sites: WrapperForwardingPass (LookupMethod/MemberName), PatternLoweringPass,
+    /// <remarks>Sites: WrapperForwardingPass (LookupMemberRoutine/MemberName), PatternLoweringPass,
     /// WiredRoutinePass, LLVMCodeGenerator.Expressions.Calls.</remarks>
     public static class RawPointer
     {
@@ -53,7 +53,7 @@ public static class RuntimeContract
 
     /// <summary>Reference-counting controller surface (<c>RetainController[T]</c> and the RC wrappers).</summary>
     /// <remarks>The controllers' count primitives are the canonical vocabulary <c>hold</c>/<c>unhold</c>
-    /// (strong ±1) and <c>observe</c>/<c>unobserve</c> (weak ±1) — plain stdlib method names, called only
+    /// (strong ±1) and <c>observe</c>/<c>unobserve</c> (weak ±1) — plain stdlib memberRoutine names, called only
     /// from wrapper <c>.rf</c> bodies, so they need no constants here.</remarks>
     public static class RefCount
     {
@@ -65,12 +65,12 @@ public static class RuntimeContract
         public const string Share = "share";
     }
 
-    /// <summary><c>Roamed[T]</c> methods that codegen inserts implicitly (no surface AST call),
+    /// <summary><c>Roamed[T]</c> memberRoutines that codegen inserts implicitly (no surface AST call),
     /// so RoutineReachabilityPass must anticipate them via the ImplicitCallContract.</summary>
     /// <remarks>Sites: LLVMCodeGenerator (promote at spawn boundary, lock_enter/lock_exit around
     /// direct field access, raw_inner for display-transparency projection) mirrored by
     /// ImplicitCallContract.ForLiveType — keep both bound to these constants, never bare literals.</remarks>
-    public static class RoamedMethod
+    public static class RoamedMemberRoutine
     {
         /// <summary>Spawn-boundary promotion of a single-thread handle to a shareable one.</summary>
         public const string Promote = "promote";
@@ -236,18 +236,18 @@ public static class RuntimeContract
         new HashSet<string>(comparer: StringComparer.Ordinal)
             { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Hijacked, Roamed };
 
-    /// <summary>Wrapper types that transparently forward inner-type methods — every wrapper EXCEPT
+    /// <summary>Wrapper types that transparently forward inner-type memberRoutines — every wrapper EXCEPT
     /// <see cref="Hijacked"/> (the raw-pointer escape hatch). Mirrors WrapperForwardingPass.ForwardingWrapperTypes.</summary>
     public static readonly IReadOnlySet<string> ForwardingWrapperTypes =
         new HashSet<string>(comparer: StringComparer.Ordinal)
             { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Roamed };
 
-    /// <summary>Read-only borrow tokens (only <c>@readonly</c> methods reachable). Mirrors
+    /// <summary>Read-only borrow tokens (only <c>@readonly</c> memberRoutines reachable). Mirrors
     /// WrapperForwardingPass.ReadOnlyWrapperTypes.</summary>
     public static readonly IReadOnlySet<string> ReadOnlyWrapperTypes =
         new HashSet<string>(comparer: StringComparer.Ordinal) { Viewing, Inspecting };
 
-    /// <summary>Borrow/view wrappers whose value points INTO another value, so a method returning one
+    /// <summary>Borrow/view wrappers whose value points INTO another value, so a memberRoutine returning one
     /// may ALIAS its receiver. Mirrors TemporaryTeardownPass.ReferringWrapperNAmes.</summary>
     public static readonly IReadOnlySet<string> ReferringWrapperNAmes =
         new HashSet<string>(comparer: StringComparer.Ordinal)

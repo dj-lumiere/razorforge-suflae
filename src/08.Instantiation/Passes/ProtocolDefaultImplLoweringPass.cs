@@ -19,12 +19,12 @@ namespace Compiler.Instantiation.Passes;
 /// cannot resolve statically against an abstract protocol owner; codegen needs the
 /// concrete implementer.
 ///
-/// Approach (per Rust's trait-default-method monomorphization):
+/// Approach (per Rust's trait-default-memberRoutine monomorphization):
 /// for every call site that resolves to a protocol-default-impl routine with a body,
 /// synthesize a per-(protocol-routine, implementer) routine whose owner is the
 /// implementer. The synthesized routine reuses the protocol routine's AST body with
 /// <c>me</c> rebound to the implementer; nested calls then re-resolve against the
-/// implementer's methods through the standard GMP path.
+/// implementer's memberRoutines through the standard GMP path.
 ///
 /// Pipeline placement: runs inside <see cref="GenericClosurePass"/> before GMP, so the
 /// synthesized routines flow through the normal monomorphization machinery and land
@@ -95,9 +95,9 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         {
             AstWalker.WalkExpressions(root: body, visit: expr =>
             {
-                // Handle both the lowered call form and the still-generic method-call form: explicit
-                // method type args (e.g. `select_many[S64](…)`) reach PDIL as a
-                // GenericMethodCallExpression because GenericCallLoweringPass runs AFTER PDIL. Without
+                // Handle both the lowered call form and the still-generic memberRoutine-call form: explicit
+                // memberRoutine type args (e.g. `select_many[S64](…)`) reach PDIL as a
+                // GenericMemberRoutineCallExpression because GenericCallLoweringPass runs AFTER PDIL. Without
                 // this its per-implementer body (List[S64].select_many) is never synthesized.
                 if (!TryGetProtocolDefaultCallParts(expr: expr,
                         resolvedRoutine: out RoutineInfo? rr0, receiverType: out TypeInfo? recvType0,
@@ -109,33 +109,33 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                     return;
                 TypeInfo impl = implOrNull;
 
-                // Method-generic resolution (e.g. `List[Text].zip[S64, List[S64]]`): the call already
-                // resolved to a fully-concrete resolution `rr` whose method type-arguments bind the
-                // protocol body's method generics. SynthesizePerImplementer drops method generics, so
+                // memberRoutine-generic resolution (e.g. `List[Text].zip[S64, List[S64]]`): the call already
+                // resolved to a fully-concrete resolution `rr` whose memberRoutine type-arguments bind the
+                // protocol body's memberRoutine generics. SynthesizePerImplementer drops memberRoutine generics, so
                 // instead generate the body FOR `rr` directly — substituting the protocol's own params
-                // (T→Text) AND the method generics (U→S64, S2→List[S64]) — keyed by rr's own
+                // (T→Text) AND the memberRoutine generics (U→S64, S2→List[S64]) — keyed by rr's own
                 // RegistryKey (which is exactly the symbol the call site emits).
                 RoutineInfo rr = rr0!;
                 // pr.GenericParameters lists the protocol owner's params first (e.g. T) then the
-                // method-level params (U, S2); rr.TypeArguments holds only the method args. Align them
-                // from the END so the trailing method generics bind, while the owner param (T) is
+                // memberRoutine-level params (U, S2); rr.TypeArguments holds only the memberRoutine args. Align them
+                // from the END so the trailing memberRoutine generics bind, while the owner param (T) is
                 // supplied separately by BuildProtocolGenericSubs (T→Text from the conformance).
-                if (rr.TypeArguments is { Count: > 0 } methodArgs &&
+                if (rr.TypeArguments is { Count: > 0 } memberRoutineArgs &&
                     pr.GenericParameters is { Count: > 0 } allParams &&
-                    methodArgs.Count <= allParams.Count)
+                    memberRoutineArgs.Count <= allParams.Count)
                 {
                     Dictionary<string, TypeInfo> fullSubs = BuildProtocolGenericSubs(
                         protocolRoutine: pr, implementer: impl);
-                    int offset = allParams.Count - methodArgs.Count;
-                    for (int i = 0; i < methodArgs.Count; i++)
-                        fullSubs[key: allParams[index: offset + i]] = methodArgs[index: i];
+                    int offset = allParams.Count - memberRoutineArgs.Count;
+                    for (int i = 0; i < memberRoutineArgs.Count; i++)
+                        fullSubs[key: allParams[index: offset + i]] = memberRoutineArgs[index: i];
 
-                    // Build the per-implementer routine with Me + the method generics substituted in
+                    // Build the per-implementer routine with Me + the memberRoutine generics substituted in
                     // its signature (rr's own ReturnType still carries ProtocolSelf `Me`, which would
                     // trip codegen's ContainsGenericParameter guard and silently skip emission). Carry
                     // rr.TypeArguments so it mangles to the same symbol the call site emits.
                     RoutineInfo mgInfo = SynthesizePerImplementer(protocolRoutine: pr, implementer: impl,
-                        protoSubs: fullSubs, typeArguments: methodArgs);
+                        protoSubs: fullSubs, typeArguments: memberRoutineArgs);
 
                     // Guard on the key we actually store under (mgInfo's), or the fixed-point loop
                     // never converges (re-adding every iteration).
@@ -188,7 +188,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                 // IsSynthesized=false: this body has a real AST cloned from the stdlib
                 // protocol-default-impl body and must flow through every lowering pass
                 // (ControlFlow, FString, Pattern, Expression, Operator, ...). Several
-                // RunOnInstantiatedGenericBodies methods skip IsSynthesized=true entries
+                // RunOnInstantiatedGenericBodies memberRoutines skip IsSynthesized=true entries
                 // assuming there is no AST to walk, which is not the case here.
                 // "me" is the receiver value binding; "Me" maps ProtocolSelf (Name "Me") to the
                 // implementer so codegen's type substitution resolves `Me`-typed constructions
@@ -225,13 +225,13 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         AstWalker.WalkExpressions(root: body, visit: expr =>
         {
             // A no-arg construction in a cloned collector body — e.g. `Set[T]()` / `List[T]()` —
-            // reaches here as a GenericMethodCallExpression (or CreatorExpression) carrying a concrete
+            // reaches here as a GenericMemberRoutineCallExpression (or CreatorExpression) carrying a concrete
             // ConstructedType after the T→implementer substitution. Codegen emits a `<Type>.create`
             // call by mangled name; mark it live so the body GMP monomorphizes survives the gate.
             TypeInfo? ct = expr switch
             {
                 CreatorExpression cre => cre.ConstructedType,
-                GenericMethodCallExpression gmc => gmc.ConstructedType,
+                GenericMemberRoutineCallExpression gmc => gmc.ConstructedType,
                 CallExpression { Arguments.Count: 0 } ce => ce.ConstructedType,
                 _ => null
             };
@@ -283,7 +283,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     /// <summary>
     /// Extracts the resolved routine, receiver type, and a rebind callback from a call-shaped
     /// expression — either a lowered <see cref="CallExpression"/> (callee is a MemberExpression) or a
-    /// still-generic <see cref="GenericMethodCallExpression"/> (explicit method type args, not yet
+    /// still-generic <see cref="GenericMemberRoutineCallExpression"/> (explicit memberRoutine type args, not yet
     /// lowered by GenericCallLoweringPass, which runs after this pass). Returns false for anything else.
     /// </summary>
     /// <param name="expr">The expression to inspect.</param>
@@ -300,7 +300,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                 receiverType = mem.Object.ResolvedType;
                 rebind = r => ce.ResolvedRoutine = r;
                 return true;
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
                 resolvedRoutine = gmc.ResolvedRoutine;
                 receiverType = gmc.Object.ResolvedType;
                 rebind = r => gmc.ResolvedRoutine = r;
@@ -322,7 +322,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
 
         // Walk the GenericDefinition chain to find a protocol-owned default-impl body. One level
         // covers the re-homed owner-resolved form (List[Text].enumerate -> Iterable[T].enumerate);
-        // a method-generic RESOLUTION needs two (List[Text].zip[S64,List[S64]] ->
+        // a memberRoutine-generic RESOLUTION needs two (List[Text].zip[S64,List[S64]] ->
         // List[Text].zip[U,S2] -> Iterable[T].zip[U,S2]).
         RoutineInfo? proto = null;
         for (RoutineInfo? cur = rr; cur != null; cur = cur.GenericDefinition)
@@ -478,9 +478,9 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         // Clone parameters/return with `Me` substituted to the implementer AND the protocol's own
         // generic params bound from the implementer's conformance (e.g. T→Text). The latter matters
         // for signatures like Iterable[T].enumerate() -> ?EnumerateIterator[T], whose return would
-        // otherwise leak the protocol element param. For a method-generic instantiation (zip[U,S2]),
-        // protoSubs also carries the bound method generics and <paramref name="typeArguments"/> the
-        // concrete method args, so the synthesized routine mangles identically to the call site's
+        // otherwise leak the protocol element param. For a memberRoutine-generic instantiation (zip[U,S2]),
+        // protoSubs also carries the bound memberRoutine generics and <paramref name="typeArguments"/> the
+        // concrete memberRoutine args, so the synthesized routine mangles identically to the call site's
         // resolution symbol (e.g. `List[Text].zip[S64,List[S64]](List[S64])`).
         var subs = new Dictionary<string, TypeInfo>(protoSubs) { ["Me"] = implementer };
         var newParams = protocolRoutine.Parameters
@@ -516,7 +516,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         // GenericAstRewriter sets ctx.ParamTypes["me"] from enclosingRoutine.OwnerType, so passing
         // the synthesized routine (OwnerType = implementer) automatically rebinds `me` (the receiver)
         // to the implementer. `Me` (the typename) is substituted via typeSubs below; nested member
-        // calls in the body then re-resolve against the implementer's methods. The protocol's own
+        // calls in the body then re-resolve against the implementer's memberRoutines. The protocol's own
         // generic params (e.g. T→Text) are folded in so body types like EnumerateIterator[T] become
         // concrete (EnumerateIterator[Text]) and don't leak the element param into codegen.
         var typeSubs = new Dictionary<string, TypeInfo>(protoSubs) { ["Me"] = implementer };

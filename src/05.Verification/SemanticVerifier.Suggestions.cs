@@ -171,9 +171,9 @@ public sealed partial class SemanticVerifier
         DidYouMean(target: typeName, candidates: TypeSuggestionCandidates());
 
     /// <summary>
-    /// Member names (non-wired methods + member variables) of the receiver type for
+    /// Member names (non-wired memberRoutines + member variables) of the receiver type for
     /// member-not-found suggestions. Walks ALL registered routines matched by owner —
-    /// GetMethodsForType only sees methods already materialized on a generic resolution,
+    /// GetMemberRoutinesForType only sees memberRoutines already materialized on a generic resolution,
     /// which is typically empty exactly when the user's first call on the type is a typo.
     /// </summary>
     private IEnumerable<string> MemberSuggestionCandidates(TypeSymbol type)
@@ -186,32 +186,32 @@ public sealed partial class SemanticVerifier
             _ => null
         };
 
-        // "List[Core.S64]" must also match methods owned by the bare "List" definition.
+        // "List[Core.S64]" must also match memberRoutines owned by the bare "List" definition.
         string baseName = type.BareName;
 
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        // Per-type method tables hold the type's own declared methods (GetAllRoutines does
+        // Per-type memberRoutine tables hold the type's own declared memberRoutines (GetAllRoutines does
         // not include them all); query both the resolution and its generic definition.
-        foreach (RoutineInfo method in _registry.GetMethodsForType(type: type))
+        foreach (RoutineInfo memberRoutine in _registry.GetMemberRoutinesForType(type: type))
         {
-            if (method.IsWiredMemberRoutine) continue;
-            string methodName = method.Name;
-            if (methodName.Length > 0 && seen.Add(item: methodName))
+            if (memberRoutine.IsWiredMemberRoutine) continue;
+            string memberRoutineName = memberRoutine.Name;
+            if (memberRoutineName.Length > 0 && seen.Add(item: memberRoutineName))
             {
-                yield return methodName;
+                yield return memberRoutineName;
             }
         }
 
         if (genericDef != null)
         {
-            foreach (RoutineInfo method in _registry.GetMethodsForType(type: genericDef))
+            foreach (RoutineInfo memberRoutine in _registry.GetMemberRoutinesForType(type: genericDef))
             {
-                if (method.IsWiredMemberRoutine) continue;
-                string methodName = method.Name;
-                if (methodName.Length > 0 && seen.Add(item: methodName))
+                if (memberRoutine.IsWiredMemberRoutine) continue;
+                string memberRoutineName = memberRoutine.Name;
+                if (memberRoutineName.Length > 0 && seen.Add(item: memberRoutineName))
                 {
-                    yield return methodName;
+                    yield return memberRoutineName;
                 }
             }
         }

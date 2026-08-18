@@ -112,8 +112,8 @@ public enum SemanticWarningCode
     /// <summary>Variable marked modifiable but never modified.</summary>
     UnnecessaryModifiable = 200,
 
-    /// <summary>Method could be marked @readonly but is not.</summary>
-    MethodCouldBeReadonly = 201,
+    /// <summary>memberRoutine could be marked @readonly but is not.</summary>
+    MemberRoutineCouldBeReadonly = 201,
 
     /// <summary>Calling .modify() on @initonly record — the record is frozen after construction.</summary>
     HijackOnInitOnly = 210,

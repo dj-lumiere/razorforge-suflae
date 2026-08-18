@@ -34,7 +34,7 @@ public partial class Parser
         value = ParseAssignment();
 
         // Base operators with in-place wired support -> CompoundAssignmentExpression
-        if (compoundOp.Value.GetInPlaceMethodName() != null)
+        if (compoundOp.Value.GetInPlaceMemberRoutineName() != null)
         {
             return new CompoundAssignmentExpression(Target: expr,
                 Operator: compoundOp.Value,

@@ -49,7 +49,7 @@ internal enum NumericTypeKind
 #endregion
 
 /// <summary>
-/// Helper methods for analysis.
+/// Helper memberRoutines for analysis.
 /// </summary>
 public sealed partial class SemanticVerifier
 {
@@ -132,7 +132,7 @@ public sealed partial class SemanticVerifier
 
     #endregion
 
-    #region Helper Methods for Analysis
+    #region Helper memberRoutines for Analysis
 
     /// <summary>
     /// Validates argument count and types for a routine call against the routine's parameter list.
@@ -442,11 +442,11 @@ public sealed partial class SemanticVerifier
                 {
                     // accept — handled by codegen as a bare function-pointer reference.
                 }
-                // Skip mismatch when paramType still references an unresolved method-level generic
+                // Skip mismatch when paramType still references an unresolved memberRoutine-level generic
                 // (e.g. `Routine[(S64,), U]` for `select[U]`). The caller runs
-                // InferMethodGenericTypeArguments after AnalyzeCallArguments and substitutes the
-                // method; without this guard we'd report a spurious error before inference resolves U.
-                else if (!ContainsUnresolvedMethodGeneric(type: paramType,
+                // InferMemberRoutineGenericTypeArguments after AnalyzeCallArguments and substitutes the
+                // memberRoutine; without this guard we'd report a spurious error before inference resolves U.
+                else if (!ContainsUnresolvedMemberRoutineGeneric(type: paramType,
                         genericParameters: routine.GenericParameters))
                 {
                     ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
@@ -460,7 +460,7 @@ public sealed partial class SemanticVerifier
                 // Implicit refer/control coercion for marker-protocol params.
                 // Wraps the argument expression as `arg.refer()` / `arg.control()` so
                 // codegen, reachability, and call-classification all see a fully resolved
-                // routine reference. The wrapper's refer/control method returns T (the
+                // routine reference. The wrapper's refer/control memberRoutine returns T (the
                 // inner entity), which matches the rewritten signature post-Phase 8.
                 TryInjectMarkerCoercion(routine, arguments, binding.Key, paramType, argType);
             }
@@ -478,13 +478,13 @@ public sealed partial class SemanticVerifier
                                  paramBase is Compiler.Resolution.RuntimeContract.Accessing or Compiler.Resolution.RuntimeContract.Controlling;
             if (_registry.Language == Language.RazorForge &&
                 argValue is IdentifierExpression or MemberExpression &&
-                !IsTriviallyStorable(type: argType) &&
+                !IsTriviallyAssignable(type: argType) &&
                 !paramIsBorrow)
             {
-                var hint = FindNonTriviallyStorableWrapper(type: argType);
+                var hint = FindNonTriviallyAssignableWrapper(type: argType);
                 if (hint != null)
                 {
-                    string verb = NonTriviallyStorableWrappers[key: hint.Value.Wrapper];
+                    string verb = NonTriviallyAssignableWrappers[key: hint.Value.Wrapper];
                     string fieldNote = hint.Value.Path == "<value>"
                         ? $"argument of type '{argType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
                         : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";
@@ -521,18 +521,18 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Re-types lambda arguments after a method-generic routine has been resolved. The initial
-    /// <see cref="AnalyzeCallArguments"/> pass runs before method-level generics are inferred, so a
-    /// lambda parameter bound to a method generic keeps it unresolved — e.g. `acc` in
+    /// Re-types lambda arguments after a memberRoutine-generic routine has been resolved. The initial
+    /// <see cref="AnalyzeCallArguments"/> pass runs before memberRoutine-level generics are inferred, so a
+    /// lambda parameter bound to a memberRoutine generic keeps it unresolved — e.g. `acc` in
     /// <c>accumulate[U](combiner: Routine[(U,T),U])</c> stays <c>U</c> rather than the inferred
     /// <c>S64</c>. Re-analyzing the lambda against the resolved parameter type rewrites
     /// <c>lambda.ResolvedType</c> with concrete parameter types so the post-processing lambda-lift
     /// mangles a defined symbol instead of one carrying an unbound generic.
     /// </summary>
-    private void ReanalyzeLambdaArguments(RoutineInfo resolvedMethod, List<Expression> arguments,
+    private void ReanalyzeLambdaArguments(RoutineInfo resolvedMemberRoutine, List<Expression> arguments,
         TypeSymbol? callObjectType)
     {
-        IReadOnlyList<ParameterInfo> parameters = resolvedMethod.Parameters;
+        IReadOnlyList<ParameterInfo> parameters = resolvedMemberRoutine.Parameters;
         foreach (Expression argExpr in arguments)
         {
             Expression inner = argExpr is NamedArgumentExpression nae ? nae.Value : argExpr;
@@ -547,11 +547,11 @@ public sealed partial class SemanticVerifier
 
             TypeSymbol paramType = param.Type;
             // Owner-level generics (T) are substituted the same way AnalyzeCallArguments does, so a
-            // `Routine[(U,T),U]` parameter is fully concrete once both U (method) and T (owner) bind.
-            if (callObjectType != null && resolvedMethod.OwnerType is { IsGenericDefinition: true })
+            // `Routine[(U,T),U]` parameter is fully concrete once both U (memberRoutine) and T (owner) bind.
+            if (callObjectType != null && resolvedMemberRoutine.OwnerType is { IsGenericDefinition: true })
                 paramType = SubstituteOwnerGenerics(paramType: paramType,
                     lookupType: callObjectType,
-                    ownerType: resolvedMethod.OwnerType) ?? paramType;
+                    ownerType: resolvedMemberRoutine.OwnerType) ?? paramType;
 
             AnalyzeExpression(expression: inner, expectedType: paramType);
         }
@@ -561,7 +561,7 @@ public sealed partial class SemanticVerifier
     /// Rewrites `show(x)` / `alert(x)` arguments in-place when `x` is a copy-restricted
     /// wrapper (Owned, Retained, Tracked, ...). Each such argument becomes `x.represent()`
     /// (for show) or `x.diagnose()` (for alert). The display protocols guarantee `@readonly`,
-    /// so the method call is a borrow — `x` is not consumed. The resulting `Text` matches
+    /// so the memberRoutine call is a borrow — `x` is not consumed. The resulting `Text` matches
     /// the `show(value: Accessing[Text])` / `alert(value: Accessing[Text])` overload
     /// (value-record, no copy verb), so subsequent overload resolution picks that branch
     /// instead of the generic `show[T]` / `alert[T]` that would trigger S420.
@@ -595,19 +595,19 @@ public sealed partial class SemanticVerifier
             if (argType.Category == TypeCategory.Error) continue;
 
             // Rewrite for args that don't match the bare-Text/Bytes overloads:
-            //   - copy-restricted wrappers (Owned, Retained, Tracked, …) — `IsTriviallyStorable`
+            //   - copy-restricted wrappers (Owned, Retained, Tracked, …) — `IsTriviallyAssignable`
             //     returns false; we need the rewrite to avoid S420.
-            //   - raw entities (List[T], Set[T], Dict[K,V]) — `IsTriviallyStorable` returns
+            //   - raw entities (List[T], Set[T], Dict[K,V]) — `IsTriviallyAssignable` returns
             //     true (fallback), but the generic `alert[T]` / `show[T]` monomorphization
             //     copies the entity ptr by value, which corrupts. Rewriting to `arg.diagnose()`
             //     extracts a Text and uses the cleaner `Accessing[Text]` overload instead.
             bool isEntity = argType is EntityTypeInfo;
-            if (!isEntity && IsTriviallyStorable(type: argType)) continue;
+            if (!isEntity && IsTriviallyAssignable(type: argType)) continue;
 
-            string methodName = isAlert ? "diagnose" : "represent";
+            string memberRoutineName = isAlert ? "diagnose" : "represent";
             var memberAccess = new MemberExpression(
                 Object: innerExpr,
-                MemberName: methodName,
+                MemberName: memberRoutineName,
                 Location: innerExpr.Location);
             var displayCall = new CallExpression(
                 Callee: memberAccess,
@@ -942,7 +942,7 @@ public sealed partial class SemanticVerifier
             string name = gp.Name;
             // Search the active generic-constraint scope for a numeric constraint on this name.
             // Constraints can live on the routine, the enclosing type, or — for
-            // extension methods — on the routine's owner type (e.g., `Array[T,N]`
+            // extension memberRoutines — on the routine's owner type (e.g., `Array[T,N]`
             // declares `needs N is U64`).
             List<List<GenericConstraintDeclaration>?> sources =
             [
@@ -1007,7 +1007,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a type supports a specific binary operator by looking up the operator method.
+    /// Checks if a type supports a specific binary operator by looking up the operator memberRoutine.
     /// </summary>
     /// <summary>
     /// Unwraps a transparent borrow protocol (<c>Accessing[T]</c> / <c>Controlling[T]</c>) to its
@@ -1028,41 +1028,41 @@ public sealed partial class SemanticVerifier
 
     private bool SupportsOperator(TypeSymbol type, BinaryOperator op)
     {
-        // Check the BASE wired method, not the derived one: `!=`/`==` are both backed by `eq`
+        // Check the BASE wired memberRoutine, not the derived one: `!=`/`==` are both backed by `eq`
         // (ne is auto-derived from eq), and all ordering operators are backed by `cmp`
         // (lt/le/gt/ge are auto-derived). Protocols (Equatable/Comparable) declare only the
-        // base method, so checking the derived name would spuriously fail for constrained generics
+        // base memberRoutine, so checking the derived name would spuriously fail for constrained generics
         // (e.g. `me[i] != other[i]` inside `List[T].eq needs T obeys Equatable`).
-        string? methodName = op switch
+        string? memberRoutineName = op switch
         {
             BinaryOperator.Equal or BinaryOperator.NotEqual => "eq",
             BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
                 or BinaryOperator.GreaterEqual or BinaryOperator.ThreeWayComparator => "cmp",
-            _ => op.GetMethodName()
+            _ => op.GetMemberRoutineName()
         };
-        if (methodName == null)
+        if (memberRoutineName == null)
         {
             return false;
         }
 
-        // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].eq).
+        // Use LookupMemberRoutine which handles generic resolutions (e.g., Hijacked[Point].eq).
         // A resolution whose owner is a ProtocolTypeInfo is the ABSTRACT protocol declaration
         // (RF protocols have no default implementations) — for a CONCRETE receiver it would link
         // to nothing (e.g. `record Cat` with no `eq` resolving `==` to `Equatable.eq`). Only a
         // concrete implementation counts as support here; generic-parameter receivers get their
         // constraint-based support from the dedicated branch below.
-        RoutineInfo? resolved = _registry.LookupMethod(type: type, methodName: methodName);
+        RoutineInfo? resolved = _registry.LookupMemberRoutine(type: type, memberRoutineName: memberRoutineName);
         if (resolved != null && resolved.OwnerType is not ProtocolTypeInfo)
             return true;
 
-        // Phase D: transparent wrappers (T, etc.) forward operator wired methods
+        // Phase D: transparent wrappers (T, etc.) forward operator wired memberRoutines
         // to the inner T's implementation. Synthesize the forwarder lazily.
         if (IsWrapperType(type: type) &&
-            TrySynthesizeWrapperForwarder(wrapperType: type, methodName: methodName,
+            TrySynthesizeWrapperForwarder(wrapperType: type, memberRoutineName: memberRoutineName,
                 isFailable: false) != null)
             return true;
 
-        // For generic parameters, check if any constrained protocol declares the method.
+        // For generic parameters, check if any constrained protocol declares the memberRoutine.
         if (type is GenericParameterTypeInfo)
         {
             foreach (GenericConstraintDeclaration c in ActiveConstraintsFor(paramName: type.Name))
@@ -1073,7 +1073,7 @@ public sealed partial class SemanticVerifier
                     {
                         TypeSymbol? proto = _registry.LookupType(name: protocolExpr.Name);
                         if (proto is ProtocolTypeInfo &&
-                            ProtocolDeclaresMethod(proto: proto, methodName: methodName))
+                            ProtocolDeclaresMemberRoutine(proto: proto, memberRoutineName: memberRoutineName))
                             return true;
                     }
                 }
@@ -1085,7 +1085,7 @@ public sealed partial class SemanticVerifier
                         TypeSymbol? underlying = _registry.LookupType(name: ct.Name);
                         if (underlying != null &&
                             underlying.Category != TypeCategory.Protocol &&
-                            _registry.LookupMethod(type: underlying, methodName: methodName) != null)
+                            _registry.LookupMemberRoutine(type: underlying, memberRoutineName: memberRoutineName) != null)
                             return true;
                     }
                 }
@@ -1096,20 +1096,20 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Returns true if the protocol (or any protocol it transitively obeys) declares a method
+    /// Returns true if the protocol (or any protocol it transitively obeys) declares a memberRoutine
     /// matching the given name. e.g. <c>Comparable</c> obeys <c>Equatable</c>, so
     /// <c>eq</c> is reachable through <c>Comparable</c>.
     /// </summary>
-    private static bool ProtocolDeclaresMethod(TypeSymbol proto, string methodName,
+    private static bool ProtocolDeclaresMemberRoutine(TypeSymbol proto, string memberRoutineName,
         HashSet<string>? visited = null)
     {
         if (proto is not ProtocolTypeInfo p) return false;
         visited ??= new HashSet<string>(StringComparer.Ordinal);
         if (!visited.Add(item: p.Name)) return false;
-        if (p.Methods.Any(predicate: m => m.Name == methodName))
+        if (p.MemberRoutines.Any(predicate: m => m.Name == memberRoutineName))
             return true;
         return p.ParentProtocols.Any(parent =>
-            ProtocolDeclaresMethod(proto: parent, methodName: methodName, visited: visited));
+            ProtocolDeclaresMemberRoutine(proto: parent, memberRoutineName: memberRoutineName, visited: visited));
     }
 
     /// <summary>
@@ -1171,10 +1171,10 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Operator wired methods that choices are NOT allowed to define or call.
+    /// Operator wired memberRoutines that choices are NOT allowed to define or call.
     /// Choices do not support any operators — use 'is' for case matching.
     /// </summary>
-    private static readonly HashSet<string> OperatorWiredMethods =
+    private static readonly HashSet<string> OperatorWiredMemberRoutines =
     [
         // Arithmetic
         "add", "sub", "mul", "truediv", "floordiv", "mod", "pow",
@@ -1199,10 +1199,10 @@ public sealed partial class SemanticVerifier
         "enter", "exit"
     ];
 
-    /// <summary>Returns true if the given method name is an operator wired (e.g., <c>add</c>, <c>eq</c>).</summary>
+    /// <summary>Returns true if the given memberRoutine name is an operator wired (e.g., <c>add</c>, <c>eq</c>).</summary>
     private static bool IsOperatorWired(string name)
     {
-        return OperatorWiredMethods.Contains(value: name);
+        return OperatorWiredMemberRoutines.Contains(value: name);
     }
 
     /// <summary>
@@ -1237,13 +1237,13 @@ public sealed partial class SemanticVerifier
         // Membership operators (in, notin): check that right has contains accepting left
         if (op is BinaryOperator.In or BinaryOperator.NotIn)
         {
-            RoutineInfo? containsMethod =
-                _registry.LookupMethod(type: right, methodName: "contains");
-            if (containsMethod == null)
+            RoutineInfo? containsMemberRoutine =
+                _registry.LookupMemberRoutine(type: right, memberRoutineName: "contains");
+            if (containsMemberRoutine == null)
             {
                 ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
                     message:
-                    $"Type '{right.Name}' does not support 'in'/'notin' (no contains method).",
+                    $"Type '{right.Name}' does not support 'in'/'notin' (no contains member routine).",
                     location: location);
             }
 
@@ -1261,7 +1261,7 @@ public sealed partial class SemanticVerifier
         }
 
         // For overloadable ordering/equality operators, verify the type actually implements the
-        // backing wired method (eq for ==/!=, cmp for </<=/>/>=). These are desugared to method
+        // backing wired memberRoutine (eq for ==/!=, cmp for </<=/>/>=). These are desugared to memberRoutine
         // calls by OperatorLoweringPass (after SA), so without this check an unsupported operator
         // would slip past SA and surface as an undefined-symbol LINKERR at codegen — e.g. a record
         // with no eq whose `==` resolves to the abstract `Equatable.eq`. A LINKERR on SA-passing
@@ -1351,7 +1351,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Resolves the element type produced by iterating over <paramref name="iterableType"/>.
     /// The type must implement the <c>Iterable</c> protocol, whose <c>iter</c> returns a <c>Iterator[T]</c>.
-    /// The element type is taken from the return type of the <c>iter</c> method or the type's first generic argument.
+    /// The element type is taken from the return type of the <c>iter</c> memberRoutine or the type's first generic argument.
     /// Reports an error and returns <see cref="ErrorTypeInfo"/> if the type is not iterable or the element type cannot be determined.
     /// </summary>
     private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
@@ -1406,9 +1406,9 @@ public sealed partial class SemanticVerifier
         // For generic resolution types, also check if the generic definition has iter
         if (!obeysIterable && iterableType.IsGenericResolution)
         {
-            RoutineInfo? seqMethod =
-                _registry.LookupMethod(type: iterableType, methodName: "iter");
-            if (seqMethod != null)
+            RoutineInfo? seqMemberRoutine =
+                _registry.LookupMemberRoutine(type: iterableType, memberRoutineName: "iter");
+            if (seqMemberRoutine != null)
             {
                 obeysIterable = true;
             }
@@ -1477,33 +1477,33 @@ public sealed partial class SemanticVerifier
         // return type. This mirrors the for-loop lowering (IteratorInlineLoweringPass) and, unlike
         // Strategy 1, does NOT depend on the instance's ImplementedProtocols being populated — so it
         // works for a generic-instance collection (e.g. `Dict[Text, SerialValue]`) iterated inside a
-        // CONCRETE method compiled before that instance is monomorphized. There, ImplementedProtocols
+        // CONCRETE memberRoutine compiled before that instance is monomorphized. There, ImplementedProtocols
         // is still empty and the naive `TypeArguments[0]` fallback below would wrongly pick the first
         // type arg (`K`, i.e. `Text` for a Dict) instead of `DictEntry[Text, SerialValue]`.
-        RoutineInfo? iterMethod = _registry.LookupMethod(type: iterableType, methodName: "iter");
-        if (iterMethod?.ReturnType is { } iteratorType and not ErrorTypeInfo)
+        RoutineInfo? iterMemberRoutine = _registry.LookupMemberRoutine(type: iterableType, memberRoutineName: "iter");
+        if (iterMemberRoutine?.ReturnType is { } iteratorType and not ErrorTypeInfo)
         {
-            RoutineInfo? emitMethod =
-                _registry.LookupMethod(type: iteratorType, methodName: "emit", isFailable: true);
-            if (emitMethod?.ReturnType is { } emittedType and not (ErrorTypeInfo or GenericParameterTypeInfo))
+            RoutineInfo? emitMemberRoutine =
+                _registry.LookupMemberRoutine(type: iteratorType, memberRoutineName: "emit", isFailable: true);
+            if (emitMemberRoutine?.ReturnType is { } emittedType and not (ErrorTypeInfo or GenericParameterTypeInfo))
             {
                 return emittedType;
             }
         }
 
-        // Strategy 2: Look for iter method to get element type from Iterator[T] return type
-        RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.iter");
+        // Strategy 2: Look for iter memberRoutine to get element type from Iterator[T] return type
+        RoutineInfo? seqMemberRoutine2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.iter");
 
-        // Generic fallback: Range[S64].iter -> Range.iter via LookupMethod
-        if (seqMethod2 == null)
+        // Generic fallback: Range[S64].iter -> Range.iter via LookupMemberRoutine
+        if (seqMemberRoutine2 == null)
         {
-            seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "iter");
+            seqMemberRoutine2 = _registry.LookupMemberRoutine(type: iterableType, memberRoutineName: "iter");
         }
 
-        if (seqMethod2?.ReturnType?.TypeArguments is { Count: > 0 })
+        if (seqMemberRoutine2?.ReturnType?.TypeArguments is { Count: > 0 })
         {
             // Resolve generic type args: if return type arg is T and iterableType is Range[S64], resolve T -> S64
-            TypeInfo returnTypeArg = seqMethod2.ReturnType.TypeArguments[index: 0];
+            TypeInfo returnTypeArg = seqMemberRoutine2.ReturnType.TypeArguments[index: 0];
             if (returnTypeArg is GenericParameterTypeInfo && iterableType is
                     { IsGenericResolution: true, TypeArguments: not null })
             {
@@ -1528,7 +1528,7 @@ public sealed partial class SemanticVerifier
             return returnTypeArg;
         }
 
-        // Fallback to type arguments if iter method not found but protocol is implemented
+        // Fallback to type arguments if iter memberRoutine not found but protocol is implemented
         if (iterableType.TypeArguments is { Count: > 0 })
         {
             return iterableType.TypeArguments[index: 0];
@@ -1536,7 +1536,7 @@ public sealed partial class SemanticVerifier
 
         ReportError(code: SemanticDiagnosticCode.TypeNotIterable,
             message:
-            $"Cannot determine element type for '{iterableType.Name}'. The iter method must return Iterator[T].",
+            $"Cannot determine element type for '{iterableType.Name}'. The iter member routine must return Iterator[T].",
             location: location);
         return ErrorTypeInfo.Instance;
     }
@@ -1548,7 +1548,7 @@ public sealed partial class SemanticVerifier
     /// and the argument isn't already an in-flight inner T, wraps the argument expression
     /// as `arg.refer()` or `arg.control()`. The resulting CallExpression has
     /// ResolvedRoutine and ResolvedType set so downstream passes (reachability, codegen,
-    /// CallOverloadResolutionPass) treat it as a normal resolved method call.
+    /// CallOverloadResolutionPass) treat it as a normal resolved memberRoutine call.
     /// </summary>
     private void TryInjectMarkerCoercion(RoutineInfo routine, List<Expression> arguments,
         int paramIndex, TypeSymbol paramType, TypeSymbol argType)
@@ -1558,9 +1558,9 @@ public sealed partial class SemanticVerifier
 
         ProtocolTypeInfo def = proto.GenericDefinition ?? proto;
         string baseName = def.BareName;
-        string methodName;
-        if (baseName == Compiler.Resolution.RuntimeContract.Controlling) methodName = "control";
-        else if (baseName == Compiler.Resolution.RuntimeContract.Accessing) methodName = "refer";
+        string memberRoutineName;
+        if (baseName == Compiler.Resolution.RuntimeContract.Controlling) memberRoutineName = "control";
+        else if (baseName == Compiler.Resolution.RuntimeContract.Accessing) memberRoutineName = "refer";
         else return;
 
         // Pass-through: the argument is already typed as the same marker protocol. No
@@ -1608,15 +1608,15 @@ public sealed partial class SemanticVerifier
         if (inner is CallExpression { Callee: MemberExpression { MemberName: "access" or "control" } })
             return;
 
-        // Resolve the method on the source argument type.
-        RoutineInfo? coercion = _registry.LookupMethodOverload(type: argType,
-            methodName: methodName, argTypes: []);
-        coercion ??= _registry.LookupMethod(type: argType, methodName: methodName);
+        // Resolve the memberRoutine on the source argument type.
+        RoutineInfo? coercion = _registry.LookupMemberRoutineOverload(type: argType,
+            memberRoutineName: memberRoutineName, argTypes: []);
+        coercion ??= _registry.LookupMemberRoutine(type: argType, memberRoutineName: memberRoutineName);
         if (coercion == null) return;
 
         var memberCallee = new MemberExpression(
             Object: inner,
-            MemberName: methodName,
+            MemberName: memberRoutineName,
             Location: inner.Location);
         var coerced = new CallExpression(
             Callee: memberCallee,
@@ -1627,7 +1627,7 @@ public sealed partial class SemanticVerifier
             ResolvedType = innerT,
             IsInFlight = true,
             IsSynthesizedLowering = true,
-            LoweringKind = CallClassifier.ClassifyMethodCall(method: coercion)
+            LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: coercion)
         };
 
         arguments[slotIndex] = slotExpr is NamedArgumentExpression na2
@@ -1637,10 +1637,10 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// True if `type` references any name listed in `genericParameters` via a
-    /// `GenericParameterTypeInfo` — i.e. an unresolved method-level generic param.
+    /// `GenericParameterTypeInfo` — i.e. an unresolved memberRoutine-level generic param.
     /// Used to suppress premature argument-type errors before generic inference runs.
     /// </summary>
-    private static bool ContainsUnresolvedMethodGeneric(TypeSymbol type,
+    private static bool ContainsUnresolvedMemberRoutineGeneric(TypeSymbol type,
         List<string>? genericParameters)
     {
         if (genericParameters is null || genericParameters.Count == 0)
@@ -1657,7 +1657,7 @@ public sealed partial class SemanticVerifier
         {
             foreach (TypeSymbol arg in args)
             {
-                if (ContainsUnresolvedMethodGeneric(type: arg,
+                if (ContainsUnresolvedMemberRoutineGeneric(type: arg,
                         genericParameters: genericParameters))
                 {
                     return true;
@@ -1669,7 +1669,7 @@ public sealed partial class SemanticVerifier
         {
             foreach (TypeSymbol pt in routine.ParameterTypes)
             {
-                if (ContainsUnresolvedMethodGeneric(type: pt,
+                if (ContainsUnresolvedMemberRoutineGeneric(type: pt,
                         genericParameters: genericParameters))
                 {
                     return true;
@@ -1677,7 +1677,7 @@ public sealed partial class SemanticVerifier
             }
 
             if (routine.ReturnType is { } ret &&
-                ContainsUnresolvedMethodGeneric(type: ret,
+                ContainsUnresolvedMemberRoutineGeneric(type: ret,
                     genericParameters: genericParameters))
             {
                 return true;

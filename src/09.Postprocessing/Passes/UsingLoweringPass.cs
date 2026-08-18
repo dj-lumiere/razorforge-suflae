@@ -169,11 +169,11 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
             ResolvedType = resourceType
         };
 
-        RoutineInfo? enterMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "enter")
+        RoutineInfo? enterMemberRoutine = resourceType != null
+            ? ctx.Registry.LookupMemberRoutine(type: resourceType, memberRoutineName: "enter")
             : null;
-        RoutineInfo? exitMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "exit")
+        RoutineInfo? exitMemberRoutine = resourceType != null
+            ? ctx.Registry.LookupMemberRoutine(type: resourceType, memberRoutineName: "exit")
             : null;
 
         var stmts = new List<Statement>();
@@ -182,24 +182,24 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         stmts.Add(MakeBinding(name: resTemp, value: u.Resource, type: resourceType, loc: loc));
 
         // Bind user's name via enter (or directly to the resource if no enter)
-        if (enterMethod != null)
+        if (enterMemberRoutine != null)
         {
             var enterCallee = new MemberExpression(
                 Object: resTempIdent, MemberName: "enter", Location: loc);
             var enterCall = new CallExpression(
                 Callee: enterCallee, Arguments: [], Location: loc)
             {
-                ResolvedRoutine = enterMethod,
-                ResolvedType = enterMethod.ReturnType
+                ResolvedRoutine = enterMemberRoutine,
+                ResolvedType = enterMemberRoutine.ReturnType
             };
 
-            bool returnsValue = enterMethod.ReturnType != null
-                && enterMethod.ReturnType.Name != "None";
+            bool returnsValue = enterMemberRoutine.ReturnType != null
+                && enterMemberRoutine.ReturnType.Name != "None";
 
             if (returnsValue)
             {
                 stmts.Add(MakeBinding(name: u.Name, value: enterCall,
-                    type: enterMethod.ReturnType, loc: loc));
+                    type: enterMemberRoutine.ReturnType, loc: loc));
             }
             else
             {
@@ -215,14 +215,14 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
 
         // Build the exit() call expression (reused for injection and normal exit)
         ExpressionStatement? exitCallStmt = null;
-        if (exitMethod != null)
+        if (exitMemberRoutine != null)
         {
             var exitCallee = new MemberExpression(
                 Object: resTempIdent, MemberName: "exit", Location: loc);
             var exitCall = new CallExpression(
                 Callee: exitCallee, Arguments: [], Location: loc)
             {
-                ResolvedRoutine = exitMethod,
+                ResolvedRoutine = exitMemberRoutine,
                 ResolvedType = null
             };
             exitCallStmt = new ExpressionStatement(Expression: exitCall, Location: loc);
@@ -270,11 +270,11 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
             ResolvedType = resourceType
         };
 
-        RoutineInfo? tryEnterMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "try_enter")
+        RoutineInfo? tryEnterMemberRoutine = resourceType != null
+            ? ctx.Registry.LookupMemberRoutine(type: resourceType, memberRoutineName: "try_enter")
             : null;
-        RoutineInfo? exitMethod = resourceType != null
-            ? ctx.Registry.LookupMethod(type: resourceType, methodName: "exit")
+        RoutineInfo? exitMemberRoutine = resourceType != null
+            ? ctx.Registry.LookupMemberRoutine(type: resourceType, memberRoutineName: "exit")
             : null;
 
         var stmts = new List<Statement>();
@@ -288,8 +288,8 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         var tryEnterCall = new CallExpression(
             Callee: tryEnterCallee, Arguments: [], Location: loc)
         {
-            ResolvedRoutine = tryEnterMethod,
-            ResolvedType = tryEnterMethod?.ReturnType
+            ResolvedRoutine = tryEnterMemberRoutine,
+            ResolvedType = tryEnterMemberRoutine?.ReturnType
         };
 
         // Success branch: bind the token, run body with exit injected, then normal-path exit.
@@ -299,14 +299,14 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         };
 
         ExpressionStatement? exitCallStmt = null;
-        if (exitMethod != null)
+        if (exitMemberRoutine != null)
         {
             var exitCallee = new MemberExpression(
                 Object: resTempIdent, MemberName: "exit", Location: loc);
             var exitCall = new CallExpression(
                 Callee: exitCallee, Arguments: [], Location: loc)
             {
-                ResolvedRoutine = exitMethod,
+                ResolvedRoutine = exitMemberRoutine,
                 ResolvedType = null
             };
             exitCallStmt = new ExpressionStatement(Expression: exitCall, Location: loc);

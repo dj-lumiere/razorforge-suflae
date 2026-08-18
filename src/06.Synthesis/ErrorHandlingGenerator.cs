@@ -253,7 +253,7 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The try_ variant routine info.</returns>
     /// <summary>
     /// Generates only a try_ variant for a failable routine. Used for bodyless protocol
-    /// methods (e.g. <c>Iterator[T].emit!</c>) so that for-loop desugaring's call to
+    /// memberRoutines (e.g. <c>Iterator[T].emit!</c>) so that for-loop desugaring's call to
     /// <c>iter.try_emit()</c> resolves when <c>iter</c> is typed as the bare protocol.
     /// </summary>
     public RoutineInfo GenerateTryVariantStub(RoutineInfo original) =>

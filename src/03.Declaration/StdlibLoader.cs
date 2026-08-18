@@ -93,7 +93,7 @@ public sealed partial class StdlibLoader
         ScanStdlibFiles();
 
         // Three-pass registration ensures protocols exist before types reference them in 'obeys' clauses.
-        // Pass 1a: Register all protocol type shells first (names + generic params, no methods yet)
+        // Pass 1a: Register all protocol type shells first (names + generic params, no memberRoutines yet)
         foreach ((Program program, string _, string ns) in _corePrograms)
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
@@ -107,14 +107,14 @@ public sealed partial class StdlibLoader
             }
         }
 
-        // Pass 1a.1: Fill in protocol method signatures (all protocols are now registered for cross-refs)
+        // Pass 1a.1: Fill in protocol memberRoutine signatures (all protocols are now registered for cross-refs)
         foreach ((Program program, string _, string _) in _corePrograms)
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ProtocolDeclaration protocol)
                 {
-                    FillProtocolMethods(registry: registry, protocol: protocol);
+                    FillProtocolMemberRoutines(registry: registry, protocol: protocol);
                 }
             }
         }
@@ -179,12 +179,12 @@ public sealed partial class StdlibLoader
             ResolveProgramProtocolConformances(registry: registry, program: program);
         }
 
-        // Pass 1e: Re-resolve protocol method return types that failed in pass 1a.1 due to
+        // Pass 1e: Re-resolve protocol memberRoutine return types that failed in pass 1a.1 due to
         // forward references (e.g., Crashable.crash_message() -> Text where Text was not yet
         // registered when protocols were first processed in pass 1a.1).
         foreach ((Program program, string _, string _) in _corePrograms)
         {
-            ResolveProtocolMethodReturnTypes(registry: registry, program: program);
+            ResolveProtocolMemberRoutineReturnTypes(registry: registry, program: program);
             ResolveAssociatedTypeBindings(registry: registry, program: program);
         }
 
@@ -224,7 +224,7 @@ public sealed partial class StdlibLoader
 
         // Recursively find all files with the appropriate extension. Sort by ordinal path so the
         // scan/registration order is identical on every OS (Directory.GetFiles order is
-        // OS-dependent) — otherwise method resolution becomes order-dependent across platforms.
+        // OS-dependent) — otherwise memberRoutine resolution becomes order-dependent across platforms.
         foreach (string filePath in Directory.GetFiles(path: _stdlibPath,
                      searchPattern: _fileExtension,
                      searchOption: SearchOption.AllDirectories)
@@ -384,7 +384,7 @@ public sealed partial class StdlibLoader
         _loadedModules.Add(item: moduleName);
 
         // Three-pass registration: protocols first, then other types, then routines
-        // Register protocol shells across all files first, then fill in methods
+        // Register protocol shells across all files first, then fill in memberRoutines
         foreach ((Program program, string _, string ns) in programs)
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
@@ -404,7 +404,7 @@ public sealed partial class StdlibLoader
             {
                 if (node is ProtocolDeclaration protocol)
                 {
-                    FillProtocolMethods(registry: registry, protocol: protocol);
+                    FillProtocolMemberRoutines(registry: registry, protocol: protocol);
                 }
             }
         }
@@ -432,10 +432,10 @@ public sealed partial class StdlibLoader
             ResolveProgramProtocolConformances(registry: registry, program: program);
         }
 
-        // Re-resolve protocol method return types that failed due to forward references
+        // Re-resolve protocol memberRoutine return types that failed due to forward references
         foreach ((Program program, string _, string _) in programs)
         {
-            ResolveProtocolMethodReturnTypes(registry: registry, program: program);
+            ResolveProtocolMemberRoutineReturnTypes(registry: registry, program: program);
             ResolveAssociatedTypeBindings(registry: registry, program: program);
         }
 

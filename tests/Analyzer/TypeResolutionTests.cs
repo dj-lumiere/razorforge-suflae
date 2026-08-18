@@ -176,11 +176,11 @@ public class TypeResolutionTests
         Assert.Equal(expected: RoutineKind.Function, actual: routine.Kind);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for method and records owner type metadata.
+    /// Verifies semantic analysis behavior for memberRoutine and records owner type metadata.
     /// </summary>
 
     [Fact]
-    public void Analyze_Method_RegistersWithOwnerType()
+    public void Analyze_memberRoutine_RegistersWithOwnerType()
     {
         string source = """
                         record Point
@@ -487,11 +487,11 @@ public class TypeResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for return integer literal in method with return type.
+    /// Verifies semantic analysis behavior for return integer literal in memberRoutine with return type.
     /// </summary>
 
     [Fact]
-    public void Analyze_ReturnIntegerLiteral_InMethodWithReturnType()
+    public void Analyze_ReturnIntegerLiteral_InMemberRoutineWithReturnType()
     {
         string source = """
                         record Counter
@@ -597,11 +597,11 @@ public class TypeResolutionTests
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for choice regular method without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for choice regular memberRoutine without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_ChoiceRegularMethod_NoError()
+    public void Analyze_ChoiceRegularMemberRoutine_NoError()
     {
         string source = """
                         choice Color
@@ -734,11 +734,11 @@ public class TypeResolutionTests
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for method returns maybe and reports the expected error.
+    /// Verifies semantic analysis behavior for memberRoutine returns maybe and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_MethodReturnsMaybe_ReportsError()
+    public void Analyze_memberRoutineReturnsMaybe_ReportsError()
     {
         string source = """
                         record Point
@@ -927,7 +927,7 @@ public class TypeResolutionTests
 
     #endregion
 
-    #region Generic Method Resolution (S191, S192, S193)
+    #region Generic memberRoutine Resolution (S191, S192, S193)
     /// <summary>
     /// Verifies semantic analysis behavior for generic record equality operator without unexpected diagnostics.
     /// </summary>
@@ -957,13 +957,13 @@ public class TypeResolutionTests
             e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for generic type void method call without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for generic type void memberRoutine call without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericType_VoidMethodCall_NoError()
+    public void Analyze_GenericType_VoidMemberRoutineCall_NoError()
     {
-        // S191: Void method call on generic resolution should not produce error type
+        // S191: Void memberRoutine call on generic resolution should not produce error type
         string source = """
                         record Container[T]
                           value: T
@@ -982,13 +982,13 @@ public class TypeResolutionTests
             e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for generic type method call resolves via definition.
+    /// Verifies semantic analysis behavior for generic type memberRoutine call resolves via definition.
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericType_MethodCall_ResolvesViaDefinition()
+    public void Analyze_GenericType_memberRoutineCall_ResolvesViaDefinition()
     {
-        // Method on generic type should be found through the generic definition
+        // memberRoutine on generic type should be found through the generic definition
         string source = """
                         record Box[T]
                           value: T

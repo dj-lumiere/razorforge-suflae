@@ -34,7 +34,7 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
     // NOTE (module-private secret, WIP): the intended end-state is that `secret` is MODULE-private for
     // ACCESS (un-importable, usable across files of the same module) enforced at the VISIBILITY layer with
     // a diagnostic — NOT by widening inlining to module scope here. A prior attempt to inline within-module
-    // secret presets regressed reachability (Dict/Set method bodies pruned → 48 "never defined" in the
+    // secret presets regressed reachability (Dict/Set memberRoutine bodies pruned → 48 "never defined" in the
     // stdlib harness). Keep inlining FILE-scoped; enforce module-private access separately.
     private Dictionary<string, PresetDeclaration>? _ownPresets;
 
@@ -385,7 +385,7 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
                 return ReferenceEquals(o, steal.Operand) ? expr : steal with { Operand = o };
             }
 
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
             {
                 Expression obj = LowerExpression(gmc.Object);
                 List<Expression> args = LowerExpressionList(gmc.Arguments);

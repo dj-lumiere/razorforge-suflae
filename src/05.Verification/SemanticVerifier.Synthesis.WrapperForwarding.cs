@@ -13,7 +13,7 @@ using TypeSymbol = TypeInfo;
 /// </summary>
 public sealed partial class SemanticVerifier
 {
-    /// <summary>Keyed by (wrapperDefName, methodName, isFailable) — caches synthesized forwarders.</summary>
+    /// <summary>Keyed by (wrapperDefName, memberRoutineName, isFailable) — caches synthesized forwarders.</summary>
     private readonly HashSet<string> _synthesizedForwarderKeys = [];
 
     /// <summary>Lazily initialized pass instance, shared across eager and lazy synthesis calls.</summary>
@@ -27,8 +27,8 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Eagerly synthesizes forwarders on all concrete wrapper-type instantiations for every
-    /// method found on their inner type.  Called after stdlib body analysis so that wrapper
-    /// methods used only implicitly (e.g. release() via scope cleanup) are still forwarded.
+    /// memberRoutine found on their inner type.  Called after stdlib body analysis so that wrapper
+    /// memberRoutines used only implicitly (e.g. release() via scope cleanup) are still forwarded.
     /// </summary>
     private void EagerSynthesizeAllWrapperForwarders()
     {
@@ -37,14 +37,14 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Attempts to synthesize a forwarding routine on a wrapper type that delegates to
-    /// a matching method on the wrapper's inner type T.
+    /// a matching memberRoutine on the wrapper's inner type T.
     /// </summary>
     private RoutineInfo? TrySynthesizeWrapperForwarder(TypeSymbol wrapperType,
-        string methodName, bool isFailable)
+        string memberRoutineName, bool isFailable)
     {
         return GetOrCreateWrapperForwardingPass().TrySynthesize(
             wrapperType: wrapperType,
-            methodName: methodName,
+            memberRoutineName: memberRoutineName,
             isFailable: isFailable);
     }
 }

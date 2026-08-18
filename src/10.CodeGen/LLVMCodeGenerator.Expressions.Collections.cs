@@ -184,7 +184,7 @@ public partial class LlvmCodeGenerator
             ? Resolution.RuntimeContract.Collection.AddLast
             : Resolution.RuntimeContract.Collection.Add;
 
-        ResolvedMemberRoutine? resolvedAdd = ResolveMemberRoutine(receiverType: resolvedType, methodName: addMemberRoutineName);
+        ResolvedMemberRoutine? resolvedAdd = ResolveMemberRoutine(receiverType: resolvedType, memberRoutineName: addMemberRoutineName);
         if (resolvedAdd == null) return collectionPtr;
 
         string mangledAdd = resolvedAdd.MangledName;
@@ -303,7 +303,7 @@ public partial class LlvmCodeGenerator
 
         ResolvedMemberRoutine? resolved = resolvedType.IsGenericResolution
             ? null
-            : ResolveMemberRoutine(receiverType: resolvedType, methodName: "create");
+            : ResolveMemberRoutine(receiverType: resolvedType, memberRoutineName: "create");
 
         if (resolved is { Routine.Parameters.Count: > 0 })
             resolved = null;
@@ -342,7 +342,7 @@ public partial class LlvmCodeGenerator
                 // `creator` is keyed on the generic-def owner (List[T]); substitute the concrete owner
                 // (List[S64]) first so the symbol is the concrete one the GMP define emits.
                 RoutineInfo mangleCreator = resolvedType.IsGenericResolution
-                    ? _registry.SubstituteMethodForOwner(method: creator, resolvedOwner: resolvedType) ?? creator
+                    ? _registry.SubstituteMemberRoutineForOwner(memberRoutine: creator, resolvedOwner: resolvedType) ?? creator
                     : creator;
                 string funcName = MangleRoutineName(routine: mangleCreator);
 

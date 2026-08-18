@@ -191,7 +191,7 @@ public class FlagsValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MethodNotFound);
+            filter: e => e.Code == SemanticDiagnosticCode.MemberRoutineNotFound);
     }
 
     #endregion

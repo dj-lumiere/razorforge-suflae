@@ -12,7 +12,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para>Transformations applied:</para>
 /// <list type="bullet">
-///   <item><c>choice</c> ??<c>record</c> with a <c>secret _underlying: S64</c> backing field plus choice methods.</item>
+///   <item><c>choice</c> ??<c>record</c> with a <c>secret _underlying: S64</c> backing field plus choice memberRoutines.</item>
 ///   <item><c>flags</c>  ??<c>record</c> with a <c>secret _bits: U64</c> backing field.</item>
 ///   <item><c>variant</c> ??<c>record</c> with <c>secret _type_id: U64</c> and <c>secret _payload: Address</c> fields.</item>
 ///   <item><c>crashable</c> ??<c>entity</c> declaration with the <c>Crashable</c> protocol added to its protocol list.</item>
@@ -51,7 +51,7 @@ internal sealed class StructuralLoweringPass(PostprocessingContext _)
 
     /// <summary>
     /// choice Name { ... } -> record Name with secret _underlying: S64 backing field
-    /// plus all choice methods carried over as members.
+    /// plus all choice memberRoutines carried over as members.
     /// </summary>
     private static RecordDeclaration LowerChoice(ChoiceDeclaration choice)
     {
@@ -65,8 +65,8 @@ internal sealed class StructuralLoweringPass(PostprocessingContext _)
             Visibility: VisibilityModifier.Secret,
             Location: choice.Location);
 
-        var members = new List<SyntaxTree.Declaration>(capacity: 1 + choice.Methods.Count) { underlyingField };
-        members.AddRange(choice.Methods);
+        var members = new List<SyntaxTree.Declaration>(capacity: 1 + choice.MemberRoutines.Count) { underlyingField };
+        members.AddRange(choice.MemberRoutines);
 
         return new RecordDeclaration(
             Name: choice.Name,

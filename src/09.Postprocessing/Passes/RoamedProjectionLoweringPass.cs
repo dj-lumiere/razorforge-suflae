@@ -9,7 +9,7 @@ namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
 /// Suflae <c>Roamed[E]</c> receiver-transparency lowering. A Suflae local promoted to
-/// <c>Roamed[E]</c> (post-SA) reaches its inner value's methods through the wrapper handle:
+/// <c>Roamed[E]</c> (post-SA) reaches its inner value's memberRoutines through the wrapper handle:
 /// operator-lowered calls (<c>x in d</c> -> <c>d.contains(x)</c>, <c>d[i]</c> -> <c>d.getitem(i)</c>,
 /// <c>==</c>/<c>&lt;</c>) and f-string <c>represent</c>/<c>diagnose</c> arrive holding the
 /// <c>RoamController</c> handle.
@@ -19,7 +19,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <c>Roamed[E]</c> receiver, <see cref="RoamedTransparency.Project"/> is the single decision point.
 /// When it applies it (a) re-resolves a wrapper-shadowed <c>represent</c>/<c>diagnose</c> to the
 /// inner value's routine (stamped onto <see cref="CallExpression.ResolvedRoutine"/>), and (b) for a
-/// bare-<c>me</c> inner method, rewrites the receiver to <c>receiver.raw_inner()</c> — projecting the
+/// bare-<c>me</c> inner memberRoutine, rewrites the receiver to <c>receiver.raw_inner()</c> — projecting the
 /// controller handle to the real inner pointer. Codegen then emits the already-projected,
 /// already-inner-resolved call verbatim.</para>
 ///
@@ -250,28 +250,28 @@ internal sealed class RoamedProjectionLoweringPass(PostprocessingContext ctx)
     }
 
     // The core rewrite: when the callee is a member call on a Roamed[E] receiver and
-    // RoamedTransparency.Project applies, stamp the inner method as ResolvedRoutine and — for a
-    // bare-`me` inner method — rewrite the receiver to `receiver.raw_inner()`.
+    // RoamedTransparency.Project applies, stamp the inner memberRoutine as ResolvedRoutine and — for a
+    // bare-`me` inner memberRoutine — rewrite the receiver to `receiver.raw_inner()`.
     private CallExpression ProjectRoamedReceiver(CallExpression call)
     {
         if (call.Callee is not MemberExpression member) return call;
         TypeInfo? receiverType = member.Object.ResolvedType;
         if (receiverType is null) return call;
 
-        // The initial method: the SA/operator-stamped routine, or (when unresolved on a Roamed
-        // receiver — an operator-lowered `d[i]`/`x in d` whose owner has no such method) a transparent
+        // The initial memberRoutine: the SA/operator-stamped routine, or (when unresolved on a Roamed
+        // receiver — an operator-lowered `d[i]`/`x in d` whose owner has no such memberRoutine) a transparent
         // lookup on the wrapper, matching the codegen path this pass replaces.
-        RoutineInfo? method = call.ResolvedRoutine
-            ?? Registry.LookupMethod(type: receiverType, methodName: member.MemberName);
+        RoutineInfo? memberRoutine = call.ResolvedRoutine
+            ?? Registry.LookupMemberRoutine(type: receiverType, memberRoutineName: member.MemberName);
 
         RoamedTransparency.Projection? proj = RoamedTransparency.Project(receiverType: receiverType,
-            method: method, memberName: member.MemberName, registry: Registry);
+            memberRoutine: memberRoutine, memberName: member.MemberName, registry: Registry);
         if (proj is not { } roamProj) return call;
 
-        // Stamp the inner method (represent/diagnose shadowed by the wrapper → inner's; a null-stamped
-        // operator call → the transparently-resolved inner method) so codegen emits it directly.
-        call.ResolvedRoutine = roamProj.Method;
-        call.LoweringKind = Verification.CallClassifier.ClassifyMethodCall(method: roamProj.Method);
+        // Stamp the inner memberRoutine (represent/diagnose shadowed by the wrapper → inner's; a null-stamped
+        // operator call → the transparently-resolved inner memberRoutine) so codegen emits it directly.
+        call.ResolvedRoutine = roamProj.MemberRoutine;
+        call.LoweringKind = Verification.CallClassifier.ClassifyMemberRoutineCall(memberRoutine: roamProj.MemberRoutine);
         if (!roamProj.ProjectToInner) return call;
 
         Expression innerRecv = MakeControlCall(member.Object, receiverType, roamProj.InnerType);
@@ -286,8 +286,8 @@ internal sealed class RoamedProjectionLoweringPass(PostprocessingContext ctx)
     // RoamedLockBracketLoweringPass (which recognizes this control() coercion), so the deref is safe.
     private Expression MakeControlCall(Expression receiver, TypeInfo receiverType, TypeInfo innerType)
     {
-        RoutineInfo? control = Registry.LookupMethod(type: receiverType,
-            methodName: RuntimeContract.Control);
+        RoutineInfo? control = Registry.LookupMemberRoutine(type: receiverType,
+            memberRoutineName: RuntimeContract.Control);
         if (control is null) return receiver;
 
         var callee = new MemberExpression(Object: receiver,

@@ -11,23 +11,23 @@ using TypeModel.Types;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
-/// Lowers operator-sugar expressions to plain method call nodes.
+/// Lowers operator-sugar expressions to plain memberRoutine call nodes.
 /// Runs after <see cref="ExpressionLoweringPass"/> in the per-file pipeline.
 ///
 /// <para>Transformations:</para>
 /// <list type="bullet">
 ///   <item><see cref="IndexExpression"/> (<c>obj[i]</c>) ??
-///         <c>obj.getitem!(i)</c> -> failable method call.</item>
+///         <c>obj.getitem!(i)</c> -> failable memberRoutine call.</item>
 ///   <item><see cref="GenericMemberExpression"/> (<c>obj.field[i]</c>, parser quirk) ??
 ///         <c>MemberExpression(obj, field)</c> + <c>IndexExpression</c> ??<c>getitem!</c>.</item>
 ///   <item><see cref="BinaryExpression"/> with an overloadable operator ??
-///         <c>left.method(you: right)</c>. Membership operators reverse operands:
+///         <c>left.MemberRoutine(you: right)</c>. Membership operators reverse operands:
 ///         <c>x in coll</c> ??<c>coll.contains(x)</c>.</item>
 ///   <item><see cref="UnaryExpression"/> with <c>!!</c> (<see cref="UnaryOperator.ForceUnwrap"/>) ??
 ///         <c>operand.unwrap()</c> -> always lowered, even in stdlib bodies (which bypass
 ///         <see cref="ExpressionLoweringPass"/>).</item>
-///   <item><see cref="UnaryExpression"/> with a wired method (<c>-</c>, <c>~</c>) ??
-///         <c>operand.neg()</c> / <c>operand.bitnot()</c> when the method is resolved.</item>
+///   <item><see cref="UnaryExpression"/> with a wired memberRoutine (<c>-</c>, <c>~</c>) ??
+///         <c>operand.neg()</c> / <c>operand.bitnot()</c> when the memberRoutine is resolved.</item>
 /// </list>
 ///
 /// <para>Only the <em>value</em> side of <see cref="AssignmentStatement"/> is lowered.
@@ -277,23 +277,23 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression obj = LowerExpression(idx.Object);
                 Expression index = LowerExpression(idx.Index);
 
-                // Resolve setitem with method-level generic monomorphization (parallel to the
-                // getitem! lowering path). Non-generic owners with method-level generics (e.g.
+                // Resolve setitem with memberRoutine-level generic monomorphization (parallel to the
+                // getitem! lowering path). Non-generic owners with memberRoutine-level generics (e.g.
                 // BitList.setitem![I]) need the resolved routine stashed so codegen can dispatch
-                // to the monomorphized entry rather than hitting ResolveMethod's generic-def guard.
+                // to the monomorphized entry rather than hitting ResolveMemberRoutine's generic-def guard.
                 RoutineInfo? resolvedSetItem = null;
                 TypeInfo? targetType = obj.ResolvedType ?? idx.Object.ResolvedType;
                 if (targetType != null)
                 {
                     resolvedSetItem =
-                        ctx.Registry.LookupMethod(type: targetType, methodName: "setitem");
+                        ctx.Registry.LookupMemberRoutine(type: targetType, memberRoutineName: "setitem");
                     if (resolvedSetItem != null)
                     {
                         var argTypes = new List<TypeInfo>();
                         TypeInfo? indexType = index.ResolvedType ?? idx.Index.ResolvedType;
                         if (indexType != null)
                             argTypes.Add(item: indexType);
-                        resolvedSetItem = ResolveMethodGenericRoutine(
+                        resolvedSetItem = ResolveMemberRoutineGenericRoutine(
                             routine: resolvedSetItem,
                             argTypes: argTypes);
                     }
@@ -322,9 +322,9 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             // IndexExpression -> obj.getitem!(idx)
             case IndexExpression idx:
             {
-                // Typewise type-receiver: `NumericSumAdd[T].method()` parses as
+                // Typewise type-receiver: `NumericSumAdd[T].MemberRoutine()` parses as
                 // IndexExpression(Ident("NumericSumAdd"), Ident("T")) because the parser only
-                // treats `Ident[...]` as a generic-method form when `]` is immediately followed
+                // treats `Ident[...]` as a generic-memberRoutine form when `]` is immediately followed
                 // by `(`. SA recognizes the pattern and resolves the IndexExpression to the
                 // generic resolution type — collapse to a bare typed identifier so MemberExpression
                 // codegen sees a typewise receiver.
@@ -352,7 +352,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 // Failability is a property, not part of the name — the property name is always
                 // the bare `getitem`; codegen dispatches via ResolvedRoutine (which carries
-                // IsFailable). Resolve the method to set ResolvedRoutine / lowering kind.
+                // IsFailable). Resolve the memberRoutine to set ResolvedRoutine / lowering kind.
                 const string propertyName = "getitem";
                 RoutineInfo? resolvedGetItem = null;
                 TypeInfo? targetType = idx.Object.ResolvedType;
@@ -374,10 +374,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     TypeInfo? indexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
                     // Pick the `getitem` overload by the (now forward U64) index argument type.
                     resolvedGetItem = indexType != null
-                        ? ctx.Registry.LookupMethodOverload(type: targetType,
-                              methodName: "getitem", argTypes: [indexType])
-                          ?? ctx.Registry.LookupMethod(type: targetType, methodName: "getitem")
-                        : ctx.Registry.LookupMethod(type: targetType, methodName: "getitem");
+                        ? ctx.Registry.LookupMemberRoutineOverload(type: targetType,
+                              memberRoutineName: "getitem", argTypes: [indexType])
+                          ?? ctx.Registry.LookupMemberRoutine(type: targetType, memberRoutineName: "getitem")
+                        : ctx.Registry.LookupMemberRoutine(type: targetType, memberRoutineName: "getitem");
                     // Suflae container locals are `Roamed[Dict]`/`Roamed[List]` post-SA; the wrapper
                     // has no `getitem`, so resolve against the UNWRAPPED inner container (exactly as the
                     // membership/comparison branch does for `x in d`). RoamedProjectionLoweringPass then
@@ -386,20 +386,20 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         UnwrapRoamedInner(type: targetType) is { } innerTarget)
                     {
                         resolvedGetItem = indexType != null
-                            ? ctx.Registry.LookupMethodOverload(type: innerTarget,
-                                  methodName: "getitem", argTypes: [indexType])
-                              ?? ctx.Registry.LookupMethod(type: innerTarget, methodName: "getitem")
-                            : ctx.Registry.LookupMethod(type: innerTarget, methodName: "getitem");
+                            ? ctx.Registry.LookupMemberRoutineOverload(type: innerTarget,
+                                  memberRoutineName: "getitem", argTypes: [indexType])
+                              ?? ctx.Registry.LookupMemberRoutine(type: innerTarget, memberRoutineName: "getitem")
+                            : ctx.Registry.LookupMemberRoutine(type: innerTarget, memberRoutineName: "getitem");
                     }
                     if (resolvedGetItem != null && indexType != null)
                     {
-                        resolvedGetItem = ResolveMethodGenericRoutine(routine: resolvedGetItem,
+                        resolvedGetItem = ResolveMemberRoutineGenericRoutine(routine: resolvedGetItem,
                             argTypes: [indexType]);
                     }
                 }
 
                 CallLoweringKind getitemKind = resolvedGetItem != null
-                    ? ClassifyMethod(resolvedGetItem)
+                    ? ClassifyMemberRoutine(resolvedGetItem)
                     : targetType != null
                         ? CallLoweringKind.DirectMemberRoutine
                         : CallLoweringKind.Unknown;
@@ -436,7 +436,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 {
                     ResolvedRoutine = elemStore,
                     ResolvedType = elemType,
-                    LoweringKind = ClassifyMethod(elemStore)
+                    LoweringKind = ClassifyMemberRoutine(elemStore)
                 };
             }
 
@@ -550,15 +550,15 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return LowerExpression(result);
             }
 
-            //  BinaryExpression -> receiver.method(you: arg)
-            // Operators with GetMethodName() == null (And, Or, Is, Identical, But, ...)
+            //  BinaryExpression -> receiver.MemberRoutine(you: arg)
+            // Operators with GetMemberRoutineName() == null (And, Or, Is, Identical, But, ...)
             // are not overloadable and stay as BinaryExpression for codegen.
 
             case BinaryExpression bin:
             {
-                string? methodName = bin.Operator.GetMethodName();
+                string? memberRoutineName = bin.Operator.GetMemberRoutineName();
 
-                if (methodName == null)
+                if (memberRoutineName == null)
                 {
                     // For Assign: lower the right side, and lower the INTERIOR of the left side
                     // (e.g., the Object of a MemberExpression, or the Object/Index of an
@@ -591,40 +591,40 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression argument = isReversed ? left : right;
 
                 // Look up the exact overload (by arg type) to get failable suffix, param name, and
-                // ResolvedRoutine. LookupMethodOverload disambiguates e.g. Moment.sub(Moment)->Duration
+                // ResolvedRoutine. LookupMemberRoutineOverload disambiguates e.g. Moment.sub(Moment)->Duration
                 // from Moment.sub(Duration)->Moment. Setting ResolvedRoutine tells codegen which
                 // overload to call without performing its own (potentially ambiguous) lookup.
                 TypeInfo? receiverType = receiver.ResolvedType;
                 TypeInfo? argType = argument.ResolvedType;
-                RoutineInfo? resolvedMethod = null;
+                RoutineInfo? resolvedMemberRoutine = null;
                 if (receiverType != null)
                 {
-                    resolvedMethod = argType != null
-                        ? ctx.Registry.LookupMethodOverload(type: receiverType, methodName: methodName,
+                    resolvedMemberRoutine = argType != null
+                        ? ctx.Registry.LookupMemberRoutineOverload(type: receiverType, memberRoutineName: memberRoutineName,
                             argTypes: [argType])
-                        : ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
-                    resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
-                        methodName: methodName);
+                        : ctx.Registry.LookupMemberRoutine(type: receiverType, memberRoutineName: memberRoutineName);
+                    resolvedMemberRoutine ??= ctx.Registry.LookupMemberRoutine(type: receiverType,
+                        memberRoutineName: memberRoutineName);
                     // If the non-failable form doesn't exist, try the failable form (sub -> sub!).
                     // Types like U64 only define sub! (underflow would be undefined behavior).
                     // The name is BARE; failability is structural — retry with isFailable: true.
-                    if (resolvedMethod == null)
+                    if (resolvedMemberRoutine == null)
                     {
-                        resolvedMethod = argType != null
-                            ? ctx.Registry.LookupMethodOverload(type: receiverType,
-                                methodName: methodName, argTypes: [argType])
+                        resolvedMemberRoutine = argType != null
+                            ? ctx.Registry.LookupMemberRoutineOverload(type: receiverType,
+                                memberRoutineName: memberRoutineName, argTypes: [argType])
                             : null;
-                        resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
-                            methodName: methodName, isFailable: true);
+                        resolvedMemberRoutine ??= ctx.Registry.LookupMemberRoutine(type: receiverType,
+                            memberRoutineName: memberRoutineName, isFailable: true);
                     }
 
                     // Suflae wraps container locals as `Roamed[Dict]` / `Roamed[Set]` post-SA. A
                     // membership/comparison operator lowers to `receiver.contains(x)` / `.eq(x)` HERE in
-                    // Phase 8 — after the wrapper-forwarder pass has frozen — so the method is unresolved
+                    // Phase 8 — after the wrapper-forwarder pass has frozen — so the memberRoutine is unresolved
                     // on the wrapper. Resolve it against the UNWRAPPED inner type (exactly as SA did for
                     // an explicit `d.count()` while `d` was still the bare container before promotion) and
-                    // stamp the inner method; codegen projects the Roamed receiver to the inner value for
-                    // `me`, same as every other inner-method call on a Roamed container.
+                    // stamp the inner memberRoutine; codegen projects the Roamed receiver to the inner value for
+                    // `me`, same as every other inner-memberRoutine call on a Roamed container.
                     // The Roamed handle reaches here in EITHER representation the pipeline produces: a
                     // WrapperTypeInfo (SuflaeEntityLoweringPass.WrapInRoam) or a RecordTypeInfo (resolver-
                     // built). Extract the inner container type from whichever it is.
@@ -639,18 +639,18 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                             => ra[index: 0],
                         _ => null
                     };
-                    if (resolvedMethod == null && innerRecv != null)
+                    if (resolvedMemberRoutine == null && innerRecv != null)
                     {
-                        resolvedMethod = argType != null
-                            ? ctx.Registry.LookupMethodOverload(type: innerRecv,
-                                methodName: methodName, argTypes: [argType])
+                        resolvedMemberRoutine = argType != null
+                            ? ctx.Registry.LookupMemberRoutineOverload(type: innerRecv,
+                                memberRoutineName: memberRoutineName, argTypes: [argType])
                             : null;
-                        resolvedMethod ??= ctx.Registry.LookupMethod(type: innerRecv, methodName: methodName);
-                        resolvedMethod ??= ctx.Registry.LookupMethod(type: innerRecv,
-                            methodName: methodName, isFailable: true);
-                        // NOTE: the Roamed receiver is NOT projected here. Resolving the inner method is
+                        resolvedMemberRoutine ??= ctx.Registry.LookupMemberRoutine(type: innerRecv, memberRoutineName: memberRoutineName);
+                        resolvedMemberRoutine ??= ctx.Registry.LookupMemberRoutine(type: innerRecv,
+                            memberRoutineName: memberRoutineName, isFailable: true);
+                        // NOTE: the Roamed receiver is NOT projected here. Resolving the inner memberRoutine is
                         // enough — codegen's unified receiver projection (EmitMemberRoutineCall) wraps the
-                        // Roamed handle in `raw_inner()` for every bare-`me` inner method uniformly, so the
+                        // Roamed handle in `raw_inner()` for every bare-`me` inner memberRoutine uniformly, so the
                         // operator-lowered call, an index `d[i]`, and an explicit `d.count()` all funnel
                         // through the one projection site.
                     }
@@ -659,7 +659,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // Mixed fixed-width integer comparisons have no direct cross-width overloads in the
                 // stdlib. Normalize both sides to a common width here so we lower to a concrete
                 // same-type comparison instead of letting codegen fall back to an arbitrary overload.
-                if (resolvedMethod == null &&
+                if (resolvedMemberRoutine == null &&
                     receiverType != null &&
                     argType != null &&
                     bin.Operator is BinaryOperator.Equal or BinaryOperator.NotEqual
@@ -673,20 +673,20 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     argument = WrapNumericOperand(expr: argument, targetType: commonType!);
                     receiverType = commonType;
                     argType = commonType;
-                    resolvedMethod = ctx.Registry.LookupMethodOverload(type: commonType!,
-                        methodName: methodName,
+                    resolvedMemberRoutine = ctx.Registry.LookupMemberRoutineOverload(type: commonType!,
+                        memberRoutineName: memberRoutineName,
                         argTypes: [commonType!]) ??
-                                     ctx.Registry.LookupMethod(type: commonType!,
-                                         methodName: methodName);
+                                     ctx.Registry.LookupMemberRoutine(type: commonType!,
+                                         memberRoutineName: memberRoutineName);
                 }
 
-                if (resolvedMethod is { Parameters.Count: > 0 } &&
+                if (resolvedMemberRoutine is { Parameters.Count: > 0 } &&
                     bin.Operator is BinaryOperator.ArithmeticLeftShift
                         or BinaryOperator.ArithmeticRightShift
                         or BinaryOperator.LogicalLeftShift
                         or BinaryOperator.LogicalRightShift)
                 {
-                    TypeInfo paramType = resolvedMethod.Parameters[index: 0].Type;
+                    TypeInfo paramType = resolvedMemberRoutine.Parameters[index: 0].Type;
                     if (argType != null &&
                         argType.FullName != paramType.FullName &&
                         TryGetFixedWidthIntegerInfo(type: argType, out _, out _) &&
@@ -696,7 +696,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     }
                 }
 
-                // Flags bitand/bitor/bitxor/eq/ne ARE lowered to method calls: WiredRoutinePass
+                // Flags bitand/bitor/bitxor/eq/ne ARE lowered to memberRoutine calls: WiredRoutinePass
                 // synthesizes those bodies as @llvm_ir intrinsic calls on the underlying i64 repr
                 // (bit_or/bit_and/bit_xor/int_eq/int_ne), so lowering `a | b` to `a.bitor(b)` cannot
                 // recurse — the body uses the intrinsic, not the surface operator. (bitnot stays
@@ -705,24 +705,24 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // Choice eq/ne bodies use BinaryOperator.Is (not Equal), so they never reach
                 // this point. No skip needed for choice types.
 
-                // Always lower to a method call -> even when the method isn't in the registry
+                // Always lower to a memberRoutine call -> even when the memberRoutine isn't in the registry
                 // (e.g., stdlib bodies where ResolvedType is null).  When ResolvedRoutine is null,
-                // codegen's EmitMethodCall resolves the method at emission time using the receiver's
+                // codegen's EmitMemberRoutineCall resolves the memberRoutine at emission time using the receiver's
                 // LLVM-inferred type; it will also retry with isFailable:null to find add! etc.
-                // Failability is structural on the callee — no `!` in the name. When the method is
-                // unknown, IsFailable stays false and codegen's EmitMethodCall retries either form.
-                bool binFailable = resolvedMethod?.IsFailable ?? false;
-                string paramName = resolvedMethod?.Parameters.Count > 0
-                    ? resolvedMethod.Parameters[0].Name
+                // Failability is structural on the callee — no `!` in the name. When the memberRoutine is
+                // unknown, IsFailable stays false and codegen's EmitMemberRoutineCall retries either form.
+                bool binFailable = resolvedMemberRoutine?.IsFailable ?? false;
+                string paramName = resolvedMemberRoutine?.Parameters.Count > 0
+                    ? resolvedMemberRoutine.Parameters[0].Name
                     : "you";
 
                 var binCallee = new MemberExpression(
                     Object: receiver,
-                    MemberName: methodName,
+                    MemberName: memberRoutineName,
                     Location: bin.Location) { IsFailable = binFailable };
 
-                CallLoweringKind lk = resolvedMethod != null
-                    ? ClassifyMethod(resolvedMethod)
+                CallLoweringKind lk = resolvedMemberRoutine != null
+                    ? ClassifyMemberRoutine(resolvedMemberRoutine)
                     : receiverType != null ? CallLoweringKind.DirectMemberRoutine
                     : CallLoweringKind.Unknown;
 
@@ -730,7 +730,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     Callee: binCallee,
                     Arguments: [new NamedArgumentExpression(Name: paramName, Value: argument, Location: bin.Location)],
                     Location: bin.Location)
-                { ResolvedType = bin.ResolvedType, ResolvedRoutine = resolvedMethod, LoweringKind = lk };
+                { ResolvedType = bin.ResolvedType, ResolvedRoutine = resolvedMemberRoutine, LoweringKind = lk };
             }
 
             //  ForceUnwrap (!!) -> operand.unwrap()
@@ -738,17 +738,17 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             // This runs for both user code (where ExpressionLoweringPass has already
             // run but no longer handles ForceUnwrap) and stdlib bodies (which bypass
             // ExpressionLoweringPass).  ResolvedType may be null for stdlib bodies;
-            // codegen infers the return type from the unwrap method definition.
+            // codegen infers the return type from the unwrap memberRoutine definition.
 
             case UnaryExpression { Operator: UnaryOperator.ForceUnwrap } forceUnwrap:
             {
                 Expression operand = LowerExpression(forceUnwrap.Operand);
                 TypeInfo? operandType = operand.ResolvedType;
-                RoutineInfo? unwrapMethod = operandType != null
-                    ? ctx.Registry.LookupMethod(type: operandType, methodName: "unwrap")
+                RoutineInfo? unwrapMemberRoutine = operandType != null
+                    ? ctx.Registry.LookupMemberRoutine(type: operandType, memberRoutineName: "unwrap")
                     : null;
-                CallLoweringKind unwrapKind = unwrapMethod != null
-                    ? ClassifyMethod(unwrapMethod)
+                CallLoweringKind unwrapKind = unwrapMemberRoutine != null
+                    ? ClassifyMemberRoutine(unwrapMemberRoutine)
                     : operandType != null
                         ? CallLoweringKind.DirectMemberRoutine
                         : CallLoweringKind.Unknown;
@@ -761,20 +761,20 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     Location: forceUnwrap.Location)
                 {
                     ResolvedType = forceUnwrap.ResolvedType,
-                    ResolvedRoutine = unwrapMethod,
+                    ResolvedRoutine = unwrapMemberRoutine,
                     LoweringKind = unwrapKind
                 };
             }
 
-            //  UnaryExpression -> operand.method()
-            // Not, Steal -> no wired method, stay as UnaryExpression.
+            //  UnaryExpression -> operand.MemberRoutine()
+            // Not, Steal -> no wired memberRoutine, stay as UnaryExpression.
 
             case UnaryExpression unary:
             {
-                string? methodName = unary.Operator.GetMethodName();
+                string? memberRoutineName = unary.Operator.GetMemberRoutineName();
                 Expression operand = LowerExpression(unary.Operand);
 
-                if (methodName == null)
+                if (memberRoutineName == null)
                 {
                     return ReferenceEquals(operand, unary.Operand)
                         ? expr
@@ -783,37 +783,37 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 TypeInfo? operandType = operand.ResolvedType;
 
-                // Flags types have no bitnot method body -> codegen handles it via EmitBitwiseNot.
-                // Skip method-call lowering so the UnaryExpression passes through unchanged.
+                // Flags types have no bitnot memberRoutine body -> codegen handles it via EmitBitwiseNot.
+                // Skip memberRoutine-call lowering so the UnaryExpression passes through unchanged.
                 if (operandType is FlagsTypeInfo
-                    && methodName == "bitnot")
+                    && memberRoutineName == "bitnot")
                 {
                     return ReferenceEquals(operand, unary.Operand)
                         ? expr
                         : unary with { Operand = operand };
                 }
 
-                RoutineInfo? resolvedUnaryMethod = null;
+                RoutineInfo? resolvedUnaryMemberRoutine = null;
                 if (operandType != null)
                 {
-                    resolvedUnaryMethod = ctx.Registry.LookupMethodOverload(type: operandType,
-                        methodName: methodName, argTypes: []);
-                    resolvedUnaryMethod ??= ctx.Registry.LookupMethod(type: operandType,
-                        methodName: methodName);
+                    resolvedUnaryMemberRoutine = ctx.Registry.LookupMemberRoutineOverload(type: operandType,
+                        memberRoutineName: memberRoutineName, argTypes: []);
+                    resolvedUnaryMemberRoutine ??= ctx.Registry.LookupMemberRoutine(type: operandType,
+                        memberRoutineName: memberRoutineName);
                 }
 
-                // Always lower to a method call -> even when method isn't resolved
+                // Always lower to a memberRoutine call -> even when memberRoutine isn't resolved
                 // (e.g., stdlib bodies with no ResolvedType on operands).
                 // Failability is structural on the callee — no `!` in the name.
-                bool unaryFailable = resolvedUnaryMethod?.IsFailable ?? false;
+                bool unaryFailable = resolvedUnaryMemberRoutine?.IsFailable ?? false;
 
                 var unaryCallee = new MemberExpression(
                     Object: operand,
-                    MemberName: methodName,
+                    MemberName: memberRoutineName,
                     Location: unary.Location) { IsFailable = unaryFailable };
 
-                CallLoweringKind unaryKind = resolvedUnaryMethod != null
-                    ? ClassifyMethod(resolvedUnaryMethod)
+                CallLoweringKind unaryKind = resolvedUnaryMemberRoutine != null
+                    ? ClassifyMemberRoutine(resolvedUnaryMemberRoutine)
                     : operandType != null
                         ? CallLoweringKind.DirectMemberRoutine
                         : CallLoweringKind.Unknown;
@@ -824,7 +824,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     Location: unary.Location)
                 {
                     ResolvedType = unary.ResolvedType,
-                    ResolvedRoutine = resolvedUnaryMethod,
+                    ResolvedRoutine = resolvedUnaryMemberRoutine,
                     LoweringKind = unaryKind
                 };
             }
@@ -891,7 +891,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return changed ? withExpr with { Base = loweredBase, Updates = updates } : expr;
             }
 
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
             {
                 Expression obj = LowerExpression(gmc.Object);
                 var args = new List<Expression>(capacity: gmc.Arguments.Count);
@@ -1017,7 +1017,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     /// Lowers operator expressions in instantiated generic routine bodies.
     /// Phase 7's <c>GenericMonomorphizationPass</c> populates <c>InstantiatedGenericBodies</c>
     /// AFTER the Phase 8 RunGlobal sweep has finished, so those bodies miss the regular
-    /// per-program operator-lowering pass. Without this method, `me.size = me.size + 1_u64`
+    /// per-program operator-lowering pass. Without this memberRoutine, `me.size = me.size + 1_u64`
     /// inside a monomorphized routine reaches codegen as a bare <c>BinaryExpression(Add)</c>
     /// and trips the "must be lowered to a wired call" guard.
     /// Caller passes the map directly (PostprocessingContext doesn't hold it).
@@ -1038,7 +1038,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    private RoutineInfo ResolveMethodGenericRoutine(RoutineInfo routine,
+    private RoutineInfo ResolveMemberRoutineGenericRoutine(RoutineInfo routine,
         List<TypeInfo> argTypes)
     {
         if (!routine.IsGenericDefinition || routine.GenericParameters == null)
@@ -1054,13 +1054,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         var inferred = new TypeInfo?[routine.GenericParameters.Count];
         // Skip the implicit `me` receiver parameter — argTypes only contains the explicit
         // call-site arguments (index type, value type, etc.), so we must align them
-        // against the non-me parameters to correctly infer method-level generics like I.
+        // against the non-me parameters to correctly infer memberRoutine-level generics like I.
         int argIdx = 0;
         foreach (ParameterInfo param in routine.Parameters)
         {
             if (param.Name == "me") continue;
             if (argIdx >= argTypes.Count) break;
-            InferMethodGenericArguments(paramType: param.Type,
+            InferMemberRoutineGenericArguments(paramType: param.Type,
                 argType: argTypes[index: argIdx],
                 genericParameters: routine.GenericParameters,
                 inferred: inferred);
@@ -1076,7 +1076,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             typeArguments: inferred.Select(selector: t => t!).ToList());
     }
 
-    private static void InferMethodGenericArguments(TypeInfo paramType, TypeInfo argType,
+    private static void InferMemberRoutineGenericArguments(TypeInfo paramType, TypeInfo argType,
         List<string> genericParameters, TypeInfo?[] inferred)
     {
         if (paramType is GenericParameterTypeInfo)
@@ -1096,7 +1096,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         {
             for (int i = 0; i < paramArgs.Count; i++)
             {
-                InferMethodGenericArguments(paramType: paramArgs[index: i],
+                InferMemberRoutineGenericArguments(paramType: paramArgs[index: i],
                     argType: argArgs[index: i],
                     genericParameters: genericParameters,
                     inferred: inferred);
@@ -1125,9 +1125,9 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    private static CallLoweringKind ClassifyMethod(RoutineInfo method)
+    private static CallLoweringKind ClassifyMemberRoutine(RoutineInfo memberRoutine)
     {
-        if (method.LlvmIrTemplate != null) return CallLoweringKind.LlvmIntrinsic;
+        if (memberRoutine.LlvmIrTemplate != null) return CallLoweringKind.LlvmIntrinsic;
         return CallLoweringKind.DirectMemberRoutine;
     }
 
@@ -1156,7 +1156,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         TypeInfo targetType, SourceLocation location)
     {
         // receiver.count() -> U64
-        RoutineInfo? countRoutine = ctx.Registry.LookupMethod(type: targetType, methodName: Resolution.RuntimeContract.Collection.Count);
+        RoutineInfo? countRoutine = ctx.Registry.LookupMemberRoutine(type: targetType, memberRoutineName: Resolution.RuntimeContract.Collection.Count);
         var countCall = new CallExpression(
             Callee: new MemberExpression(Object: loweredObj, MemberName: Resolution.RuntimeContract.Collection.Count,
                 Location: location),
@@ -1166,14 +1166,14 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             ResolvedRoutine = countRoutine,
             ResolvedType = countRoutine?.ReturnType,
             LoweringKind = countRoutine != null
-                ? ClassifyMethod(countRoutine)
+                ? ClassifyMemberRoutine(countRoutine)
                 : CallLoweringKind.DirectMemberRoutine
         };
 
         // backIndex.resolve!(count) -> U64 (failable: throws IndexOutOfBoundsError on overshoot)
         TypeInfo? backIndexType = backIndex.ResolvedType;
         RoutineInfo? resolveRoutine = backIndexType != null
-            ? ctx.Registry.LookupMethod(type: backIndexType, methodName: Resolution.RuntimeContract.Resolve, isFailable: true)
+            ? ctx.Registry.LookupMemberRoutine(type: backIndexType, memberRoutineName: Resolution.RuntimeContract.Resolve, isFailable: true)
             : null;
         return new CallExpression(
             Callee: new MemberExpression(Object: backIndex, MemberName: Resolution.RuntimeContract.Resolve,
@@ -1184,7 +1184,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             ResolvedRoutine = resolveRoutine,
             ResolvedType = resolveRoutine?.ReturnType,
             LoweringKind = resolveRoutine != null
-                ? ClassifyMethod(resolveRoutine)
+                ? ClassifyMemberRoutine(resolveRoutine)
                 : CallLoweringKind.DirectMemberRoutine
         };
     }

@@ -1,7 +1,7 @@
 namespace Compiler.Tokenizer;
 
 /// <summary>
-/// Partial class containing identifier, keyword, and comment scanning methods for the unified tokenizer.
+/// Partial class containing identifier, keyword, and comment scanning memberRoutines for the unified tokenizer.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -32,7 +32,7 @@ public partial class Tokenizer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method sets <see cref="_hasTokenOnLine"/> to true, which affects
+    /// This memberRoutine sets <see cref="_hasTokenOnLine"/> to true, which affects
     /// newline significance detection.
     /// </para>
     /// <para>

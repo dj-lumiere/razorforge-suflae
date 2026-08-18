@@ -24,7 +24,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// Ambient registry reference for static helpers that need to route generic resolutions
     /// through <see cref="GetOrCreateResolution"/> (to pick up entity specializations) but
-    /// have no direct registry access — notably the static Substitute* methods on
+    /// have no direct registry access — notably the static Substitute* memberRoutines on
     /// <see cref="RoutineInfo"/> and <see cref="RecordTypeInfo"/>. Set by the constructor.
     /// [ThreadStatic] so parallel test runs each get their own Ambient without cross-contamination.
     /// </summary>
@@ -221,8 +221,8 @@ public sealed partial class TypeRegistry
     /// <summary>Routines indexed by module-qualified name for unambiguous lookup.</summary>
     private readonly Dictionary<string, RoutineInfo> _routinesByQualifiedName = new();
 
-    /// <summary>Routines indexed by owner type FullName, then by method name → overload list. The nested
-    /// by-name level makes `owner.method` lookup O(1) (no list scan), and — because a bare generic-param
+    /// <summary>Routines indexed by owner type FullName, then by memberRoutine name → overload list. The nested
+    /// by-name level makes `owner.MemberRoutine` lookup O(1) (no list scan), and — because a bare generic-param
     /// owner (`routine T.m()`) is stored under the canonical key <see cref="GenericOwnerKey"/> — lets a
     /// receiver-agnostic default-impl member routine resolve by name off the SAME store, no separate index.</summary>
     private readonly Dictionary<string, Dictionary<string, List<RoutineInfo>>> _routinesByOwner = new();
@@ -237,27 +237,27 @@ public sealed partial class TypeRegistry
     /// `_routineOverloads` index is no longer needed. Excluded from member-routine enumeration.</summary>
     internal const string FreeOwnerKey = "$free";
 
-    /// <summary>The flattened method list for an owner (all overloads across all method names), or empty.</summary>
-    private static IEnumerable<RoutineInfo> OwnerMethods(Dictionary<string, List<RoutineInfo>>? byName)
+    /// <summary>The flattened memberRoutine list for an owner (all overloads across all memberRoutine names), or empty.</summary>
+    private static IEnumerable<RoutineInfo> OwnerMemberRoutines(Dictionary<string, List<RoutineInfo>>? byName)
         => byName?.Values.SelectMany(selector: l => l) ?? Enumerable.Empty<RoutineInfo>();
 
-    /// <summary>Derive method NAMES that are OPT-IN (capability-conferred): any `@overridable/@override
-    /// T.m()` whose gate is a `needs P everywhere` / `needs T obeys P` capability constraint. Once a method
+    /// <summary>Derive memberRoutine NAMES that are OPT-IN (capability-conferred): any `@overridable/@override
+    /// T.m()` whose gate is a `needs P everywhere` / `needs T obeys P` capability constraint. Once a memberRoutine
     /// is opt-in, ALL its derive templates — including KIND-gated overrides (`needs T is VariantType`) —
     /// stay opt-in (must NOT become live universals). Keyed by name so a kind-override registered AFTER its
     /// capability-gated base is classified consistently. Populated during stdlib load.</summary>
-    private readonly HashSet<string> _optInDeriveMethods = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> _optInDeriveMemberRoutines = new(comparer: StringComparer.Ordinal);
 
-    /// <summary>Marks a derive method name opt-in (capability-conferred) — see <see cref="_optInDeriveMethods"/>.</summary>
-    public void MarkOptInDeriveMethod(string method) => _optInDeriveMethods.Add(item: method);
+    /// <summary>Marks a derive memberRoutine name opt-in (capability-conferred) — see <see cref="_optInDeriveMemberRoutines"/>.</summary>
+    public void MarkOptInDeriveMemberRoutine(string memberRoutine) => _optInDeriveMemberRoutines.Add(item: memberRoutine);
 
-    /// <summary>True if a derive method name was marked opt-in via a capability gate.</summary>
-    public bool IsOptInDeriveMethod(string method) => _optInDeriveMethods.Contains(item: method);
+    /// <summary>True if a derive memberRoutine name was marked opt-in via a capability gate.</summary>
+    public bool IsOptInDeriveMemberRoutine(string memberRoutine) => _optInDeriveMemberRoutines.Contains(item: memberRoutine);
 
     /// <summary>
-    /// Auto-derive templates: universal <c>@overridable routine T.method()</c> bodies, plus their
+    /// Auto-derive templates: universal <c>@overridable routine T.MemberRoutine()</c> bodies, plus their
     /// kind-specialized <c>@override … needs T is VariantType/ChoiceType/FlagsType/…</c> variants. Keyed by
-    /// method name → all candidate (routine + body) pairs. The wired-routine synthesizer picks the
+    /// memberRoutine name → all candidate (routine + body) pairs. The wired-routine synthesizer picks the
     /// most-specific kind-matching template per concrete type at SYNTHESIS time (one body per type,
     /// so several same-signature templates coexist here without any registry/call-resolution clash).
     /// </summary>
@@ -319,11 +319,11 @@ public sealed partial class TypeRegistry
         // Register well-known error handling types BEFORE loading the Core module.
         // This ensures that when Core stdlib routines (e.g. Maybe[T].unwrap) are registered
         // during LoadCoreModule, LookupType("Maybe") returns the initial Maybe definition
-        // (FullName="Maybe", no module prefix), so methods are keyed under "Maybe" in
-        // _routinesByOwner and are reachable via LookupMethod on Maybe[T] resolutions.
+        // (FullName="Maybe", no module prefix), so memberRoutines are keyed under "Maybe" in
+        // _routinesByOwner and are reachable via LookupMemberRoutine on Maybe[T] resolutions.
         // If LoadCoreModule ran first, it would register Core.Maybe (FullName="Core.Maybe")
-        // before the initial Maybe, causing method registration under "Core.Maybe" — a key
-        // that LookupMethod never checks when resolving methods on Maybe[S64].
+        // before the initial Maybe, causing memberRoutine registration under "Core.Maybe" — a key
+        // that LookupMemberRoutine never checks when resolving memberRoutines on Maybe[S64].
         RegisterErrorHandlingTypes();
 
         // Load Core module eagerly - Core types are fundamental to every program
@@ -552,7 +552,7 @@ public sealed partial class TypeRegistry
         // LoadCoreModule) fills in the members from the stdlib source once all Core types exist.
         // We must register the shells HERE (before LoadCoreModule) so that when
         // LoadCoreModule's RegisterProgramRoutines processes Maybe[T].unwrap etc., it calls
-        // LookupType("Maybe") and gets this shell (FullName="Maybe"), causing those methods to
+        // LookupType("Maybe") and gets this shell (FullName="Maybe"), causing those memberRoutines to
         // be keyed under "Maybe" in _routinesByOwner rather than "Core.Maybe".
         RegisterType(
             type: new RecordTypeInfo(name: "Maybe")
@@ -609,7 +609,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Updates a type in the registry, replacing it with a new version.
-    /// Used for updating immutable type info after additional resolution (e.g., protocol methods).
+    /// Used for updating immutable type info after additional resolution (e.g., protocol memberRoutines).
     /// </summary>
     /// <param name="oldType">The old type to replace.</param>
     /// <param name="newType">The new type to register.</param>
@@ -845,7 +845,7 @@ public sealed partial class TypeRegistry
 
         var updatedProtocol = new ProtocolTypeInfo(name: protocol.Name)
         {
-            Methods = protocol.Methods,
+            MemberRoutines = protocol.MemberRoutines,
             ParentProtocols = parentProtocols,
             GenericParameters = protocol.GenericParameters,
             GenericConstraints = protocol.GenericConstraints,
@@ -1055,7 +1055,7 @@ public sealed partial class TypeRegistry
         // The shortKey is a bare-type-arg alias (e.g. "Modifying[Counter]") shared by callers that
         // look up by short arg name. It COLLIDES when two modules declare a same-named type
         // (Modifying[A/Counter] vs Modifying[B/Counter]): a first-wins short alias would return the
-        // wrong module's inner type, contaminating wrapper forwarding / method dispatch. Only accept a
+        // wrong module's inner type, contaminating wrapper forwarding / memberRoutine dispatch. Only accept a
         // short-alias hit whose type arguments AND generic definition match the request.
         if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing)
             && ResolutionTypeArgsMatch(resolved: existing, typeArguments: typeArguments)
@@ -1107,7 +1107,7 @@ public sealed partial class TypeRegistry
         {
             // Notify GMP's fixed-point loop about newly discovered concrete entity/record types.
             // Guards:
-            // 1. Fully-concrete: no unresolved GenericParameterTypeInfo args (avoids LookupMethod recursion).
+            // 1. Fully-concrete: no unresolved GenericParameterTypeInfo args (avoids LookupMemberRoutine recursion).
             // 2. No self-nesting: skip types where a type argument's FullName contains the outer type's
             //    bare base name — e.g. Hijacked[Hijacked[Text]] created by Hijacked[T].offset
             //    body rewriting would recurse unboundedly (Hijacked^N for all N).
@@ -1318,15 +1318,15 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Refreshes stale cached protocol resolutions whose method signatures are out of date.
-    /// Called after <c>ResolveProtocolMethodReturnTypes</c> (Pass 1e) re-fills a generic protocol
-    /// definition (e.g. MutableIndexable[V]) whose methods were initially registered with dropped
+    /// Refreshes stale cached protocol resolutions whose memberRoutine signatures are out of date.
+    /// Called after <c>ResolveProtocolMemberRoutineReturnTypes</c> (Pass 1e) re-fills a generic protocol
+    /// definition (e.g. MutableIndexable[V]) whose memberRoutines were initially registered with dropped
     /// forward-reference params — a concrete <c>index: U64</c> param silently dropped because U64
     /// wasn't registered yet. Instances created before that re-fill (during earlier stdlib
-    /// registration, e.g. List's <c>obeys MutableIndexable[T]</c>) hold stale method signatures and
+    /// registration, e.g. List's <c>obeys MutableIndexable[T]</c>) hold stale memberRoutine signatures and
     /// are cached, so user types obeying the protocol pick up the stale 1-param <c>setitem</c> and
     /// wrongly fail conformance (S703). Mirrors <see cref="RefreshEntityResolutions"/> /
-    /// <see cref="RefreshRecordResolutions"/> by rebuilding Methods in place so existing references
+    /// <see cref="RefreshRecordResolutions"/> by rebuilding memberRoutines in place so existing references
     /// (e.g. a collection's ImplementedProtocols) also see the fix.
     /// </summary>
     public void RefreshProtocolResolutions(ProtocolTypeInfo genericDef)
@@ -1346,24 +1346,24 @@ public sealed partial class TypeRegistry
                 var fresh =
                     (ProtocolTypeInfo)genericDef.CreateInstance(
                         typeArguments: protoRes.TypeArguments);
-                protoRes.Methods = fresh.Methods;
+                protoRes.MemberRoutines = fresh.MemberRoutines;
             }
         }
     }
 
     /// <summary>
-    /// A cached protocol instance is stale if any of its methods is missing or has a different
-    /// parameter arity than the (just re-filled) generic definition's matching method.
+    /// A cached protocol instance is stale if any of its memberRoutines is missing or has a different
+    /// parameter arity than the (just re-filled) generic definition's matching memberRoutine.
     /// </summary>
     private static bool IsProtocolResolutionStale(ProtocolTypeInfo instance,
         ProtocolTypeInfo genericDef)
     {
-        foreach (ProtocolMethodInfo defMethod in genericDef.Methods)
+        foreach (ProtocolMemberRoutineInfo defMemberRoutine in genericDef.MemberRoutines)
         {
-            ProtocolMethodInfo? instMethod = instance.Methods.FirstOrDefault(predicate: m =>
-                m.Name == defMethod.Name && m.IsFailable == defMethod.IsFailable);
-            if (instMethod == null ||
-                instMethod.ParameterTypes.Count != defMethod.ParameterTypes.Count)
+            ProtocolMemberRoutineInfo? instMemberRoutine = instance.MemberRoutines.FirstOrDefault(predicate: m =>
+                m.Name == defMemberRoutine.Name && m.IsFailable == defMemberRoutine.IsFailable);
+            if (instMemberRoutine == null ||
+                instMemberRoutine.ParameterTypes.Count != defMemberRoutine.ParameterTypes.Count)
             {
                 return true;
             }
@@ -1415,10 +1415,10 @@ public sealed partial class TypeRegistry
             };
         _resolutions[key: key] = newType;
 
-        // A routine VALUE is Serializable — like a tuple registers its methods at creation (structural
+        // A routine VALUE is Serializable — like a tuple registers its memberRoutines at creation (structural
         // types never reach the AutoWiredRegistrationPass named-type loop). Serializing executable code is
         // meaningless, but a routine has a first-class `represent` (its signature), so serialize boxes that
-        // Text. Registering the per-type method lets the universal serialize walk over a routine-typed
+        // Text. Registering the per-type memberRoutine lets the universal serialize walk over a routine-typed
         // member (`entity Callback { f: Routine[...] }`) resolve; the BODY is the zero-field
         // BuildSerializeBody path, synthesized in WiredRoutinePass's routine-type loop.
         TypeInfo? routineSerialValue = LookupType(name: "SerialValue");
@@ -1502,7 +1502,7 @@ public sealed partial class TypeRegistry
         // tuple won't either — keeping derivation in lockstep with the underlying types.
         TypeInfo? boolType = LookupType(name: "Bool");
         if (boolType != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "eq") != null))
+            elementTypes.All(predicate: et => LookupMemberRoutine(type: et, memberRoutineName: "eq") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
@@ -1536,7 +1536,7 @@ public sealed partial class TypeRegistry
         // Auto-register hash if ALL element types support hash
         TypeInfo? u64Type = LookupType(name: "U64");
         if (u64Type != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "hash") != null))
+            elementTypes.All(predicate: et => LookupMemberRoutine(type: et, memberRoutineName: "hash") != null))
         {
             RegisterRoutine(routine: new RoutineInfo(name: "hash")
             {
@@ -1562,7 +1562,7 @@ public sealed partial class TypeRegistry
         if (serialValueType != null &&
             elementTypes.All(predicate: et =>
                 et is not GenericParameterTypeInfo &&
-                (et is RoutineTypeInfo || LookupMethod(type: et, methodName: "serialize") != null)))
+                (et is RoutineTypeInfo || LookupMemberRoutine(type: et, memberRoutineName: "serialize") != null)))
         {
             RegisterRoutine(routine: new RoutineInfo(name: "serialize")
             {
@@ -1578,19 +1578,19 @@ public sealed partial class TypeRegistry
             });
         }
 
-        // Auto-register `store` (the retaining field-walk copy) iff every element is itself storable —
+        // Auto-register `store` (the retaining field-walk copy) iff every element is itself Assignable —
         // a value / managed leaf / RC wrapper, never a bare `entity` or access token. Mirrors how a
         // declared record gets its synthesized `store`: without it, `var u = t` on a tuple holding a
         // managed leaf (Text) bitwise-aliases and double-frees at the two scopes' teardown. The body
         // (WiredRoutinePass.HandleTuple `store` → BuildRecordCopyBody) reconstructs the tuple field-by-
         // field, calling each retaining field's own `store`. Generic-parameter elements (`Tuple[U64, T]`)
-        // are not storable here, so store is registered per CONCRETE instantiation (like serialize).
+        // are not Assignable here, so store is registered per CONCRETE instantiation (like serialize).
         if (elementTypes.All(predicate: et =>
                 CanAutoDeriveAssignable(type: et)
-                || DoesTypeObeyProtocol(type: et, protocolName: "Storable")
-                || LookupMethod(type: et, methodName: "store") is not null))
+                || DoesTypeObeyProtocol(type: et, protocolName: "Assignable")
+                || LookupMemberRoutine(type: et, memberRoutineName: "assign") is not null))
         {
-            RegisterRoutine(routine: new RoutineInfo(name: "store")
+            RegisterRoutine(routine: new RoutineInfo(name: "assign")
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1607,7 +1607,7 @@ public sealed partial class TypeRegistry
         // Auto-register cmp + derived operators if ALL element types support cmp
         TypeInfo? comparisonSignType = LookupType(name: "ComparisonSign");
         if (boolType != null && comparisonSignType != null &&
-            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "cmp") != null))
+            elementTypes.All(predicate: et => LookupMemberRoutine(type: et, memberRoutineName: "cmp") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
@@ -1720,7 +1720,7 @@ public sealed partial class TypeRegistry
     /// Gets all concrete (non-definition) generic type instances created during semantic analysis.
     /// These are types like <c>List[S64]</c>, <c>Maybe[Text]</c>, etc. that have been resolved
     /// from their generic definitions during type checking. Used by
-    /// <c>GenericMonomorphizationPass</c> to enumerate which method bodies need rewriting.
+    /// <c>GenericMonomorphizationPass</c> to enumerate which memberRoutine bodies need rewriting.
     /// </summary>
     public IEnumerable<TypeInfo> AllConcreteGenericInstances =>
         _resolutions.Values
@@ -1778,7 +1778,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// All concrete wrapper instances bypassing the liveness filter. Mirror of
     /// <see cref="AllConcreteGenericInstancesUnfiltered"/> for wrapper types — used by GMP to
-    /// monomorphize methods on wrappers like <c>Hijacked[Text]</c> that were created
+    /// monomorphize memberRoutines on wrappers like <c>Hijacked[Text]</c> that were created
     /// during stdlib analysis but never reached the liveness walk (e.g. as a field type of an
     /// iterator entity referenced indirectly via represent/diagnose).
     /// </summary>
@@ -1790,10 +1790,10 @@ public sealed partial class TypeRegistry
                            .Distinct();
 
     /// <summary>
-    /// Gets all types that can have methods (records, entities, choices, flags).
+    /// Gets all types that can have memberRoutines (records, entities, choices, flags).
     /// </summary>
-    /// <returns>An enumerable of all types that can have methods.</returns>
-    public IEnumerable<TypeInfo> GetTypesWithMethods()
+    /// <returns>An enumerable of all types that can have memberRoutines.</returns>
+    public IEnumerable<TypeInfo> GetTypesWithMemberRoutines()
     {
         IEnumerable<TypeInfo> namedTypes = _types.Values.Where(predicate: t =>
             t.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Choice
@@ -1813,7 +1813,7 @@ public sealed partial class TypeRegistry
     /// WiredRoutinePass iterates these to synthesize their wired bodies (serialize) regardless of the
     /// GetAllRoutines liveness filter, mirroring the tuple path.</summary>
     public IEnumerable<TypeInfo> GetResolvedRoutineTypes()
-        // Materialized: like GetTypesWithMethods, wired-body synthesis registers resolutions while
+        // Materialized: like GetTypesWithMemberRoutines, wired-body synthesis registers resolutions while
         // iterating this, which would invalidate a lazy enumerator over the live `_resolutions`.
         => _resolutions.Values.Where(predicate: t => t is RoutineTypeInfo { IsGenericDefinition: false })
             .ToList();
@@ -1961,7 +1961,7 @@ public sealed partial class TypeRegistry
 
     #endregion
 
-    // Routine registration and lookup methods are in TypeRegistry.MethodLookup.cs
+    // Routine registration and lookup memberRoutines are in TypeRegistry.MemberRoutineLookup.cs
 
     #region Scope Management
 

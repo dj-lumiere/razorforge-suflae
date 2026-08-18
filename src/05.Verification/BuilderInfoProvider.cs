@@ -13,7 +13,7 @@ using TypeSymbol = TypeInfo;
 
 /// <summary>
 /// Central authority for BuilderService routine registration and import-gating.
-/// Provides static name sets for identifying BS routines and methods to register
+/// Provides static name sets for identifying BS routines and memberRoutines to register
 /// them on types, as standalone functions, and as module-level routines.
 /// </summary>
 public static class BuilderInfoProvider
@@ -39,7 +39,7 @@ public static class BuilderInfoProvider
     /// <summary>
     /// Registers all per-type BuilderService metadata routines on a given type.
     /// </summary>
-    public static void RegisterRoutinesOnType(TypeSymbol type, List<RoutineInfo> existingMethods,
+    public static void RegisterRoutinesOnType(TypeSymbol type, List<RoutineInfo> existingMemberRoutines,
         TypeRegistry registry, TypeSymbol? textType, TypeSymbol? boolType,
         TypeSymbol? u64Type, TypeSymbol? s64Type, TypeSymbol? listTextType,
         TypeSymbol? listFieldInfoType, TypeSymbol? listProtocolInfoType,
@@ -52,17 +52,17 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "type_name",
                 returnType: textType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
             MaybeRegister(owner: type,
                 name: "module_name",
                 returnType: textType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
             MaybeRegister(owner: type,
                 name: "full_type_name",
                 returnType: textType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -72,7 +72,7 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "type_id",
                 returnType: u64Type,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -82,7 +82,7 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: RuntimeContract.DataSize,
                 returnType: byteSizeType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -92,7 +92,7 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "member_variable_count",
                 returnType: s64Type,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -103,7 +103,7 @@ public static class BuilderInfoProvider
                 MaybeRegister(owner: type,
                     name: "type_kind",
                     returnType: typeKindType,
-                    existingMethods: existingMethods,
+                    existingMemberRoutines: existingMemberRoutines,
                     registry: registry);
             }
         // Bool-returning routines
@@ -112,12 +112,12 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "is_generic",
                 returnType: boolType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
             MaybeRegister(owner: type,
                 name: "is_in_flight",
                 returnType: boolType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -127,27 +127,27 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "protocols",
                 returnType: listTextType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
             MaybeRegister(owner: type,
                 name: "routine_names",
                 returnType: listTextType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
             MaybeRegister(owner: type,
                 name: "annotations",
                 returnType: listTextType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
             MaybeRegister(owner: type,
                 name: "generic_args",
                 returnType: listTextType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
             MaybeRegister(owner: type,
                 name: "dependencies",
                 returnType: listTextType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -157,7 +157,7 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "member_variable_info",
                 returnType: listFieldInfoType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -167,7 +167,7 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "protocol_info",
                 returnType: listProtocolInfoType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -177,7 +177,7 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "routine_info",
                 returnType: listRoutineInfoType,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
 
@@ -189,7 +189,7 @@ public static class BuilderInfoProvider
                 paramName: "member_name",
                 paramType: textType,
                 returnType: u64Type,
-                existingMethods: existingMethods,
+                existingMemberRoutines: existingMemberRoutines,
                 registry: registry);
         }
     }
@@ -282,9 +282,9 @@ public static class BuilderInfoProvider
     /// Registers a no-parameter readonly synthesized routine if not already defined.
     /// </summary>
     private static void MaybeRegister(TypeSymbol owner, string name, TypeSymbol returnType,
-        List<RoutineInfo> existingMethods, TypeRegistry registry)
+        List<RoutineInfo> existingMemberRoutines, TypeRegistry registry)
     {
-        if (existingMethods.Any(predicate: m => m.Name == name))
+        if (existingMemberRoutines.Any(predicate: m => m.Name == name))
         {
             return;
         }
@@ -307,10 +307,10 @@ public static class BuilderInfoProvider
     /// Registers a single-parameter readonly synthesized routine if not already defined.
     /// </summary>
     private static void MaybeRegisterWithParam(TypeSymbol owner, string name, string paramName,
-        TypeSymbol paramType, TypeSymbol returnType, List<RoutineInfo> existingMethods,
+        TypeSymbol paramType, TypeSymbol returnType, List<RoutineInfo> existingMemberRoutines,
         TypeRegistry registry)
     {
-        if (existingMethods.Any(predicate: m => m.Name == name))
+        if (existingMemberRoutines.Any(predicate: m => m.Name == name))
         {
             return;
         }

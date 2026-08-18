@@ -10,7 +10,7 @@ using TypeModel.Types;
 namespace Compiler.CodeGen;
 
 /// <summary>
-/// Expression code generation: allocation, member variable access, method calls, operators.
+/// Expression code generation: allocation, member variable access, memberRoutine calls, operators.
 /// </summary>
 public partial class LlvmCodeGenerator
 {
@@ -42,7 +42,7 @@ public partial class LlvmCodeGenerator
             BinaryExpression binary => EmitBinaryOp(sb: sb, binary: binary),
             // TODO: This should be eliminated by lowering pass
             UnaryExpression unary => EmitUnaryOp(sb: sb, unary: unary),
-            GenericMethodCallExpression gmc => EmitGmceFallback(sb: sb, gmc: gmc),
+            GenericMemberRoutineCallExpression gmc => EmitGmceFallback(sb: sb, gmc: gmc),
             // Array[T,N] and BitArray[N] are inline IR constructs (insertvalue); all other
             // collection literals must be lowered to CreatorExpression + add calls before codegen.
             ListLiteralExpression list when IsArrayOrBitArrayLiteral(list.ResolvedType) =>
@@ -141,8 +141,8 @@ public partial class LlvmCodeGenerator
     /// (ignored); it forwards the remaining arguments to the real routine. One thunk per routine
     /// (deduped).
     ///
-    /// <para>Free routines forward their declared parameters. An <b>unbound entity-method</b>
-    /// reference additionally forwards the receiver as a leading <c>ptr %me</c> — the real method
+    /// <para>Free routines forward their declared parameters. An <b>unbound entity-memberRoutine</b>
+    /// reference additionally forwards the receiver as a leading <c>ptr %me</c> — the real memberRoutine
     /// symbol takes <c>me</c> first, and the caller (e.g. the cycle collector invoking a per-type
     /// <c>roam_trace_impl</c> hook) supplies the entity pointer as that first logical argument.
     /// Only entity receivers (always <c>ptr</c>) are handled; record-value receivers would need
@@ -175,7 +175,7 @@ public partial class LlvmCodeGenerator
         var fwdTypes = new List<string>();
         var fwdValues = new List<string>();
 
-        // Unbound entity-method reference: the real method symbol takes `me` (a `ptr`) first, so the
+        // Unbound entity-member routine reference: the real member routine symbol takes `me` (a `ptr`) first, so the
         // thunk forwards it as its first logical argument (after the ignored closure slot). The caller
         // supplies the receiver at call time — e.g. the collector passes the entity address to a
         // `roam_trace_impl` / `roam_free_impl` hook.
@@ -682,8 +682,8 @@ public partial class LlvmCodeGenerator
 
         // A pre-resolved routine-VALUE reference (set by a lowering pass, e.g. an unbound member-
         // routine hook). The routine is already known, so skip name-based lookup — the bare name may
-        // be a method that lookup cannot resolve without the owner type. Falls through the same
-        // closure-materialization path (methods reach EnsureRoutineValueThunk, now method-aware). The
+        // be a memberRoutine that lookup cannot resolve without the owner type. Falls through the same
+        // closure-materialization path (memberRoutines reach EnsureRoutineValueThunk, now memberRoutine-aware). The
         // node keeps the surrounding-context type (e.g. CPtr for a hook field), so we gate on the
         // resolved routine alone rather than its ResolvedType label.
         if (identifier.ResolvedRoutine is { } preResolved)
@@ -779,8 +779,8 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Generates code for a function/method call.
-    /// Handles both standalone function calls and method calls on objects.
+    /// Generates code for a function/memberRoutine call.
+    /// Handles both standalone function calls and memberRoutine calls on objects.
     /// </summary>
     private string EmitCall(StringBuilder sb, CallExpression call)
     {
@@ -802,7 +802,7 @@ public partial class LlvmCodeGenerator
 
         // Module-qualified call `Module.routine(...)`: SA resolved it to a module-level routine
         // (OwnerType == null) even though the callee is syntactically a member access. There is no
-        // receiver, so emit it as a free call rather than a method call.
+        // receiver, so emit it as a free call rather than a memberRoutine call.
         if (call.Callee is MemberExpression && call.ResolvedRoutine is { OwnerType: null } moduleRoutine)
         {
             return EmitRoutineCall(sb: sb,
@@ -817,7 +817,7 @@ public partial class LlvmCodeGenerator
 
         return call.Callee switch
         {
-            // Determine if this is a method call (callee is MemberExpression) or standalone function call
+            // Determine if this is a memberRoutine call (callee is MemberExpression) or standalone function call
             MemberExpression member => EmitMemberRoutineCall(sb: sb,
                 member: member,
                 arguments: call.Arguments,
@@ -852,7 +852,7 @@ public partial class LlvmCodeGenerator
             return ""; // not a tracked local (e.g. a param) — leave untracked (first-cut limitation)
         }
 
-        RoutineInfo? destroy = _registry.LookupMethod(type: type, methodName: "destroy");
+        RoutineInfo? destroy = _registry.LookupMemberRoutine(type: type, memberRoutineName: "destroy");
         if (destroy == null)
         {
             return "";
@@ -1084,10 +1084,10 @@ public partial class LlvmCodeGenerator
             BinaryOperator.Or => throw new InvalidOperationException(
                 $"BinaryExpression(Or) must be lowered to ConditionalExpression by ExpressionLoweringPass before codegen. In routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
             BinaryOperator.Assign => EmitBinaryAssign(sb: sb, binary: binary),
-            BinaryOperator.In => EmitContainsCall(sb: sb, binary: binary, methodName: "contains"),
+            BinaryOperator.In => EmitContainsCall(sb: sb, binary: binary, memberRoutineName: "contains"),
             BinaryOperator.NotIn => EmitContainsCall(sb: sb,
                 binary: binary,
-                methodName: "notcontains"),
+                memberRoutineName: "notcontains"),
             BinaryOperator.Is => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "eq"),
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
             // obeys/disobeys are folded to a compile-time Bool literal by ExpressionLoweringPass
@@ -1153,7 +1153,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emit contains call as part of this compiler phase.
     /// </summary>
-    private string EmitContainsCall(StringBuilder sb, BinaryExpression binary, string methodName)
+    private string EmitContainsCall(StringBuilder sb, BinaryExpression binary, string memberRoutineName)
     {
         // TODO: This should be done with member routine, not here
         string collection = EmitExpression(sb: sb, expr: binary.Right);
@@ -1167,10 +1167,10 @@ public partial class LlvmCodeGenerator
         }
 
         ResolvedMemberRoutine? resolved =
-            ResolveMemberRoutine(receiverType: collectionType, methodName: methodName);
+            ResolveMemberRoutine(receiverType: collectionType, memberRoutineName: memberRoutineName);
         string mangledName = resolved?.MangledName ??
                              Q(name:
-                                 $"{collectionType.FullName}.{SanitizeLlvmName(name: methodName)}");
+                                 $"{collectionType.FullName}.{SanitizeLlvmName(name: memberRoutineName)}");
 
         if (resolved != null)
         {

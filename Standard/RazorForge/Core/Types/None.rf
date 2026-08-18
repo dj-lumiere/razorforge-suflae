@@ -4,7 +4,7 @@ module Core
 ### type-safe. It is BOTH a value type (the void return / empty payload) AND the canonical variant
 ### empty branch — one name for "nothing".
 @llvm("void")
-record None obeys Storable, Copyable
+record None obeys Assignable, Copyable
   pass
 
 # ============================================================================

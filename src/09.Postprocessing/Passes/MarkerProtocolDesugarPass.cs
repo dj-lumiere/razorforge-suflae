@@ -423,7 +423,7 @@ internal sealed class MarkerProtocolDesugarPass
             case StealExpression st:
                 WalkExpression(st.Operand);
                 break;
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
                 WalkExpression(gmc.Object);
                 foreach (Expression a in gmc.Arguments) WalkExpression(a);
                 break;
@@ -516,11 +516,11 @@ internal sealed class MarkerProtocolDesugarPass
                 && (mem.MemberName == "access" || mem.MemberName == "control"))
                 continue;
 
-            string methodName = mk.Kind == MarkerKind.Control ? "control" : "access";
+            string memberRoutineName = mk.Kind == MarkerKind.Control ? "control" : "access";
             var coerced = new CallExpression(
                 Callee: new MemberExpression(
                     Object: valueExpr,
-                    MemberName: methodName,
+                    MemberName: memberRoutineName,
                     Location: valueExpr.Location),
                 Arguments: [],
                 Location: valueExpr.Location)

@@ -18,32 +18,32 @@ using TypeSymbol = TypeInfo;
 public sealed partial class SemanticVerifier
 {
     /// <summary>
-    /// Known wired methods that are valid operator/special methods. Derived from the single source
+    /// Known wired memberRoutines that are valid operator/special memberRoutines. Derived from the single source
     /// of truth <see cref="Compiler.Resolution.WiredRoutineCatalog"/> (entries flagged
     /// <see cref="Compiler.Resolution.WiredView.KnownWired"/>).
     /// </summary>
-    private static readonly HashSet<string> KnownWiredMethods =
-        Compiler.Resolution.WiredRoutineCatalog.BuildKnownWiredMethods();
+    private static readonly HashSet<string> KnownWiredMemberRoutines =
+        Compiler.Resolution.WiredRoutineCatalog.BuildKnownWiredMemberRoutines();
 
     /// <summary>
     /// Checks whether a routine declared with the wired '$' sigil names something that is NOT a known
-    /// built-in wired method. The canonical name is bare ('$' is a structured attribute, not part of
+    /// built-in wired memberRoutine. The canonical name is bare ('$' is a structured attribute, not part of
     /// the name), so wired-ness is passed via <paramref name="isWired"/> rather than sniffed from the
     /// string. A non-wired routine can be named anything and is never flagged.
     /// </summary>
-    private static bool IsUnknownWiredMethod(string bareName, bool isWired)
+    private static bool IsUnknownWiredMemberRoutine(string bareName, bool isWired)
     {
         if (!isWired || bareName.Length == 0)
         {
             return false;
         }
 
-        return !KnownWiredMethods.Contains(value: bareName);
+        return !KnownWiredMemberRoutines.Contains(value: bareName);
     }
 
     /// <summary>
-    /// Maps operator wired methods to their required protocols. Types must follow the protocol to
-    /// define the operator method. Derived from the single source of truth
+    /// Maps operator wired memberRoutines to their required protocols. Types must follow the protocol to
+    /// define the operator memberRoutine. Derived from the single source of truth
     /// <see cref="Compiler.Resolution.WiredRoutineCatalog"/> (entries flagged
     /// <see cref="Compiler.Resolution.WiredView.ProtocolDecl"/>).
     /// </summary>
@@ -51,7 +51,7 @@ public sealed partial class SemanticVerifier
         Compiler.Resolution.WiredRoutineCatalog.BuildWiredToProtocols();
 
     /// <summary>
-    /// Gets the required protocol for a wired method, or null if no protocol is required.
+    /// Gets the required protocol for a wired memberRoutine, or null if no protocol is required.
     /// </summary>
     internal static List<string>? GetRequiredProtocols(string wiredName)
     {
@@ -65,7 +65,7 @@ public sealed partial class SemanticVerifier
     /// sets this flag (it is uniformly false at registration). This pass restores meaningful wired-ness
     /// by INFERRING it from the wired-routine catalog plus explicit protocol conformance.</para>
     ///
-    /// <para>A member routine <c>R</c> is wired iff its bare name is a known wired method AND either the
+    /// <para>A member routine <c>R</c> is wired iff its bare name is a known wired memberRoutine AND either the
     /// name is not protocol-gated (creator/context/lifecycle names like <c>create</c>/<c>destroy</c> —
     /// wired by catalog name alone) or the owner EXPLICITLY <c>obeys</c> one of the name's required
     /// protocols. This reproduces the pre-removal <c>$</c> set: a numeric <c>add</c> (obeys Addable) is
@@ -86,7 +86,7 @@ public sealed partial class SemanticVerifier
     /// <summary>Computes wired-ness for a single member routine (see <see cref="InferWiredMemberRoutines"/>).</summary>
     private bool InferWired(RoutineInfo r)
     {
-        if (r.OwnerType == null || !KnownWiredMethods.Contains(value: r.Name))
+        if (r.OwnerType == null || !KnownWiredMemberRoutines.Contains(value: r.Name))
         {
             return false;
         }

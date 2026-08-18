@@ -18,7 +18,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para>Previously codegen inserted the retain-side refcount bump with NO surface AST call at three
 /// sites: a var-binding / reassignment of a record whose fields are RC wrappers (one bump per RC
-/// field, matching <c>RecordTypeInfo.HasRCFields</c>) and a <c>Roamed[T]</c> ENTITY-field write (one
+/// field, matching <c>RecordTypeInfo.HasRCMemberVariables</c>) and a <c>Roamed[T]</c> ENTITY-field write (one
 /// <c>roam</c> on the stored handle). This pass makes each an explicit
 /// <c>&lt;target&gt;.&lt;field&gt;.retain()</c> / <c>&lt;target&gt;.roam()</c>
 /// <see cref="ExpressionStatement"/> inserted immediately AFTER the binding statement, referencing the
@@ -142,7 +142,7 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
         {
             ResolvedType = vd.Initializer.ResolvedType
         };
-        return RcFieldBumps(target: target);
+        return RcMemberVariableBumps(target: target);
     }
 
     // A record copy (var-decl / reassignment to a local) bumps each RC-wrapper field. The retain-new for a
@@ -152,18 +152,18 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
     private List<Statement> AssignBumps(Expression target, Expression value)
     {
         _ = value;
-        return RcFieldBumps(target: target);
+        return RcMemberVariableBumps(target: target);
     }
 
     // ---- RC-field record copy (Retained/Tracked/Shared/Watched fields) --------------------------
 
-    private List<Statement> RcFieldBumps(Expression target)
+    private List<Statement> RcMemberVariableBumps(Expression target)
     {
-        if (target.ResolvedType is not RecordTypeInfo { HasRCFields: true } record) return [];
+        if (target.ResolvedType is not RecordTypeInfo { HasRCMemberVariables: true } record) return [];
         var bumps = new List<Statement>();
         foreach (MemberVariableInfo field in record.MemberVariables)
         {
-            if (TryFieldBump(target: target, field: field) is { } bump) bumps.Add(item: bump);
+            if (TryMemberVariableBump(target: target, field: field) is { } bump) bumps.Add(item: bump);
         }
         return bumps;
     }
@@ -171,7 +171,7 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
     // Every RC-wrapper field bumps its OWN count via the unified copy verb `store` (Retained/Shared →
     // strong, Tracked/Watched → weak, Roamed → biased). This is per-kind symmetry with the field-release
     // side (EmitRcRecordRelease tears each field down through its own `destroy`→`release`).
-    private Statement? TryFieldBump(Expression target, MemberVariableInfo field)
+    private Statement? TryMemberVariableBump(Expression target, MemberVariableInfo field)
     {
         if (field.Type is not WrapperTypeInfo wrapper ||
             RuntimeContract.RcWrapperBaseNames.Contains(item: wrapper.Name) is false)
@@ -179,7 +179,7 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
             return null;
         }
 
-        RoutineInfo? store = Registry.LookupMethod(type: wrapper, methodName: RuntimeContract.RefCount.Share);
+        RoutineInfo? store = Registry.LookupMemberRoutine(type: wrapper, memberRoutineName: RuntimeContract.RefCount.Share);
         if (store is null) return null;
 
         var fieldAccess = new MemberExpression(Object: target, MemberName: field.Name,
@@ -202,7 +202,7 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
         {
             ResolvedRoutine = copy,
             ResolvedType = copy.ReturnType,
-            LoweringKind = CallClassifier.ClassifyMethodCall(method: copy)
+            LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: copy)
         };
         return new ExpressionStatement(Expression: call, Location: receiver.Location);
     }

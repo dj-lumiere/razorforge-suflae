@@ -8,7 +8,7 @@ import Collections
 ### for graphics, simulation, and general-purpose numeric code where 24 bits of
 ### significand precision are acceptable.
 @llvm("float")
-record F32 obeys Numeric, Ordered, Storable, Copyable
+record F32 obeys Numeric, Ordered, Assignable, Copyable
   pass
 
 # IEEE 754 single precision constants

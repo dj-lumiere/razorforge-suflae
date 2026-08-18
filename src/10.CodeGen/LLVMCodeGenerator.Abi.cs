@@ -164,7 +164,7 @@ public partial class LlvmCodeGenerator
         }
 
         var leaves = new List<(int Off, int Size, string Llvm)>();
-        CollectLeafFields(type: type, baseOffset: 0, leaves: leaves);
+        CollectLeafMemberVariables(type: type, baseOffset: 0, leaves: leaves);
         if (size <= 8)
         {
             return AbiPassing.Coerce(llvm: EightbyteType(leaves: leaves, start: 0, chunkBytes: size));
@@ -201,7 +201,7 @@ public partial class LlvmCodeGenerator
     /// (<see cref="RecordTypeInfo.SizeBytes"/>: each member padded to its natural
     /// <see cref="TypeInfo.Alignment"/>). Feeds the per-eightbyte SSE/INTEGER classification and the HFA test.
     /// </summary>
-    private void CollectLeafFields(TypeInfo type, int baseOffset,
+    private void CollectLeafMemberVariables(TypeInfo type, int baseOffset,
         List<(int Off, int Size, string Llvm)> leaves)
     {
         if (IsByValueStructRecord(type: type) && type is RecordTypeInfo { MemberVariables: { } members })
@@ -212,7 +212,7 @@ public partial class LlvmCodeGenerator
                 int memberSize = GetTypeSize(type: mv.Type);
                 int alignment = mv.Type.Alignment(pointerSize: _pointerSizeBytes);
                 size = AlignTo(size: size, alignment: alignment);
-                CollectLeafFields(type: mv.Type, baseOffset: baseOffset + size, leaves: leaves);
+                CollectLeafMemberVariables(type: mv.Type, baseOffset: baseOffset + size, leaves: leaves);
                 size += memberSize;
             }
 
@@ -270,7 +270,7 @@ public partial class LlvmCodeGenerator
     {
         coerce = "";
         var leaves = new List<(int Off, int Size, string Llvm)>();
-        CollectLeafFields(type: type, baseOffset: 0, leaves: leaves);
+        CollectLeafMemberVariables(type: type, baseOffset: 0, leaves: leaves);
         if (leaves.Count is 0 or > 4)
         {
             return false;
@@ -382,24 +382,24 @@ public partial class LlvmCodeGenerator
     /// <c>store</c> to bump a refcount and no managed <c>destroy</c> to balance. Decided by the
     /// SAME oracle the copy-lowering and teardown passes use: <see cref="Compiler.Resolution.TypeRegistry.GetLifecycle(TypeModel.Types.TypeInfo)"/>
     /// returns a non-null <c>Store</c> exactly when the type (or, recursively, a field of it) is a
-    /// managed leaf like <c>Text</c>/<c>Decimal</c>; a null <c>Store</c> means trivially storable.
+    /// managed leaf like <c>Text</c>/<c>Decimal</c>; a null <c>Store</c> means trivially Assignable.
     /// Tuples and composite records are handled by the recursion inside GetLifecycle.
     ///
     /// This gates <c>byval</c>: byval is a bitwise memcpy that bypasses the managed protocol, so for
     /// a managed record the callee's <c>destroy</c> of its byval copy would free state the caller
     /// still owns — a double-free. Because the copy-lowering pass injects a retaining <c>store</c>
     /// for EXACTLY the same (non-trivial) types, gating on this oracle also guarantees byval never
-    /// races that injected store: trivially-storable args get no <c>store</c>, so byval is the only
+    /// races that injected store: trivially-Assignable args get no <c>store</c>, so byval is the only
     /// duplication and it is sound.
     /// </summary>
-    private bool IsTriviallyStorableRecord(TypeInfo type) =>
+    private bool IsTriviallyAssignableRecord(TypeInfo type) =>
         _registry.GetLifecycle(type: type).Store == null;
 
     /// <summary>
     /// Whether the explicit value parameter <paramref name="paramType"/> of <paramref name="routine"/>
     /// is passed BY VALUE through a hidden <c>ptr byval(%T)</c> copy (the
-    /// <see cref="AbiKind.Indirect"/> argument form). Requires the type to be trivially storable (see
-    /// <see cref="IsTriviallyStorableRecord"/>) — byval is a bitwise copy and is unsound for managed
+    /// <see cref="AbiKind.Indirect"/> argument form). Requires the type to be trivially Assignable (see
+    /// <see cref="IsTriviallyAssignableRecord"/>) — byval is a bitwise copy and is unsound for managed
     /// records (which keep the existing by-value path that the copy-lowering pass balances with an
     /// explicit <c>store</c>). EXCLUDES async routines: suspended/threaded workers receive their args
     /// through their own handoff (the thread cell / closure), not the C calling convention, so byval
@@ -409,7 +409,7 @@ public partial class LlvmCodeGenerator
     private bool ParameterPassedByval(RoutineInfo routine, TypeInfo paramType) =>
         !routine.IsAsync
         && AbiClassify(type: paramType).Kind == AbiKind.Indirect
-        && IsTriviallyStorableRecord(type: paramType);
+        && IsTriviallyAssignableRecord(type: paramType);
 
     /// <summary>
     /// The ABI register type a value parameter is COERCED to (e.g. <c>i64</c> / <c>{ i64, i32 }</c>),

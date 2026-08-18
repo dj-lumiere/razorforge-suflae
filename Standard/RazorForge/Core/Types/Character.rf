@@ -4,7 +4,7 @@ module Core
 ### `Character` stores a code point-sized payload and models text characters
 ### rather than arbitrary binary bytes.
 @llvm("i32")
-record Character obeys ConstCompatible, Comparable, Storable, Copyable
+record Character obeys ConstCompatible, Comparable, Assignable, Copyable
   pass
 
 # Creators

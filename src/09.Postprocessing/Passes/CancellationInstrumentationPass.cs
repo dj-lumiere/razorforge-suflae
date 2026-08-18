@@ -104,9 +104,9 @@ public sealed class CancellationInstrumentationPass
         }
 
         string ownerName = decl.Name[..dot];
-        string methodName = decl.Name[(dot + 1)..];
+        string memberRoutineName = decl.Name[(dot + 1)..];
         TypeInfo? owner = _registry.LookupType(name: ownerName);
-        return owner == null ? null : _registry.LookupMethod(type: owner, methodName: methodName, isFailable: decl.IsFailable);
+        return owner == null ? null : _registry.LookupMemberRoutine(type: owner, memberRoutineName: memberRoutineName, isFailable: decl.IsFailable);
     }
 
     private void MaybeInstrument(RoutineDeclaration decl)

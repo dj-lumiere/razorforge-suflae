@@ -248,7 +248,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
                 // Replace one Crashable-shaped clause with N TypePattern clauses, one per
                 // registered CrashableTypeInfo. Each arm gets its own deep-clone of the
                 // body where the bound name `err` is rewired to the concrete crashable
-                // type, so `err.crash_message()` etc. dispatches against a real method
+                // type, so `err.crash_message()` etc. dispatches against a real memberRoutine
                 // instead of the bodyless protocol stub.
                 var emptySubs = new Dictionary<string, string>();
                 foreach (CrashableTypeInfo crashable in crashableTypes)

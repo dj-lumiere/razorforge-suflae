@@ -382,7 +382,7 @@ public partial class Tokenizer
 
     #endregion
 
-    #region Public Methods
+    #region Public memberRoutines
 
     /// <summary>
     /// Tokenizes the entire source code and returns a list of tokens.

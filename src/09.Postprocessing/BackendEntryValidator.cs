@@ -198,7 +198,7 @@ public sealed class BackendEntryValidator
         // hardening step after AsyncLoweringPass owns them.
         string? requiredPass = node switch
         {
-            GenericMethodCallExpression => "GenericCallLoweringPass",
+            GenericMemberRoutineCallExpression => "GenericCallLoweringPass",
             LambdaExpression => "LambdaLiftingPass",
             InsertedTextExpression => "FStringLoweringPass",
             RangeExpression => "ExpressionLoweringPass",

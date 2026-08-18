@@ -345,7 +345,7 @@ internal sealed class BuilderServiceInliningPass
         // Leaf nodes: nothing to fold or recurse into.
         if (expr is LiteralExpression or TypeIdExpression) return expr;
 
-        // Source location constant-call folding (standalone calls, not method calls)
+        // Source location constant-call folding (standalone calls, not memberRoutine calls)
         if (expr is CallExpression
             {
                 Callee: IdentifierExpression { Name: var slName },
@@ -454,7 +454,7 @@ internal sealed class BuilderServiceInliningPass
                 return ReferenceEquals(o, steal.Operand) ? expr : steal with { Operand = o };
             }
 
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
             {
                 Expression obj = LowerExpression(gmc.Object);
                 List<Expression> args = LowerExpressionList(gmc.Arguments);
@@ -666,7 +666,7 @@ internal sealed class BuilderServiceInliningPass
             return _registry.LookupType(idName);
         }
 
-        // 3. TypeExpression used as the receiver (e.g. in type-level method calls).
+        // 3. TypeExpression used as the receiver (e.g. in type-level memberRoutine calls).
         if (receiver is TypeExpression { Name: var teName })
         {
             if (_currentTypeSubs != null

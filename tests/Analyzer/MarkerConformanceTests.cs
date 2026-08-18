@@ -198,7 +198,7 @@ public class MarkerConformanceTests
     [Fact]
     public void Analyze_InnateOverride_ReportsError()
     {
-        // @innate methods cannot be overridden by user code
+        // @innate memberRoutines cannot be overridden by user code
         string source = """
                         protocol Lockable
                           @[readonly, innate]

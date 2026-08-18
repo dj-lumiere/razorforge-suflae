@@ -614,7 +614,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case WithExpression withExpr:
                 return LowerWithExpression(withExpr);
 
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
             {
                 var hoisted = new List<Statement>();
                 var (objH, loweredObj) = LowerExpr(gmc.Object);
@@ -638,16 +638,16 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
             case CompoundAssignmentExpression compound:
             {
-                string? inPlaceName = compound.Operator.GetInPlaceMethodName();
+                string? inPlaceName = compound.Operator.GetInPlaceMemberRoutineName();
                 var (targetH, loweredTarget) = LowerExpr(compound.Target);
                 var (valueH, loweredValue) = LowerExpr(compound.Value);
                 var hoisted = new List<Statement>(capacity: targetH.Count + valueH.Count + 1);
                 hoisted.AddRange(targetH);
                 hoisted.AddRange(valueH);
                 SourceLocation loc = compound.Location;
-                // Try in-place method first (iadd, isub, etc.)
+                // Try in-place memberRoutine first (iadd, isub, etc.)
                 if (inPlaceName != null && loweredTarget.ResolvedType != null &&
-                    ctx.Registry.LookupMethod(type: loweredTarget.ResolvedType, methodName: inPlaceName) != null)
+                    ctx.Registry.LookupMemberRoutine(type: loweredTarget.ResolvedType, memberRoutineName: inPlaceName) != null)
                 {
                     var inPlaceCall = new CallExpression(
                         Callee: new MemberExpression(
@@ -903,7 +903,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     // text: "1")` — mirroring how LiteralLoweringPass lowers the start/end literals.
                     // Scalar element types (RF's S64) have no `from_literal` and keep the raw literal.
                     RoutineInfo? stepFromLiteral = elemType != null
-                        ? ctx.Registry.LookupMethod(type: elemType, methodName: "from_literal")
+                        ? ctx.Registry.LookupMemberRoutine(type: elemType, memberRoutineName: "from_literal")
                         : null;
                     if (elemType != null && stepFromLiteral != null)
                     {
@@ -1158,7 +1158,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         Expression colRef = MakeRef(tempName, listType, loc);
 
         // List, Deque, BitList append at the end; everything else uses add().
-        string addMethod = baseName is "List" or "Deque" or "BitList"
+        string addMemberRoutine = baseName is "List" or "Deque" or "BitList"
             ? Resolution.RuntimeContract.Collection.AddLast
             : Resolution.RuntimeContract.Collection.Add;
 
@@ -1166,7 +1166,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         {
             var (h, lowered) = LowerExpr(elem);
             hoisted2.AddRange(h);
-            hoisted2.Add(MakeCollectionAddCall(colRef, listType, addMethod, [lowered], loc));
+            hoisted2.Add(MakeCollectionAddCall(colRef, listType, addMemberRoutine, [lowered], loc));
         }
 
         // If the original expression was wrapped in Owned/Retained/Tracked, restore that
@@ -1188,7 +1188,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
         // Unwrap Owned/Retained/Tracked so the temp var holds the inner collection (Set/SortedSet/
         // SecureSet/...) instead of the wrapper. Without this, MakeCollectionAddCall resolves
-        // `.add` against Owned[…] (which has no add) and codegen throws "no resolved method".
+        // `.add` against Owned[…] (which has no add) and codegen throws "no resolved member routine".
         TypeInfo setType = UnwrapOwnershipWrapper(resolvedType) ?? resolvedType;
         string baseName = GetCollectionBaseName(setType) ?? "Set";
         string tempName = NextTempName("lit");
@@ -1492,20 +1492,20 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     }
 
     private DiscardStatement MakeCollectionAddCall(Expression receiver, TypeInfo receiverType,
-        string methodName, List<Expression> args, SourceLocation loc)
+        string memberRoutineName, List<Expression> args, SourceLocation loc)
     {
-        RoutineInfo? method = ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
+        RoutineInfo? memberRoutine = ctx.Registry.LookupMemberRoutine(type: receiverType, memberRoutineName: memberRoutineName);
 
-        var callee = new MemberExpression(Object: receiver, MemberName: methodName,
+        var callee = new MemberExpression(Object: receiver, MemberName: memberRoutineName,
             Location: loc);
         var call = new CallExpression(
             Callee: callee,
             Arguments: args,
             Location: loc)
         {
-            ResolvedType = method?.ReturnType,
-            ResolvedRoutine = method,
-            LoweringKind = method != null ? CallLoweringKind.DirectMemberRoutine : CallLoweringKind.Unknown
+            ResolvedType = memberRoutine?.ReturnType,
+            ResolvedRoutine = memberRoutine,
+            LoweringKind = memberRoutine != null ? CallLoweringKind.DirectMemberRoutine : CallLoweringKind.Unknown
         };
         return new DiscardStatement(Expression: call, Location: loc);
     }
@@ -1709,7 +1709,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// </summary>
     /// <summary>
     /// Lowers <c>base with .field1 = v1, .field2 = v2</c> into
-    /// <c>var tmp = base.store(); tmp.field1 = v1; tmp.field2 = v2; tmp</c>. The
+    /// <c>var tmp = base.assign(); tmp.field1 = v1; tmp.field2 = v2; tmp</c>. The
     /// <c>store</c> dispatch carries any per-field semantics (e.g. retains on
     /// <c>Retained[T]</c> fields) that a field-by-field constructor rebuild would skip.
     /// SA gates this in <c>AnalyzeWithExpression</c> (base type must obey Assignable).
@@ -1765,10 +1765,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             return (hoisted, withExpr with { Base = baseRef });
         }
 
-        // var with_copy = baseRef.store()
+        // var with_copy = baseRef.assign()
         var copyCall = new CallExpression(
             Callee: new MemberExpression(
-                Object: baseRef, MemberName: "store", Location: loc)
+                Object: baseRef, MemberName: "assign", Location: loc)
                 { ResolvedType = baseType },
             Arguments: [],
             Location: loc) { ResolvedType = baseType };

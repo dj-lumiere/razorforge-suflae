@@ -3,7 +3,7 @@ module Core
 import BuilderService
 
 ### Represents temporary thread-safe read-only access to data guarded by a {Shared[T, P]}.
-### `Inspecting[T]` is the non-storable token produced by `Shared.inspect()` for shared (multi-reader)
+### `Inspecting[T]` is the non-Assignable token produced by `Shared.inspect()` for shared (multi-reader)
 ### observation. It holds the shared {ShareController[T, P]} pointer; entering its `using` scope
 ### (`enter`) acquires the reader hold on the controller's access-discipline lock and exiting
 ### (`exit`) releases it, so the lock spans exactly the `using` block. Many inspectors may coexist;

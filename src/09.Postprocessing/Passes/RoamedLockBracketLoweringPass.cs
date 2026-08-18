@@ -99,17 +99,17 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
         {
             RecurseInto(stmt);
             List<Expression> handles = FieldAccessHandles(stmt);
-            foreach (Expression h in handles) AddBracket(rewritten, h, RuntimeContract.RoamedMethod.LockEnter);
+            foreach (Expression h in handles) AddBracket(rewritten, h, RuntimeContract.RoamedMemberRoutine.LockEnter);
             rewritten.Add(item: stmt);
-            foreach (Expression h in handles) AddBracket(rewritten, h, RuntimeContract.RoamedMethod.LockExit);
+            foreach (Expression h in handles) AddBracket(rewritten, h, RuntimeContract.RoamedMemberRoutine.LockExit);
         }
         block.Statements.Clear();
         block.Statements.AddRange(collection: rewritten);
     }
 
-    private void AddBracket(List<Statement> into, Expression handle, string method)
+    private void AddBracket(List<Statement> into, Expression handle, string memberRoutine)
     {
-        if (MakeLockCall(handle: handle, method: method) is { } call) into.Add(item: call);
+        if (MakeLockCall(handle: handle, memberRoutine: memberRoutine) is { } call) into.Add(item: call);
     }
 
     // The Roamed[E] handle expressions of every DIRECT field access (read or write) in `stmt`'s own
@@ -124,10 +124,10 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
             AstWalker.WalkExpressions(root: e, visit: n =>
             {
                 if (n is not MemberExpression member) return;
-                // A direct field access through a Roamed handle, OR a method-dispatch deref (the
+                // A direct field access through a Roamed handle, OR a memberRoutine-dispatch deref (the
                 // `control`/`refer`/`raw_inner` coercion RoamedProjectionLoweringPass inserts on a
                 // Roamed receiver). Both must hold the access lock across the enclosing statement —
-                // otherwise a METHOD call on a Roamed receiver (e.g. an SF wrapper's `xs.getitem!(i)`,
+                // otherwise a memberRoutine call on a Roamed receiver (e.g. an SF wrapper's `xs.getitem!(i)`,
                 // whose bare-`me` inner is reached via the coercion) touches the object UNLOCKED,
                 // breaking escaped-mode serialization. Coarse (whole-statement) bracketing is exact for
                 // the reentrant, task-keyed lock.
@@ -165,7 +165,7 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
     }
 
     // When `member` is a DIRECT field access through a Roamed[E] handle (the member name is a member
-    // VARIABLE of the inner entity, not a method — a method call's callee member name never matches an
+    // VARIABLE of the inner entity, not a memberRoutine — a memberRoutine call's callee member name never matches an
     // entity field), returns the Roamed[E] handle expression to bracket; otherwise null.
     private static Expression? RoamedFieldReceiver(MemberExpression member)
     {
@@ -175,14 +175,14 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
     }
 
     // When `member` is a deref COERCION (`control` / `refer` / `raw_inner`) on a Roamed[E] handle —
-    // the receiver projection RoamedProjectionLoweringPass inserts for a method call on a Roamed
-    // receiver — returns the Roamed[E] handle to bracket; otherwise null. This is what makes a METHOD
+    // the receiver projection RoamedProjectionLoweringPass inserts for a memberRoutine call on a Roamed
+    // receiver — returns the Roamed[E] handle to bracket; otherwise null. This is what makes a memberRoutine
     // call on a Roamed receiver hold the access lock (the field-access path above only catches direct
     // field touches). The lifecycle coercions on the handle itself (`roam`/`promote`/`lock_*`/`destroy`)
     // are NOT deref and are deliberately excluded.
     private static Expression? RoamedCoercionReceiver(MemberExpression member)
     {
-        if (member.MemberName is not (RuntimeContract.RoamedMethod.RawInner
+        if (member.MemberName is not (RuntimeContract.RoamedMemberRoutine.RawInner
             or RuntimeContract.Control or RuntimeContract.Access)) return null;
         return RoamedInnerEntity(member.Object.ResolvedType) is not null ? member.Object : null;
     }
@@ -201,13 +201,13 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
     // take the Roamed handle, and return void — so the statement is a pure side effect around the field
     // access, exactly what the removed codegen bracket did. The handle node is reused (side-effect-free
     // to re-evaluate: an identifier / member handle), mirroring the promote/retain steps.
-    private Statement? MakeLockCall(Expression handle, string method)
+    private Statement? MakeLockCall(Expression handle, string memberRoutine)
     {
         if (handle.ResolvedType is not { } recvType) return null;
-        RoutineInfo? routine = Registry.LookupMethod(type: recvType, methodName: method);
+        RoutineInfo? routine = Registry.LookupMemberRoutine(type: recvType, memberRoutineName: memberRoutine);
         if (routine is null) return null;
 
-        var callee = new MemberExpression(Object: handle, MemberName: method, Location: handle.Location)
+        var callee = new MemberExpression(Object: handle, MemberName: memberRoutine, Location: handle.Location)
         {
             ResolvedType = recvType
         };
@@ -216,7 +216,7 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
         {
             ResolvedRoutine = routine,
             ResolvedType = routine.ReturnType,
-            LoweringKind = Verification.CallClassifier.ClassifyMethodCall(method: routine)
+            LoweringKind = Verification.CallClassifier.ClassifyMemberRoutineCall(memberRoutine: routine)
         };
         return new ExpressionStatement(Expression: call, Location: handle.Location);
     }

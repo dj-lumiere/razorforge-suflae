@@ -246,11 +246,11 @@ public class ParserErrorTests
 
     #region Protocol Errors
     /// <summary>
-    /// Verifies that the parser accepts protocol method with body as invalid input for later validation.
+    /// Verifies that the parser accepts protocol memberRoutine with body as invalid input for later validation.
     /// </summary>
 
     [Fact]
-    public void Parse_Protocol_MethodWithBody_ShouldBeInvalid()
+    public void Parse_Protocol_memberRoutineWithBody_ShouldBeInvalid()
     {
         // Protocol member routines are signatures only - no body allowed
         string source = """

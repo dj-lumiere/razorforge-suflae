@@ -6,7 +6,7 @@ module Core
 ### RazorForge. It maps to LLVM `i1` and occupies a single bit in registers,
 ### though it is stored as a byte in memory.
 @llvm("i1")
-record Bool obeys Equatable, ConstCompatible, Storable, Copyable
+record Bool obeys Equatable, ConstCompatible, Assignable, Copyable
   pass
 
 ### Returns `true` when both values are equal.

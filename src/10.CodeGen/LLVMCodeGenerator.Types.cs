@@ -483,7 +483,7 @@ public partial class LlvmCodeGenerator
 
     // -----------------------------------------------------------------------------
 
-    /// <summary>Bundles a method lookup result with fully-resolved context for codegen emission.</summary>
+    /// <summary>Bundles a memberRoutine lookup result with fully-resolved context for codegen emission.</summary>
     private record ResolvedMemberRoutine(
         RoutineInfo Routine,
         TypeInfo OwnerType,
@@ -491,52 +491,52 @@ public partial class LlvmCodeGenerator
         List<string>? ModulePath,
         string MangledName,
         bool IsMonomorphized,
-        Dictionary<string, TypeInfo>? MemberRoutineTypeArgs
+        Dictionary<string, TypeInfo>? memberRoutineTypeArgs
     );
 
     /// <summary>
-    /// Infers method-level type arguments from concrete argument types.
+    /// Infers memberRoutine-level type arguments from concrete argument types.
     /// Returns a mapping of generic parameter names to concrete types, or null if inference fails.
-    /// Only infers parameters that belong to the method itself (excludes owner-level params).
+    /// Only infers parameters that belong to the memberRoutine itself (excludes owner-level params).
     /// </summary>
-    private static Dictionary<string, TypeInfo>? InferMemberRoutineTypeArgs(RoutineInfo genericMethod,
+    private static Dictionary<string, TypeInfo>? InferMemberRoutineTypeArgs(RoutineInfo genericMemberRoutine,
         List<TypeInfo> argTypes)
     {
-        if (genericMethod.GenericParameters == null)
+        if (genericMemberRoutine.GenericParameters == null)
         {
             return null;
         }
 
         var ownerParams = new HashSet<string>();
-        if (genericMethod.OwnerType?.GenericParameters != null)
+        if (genericMemberRoutine.OwnerType?.GenericParameters != null)
         {
-            foreach (string gp in genericMethod.OwnerType.GenericParameters)
+            foreach (string gp in genericMemberRoutine.OwnerType.GenericParameters)
             {
                 ownerParams.Add(item: gp);
             }
         }
 
-        var methodParams = genericMethod.GenericParameters
+        var memberRoutineParams = genericMemberRoutine.GenericParameters
             .Where(predicate: gp => !ownerParams.Contains(item: gp))
             .ToHashSet();
-        if (methodParams.Count == 0)
+        if (memberRoutineParams.Count == 0)
         {
             return null;
         }
 
         var inferred = new Dictionary<string, TypeInfo>();
 
-        for (int i = 0; i < genericMethod.Parameters.Count && i < argTypes.Count; i++)
+        for (int i = 0; i < genericMemberRoutine.Parameters.Count && i < argTypes.Count; i++)
         {
-            TypeInfo paramType = genericMethod.Parameters[index: i].Type;
+            TypeInfo paramType = genericMemberRoutine.Parameters[index: i].Type;
             TypeInfo argType = argTypes[index: i];
             InferFromTypes(paramType: paramType,
                 argType: argType,
-                methodParams: methodParams,
+                memberRoutineParams: memberRoutineParams,
                 inferred: inferred);
         }
 
-        return inferred.Count == methodParams.Count
+        return inferred.Count == memberRoutineParams.Count
             ? inferred
             : null;
     }
@@ -546,9 +546,9 @@ public partial class LlvmCodeGenerator
     /// Handles direct params (T -> S64) and parameterized types (List[T] -> List[S64]).
     /// </summary>
     private static void InferFromTypes(TypeInfo paramType, TypeInfo argType,
-        HashSet<string> methodParams, Dictionary<string, TypeInfo> inferred)
+        HashSet<string> memberRoutineParams, Dictionary<string, TypeInfo> inferred)
     {
-        if (paramType is GenericParameterTypeInfo && methodParams.Contains(item: paramType.Name))
+        if (paramType is GenericParameterTypeInfo && memberRoutineParams.Contains(item: paramType.Name))
         {
             inferred.TryAdd(key: paramType.Name, value: argType);
             return;
@@ -562,19 +562,19 @@ public partial class LlvmCodeGenerator
             {
                 InferFromTypes(paramType: paramType.TypeArguments[index: i],
                     argType: argType.TypeArguments[index: i],
-                    methodParams: methodParams,
+                    memberRoutineParams: memberRoutineParams,
                     inferred: inferred);
             }
         }
     }
 
     /// <summary>
-    /// Looks up a method on a type and returns a fully-resolved bundle for codegen.
+    /// Looks up a memberRoutine on a type and returns a fully-resolved bundle for codegen.
     /// Generic instantiation must already be complete before this runs.
     /// </summary>
-    private ResolvedMemberRoutine? ResolveMemberRoutine(TypeInfo receiverType, string methodName,
+    private ResolvedMemberRoutine? ResolveMemberRoutine(TypeInfo receiverType, string memberRoutineName,
         bool? isFailable = null,
-        List<TypeInfo>? methodTypeArgs = null,
+        List<TypeInfo>? memberRoutineTypeArgs = null,
         List<TypeInfo>? argTypes = null)
     {
         receiverType = ApplyTypeSubstitutions(type: receiverType);
@@ -582,51 +582,51 @@ public partial class LlvmCodeGenerator
             .Select(selector: ApplyTypeSubstitutions)
             .ToList();
 
-        RoutineInfo? method = _registry.LookupMethod(type: receiverType,
-            methodName: methodName,
+        RoutineInfo? memberRoutine = _registry.LookupMemberRoutine(type: receiverType,
+            memberRoutineName: memberRoutineName,
             isFailable: isFailable);
-        if (method?.IsGenericDefinition == true && resolvedArgTypes is { Count: > 0 })
+        if (memberRoutine?.IsGenericDefinition == true && resolvedArgTypes is { Count: > 0 })
         {
-            method = _registry.LookupMethodOverload(type: receiverType,
-                methodName: methodName,
+            memberRoutine = _registry.LookupMemberRoutineOverload(type: receiverType,
+                memberRoutineName: memberRoutineName,
                 argTypes: resolvedArgTypes);
         }
 
-        if (method == null)
+        if (memberRoutine == null)
         {
             return null;
         }
 
-        if (methodTypeArgs is { Count: > 0 } ||
-            resolvedArgTypes is { Count: > 0 } && method.IsGenericDefinition)
+        if (memberRoutineTypeArgs is { Count: > 0 } ||
+            resolvedArgTypes is { Count: > 0 } && memberRoutine.IsGenericDefinition)
         {
             throw new InvalidOperationException(
-                $"Method-level generic instantiation for '{receiverType.FullName}.{methodName}' reached LLVM codegen. " +
+                $"member routine-level generic instantiation for '{receiverType.FullName}.{memberRoutineName}' reached LLVM codegen. " +
                 "Instantiate it before codegen.");
         }
 
-        if (method.IsGenericDefinition || method.OwnerType is GenericParameterTypeInfo)
+        if (memberRoutine.IsGenericDefinition || memberRoutine.OwnerType is GenericParameterTypeInfo)
         {
             // Synthesized wrapper forwarder: the raw generic-def-anchored version was returned
             // instead of the concrete instance. The concrete body will be emitted by Phase C;
             // return null so the caller falls back to a placeholder mangled name and the
             // define-vs-declare conflict is resolved at the final IR assembly step.
-            if (method is { IsSynthesized: true, WrapperForwarderInnerMethod: not null })
+            if (memberRoutine is { IsSynthesized: true, WrapperForwarderInnerMemberRoutine: not null })
                 return null;
             throw new InvalidOperationException(
-                $"Unresolved generic method '{receiverType.FullName}.{methodName}' reached LLVM codegen.");
+                $"Unresolved generic member routine '{receiverType.FullName}.{memberRoutineName}' reached LLVM codegen.");
         }
 
-        string mangledName = MangleRoutineName(routine: method);
+        string mangledName = MangleRoutineName(routine: memberRoutine);
 
         return new ResolvedMemberRoutine(
-            Routine: method,
+            Routine: memberRoutine,
             OwnerType: receiverType,
-            IsFailable: method.IsFailable,
-            ModulePath: method.ModulePath,
+            IsFailable: memberRoutine.IsFailable,
+            ModulePath: memberRoutine.ModulePath,
             MangledName: mangledName,
             IsMonomorphized: false,
-            MemberRoutineTypeArgs: null
+            memberRoutineTypeArgs: null
         );
     }
 
@@ -698,7 +698,7 @@ public partial class LlvmCodeGenerator
 
         receiverType = NormalizeRoutineLookupType(type: receiverType);
         returnType = NormalizeRoutineLookupType(type: returnType);
-        string lookupMethodName = GetMemberRoutineLookupName(routine);
+        string lookupMemberRoutineName = GetMemberRoutineLookupName(routine);
 
         bool ownerMismatch = receiverType != null &&
                              routine.OwnerType is { } ownerType and not ProtocolTypeInfo &&
@@ -710,22 +710,22 @@ public partial class LlvmCodeGenerator
              routine.IsGenericDefinition ||
              RoutineHasUnresolvedTypeArguments(routine: routine)))
         {
-            RoutineInfo? reboundMethod = _registry.LookupMethodOverload(type: receiverType,
-                methodName: lookupMethodName,
+            RoutineInfo? reboundMemberRoutine = _registry.LookupMemberRoutineOverload(type: receiverType,
+                memberRoutineName: lookupMemberRoutineName,
                 argTypes: argTypes);
-            reboundMethod ??= _registry.LookupMethod(type: receiverType,
-                methodName: lookupMethodName,
+            reboundMemberRoutine ??= _registry.LookupMemberRoutine(type: receiverType,
+                memberRoutineName: lookupMemberRoutineName,
                 isFailable: routine.IsFailable);
-            if (reboundMethod != null)
+            if (reboundMemberRoutine != null)
             {
-                return reboundMethod;
+                return reboundMemberRoutine;
             }
         }
 
         if (returnType != null && routine.Name == "create")
         {
-            RoutineInfo? reboundCreator = _registry.LookupMethodOverload(type: returnType,
-                methodName: "create",
+            RoutineInfo? reboundCreator = _registry.LookupMemberRoutineOverload(type: returnType,
+                memberRoutineName: "create",
                 argTypes: argTypes);
             reboundCreator ??= _registry.LookupRoutineOverload(
                 baseName: $"{returnType.Name}.create",
@@ -748,7 +748,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string GetMemberRoutineLookupName(RoutineInfo routine)
     {
-        // The bare method name is already the structured RoutineInfo.Name; BaseName is
+        // The bare memberRoutine name is already the structured RoutineInfo.Name; BaseName is
         // "Owner.name" (or "Module.name"), so its last dot-segment is exactly Name.
         return routine.Name;
     }

@@ -286,7 +286,7 @@ public enum TokenType
 
     /// <summary>
     /// Protocol declaration keyword.
-    /// Interface/trait contract defining method signatures that types must implement.
+    /// Interface/trait contract defining member routine signatures that types must implement.
     /// Types use 'obeys' keyword to implement protocols.
     /// </summary>
     Protocol,
@@ -328,7 +328,7 @@ public enum TokenType
 
 /// <summary>
     /// Static/class-level routine modifier.
-    /// No receiver (no 'me'), accessed via Type.method() syntax.
+    /// No receiver (no 'me'), accessed via Type.MemberRoutine() syntax.
     /// </summary>
     Common,
 
@@ -336,7 +336,7 @@ public enum TokenType
 
     #region Self References
 
-    /// <summary>Self reference keyword (me) - refers to the current instance in methods</summary>
+    /// <summary>Self reference keyword (me) - refers to the current instance in member routines</summary>
     Me,
 
     /// <summary>Self type keyword (Me) - the type of 'me', used in protocols for associated types</summary>
@@ -461,7 +461,7 @@ public enum TokenType
     /// <summary>Type alias/Resource management as keyword (type Foo as Bar, or 'as' in scoped access blocks)</summary>
     As,
 
-    /// <summary>Method/Type redefinition keyword (define A as B)</summary>
+    /// <summary>memberRoutine/Type redefinition keyword (define A as B)</summary>
     Define,
 
     /// <summary>No-operation pass keyword - placeholder for empty blocks</summary>

@@ -254,7 +254,7 @@ public partial class LlvmCodeGenerator
                 EmitLine(sb: _currentRoutineEntryAllocas, line: $"  store ptr null, ptr {varPtr}");
                 break;
             // Track record variables with RC wrapper fields for retain/release
-            case RecordTypeInfo { HasRCFields: true } rcRecord:
+            case RecordTypeInfo { HasRCMemberVariables: true } rcRecord:
                 _localRcRecordVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcRecord));
                 break;
         }
@@ -372,7 +372,7 @@ public partial class LlvmCodeGenerator
         // inferred varType is null or unresolved-generic. The earlier "ptr-typed" heuristic
         // was too loose — for `var x = entity.retain()`, the initializer's ResolvedType is
         // the fully-substituted `Retained[Entity[S64]]`, but the underlying routine's
-        // declared ReturnType is the universal-method-baked `Retained[Entity]` (with the
+        // declared ReturnType is the universal-memberRoutine-baked `Retained[Entity]` (with the
         // inner type-arg lost). TryResolveExplicitGenericCallReturnType reads
         // `routine.ReturnType` directly and would overwrite our correct varType with the
         // bare form. Only re-resolve when the existing varType is missing or still has
@@ -567,7 +567,7 @@ public partial class LlvmCodeGenerator
         string varPtr = $"%{llvmName}.addr";
 
         // Release old value's RC fields before overwrite
-        if (varType is RecordTypeInfo { HasRCFields: true } rcRecord)
+        if (varType is RecordTypeInfo { HasRCMemberVariables: true } rcRecord)
         {
             EmitRcRecordRelease(sb: sb, llvmAddr: varPtr, recordType: rcRecord);
         }
@@ -797,7 +797,7 @@ public partial class LlvmCodeGenerator
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
-        RoutineInfo? setItem = LookupSetItemMethod(index: index);
+        RoutineInfo? setItem = LookupSetItemMemberRoutine(index: index);
 
         // Record setitem!: the receiver must be the alloca pointer so mutations persist in the
         // caller's frame. EmitMemberRoutineCall evaluates the receiver as a loaded value, which would
@@ -810,7 +810,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Entity/generic dispatch: synthesize `obj.setitem[!](index, rhs)` and delegate to
-        // EmitMemberRoutineCall, reusing the owner-/method-level generic monomorphization machinery.
+        // EmitMemberRoutineCall, reusing the owner-/memberRoutine-level generic monomorphization machinery.
         // OperatorLoweringPass annotates `index.ResolvedSetItem`; prefer it over a fresh lookup so
         // codegen bypasses the generic-definition guard.
         RoutineInfo? dispatchSetItem = index.ResolvedSetItem ?? setItem;
@@ -848,7 +848,7 @@ public partial class LlvmCodeGenerator
         // Wrapper-record detection: if the resolved setitem's value-param type doesn't match the
         // target's last type-argument, the lookup unwrapped through a wrapper (e.g.
         // Owned[List[S64]] -> inner List[S64].setitem!(i64)) — that symbol doesn't exist inline, so
-        // escape to the standard method-dispatch path. Skipped for const-generic owners (never
+        // escape to the standard memberRoutine-dispatch path. Skipped for const-generic owners (never
         // wrapper forwarders).
         bool isWrapperForwardingSetItem =
             setItem.Parameters.Count >= 2 &&
@@ -900,7 +900,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Fallback index store: raw GEP + store for pointer/contiguous-memory types with no
-    /// <c>setitem</c> method.
+    /// <c>setitem</c> memberRoutine.
     /// </summary>
     private void EmitRawIndexStore(StringBuilder sb, IndexExpression index, Expression rhs,
         TypeInfo? targetType)
@@ -927,9 +927,9 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Looks up the setitem method for an indexed target, handling failable names and generic types.
+    /// Looks up the setitem memberRoutine for an indexed target, handling failable names and generic types.
     /// </summary>
-    private RoutineInfo? LookupSetItemMethod(IndexExpression index)
+    private RoutineInfo? LookupSetItemMemberRoutine(IndexExpression index)
     {
         TypeInfo? targetType = GetExpressionType(expr: index.Object);
         if (targetType == null)
@@ -940,7 +940,7 @@ public partial class LlvmCodeGenerator
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
-        return _registry.LookupMethod(type: targetType, methodName: "setitem");
+        return _registry.LookupMemberRoutine(type: targetType, memberRoutineName: "setitem");
     }
 
     #endregion
@@ -1003,14 +1003,14 @@ public partial class LlvmCodeGenerator
 
             // Unified teardown: tear the RC-wrapper field down via its `destroy` (which forwards
             // to `release`→controller), not `release` directly — keeps every teardown on one verb.
-            RoutineInfo? destroyMethod = _registry.LookupMethod(type: w, methodName: "destroy");
-            if (destroyMethod == null)
+            RoutineInfo? destroyMemberRoutine = _registry.LookupMemberRoutine(type: w, memberRoutineName: "destroy");
+            if (destroyMemberRoutine == null)
             {
                 continue;
             }
 
-            GenerateRoutineDeclaration(routine: destroyMethod);
-            string mangled = MangleRoutineName(routine: destroyMethod);
+            GenerateRoutineDeclaration(routine: destroyMemberRoutine);
+            string mangled = MangleRoutineName(routine: destroyMemberRoutine);
             string fieldLlvm = GetParameterLlvmType(type: w);
             EmitLine(sb: sb, line: $"  call void @{mangled}({fieldLlvm} {fieldVal})");
         }
@@ -1052,9 +1052,9 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        RoutineInfo? releaseMethod =
-            _registry.LookupMethod(type: recordType, methodName: "destroy");
-        if (releaseMethod == null)
+        RoutineInfo? releaseMemberRoutine =
+            _registry.LookupMemberRoutine(type: recordType, memberRoutineName: "destroy");
+        if (releaseMemberRoutine == null)
         {
             return;
         }
@@ -1063,8 +1063,8 @@ public partial class LlvmCodeGenerator
         string loaded = NextTemp();
         EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
 
-        GenerateRoutineDeclaration(routine: releaseMethod);
-        string mangled = MangleRoutineName(routine: releaseMethod);
+        GenerateRoutineDeclaration(routine: releaseMemberRoutine);
+        string mangled = MangleRoutineName(routine: releaseMemberRoutine);
         string rcLlvm = GetParameterLlvmType(type: recordType);
 
         // Null-check guard: conditionally-declared RC wrapper bindings (e.g. a

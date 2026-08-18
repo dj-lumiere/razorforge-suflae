@@ -200,7 +200,7 @@ public sealed class StdlibApiTests
         // 2b) stderr must be CLEAN. The build's own progress banners go to stdout; anything on stderr is
         // a diagnostic — a compiler warning/error or a runtime fault. These are silently swallowed if we
         // only check stdout+exit (that is exactly how a flood of "Synthesized body codegen failed" /
-        // "Unresolved generic method 'Core.Dict.create'" warnings hid for so long). Fail on any of them.
+        // "Unresolved generic memberRoutine 'Core.Dict.create'" warnings hid for so long). Fail on any of them.
         string[] offending = run.Stderr
             .Split('\n')
             .Select(selector: l => l.TrimEnd('\r'))

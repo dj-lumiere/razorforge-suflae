@@ -44,7 +44,7 @@ public class ErrorHandlingPatternTests
     }
 
     /// <summary>
-    /// Verifies that Maybe[T] (T?) IS allowed as a routine parameter type — it is a storable
+    /// Verifies that Maybe[T] (T?) IS allowed as a routine parameter type — it is a Assignable
     /// presence-carrying value, unlike Result/Lookup.
     /// </summary>
     [Fact]

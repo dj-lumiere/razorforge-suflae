@@ -21,12 +21,12 @@ namespace Compiler.Resolution;
 internal static class ImplicitCallContract
 {
     /// <summary>
-    /// The <c>(owner, methodName)</c> pairs codegen implicitly inserts for a value of
+    /// The <c>(owner, memberRoutineName)</c> pairs codegen implicitly inserts for a value of
     /// <paramref name="liveType"/>. The caller resolves each against the registry and seeds it.
     /// Only genuine no-AST-node insertions belong here — routines reached through a real (even
     /// synthesized) AST call are walked normally and must NOT be listed.
     /// </summary>
-    public static IEnumerable<(TypeInfo owner, string methodName)> ForLiveType(TypeInfo liveType)
+    public static IEnumerable<(TypeInfo owner, string memberRoutineName)> ForLiveType(TypeInfo liveType)
     {
         // Structured base-name classification (canonical helper — prefers the generic definition's
         // BareName, no ad-hoc bracket parsing). Returns null for anything that isn't an RC wrapper.
@@ -35,7 +35,7 @@ internal static class ImplicitCallContract
         // RC wrappers: codegen inserts the RC copy verb `share` (refcount-bump co-owner mint) on every
         // var binding of this wrapper (and on PLP-synthesized else-pattern bindings that appear after
         // reachability runs). Renamed from the STEP-3 unified `store` — RC's copy is the explicit-share op,
-        // distinct from value-record `store`; seeded here (not via the WiredRoutineCatalog Storable entry).
+        // distinct from value-record `store`; seeded here (not via the WiredRoutineCatalog Assignable entry).
         if (ownerBase != null)
             yield return (liveType, RuntimeContract.RefCount.Share);
 
@@ -43,13 +43,13 @@ internal static class ImplicitCallContract
             yield break;
 
         // Roamed[T]: promote at spawn boundaries, lock_enter/lock_exit around direct field access,
-        // raw_inner for argument projection (Roamed arg → bare param), control for the method-dispatch
+        // raw_inner for argument projection (Roamed arg → bare param), control for the memberRoutine-dispatch
         // receiver deref (Roamed obeys Controlling; RoamedProjectionLoweringPass coerces a Roamed
         // receiver to its inner via control) — all on the Roamed handle itself.
-        yield return (liveType, RuntimeContract.RoamedMethod.Promote);
-        yield return (liveType, RuntimeContract.RoamedMethod.LockEnter);
-        yield return (liveType, RuntimeContract.RoamedMethod.LockExit);
-        yield return (liveType, RuntimeContract.RoamedMethod.RawInner);
+        yield return (liveType, RuntimeContract.RoamedMemberRoutine.Promote);
+        yield return (liveType, RuntimeContract.RoamedMemberRoutine.LockEnter);
+        yield return (liveType, RuntimeContract.RoamedMemberRoutine.LockExit);
+        yield return (liveType, RuntimeContract.RoamedMemberRoutine.RawInner);
         yield return (liveType, RuntimeContract.Control);
 
         // Display transparency: codegen re-resolves represent/diagnose on the Roamed handle to the

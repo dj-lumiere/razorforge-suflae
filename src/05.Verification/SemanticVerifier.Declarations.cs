@@ -597,9 +597,9 @@ public sealed partial class SemanticVerifier
         else if (routine.Name.Contains(value: '.'))
         {
             // Member routine syntax: "Type.routine" or "Type[T].routine". The parser already split
-            // the owner base (args-stripped) and method into structured fields — read them instead of
+            // the owner base (args-stripped) and member routine into structured fields — read them instead of
             // re-parsing the concatenated Name (name-canonicalization).
-            routineName = routine.MethodName!;
+            routineName = routine.MemberRoutineName!;
 
             kind = RoutineKind.MemberRoutine;
 
@@ -632,7 +632,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Validate that choice types cannot define any operator wired methods
+        // Validate that choice types cannot define any operator wired member routines
         if (ownerType is ChoiceTypeInfo && kind == RoutineKind.MemberRoutine &&
             IsOperatorWired(name: routineName))
         {
@@ -643,7 +643,7 @@ public sealed partial class SemanticVerifier
                 location: routine.Location);
         }
 
-        // #135: Flags types cannot define any operator wired methods
+        // #135: Flags types cannot define any operator wired member routines
         if (ownerType is FlagsTypeInfo && kind == RoutineKind.MemberRoutine &&
             IsOperatorWired(name: routineName))
         {
@@ -663,12 +663,12 @@ public sealed partial class SemanticVerifier
             ? routineName[(routineName.IndexOf(value: '.') + 1)..]
             : routineName;
 
-        // Validate $ prefixed names are known built-in methods
-        if (IsUnknownWiredMethod(bareName: baseName, isWired: routine.IsWiredMemberRoutine))
+        // Validate $ prefixed names are known built-in member routines
+        if (IsUnknownWiredMemberRoutine(bareName: baseName, isWired: routine.IsWiredMemberRoutine))
         {
             ReportError(code: SemanticDiagnosticCode.UnknownWiredRoutine,
                 message: $"Routine name '${baseName}' uses reserved '$' prefix. " +
-                         "Names starting with '$' are reserved for built-in methods.",
+                         "Names starting with '$' are reserved for built-in memberRoutines.",
                 location: routine.Location);
         }
 
@@ -762,7 +762,7 @@ public sealed partial class SemanticVerifier
     #region Phase 5: Protocol Implementation Validation
 
     /// <summary>
-    /// Validates that all types declaring "obeys Protocol" implement all required protocol methods.
+    /// Validates that all types declaring "obeys Protocol" implement all required protocol member routines.
     /// This is called after all routines are registered (Phase 4.1) and derived operators are generated.
     /// </summary>
     private void ValidateProtocolImplementations()
@@ -774,12 +774,12 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Validates that a specific type implements all methods required by its declared protocols.
+    /// Validates that a specific type implements all member routines required by its declared protocols.
     /// </summary>
     private void ValidateTypeProtocolImplementation(TypeSymbol type)
     {
         // Skip stdlib/fallback types (types without source location or in Core module)
-        // These are pre-defined types that may not have full method implementations in test environments
+        // These are pre-defined types that may not have full member routine implementations in test environments
         if (type.Location == null || string.IsNullOrEmpty(value: type.Location.FileName))
         {
             return;
@@ -823,7 +823,7 @@ public sealed partial class SemanticVerifier
 
             if (!_implicitProtocolConformances.Contains(item: (type.FullName, protoInfo.Name)))
             {
-                ValidateProtocolMethods(type: type, protocol: protoInfo);
+                ValidateProtocolMemberRoutines(type: type, protocol: protoInfo);
             }
         }
 
@@ -833,7 +833,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Closed allowlist of stdlib wrappers permitted to declare <c>obeys Accessing[T]</c> or
     /// <c>obeys Controlling[T]</c> (directly or transitively). Marker protocols type-erase in
-    /// codegen — bodies of routines with marker-protocol params call T's methods on the raw ptr,
+    /// codegen — bodies of routines with marker-protocol params call T's member routines on the raw ptr,
     /// so every obeyer must share T's ptr layout. Enforcing this via a closed list (not a
     /// heuristic like @llvm("ptr")) blocks user-defined obeyers with extra fields / non-ptr
     /// representation that would silently misread the layout at runtime.
@@ -915,62 +915,62 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Validates that a type implements all methods required by a protocol.
+    /// Validates that a type implements all member routines required by a protocol.
     /// </summary>
-    private void ValidateProtocolMethods(TypeSymbol type, ProtocolTypeInfo protocol) // NOSONAR S3776
+    private void ValidateProtocolMemberRoutines(TypeSymbol type, ProtocolTypeInfo protocol) // NOSONAR S3776
     {
-        foreach (ProtocolMethodInfo requiredMethod in protocol.Methods)
+        foreach (ProtocolMemberRoutineInfo requiredMemberRoutine in protocol.MemberRoutines)
         {
-            // Skip methods with default implementations
-            if (requiredMethod.HasDefaultImplementation)
+            // Skip member routines with default implementations
+            if (requiredMemberRoutine.HasDefaultImplementation)
             {
                 continue;
             }
 
             // Skip auto-derived failable variants. These `try_X` / `check_X` / `lookup_X`
-            // entries are synthesized by FillProtocolMethods from the failable original
+            // entries are synthesized by FillProtocolMemberRoutines from the failable original
             // (`X!`) so call sites typed against the bare protocol can resolve them. The
             // implementer only owes the failable original — ErrorHandlingVariantPass
             // generates the variants on user types at synthesis time. A protocol-declared
             // `try_X` written by hand (no auto-derivation flag) still produces an obligation.
-            if (requiredMethod.IsAutoDerivedVariant)
+            if (requiredMemberRoutine.IsAutoDerivedVariant)
             {
                 continue;
             }
 
-            // Look for the method on the type (not on its protocols — that would find the protocol's own declaration)
+            // Look for the member routine on the type (not on its protocols — that would find the protocol's own declaration)
             // Routine names are bare; the failable `!` is a structured flag. Match the bare name,
             // then (for a failable requirement) fall back to a same-named failable implementation.
-            IEnumerable<RoutineInfo> ownMethods = _registry.GetMethodsForType(type: type);
-            RoutineInfo? typeMethod =
-                ownMethods.FirstOrDefault(predicate: m => m.Name == requiredMethod.Name);
-            if (typeMethod == null && requiredMethod.IsFailable)
+            IEnumerable<RoutineInfo> ownMemberRoutines = _registry.GetMemberRoutinesForType(type: type);
+            RoutineInfo? typeMemberRoutine =
+                ownMemberRoutines.FirstOrDefault(predicate: m => m.Name == requiredMemberRoutine.Name);
+            if (typeMemberRoutine == null && requiredMemberRoutine.IsFailable)
             {
-                typeMethod =
-                    ownMethods.FirstOrDefault(predicate: m =>
-                        m.Name == requiredMethod.Name && m.IsFailable);
+                typeMemberRoutine =
+                    ownMemberRoutines.FirstOrDefault(predicate: m =>
+                        m.Name == requiredMemberRoutine.Name && m.IsFailable);
             }
 
-            if (typeMethod == null)
+            if (typeMemberRoutine == null)
             {
-                ReportError(code: SemanticDiagnosticCode.MissingProtocolMethod,
+                ReportError(code: SemanticDiagnosticCode.MissingProtocolMemberRoutine,
                     message:
-                    $"Type '{type.Name}' declares 'obeys {protocol.Name}' but does not implement required method '{requiredMethod.Name}'.",
+                    $"Type '{type.Name}' declares 'obeys {protocol.Name}' but does not implement required memberRoutine '{requiredMemberRoutine.Name}'.",
                     location: type.Location ?? new SourceLocation(FileName: "",
                         Line: 0,
                         Column: 0,
                         Position: 0));
             }
-            else if (requiredMethod.GenerationKind == ProtocolRoutineKind.Innate &&
-                     !typeMethod.IsSynthesized)
+            else if (requiredMemberRoutine.GenerationKind == ProtocolRoutineKind.Innate &&
+                     !typeMemberRoutine.IsSynthesized)
             {
                 ReportError(code: SemanticDiagnosticCode.InnateOverrideNotAllowed,
                     message:
-                    $"Cannot override innate routine '{protocol.Name}.{requiredMethod.Name}'. " +
+                    $"Cannot override innate routine '{protocol.Name}.{requiredMemberRoutine.Name}'. " +
                     "Innate routines are compiler-provided and cannot be overridden.",
-                    location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
+                    location: typeMemberRoutine.Location ?? new SourceLocation("", 0, 0, 0));
             }
-            else if (typeMethod != null)
+            else if (typeMemberRoutine != null)
             {
                 // #61: Protocol mutation contract validation. The implementation must not be MORE
                 // mutating than the protocol declares (Readonly < Writable < Migratable): callers
@@ -978,14 +978,14 @@ public sealed partial class SemanticVerifier
                 // a Modifying token for the writable default — so an impl that mutates or relocates
                 // beyond that contract would be unsound (a Migratable impl behind a Writable protocol
                 // could relocate mid-iteration through a Modifying token, invalidating iterators).
-                if (typeMethod.MutationCategory > requiredMethod.Mutation)
+                if (typeMemberRoutine.MutationCategory > requiredMemberRoutine.Mutation)
                 {
                     ReportError(code: SemanticDiagnosticCode.ProtocolMutationContractViolation,
                         message:
-                        $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be " +
-                        $"@{requiredMethod.Mutation.ToString().ToLowerInvariant()} (or less mutating), " +
-                        $"but implementation on '{type.Name}' is @{typeMethod.MutationCategory.ToString().ToLowerInvariant()}.",
-                        location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
+                        $"Protocol '{protocol.Name}' requires '{requiredMemberRoutine.Name}' to be " +
+                        $"@{requiredMemberRoutine.Mutation.ToString().ToLowerInvariant()} (or less mutating), " +
+                        $"but implementation on '{type.Name}' is @{typeMemberRoutine.MutationCategory.ToString().ToLowerInvariant()}.",
+                        location: typeMemberRoutine.Location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
         }
@@ -993,7 +993,7 @@ public sealed partial class SemanticVerifier
         // Also check parent protocols
         foreach (ProtocolTypeInfo parentProtocol in protocol.ParentProtocols)
         {
-            ValidateProtocolMethods(type: type, protocol: parentProtocol);
+            ValidateProtocolMemberRoutines(type: type, protocol: parentProtocol);
         }
     }
 

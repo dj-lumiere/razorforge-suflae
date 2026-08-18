@@ -107,7 +107,7 @@ public class IterPrivacyTests
     [Fact]
     public void UserCode_DefinesDollarIter_OnRecord_Allowed()
     {
-        // Declaring a `$iter` method on a user type is fine — the prohibition is on
+        // Declaring a `$iter` memberRoutine on a user type is fine — the prohibition is on
         // *calling* `$iter` from user code, not on implementing the protocol.
         string source = """
                         record Bag

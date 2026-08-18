@@ -27,7 +27,7 @@ using TypeSymbol = TypeInfo;
 /// <summary>
 /// Semantic analyzer for RazorForge and Suflae programs.
 /// Performs type checking, scope analysis, and inference for:
-/// - Method modification (readonly/writable/migratable)
+/// - memberRoutine modification (readonly/writable/migratable)
 /// - Migratable modification tracking (buffer relocation detection)
 /// - Error handling variant generation (try_/check_/lookup_)
 /// </summary>
@@ -223,7 +223,7 @@ public sealed partial class SemanticVerifier
     private Dictionary<string, Statement> _variantBodies = new();
 
     /// <summary>
-    /// Concrete generic method bodies produced by <see cref="GenericMonomorphizationPass"/>.
+    /// Concrete generic memberRoutine bodies produced by <see cref="GenericMonomorphizationPass"/>.
     /// Captured from <see cref="DesugaringContext.InstantiatedGenericBodies"/> in
     /// <see cref="RunPhase6GlobalDesugaring"/> and forwarded to <see cref="AnalysisResult"/>.
     /// </summary>
@@ -527,7 +527,7 @@ public sealed partial class SemanticVerifier
         // Re-run AutoRegisterWiredRoutines first so user variants (registered in Phase 3
         // per-file via PreRegisterUserVariants, AFTER the Phase 3 global AutoRegister sweep)
         // get their represent/diagnose stubs registered before WiredRoutinePass synthesizes
-        // bodies. MaybeRegisterWired is idempotent on existing methods.
+        // bodies. MaybeRegisterWired is idempotent on existing memberRoutines.
         AutoRegisterWiredRoutines();
         var lateCtx = new DesugaringContext(registry: _registry,
             routineBodies: _routineBodies,
@@ -558,7 +558,7 @@ public sealed partial class SemanticVerifier
         {
             // Include wrapper forwarders AND derived operators on generic owner types.
             // GMP must monomorphize both; Phase C must not emit the generic-def version.
-            if (pair.Routine.WrapperForwarderInnerMethod != null ||
+            if (pair.Routine.WrapperForwarderInnerMemberRoutine != null ||
                 pair.Routine.OwnerType?.IsGenericDefinition == true)
                 mergedVariantBodies[key] = pair.Body;
         }
@@ -643,7 +643,7 @@ public sealed partial class SemanticVerifier
 
         // Expand `is Crashable err` clauses BEFORE reachability so that the new
         // per-crashable `err.crash_message()` calls participate in liveness analysis.
-        // Without this, the fanout happens in Phase 8 and the crash_message method on
+        // Without this, the fanout happens in Phase 8 and the crash_message memberRoutine on
         // each concrete crashable is never marked reachable -> linker errors.
         {
             var crashablePass = new CrashableExpansionPass(markerCtx);
@@ -922,7 +922,7 @@ public sealed partial class SemanticVerifier
         int errorsBefore = _errors.Count;
 
         // The operator-protocol conformance gate (AnalyzeBinaryExpression) relies on STRUCTURAL
-        // conformance, whose derived operator methods (e.g. ByteSize's wrapping-multiply) are only
+        // conformance, whose derived operator memberRoutines (e.g. ByteSize's wrapping-multiply) are only
         // fully materialized by the FULL pipeline — this reduced validation phase runs a trimmed
         // GenerateDerivedOperators, so structural conformance under-reports and the gate false-fires
         // on stdlib operators that the full-pipeline StdlibHarness already validates. Suppress the gate
@@ -1198,7 +1198,7 @@ public sealed partial class SemanticVerifier
         }
         Mark(label: "Phase 6 pre-file -> PreRegisterUserVariants");
 
-        // Phase 6 global (pre-pass): pre-register stdlib failable method variants (try_emit, try_recover, etc.)
+        // Phase 6 global (pre-pass): pre-register stdlib failable memberRoutine variants (try_emit, try_recover, etc.)
         // Must run before Phase 5 body analysis and before Phase 7 syntax prepass
         // (ControlFlowLoweringPass generates try_emit calls that Phase 5 must resolve).
         PreRegisterStdlibVariants();
@@ -1636,7 +1636,7 @@ public sealed partial class SemanticVerifier
 
     #endregion
 
-    #region Helper Methods
+    #region Helper memberRoutines
 
     /// <summary>
     /// Walks the current scope chain and returns the fully-qualified module name

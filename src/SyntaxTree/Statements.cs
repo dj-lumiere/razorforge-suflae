@@ -37,7 +37,7 @@ public abstract record Statement(SourceLocation Location) : SyntaxTreeNode(Locat
 /// Common uses include:
 /// <list type="bullet">
 /// <item>Function calls that modify state: print("Hello"), array.append(item)</item>
-/// <item>Method invocations: object.doSomething()</item>
+/// <item>memberRoutine invocations: object.doSomething()</item>
 /// <item>Assignment operators: x += 5</item>
 /// </list>
 /// </remarks>

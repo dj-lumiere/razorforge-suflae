@@ -66,9 +66,9 @@ public sealed partial class SemanticVerifier
         _currentType = ownerType;
         foreach (Declaration member in members)
         {
-            if (member is RoutineDeclaration { Body: not PassStatement } method)
+            if (member is RoutineDeclaration { Body: not PassStatement } memberRoutine)
             {
-                AnalyzeFunctionBody(routine: method);
+                AnalyzeFunctionBody(routine: memberRoutine);
             }
         }
         _currentType = prevType;
@@ -79,33 +79,33 @@ public sealed partial class SemanticVerifier
         // Opt-in-capability derive templates (`@overridable/@override routine T.eq/cmp()` with a
         // bare generic-param owner) are comptime macros consumed ONLY by the wired per-type
         // synthesizer (WiredRoutinePass.CloneUniversalDeriveBody → post-GMP lowering resolves the
-        // operators). Unlike represent/diagnose, they are NOT registered as live universal methods
+        // operators). Unlike represent/diagnose, they are NOT registered as live universal memberRoutines
         // (see StdlibLoader.Registration), so no GMP instance relies on the template body being
         // SA-annotated. Analyzing the raw template pre-monomorphization is meaningless and
         // spuriously errors (unresolved `T`-typed `you:` param, splice `!=`, unknown `SAME`), so
         // skip it. represent/diagnose stay analyzed — their registered universal instances need the
         // SA annotation. Concrete-owner `@override`s (e.g. `MyType.eq`) resolve their owner normally.
-        // Structural owner/method (name-canonicalization): the parser split the dotted name into
-        // OwnerName + MethodName + HasReceiverTypeArgs, so we no longer re-parse the `Name` string.
+        // Structural owner/memberRoutine (name-canonicalization): the parser split the dotted name into
+        // OwnerName + memberRoutineName + HasReceiverTypeArgs, so we no longer re-parse the `Name` string.
         // The template is a UNIVERSAL derive when its owner is a bare type-parameter placeholder — no
         // receiver type-args (not `List[T].foo`) AND the owner name doesn't resolve to a real type
         // (it's the `T` placeholder, not a concrete-owner `MyType.eq` override).
         if (_currentType == null
             && (routine.Annotations.Contains(item: "overridable")
                 || routine.Annotations.Contains(item: "override"))
-            && routine.MethodName is { } method
+            && routine.MemberRoutineName is { } memberRoutine
             && routine.OwnerName is { } ownerName
             && !routine.HasReceiverTypeArgs
             && LookupTypeWithImports(name: ownerName) == null)
         {
-            // Skip SA for an OPT-IN derive template. It isn't registered as a live universal method
+            // Skip SA for an OPT-IN derive template. It isn't registered as a live universal memberRoutine
             // (see StdlibLoader.Registration), so its bare owner placeholder `T` is unbound during SA —
             // `expand m in memvarof(T)`, a `you: T` param, etc. would spuriously error (RF-S100). The
             // per-type body instead comes from the derive-template store via CloneUniversalDeriveBody,
             // which unrolls the `expand` against the concrete type post-monomorph. The auto-conferred
             // display derives (represent/diagnose) ARE registered universals → `T` is bound → they stay
-            // analyzed. Protocol-grounded via the wired catalog, not a per-method name list.
-            if (!Compiler.Resolution.WiredRoutineCatalog.IsAutoConferredDerive(method: method))
+            // analyzed. Protocol-grounded via the wired catalog, not a per-memberRoutine name list.
+            if (!Compiler.Resolution.WiredRoutineCatalog.IsAutoConferredDerive(memberRoutine: memberRoutine))
                 return;
         }
 
@@ -133,13 +133,13 @@ public sealed partial class SemanticVerifier
         }
         else if (routine.Name.Contains(value: '.'))
         {
-            // Extension method syntax (e.g., "List[T].add_last"): method + args-stripped owner base
+            // Extension memberRoutine syntax (e.g., "List[T].add_last"): memberRoutine + args-stripped owner base
             // come from the parser's structural fields; `typeName` (owner WITH type-args) is still
             // needed for the bracketed protocol-extension registry lookup below — that registry-key
             // string form only lives in Name (ResolveType(ReceiverType) resolves differently here).
             int dotIndex = routine.Name.IndexOf(value: '.');
             string typeName = routine.Name[..dotIndex];
-            string methodName = routine.MethodName!;
+            string memberRoutineName = routine.MemberRoutineName!;
             TypeSymbol? ownerType = LookupTypeWithImports(name: routine.OwnerName!);
             // Protocol-extension decls like `Iterable[Text].join` should have `me` typed as the
             // bracketed owner so the body's `for part in me` resolves `part` from
@@ -156,7 +156,7 @@ public sealed partial class SemanticVerifier
             routineOwnerType = ownerType;
 
             baseName = ownerType != null
-                ? $"{RoutineInfo.GetTypeIdentity(type: ownerType)}.{methodName}"
+                ? $"{RoutineInfo.GetTypeIdentity(type: ownerType)}.{memberRoutineName}"
                 : routine.Name;
         }
         else
@@ -243,14 +243,14 @@ public sealed partial class SemanticVerifier
             routineInfo = _registry.LookupRoutine(fullName: registryKey,
                 isFailable: routine.IsFailable);
 
-            // Fallback: extension methods on concrete generic specializations
+            // Fallback: extension memberRoutines on concrete generic specializations
             // (e.g., `List[Byte].create`) register under the concrete owner type,
             // producing a RegistryKey like `Core.List[Core.Byte].create#Core.Bytes`.
             // The first lookup above used the generic-def-normalized owner
             // (`Core.List[T].create`), so it missed. Resolve the concrete owner
             // type from the routine name and rebuild the canonical key.
             if (routineInfo == null && routine.HasReceiverTypeArgs
-                && routine.ReceiverType is { } ownerExpr && routine.MethodName is { } mName)
+                && routine.ReceiverType is { } ownerExpr && routine.MemberRoutineName is { } mName)
             {
                 // Structured receiver from the parser (was: re-parse the owner substring of Name).
                 TypeSymbol resolvedOwner = ResolveType(typeExpr: ownerExpr);
@@ -272,7 +272,7 @@ public sealed partial class SemanticVerifier
         routineInfo ??= _registry.LookupRoutine(fullName: baseName);
 
         // Fall back to the original concrete-specialization name (e.g., "Core.List[U16].decode_as_utf16")
-        // for extension methods registered under the concrete owner type rather than the generic def.
+        // for extension memberRoutines registered under the concrete owner type rather than the generic def.
         if (routineInfo == null && routine.Name.Contains(value: '['))
         {
             string? module = GetCurrentModuleName();
@@ -283,13 +283,13 @@ public sealed partial class SemanticVerifier
                 ?? _registry.LookupRoutineByQualifiedName(qualifiedName: concreteName);
         }
 
-        // Final fallback: scan all routines for one with the same method name.
-        // Tolerates registration/verification key mismatches for overloaded extension methods
+        // Final fallback: scan all routines for one with the same memberRoutine name.
+        // Tolerates registration/verification key mismatches for overloaded extension memberRoutines
         // and concrete generic specializations. Prefer matching IsFailable to disambiguate
         // overloads that share a base name but differ on '!'.
-        if (routineInfo == null && routine.MethodName is { } lastMethodName)
+        if (routineInfo == null && routine.MemberRoutineName is { } lastMemberRoutineName)
         {
-            routineInfo = _registry.LookupAnyByMethodName(methodName: lastMethodName,
+            routineInfo = _registry.LookupAnyByMemberRoutineName(memberRoutineName: lastMemberRoutineName,
                 isFailable: routine.IsFailable);
         }
 
@@ -512,7 +512,7 @@ public sealed partial class SemanticVerifier
 
     #endregion
 
-    #region Statement Analysis Methods
+    #region Statement Analysis memberRoutines
 
     private void AnalyzeVariantReturnStatement(VariantReturnStatement variantReturn)
     {
@@ -652,17 +652,17 @@ public sealed partial class SemanticVerifier
         }
 
         // RazorForge: keeping a value with NO STORE. The dividing line for an implicit bind is whether
-        // the value can be STORED — i.e. whether its type obeys `Storable` (every value type does: a
+        // the value can be STORED — i.e. whether its type obeys `Assignable` (every value type does: a
         // trivial record via the auto-derived bitwise store, a managed leaf like Text via its retaining
-        // store). A single-owner `entity` deliberately obeys no `Storable`, so it has no copy of its own.
+        // store). A single-owner `entity` deliberately obeys no `Assignable`, so it has no copy of its own.
         // A bind whose initializer is a VIEW of a value someone else owns — a bare reference (`var x = a`)
         // or an element read (`var x = a[i]`) — would make TWO owners of that one entity, so it is
         // rejected. A fresh owned producer (creator / in-flight call) and an explicit `steal` are MOVES,
-        // not views, and are allowed. (SF entity elements are `Roamed`, which DOES obey Storable via its
+        // not views, and are allowed. (SF entity elements are `Roamed`, which DOES obey Assignable via its
         // refcount retain — so this never fires in Suflae.)
         // The store-less set is EXACTLY the entities: every value category (records, tuples, routines,
         // SIMD vectors, generic records) is copyable via an auto-derived bitwise or field-wise store, so
-        // `obeys Storable` under-reports them — `EntityTypeInfo` is the precise predicate for "has no
+        // `obeys Assignable` under-reports them — `EntityTypeInfo` is the precise predicate for "has no
         // store of its own". (SF entity elements are `Roamed`, a record wrapper, not an `EntityTypeInfo`.)
         // A tuple element access (`_t.item0`) is how `var (a, b) = expr` destructuring lowers: the tuple
         // is a CONSUMED temporary, so each element MOVES out — not a view of a persisting owner. Exclude it
@@ -738,12 +738,12 @@ public sealed partial class SemanticVerifier
         // hard error once stdlib migration completes (Phase 2).
         else if (_registry.Language == Language.RazorForge &&
             varDecl.Initializer is IdentifierExpression or MemberExpression &&
-            !IsTriviallyStorable(type: varType))
+            !IsTriviallyAssignable(type: varType))
         {
-            var hint = FindNonTriviallyStorableWrapper(type: varType);
+            var hint = FindNonTriviallyAssignableWrapper(type: varType);
             if (hint != null)
             {
-                string verb = NonTriviallyStorableWrappers[key: hint.Value.Wrapper];
+                string verb = NonTriviallyAssignableWrappers[key: hint.Value.Wrapper];
                 string fieldNote = hint.Value.Path == "<value>"
                     ? $"type '{varType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
                     : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";
@@ -940,13 +940,13 @@ public sealed partial class SemanticVerifier
                 }
             }
 
-            // Check if we're in a @readonly method trying to mutate 'me'
+            // Check if we're in a @readonly memberRoutine trying to mutate 'me'
             if (_currentRoutine is { IsReadOnly: true } &&
                 member.Object is IdentifierExpression { Name: "me" })
             {
-                ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
+                ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
                     message:
-                    $"Cannot mutate member variable '{member.MemberName}' in a @readonly method. " +
+                    $"Cannot mutate member variable '{member.MemberName}' in a @readonly member routine. " +
                     "Use @migratable to allow mutations.",
                     location: assign.Location);
             }

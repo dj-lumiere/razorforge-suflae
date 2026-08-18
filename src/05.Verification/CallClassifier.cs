@@ -25,14 +25,14 @@ internal static class CallClassifier
     }
 
     /// <summary>
-    /// Performs the classify method call step for this compiler phase.
+    /// Performs the classify memberRoutine call step for this compiler phase.
     /// </summary>
-    internal static CallLoweringKind ClassifyMethodCall(RoutineInfo method)
+    internal static CallLoweringKind ClassifyMemberRoutineCall(RoutineInfo memberRoutine)
     {
-        if (method.LlvmIrTemplate != null)
+        if (memberRoutine.LlvmIrTemplate != null)
             return CallLoweringKind.LlvmIntrinsic;
 
-        if (method.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(name: method.Name))
+        if (memberRoutine.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(name: memberRoutine.Name))
             return CallLoweringKind.BuilderIntrinsic;
 
         return CallLoweringKind.DirectMemberRoutine;

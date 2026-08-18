@@ -21,9 +21,9 @@ internal sealed class ReachableGenericCollectionPass(InstantiationContext ctx)
                 _ => concreteType
             };
 
-            foreach (var method in ctx.Registry.GetMethodsForType(genericDefinition))
+            foreach (var memberRoutine in ctx.Registry.GetMemberRoutinesForType(genericDefinition))
             {
-                ctx.ReachableGenericRoutines.Add(item: $"{concreteType.FullName}.{method.Name}");
+                ctx.ReachableGenericRoutines.Add(item: $"{concreteType.FullName}.{memberRoutine.Name}");
             }
         }
     }

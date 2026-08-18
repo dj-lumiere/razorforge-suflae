@@ -1,7 +1,7 @@
 namespace Compiler.Tokenizer;
 
 /// <summary>
-/// Partial class containing operator scanning methods for the unified tokenizer.
+/// Partial class containing operator scanning memberRoutines for the unified tokenizer.
 /// </summary>
 /// <remarks>
 /// <para>

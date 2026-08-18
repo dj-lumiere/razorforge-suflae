@@ -84,7 +84,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // Lower the cycle-collector hook intrinsics (`<entity>.roam_trace_ref()` /
         // `.roam_free_ref()`) into explicit routine-VALUE references now that GMP has substituted the
         // generic `RoamController[T]` receiver to a concrete entity. Codegen then materializes the
-        // closure from the stamped ResolvedRoutine — it no longer picks the impl via LookupMethod.
+        // closure from the stamped ResolvedRoutine — it no longer picks the impl via LookupMemberRoutine.
         new RoamHookRefLoweringPass(registry: ctx.Registry)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
@@ -101,7 +101,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
             buildMode: ctx.BuildMode);
         // FStringLoweringPass runs BEFORE OperatorLoweringPass (per the per-file pipeline order);
         // monomorphized represent/diagnose bodies need f-strings lowered to represent/diagnose
-        // method calls + Text.add before operator lowering can fold the `+` chain.
+        // memberRoutine calls + Text.add before operator lowering can fold the `+` chain.
         new FStringLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         // ExpressionLoweringPass: handles RangeExpression, UnaryExpression(Not), pattern lowering

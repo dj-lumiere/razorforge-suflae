@@ -3,7 +3,7 @@ module Core
 import BuilderService
 
 ### Represents temporary read-only access to an entity.
-### `Viewing[T]` is the non-storable borrow type produced by `.view()` for single-threaded observation.
+### `Viewing[T]` is the non-Assignable borrow type produced by `.view()` for single-threaded observation.
 ### :typeparam T: The entity type being viewed.
 ### :see: {Modifying[T]}, {Claiming[T]}, {Inspecting[T]}, {Access-Types}
 @llvm("ptr")

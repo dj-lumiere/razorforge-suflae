@@ -386,16 +386,16 @@ public sealed class RoutineInfo
     public bool IsSynthesized { get; init; }
 
     /// <summary>
-    /// For wrapper-forwarder synthesized routines: the inner-type method that this forwarder
+    /// For wrapper-forwarder synthesized routines: the inner-type member routine that this forwarder
     /// delegates to. Used by monomorphization to re-resolve signatures against the concrete
-    /// inner type when the inner method's return depends on the inner's generic parameter.
+    /// inner type when the inner member routine's return depends on the inner's generic parameter.
     /// </summary>
-    public RoutineInfo? WrapperForwarderInnerMethod { get; init; }
+    public RoutineInfo? WrapperForwarderInnerMemberRoutine { get; init; }
 
     /// <summary>
     /// For wrapper-forwarder synthesized routines: the inner type's generic definition
     /// (e.g. List[T] when wrapping List[T]). Used to look up the concrete inner
-    /// method after monomorphization.
+    /// member routine after monomorphization.
     /// </summary>
     public TypeSymbol? WrapperForwarderInnerGenericDef { get; init; }
 
@@ -490,16 +490,16 @@ public sealed class RoutineInfo
             MutationCategory = MutationCategory,
             TypeArguments = typeArguments,
             // Preserve universal self-type provenance through this resolution layer. For a
-            // self-type extension method (`routine T.share[P]()`), `LookupMethod` returns an
+            // self-type extension member routine (`routine T.share[P]()`), `LookupMemberRoutine` returns an
             // owner-bound intermediate (OwnerType already = the concrete receiver) whose
-            // GenericDefinition points at the original universal method (OwnerType = the bare
+            // GenericDefinition points at the original universal member routine (OwnerType = the bare
             // `T` generic parameter). If we naively set GenericDefinition = this, that universal
             // provenance is buried one level down, and reachability / GMP (which gate the
             // self-type owner→receiver binding on `GenericDefinition.OwnerType is
             // GenericParameterTypeInfo`) can no longer recover `T → receiver` — the concrete
-            // receiver carries no TypeArguments to recover it from, unlike `List[S32].method[U]`.
+            // receiver carries no TypeArguments to recover it from, unlike `List[S32].MemberRoutine[U]`.
             // The result is an emitted call to `Receiver.share[P]` with no matching definition
-            // (LINKERR). Keep the universal method as the definition so that binding survives.
+            // (LINKERR). Keep the universal member routine as the definition so that binding survives.
             GenericDefinition = GenericDefinition?.OwnerType is GenericParameterTypeInfo
                 ? GenericDefinition
                 : this,
@@ -512,7 +512,7 @@ public sealed class RoutineInfo
             IsVariadic = IsVariadic,
             IsDangerous = IsDangerous,
             IsSynthesized = IsSynthesized,
-            WrapperForwarderInnerMethod = WrapperForwarderInnerMethod,
+            WrapperForwarderInnerMemberRoutine = WrapperForwarderInnerMemberRoutine,
             WrapperForwarderInnerGenericDef = WrapperForwarderInnerGenericDef,
             Storage = Storage,
             AsyncStatus = AsyncStatus,

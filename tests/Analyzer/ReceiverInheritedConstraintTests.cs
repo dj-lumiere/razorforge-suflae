@@ -11,8 +11,8 @@ using static TestHelpers;
 /// argument at the call site — e.g. <c>Box[T].only_ab() needs T in [Alpha, Beta]</c> called on a
 /// <c>Box[Gamma]</c>, or the stdlib <c>Shared[T, P].claim() needs P in [Exclusive, MultiRead]</c>.
 ///
-/// Such constraints used to be silently dropped during method resolution (the resolved instance
-/// method kept only constraints on its OWN generic params, discarding owner-param constraints), so
+/// Such constraints used to be silently dropped during memberRoutine resolution (the resolved instance
+/// memberRoutine kept only constraints on its OWN generic params, discarding owner-param constraints), so
 /// they went unchecked. The fix preserves owner-param TypeEquality constraints through resolution
 /// and validates them at the call site against the receiver's bound argument (RF-S160).
 /// </summary>

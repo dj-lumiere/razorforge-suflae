@@ -78,7 +78,7 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
     public bool VisitLambdaExpression(LambdaExpression node) => node.Body.Accept(visitor: this);
     public bool VisitTypeConversionExpression(TypeConversionExpression node) =>
         node.Expression.Accept(visitor: this);
-    public bool VisitGenericMethodCallExpression(GenericMethodCallExpression node) =>
+    public bool VisitGenericMemberRoutineCallExpression(GenericMemberRoutineCallExpression node) =>
         node.Object.Accept(visitor: this) || Any(xs: node.Arguments);
     public bool VisitGenericMemberExpression(GenericMemberExpression node) =>
         node.Object.Accept(visitor: this);

@@ -11,7 +11,7 @@ import BuilderService
 ### :typeparam T: The pointee type.
 ### :see: {Address}, {Modifying[T]}, {Viewing[T]}, {Memory-Types}
 @llvm("ptr")
-record Hijacked[T] obeys Storable
+record Hijacked[T] obeys Assignable
   pass
 
 ### Returns the raw address carried by this pointer.
@@ -21,12 +21,12 @@ routine Hijacked[T].get_address() -> Address
   return LLVM::pointer_to_int[T, Address](me)
 
 ### Returns a bitwise duplicate of this raw pointer.
-### `Hijacked[T]` is `@llvm("ptr")` so it does not auto-derive `Storable`; this
+### `Hijacked[T]` is `@llvm("ptr")` so it does not auto-derive `Assignable`; this
 ### trivial opt-in body lets `=` and `with` work, with aliasing left to the user
 ### just like every other operation on this type.
 ### :returns: A bitwise duplicate of this pointer.
 @readonly
-routine Hijacked[T].store() -> Hijacked[T]
+routine Hijacked[T].assign() -> Hijacked[T]
   return me
 
 ### Returns the raw address of a bare value when it is reinterpreted as a pointer slot.

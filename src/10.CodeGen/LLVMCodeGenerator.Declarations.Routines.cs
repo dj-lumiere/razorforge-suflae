@@ -53,7 +53,7 @@ public partial class LlvmCodeGenerator
         // Build parameter list
         var paramTypes = new List<string>();
 
-        // For methods, add implicit 'me' parameter first
+        // For memberRoutines, add implicit 'me' parameter first
         // Skip 'me' for create routines (static factories) and common (type-level) routines
         bool isCreator = IsCreatorRoutine(routine: routine);
         if (routine.OwnerType != null && !isCreator && !routine.IsCommon)
@@ -302,7 +302,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Owner-scoped member lookup pinned to <paramref name="moduleContext"/>. A bare
-    /// <c>LookupRoutine("Box.destroy")</c> returns a first-wins entry, so a 0-param method on a
+    /// <c>LookupRoutine("Box.destroy")</c> returns a first-wins entry, so a 0-param memberRoutine on a
     /// same-named type in another module would otherwise be emitted under the wrong symbol.
     /// </summary>
     private RoutineInfo? LookupScopedMemberRoutine(string baseName, string? moduleContext)
@@ -317,7 +317,7 @@ public partial class LlvmCodeGenerator
         TypeInfo? scopedOwner = _registry.LookupType(name: $"{moduleContext}.{ownerSeg}");
         return scopedOwner == null
             ? null
-            : _registry.LookupMethod(type: scopedOwner, methodName: baseName[(memberDot + 1)..]);
+            : _registry.LookupMemberRoutine(type: scopedOwner, memberRoutineName: baseName[(memberDot + 1)..]);
     }
 
     /// <summary>
@@ -342,7 +342,7 @@ public partial class LlvmCodeGenerator
             ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
             : null) ?? _registry.LookupType(name: ownerPart);
         RoutineInfo? routineInfo = ownerType != null
-            ? _registry.LookupMethod(type: ownerType, methodName: shortName)
+            ? _registry.LookupMemberRoutine(type: ownerType, memberRoutineName: shortName)
             : null;
         return routineInfo ?? _registry.LookupRoutine(fullName: shortName) ??
             _registry.LookupRoutineByName(name: shortName);
@@ -366,7 +366,7 @@ public partial class LlvmCodeGenerator
             return routineInfo;
         }
 
-        RoutineInfo? overload = ResolveScopedMethodOverload(routine: routine,
+        RoutineInfo? overload = ResolveScopedMemberRoutineOverload(routine: routine,
             moduleContext: moduleContext, astParamTypes: astParamTypes);
         overload ??= _registry.LookupRoutineOverload(baseName: routineInfo.BaseName,
             argTypes: astParamTypes);
@@ -407,10 +407,10 @@ public partial class LlvmCodeGenerator
     /// misses here because member base names always contain a '.', which disables the Core-prefix
     /// fallback — so collect the owner type's candidates and match positionally by arg type.
     /// </summary>
-    private RoutineInfo? ResolveScopedMethodOverload(RoutineDeclaration routine,
+    private RoutineInfo? ResolveScopedMemberRoutineOverload(RoutineDeclaration routine,
         string? moduleContext, List<TypeInfo> astParamTypes)
     {
-        if (routine.OwnerName is not { } ownerPart || routine.MethodName is not { } shortName)
+        if (routine.OwnerName is not { } ownerPart || routine.MemberRoutineName is not { } shortName)
         {
             return null;
         }
@@ -420,7 +420,7 @@ public partial class LlvmCodeGenerator
             : null) ?? _registry.LookupType(name: ownerPart);
         return ownerType == null
             ? null
-            : _registry.LookupMethodOverload(type: ownerType, methodName: shortName,
+            : _registry.LookupMemberRoutineOverload(type: ownerType, memberRoutineName: shortName,
                 argTypes: astParamTypes);
     }
 
@@ -466,7 +466,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Builds the LLVM parameter list (with names) for a routine definition: the hidden closure
-    /// pointer for lambdas, the implicit <c>me</c> receiver for methods, and each explicit
+    /// pointer for lambdas, the implicit <c>me</c> receiver for memberRoutines, and each explicit
     /// parameter in its ABI form (by-ref thread arg / byval / coerce / plain value).
     /// </summary>
     private List<string> BuildDefinitionParameterList(RoutineInfo info)
@@ -480,7 +480,7 @@ public partial class LlvmCodeGenerator
             paramList.Add(item: "ptr %__cl");
         }
 
-        // For methods, add implicit 'me' parameter first (skip create factories, common routines,
+        // For memberRoutines, add implicit 'me' parameter first (skip create factories, common routines,
         // and void/None owner types).
         if (info.OwnerType != null && !IsCreatorRoutine(routine: info) && !info.IsCommon)
         {
@@ -606,7 +606,7 @@ public partial class LlvmCodeGenerator
     {
         // Mark that we are emitting a body: every routine declared (referenced) from here on is a
         // real callee of an emitted routine, so it must itself be emitted. Save/restore in case a
-        // body's emission ever re-enters this method.
+        // body's emission ever re-enters this memberRoutine.
         bool prevEmittingBody = _emittingRoutineBody;
         _emittingRoutineBody = true;
         try
@@ -663,15 +663,15 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Binds the implicit <c>me</c> local for a method, or — for an entity <c>create</c> that
+    /// Binds the implicit <c>me</c> local for a memberRoutine, or — for an entity <c>create</c> that
     /// references <c>me</c> — allocates the entity at entry and binds <c>me</c> to the fresh pointer.
     /// </summary>
     private void BindImplicitMeReceiver(StringBuilder sb, Statement body, RoutineInfo routine)
     {
-        // Register implicit 'me' for methods (skip create static factories and common routines).
+        // Register implicit 'me' for memberRoutines (skip create static factories and common routines).
         if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine) && !routine.IsCommon)
         {
-            BindMethodMeReceiver(sb: sb, routine: routine);
+            BindMemberRoutineMeReceiver(sb: sb, routine: routine);
             return;
         }
 
@@ -689,8 +689,8 @@ public partial class LlvmCodeGenerator
         }
     }
 
-    /// <summary>Binds <c>me</c> for a method receiver (by-ref, void, or value-copy forms).</summary>
-    private void BindMethodMeReceiver(StringBuilder sb, RoutineInfo routine)
+    /// <summary>Binds <c>me</c> for a memberRoutine receiver (by-ref, void, or value-copy forms).</summary>
+    private void BindMemberRoutineMeReceiver(StringBuilder sb, RoutineInfo routine)
     {
         // A Suflae entity member routine receives `me` as the `Roamed[E]` handle (SF slice 2 sets
         // MeType), so bind the local to that handle type — otherwise `me.field` codegen sees the
@@ -733,7 +733,7 @@ public partial class LlvmCodeGenerator
     private void RegisterParameterAsLocal(StringBuilder sb, RoutineInfo routine, ParameterInfo param)
     {
         // By-ref struct-record thread arg / ABI-Indirect byval param: `%<name>.addr` IS the
-        // parameter (a pointer to the caller's / callee's copy). No alloca/store — field/method
+        // parameter (a pointer to the caller's / callee's copy). No alloca/store — field/memberRoutine
         // access resolves through the address directly.
         if (IsByRefThreadArg(routine: routine, param: param) ||
             ParameterPassedByval(routine: routine, paramType: param.Type))
@@ -983,26 +983,26 @@ public partial class LlvmCodeGenerator
             return Q(name: $"{AttrPrefix(r: routine)}{typeName}.{name}{LabeledParams(r: routine)}");
         }
 
-        // Method: `[member, wired?, crashable?, …] Module.OwnerType.name(label: Type, …)`
+        // memberRoutine: `[member, wired?, crashable?, …] Module.OwnerType.name(label: Type, …)`
         // (OwnerType.FullName includes module). The `$`/`!` are gone from the name — they are in the
         // attribute prefix.
         string ownerTypeName = routine.OwnerType.FullName;
         string baseName = AttrPrefix(r: routine) + $"{ownerTypeName}.{name}";
 
-        // Method-level type arguments (e.g., Hijacked[U64].recast_as[BTreeListNode[S64]]).
+        // memberRoutine-level type arguments (e.g., Hijacked[U64].recast_as[BTreeListNode[S64]]).
         // Distinct from owner type args already in OwnerType.FullName.
-        if (routine.TypeArguments is { Count: > 0 } methodTypeArgs)
+        if (routine.TypeArguments is { Count: > 0 } memberRoutineTypeArgs)
         {
             // Only include type args that aren't already in the owner's type arg list to
-            // avoid duplicating owner generics (method.TypeArguments may be a superset).
+            // avoid duplicating owner generics (memberRoutine.TypeArguments may be a superset).
             // Also drop bare GenericParameterTypeInfo entries: when SignatureResolver leaves
             // an owner-level param (e.g. T) in routine.TypeArguments and the owner is already
             // monomorphized to a concrete type, the bare T would survive the name-based
-            // dedup and mangle as `Type[Concrete].method[T]` — producing an undefined symbol.
+            // dedup and mangle as `Type[Concrete].MemberRoutine[T]` — producing an undefined symbol.
             //
             // Additionally drop entries whose Name matches one of the owner gen-def's
             // GenericParameters (e.g. "T" for SortedSet[T]). When TransferSubstitutedTypeArguments
-            // or SubstituteMethodForOwner forwards a stale leftover TypeInfo named "T" that is
+            // or SubstituteMemberRoutineForOwner forwards a stale leftover TypeInfo named "T" that is
             // *not* a GenericParameterTypeInfo (some passes wrap the owner-leak in a non-GPTI),
             // the GPTI check above doesn't catch it. Matching by name closes that hole.
             var ownerArgs = routine.OwnerType.TypeArguments ?? [];
@@ -1014,15 +1014,15 @@ public partial class LlvmCodeGenerator
                 _ => routine.OwnerType
             };
             List<string> ownerGenDefParamNames = ownerGenDef?.GenericParameters ?? [];
-            var methodOnlyArgs = methodTypeArgs
+            var memberRoutineOnlyArgs = memberRoutineTypeArgs
                 .Where(predicate: a => a is not GenericParameterTypeInfo
                     && !ownerArgs.Any(predicate: o => o.FullName == a.FullName)
                     && !ownerGenDefParamNames.Contains(item: a.Name))
                 .ToList();
-            if (methodOnlyArgs.Count > 0)
+            if (memberRoutineOnlyArgs.Count > 0)
             {
                 string typeArgSuffix = string.Join(separator: ",",
-                    values: methodOnlyArgs.Select(selector: t => t.FullName));
+                    values: memberRoutineOnlyArgs.Select(selector: t => t.FullName));
                 baseName = $"{baseName}[{typeArgSuffix}]";
             }
         }
@@ -1199,11 +1199,11 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Whether a record's <c>me</c> is passed by reference (a <c>ptr</c> to the caller's storage)
-    /// rather than by value. This is a purely type-level decision — no per-method special cases:
+    /// rather than by value. This is a purely type-level decision — no per-memberRoutine special cases:
     /// <list type="bullet">
     /// <item><b>By reference</b> — every <i>storage-backed</i> record: a struct record (no
     /// <c>@llvm</c> backend) or an <c>@llvm</c> record whose backend is an <i>aggregate</i>
-    /// (<c>[N x T]</c>, i.e. <c>Array[T,N]</c> / <c>BitArray[N]</c>). By-ref lets any method mutate
+    /// (<c>[N x T]</c>, i.e. <c>Array[T,N]</c> / <c>BitArray[N]</c>). By-ref lets any memberRoutine mutate
     /// in place and take stable addresses (hijack/get_address, atomics, C FFI), and avoids copying
     /// the aggregate on every call.</item>
     /// <item><b>By value</b> — only <i>scalar</i> <c>@llvm</c> records (<c>iN</c>, <c>fN</c>,
@@ -1214,7 +1214,7 @@ public partial class LlvmCodeGenerator
     /// </list>
     /// Entities are already by-ref via their pointer ABI. This replaces the old <c>setitem</c>
     /// name-check: <c>Array.setitem</c> is by-ref because Array is aggregate-backed, like every
-    /// other Array method — not because of its name.
+    /// other Array memberRoutine — not because of its name.
     /// </summary>
     internal static bool IsByRefMeRecord(TypeInfo? ownerType) => ownerType switch
     {
@@ -1236,7 +1236,7 @@ public partial class LlvmCodeGenerator
     /// REFERENCE: the worker's parameter is a pointer to the spawner's storage, so every worker
     /// that receives the same cell operates on one address (the basis of <c>Atomic[T]</c>
     /// cross-thread sharing). This mirrors the by-ref <c>me</c> convention — the parameter doubles
-    /// as the field/method-access base, no alloca/store copy.
+    /// as the field/memberRoutine-access base, no alloca/store copy.
     /// <para>
     /// Only types that carry their own synchronization (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>)
     /// are shared this way. Every OTHER record falls through to the normal by-value parameter path

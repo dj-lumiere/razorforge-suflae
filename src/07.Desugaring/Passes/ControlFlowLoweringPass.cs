@@ -414,28 +414,28 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         // Skip ErrorTypeInfo: SA suppresses stdlib errors.
         if (eachStmt.Iterable.ResolvedType is { } iterType and not ErrorTypeInfo)
         {
-            RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "iter");
-            if (iterMethod?.ReturnType is { } rawIteratorType)
+            RoutineInfo? iterMemberRoutine = ctx.Registry.LookupMemberRoutine(type: iterType, memberRoutineName: "iter");
+            if (iterMemberRoutine?.ReturnType is { } rawIteratorType)
             {
-                // LookupMethod returns the generic-def `iter`, whose ReturnType still carries the
+                // LookupMemberRoutine returns the generic-def `iter`, whose ReturnType still carries the
                 // owner's params (e.g. `?EnumerateEmitter[T, S/Iter]`). Substitute the concrete
                 // owner's type args so `try_emit` resolves on the CONCRETE emitter
                 // (`EnumerateEmitter[Text, ListEmitter[Text]]`); otherwise reachability marks the
                 // unresolved-projection emitter's try_emit and the concrete one never generates.
                 TypeInfo iteratorType = SubstituteForConcreteOwner(type: rawIteratorType,
                     owner: iterType);
-                iterCallExpr.ResolvedRoutine = iterMethod;
+                iterCallExpr.ResolvedRoutine = iterMemberRoutine;
                 iterCallExpr.ResolvedType = iteratorType;
                 // Carry the concrete emitter type onto the receiver so reachability/codegen see it.
                 tryNextReceiver.ResolvedType = iteratorType;
-                RoutineInfo? tryNextMethod =
-                    ctx.Registry.LookupMethod(type: iteratorType, methodName: Resolution.RuntimeContract.TryEmit);
-                if (tryNextMethod != null)
+                RoutineInfo? tryNextMemberRoutine =
+                    ctx.Registry.LookupMemberRoutine(type: iteratorType, memberRoutineName: Resolution.RuntimeContract.TryEmit);
+                if (tryNextMemberRoutine != null)
                     tryNextCallExpr = tryNextCallExpr with
                     {
-                        ResolvedRoutine = tryNextMethod,
+                        ResolvedRoutine = tryNextMemberRoutine,
                         LoweringKind = CallLoweringKind.DirectMemberRoutine,
-                        ResolvedType = tryNextMethod.ReturnType ?? tryNextCallExpr.ResolvedType
+                        ResolvedType = tryNextMemberRoutine.ReturnType ?? tryNextCallExpr.ResolvedType
                     };
             }
         }

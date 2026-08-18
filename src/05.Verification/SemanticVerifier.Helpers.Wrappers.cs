@@ -94,7 +94,7 @@ public sealed partial class SemanticVerifier
     ];
 
     /// <summary>
-    /// Read-only wrapper types that can only access @readonly methods.
+    /// Read-only wrapper types that can only access @readonly memberRoutines.
     /// </summary>
     private static readonly HashSet<string> ReadOnlyWrapperTypes =
     [
@@ -171,28 +171,28 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Validates that a method can be called through a read-only wrapper.
-    /// Read-only wrappers (Viewing, Inspecting) can only call @readonly methods.
+    /// Validates that a memberRoutine can be called through a read-only wrapper.
+    /// Read-only wrappers (Viewing, Inspecting) can only call @readonly memberRoutines.
     /// </summary>
     /// <param name="wrapperType">The wrapper type being used.</param>
-    /// <param name="method">The method being called.</param>
+    /// <param name="member routine">The memberRoutine being called.</param>
     /// <param name="location">Source location for error reporting.</param>
-    private void ValidateReadOnlyWrapperMethodAccess(TypeSymbol wrapperType, RoutineInfo method,
+    private void ValidateReadOnlyWrapperMemberRoutineAccess(TypeSymbol wrapperType, RoutineInfo memberRoutine,
         SourceLocation location)
     {
         if (!IsReadOnlyWrapper(type: wrapperType))
         {
-            return; // Modifiable wrappers can access all methods
+            return; // Modifiable wrappers can access all memberRoutines
         }
 
-        // Read-only wrappers can only access @readonly methods
-        if (!method.IsReadOnly)
+        // Read-only wrappers can only access @readonly memberRoutines
+        if (!memberRoutine.IsReadOnly)
         {
             string wrapperName = wrapperType.BareName;
-            ReportError(code: SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
+            ReportError(code: SemanticDiagnosticCode.WritableMemberRoutineThroughReadOnlyWrapper,
                 message:
-                $"Cannot call writable method '{method.Name}' through read-only wrapper '{wrapperName}[T]'. " +
-                $"Only @readonly methods are accessible.",
+                $"Cannot call writable member routine '{memberRoutine.Name}' through read-only wrapper '{wrapperName}[T]'. " +
+                $"Only @readonly member routines are accessible.",
                 location: location);
         }
     }
@@ -225,7 +225,7 @@ public sealed partial class SemanticVerifier
     /// `Hijacked[T]` is excluded because it is a raw pointer and copies bitwise.
     /// See <c>RazorForge-Wiki/docs/Records.md#copy-semantics</c>.
     /// </summary>
-    private static readonly Dictionary<string, string> NonTriviallyStorableWrappers =
+    private static readonly Dictionary<string, string> NonTriviallyAssignableWrappers =
         new(StringComparer.Ordinal)
         {
             [Compiler.Resolution.RuntimeContract.Retained] = "a.share()",
@@ -264,7 +264,7 @@ public sealed partial class SemanticVerifier
             or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched
             or Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
 
-    private static bool IsTriviallyStorable(TypeSymbol type)
+    private static bool IsTriviallyAssignable(TypeSymbol type)
     {
         if (type is ErrorTypeInfo or GenericParameterTypeInfo || type.IsNone)
         {
@@ -283,7 +283,7 @@ public sealed partial class SemanticVerifier
         // Tuples — anonymous; auto-derive cascades only when every element does.
         if (type is TupleTypeInfo tuple)
         {
-            return tuple.ElementTypes.All(predicate: IsTriviallyStorable);
+            return tuple.ElementTypes.All(predicate: IsTriviallyAssignable);
         }
 
         // Records / choices / flags / entities carry ImplementedProtocols populated by
@@ -299,10 +299,10 @@ public sealed partial class SemanticVerifier
 
         if (implemented != null)
         {
-            // Either capability qualifies: `Storable` (can `store`) or `Copyable` (deep copy, which
-            // obeys Storable). The auto-derive adds `Copyable` directly (not `Storable`), so this direct
+            // Either capability qualifies: `Assignable` (can `store`) or `Copyable` (deep copy, which
+            // obeys Assignable). The auto-derive adds `Copyable` directly (not `Assignable`), so this direct
             // name check must accept both.
-            return implemented.Any(predicate: p => p.Name is "Storable" or "Copyable");
+            return implemented.Any(predicate: p => p.Name is "Assignable" or "Copyable");
         }
 
         // Anything we did not recognise falls back to trivially copyable so this pass does
@@ -318,14 +318,14 @@ public sealed partial class SemanticVerifier
     /// <param name="type">Type to classify.</param>
     /// <returns>The offending wrapper's base name (e.g. <c>"Retained"</c>) and the path
     /// of field names leading to it, or null when no offender exists.</returns>
-    private static (string Wrapper, string Path)? FindNonTriviallyStorableWrapper(TypeSymbol type)
+    private static (string Wrapper, string Path)? FindNonTriviallyAssignableWrapper(TypeSymbol type)
     {
         return FindCore(type: type, prefix: "", visited: new HashSet<string>(StringComparer.Ordinal));
 
         (string, string)? FindCore(TypeSymbol type, string prefix, HashSet<string> visited)
         {
             string baseName = type.BareName;
-            if (NonTriviallyStorableWrappers.ContainsKey(key: baseName))
+            if (NonTriviallyAssignableWrappers.ContainsKey(key: baseName))
             {
                 return (baseName, prefix.Length == 0 ? "<value>" : prefix);
             }

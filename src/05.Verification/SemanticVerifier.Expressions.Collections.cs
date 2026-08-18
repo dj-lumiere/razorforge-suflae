@@ -69,7 +69,7 @@ public sealed partial class SemanticVerifier
     /// collection — it builds a fresh <c>create + add_last</c> sequence and the SF binding lowering roams
     /// the result at the var/field/assignment site (exactly like a <c>List[T]()</c> constructor RHS).
     /// Stamping <c>Roamed</c> onto the literal would make its <c>add</c>/<c>add_last</c> calls target the
-    /// Roamed handle, which has no collection method → codegen "no resolved method" (or, once the temp is
+    /// Roamed handle, which has no collection memberRoutine → codegen "no resolved member routine" (or, once the temp is
     /// created as <c>Roamed[Set]()</c>, an uninitialized controller → AccessViolation). Other expected
     /// wrappers (Owned/Retained/Tracked) and exact collection types pass through unchanged.
     /// </summary>
@@ -522,14 +522,14 @@ public sealed partial class SemanticVerifier
                 message: $"'with' expression requires a record type, got '{baseType.Name}'.",
                 location: with.Location);
         }
-        else if (!IsTriviallyStorable(type: baseType))
+        else if (!IsTriviallyAssignable(type: baseType))
         {
-            // `with` lowers to `tmp = base.store(); tmp.field = v` — so the base must obey
+            // `with` lowers to `tmp = base.assign(); tmp.field = v` — so the base must obey
             // Assignable. Records with ownership-bearing fields that don't opt in are rejected
             // here rather than producing a broken lowered AST.
             ReportError(code: SemanticDiagnosticCode.WithBaseNotAssignable,
-                message: $"'with' expression base of type '{baseType.Name}' must obey 'Storable'. " +
-                         "Add 'obeys Storable' and define 'store() -> Me', or reconstruct the value explicitly.",
+                message: $"'with' expression base of type '{baseType.Name}' must obey 'Assignable'. " +
+                         "Add 'obeys Assignable' and define 'assign() -> Me', or reconstruct the value explicitly.",
                 location: with.Location);
         }
 
@@ -784,7 +784,7 @@ public sealed partial class SemanticVerifier
 
             // Recurse into TypeArguments so const- and type-generics inside a parameterized
             // pattern (e.g. `array: Array[Byte, N]`) bind from the matching position in argType.
-            InferMethodTypeArgumentsFromTypes(paramType: paramType,
+            InferMemberRoutineTypeArgumentsFromTypes(paramType: paramType,
                 argType: argType,
                 genericParameters: genericRoutine.GenericParameters,
                 inferred: typeArgs);
@@ -803,7 +803,7 @@ public sealed partial class SemanticVerifier
         if (expectedType is not null && expectedType != ErrorTypeInfo.Instance &&
             genericRoutine.ReturnType is { } returnType)
         {
-            InferMethodTypeArgumentsFromTypes(paramType: returnType,
+            InferMemberRoutineTypeArgumentsFromTypes(paramType: returnType,
                 argType: expectedType,
                 genericParameters: genericRoutine.GenericParameters,
                 inferred: typeArgs);
@@ -822,7 +822,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Infers still-unbound method generics from the routine's <c>needs</c> constraints. For a
+    /// Infers still-unbound memberRoutine generics from the routine's <c>needs</c> constraints. For a
     /// constraint <c>S obeys Proto[..., U, ...]</c> where <c>S</c> is already inferred to a concrete
     /// type, the bound type's actual conformance to <c>Proto</c> supplies the concrete arguments,
     /// which are unified positionally against the constraint's type arguments to fill in <c>U</c>.
@@ -883,29 +883,29 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Infers method-level generic type arguments for an already owner-resolved method.
+    /// Infers memberRoutine-level generic type arguments for an already owner-resolved memberRoutine.
     /// </summary>
-    private List<TypeInfo>? InferMethodGenericTypeArguments(RoutineInfo genericMethod,
+    private List<TypeInfo>? InferMemberRoutineGenericTypeArguments(RoutineInfo genericMemberRoutine,
         List<Expression> arguments, TypeSymbol? receiverType = null)
     {
-        if (genericMethod.GenericParameters == null ||
-            genericMethod.GenericParameters.Count == 0)
+        if (genericMemberRoutine.GenericParameters == null ||
+            genericMemberRoutine.GenericParameters.Count == 0)
         {
             return null;
         }
 
-        var inferred = new TypeSymbol?[genericMethod.GenericParameters.Count];
+        var inferred = new TypeSymbol?[genericMemberRoutine.GenericParameters.Count];
 
         // Receiver-based inference for a member declared on a SPECIALIZED generic instantiation
-        // (e.g. `routine List[Agent[V]].gather!()`): unify the method's MeType pattern
+        // (e.g. `routine List[Agent[V]].gather!()`): unify the memberRoutine's MeType pattern
         // (List[Agent[V]]) against the actual receiver (List[Agent[S64]]) to bind generic params
         // (V) that appear only in the receiver, not in any value parameter.
-        if (genericMethod.MeType is { } mePattern && receiverType != null)
+        if (genericMemberRoutine.MeType is { } mePattern && receiverType != null)
         {
-            InferMethodTypeArgumentsFromTypes(paramType: mePattern, argType: receiverType,
-                genericParameters: genericMethod.GenericParameters, inferred: inferred);
+            InferMemberRoutineTypeArgumentsFromTypes(paramType: mePattern, argType: receiverType,
+                genericParameters: genericMemberRoutine.GenericParameters, inferred: inferred);
         }
-        int argCount = Math.Min(val1: genericMethod.Parameters.Count, val2: arguments.Count);
+        int argCount = Math.Min(val1: genericMemberRoutine.Parameters.Count, val2: arguments.Count);
         for (int i = 0; i < argCount; i++)
         {
             Expression arg = arguments[index: i] is NamedArgumentExpression named
@@ -917,14 +917,14 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
-            InferMethodTypeArgumentsFromTypes(paramType: genericMethod.Parameters[index: i].Type,
+            InferMemberRoutineTypeArgumentsFromTypes(paramType: genericMemberRoutine.Parameters[index: i].Type,
                 argType: argType,
-                genericParameters: genericMethod.GenericParameters,
+                genericParameters: genericMemberRoutine.GenericParameters,
                 inferred: inferred);
         }
 
         // Infer still-unbound generics from `needs` constraints (e.g. U from `S obeys Iterable[U]`).
-        InferGenericsFromConstraints(routine: genericMethod, inferred: inferred);
+        InferGenericsFromConstraints(routine: genericMemberRoutine, inferred: inferred);
 
         for (int i = 0; i < inferred.Length; i++)
         {
@@ -937,7 +937,7 @@ public sealed partial class SemanticVerifier
         return inferred.ToList()!;
     }
 
-    private static void InferMethodTypeArgumentsFromTypes(TypeSymbol paramType, TypeSymbol argType,
+    private static void InferMemberRoutineTypeArgumentsFromTypes(TypeSymbol paramType, TypeSymbol argType,
         List<string> genericParameters, TypeSymbol?[] inferred)
     {
         if (paramType is GenericParameterTypeInfo)
@@ -976,7 +976,7 @@ public sealed partial class SemanticVerifier
         {
             for (int i = 0; i < paramArgs.Count; i++)
             {
-                InferMethodTypeArgumentsFromTypes(paramType: paramArgs[index: i],
+                InferMemberRoutineTypeArgumentsFromTypes(paramType: paramArgs[index: i],
                     argType: argArgs[index: i],
                     genericParameters: genericParameters,
                     inferred: inferred);
@@ -985,13 +985,13 @@ public sealed partial class SemanticVerifier
 
         // RoutineTypeInfo is structural: its parameter/return types live in ParameterTypes/ReturnType,
         // not TypeArguments. Without this branch, `Routine[(T,), U]` would not unify against
-        // `Routine[(S64,), S64]` and method-level params (e.g. `select[U]`) would stay unresolved.
+        // `Routine[(S64,), S64]` and memberRoutine-level params (e.g. `select[U]`) would stay unresolved.
         if (paramType is RoutineTypeInfo paramRoutine && argType is RoutineTypeInfo argRoutine &&
             paramRoutine.ParameterTypes.Count == argRoutine.ParameterTypes.Count)
         {
             for (int i = 0; i < paramRoutine.ParameterTypes.Count; i++)
             {
-                InferMethodTypeArgumentsFromTypes(paramType: paramRoutine.ParameterTypes[index: i],
+                InferMemberRoutineTypeArgumentsFromTypes(paramType: paramRoutine.ParameterTypes[index: i],
                     argType: argRoutine.ParameterTypes[index: i],
                     genericParameters: genericParameters,
                     inferred: inferred);
@@ -999,7 +999,7 @@ public sealed partial class SemanticVerifier
 
             if (paramRoutine.ReturnType is { } paramRet && argRoutine.ReturnType is { } argRet)
             {
-                InferMethodTypeArgumentsFromTypes(paramType: paramRet,
+                InferMemberRoutineTypeArgumentsFromTypes(paramType: paramRet,
                     argType: argRet,
                     genericParameters: genericParameters,
                     inferred: inferred);

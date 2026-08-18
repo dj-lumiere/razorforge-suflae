@@ -55,27 +55,27 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         // followed by its member routines → free routines → the entry point `start`.
         var presets = new List<string>();
         var typeDefs = new List<(string Key, string Text)>();
-        var methodsByOwner = new Dictionary<string, List<string>>();
+        var memberRoutinesByOwner = new Dictionary<string, List<string>>();
         var freeRoutines = new List<string>();
         string? startText = null;
 
-        void AddMethod(string ownerKey, string text)
+        void AddMemberRoutine(string ownerKey, string text)
         {
-            if (!methodsByOwner.TryGetValue(key: ownerKey, value: out List<string>? list))
-                methodsByOwner[key: ownerKey] = list = new List<string>();
+            if (!memberRoutinesByOwner.TryGetValue(key: ownerKey, value: out List<string>? list))
+                memberRoutinesByOwner[key: ownerKey] = list = new List<string>();
             list.Add(item: text);
         }
 
         void CategorizeRoutine(RoutineInfo ri, string text)
         {
             if (ri.OwnerType is { IsGenericDefinition: false } owner)
-                AddMethod(ownerKey: owner.FullName, text: text);
+                AddMemberRoutine(ownerKey: owner.FullName, text: text);
             else if (ri.OwnerType == null && ri.Name == "start")
                 startText = text;
             else if (ri.OwnerType == null)
                 freeRoutines.Add(item: text);
             else
-                AddMethod(ownerKey: ri.OwnerType.FullName, text: text);
+                AddMemberRoutine(ownerKey: ri.OwnerType.FullName, text: text);
         }
 
         // 1. AST declarations from every program (stdlib + user), bucketed.
@@ -157,15 +157,15 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         foreach ((string key, string text) in typeDefs)
         {
             Emit(text: text);
-            if (methodsByOwner.Remove(key: key, value: out List<string>? typeMethods))
-                foreach (string method in typeMethods)
-                    Emit(text: method);
+            if (memberRoutinesByOwner.Remove(key: key, value: out List<string>? typeMemberRoutines))
+                foreach (string memberRoutine in typeMemberRoutines)
+                    Emit(text: memberRoutine);
         }
-        // Methods whose owner type has no printed definition here (e.g. its def was a filtered generic
+        // memberRoutines whose owner type has no printed definition here (e.g. its def was a filtered generic
         // template) — emit them so nothing is dropped.
-        foreach (List<string> orphaned in methodsByOwner.Values)
-            foreach (string method in orphaned)
-                Emit(text: method);
+        foreach (List<string> orphaned in memberRoutinesByOwner.Values)
+            foreach (string memberRoutine in orphaned)
+                Emit(text: memberRoutine);
         foreach (string free in freeRoutines)
             Emit(text: free);
         if (startText != null)
@@ -178,7 +178,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         return sb.ToString();
     }
 
-    /// <summary>The bare declared name of a type declaration node (for grouping methods under it).</summary>
+    /// <summary>The bare declared name of a type declaration node (for grouping memberRoutines under it).</summary>
     private static string NodeTypeName(Declaration decl) => decl switch
     {
         RecordDeclaration r => r.Name,
@@ -483,7 +483,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     public string VisitCallExpression(CallExpression node)
     {
         // Qualify every resolved call to its module-qualified routine name with the full generic
-        // type-argument list spelled out. Method calls are rendered free-function style with the
+        // type-argument list spelled out. memberRoutine calls are rendered free-function style with the
         // receiver as the explicit first argument.
         if (node.ResolvedRoutine is { } ri)
         {
@@ -495,7 +495,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             // — `create` is the internal routine name (the owner's generic args are already in FullName).
             if (ri.Name == "create" && ri.OwnerType is { } ctorOwner)
                 return $"{ctorOwner.FullName}({argList})";
-            // Member routines stay in receiver form (`obj.method(...)`) — the owner is implicit in the
+            // Member routines stay in receiver form (`obj.MemberRoutine(...)`) — the owner is implicit in the
             // receiver, so there is no need to spell the qualified free-function form. Free routines get
             // the fully-qualified name.
             if (node.Callee is MemberExpression mem)
@@ -569,7 +569,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
     /// <inheritdoc/>
     public string VisitTypeConversionExpression(TypeConversionExpression node) =>
-        node.IsMethodStyle
+        node.IsMemberRoutineStyle
             ? $"{node.Expression.Accept(this)}.{node.TargetType}!()"
             : $"{node.TargetType}!({node.Expression.Accept(this)})";
 
@@ -713,30 +713,30 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitGenericMethodCallExpression(GenericMethodCallExpression node)
+    public string VisitGenericMemberRoutineCallExpression(GenericMemberRoutineCallExpression node)
     {
         string typeArgs = node.TypeArguments.Count > 0
             ? $"[{string.Join(", ", node.TypeArguments.Select(t => t.Accept(this)))}]"
             : "";
         string args = RenderArgs(args: node.Arguments, routine: node.ResolvedRoutine);
-        // Qualify to the resolved routine, keeping the explicit type-argument list; method calls
+        // Qualify to the resolved routine, keeping the explicit type-argument list; member routine calls
         // render free-function style with the receiver as the first argument (as VisitCallExpression).
         if (node.ResolvedRoutine is { } ri)
         {
             // Constructor → type-constructor sugar `Type(...)` (owner FullName carries the generic args).
             if (ri.Name == "create" && ri.OwnerType is { } ctorOwner)
                 return $"{ctorOwner.FullName}({args})";
-            // Type constructor / free routine: Object and MethodName are the same identifier.
-            if (node.Object is IdentifierExpression ctorId && ctorId.Name == node.MethodName)
+            // Type constructor / free routine: Object and memberRoutineName are the same identifier.
+            if (node.Object is IdentifierExpression ctorId && ctorId.Name == node.MemberRoutineName)
                 return $"{ri.QualifiedName}{typeArgs}({args})";
-            // Member routine: keep the receiver form (`obj.method[...](...)`).
+            // Member routine: keep the receiver form (`obj.MemberRoutine[...](...)`).
             return $"{node.Object.Accept(this)}.{ri.Name}{typeArgs}({args})";
         }
-        // Type constructor: Object and MethodName are the same identifier (e.g. SortedDict[S64, S64]())
-        if (node.Object is IdentifierExpression id && id.Name == node.MethodName)
-            return $"{node.MethodName}{typeArgs}({args})";
-        // Generic method call on a receiver (e.g. buf.read![U8](offset))
-        return $"{node.Object.Accept(this)}.{node.MethodName}{typeArgs}({args})";
+        // Type constructor: Object and memberRoutineName are the same identifier (e.g. SortedDict[S64, S64]())
+        if (node.Object is IdentifierExpression id && id.Name == node.MemberRoutineName)
+            return $"{node.MemberRoutineName}{typeArgs}({args})";
+        // Generic member routine call on a receiver (e.g. buf.read![U8](offset))
+        return $"{node.Object.Accept(this)}.{node.MemberRoutineName}{typeArgs}({args})";
     }
 
 
@@ -1107,7 +1107,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
-    /// <summary>Module-qualifies a routine declaration name for the flat dump: methods become
+    /// <summary>Module-qualifies a routine declaration name for the flat dump: member routines become
     /// <c>Module.Owner.name</c>, free routines <c>Module.name</c>. Prefers the resolved info; falls
     /// back to prefixing the ambient module.</summary>
     private string QualifyRoutineName(RoutineDeclaration node)
@@ -1188,7 +1188,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             string valStr = c.Value != null ? $" = {c.Value.Accept(this)}" : "";
             sb.AppendLine($"{I}{c.Name}{valStr}");
         }
-        foreach (RoutineDeclaration m in node.Methods)
+        foreach (RoutineDeclaration m in node.MemberRoutines)
             sb.AppendLine(m.Accept(this));
         _indent--;
         return sb.ToString().TrimEnd();
@@ -1236,7 +1236,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         var sb = new StringBuilder();
         sb.AppendLine($"{I}protocol {QualifyDecl(node.Name)}{generics}{parents}");
         _indent++;
-        foreach (RoutineSignature sig in node.Methods)
+        foreach (RoutineSignature sig in node.MemberRoutines)
         {
             string returnStr = sig.ReturnType != null
                 ? $" -> {sig.ReturnType.Accept(this)}"

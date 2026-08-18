@@ -9,7 +9,7 @@ namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
 /// Lowers <see cref="InsertedTextExpression"/> f-strings to <c>represent</c>/<c>diagnose</c>
-/// method calls folded with <c>Text.add</c>.
+/// memberRoutine calls folded with <c>Text.add</c>.
 /// Runs after <see cref="ExpressionLoweringPass"/> and before <see cref="OperatorLoweringPass"/>
 /// in the per-file desugaring pipeline.
 ///
@@ -360,7 +360,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                 return changed ? withExpr with { Base = loweredBase, Updates = updates } : expr;
             }
 
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
             {
                 Expression obj = LowerExpression(gmc.Object);
                 var args = new List<Expression>(capacity: gmc.Arguments.Count);
@@ -478,7 +478,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                 case ExpressionPart ep:
                 {
                     Expression loweredInner = LowerExpression(ep.Expression);
-                    string methodName = ep.FormatSpec is "?" or "=?" ? "diagnose" : "represent";
+                    string memberRoutineName = ep.FormatSpec is "?" or "=?" ? "diagnose" : "represent";
 
                     // "=" and "=?" format specs prepend "varName=" as a text literal.
                     if (ep.FormatSpec is "=" or "=?")
@@ -496,7 +496,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                     Expression renderCall = new CallExpression(
                         Callee: new MemberExpression(
                             Object: loweredInner,
-                            MemberName: methodName,
+                            MemberName: memberRoutineName,
                             Location: ep.Location),
                         Arguments: [],
                         Location: ep.Location) { ResolvedType = textType };

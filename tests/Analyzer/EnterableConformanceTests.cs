@@ -10,7 +10,7 @@ using static TestHelpers;
 /// <list type="bullet">
 ///   <item>Failability covariance — a NON-failable implementation satisfies a FAILABLE (<c>!</c>)
 ///         protocol requirement (never-failing is a stronger contract); the reverse is an error.</item>
-///   <item>The <c>?</c> in-flight mark is meaningless on value-type records, so a record method that
+///   <item>The <c>?</c> in-flight mark is meaningless on value-type records, so a record memberRoutine that
 ///         returns the bare type satisfies a protocol requirement written as <c>?Me</c>.</item>
 ///   <item>A user type may obey <c>Enterable</c> with a pass-through <c>$enter</c> and drive a
 ///         <c>using</c> scope.</item>
@@ -55,7 +55,7 @@ public class EnterableConformanceTests
         AnalysisResult result = AssertHasErrorSa(source: source,
             expectedErrorSubstring: "should be non-failable to match protocol 'Plain'");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ProtocolMethodSignatureMismatch);
+            filter: e => e.Code == SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch);
     }
 
     #endregion

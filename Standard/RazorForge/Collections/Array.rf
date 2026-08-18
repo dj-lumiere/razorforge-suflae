@@ -76,7 +76,7 @@ dangerous routine Array[T, N].destroy()
   var i = 0u64
   while i < N
     # Read element i in place through the storage pointer (element_at's by-VALUE form copies the whole
-    # array — which also draws a spurious retaining `me.store()` at the copy-lowering pass; the pointer
+    # array — which also draws a spurious retaining `me.assign()` at the copy-lowering pass; the pointer
     # form is what getitem/setitem use). The routine is already `dangerous`, so no nested `danger` block.
     LLVM::load_element_ref[Array[T, N], T](me.hijack(), i).destroy()
     i = i + 1u64
@@ -85,14 +85,14 @@ dangerous routine Array[T, N].destroy()
 ### Returns a copy with each element STORED (refcount-bumped for managed element types like `Text`; a
 ### plain bitwise duplicate for trivially-copyable elements). Element-wise so the per-element `destroy`
 ### at scope teardown stays balanced — a whole-array bitwise copy would alias element handles at
-### refcount 1 and double-free. Storability CASCADES: `Array[T, N]` is storable iff `T` is.
+### refcount 1 and double-free. Storability CASCADES: `Array[T, N]` is Assignable iff `T` is.
 @readonly
-routine Array[T, N].store() -> Array[T, N]
-needs T obeys Storable
+routine Array[T, N].assign() -> Array[T, N]
+needs T obeys Assignable
   var result = Array[T, N]()
   var i = 0u64
   while i < N
-    result[i] = me[i].store()
+    result[i] = me[i].assign()
     i = i + 1u64
   return result
 

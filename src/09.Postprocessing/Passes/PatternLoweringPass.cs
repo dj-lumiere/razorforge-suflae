@@ -713,7 +713,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 // GENERIC PARAM (e.g. `is T` in Result[T].represent): a baked FNV("T") literal
                 // would never match after monomorphization (success stores FNV of the concrete type).
                 // The binding already substitutes correctly (CarrierPayloadExpression carries the
-                // type), but a frozen literal does not. Emit `<T>.type_id()` instead — a type-method
+                // type), but a frozen literal does not. Emit `<T>.type_id()` instead — a type-memberRoutine
                 // call GenericAstRewriter folds via the T->concrete substitution map
                 // (TryFoldBsCallViaStringSubs) to ComputeTypeId(concrete.FullName), so the condition
                 // matches the success state once instantiated.

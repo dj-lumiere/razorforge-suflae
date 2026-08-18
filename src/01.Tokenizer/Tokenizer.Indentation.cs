@@ -3,7 +3,7 @@ using Compiler.Diagnostics;
 namespace Compiler.Tokenizer;
 
 /// <summary>
-/// Partial class containing indentation and newline handling methods for the unified tokenizer.
+/// Partial class containing indentation and newline handling memberRoutines for the unified tokenizer.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,7 +26,7 @@ public partial class Tokenizer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method is called at the beginning of each line (when column == 1).
+    /// This memberRoutine is called at the beginning of each line (when column == 1).
     /// It measures the leading whitespace and compares it to the current
     /// indentation level to determine whether INDENT or DEDENT tokens are needed.
     /// </para>
@@ -160,7 +160,7 @@ public partial class Tokenizer
     /// continuation (like open parentheses or binary operators).
     /// </para>
     /// <para>
-    /// This method also resets the <see cref="_hasTokenOnLine"/> flag for
+    /// This memberRoutine also resets the <see cref="_hasTokenOnLine"/> flag for
     /// the next line.
     /// </para>
     /// </remarks>

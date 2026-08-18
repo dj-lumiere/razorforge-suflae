@@ -842,11 +842,11 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts when comparison with method call.
+    /// Verifies that the parser accepts when comparison with memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_WhenComparisonWithMethodCall()
+    public void Parse_WhenComparisonWithMemberRoutineCall()
     {
         string source = """
                         routine test(value: S32)
@@ -1092,11 +1092,11 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts when guard with method call.
+    /// Verifies that the parser accepts when guard with memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_WhenGuardWithMethodCall()
+    public void Parse_WhenGuardWithMemberRoutineCall()
     {
         string source = """
                         routine process(item: Item)

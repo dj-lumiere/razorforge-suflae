@@ -47,8 +47,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid Decimal literal format.</summary>
     InvalidDecimalLiteral = 5,
 
-    /// <summary>'me' keyword used outside a type method context.</summary>
-    MeOutsideTypeMethod = 6,
+    /// <summary>'me' keyword used outside a type memberRoutine context.</summary>
+    MeOutsideTypeMemberRoutine = 6,
 
     /// <summary>Referenced identifier is not declared in the current scope.</summary>
     UnknownIdentifier = 7,
@@ -117,10 +117,10 @@ public enum SemanticDiagnosticCode
     /// <summary>BackIndex operator '^' requires an integer operand.</summary>
     BackIndexRequiresInteger = 64,
 
-    /// <summary>Binary operator method not found on type.</summary>
+    /// <summary>Binary operator memberRoutine not found on type.</summary>
     BinaryOperatorNotFound = 65,
 
-    /// <summary>Unary operator method not found on type.</summary>
+    /// <summary>Unary operator memberRoutine not found on type.</summary>
     UnaryOperatorNotFound = 66,
 
     /// <summary>Real-to-Complex promotion only allowed for addition and subtraction.</summary>
@@ -286,10 +286,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Compound assignment operator not supported on type.</summary>
     CompoundAssignmentNotSupported = 254,
 
-    /// <summary>Attempting to mutate 'me' member variable in a @readonly method.</summary>
-    MutationInReadonlyMethod = 255,
+    /// <summary>Attempting to mutate 'me' member variable in a @readonly memberRoutine.</summary>
+    MutationInReadonlyMemberRoutine = 255,
 
-    /// <summary>Cannot call modifying method on preset variable.</summary>
+    /// <summary>Cannot call modifying memberRoutine on preset variable.</summary>
     ModifyingCallOnImmutable = 256,
 
     /// <summary>Cannot assign to member variable of preset variable.</summary>
@@ -418,10 +418,10 @@ public enum SemanticDiagnosticCode
     /// </summary>
     ReservedRoutinePrefix = 409,
 
-    /// <summary>Routine name uses reserved '$' prefix but is not a known wired method.</summary>
+    /// <summary>Routine name uses reserved '$' prefix but is not a known wired memberRoutine.</summary>
     UnknownWiredRoutine = 410,
 
-    /// <summary>Type defines an operator method but does not follow the required protocol.</summary>
+    /// <summary>Type defines an operator memberRoutine but does not follow the required protocol.</summary>
     OperatorWithoutProtocol = 411,
 
     /// <summary>Record member variable has a type that is not a value type (entities, wrappers, tokens cannot be stored in records).</summary>
@@ -445,8 +445,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Variant type cannot be used as a parameter type.</summary>
     VariantParameterNotAllowed = 415,
 
-    /// <summary>Variant type cannot have methods or follow protocols.</summary>
-    VariantMethodNotAllowed = 416,
+    /// <summary>Variant type cannot have memberRoutines or follow protocols.</summary>
+    VariantMemberRoutineNotAllowed = 416,
 
     /// <summary>Choice cases must have either all explicit values or all implicit values.</summary>
     ChoiceMixedValues = 417,
@@ -518,14 +518,14 @@ public enum SemanticDiagnosticCode
     /// <summary>Missing required member variable in creator.</summary>
     MissingRequiredMemberVariable = 455,
 
-    /// <summary>Cannot call writable method through read-only wrapper.</summary>
-    WritableMethodThroughReadOnlyWrapper = 456,
+    /// <summary>Cannot call writable memberRoutine through read-only wrapper.</summary>
+    WritableMemberRoutineThroughReadOnlyWrapper = 456,
 
     /// <summary>'with' expression requires a record type.</summary>
     WithExpressionNotRecord = 457,
 
-    /// <summary>Method not found on type.</summary>
-    MethodNotFound = 458,
+    /// <summary>memberRoutine not found on type.</summary>
+    MemberRoutineNotFound = 458,
 
     /// <summary>Common routine called on object or vice versa.</summary>
     CommonRoutineMismatch = 459,
@@ -572,7 +572,7 @@ public enum SemanticDiagnosticCode
 
     /// <summary>A user `create` may not take exactly the type's field-name set — that signature
     /// is the built-in memberwise constructor and cannot be overridden.</summary>
-    AllFieldsCreatorReserved = 511,
+    AllMemberVariablesCreatorReserved = 511,
 
     /// <summary>A call to a `@positional` routine mixes positional and named arguments — a call
     /// must be either all positional or all named.</summary>
@@ -693,7 +693,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot write to member variable through read-only wrapper (Viewing, Inspecting).</summary>
     WriteThroughReadOnlyWrapper = 631,
 
-    /// <summary>Hijacked[T] method calls require danger block.</summary>
+    /// <summary>Hijacked[T] memberRoutine calls require danger block.</summary>
     HijackedRequiresDanger = 627,
 
     /// <summary>.hijack() on Shared/Watched requires danger block.</summary>
@@ -732,11 +732,11 @@ public enum SemanticDiagnosticCode
     /// <summary>Only record types can be thrown (error types must be records).</summary>
     ThrowRequiresRecordType = 701,
 
-    /// <summary>Missing required protocol method implementation.</summary>
-    MissingProtocolMethod = 702,
+    /// <summary>Missing required protocol memberRoutine implementation.</summary>
+    MissingProtocolMemberRoutine = 702,
 
-    /// <summary>Protocol method signature mismatch.</summary>
-    ProtocolMethodSignatureMismatch = 703,
+    /// <summary>Protocol memberRoutine signature mismatch.</summary>
+    ProtocolMemberRoutineSignatureMismatch = 703,
 
     /// <summary>@generated or @innate annotation used outside a protocol routine declaration.</summary>
     InvalidGeneratedInnatePlacement = 704,
@@ -812,8 +812,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Only one varargs parameter is allowed per routine.</summary>
     VarargsMultiple = 769,
 
-    /// <summary>Method-chain syntax only works with single-argument constructors.</summary>
-    MethodChainMultiArg = 770,
+    /// <summary>memberRoutine-chain syntax only works with single-argument constructors.</summary>
+    MemberRoutineChainMultiArg = 770,
 
     /// <summary>Protocol mutation contract violated: implementation does not match protocol's mutation category.</summary>
     ProtocolMutationContractViolation = 771,

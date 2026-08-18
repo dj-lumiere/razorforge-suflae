@@ -61,10 +61,10 @@ internal sealed class LiteralLoweringPass
         _decimalType = ctx.Registry.LookupType(name: "Decimal");
         _textType = ctx.Registry.LookupType(name: "Text");
         _integerFromLiteral = _integerType != null
-            ? ctx.Registry.LookupMethod(type: _integerType, methodName: "from_literal")
+            ? ctx.Registry.LookupMemberRoutine(type: _integerType, memberRoutineName: "from_literal")
             : null;
         _decimalFromLiteral = _decimalType != null
-            ? ctx.Registry.LookupMethod(type: _decimalType, methodName: "from_literal")
+            ? ctx.Registry.LookupMemberRoutine(type: _decimalType, memberRoutineName: "from_literal")
             : null;
 
         // Imaginary `j*` literals (J32/J64/J128/Jn) are emitted as Text by codegen (no scalar form
@@ -78,7 +78,7 @@ internal sealed class LiteralLoweringPass
         _f128Type = ctx.Registry.LookupType(name: "F128");
         _realType = ctx.Registry.LookupType(name: "Real");
         _realFromLiteral = _realType != null
-            ? ctx.Registry.LookupMethod(type: _realType, methodName: "from_literal")
+            ? ctx.Registry.LookupMemberRoutine(type: _realType, memberRoutineName: "from_literal")
             : null;
     }
 
@@ -343,7 +343,7 @@ internal sealed class LiteralLoweringPass
                 Expression o = LowerExpression(steal.Operand);
                 return ReferenceEquals(o, steal.Operand) ? expr : steal with { Operand = o };
             }
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
             {
                 Expression obj = LowerExpression(gmc.Object);
                 List<Expression> args = LowerExpressionList(gmc.Arguments);

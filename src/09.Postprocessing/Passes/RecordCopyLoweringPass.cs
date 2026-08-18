@@ -18,7 +18,7 @@ namespace Compiler.Postprocessing.Passes;
 /// transfer sites while still emitting the operand value directly.</item>
 /// <item><b>Record copy injection</b> -> rewrites <c>var r2 = r1</c> and <c>r2 = r1</c>
 /// where <c>r1</c> is a "borrowed reference" (identifier or field access) of a
-/// record type to <c>r1.store()</c>. Required for RC wrapper types
+/// record type to <c>r1.assign()</c>. Required for RC wrapper types
 ///  (<c>Retained[T]</c>, <c>Tracked[T]</c>, etc.) where a bit-for-bit struct copy
 /// would not increment the reference count, causing a double-free bug.
 /// For plain records (no RC fields) <c>store()</c> is semantically identical to
@@ -36,7 +36,7 @@ namespace Compiler.Postprocessing.Passes;
 internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 {
     // True while lowering the body of a `store` routine. Returning `me` there is the identity-copy
-    // primitive itself, so it must NOT be rewritten to `me.store()` (that would recurse forever).
+    // primitive itself, so it must NOT be rewritten to `me.assign()` (that would recurse forever).
     private bool _inCopyRoutine;
 
     // True while lowering an RC-wrapper's refcount COPY VERB body (now the unified `store`). These are
@@ -53,10 +53,10 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     // move-out and must NOT be copied. So we retain-on-return only for these borrow params (and `me`).
     private readonly HashSet<string> _borrowParamNames = new(comparer: StringComparer.Ordinal);
 
-    // The method-name segment of a routine name/key: strips a leading `Owner.` qualifier and any
+    // The memberRoutine-name segment of a routine name/key: strips a leading `Owner.` qualifier and any
     // `(params)` / `[typeargs]` suffix. A stdlib generic DEF is keyed by its FULL name (e.g.
     // `Roamed[T].roam`), so a bare-name equality check would miss `roam` — extract the tail first.
-    private static string MethodTail(string nameOrKey)
+    private static string memberRoutineTail(string nameOrKey)
     {
         int lastDot = nameOrKey.LastIndexOf(value: '.');
         string tail = lastDot >= 0 ? nameOrKey[(lastDot + 1)..] : nameOrKey;
@@ -64,7 +64,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         return cut >= 0 ? tail[..cut] : tail;
     }
 
-    // The bare method/routine name a call resolves to (for store-primitive detection). Mirrors
+    // The bare memberRoutine/routine name a call resolves to (for store-primitive detection). Mirrors
     // ScopeTeardownLoweringPass.CalleeName so the copy pass and the teardown pass agree on which calls
     // are store primitives.
     private static string? CalleeName(Expression callee) => callee switch
@@ -74,7 +74,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         _ => null
     };
 
-    // The OWNER type's base name of a `Owner.method` routine name/key (strips generic args + module path):
+    // The OWNER type's base name of a `Owner.MemberRoutine` routine name/key (strips generic args + module path):
     // `Core.Roamed[Main.Box].roam` -> `Roamed`. Empty for a free routine.
     private static string OwnerBase(string nameOrKey)
     {
@@ -85,11 +85,11 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         return od >= 0 ? owner[(od + 1)..] : owner;
     }
 
-    // True when the routine is a METHOD of an RC wrapper (Retained/Tracked/Shared/Watched/Roamed). Inside ANY
-    // such method `me` is the primitive handle — retain-copying it makes the method call the wrapper's copy verb
-    // (`roam`), and the copy verb itself calls other wrapper methods (controller_address, …) which would ALSO
+    // True when the routine is a memberRoutine of an RC wrapper (Retained/Tracked/Shared/Watched/Roamed). Inside ANY
+    // such memberRoutine `me` is the primitive handle — retain-copying it makes the memberRoutine call the wrapper's copy verb
+    // (`roam`), and the copy verb itself calls other wrapper memberRoutines (controller_address, …) which would ALSO
     // get `me.roam()` injected → mutual recursion (StackOverflow). So suppress all injection in EVERY RC-wrapper
-    // method body, not just the copy verb. AST-declaration sites (Run / LowerMemberList) and variant-body keys
+    // memberRoutine body, not just the copy verb. AST-declaration sites (Run / LowerMemberList) and variant-body keys
     // only carry the routine NAME string, so the owner is parsed out of it; the instantiated-generic site has a
     // structural `RoutineInfo.OwnerType` and uses `OwnerTypeIsRcWrapper` instead.
     private static bool OwnerNameIsRcWrapper(string nameOrKey) =>
@@ -109,8 +109,8 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 
     private static bool NameIsCopyRoutine(string name)
     {
-        string tail = MethodTail(nameOrKey: name);
-        return tail == "store" || tail == "copy";
+        string tail = memberRoutineTail(nameOrKey: name);
+        return tail == "assign" || tail == "copy";
     }
 
     // Populates <see cref="_borrowParamNames"/> with the routine's MANAGED (retaining-store) record
@@ -125,14 +125,14 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             if (p.Name == "me") continue;
             TypeInfo? pt = p.Type?.ResolvedType;
-            if (pt != null && NeedsRetainingCopy(type: pt, copyMethod: out _))
+            if (pt != null && NeedsRetainingCopy(type: pt, copyMemberRoutine: out _))
                 _borrowParamNames.Add(item: p.Name);
         }
     }
 
     private static bool KeyIsCopyRoutine(string key)
     {
-        return key.Contains(value: "store") || key.Contains(value: ".copy");
+        return key.Contains(value: "assign") || key.Contains(value: ".copy");
     }
 
     /// <summary>
@@ -430,7 +430,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     /// Lowers a single expression sitting in an ownership/copy position (var-binding RHS,
     /// assignment RHS, return value, call argument). A "borrowed reference" — an identifier or
     /// field read — of a type that carries a retaining <c>store</c> (e.g. <c>Text</c>, whose
-    /// <c>store</c> bumps the controller refcount) is rewritten to <c>expr.store()</c> so the new
+    /// <c>store</c> bumps the controller refcount) is rewritten to <c>expr.assign()</c> so the new
     /// owner holds its own reference, balancing the <c>destroy</c> that scope-teardown inserts.
     /// Explicit <see cref="StealExpression"/> is preserved (an explicit move, no copy). Fresh
     /// values (calls, constructors, arithmetic) are already owned and are only recursed for
@@ -468,7 +468,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 
         if (!_inRcCopyVerb
             && expr is IdentifierExpression or MemberExpression
-            && NeedsRetainingCopy(type: expr.ResolvedType, copyMethod: out RoutineInfo? copyMethod))
+            && NeedsRetainingCopy(type: expr.ResolvedType, copyMemberRoutine: out RoutineInfo? copyMemberRoutine))
         {
             if (isReturn && expr is IdentifierExpression id)
             {
@@ -481,7 +481,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 if (!returningBorrowedReceiver && !returningBorrowParam)
                     return expr;
             }
-            return MakeCopyCall(expr: expr, copyMethod: copyMethod!);
+            return MakeCopyCall(expr: expr, copyMemberRoutine: copyMemberRoutine!);
         }
 
         // (`a[i]` element reads are legitimized into an owned value by OperatorLoweringPass, which wraps the
@@ -522,7 +522,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 // value's fields — a DESTINATION, exactly like a CreatorExpression member-init — so its
                 // borrowed-ref args must be retained (a bare struct copy would alias the source and
                 // double-free at teardown). A store primitive is likewise a destination (writes raw
-                // storage). Only a plain routine/method call borrows its args.
+                // storage). Only a plain routine/memberRoutine call borrows its args.
                 bool isDestination = isStorePrimitive || call.ConstructedType is not null;
                 var args = new List<Expression>(capacity: call.Arguments.Count);
                 foreach (Expression arg in call.Arguments)
@@ -575,11 +575,11 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 return changed ? creator with { MemberVariables = members } : creator;
             }
 
-            case GenericMethodCallExpression gmc:
+            case GenericMemberRoutineCallExpression gmc:
             {
                 bool changed = false;
                 // Store-primitive move semantics (see the CallExpression case) — e.g. poke lowers to
-                // `LLVM::store[T](me, value)`, a generic method call whose `value` arg is moved into
+                // `LLVM::store[T](me, value)`, a generic memberRoutine call whose `value` arg is moved into
                 // memory and must NOT be retain-copied here.
                 bool isStorePrimitiveG = CalleeName(gmc.Object) is { } gcn
                     && Resolution.RuntimeContract.StorePrimitives.Contains(item: gcn);
@@ -718,21 +718,21 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     /// which is how leaf managed types like <c>Text</c> bump their refcount. Trivially-copyable
     /// records have only a synthesized identity <c>store</c> and need no injection.
     /// </summary>
-    private bool NeedsRetainingCopy(TypeInfo? type, out RoutineInfo? copyMethod)
+    private bool NeedsRetainingCopy(TypeInfo? type, out RoutineInfo? copyMemberRoutine)
     {
-        copyMethod = null;
+        copyMemberRoutine = null;
         if (type == null) return false;
         // Same unified decision the teardown pass uses (TypeRegistry.GetLifecycle): a retaining copy
         // is needed iff the type has a hand-written (non-synthesized) zero-arg `store` — restricted to
-        // records and excluding the borrow tier — resolved through GetOwnMethodsResolved so generic
+        // records and excluding the borrow tier — resolved through GetOwnMemberRoutinesResolved so generic
         // resolutions (e.g. Maybe[Text]) agree with what teardown sees for the same type.
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(type: type);
-        copyMethod = lc.Store;
-        return !lc.IsBorrow && copyMethod != null;
+        copyMemberRoutine = lc.Store;
+        return !lc.IsBorrow && copyMemberRoutine != null;
     }
 
     /// <summary>
-    /// Builds a fully resolved <c>expr.store()</c> call. The routine and lowering kind are stamped
+    /// Builds a fully resolved <c>expr.assign()</c> call. The routine and lowering kind are stamped
     /// here (not left for a later pass) so codegen materializes the <c>store</c> return value — an
     /// unresolved call is emitted as a discarded <c>void</c> call, dropping the retained copy and
     /// leaving the binding with a dangling reference.
@@ -748,19 +748,19 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         init is CarrierPayloadExpression
         || (init is MemberExpression { Object.ResolvedType: RecordTypeInfo { CarrierKind: not TypeModel.Enums.CarrierKind.None } });
 
-    private static Expression MakeCopyCall(Expression expr, RoutineInfo copyMethod)
+    private static Expression MakeCopyCall(Expression expr, RoutineInfo copyMemberRoutine)
     {
-        // Use the resolved method's own name for the property: records/managed-leaves retain via
+        // Use the resolved memberRoutine's own name for the property: records/managed-leaves retain via
         // `store`, but a variant's deep copy is `copy` (BuildVariantCopyBody). Codegen dispatches on
         // ResolvedRoutine, but keeping the property name in sync avoids a misleading `store` label on
         // a `copy` call and any name-based lookup drifting.
-        var callee = new MemberExpression(Object: expr, MemberName: copyMethod.Name, Location: expr.Location)
+        var callee = new MemberExpression(Object: expr, MemberName: copyMemberRoutine.Name, Location: expr.Location)
             { ResolvedType = expr.ResolvedType };
         return new CallExpression(Callee: callee, Arguments: [], Location: expr.Location)
         {
-            ResolvedRoutine = copyMethod,
+            ResolvedRoutine = copyMemberRoutine,
             ResolvedType = expr.ResolvedType,
-            LoweringKind = CallClassifier.ClassifyMethodCall(method: copyMethod)
+            LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: copyMemberRoutine)
         };
     }
 }

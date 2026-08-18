@@ -237,7 +237,7 @@ routine T.serialize() -> SerialValue
 @overridable
 routine T.copy() -> Me
 needs Copyable everywhere
-  return me.store()
+  return me.assign()
 
 ### Variant `copy()`: TAG-dispatch DEEP copy — reconstruct the live arm with a copied payload, so a
 ### heap arm (a collection, a managed leaf) is NOT bitwise-aliased (which would double-free). `branchof`
@@ -286,19 +286,19 @@ needs T is VariantType
         return
     else => return
 
-### The auto-derived `store()` (Storable — the shallow store / alias-safe verb): a shallow `var result
+### The auto-derived `assign()` (Assignable — the shallow store / alias-safe verb): a shallow `var result
 ### = me` (the compiler does NOT re-enter `store` on this self-copy — no recursion), then re-store each
 ### member IN PLACE so a retaining field (a managed leaf like Text/Decimal, or a record owning one) gets
 ### its refcount bumped on the copy — a bare bitwise alias would double-free at teardown. Only members
 ### that actually carry a retaining `store` are re-stored (`m.is_retaining`); a pure value field, or an
 ### @llvm-backed aggregate like `Array[T, N]` that has NO `store` at all, is left as the shallow bitwise
-### copy — emitting `me.field.store()` on it would call a store that does not exist. Replaces the C#
-### reconstruction `T(f: me.f.store(), …)` with a mutation walk — no creator arg-list needed.
+### copy — emitting `me.field.assign()` on it would call a store that does not exist. Replaces the C#
+### reconstruction `T(f: me.f.assign(), …)` with a mutation walk — no creator arg-list needed.
 @overridable
-routine T.store() -> Me
-needs Storable everywhere
+routine T.assign() -> Me
+needs Assignable everywhere
   var result = me
   expand m in allmemvarof(T)
     if m.is_retaining
-      result.$nameof(m) = me.$nameof(m).store()
+      result.$nameof(m) = me.$nameof(m).assign()
   return result

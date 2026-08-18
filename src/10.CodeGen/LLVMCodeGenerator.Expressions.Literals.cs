@@ -254,12 +254,12 @@ public partial class LlvmCodeGenerator
     /// memberwise-create synthesis plus a compile-time constant-aggregate argument path, which the
     /// current stdlib <c>create</c> (runtime-arg) does not accept. See the task report.</para>
     /// </summary>
-    private string BuildLiteralCarrierLayout(string carrierName, int expectedFields,
+    private string BuildLiteralCarrierLayout(string carrierName, int expectedMemberVariables,
         out string structTypeName)
     {
         TypeInfo? carrier = _registry.LookupType(name: carrierName)
             ?? _registry.LookupType(name: $"Core.{carrierName}");
-        if (carrier is RecordTypeInfo record && record.MemberVariables.Count == expectedFields)
+        if (carrier is RecordTypeInfo record && record.MemberVariables.Count == expectedMemberVariables)
         {
             structTypeName = GetRecordTypeName(record: record);
             var fieldTypes = record.MemberVariables
@@ -270,7 +270,7 @@ public partial class LlvmCodeGenerator
         // Fallback to the known physical layout when the type isn't registered yet (e.g. a bare
         // literal-only compilation without the stdlib carrier loaded).
         structTypeName = $"%Record.Core.{carrierName}";
-        return expectedFields == 3 ? "ptr, i64, ptr" : "ptr, i64";
+        return expectedMemberVariables == 3 ? "ptr, i64, ptr" : "ptr, i64";
     }
 
     /// <summary>
@@ -340,7 +340,7 @@ public partial class LlvmCodeGenerator
         // (physically `{ ptr data, i64 count, ptr ctrl }`). The `ctrl` slot is null for static
         // literals; `store`/`destroy` treat null ctrl as a no-op so the literal
         // is never freed and refcount ops are skipped.
-        string bytesLayout = BuildLiteralCarrierLayout(carrierName: "Bytes", expectedFields: 3,
+        string bytesLayout = BuildLiteralCarrierLayout(carrierName: "Bytes", expectedMemberVariables: 3,
             out string bytesStructType);
         string bytesValue = BuildLiteralCarrierValue(carrierName: "Bytes", dataName: dataName, count: count);
         EmitLine(sb: _globalDeclarations,
@@ -717,7 +717,7 @@ public partial class LlvmCodeGenerator
         // sites expect the record by value, not a pointer. Use the named struct type
         // (derived from the registered Text fields) so the SSA value matches the call
         // signature. The optimizer collapses redundant loads of the same global.
-        _ = BuildLiteralCarrierLayout(carrierName: "Text", expectedFields: 3,
+        _ = BuildLiteralCarrierLayout(carrierName: "Text", expectedMemberVariables: 3,
             out string textStructType);
         string loaded = NextTemp();
         EmitLine(sb: sb, line: $"{loaded} = load {textStructType}, ptr {constName}");
@@ -767,7 +767,7 @@ public partial class LlvmCodeGenerator
         // Layer 2: Text record payload — layout derived from the registered Text fields
         // (physically `{ ptr data, i64 count, ptr ctrl }`). `ctrl` is null for static literals —
         // store/destroy short-circuit on null and never free the literal or touch the refcount.
-        string textLayout = BuildLiteralCarrierLayout(carrierName: "Text", expectedFields: 3,
+        string textLayout = BuildLiteralCarrierLayout(carrierName: "Text", expectedMemberVariables: 3,
             out _);
         string textValue = BuildLiteralCarrierValue(carrierName: "Text", dataName: dataName, count: count);
         EmitLine(sb: _globalDeclarations,

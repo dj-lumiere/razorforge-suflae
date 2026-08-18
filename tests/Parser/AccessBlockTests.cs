@@ -64,11 +64,11 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts viewing with method call.
+    /// Verifies that the parser accepts viewing with memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_ViewingWithMethodCall()
+    public void Parse_ViewingWithMemberRoutineCall()
     {
         string source = """
                         routine test()

@@ -7,9 +7,9 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for in-place compound assignment dispatch (#40).
-/// Compound assignments (+=, -=, etc.) dispatch to in-place wired methods ($iadd, etc.)
+/// Compound assignments (+=, -=, etc.) dispatch to in-place wired memberRoutines ($iadd, etc.)
 /// first, then fall back to create-and-assign ($add) for non-entity types.
-/// Entities require in-place wired methods (no fallback, since bare entity assignment is prohibited).
+/// Entities require in-place wired memberRoutines (no fallback, since bare entity assignment is prohibited).
 /// </summary>
 public class CompoundAssignmentTests
 {

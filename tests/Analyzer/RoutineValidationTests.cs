@@ -59,7 +59,7 @@ public class RoutineValidationTests
     #region Migratable annotation
 
     /// <summary>
-    /// Verifies that a single @migratable annotation on a method produces no conflict error.
+    /// Verifies that a single @migratable annotation on a memberRoutine produces no conflict error.
     /// </summary>
     [Fact]
     public void Analyze_MigratableAnnotationAlone_NoError()

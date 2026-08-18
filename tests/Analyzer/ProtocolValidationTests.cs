@@ -82,7 +82,7 @@ public class ProtocolValidationTests
     [Fact]
     public void Analyze_ProtocolWritableImplMigratable_ReportsError()
     {
-        // Protocol method is writable by default; the impl is @migratable — MORE mutating than
+        // Protocol memberRoutine is writable by default; the impl is @migratable — MORE mutating than
         // the contract allows, so it is rejected (a Modifying-token caller could trigger relocation).
         string source = """
                         protocol Mutator
@@ -104,7 +104,7 @@ public class ProtocolValidationTests
     #region Migratable protocol contract
 
     /// <summary>
-    /// Verifies that a @migratable protocol method implemented as @migratable produces no error.
+    /// Verifies that a @migratable protocol memberRoutine implemented as @migratable produces no error.
     /// </summary>
     [Fact]
     public void Analyze_ProtocolMigratableImplMigratable_NoError()
@@ -126,7 +126,7 @@ public class ProtocolValidationTests
     }
 
     /// <summary>
-    /// Verifies that a @migratable protocol method implemented as plain writable produces no error
+    /// Verifies that a @migratable protocol memberRoutine implemented as plain writable produces no error
     /// (writable is more restrictive than migratable, so the contract is satisfied).
     /// </summary>
     [Fact]
@@ -148,7 +148,7 @@ public class ProtocolValidationTests
     }
 
     /// <summary>
-    /// Verifies that a @readonly protocol method implemented as @migratable reports a contract violation.
+    /// Verifies that a @readonly protocol memberRoutine implemented as @migratable reports a contract violation.
     /// </summary>
     [Fact]
     public void Analyze_ProtocolReadonlyImplMigratable_ReportsError()

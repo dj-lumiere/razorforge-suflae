@@ -10,7 +10,7 @@ public enum CallLoweringKind
     /// <summary>Direct standalone routine call.</summary>
     DirectRoutine,
 
-    /// <summary>Direct method call on a concrete receiver type.</summary>
+    /// <summary>Direct memberRoutine call on a concrete receiver type.</summary>
     DirectMemberRoutine,
 
     /// <summary>Type construction through a creator or constructor-style call.</summary>

@@ -134,7 +134,7 @@ public class RecordTypeInfo : TypeInfo
         [RuntimeContract.Retained, RuntimeContract.Shared, RuntimeContract.Tracked, RuntimeContract.Watched];
 
     /// <summary>Whether this record has RC wrapper fields needing retain-on-copy / release-on-drop.</summary>
-    public bool HasRCFields => MemberVariables.Any(predicate: f =>
+    public bool HasRCMemberVariables => MemberVariables.Any(predicate: f =>
         f.Type is WrapperTypeInfo w && RCWrapperBaseNames.Contains(item: w.Name));
 
     /// <summary>

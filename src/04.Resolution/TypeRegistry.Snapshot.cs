@@ -38,7 +38,7 @@ partial class TypeRegistry
         public Dictionary<string, RoutineInfo> Routines { get; init; } = null!;
         /// <summary>Routines keyed by qualified name.</summary>
         public Dictionary<string, RoutineInfo> RoutinesByQualifiedName { get; init; } = null!;
-        /// <summary>Routines grouped by owner type full name, then by method name → overloads (a bare
+        /// <summary>Routines grouped by owner type full name, then by memberRoutine name → overloads (a bare
         /// generic-param owner is stored under the canonical GenericOwnerKey).</summary>
         public Dictionary<string, Dictionary<string, List<RoutineInfo>>> RoutinesByOwner { get; init; } = null!;
         /// <summary>Resolved routine instances (concrete-owner substitutions) keyed by RegistryKey.</summary>

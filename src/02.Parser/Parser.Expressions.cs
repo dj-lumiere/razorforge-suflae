@@ -62,7 +62,7 @@ public partial class Parser
     private Expression ParseDollarSpliceInner()
     {
         SourceLocation loc = GetLocation();
-        if (!Check(type: TokenType.Identifier) && !IsKeywordValidAsMethodName(CurrentToken.Type))
+        if (!Check(type: TokenType.Identifier) && !IsKeywordValidAsMemberRoutineName(CurrentToken.Type))
         {
             throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
                 message: "Expected a primary (e.g. 'nameof(m)') after a '$' comptime splice.");

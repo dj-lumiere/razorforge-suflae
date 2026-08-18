@@ -33,7 +33,7 @@ public partial class LlvmCodeGenerator
         new Dictionary<string, Statement>();
 
     /// <summary>
-    /// Concrete generic method bodies from <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>,
+    /// Concrete generic memberRoutine bodies from <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>,
     /// keyed by <see cref="TypeModel.Symbols.RoutineInfo.RegistryKey"/>.
     /// Phase B emission iterates this map and emits any body whose
     /// mangled name has been declared in <see cref="_generatedRoutines"/>.
@@ -555,7 +555,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// True if <paramref name="type"/> is, or contains, an unresolved associated-type projection
     /// ('Me/Value', 'S/Iter'). Such a type is abstract until monomorphization resolves the slot, so
-    /// a record instantiation built over it (e.g. Maybe[Me/Value] from an abstract protocol method
+    /// a record instantiation built over it (e.g. Maybe[Me/Value] from an abstract protocol memberRoutine
     /// signature) is not emittable LLVM IR and must be skipped at the record-declaration sites.
     /// Kept separate from <see cref="ContainsGenericParameter"/> so routine emission is unaffected.
     /// </summary>
@@ -580,7 +580,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Protocol self-type ('Me') has no concrete LLVM representation — treat the same as an
-        // unresolved generic parameter so that abstract protocol method stubs are never declared.
+        // unresolved generic parameter so that abstract protocol memberRoutine stubs are never declared.
         // Build-time dispatch: concrete implementers emit their own declarations; the abstract
         // stub with 'Me' in its signature is never valid LLVM IR.
         if (type is ProtocolSelfTypeInfo)
@@ -748,19 +748,19 @@ public partial class LlvmCodeGenerator
 
                     if (routineInfo == null)
                     {
-                        if (routine.OwnerName is { } ownerPart && routine.MethodName is { } shortName)
+                        if (routine.OwnerName is { } ownerPart && routine.MemberRoutineName is { } shortName)
                         {
                             // Member declaration (e.g. "UnpackedFloat[M, L, W].cbrt"). Resolve scoped
                             // to the owner type FIRST — never fall through to a bare short-name lookup
                             // that could bind a same-named free/external routine of a different owner
-                            // (which would emit this method's body under the wrong identity →
-                            // "Unresolved generic method" at codegen). OwnerName is the args-stripped
+                            // (which would emit this memberRoutine's body under the wrong identity →
+                            // "Unresolved generic member routine" at codegen). OwnerName is the args-stripped
                             // owner base (structural, from the parser).
                             TypeInfo? ownerType = _registry.LookupType(name: ownerPart);
                             if (ownerType != null)
                             {
-                                routineInfo = _registry.LookupMethod(type: ownerType,
-                                    methodName: shortName);
+                                routineInfo = _registry.LookupMemberRoutine(type: ownerType,
+                                    memberRoutineName: shortName);
                             }
 
                             routineInfo ??= _registry.LookupRoutine(fullName: shortName) ??
@@ -853,7 +853,7 @@ public partial class LlvmCodeGenerator
                             {
                                 var candidates = new List<RoutineInfo>();
                                 _registry.CollectMemberRoutineCandidates(type: resolvedOwner,
-                                    methodName: routineInfo.Name,
+                                    memberRoutineName: routineInfo.Name,
                                     candidates: candidates);
 
                                 static string NormalizeTypeName(string n)
@@ -937,15 +937,15 @@ public partial class LlvmCodeGenerator
                     // When failable/non-failable overloads share the same name and parameter types
                     // (e.g., interpret_as_utf8() and interpret_as_utf8!()), they collide in
                     // the _routines dictionary under the same RegistryKey. The last registration
-                    // wins, making the first invisible to LookupRoutine. Use LookupMethod
+                    // wins, making the first invisible to LookupRoutine. Use LookupMemberRoutine
                     // (which indexes by owner type and preserves all overloads) to find the
                     // correct variant.
                     if (routineInfo != null && routineInfo.IsFailable != routine.IsFailable &&
                         routineInfo.OwnerType != null)
                     {
-                        RoutineInfo? corrected = _registry.LookupMethod(
+                        RoutineInfo? corrected = _registry.LookupMemberRoutine(
                             type: routineInfo.OwnerType,
-                            methodName: routineInfo.Name,
+                            memberRoutineName: routineInfo.Name,
                             isFailable: routine.IsFailable);
                         if (corrected != null)
                         {
@@ -1039,7 +1039,7 @@ public partial class LlvmCodeGenerator
                 // would always fail this gate. The inner per-concrete loop below has its own
                 // liveness check (_generatedRoutines.Contains), so it's safe to bypass here.
                 bool isWrapperForwarderGenDef =
-                    synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: not null }
+                    synthInfo is { IsSynthesized: true, WrapperForwarderInnerMemberRoutine: not null }
                     && synthInfo.OwnerType?.IsGenericDefinition == true;
                 if (!isWrapperForwarderGenDef
                     && _liveRoutineKeys.Count > 0
@@ -1062,9 +1062,9 @@ public partial class LlvmCodeGenerator
                     // Non-wrapper synthesized bodies on generic-def owners (try_emit, represent,
                     // diagnose, hash, eq for generic types like ListEmitter[T], List[T]).
                     // For each live concrete instantiation of this owner, lookup the substituted
-                    // method (LookupMethod normalizes generic-def methods onto concrete owners),
+                    // memberRoutine (LookupMemberRoutine normalizes generic-def memberRoutines onto concrete owners),
                     // rewrite the shared body to a fully concrete form, and emit one per owner.
-                    if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: null }
+                    if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMemberRoutine: null }
                         && synthInfo.OwnerType.GenericParameters is { Count: > 0 } gParams)
                     {
                         TypeInfo genericOwner = synthInfo.OwnerType;
@@ -1087,13 +1087,13 @@ public partial class LlvmCodeGenerator
                             if (_liveOwnerTypeNames.Count > 0
                                 && !_liveOwnerTypeNames.Contains(item: candidateOwner.FullName))
                                 continue;
-                            RoutineInfo? concreteMethod = _registry.LookupMethod(
-                                type: candidateOwner, methodName: synthInfo.Name);
-                            if (concreteMethod == null) continue;
+                            RoutineInfo? concreteMemberRoutine = _registry.LookupMemberRoutine(
+                                type: candidateOwner, memberRoutineName: synthInfo.Name);
+                            if (concreteMemberRoutine == null) continue;
                             if (_liveRoutineKeys.Count > 0
-                                && !_referencedKeys.Contains(item: concreteMethod.RegistryKey))
+                                && !_referencedKeys.Contains(item: concreteMemberRoutine.RegistryKey))
                                 continue;
-                            string monoFuncName = MangleRoutineName(routine: concreteMethod);
+                            string monoFuncName = MangleRoutineName(routine: concreteMemberRoutine);
                             if (_generatedRoutineDefs.Contains(item: monoFuncName)) continue;
                             var newSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
                             for (int gi = 0; gi < gParams.Count; gi++)
@@ -1120,19 +1120,19 @@ public partial class LlvmCodeGenerator
                                 subs: monoStringSubs,
                                 typeSubs: newSubs,
                                 registry: _registry,
-                                enclosingRoutine: concreteMethod);
-                            EmitSynthesizedBodyFromAst(routine: concreteMethod,
+                                enclosingRoutine: concreteMemberRoutine);
+                            EmitSynthesizedBodyFromAst(routine: concreteMemberRoutine,
                                 funcName: monoFuncName, body: rewrittenSynthBody);
                         }
                     }
-                    if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: not null } &&
+                    if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMemberRoutine: not null } &&
                         synthInfo.OwnerType.GenericParameters is { Count: 1 } wrapperParams)
                     {
                         string wrapperParamName = wrapperParams[0];
                         foreach (RoutineInfo concreteWf in _registry.GetAllRoutineResolutions())
                         {
                             if (!concreteWf.IsSynthesized ||
-                                concreteWf.WrapperForwarderInnerMethod == null ||
+                                concreteWf.WrapperForwarderInnerMemberRoutine == null ||
                                 !ReferenceEquals(objA: concreteWf.GenericDefinition, objB: synthInfo) ||
                                 concreteWf.OwnerType?.TypeArguments is not { Count: 1 })
                                 continue;
@@ -1233,7 +1233,7 @@ public partial class LlvmCodeGenerator
     /// routines nested inside CrashableDeclaration.Members (e.g., crash_message synthesized
     /// from the "message:" directive). Nested routines are yielded with their names prefixed
     /// by the owning type name (e.g., "DivisionByZeroError.crash_message") so Phase A's
-    /// registry lookup can find the registered method.
+    /// registry lookup can find the registered memberRoutine.
     /// </summary>
     private static IEnumerable<RoutineDeclaration> EnumerateStdlibRoutines(Program program)
     {

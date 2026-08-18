@@ -7,7 +7,7 @@ namespace TypeModel.Types;
 
 /// <summary>
 /// Type information for variants (type-based tagged unions).
-/// Variants are local-only and unmodifiable with no methods.
+/// Variants are local-only and unmodifiable with no memberRoutines.
 /// Members are types — the type IS the tag. No named cases.
 /// </summary>
 // Variant is a value type ({ i64 tag, [payload] } aggregate, like a record) → extends RecordTypeInfo,

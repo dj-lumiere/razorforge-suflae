@@ -80,9 +80,9 @@ public partial class LlvmCodeGenerator
                     name: "Bool"), // Comparisons return Bool
                 UnaryExpression unary => GetUnaryExpressionType(unary: unary),
                 CallExpression call => GetCallReturnType(call: call),
-                GenericMethodCallExpression gmc2 => throw new InvalidOperationException(
-                    $"GenericMethodCallExpression must be lowered by GenericCallLoweringPass before codegen. " +
-                    $"GMCE: {(gmc2.Object is IdentifierExpression eid ? eid.Name : gmc2.Object.GetType().Name)}.{gmc2.MethodName}" +
+                GenericMemberRoutineCallExpression gmc2 => throw new InvalidOperationException(
+                    $"GenericMemberRoutineCallExpression must be lowered by GenericCallLoweringPass before codegen. " +
+                    $"GMCE: {(gmc2.Object is IdentifierExpression eid ? eid.Name : gmc2.Object.GetType().Name)}.{gmc2.MemberRoutineName}" +
                     $"[{string.Join(", ", gmc2.TypeArguments?.Select(t => t.Name) ?? [])}], " +
                     $"in routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
                 StealExpression steal => GetExpressionType(expr: steal.Operand),
@@ -103,7 +103,7 @@ public partial class LlvmCodeGenerator
         if (expr is CallExpression { Callee: MemberExpression calleeMember })
         {
             TypeInfo? rcvrType = GetExpressionType(expr: calleeMember.Object);
-            if (rcvrType is ProtocolTypeInfo { Methods.Count: 0, TypeArguments.Count: > 0 })
+            if (rcvrType is ProtocolTypeInfo { MemberRoutines.Count: 0, TypeArguments.Count: > 0 })
             {
                 skipSaResolved = true;
             }
@@ -117,7 +117,7 @@ public partial class LlvmCodeGenerator
             // fall through to the expression-specific resolution which can use call-site type arguments
             if (resolved is not GenericParameterTypeInfo and not ErrorTypeInfo)
             {
-                // Const generic values resolve to their underlying primitive type for method dispatch
+                // Const generic values resolve to their underlying primitive type for memberRoutine dispatch
                 if (resolved is ConstGenericValueTypeInfo constVal)
                 {
                     return ResolveConstGenericUnderlyingType(constVal: constVal);
@@ -139,9 +139,9 @@ public partial class LlvmCodeGenerator
                 name: "Bool"), // Comparisons return Bool
             UnaryExpression unary => GetUnaryExpressionType(unary: unary),
             CallExpression call => GetCallReturnType(call: call),
-            GenericMethodCallExpression gmc2 => throw new InvalidOperationException(
-                $"GenericMethodCallExpression must be lowered by GenericCallLoweringPass before codegen. " +
-                $"GMCE: {(gmc2.Object is IdentifierExpression eid ? eid.Name : gmc2.Object.GetType().Name)}.{gmc2.MethodName}" +
+            GenericMemberRoutineCallExpression gmc2 => throw new InvalidOperationException(
+                $"GenericMemberRoutineCallExpression must be lowered by GenericCallLoweringPass before codegen. " +
+                $"GMCE: {(gmc2.Object is IdentifierExpression eid ? eid.Name : gmc2.Object.GetType().Name)}.{gmc2.MemberRoutineName}" +
                 $"[{string.Join(", ", gmc2.TypeArguments?.Select(t => t.Name) ?? [])}], " +
                 $"in routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
             StealExpression steal => GetExpressionType(expr: steal.Operand),
@@ -317,7 +317,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Try getitem on the member type
-        RoutineInfo? getItem = _registry.LookupMethod(type: memberType, methodName: "getitem");
+        RoutineInfo? getItem = _registry.LookupMemberRoutine(type: memberType, memberRoutineName: "getitem");
         return getItem?.ReturnType;
     }
 
@@ -692,7 +692,7 @@ public partial class LlvmCodeGenerator
     private static void TryGetTransparentProtocolTarget(TypeInfo? type, out TypeInfo? targetType)
     {
         if (type is ProtocolTypeInfo { TypeArguments: { Count: > 0 } } proto
-            && HasOnlyMarkerCoercionMethods(proto))
+            && HasOnlyMarkerCoercionMemberRoutines(proto))
         {
             targetType = proto.TypeArguments![index: 0]!;
             return;
@@ -701,9 +701,9 @@ public partial class LlvmCodeGenerator
         targetType = type;
     }
 
-    private static bool HasOnlyMarkerCoercionMethods(ProtocolTypeInfo proto)
+    private static bool HasOnlyMarkerCoercionMemberRoutines(ProtocolTypeInfo proto)
     {
-        foreach (ProtocolMethodInfo m in proto.Methods)
+        foreach (ProtocolMemberRoutineInfo m in proto.MemberRoutines)
         {
             if (m.Name != "access" && m.Name != "control") return false;
         }
@@ -712,8 +712,8 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Resolves a <see cref="ConstGenericValueTypeInfo"/> to its underlying primitive type
-    /// for method dispatch. E.g., a const generic value "8" with constraint "N is U64"
-    /// resolves to the U64 type so that method calls like N.represent() work correctly.
+    /// for memberRoutine dispatch. E.g., a const generic value "8" with constraint "N is U64"
+    /// resolves to the U64 type so that memberRoutine calls like N.represent() work correctly.
     /// </summary>
     private TypeInfo ResolveConstGenericUnderlyingType(ConstGenericValueTypeInfo constVal)
     {
@@ -738,7 +738,7 @@ public partial class LlvmCodeGenerator
             return null;
         }
 
-        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: "getitem");
+        RoutineInfo? getItem = _registry.LookupMemberRoutine(type: lookupType, memberRoutineName: "getitem");
         if (getItem?.ReturnType == null)
         {
             return null;
@@ -829,7 +829,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Fallback: OperatorLoweringPass sets ResolvedType on getitem! calls when it can't
-        // find a RoutineInfo via LookupMethod (e.g., when registered name differs from lookup name).
+        // find a RoutineInfo via LookupMemberRoutine (e.g., when registered name differs from lookup name).
         // ResolvedType was set from the IndexExpression SA annotated before lowering.
         if (call.ResolvedType is not null and not ErrorTypeInfo)
         {

@@ -640,8 +640,8 @@ public sealed partial class SemanticVerifier
     private void AnalyzeDiscardStatement(DiscardStatement discard)
     {
         // discard must target a routine call, not an arbitrary expression like a literal or variable.
-        // Explicit-generic calls (`f[T](...)`) parse to GenericMethodCallExpression — also a call.
-        if (discard.Expression is not (CallExpression or GenericMethodCallExpression))
+        // Explicit-generic calls (`f[T](...)`) parse to GenericMemberRoutineCallExpression — also a call.
+        if (discard.Expression is not (CallExpression or GenericMemberRoutineCallExpression))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidDiscardTarget,
                 message: "'discard' can only be used with routine calls. " +
@@ -763,17 +763,17 @@ public sealed partial class SemanticVerifier
             else
             {
                 // The bound variable's type is `enter`'s return type when non-void (pass-through).
-                // LookupMethod handles generic fallback (Viewing[Point].enter -> Viewing.enter).
-                RoutineInfo? enterMethod =
-                    _registry.LookupMethod(type: resourceType, methodName: "enter");
-                if (enterMethod?.ReturnType is { IsNone: false } enterReturn)
+                // LookupMemberRoutine handles generic fallback (Viewing[Point].enter -> Viewing.enter).
+                RoutineInfo? enterMemberRoutine =
+                    _registry.LookupMemberRoutine(type: resourceType, memberRoutineName: "enter");
+                if (enterMemberRoutine?.ReturnType is { IsNone: false } enterReturn)
                     boundType = enterReturn;
 
                 // A `fallback` branch drives a non-blocking acquisition — the resource must
                 // provide `try_enter` (returns Bool: did the hold succeed?). Types whose entry
                 // can only block (no `try_enter`) cannot take a `fallback`.
                 if (usingStmt.FallbackBody != null &&
-                    _registry.LookupMethod(type: resourceType, methodName: "try_enter") == null)
+                    _registry.LookupMemberRoutine(type: resourceType, memberRoutineName: "try_enter") == null)
                 {
                     ReportError(code: SemanticDiagnosticCode.UsingFallbackRequiresTryEnter,
                         message:

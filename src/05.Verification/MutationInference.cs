@@ -14,18 +14,18 @@ namespace Verification;
 /// Implements the three-phase algorithm from the wiki:
 ///
 /// Step 1 (Direct Analysis):
-///   - If method writes to any member variable of me -> mark as Writable
-///   - If method calls .modify() on me member variables -> mark as Writable
+///   - If memberRoutine writes to any member variable of me -> mark as Writable
+///   - If memberRoutine calls .modify() on me member variables -> mark as Writable
 ///
 /// Step 2 (Call Graph Propagation):
-///   - If method calls a Writable method on me -> mark as Writable
-///   - If method calls a Migratable method on me -> mark as Migratable
+///   - If memberRoutine calls a Writable memberRoutine on me -> mark as Writable
+///   - If memberRoutine calls a Migratable memberRoutine on me -> mark as Migratable
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Step 3 (Token Checking):
-///   - Viewing/Inspecting tokens can only call Readonly methods
-///   - Modifying/Claiming tokens can call Readonly or Writable methods
-///   - Only owned/non-token access can call Migratable methods
+///   - Viewing/Inspecting tokens can only call Readonly memberRoutines
+///   - Modifying/Claiming tokens can call Readonly or Writable memberRoutines
+///   - Only owned/non-token access can call Migratable memberRoutines
 /// </summary>
 public sealed class MutationInference
 {
@@ -83,7 +83,7 @@ public sealed class MutationInference
 
     /// <summary>
     /// Computes the mutation category for a node based on its direct mutations
-    /// and the categories of methods it calls on 'me'.
+    /// and the categories of memberRoutines it calls on 'me'.
     /// </summary>
     /// <param name="node">The node to compute the category for.</param>
     /// <returns>The computed mutation category.</returns>

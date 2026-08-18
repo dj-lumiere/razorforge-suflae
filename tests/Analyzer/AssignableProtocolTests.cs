@@ -16,7 +16,7 @@ using static TestHelpers;
 ///     Assignable for free; ownership-bearing wrappers do not.
 ///   * Choice / Flags auto-derive Assignable unconditionally (scalar layout).
 ///   * Tuples cascade — Assignable iff every element is Assignable.
-///   * Raw-pointer wrappers (Hijacked[T], CPtr) opt in with a one-line $store body.
+///   * Raw-pointer wrappers (Hijacked[T], CPtr) opt in with a one-line assign body.
 ///   * <c>with</c> expression now requires Assignable on the base; gate diagnostic
 ///     is <c>WithBaseNotAssignable</c> (S785).
 /// </summary>
@@ -68,12 +68,12 @@ public class AssignableProtocolTests
     {
         string source = """
                         flags Perms
-                          Read
-                          Write
-                          Execute
+                          READ
+                          WRITE
+                          EXECUTE
 
                         routine start()
-                          var a = Perms.Read
+                          var a = Perms.READ
                           var b = a
                           return
                         """;
@@ -311,7 +311,7 @@ public class AssignableProtocolTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithBaseNotAssignable &&
-                         e.Message.Contains(value: "Storable",
+                         e.Message.Contains(value: "Assignable",
                              comparisonType: StringComparison.Ordinal));
     }
 
@@ -368,10 +368,10 @@ public class AssignableProtocolTests
 
     #endregion
 
-    #region $store synthesis — direct calls succeed on auto-derived Assignable types
+    #region $assign synthesis — direct calls succeed on auto-derived Assignable types
 
     [Fact]
-    public void Analyze_CopyMethod_DirectCall_OnPrimitiveRecord_NoError()
+    public void Analyze_CopyMemberRoutine_DirectCall_OnPrimitiveRecord_NoError()
     {
         string source = """
                         record Point
@@ -380,7 +380,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Point(x: 1, y: 2)
-                          var b = a.store()
+                          var b = a.assign()
                           return
                         """;
 
@@ -389,7 +389,7 @@ public class AssignableProtocolTests
     }
 
     [Fact]
-    public void Analyze_CopyMethod_DirectCall_OnChoice_NoError()
+    public void Analyze_CopyMemberRoutine_DirectCall_OnChoice_NoError()
     {
         string source = """
                         choice Color
@@ -399,7 +399,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Color.Red
-                          var b = a.store()
+                          var b = a.assign()
                           return
                         """;
 
@@ -408,7 +408,7 @@ public class AssignableProtocolTests
     }
 
     [Fact]
-    public void Analyze_CopyMethod_DirectCall_OnFlags_NoError()
+    public void Analyze_CopyMemberRoutine_DirectCall_OnFlags_NoError()
     {
         string source = """
                         flags Perms
@@ -418,7 +418,7 @@ public class AssignableProtocolTests
 
                         routine start()
                           var a = Perms.Read
-                          var b = a.store()
+                          var b = a.assign()
                           return
                         """;
 
@@ -427,10 +427,10 @@ public class AssignableProtocolTests
     }
 
     [Fact]
-    public void Analyze_CopyMethod_DirectCall_OnRecordWithRetained_NoMethodFound()
+    public void Analyze_CopyMemberRoutine_DirectCall_OnRecordWithRetained_NoMemberRoutineFound()
     {
-        // Record with Retained field doesn't auto-derive Assignable → no synthesized $store.
-        // User-written $store would be required; without it the direct call fails to resolve.
+        // Record with Retained field doesn't auto-derive Assignable → no synthesized $assign.
+        // User-written $assign would be required; without it the direct call fails to resolve.
         string source = """
                         entity Node
                           value: S64
@@ -441,7 +441,7 @@ public class AssignableProtocolTests
                         routine start()
                           var a = Node(value: 1)
                           var b = Box(handle: Retained(from: steal a))
-                          var c = b.store()
+                          var c = b.assign()
                           return
                         """;
 
