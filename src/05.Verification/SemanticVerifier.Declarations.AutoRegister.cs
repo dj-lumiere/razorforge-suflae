@@ -5,7 +5,7 @@ namespace Verification;
 
 public sealed partial class SemanticVerifier
 {
-    #region Phase 2.55: Auto-Register Builder-Generated Member Routines
+    #region Phase 5: Auto-Register Builder-Generated Member Routines
 
     private void AutoRegisterWiredRoutines()
     {

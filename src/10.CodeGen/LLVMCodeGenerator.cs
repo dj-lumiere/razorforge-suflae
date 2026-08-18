@@ -455,21 +455,21 @@ public partial class LlvmCodeGenerator
             sw.Restart();
         }
 
-        // Phase 1: Generate all type declarations
+        // Stage 1: Generate all type declarations
         GenerateTypeDeclarations();
-        Mark(label: "Phase 1 TypeDeclarations");
+        Mark(label: "Stage 1 TypeDeclarations");
 
-        // Phase 2: Generate function declarations (signatures)
+        // Stage 2: Generate function declarations (signatures)
         GenerateRoutineDeclarations();
-        Mark(label: "Phase 2 RoutineDeclarations");
+        Mark(label: "Stage 2 RoutineDeclarations");
 
-        // Phase 3: Generate function definitions (bodies)
+        // Stage 3: Generate function definitions (bodies)
         GenerateRoutineDefinitions();
-        Mark(label: "Phase 3 RoutineDefinitions");
+        Mark(label: "Stage 3 RoutineDefinitions");
 
-        // Phase 4: Generate runtime support (if needed)
+        // Stage 4: Generate runtime support (if needed)
         GenerateRuntimeSupport();
-        Mark(label: "Phase 4 RuntimeSupport");
+        Mark(label: "Stage 4 RuntimeSupport");
 
         // Combine all sections
         string output = BuildOutput();

@@ -13,16 +13,16 @@ namespace Verification;
 /// Performs mutation inference for routines.
 /// Implements the three-phase algorithm from the wiki:
 ///
-/// Phase 1 (Direct Analysis):
+/// Step 1 (Direct Analysis):
 ///   - If method writes to any member variable of me -> mark as Writable
 ///   - If method calls .modify() on me member variables -> mark as Writable
 ///
-/// Phase 2 (Call Graph Propagation):
+/// Step 2 (Call Graph Propagation):
 ///   - If method calls a Writable method on me -> mark as Writable
 ///   - If method calls a Migratable method on me -> mark as Migratable
 ///   - Repeat until fixpoint (no changes)
 ///
-/// Phase 3 (Token Checking):
+/// Step 3 (Token Checking):
 ///   - Viewing/Inspecting tokens can only call Readonly methods
 ///   - Modifying/Claiming tokens can call Readonly or Writable methods
 ///   - Only owned/non-token access can call Migratable methods
@@ -46,15 +46,15 @@ public sealed class MutationInference
     /// </summary>
     public void InferAll()
     {
-        // Phase 1: Direct analysis (already done during AST traversal)
+        // Step 1: Direct analysis (already done during AST traversal)
         // The DirectlyMutates flag should be set on CallGraphNodes
 
-        // Phase 2: Call graph propagation
+        // Step 2: Call graph propagation
         PropagateCategories();
     }
 
     /// <summary>
-    /// Phase 2: Propagates mutation categories through the call graph.
+    /// Step 2: Propagates mutation categories through the call graph.
     /// Uses fixpoint iteration until no changes occur.
     /// </summary>
     private void PropagateCategories()
@@ -123,7 +123,7 @@ public sealed class MutationInference
 
     /// <summary>
     /// Analyzes a statement for direct mutations (member variable writes to 'me').
-    /// Call this during Phase 1 AST traversal.
+    /// Call this during Step 1 (direct analysis) AST traversal.
     /// </summary>
     /// <param name="node">The call graph node for the current routine.</param>
     /// <param name="statement">The statement to analyze.</param>

@@ -12,11 +12,11 @@ namespace Verification;
 using TypeSymbol = TypeInfo;
 
 /// <summary>
-/// Phase 3: Statement analysis.
+/// Phase 5: Statement analysis.
 /// </summary>
 public sealed partial class SemanticVerifier
 {
-    #region Phase 3: Body Analysis
+    #region Phase 5: Body Analysis
 
     /// <summary>
     /// Analyzes routine bodies and expressions for type correctness.
@@ -184,7 +184,7 @@ public sealed partial class SemanticVerifier
         // Look up by RegistryKey (BaseName + param types) for overload disambiguation,
         // then fall back to BaseName for the first-overload-wins entry.
         // Set up generic parameter context so ResolveType recognizes T, U, etc.
-        // (mirrors Phase 2.5 registration in Signatures.cs)
+        // (mirrors Phase 4.1 registration in Signatures.cs)
         // Set OwnerType so `Me` in param types resolves to the concrete owner
         // (e.g. `routine SumS64.combine(you: Me) -> Me` needs Me → SumS64 during param-type
         // resolution at line 137, which happens before routineInfo is looked up).
@@ -215,7 +215,7 @@ public sealed partial class SemanticVerifier
                                                              }
 
                                                              // Varargs params are stored as List[T] in the registry
-                                                             // (mirrors the wrapping in Signatures.cs Phase 2)
+                                                             // (mirrors the wrapping in Signatures.cs Phase 4)
                                                              if (p.IsVariadic)
                                                              {
                                                                  TypeSymbol? listDef =

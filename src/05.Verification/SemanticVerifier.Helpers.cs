@@ -176,7 +176,7 @@ public sealed partial class SemanticVerifier
             targetNames: parameters.Where(predicate: p => p.Name != "me")
                                    .Select(selector: p => p.Name).ToList());
 
-        // Phase 1: Validate named argument ordering and build parameter bindings.
+        // Step 1: Validate named argument ordering and build parameter bindings.
         // Each entry maps parameter index -> argument expression.
         bool seenNamed = false;
         var boundParams = new Dictionary<int, Expression>();
@@ -331,7 +331,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Phase 2: Check argument count against required parameters.
+        // Step 2: Check argument count against required parameters.
         int requiredParams = parameters.Count(predicate: p => !p.HasDefaultValue);
         int unboundRequired = 0;
         for (int i = 0; i < totalParams; i++)
@@ -367,7 +367,7 @@ public sealed partial class SemanticVerifier
                 location: location);
         }
 
-        // Phase 3: Type-check each bound argument against its parameter.
+        // Step 3: Type-check each bound argument against its parameter.
         foreach (KeyValuePair<int, Expression> binding in boundParams)
         {
             if (binding.Key >= totalParams)

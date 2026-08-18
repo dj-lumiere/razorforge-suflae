@@ -13,7 +13,7 @@ namespace Verification;
 using TypeSymbol = TypeInfo;
 
 /// <summary>
-/// Phase 2: Wired routine synthesis and derived operator generation.
+/// Phase 5: Wired routine synthesis and derived operator generation.
 /// </summary>
 public sealed partial class SemanticVerifier
 {
@@ -213,7 +213,7 @@ public sealed partial class SemanticVerifier
         }
     }
 
-    #region Phase 2.6: Derived Operator Generation
+    #region Phase 5: Derived Operator Generation
 
     /// <summary>
     /// Generates derived comparison operators from eq and cmp routines.

@@ -55,11 +55,11 @@ internal sealed class SignatureResolver
         }
     }
 
-    #region Phase 2.5: Routine Signature Resolution and Registration
+    #region Phase 4.1: Routine Signature Resolution and Registration
 
     /// <summary>
     /// Resolves routine signatures and registers them in the type registry.
-    /// Processes pending routines collected during Phase 1 and Phase 2.
+    /// Processes pending routines collected during Phase 3 and Phase 4.
     /// Performs protocol-as-type desugaring and duplicate detection by full signature.
     /// </summary>
     /// <param name="filterFilePath">If set, only processes pending routines from this file.</param>
@@ -97,11 +97,11 @@ internal sealed class SignatureResolver
             routine.Annotations.Contains(item: "migratable") ? MutationCategory.Migratable :
             MutationCategory.Writable;
 
-        // Phase 2 (ResolveTypeBodies) replaces user-defined entity/record types in the registry
+        // Phase 4 (ResolveTypeBodies) replaces user-defined entity/record types in the registry
         // with new objects that carry resolved member variables. pending.OwnerType was captured
-        // in Phase 1 and still points to the empty-member Phase 1 object. Re-look up by FullName
-        // so that routines see the correct member variable list at body-analysis time (Phase 4).
-        // For stdlib types the Phase 1 object is mutated in-place, so the lookup returns the
+        // in Phase 3 and still points to the empty-member Phase 3 object. Re-look up by FullName
+        // so that routines see the correct member variable list at body-analysis time (Phase 5).
+        // For stdlib types the Phase 3 object is mutated in-place, so the lookup returns the
         // same object — no behaviour change there.
         TypeSymbol? refreshedOwnerType = pending.OwnerType != null
             ? (_sa._registry.LookupType(name: pending.OwnerType.FullName) ?? pending.OwnerType)
@@ -466,7 +466,7 @@ internal sealed class SignatureResolver
 
     /// <summary>
     /// Resolves external routine signatures (parameter types and return types).
-    /// Externals are registered in Phase 1 and updated here with resolved types.
+    /// Externals are registered in Phase 3 and updated here with resolved types.
     /// </summary>
     internal void ResolveExternalSignatures(Program program)
     {

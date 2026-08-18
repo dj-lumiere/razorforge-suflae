@@ -13,11 +13,11 @@ namespace Verification;
 using TypeSymbol = TypeInfo;
 
 /// <summary>
-/// Phase 1 &amp; 2: Declaration collection and type body resolution.
+/// Phase 3 &amp; 4: Declaration collection and type body resolution.
 /// </summary>
 public sealed partial class SemanticVerifier
 {
-    #region Phase 1: Declaration Collection
+    #region Phase 3: Declaration Collection
 
     /// <summary>
     /// Collects all type and routine declarations without resolving bodies.
@@ -748,7 +748,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Store for deferred resolution and registration in Phase 2.5
+        // Store for deferred resolution and registration in Phase 4.1
         _pendingRoutines.Add(item: new PendingRoutine(Declaration: routine,
             OwnerType: ownerType,
             Kind: kind,
@@ -759,11 +759,11 @@ public sealed partial class SemanticVerifier
 
     #endregion
 
-    #region Phase 2.7: Protocol Implementation Validation
+    #region Phase 5: Protocol Implementation Validation
 
     /// <summary>
     /// Validates that all types declaring "obeys Protocol" implement all required protocol methods.
-    /// This is called after all routines are registered (Phase 2.5) and derived operators are generated (Phase 2.6).
+    /// This is called after all routines are registered (Phase 4.1) and derived operators are generated.
     /// </summary>
     private void ValidateProtocolImplementations()
     {

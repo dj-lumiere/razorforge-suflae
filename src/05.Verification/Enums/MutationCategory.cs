@@ -7,16 +7,16 @@ namespace Verification.Enums;
 /// <remarks>
 /// The builder automatically infers mutation categories using three-phase analysis:
 ///
-/// Phase 1 (Direct Analysis):
+/// Step 1 (Direct Analysis):
 ///   - If method writes to any member variable of me -> Writable
 ///   - If method calls .grasp() on me member variables -> Writable
 ///
-/// Phase 2 (Call Graph Propagation):
+/// Step 2 (Call Graph Propagation):
 ///   - If method calls a Writable method on me -> Writable
 ///   - If method calls a Migratable method on me -> Migratable
 ///   - Repeat until fixpoint (no changes)
 ///
-/// Phase 3 (Token Checking):
+/// Step 3 (Token Checking):
 ///   - Viewing/Inspecting tokens can only call Readonly methods
 ///   - Modifying/Claiming tokens can call Readonly or Writable methods
 ///   - Only owned/non-token access can call Migratable methods

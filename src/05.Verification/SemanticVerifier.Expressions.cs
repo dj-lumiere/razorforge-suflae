@@ -11,7 +11,7 @@ namespace Verification;
 using TypeSymbol = TypeInfo;
 
 /// <summary>
-/// Phase 3: Expression analysis.
+/// Phase 5: Expression analysis.
 /// </summary>
 public sealed partial class SemanticVerifier
 {

@@ -13,7 +13,7 @@ namespace Verification;
 using TypeSymbol = TypeInfo;
 
 /// <summary>
-/// Phase 4: Error handling variant support.
+/// Phase 5: Error handling variant support.
 ///
 /// RazorForge/Suflae error handling model:
 /// - Failable functions end with ! suffix (e.g., parse!, connect!)
@@ -30,7 +30,7 @@ using TypeSymbol = TypeInfo;
 /// </summary>
 public sealed partial class SemanticVerifier
 {
-    #region Phase 4: Error Handling Body Collection
+    #region Phase 5: Error Handling Body Collection
 
     /// <summary>
     /// Storage for routine bodies needed during variant generation.
@@ -51,8 +51,8 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Phase 2.8: Pre-register error handling variant stubs for user-defined failable routines.
-    /// Called before Phase 4 body analysis so that try_/check_/lookup_ variants are in scope
+    /// Phase 6 pre-pass: Pre-register error handling variant stubs for user-defined failable routines.
+    /// Called before Phase 5 body analysis so that try_/check_/lookup_ variants are in scope
     /// when user code calls them from within the same module.
     /// Uses AST-level throw/absent detection -> no full semantic analysis required.
     /// </summary>

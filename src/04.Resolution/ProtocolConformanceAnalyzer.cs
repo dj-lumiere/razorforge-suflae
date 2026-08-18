@@ -20,7 +20,7 @@ internal sealed class ProtocolConformanceAnalyzer
         _sa = sa;
     }
 
-    #region Phase 2.54: Implicit Marker Protocol Conformance
+    #region Phase 4.2: Implicit Marker Protocol Conformance
 
     /// <summary>
     /// Automatically adds marker protocol conformance based on type category.

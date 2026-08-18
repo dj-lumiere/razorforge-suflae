@@ -27,12 +27,12 @@ internal sealed class TypeBodyResolver
         _typeResolver = typeResolver;
     }
 
-    #region Phase 2: Type Body Resolution
+    #region Phase 4: Type Body Resolution
 
     /// <summary>
     /// Looks up a type by name, trying the current module-qualified name first,
-    /// then falling back to the bare name. This is needed because Phase 1 registers
-    /// user types with their full name (e.g., "Module.Point"), but Phase 2 resolvers
+    /// then falling back to the bare name. This is needed because Phase 3 registers
+    /// user types with their full name (e.g., "Module.Point"), but Phase 4 resolvers
     /// only have the bare name from the AST node.
     /// </summary>
     private TypeInfo? LookupTypeInCurrentModule(string name)

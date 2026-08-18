@@ -13,7 +13,7 @@ using TypeSymbol = TypeModel.Types.TypeInfo;
 namespace Compiler.Synthesis;
 
 /// <summary>
-/// Phase 2.55: Auto-registers builder-generated member routine signatures for all user types.
+/// Phase 6: Auto-registers builder-generated member routine signatures for all user types.
 /// These are default routines that every type of a given category gets (hash(), eq(), etc.).
 /// represent and diagnose are auto-registered (overridable).
 /// Only registers if the user hasn't already defined the routine.

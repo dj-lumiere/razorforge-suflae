@@ -12,7 +12,7 @@ namespace Verification;
 using TypeSymbol = TypeInfo;
 
 /// <summary>
-/// Phase 3: Literal expression analysis and deferred numeric parsing.
+/// Phase 5: Literal expression analysis and deferred numeric parsing.
 /// </summary>
 public sealed partial class SemanticVerifier
 {
