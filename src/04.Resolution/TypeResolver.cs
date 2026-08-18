@@ -1010,6 +1010,17 @@ internal sealed class TypeResolver
             return true;
         }
 
+        // The routine's OWN declared parameters (a free generic `identity[T]` or a member routine's
+        // method-generic `Holder[A].mapped[U]`) shadow too — but ONLY on the genuine TEMPLATE, whose
+        // GenericDefinition is null. A monomorphized instance (GenericDefinition set) can carry
+        // substituted concrete argument names in its GenericParameters list (e.g. `List[Byte].create`
+        // holding "Byte"); treating those as parameters is exactly the leak this guard prevents.
+        if (_sa._currentRoutine is { GenericDefinition: null, GenericParameters: { } routineParams }
+            && routineParams.Contains(value: name))
+        {
+            return true;
+        }
+
         // Universal / wrapper-inner owner: the owner IS the parameter (a single-hole template scope).
         if (_sa._currentRoutine?.OwnerType is GenericParameterTypeInfo gp && gp.Name == name)
         {

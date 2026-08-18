@@ -64,4 +64,72 @@ public class GenericParamCollisionTests
                                  return
                                """);
     }
+
+    /// <summary>
+    /// A FREE generic routine's OWN parameter must shadow a user type of the same name: `record T`
+    /// plus `routine identity[T](x: T) -> T` — the `T` in the routine is the parameter, not the record,
+    /// so `identity(7_s32)` infers `T = S32` rather than type-erroring against `record T`.
+    /// </summary>
+    [Fact]
+    public void FreeGenericRoutine_OwnParam_CoexistsWith_UserRecordOfSameName()
+    {
+        AssertAnalyzes(source: """
+                               record T
+                                 a: S32
+
+                               routine identity[T](x: T) -> T
+                                 return x
+
+                               routine start()
+                                 var id = identity(7_s32)
+                                 var t = T(a: 1_s32)
+                                 return
+                               """);
+    }
+
+    /// <summary>
+    /// A member routine's OWN method-generic parameter must shadow a user type of the same name:
+    /// `record U` plus `routine Holder[A].mapped[U](u: U) -> U` — the method's `U` is its parameter.
+    /// </summary>
+    [Fact]
+    public void MethodGenericParam_CoexistsWith_UserRecordOfSameName()
+    {
+        AssertAnalyzes(source: """
+                               record Holder[A]
+                                 value: A
+
+                               routine Holder[A].mapped[U](u: U) -> U
+                                 return u
+
+                               record U
+                                 x: S32
+
+                               routine start()
+                                 var h = Holder[S32](value: 1_s32)
+                                 var r = h.mapped(7_s32)
+                                 var u = U(x: 2_s32)
+                                 return
+                               """);
+    }
+
+    /// <summary>
+    /// A USER generic type's parameter must shadow a user type of the same name: `record T` plus a
+    /// user `record Box[T]` — `Box`'s `item: T` field is the parameter, not the record.
+    /// </summary>
+    [Fact]
+    public void UserGenericType_Param_CoexistsWith_UserRecordOfSameName()
+    {
+        AssertAnalyzes(source: """
+                               record T
+                                 a: S32
+
+                               record Box[T]
+                                 item: T
+
+                               routine start()
+                                 var b = Box[S32](item: 5_s32)
+                                 var t = T(a: 1_s32)
+                                 return
+                               """);
+    }
 }

@@ -116,12 +116,22 @@ internal sealed class SignatureResolver
             && !_sa.IsStdlibFile(filePath: pending.FilePath);
 
         // Filter routine.GenericParameters to exclude names that resolve to real types in the
-        // registry. The parser collects leaf identifiers from nested receiver types like
-        // `List[DictEntry[K, V]]` — these include both unresolved names (K, V) which are
-        // genuine generic params and registered names (e.g., S64 in `List[Pair[K, S64]]`)
-        // which should not be re-introduced as params.
+        // registry — but ONLY for RECEIVER-derived leaves. The parser collects leaf identifiers from a
+        // member routine's receiver type (`List[DictEntry[K, V]]`, `Iterable[Text]`); these mix genuine
+        // params (K, V) with concrete bindings that must NOT re-enter as params (S64 in
+        // `List[Pair[K, S64]]`, `Text` in `Iterable[Text].join`, `U16` in `List[U16].decode_as_utf16`).
+        // A receiver leaf that resolves to a type is such a binding — drop it (the owner type still
+        // carries any genuine receiver params, so they resolve via that scope).
+        //
+        // A param that is NOT receiver-derived — a free routine's own `[T]`, or a member routine's
+        // method-generic `[U]` — is an EXPLICIT declaration. It must NEVER be dropped just because a
+        // user type shares its name (`record T` + `identity[T]`, `record U` + `Holder[A].mapped[U]`):
+        // its identity is its slot, not the label. Filtering it here was the RF-S502 half of the
+        // name-as-identity collision (the resolver-side half is TypeResolver's slot-first shadowing).
+        HashSet<string> receiverLeaves = CollectReceiverLeafParamNames(routine.ReceiverType);
         List<string>? filteredGenericParams = routine.GenericParameters?
-            .Where(predicate: p => _sa._registry.LookupType(name: p) is null)
+            .Where(predicate: p => !receiverLeaves.Contains(item: p)
+                                   || _sa._registry.LookupType(name: p) is null)
             .ToList();
         if (filteredGenericParams is { Count: 0 }) filteredGenericParams = null;
 
@@ -462,6 +472,44 @@ internal sealed class SignatureResolver
             location: routine.Location);
         ValidateProtocolMethodSignature(routineInfo: finalRoutine,
             location: routine.Location);
+    }
+
+    /// <summary>
+    /// Collects the leaf identifier names appearing in a member routine's RECEIVER type arguments
+    /// (e.g. <c>List[DictEntry[K, V]]</c> → {K, V}, <c>Iterable[Text]</c> → {Text}). These are the
+    /// receiver-DERIVED parameter names — the only ones the same-name-as-a-type filter may drop, since
+    /// a receiver slot can bind a concrete type. Method-generic and free-routine parameters are NOT in
+    /// the receiver, so they never appear here and are never filtered. Empty for a free routine (null
+    /// receiver) or a bare type-parameter receiver. Dotted (module-qualified) names are excluded.
+    /// </summary>
+    private static HashSet<string> CollectReceiverLeafParamNames(TypeExpression? receiver)
+    {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        if (receiver?.GenericArguments is { Count: > 0 } args)
+        {
+            foreach (TypeExpression arg in args)
+            {
+                CollectReceiverLeaves(type: arg, into: names);
+            }
+        }
+
+        return names;
+    }
+
+    private static void CollectReceiverLeaves(TypeExpression type, HashSet<string> into)
+    {
+        if (type.GenericArguments is { Count: > 0 } args)
+        {
+            foreach (TypeExpression arg in args)
+            {
+                CollectReceiverLeaves(type: arg, into: into);
+            }
+
+            return;
+        }
+
+        if (type.Name.Contains(value: '.')) return;
+        into.Add(item: type.Name);
     }
 
     /// <summary>
