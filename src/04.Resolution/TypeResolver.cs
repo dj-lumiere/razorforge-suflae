@@ -344,6 +344,27 @@ internal sealed class TypeResolver
             return ResolveGenericType(typeExpr: typeExpr);
         }
 
+        // Generic parameters SHADOW same-named global types. A parameter's NAME is only a source
+        // label; its identity is its positional SLOT in the enclosing scope. So resolve an in-scope
+        // parameter BEFORE any global lookup — otherwise a user type whose name matches a stdlib
+        // generic's parameter (e.g. `record T` vs `List[T]`) hijacks that parameter during the
+        // generic's body/signature resolution (the RF-S954 monomorphization collision). Checking the
+        // slot here, not a collision-proof renamed string, keeps the label genuinely irrelevant.
+        //
+        // The shadow is granted ONLY when the name is a GENUINE parameter of a generic-DEFINITION
+        // scope (or resolves to nothing global). A name that resolves to a concrete type and is NOT a
+        // definition's own parameter is a CONCRETE argument that merely landed in a scope's parameter
+        // list — a specialized receiver (`Iterable[Text].join`) or a monomorphized instance's leaked
+        // arg (`List[Byte].create`) or a bracket-parsed concrete element (`Tuple[S32, Text, Bool]`).
+        // Those must resolve to the concrete type, not a bogus generic parameter, so they fall through.
+        bool nameIsParam = IsGenericParameter(name: typeExpr.Name);
+        TypeSymbol? globalType = LookupTypeWithImports(name: typeExpr.Name);
+        if (nameIsParam && (globalType is null || IsGenericDefinitionScopeParam(name: typeExpr.Name)))
+        {
+            return new GenericParameterTypeInfo(name: typeExpr.Name,
+                slot: GenericParameterSlot(name: typeExpr.Name));
+        }
+
         // Module-scoped ambiguity: a bare name declared in 2+ imported modules (with the current
         // module NOT declaring its own to shadow) is ambiguous. Report here where a location exists;
         // still resolve (first-match) below so downstream analysis doesn't cascade on a null type.
@@ -359,16 +380,18 @@ internal sealed class TypeResolver
         }
 
         // Try to look up the type by name (including imported modules)
-        TypeSymbol? resolved = LookupTypeWithImports(name: typeExpr.Name);
+        TypeSymbol? resolved = globalType;
         if (resolved != null)
         {
             return resolved;
         }
 
-        // Check for generic type parameters in current context
-        if (IsGenericParameter(name: typeExpr.Name))
+        // A name that is an in-scope parameter but ALSO an unresolved global (the guard above only
+        // returned for the genuine-definition-scope case) still resolves to the parameter here.
+        if (nameIsParam)
         {
-            return new GenericParameterTypeInfo(name: typeExpr.Name);
+            return new GenericParameterTypeInfo(name: typeExpr.Name,
+                slot: GenericParameterSlot(name: typeExpr.Name));
         }
 
         // Comptime const-generic argument from a `${…}` value-splice (e.g. the payload buffer size
@@ -925,6 +948,76 @@ internal sealed class TypeResolver
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The 0-based positional SLOT of an in-scope generic parameter <paramref name="name"/>, or
+    /// <c>-1</c> when it is not a parameter in the current scope. Mirrors the scope-lookup ORDER of
+    /// <see cref="IsGenericParameter"/> (routine params, then the owning type's, then the extension
+    /// receiver's) so the slot is the index within whichever scope binds the name. This is the
+    /// parameter's identity signal — see <see cref="GenericParameterTypeInfo.Slot"/>.
+    /// </summary>
+    internal int GenericParameterSlot(string name)
+    {
+        int slot;
+        if ((slot = _sa._currentRoutine?.GenericParameters?.IndexOf(item: name) ?? -1) >= 0)
+        {
+            return slot;
+        }
+
+        if ((slot = _sa._currentType?.GenericParameters?.IndexOf(item: name) ?? -1) >= 0)
+        {
+            return slot;
+        }
+
+        if ((slot = _sa._currentRoutine?.OwnerType?.GenericParameters?.IndexOf(item: name) ?? -1) >= 0)
+        {
+            return slot;
+        }
+
+        // Universal method (`routine T.bar()`): the owner IS the parameter — a single-slot scope.
+        if (_sa._currentRoutine?.OwnerType is GenericParameterTypeInfo or
+                WrapperTypeInfo { InnerType: GenericParameterTypeInfo })
+        {
+            return 0;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// True when <paramref name="name"/> is a GENUINE parameter of a generic-DEFINITION scope — a
+    /// still-unbound hole of a template — as opposed to a concrete type argument that merely appears
+    /// in some scope's parameter list. Used to decide whether an in-scope name may shadow a same-named
+    /// global type: only a definition's own unbound parameter shadows (so `record T` cannot hijack
+    /// `List[T]`'s parameter), while a concrete argument name (a specialized receiver's `Text`, a
+    /// monomorphized instance's leaked arg, a concrete tuple's bracket-parsed element) does NOT — it
+    /// must resolve to that concrete type. The routine's OWN parameter list is intentionally excluded
+    /// here because a monomorphized instance can carry concrete argument names in it; such a name only
+    /// resolves as a parameter when it has no global type at all (handled by the caller's fall-through).
+    /// </summary>
+    private bool IsGenericDefinitionScopeParam(string name)
+    {
+        if (_sa._currentType is { IsGenericDefinition: true, GenericParameters: { } typeParams }
+            && typeParams.Contains(value: name))
+        {
+            return true;
+        }
+
+        if (_sa._currentRoutine?.OwnerType is { IsGenericDefinition: true, GenericParameters: { } ownerParams }
+            && ownerParams.Contains(value: name))
+        {
+            return true;
+        }
+
+        // Universal / wrapper-inner owner: the owner IS the parameter (a single-hole template scope).
+        if (_sa._currentRoutine?.OwnerType is GenericParameterTypeInfo gp && gp.Name == name)
+        {
+            return true;
+        }
+
+        return _sa._currentRoutine?.OwnerType is WrapperTypeInfo { InnerType: GenericParameterTypeInfo wgp }
+            && wgp.Name == name;
     }
 
     /// <summary>
