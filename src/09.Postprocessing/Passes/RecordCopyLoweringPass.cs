@@ -259,6 +259,16 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 
             case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } ds:
             {
+                // A carrier PAYLOAD EXTRACTION — `<Maybe/Result/Lookup>.value` (a MemberExpression on a
+                // carrier), or the `CarrierPayloadExpression` the Result/Lookup path lowers to — is a VIEW
+                // into a payload the carrier still owns, NOT an owning copy. It is the shape every `when`/
+                // `each` element binding takes (`else var v -> …` from `try_emit()`'s `Maybe`). Retaining it
+                // makes the loop element a co-owner (+1) that never escapes the each scope and is never
+                // released → a per-iteration leak + needless churn. The carrier owns the payload for as long
+                // as the binding is live (non-escaping), and any ESCAPING use retains at its own store site,
+                // so skip the retain here. (dj: iter can't leave the each scope → no escape machinery.)
+                if (IsCarrierPayloadExtraction(vd.Initializer))
+                    return stmt;
                 Expression lowered = LowerOwnership(expr: vd.Initializer, isReturn: false);
                 if (ReferenceEquals(lowered, vd.Initializer)) return stmt;
                 var newVd = vd with { Initializer = lowered };
@@ -727,6 +737,17 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     /// unresolved call is emitted as a discarded <c>void</c> call, dropping the retained copy and
     /// leaving the binding with a dangling reference.
     /// </summary>
+    /// <summary>
+    /// True when <paramref name="init"/> extracts a carrier's inline payload — a <c>CarrierPayloadExpression</c>
+    /// (the Result/Lookup arm-binding form) or a member access <c>&lt;carrier&gt;.value</c> where the receiver
+    /// is a <c>Maybe</c>/<c>Result</c>/<c>Lookup</c> carrier (the <c>Maybe</c> arm-binding form, e.g. an
+    /// <c>each</c>/<c>when</c> element). Such a binding is a VIEW into a payload the carrier owns, so it must
+    /// not be retained as an owning copy.
+    /// </summary>
+    private static bool IsCarrierPayloadExtraction(Expression init) =>
+        init is CarrierPayloadExpression
+        || (init is MemberExpression { Object.ResolvedType: RecordTypeInfo { CarrierKind: not TypeModel.Enums.CarrierKind.None } });
+
     private static Expression MakeCopyCall(Expression expr, RoutineInfo copyMethod)
     {
         // Use the resolved method's own name for the property: records/managed-leaves retain via
