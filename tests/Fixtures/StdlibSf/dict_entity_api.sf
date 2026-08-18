@@ -1,0 +1,25 @@
+module Tests/StdlibSf/DictEntityApi
+import IO/Console
+
+# SF entities held as Dict values lower to `Roamed[Node]`. The cycle collector's auto roam-trace must
+# walk the Dict's live `vals` buffer (the sparse-buffer trace, skipping tombstoned slots) so container-
+# held entities stay visible to collection — the open-addressing counterpart of the dense List buffer.
+entity Node
+  id: S64
+
+routine start()
+  var d = Dict[S64, Node]()
+  discard d.add(key: 1, value: Node(id: 10))
+  discard d.add(key: 2, value: Node(id: 20))
+  discard d.add(key: 3, value: Node(id: 30))
+  show(f"count: {d.count()}")
+  show(f"d[2].id: {d[2].id}")
+
+  # Remove tombstones an entry — the sparse trace must SKIP it (live-only, R2).
+  discard d.remove(key: 2)
+  show(f"count after remove(2): {d.count()}")
+  each e in d
+    show(f"entry {e.key} -> {e.value.id}")
+
+  show("DONE")
+  return

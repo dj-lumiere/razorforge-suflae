@@ -2831,6 +2831,54 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             statements.Add(item: new ExpressionStatement(Expression: traceCall, Location: _synthLoc));
         }
 
+        // Sparse container (open-addressing Dict/Set): a per-entry liveness bitmap `entry_live: Hijacked[U8]`
+        // plus an `entries_used` high-water mark identify a hash container whose element buffers (`keys`/
+        // `vals`/`slots`) are indexed 0..entries_used WITH HOLES. The dense single-buffer branch above does
+        // NOT fire (Dict/Set carry several Hijacked fields), so trace each ELEMENT buffer through
+        // `cyclic_trace_sparse_buffer(live, used)`, which reports only the live slots (R2). An element buffer
+        // is a Hijacked field whose inner type is NOT trivially-destructible — the generic `keys`/`vals`/
+        // `slots`, never the scalar `Hijacked[U8]`/`Hijacked[U64]` ctrl/indices/entry_live metadata (which
+        // cannot transitively hold a Roamed). Same visibility guarantee as the List buffer: `cyclic_visit`
+        // no-ops for value elements, reports each `Roamed` handle.
+        MemberVariableInfo? entryLiveField =
+            fields.FirstOrDefault(predicate: f => f.Name == "entry_live" && IsHijackedField(t: f.Type));
+        MemberVariableInfo? entriesUsedField =
+            fields.FirstOrDefault(predicate: f => f.Name == "entries_used");
+        if (entryLiveField != null && entriesUsedField != null)
+        {
+            foreach (MemberVariableInfo field in fields)
+            {
+                if (!IsHijackedField(t: field.Type) || ReferenceEquals(objA: field, objB: entryLiveField))
+                    continue;
+                TypeInfo? inner = HijackedInnerType(t: field.Type);
+                if (inner == null)
+                    continue;
+                // roam_trace_impl is synthesized on the GENERIC container, so an ELEMENT buffer's inner
+                // type is the container's own generic PARAMETER (keys→K, vals→V, slots→T) — always trace
+                // it (whether a concrete instantiation binds it to a value or a Roamed is decided at
+                // monomorphization, where the sparse walk of a value buffer folds to a harmless no-op).
+                // A CONCRETE trivially-destructible inner is a scalar METADATA buffer (`Hijacked[U8]`/
+                // `Hijacked[U64]` ctrl/indices/entry_live) that can never reach a Roamed — skip it.
+                if (inner is not GenericParameterTypeInfo && ctx.Registry.IsTriviallyDestructible(type: inner))
+                    continue;
+                MemberExpression MeField(string name, TypeInfo? type) => new(
+                    Object: new IdentifierExpression(Name: "me", Location: _synthLoc) { ResolvedType = owner },
+                    MemberName: name, Location: _synthLoc) { ResolvedType = type };
+                var sparseCall = new CallExpression(
+                    Callee: new MemberExpression(Object: MeField(field.Name, field.Type),
+                        MemberName: "cyclic_trace_sparse_buffer", Location: _synthLoc) { ResolvedType = noneType },
+                    Arguments:
+                    [
+                        new NamedArgumentExpression(Name: "live",
+                            Value: MeField("entry_live", entryLiveField.Type), Location: _synthLoc),
+                        new NamedArgumentExpression(Name: "used",
+                            Value: MeField("entries_used", entriesUsedField.Type), Location: _synthLoc)
+                    ],
+                    Location: _synthLoc) { ResolvedType = noneType };
+                statements.Add(item: new ExpressionStatement(Expression: sparseCall, Location: _synthLoc));
+            }
+        }
+
         statements.Add(item: noop);
         return new BlockStatement(Statements: statements, Location: _synthLoc);
     }
@@ -2847,6 +2895,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         };
         return baseName == Resolution.RuntimeContract.Hijacked;
     }
+
+    /// <summary>The element type <c>U</c> of a <c>Hijacked[U]</c> field type, or null. Used by the
+    /// sparse-container roam-trace to tell an element buffer (generic <c>keys</c>/<c>vals</c>/<c>slots</c>)
+    /// from a scalar metadata buffer (<c>Hijacked[U8]</c>/<c>Hijacked[U64]</c> ctrl/indices/entry_live).</summary>
+    private static TypeInfo? HijackedInnerType(TypeInfo? t) => t switch
+    {
+        WrapperTypeInfo w => w.InnerType,
+        _ => t?.TypeArguments is { Count: > 0 } args ? args[index: 0] : null
+    };
 
     /// <summary>
     /// Builds the cycle-collector free hook <c>roam_free_impl()</c> for an entity: tears down each

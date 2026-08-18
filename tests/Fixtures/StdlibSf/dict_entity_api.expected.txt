@@ -1,0 +1,6 @@
+count: 3
+d[2].id: 20
+count after remove(2): 2
+entry 1 -> 10
+entry 3 -> 30
+DONE

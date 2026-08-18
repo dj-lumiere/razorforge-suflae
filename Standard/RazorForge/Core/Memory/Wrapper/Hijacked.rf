@@ -147,6 +147,22 @@ dangerous routine Hijacked[T].cyclic_trace_buffer(count: U64)
     i = i +% 1u64
   return
 
+### Cycle-collector hook for a SPARSE (open-addressing) container's dense entries buffer, whose slots
+### have holes: reports each LIVE element to the collector, skipping tombstoned/unused slots per the
+### parallel `live` bitmap. This is the `cyclic_trace_buffer` counterpart for Dict/Set (whose `keys`/
+### `vals`/`slots` arrays are indexed 0..`used` with per-entry liveness), so exactly the live elements
+### are reported (R2 — no garbage from empty slots). `cyclic_visit` is the universal no-op that only
+### `Roamed[T]` overrides, so value elements visit nothing.
+### :param live: The parallel `entry_live` bitmap — one `U8` per entry, `1` = live, `0` = tombstone/unused.
+### :param used: The high-water mark of the entries buffer; slots `0..used` are scanned.
+dangerous routine Hijacked[T].cyclic_trace_sparse_buffer(live: Hijacked[U8], used: U64)
+  var i = 0u64
+  while i < used
+    if live.peek_at_offset(offset: U8.data_size() * i) == 1u8
+      me.peek_at_offset(offset: T.data_size() * i).cyclic_visit()
+    i = i +% 1u64
+  return
+
 ### Deallocates the memory at this pointer's address.
 dangerous routine Hijacked[T].invalidate()
   C::rf_invalidate(me.address())
