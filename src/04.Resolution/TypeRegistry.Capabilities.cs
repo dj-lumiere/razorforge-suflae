@@ -235,7 +235,7 @@ public sealed partial class TypeRegistry
             RecordTypeInfo { IsGenericDefinition: false } r =>
                 r.MemberVariables is { Count: > 0 }
                     ? r.MemberVariables.All(predicate: m => FieldStorable(m.Type))
-                    // No AST member variables: an `@llvm` inline-storage record (Array[T,N], Vector[E,N])
+                    // No AST member variables: an `@llvm` inline-storage record (Array[T,N], Vector[T,N])
                     // stores its type-KIND generic args INLINE — cascade storability to them so
                     // Array[Text] is storable (Text is) but Array[SomeEntity] is NOT (entity has no
                     // store). A const-generic VALUE arg (N) stores nothing → filtered out. Wrapper
@@ -258,7 +258,7 @@ public sealed partial class TypeRegistry
     /// WRAPPER types (RC handles, raw-pointer <c>Hijacked</c>/<c>CPtr</c>, scope-bound access tokens) are
     /// excluded up front — a raw/shared handle is never structurally copyable (bitwise dup would alias →
     /// double-free), and the storable wrappers declare their conformance explicitly (so the gate would skip
-    /// them anyway). An <c>@llvm</c> aggregate (Array[T,N], Vector[E,N]) has NO AST member variables — its
+    /// them anyway). An <c>@llvm</c> aggregate (Array[T,N], Vector[T,N]) has NO AST member variables — its
     /// elements live in the layout string — so <see cref="MemberProjection"/> cascades to its type-KIND
     /// generic args, making <c>Array[Entity]</c> correctly NON-conforming rather than vacuously true.
     /// </para>
@@ -298,7 +298,7 @@ public sealed partial class TypeRegistry
         RecordTypeInfo { IsGenericDefinition: false } r =>
             r.MemberVariables is { Count: > 0 } mv
                 ? mv.Select(selector: m => m.Type)
-                // No AST members: an `@llvm` inline-storage record (Array[T,N], Vector[E,N]) stores its
+                // No AST members: an `@llvm` inline-storage record (Array[T,N], Vector[T,N]) stores its
                 // type-KIND generic args INLINE — cascade to them (const-generic N filtered) so Array[Entity]
                 // is NOT vacuously conforming. A truly field-less record with no type args ⇒ [] ⇒ vacuous.
                 : (r.TypeArguments ?? [])

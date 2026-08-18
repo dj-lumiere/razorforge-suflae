@@ -1,7 +1,7 @@
 module Simd
 
-### A fixed-length SIMD vector of `N` lanes of element type `E`, laid out as the
-### native LLVM vector type `<N x E>`. Arithmetic is elementwise (lane-wise) and
+### A fixed-length SIMD vector of `N` lanes of element type `T`, laid out as the
+### native LLVM vector type `<N x T>`. Arithmetic is elementwise (lane-wise) and
 ### lowers to hardware vector instructions where the target supports them.
 ###
 ### Unlike the geometry-facing `Vector2D`/`Vector3D`/`Vector4D`, this type is
@@ -9,23 +9,18 @@ module Simd
 ### elementwise (Hadamard) — the standard SIMD meaning — not a dot or cross
 ### product. Use `dot` for the inner product.
 ###
-### **Element type:** `E` must obey `Numeric`. In practice `Vector[E, N]` is
+### **Element type:** `T` must obey `Numeric`. In practice `Vector[T, N]` is
 ### intended for the primitive IEEE float lanes `F16` / `F32` / `F64`, whose
-### `+ - * /` map to LLVM `fadd` / `fsub` / `fmul` / `fdiv` on `<N x E>`. Software
+### `+ - * /` map to LLVM `fadd` / `fsub` / `fmul` / `fdiv` on `<N x T>`. Software
 ### floats (`F128`) and non-float `Numeric` types are not valid SIMD lanes.
 ###
-### The element type parameter is named `E`, not `T`: the `LLVM::` vector
-### intrinsics use `T` for their own generic parameter, and reusing that name for
-### the enclosing type's parameter makes the two collide during protocol
-### conformance checking (the return type doubles to `Vector[Vector[E,N], N]`).
-###
-### :typeparam E: The element (lane) type; a primitive float.
+### :typeparam T: The element (lane) type; a primitive float.
 ### :typeparam N: The compile-time lane count, supplied as a `U64` literal.
 ### :see: {Vector3D} for the fixed 3-component geometry vector.
-@llvm("<{N} x {E}>")
-record Vector[E, N] obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Equatable, Sized, MutableIndexable[E]
+@llvm("<{N} x {T}>")
+record Vector[T, N] obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Equatable, Sized, MutableIndexable[T]
 needs N is U64
-  # N lanes of E stored as a native LLVM vector - no explicit member variables.
+  # N lanes of T stored as a native LLVM vector - no explicit member variables.
   pass
 
 # ============================================================================
@@ -36,10 +31,10 @@ needs N is U64
 ### Pass `fill: 0` (in the lane type) for the zero vector.
 ### :param fill: The scalar to replicate across all `N` lanes.
 ### :returns: The splatted vector.
-routine Vector[E, N](fill: E) -> Vector[E, N]
-  var result = LLVM::zero_value[Vector[E, N]]()
+routine Vector[T, N](fill: T) -> Vector[T, N]
+  var result = LLVM::zero_value[Vector[T, N]]()
   each i in 0u64 til N
-    result = LLVM::insert_element[Vector[E, N], E](result, fill, i)
+    result = LLVM::insert_element[Vector[T, N], T](result, fill, i)
   return result
 
 # ============================================================================
@@ -47,17 +42,17 @@ routine Vector[E, N](fill: E) -> Vector[E, N]
 # ============================================================================
 
 ### Returns the scalar at lane `index` (the `me[index]` read operator).
-### Reads in place through the storage pointer — a `<N x E>` vector is `N`
-### contiguous `E` lanes, so an `E`-strided load addresses lane `index` directly.
+### Reads in place through the storage pointer — a `<N x T>` vector is `N`
+### contiguous `T` lanes, so an `T`-strided load addresses lane `index` directly.
 ### :param index: The zero-based lane to read.
 ### :returns: The element at that lane.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @readonly
-routine Vector[E, N].getitem!(index: U64) -> E
+routine Vector[T, N].getitem!(index: U64) -> T
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
   danger
-    return LLVM::load_element_ref[Vector[E, N], E](me.hijack(), index)
+    return LLVM::load_element_ref[Vector[T, N], T](me.hijack(), index)
 
 ### Replaces the lane at `index` with `value`, mutating this vector in place (the
 ### `me[index] = value` write operator). `me` is received by reference, so the
@@ -65,69 +60,69 @@ routine Vector[E, N].getitem!(index: U64) -> E
 ### :param index: The zero-based lane to overwrite.
 ### :param value: The replacement scalar.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
-routine Vector[E, N].setitem!(index: U64, value: E)
+routine Vector[T, N].setitem!(index: U64, value: T)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
   danger
-    LLVM::store_element_ref[Vector[E, N], E](me.hijack(), index, value)
+    LLVM::store_element_ref[Vector[T, N], T](me.hijack(), index, value)
   return
 
 ### Returns the lane count `N`.
 ### :returns: The compile-time lane count.
 @readonly
-routine Vector[E, N].count() -> U64
+routine Vector[T, N].count() -> U64
   return N
 
 ### Returns true when the lane count is zero.
 ### :returns: `true` if `N == 0`.
 @readonly
-routine Vector[E, N].is_empty() -> Bool
+routine Vector[T, N].is_empty() -> Bool
   return N == 0u64
 
 # ============================================================================
-# Elementwise Arithmetic (lowers to LLVM `<N x E>` vector ops)
+# Elementwise Arithmetic (lowers to LLVM `<N x T>` vector ops)
 # ============================================================================
 
 ### Returns the lane-wise sum `me + you`.
 ### :param you: The addend vector.
 ### :returns: A vector whose lanes are the sums.
-routine Vector[E, N].add(you: Vector[E, N]) -> Vector[E, N]
-needs E obeys Numeric
-  return LLVM::float_add[Vector[E, N]](me, you)
+routine Vector[T, N].add(you: Vector[T, N]) -> Vector[T, N]
+needs T obeys Numeric
+  return LLVM::float_add[Vector[T, N]](me, you)
 
 ### Returns the lane-wise difference `me - you`.
 ### :param you: The vector to subtract.
 ### :returns: A vector whose lanes are the differences.
-routine Vector[E, N].sub(you: Vector[E, N]) -> Vector[E, N]
-needs E obeys Numeric
-  return LLVM::float_sub[Vector[E, N]](me, you)
+routine Vector[T, N].sub(you: Vector[T, N]) -> Vector[T, N]
+needs T obeys Numeric
+  return LLVM::float_sub[Vector[T, N]](me, you)
 
 ### Returns the lane-wise (Hadamard) product `me * you`.
 ### :param you: The right operand vector.
 ### :returns: A vector whose lanes are the products.
-routine Vector[E, N].mul(you: Vector[E, N]) -> Vector[E, N]
-needs E obeys Numeric
-  return LLVM::float_mul[Vector[E, N]](me, you)
+routine Vector[T, N].mul(you: Vector[T, N]) -> Vector[T, N]
+needs T obeys Numeric
+  return LLVM::float_mul[Vector[T, N]](me, you)
 
 ### Returns the lane-wise quotient `me / you`.
 ### :param you: The divisor vector.
 ### :returns: A vector whose lanes are the quotients.
-routine Vector[E, N].truediv(you: Vector[E, N]) -> Vector[E, N]
-needs E obeys Numeric
-  return LLVM::float_div[Vector[E, N]](me, you)
+routine Vector[T, N].truediv(you: Vector[T, N]) -> Vector[T, N]
+needs T obeys Numeric
+  return LLVM::float_div[Vector[T, N]](me, you)
 
 ### Returns the lane-wise negation of this vector.
 ### :returns: A vector whose lanes are negated.
-routine Vector[E, N].neg() -> Vector[E, N]
-needs E obeys Numeric
-  return LLVM::float_sub[Vector[E, N]](LLVM::zero_value[Vector[E, N]](), me)
+routine Vector[T, N].neg() -> Vector[T, N]
+needs T obeys Numeric
+  return LLVM::float_sub[Vector[T, N]](LLVM::zero_value[Vector[T, N]](), me)
 
 ### Returns this vector with every lane scaled by the scalar `factor`.
 ### :param factor: The scalar multiplier.
 ### :returns: `factor · me`, lane-wise.
-routine Vector[E, N].scale(factor: E) -> Vector[E, N]
-needs E obeys Numeric
-  return LLVM::float_mul[Vector[E, N]](me, Vector[E, N](fill: factor))
+routine Vector[T, N].scale(factor: T) -> Vector[T, N]
+needs T obeys Numeric
+  return LLVM::float_mul[Vector[T, N]](me, Vector[T, N](fill: factor))
 
 # ============================================================================
 # Reductions
@@ -136,11 +131,11 @@ needs E obeys Numeric
 ### Returns the horizontal sum of all lanes.
 ### :returns: `lane₀ + lane₁ + … + laneₙ₋₁`.
 @readonly
-routine Vector[E, N].sum() -> E
-needs E obeys Numeric
-  var acc = LLVM::zero_value[E]()
+routine Vector[T, N].sum() -> T
+needs T obeys Numeric
+  var acc = LLVM::zero_value[T]()
   each i in 0u64 til N
-    acc = acc + LLVM::extract_element[Vector[E, N], E](me, i)
+    acc = acc + LLVM::extract_element[Vector[T, N], T](me, i)
   return acc
 
 ### Returns the dot (inner) product `me · you`, the horizontal sum of the
@@ -148,16 +143,16 @@ needs E obeys Numeric
 ### :param you: The right operand vector.
 ### :returns: `Σ meᵢ·youᵢ`.
 @readonly
-routine Vector[E, N].dot(you: Vector[E, N]) -> E
-needs E obeys Numeric
+routine Vector[T, N].dot(you: Vector[T, N]) -> T
+needs T obeys Numeric
   var prod = me * you
   return prod.sum()
 
 ### Returns the squared Euclidean length (the dot product with itself).
 ### :returns: `me · me`.
 @readonly
-routine Vector[E, N].length_squared() -> E
-needs E obeys Numeric
+routine Vector[T, N].length_squared() -> T
+needs T obeys Numeric
   return me.dot(you: me)
 
 # ============================================================================
@@ -168,10 +163,10 @@ needs E obeys Numeric
 ### :param you: The other vector.
 ### :returns: `true` if all `N` lanes are equal.
 @readonly
-routine Vector[E, N].eq(you: Vector[E, N]) -> Bool
-needs E obeys Equatable
+routine Vector[T, N].eq(you: Vector[T, N]) -> Bool
+needs T obeys Equatable
   each i in 0u64 til N
-    if LLVM::extract_element[Vector[E, N], E](me, i) != LLVM::extract_element[Vector[E, N], E](you, i)
+    if LLVM::extract_element[Vector[T, N], T](me, i) != LLVM::extract_element[Vector[T, N], T](you, i)
       return false
   return true
 
@@ -182,11 +177,11 @@ needs E obeys Equatable
 ### Formats this vector as `<lane₀, lane₁, …>`.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Vector[E, N].represent() -> Text
+routine Vector[T, N].represent() -> Text
   var result = "<"
   each i in 0u64 til N
     if i > 0u64
       result = result + ", "
-    result = result + LLVM::extract_element[Vector[E, N], E](me, i).represent()
+    result = result + LLVM::extract_element[Vector[T, N], T](me, i).represent()
   result = result + ">"
   return result
