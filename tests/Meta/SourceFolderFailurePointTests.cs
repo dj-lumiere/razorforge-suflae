@@ -44,7 +44,7 @@ public sealed partial class SourceFolderFailurePointTests
         {
             "05.Verification",
             "semantic analysis runs ordered phases and reports diagnostics instead of raw exceptions",
-            ["RunPhase1Declaration", "RunPhase2Resolution", "RunPhase4Verification", "ReportError"]
+            ["RunPhase3Declaration", "RunPhase4Resolution", "RunPhase5Verification", "ReportError"]
         },
         {
             "07.Desugaring",
