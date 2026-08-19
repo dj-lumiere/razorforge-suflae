@@ -113,7 +113,7 @@ routine List[T].is_empty() -> Bool
 ### Appends `value` at the back of the list.
 ### The buffer is doubled automatically when the current capacity is exhausted.
 ### :param value: The value to append.
-@migratable
+@reshaping
 routine List[T].add_last(value: T)
   if me.count >= me.capacity
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
@@ -139,7 +139,7 @@ routine List[T].add_last(value: T)
 ###
 ### NOTE: Stub signature — implementation pending. Tracking:
 ###       memory/bytes_io_api_plan.md (v0.1.0 first additions).
-@migratable
+@reshaping
 routine List[T].add_range(you: Accessing[Iterable[T]])
   # TODO(fast-io): hoist capacity-reserve when `you` exposes a known count.
   # For now, fall back to per-element append so the routine type-checks while the
@@ -152,7 +152,7 @@ routine List[T].add_range(you: Accessing[Iterable[T]])
 ### Capacity is not reduced.
 ### :returns: The element that was at the back.
 ### :absent: The list is empty.
-@migratable
+@reshaping
 routine List[T].remove_last!() -> T
   if me.is_empty()
     absent
@@ -165,7 +165,7 @@ routine List[T].remove_last!() -> T
 ### Inserts `value` at the front of the list.
 ### All existing elements are shifted one position toward the back. This is O(n).
 ### :param value: The value to insert.
-@migratable
+@reshaping
 routine List[T].add_first(value: T)
   me.add_at(index: 0u64, value: value)
   return
@@ -175,7 +175,7 @@ routine List[T].add_first(value: T)
 ### :param index: The zero-based insertion position.
 ### :param value: The value to insert.
 ### :throws: {IndexOutOfBoundsError} if `index` is greater than `count()`.
-@migratable
+@reshaping
 routine List[T].add_at!(index: U64, value: T)
   if index > me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
@@ -200,7 +200,7 @@ routine List[T].add_at!(index: U64, value: T)
 ### Removes and returns the first element, shifting the remaining elements left by one position.
 ### :returns: The element that was at the front.
 ### :absent: The list is empty.
-@migratable
+@reshaping
 routine List[T].remove_first!() -> T
   if me.is_empty()
     absent
@@ -210,7 +210,7 @@ routine List[T].remove_first!() -> T
 ### :param index: The zero-based position to remove.
 ### :returns: The element that was at `index`.
 ### :throws: {IndexOutOfBoundsError} if `index` is out of range.
-@migratable
+@reshaping
 routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
@@ -301,7 +301,7 @@ routine List[T].set_raw(index: U64, value: T)
 ### Ensures the backing allocation holds at least `new_capacity` elements.
 ### Does nothing if the current capacity already meets or exceeds `new_capacity`.
 ### :param new_capacity: The minimum slot count to guarantee.
-@migratable
+@reshaping
 routine List[T].reserve(new_capacity: U64)
   if new_capacity > me.capacity
     var new_byte_size = T.data_size() * new_capacity
@@ -319,7 +319,7 @@ routine List[T].reserve(new_capacity: U64)
 
 ### Discards all elements while preserving the current allocation.
 ### Use this to reuse a list without paying reallocation costs.
-@migratable
+@reshaping
 routine List[T].clear()
   me.count = 0u64
   return
@@ -412,7 +412,7 @@ routine List[T].diagnose() -> Text
 ### :param from: The zero-based start index within `source`.
 ### :param count: The number of elements to copy.
 ### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
-@migratable
+@reshaping
 routine List[T].add_range!(source: Accessing[List[T]], from: U64, count: U64)
 needs T obeys Copyable
   if count == 0u64
@@ -465,7 +465,7 @@ needs T obeys Serializable
 ### The backing allocation is not changed.
 ### :param new_count: The new element count; must be no greater than `count()`.
 ### :throws: {IndexOutOfBoundsError} if `new_count > count()`.
-@migratable
+@reshaping
 routine List[T].truncate!(new_count: U64)
   if new_count > me.count
     throw IndexOutOfBoundsError(index: new_count, count: me.count)

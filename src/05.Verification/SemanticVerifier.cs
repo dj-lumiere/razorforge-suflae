@@ -27,8 +27,8 @@ using TypeSymbol = TypeInfo;
 /// <summary>
 /// Semantic analyzer for RazorForge and Suflae programs.
 /// Performs type checking, scope analysis, and inference for:
-/// - memberRoutine modification (readonly/writable/migratable)
-/// - Migratable modification tracking (buffer relocation detection)
+/// - memberRoutine modification (readonly/writable/reshaping)
+/// - Reshaping modification tracking (buffer relocation detection)
 /// - Error handling variant generation (try_/check_/lookup_)
 /// </summary>
 public sealed partial class SemanticVerifier
@@ -162,7 +162,7 @@ public sealed partial class SemanticVerifier
     /// against the flag members of that type.</summary>
     private readonly Stack<TypeSymbol> _flagsContextStack = new();
 
-    /// <summary>Tracks the current for-loop iteration variable names for migratable check (#22).</summary>
+    /// <summary>Tracks the current for-loop iteration variable names for reshaping check (#22).</summary>
     private readonly HashSet<string> _activeIterationSources = [];
 
     /// <summary>Routine declarations collected in Phase 3/4, pending resolution and registration in Phase 4.1.</summary>

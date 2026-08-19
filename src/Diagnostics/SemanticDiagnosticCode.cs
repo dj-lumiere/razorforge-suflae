@@ -684,8 +684,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot re-modify an already-modifying token.</summary>
     ReHijackingProhibited = 621,
 
-    /// <summary>Migratable operation on collection during iteration is not allowed.</summary>
-    MigratableDuringIteration = 625,
+    /// <summary>Reshaping operation on collection during iteration is not allowed.</summary>
+    ReshapingDuringIteration = 625,
 
     /// <summary>Claiming[T] cannot be copied or aliased.</summary>
     ClaimingCopyNotAllowed = 626,

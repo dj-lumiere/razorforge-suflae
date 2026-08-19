@@ -179,7 +179,7 @@ routine FastSet[T].should_rehash() -> Bool
     return true
   return false
 
-@migratable
+@reshaping
 routine FastSet[T].rehash()
   var old_cap = me.capacity
   var old_ecap = me.entries_cap
@@ -247,7 +247,7 @@ routine FastSet[T].count() -> U64
 routine FastSet[T].is_empty() -> Bool
   return me.count == 0u64
 
-@migratable
+@reshaping
 routine FastSet[T].clear()
   danger
     C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
@@ -263,7 +263,7 @@ routine FastSet[T].contains(value: T) -> Bool
 ### Inserts `value` if it is not already present.
 ### :param value: The element to insert.
 ### :returns: `true` if the element was inserted; `false` if it was already present.
-@migratable
+@reshaping
 routine FastSet[T].add(value: T) -> Bool
   if me.should_rehash()
     me.rehash()
@@ -281,7 +281,7 @@ routine FastSet[T].add(value: T) -> Bool
 ### Removes `value` if it is present in the set.
 ### :param value: The element to remove.
 ### :returns: `true` if the element was found and removed; `false` if not present.
-@migratable
+@reshaping
 routine FastSet[T].remove(value: T) -> Bool
   var slot = me.find_slot(value)
   if slot >= me.capacity

@@ -439,7 +439,7 @@ public sealed partial class SemanticVerifier
             case LoopStatement loopStmt:
                 _registry.EnterScope(kind: ScopeKind.Loop, name: "loop");
                 // A lowered `each x in a` loop carries the surface source name so the
-                // migratable-during-iteration check can fire even though the EachStatement was
+                // reshaping-during-iteration check can fire even though the EachStatement was
                 // rewritten away before this phase. Track it for the duration of the body.
                 bool tracksIterationSource = loopStmt.IterationSourceName != null &&
                     _activeIterationSources.Add(item: loopStmt.IterationSourceName);
@@ -954,7 +954,7 @@ public sealed partial class SemanticVerifier
                 ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
                     message:
                     $"Cannot mutate member variable '{member.MemberName}' in a @readonly member routine. " +
-                    "Use @migratable to allow mutations.",
+                    "Use @reshaping to allow mutations.",
                     location: assign.Location);
             }
         }

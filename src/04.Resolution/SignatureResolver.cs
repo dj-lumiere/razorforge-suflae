@@ -94,7 +94,7 @@ internal sealed class SignatureResolver
 
         MutationCategory declaredModification =
             routine.Annotations.Contains(item: "readonly") ? MutationCategory.Readonly :
-            routine.Annotations.Contains(item: "migratable") ? MutationCategory.Migratable :
+            routine.Annotations.Contains(item: "reshaping") ? MutationCategory.Reshaping :
             MutationCategory.Writable;
 
         // Phase 4 (ResolveTypeBodies) replaces user-defined entity/record types in the registry

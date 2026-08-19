@@ -13,13 +13,13 @@ namespace Verification.Enums;
 ///
 /// Step 2 (Call Graph Propagation):
 ///   - If memberRoutine calls a Writable memberRoutine on me -> Writable
-///   - If memberRoutine calls a Migratable memberRoutine on me -> Migratable
+///   - If memberRoutine calls a Reshaping memberRoutine on me -> Reshaping
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Step 3 (Token Checking):
 ///   - Viewing/Inspecting tokens can only call Readonly memberRoutines
 ///   - Modifying/Claiming tokens can call Readonly or Writable memberRoutines
-///   - Only owned/non-token access can call Migratable memberRoutines
+///   - Only owned/non-token access can call Reshaping memberRoutines
 /// </remarks>
 public enum MutationCategory
 {
@@ -42,5 +42,5 @@ public enum MutationCategory
     /// Needs ownership or exclusive access outside iteration.
     /// This is the default/most permissive category.
     /// </summary>
-    Migratable
+    Reshaping
 }

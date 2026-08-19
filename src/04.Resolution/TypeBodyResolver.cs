@@ -458,7 +458,7 @@ internal sealed class TypeBodyResolver
                 : null;
 
             // Extract mutation category from attributes
-            // @readonly -> Readonly, @migratable -> Migratable, default/no annotation -> Writable
+            // @readonly -> Readonly, @reshaping -> Reshaping, default/no annotation -> Writable
             MutationCategory modification = MutationCategory.Writable; // Default
             if (sig.Annotations != null)
             {
@@ -466,9 +466,9 @@ internal sealed class TypeBodyResolver
                 {
                     modification = MutationCategory.Readonly;
                 }
-                else if (sig.Annotations.Contains(item: "migratable"))
+                else if (sig.Annotations.Contains(item: "reshaping"))
                 {
-                    modification = MutationCategory.Migratable;
+                    modification = MutationCategory.Reshaping;
                 }
             }
 

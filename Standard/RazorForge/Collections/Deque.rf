@@ -217,7 +217,7 @@ routine Deque[T].clear()
 
 ### Grows the backing storage using the deque's standard doubling policy.
 ### Empty deques start at four slots; subsequent growth always doubles.
-@migratable
+@reshaping
 routine Deque[T].grow()
   var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
   me.reserve(new_capacity)
@@ -228,7 +228,7 @@ routine Deque[T].grow()
 ### the new buffer in logical order so the front moves to physical slot 0.
 ### Requests no larger than the current capacity are ignored.
 ### :param new_capacity: The minimum element count to accommodate.
-@migratable
+@reshaping
 routine Deque[T].reserve(new_capacity: U64)
   var actual = 1u64
   while actual < new_capacity

@@ -32,7 +32,7 @@ needs SE obeys Emittable[T]
 ### Returns the next value not yet yielded by this iterator.
 ### Source values that have already been seen are discarded until a new one is found.
 ### :returns: The resulting `T` value.
-@migratable
+@reshaping
 routine DistinctEmittable[T, SE].emit!() -> T
 needs T obeys Hashable, Comparable
   danger
@@ -89,7 +89,7 @@ needs SE obeys Emittable[T]
 ### Returns the next element whose key has not yet been yielded.
 ### Elements are consumed and discarded until one with a fresh key is found.
 ### :returns: The resulting `T` value.
-@migratable
+@reshaping
 routine DistinctByEmittable[T, U, SE].emit!() -> T
 needs U obeys Hashable, Comparable
   danger

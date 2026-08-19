@@ -219,14 +219,14 @@ public sealed class RoutineInfo
 
     /// <summary>The declared mutation category for this routine (from source annotation).</summary>
     public MutationCategory DeclaredMutation { get; init; } =
-        MutationCategory.Migratable;
+        MutationCategory.Reshaping;
 
     /// <summary>
     /// The inferred/final mutation category for this routine.
     /// Initially set to declared value, then updated by mutation inference.
     /// </summary>
     public MutationCategory MutationCategory { get; set; } =
-        MutationCategory.Migratable;
+        MutationCategory.Reshaping;
 
     /// <summary>Generic type parameters, if any.</summary>
     public List<string>? GenericParameters { get; init; }

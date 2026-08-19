@@ -19,7 +19,7 @@ public sealed class ProtocolMemberRoutineInfo
     public bool IsInstanceMemberRoutine { get; init; } = true;
 
     /// <summary>The mutation category for this memberRoutine.</summary>
-    public MutationCategory Mutation { get; init; } = MutationCategory.Migratable;
+    public MutationCategory Mutation { get; init; } = MutationCategory.Reshaping;
 
     /// <summary>Parameter types (excluding me for instance memberRoutines).</summary>
     public List<TypeInfo> ParameterTypes { get; init; } = [];

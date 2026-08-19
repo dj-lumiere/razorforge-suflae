@@ -192,7 +192,7 @@ routine BitList.remove_last!() -> Bool
 
 ### Ensures that the packed storage can hold at least `new_capacity` logical bits.
 ### :param new_capacity: The minimum capacity to reserve.
-@migratable
+@reshaping
 routine BitList.reserve(new_capacity: U64)
   # Ensure capacity is at least new_capacity (in bits)
   if new_capacity > me.capacity

@@ -26,6 +26,6 @@ public enum ScopeKind
     /// <summary>Danger block scope (RazorForge only).</summary>
     Danger,
 
-    /// <summary>Iteration scope - tracks active iterators for migratable checking.</summary>
+    /// <summary>Iteration scope - tracks active iterators for reshaping checking.</summary>
     Iteration
 }

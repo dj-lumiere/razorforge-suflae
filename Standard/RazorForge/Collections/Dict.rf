@@ -212,7 +212,7 @@ routine Dict[K, V].should_rehash() -> Bool
     return true
   return false
 
-@migratable
+@reshaping
 routine Dict[K, V].rehash()
   var old_cap = me.capacity
   var old_ecap = me.entries_cap

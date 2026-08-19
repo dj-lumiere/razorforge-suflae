@@ -19,13 +19,13 @@ namespace Verification;
 ///
 /// Step 2 (Call Graph Propagation):
 ///   - If memberRoutine calls a Writable memberRoutine on me -> mark as Writable
-///   - If memberRoutine calls a Migratable memberRoutine on me -> mark as Migratable
+///   - If memberRoutine calls a Reshaping memberRoutine on me -> mark as Reshaping
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Step 3 (Token Checking):
 ///   - Viewing/Inspecting tokens can only call Readonly memberRoutines
 ///   - Modifying/Claiming tokens can call Readonly or Writable memberRoutines
-///   - Only owned/non-token access can call Migratable memberRoutines
+///   - Only owned/non-token access can call Reshaping memberRoutines
 /// </summary>
 public sealed class MutationInference
 {
@@ -98,9 +98,9 @@ public sealed class MutationInference
             category = MutationCategory.Writable;
         }
 
-        if (node.DirectlyMigrates && category < MutationCategory.Migratable)
+        if (node.DirectlyMigrates && category < MutationCategory.Reshaping)
         {
-            category = MutationCategory.Migratable;
+            category = MutationCategory.Reshaping;
         }
 
         // Propagate from callees (only for calls on 'me')
@@ -184,12 +184,12 @@ public sealed class MutationInference
         node.DirectlyMutates = true;
         node.InferredMutation = MutationCategory.Writable;
 
-        // A direct write to a Hijacked[T] field relocates the buffer pointer — migratable.
+        // A direct write to a Hijacked[T] field relocates the buffer pointer — reshaping.
         if (assignment.Target is MemberExpression { Object: IdentifierExpression { Name: "me" } } direct
             && IsHijackedField(ownerType: node.Routine.OwnerType, fieldName: direct.MemberName))
         {
             node.DirectlyMigrates = true;
-            node.InferredMutation = MutationCategory.Migratable;
+            node.InferredMutation = MutationCategory.Reshaping;
         }
     }
 

@@ -390,7 +390,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         string iterName = $"_lf_iter_{n}";
 
         // Preserve the surface iteration-source name (only when it is a plain variable) so the
-        // Phase-5 migratable-during-iteration check can recover it — this EachStatement is gone by
+        // Phase-5 reshaping-during-iteration check can recover it — this EachStatement is gone by
         // the time body analysis runs.
         string? iterationSourceName = eachStmt.Iterable is IdentifierExpression iterSource
             ? iterSource.Name

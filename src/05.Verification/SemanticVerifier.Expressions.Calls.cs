@@ -1313,7 +1313,7 @@ public sealed partial class SemanticVerifier
                         ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
                             message:
                             $"Cannot call non-readonly member routine '{memberRoutine.Name}' on 'me' in a @readonly member routine. " +
-                            "Mark the called member routine @readonly or use @migratable.",
+                            "Mark the called member routine @readonly or use @reshaping.",
                             location: call.Location);
                     }
 
@@ -1481,14 +1481,14 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #22: Reject migratable operations on collection being iterated
+                    // #22: Reject reshaping operations on collection being iterated
                     if (member.Object is IdentifierExpression iterTarget &&
                         _activeIterationSources.Contains(item: iterTarget.Name) &&
-                        memberRoutine.MutationCategory == MutationCategory.Migratable)
+                        memberRoutine.MutationCategory == MutationCategory.Reshaping)
                     {
-                        ReportError(code: SemanticDiagnosticCode.MigratableDuringIteration,
+                        ReportError(code: SemanticDiagnosticCode.ReshapingDuringIteration,
                             message:
-                            $"Cannot call migratable member routine '{memberRoutine.Name}' on '{iterTarget.Name}' while iterating over it. " +
+                            $"Cannot call reshaping member routine '{memberRoutine.Name}' on '{iterTarget.Name}' while iterating over it. " +
                             "Collect changes and apply them after the loop.",
                             location: call.Location);
                     }

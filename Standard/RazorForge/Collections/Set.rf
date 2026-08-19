@@ -170,7 +170,7 @@ routine Set[T].should_rehash() -> Bool
     return true
   return false
 
-@migratable
+@reshaping
 routine Set[T].rehash()
   var old_cap = me.capacity
   var old_ecap = me.entries_cap

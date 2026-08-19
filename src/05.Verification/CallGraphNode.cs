@@ -21,7 +21,7 @@ public sealed class CallGraphNode
     /// <summary>
     /// The inferred mutation category for this routine.
     /// Seeded from the routine's declared category so user annotations are never downgraded;
-    /// propagation can only upgrade toward Migratable.
+    /// propagation can only upgrade toward Reshaping.
     /// </summary>
     public MutationCategory InferredMutation { get; set; }
 
@@ -31,7 +31,7 @@ public sealed class CallGraphNode
     public bool DirectlyMutates { get; set; }
 
     /// <summary>
-    /// Whether this routine directly mutates the internal Hijacked buffer (migratable).
+    /// Whether this routine directly mutates the internal Hijacked buffer (reshaping).
     /// </summary>
     public bool DirectlyMigrates { get; set; }
 

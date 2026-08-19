@@ -414,7 +414,7 @@ public record LoopStatement(
     /// For a lowered <c>each x in a</c> loop whose iteration source is a plain variable, the name of
     /// that variable (<c>"a"</c>); otherwise <c>null</c>. ControlFlowLoweringPass (Phase 7) rewrites
     /// the surface <see cref="EachStatement"/> away before Phase 5 body analysis, so this marker is
-    /// how the migratable-during-iteration check (SemanticVerifier) recovers the source name to
+    /// how the reshaping-during-iteration check (SemanticVerifier) recovers the source name to
     /// populate its active-iteration set.
     /// </summary>
     public string? IterationSourceName { get; init; }

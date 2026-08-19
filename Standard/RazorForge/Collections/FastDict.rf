@@ -233,7 +233,7 @@ routine FastDict[K, V].should_rehash() -> Bool
 ### Rebuilds the probe table and compacts the entries array, preserving insertion order.
 ### The probe table doubles when its load is the trigger; the entries array doubles when
 ### compacting alone would leave less than half its slots free. Tombstones are discarded.
-@migratable
+@reshaping
 routine FastDict[K, V].rehash()
   var old_cap = me.capacity
   var old_ecap = me.entries_cap
@@ -314,7 +314,7 @@ routine FastDict[K, V].is_empty() -> Bool
 ### Removes every entry while preserving the current probe and entries capacities.
 ### Resets the probe control array to all-empty in one pass and rewinds the entries
 ### high-water mark; per-entry live bytes are implicitly invalidated.
-@migratable
+@reshaping
 routine FastDict[K, V].clear()
   danger
     C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
@@ -335,7 +335,7 @@ routine FastDict[K, V].contains(key: K) -> Bool
 ### :param key: The key to insert or update.
 ### :param value: The value to associate with `key`.
 ### :returns: `true` if a new entry was inserted; `false` if an existing entry was updated.
-@migratable
+@reshaping
 routine FastDict[K, V].add(key: K, value: V) -> Bool
   if me.should_rehash()
     me.rehash()
@@ -358,7 +358,7 @@ routine FastDict[K, V].add(key: K, value: V) -> Bool
 ### The entry's slot in the entries array becomes a tombstone and is reclaimed on the next rehash.
 ### :param key: The key to remove.
 ### :returns: `true` if the key was found and removed; `false` if not present.
-@migratable
+@reshaping
 routine FastDict[K, V].remove(key: K) -> Bool
   var slot = me.find_slot(key)
   if slot >= me.capacity

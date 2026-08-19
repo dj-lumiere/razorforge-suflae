@@ -225,7 +225,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // #22: Track active iteration source for migratable-during-iteration check
+        // #22: Track active iteration source for reshaping-during-iteration check
         string? iterationSourceName = eachStmt.Iterable is IdentifierExpression iterSource
             ? iterSource.Name
             : null;

@@ -793,7 +793,7 @@ public sealed partial class SemanticVerifier
                     ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
                         message:
                         $"Cannot mutate member variable '{member.MemberName}' in a @readonly member routine. " +
-                        "Use @migratable to allow mutations.",
+                        "Use @reshaping to allow mutations.",
                         location: location);
                 }
 
@@ -952,7 +952,7 @@ public sealed partial class SemanticVerifier
                     ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
                         message:
                         $"Cannot mutate member variable '{member.MemberName}' in a @readonly member routine. " +
-                        "Use @migratable to allow mutations.",
+                        "Use @reshaping to allow mutations.",
                         location: compound.Location);
                 }
 
@@ -1045,7 +1045,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.CompoundAssignmentNotSupported,
                 message:
                 $"Entity type '{targetType.Name}' does not support compound assignment '{opSymbol}='. " +
-                $"Define in-place operator '{inPlaceMemberRoutine}' (with @migratable) to allow compound assignment.",
+                $"Define in-place operator '{inPlaceMemberRoutine}' (with @reshaping) to allow compound assignment.",
                 location: compound.Location);
             return ErrorTypeInfo.Instance;
         }

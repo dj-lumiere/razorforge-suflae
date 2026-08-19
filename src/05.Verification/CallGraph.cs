@@ -5,7 +5,7 @@ namespace Verification;
 
 /// <summary>
 /// Represents a call graph for analyzing memberRoutine dependencies.
-/// Used for modification inference and migratable inference.
+/// Used for modification inference and reshaping inference.
 /// </summary>
 public sealed class CallGraph
 {

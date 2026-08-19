@@ -699,7 +699,7 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.InvalidAnnotation,
                 message: "@writable is no longer a valid annotation. " +
-                         "Routines are writable by default; use @readonly to restrict, or @migratable explicitly.",
+                         "Routines are writable by default; use @readonly to restrict, or @reshaping explicitly.",
                 location: routine.Location);
         }
 
@@ -710,7 +710,7 @@ public sealed partial class SemanticVerifier
             mutationCount++;
         }
 
-        if (routine.Annotations.Contains(item: "migratable"))
+        if (routine.Annotations.Contains(item: "reshaping"))
         {
             mutationCount++;
         }
@@ -719,7 +719,7 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.MutationCategoryConflict,
                 message: "Routine has conflicting mutation annotations. " +
-                         "Only one of @readonly or @migratable can be specified.",
+                         "Only one of @readonly or @reshaping can be specified.",
                 location: routine.Location);
         }
 
@@ -973,10 +973,10 @@ public sealed partial class SemanticVerifier
             else if (typeMemberRoutine != null)
             {
                 // #61: Protocol mutation contract validation. The implementation must not be MORE
-                // mutating than the protocol declares (Readonly < Writable < Migratable): callers
+                // mutating than the protocol declares (Readonly < Writable < Reshaping): callers
                 // hold tokens sized to the protocol's category — e.g. a Viewing token for @readonly,
                 // a Modifying token for the writable default — so an impl that mutates or relocates
-                // beyond that contract would be unsound (a Migratable impl behind a Writable protocol
+                // beyond that contract would be unsound (a Reshaping impl behind a Writable protocol
                 // could relocate mid-iteration through a Modifying token, invalidating iterators).
                 if (typeMemberRoutine.MutationCategory > requiredMemberRoutine.Mutation)
                 {
