@@ -438,7 +438,14 @@ public sealed partial class SemanticVerifier
 
             case LoopStatement loopStmt:
                 _registry.EnterScope(kind: ScopeKind.Loop, name: "loop");
+                // A lowered `each x in a` loop carries the surface source name so the
+                // migratable-during-iteration check can fire even though the EachStatement was
+                // rewritten away before this phase. Track it for the duration of the body.
+                bool tracksIterationSource = loopStmt.IterationSourceName != null &&
+                    _activeIterationSources.Add(item: loopStmt.IterationSourceName);
                 AnalyzeStatement(statement: loopStmt.Body);
+                if (tracksIterationSource)
+                    _activeIterationSources.Remove(item: loopStmt.IterationSourceName!);
                 _registry.ExitScope();
                 break;
 

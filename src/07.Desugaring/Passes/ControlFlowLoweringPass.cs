@@ -389,6 +389,13 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         int n = _iterCount++;
         string iterName = $"_lf_iter_{n}";
 
+        // Preserve the surface iteration-source name (only when it is a plain variable) so the
+        // Phase-5 migratable-during-iteration check can recover it — this EachStatement is gone by
+        // the time body analysis runs.
+        string? iterationSourceName = eachStmt.Iterable is IdentifierExpression iterSource
+            ? iterSource.Name
+            : null;
+
         // -----------------------------------------------------------------------------
         var iterCallExpr = new CallExpression(
             Callee: new MemberExpression(
@@ -534,7 +541,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 Clauses: [noneClause, elseClause], Location: loc);
             var loopStmt = new LoopStatement(
                 Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc)
-                { IsIteratorEachLoop = true };
+                { IsIteratorEachLoop = true, IterationSourceName = iterationSourceName };
 
             // var _lf_exhausted_N: Bool = false
             Statement exhaustedVarStmt = new DeclarationStatement(
@@ -574,7 +581,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 Clauses: [noneClause, elseClause], Location: loc);
             var loopStmt = new LoopStatement(
                 Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc)
-                { IsIteratorEachLoop = true };
+                { IsIteratorEachLoop = true, IterationSourceName = iterationSourceName };
 
             return new BlockStatement(Statements: [iterVarStmt, loopStmt], Location: loc);
         }
