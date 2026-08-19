@@ -35,7 +35,7 @@
         {
           "comment": "Variable declarations",
           "name": "keyword.declaration.razorforge",
-          "match": "\\b(var|preset|common|define|lateinit|uninit)\\b"
+          "match": "\\b(var|preset|common|define|lateinit)\\b"
         },
         {
           "comment": "Access and routine modifiers",
@@ -50,7 +50,7 @@
         {
           "comment": "Compile-time reflection sources (expand m in memvarof(T)/branchof(T)/caseof(T))",
           "name": "support.function.builtin.razorforge",
-          "match": "\\b(memvarof|branchof|caseof)\\b"
+          "match": "\\b(openmemvarof|allmemvarof|branchof|caseof|nameof|orderof|placeof|sizeof|typeof|typeidof|valueof|visibilityof)\\b"
         },
         {
           "comment": "Type and pattern operations",
