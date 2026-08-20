@@ -383,7 +383,7 @@ routine List[T](from: Set[T]) -> List[T]
 # Display
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine Set[T].represent() -> Text
   if me.is_empty()
     return "{}"
@@ -397,7 +397,7 @@ routine Set[T].represent() -> Text
   result = result + "}"
   return steal result
 
-@readonly
+@[readonly, override]
 routine Set[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
@@ -440,7 +440,7 @@ dangerous routine Set[T].destroy()
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine Set[T].serialize() -> SerialValue
 needs T obeys Serializable
   var __sv = List[SerialValue]()

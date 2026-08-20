@@ -213,7 +213,7 @@ routine BitArray[N].contains(value: Bool) -> Bool
 # Display
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine BitArray[N].represent() -> Text
   var result = "BitArray(["
   var i = 0u64
@@ -225,7 +225,7 @@ routine BitArray[N].represent() -> Text
   result = result + "])"
   return result
 
-@readonly
+@[readonly, override]
 routine BitArray[N].diagnose() -> Text
   var result = me.full_type_name() + "(["
   var i = 0u64

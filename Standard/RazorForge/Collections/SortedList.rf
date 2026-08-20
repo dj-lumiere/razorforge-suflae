@@ -873,7 +873,7 @@ routine SortedListEmittable[T].emit!() -> T
 # Display / Equality
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine SortedList[T].represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
@@ -885,7 +885,7 @@ routine SortedList[T].represent() -> Text
   result = result + "])"
   return steal result
 
-@readonly
+@[readonly, override]
 routine SortedList[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
@@ -913,7 +913,7 @@ routine SortedList[T].eq(you: Accessing[SortedList[T]]) -> Bool
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine SortedList[T].serialize() -> SerialValue
 needs T obeys Serializable
   var __sv = List[SerialValue]()

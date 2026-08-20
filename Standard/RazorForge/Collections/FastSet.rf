@@ -402,7 +402,7 @@ routine FastSetEmittable[T].emit!() -> T
 # Display
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine FastSet[T].represent() -> Text
   var result = "FastSet({"
   var first = true
@@ -414,7 +414,7 @@ routine FastSet[T].represent() -> Text
   result = result + "})"
   return steal result
 
-@readonly
+@[readonly, override]
 routine FastSet[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
@@ -454,7 +454,7 @@ dangerous routine FastSet[T].destroy()
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine FastSet[T].serialize() -> SerialValue
 needs T obeys Serializable
   var __sv = List[SerialValue]()

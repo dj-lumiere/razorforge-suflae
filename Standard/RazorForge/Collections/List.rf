@@ -382,7 +382,7 @@ needs T obeys Equatable
     i = i +% 1u64
   return false
 
-@readonly
+@[readonly, override]
 routine List[T].represent() -> Text
   var result = "["
   var i = 0u64
@@ -392,9 +392,9 @@ routine List[T].represent() -> Text
     result = result + v.represent()
     i = i +% 1u64
   result = result + "]"
-  return steal result
+  return result
 
-@readonly
+@[readonly, override]
 routine List[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
@@ -404,7 +404,7 @@ routine List[T].diagnose() -> Text
     result = result + v.represent()
     i = i +% 1u64
   result = result + "])"
-  return steal result
+  return result
 
 ### Appends `count` elements from `source` beginning at `from` into this list.
 ### Elements are copied as a single contiguous range using a memcopy.
@@ -451,7 +451,7 @@ needs T obeys Copyable
 ### default field-walk so a `List[T]` renders as a sequence of serialized elements, not its internal
 ### buffer/count layout.
 ### :returns: The `SerialValue.List` holding each element's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine List[T].serialize() -> SerialValue
 needs T obeys Serializable
   var result = List[SerialValue]()

@@ -201,6 +201,7 @@ routine ArrayEmittable[T, N].emit!() -> T
 # Display
 # ============================================================================
 
+@[readonly, override]
 routine Array[T, N].represent() -> Text
   var result = "Array(["
   each i in 0u64 til N
@@ -210,6 +211,7 @@ routine Array[T, N].represent() -> Text
   result = result + "])"
   return result
 
+@[readonly, override]
 routine Array[T, N].diagnose() -> Text
   var result = me.full_type_name() + "(["
   each i in 0u64 til N

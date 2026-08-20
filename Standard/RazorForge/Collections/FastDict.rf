@@ -507,7 +507,7 @@ routine FastDictEmittable[K, V].emit!() -> DictEntry[K, V]
 
 ### Returns a compact text representation of the dictionary contents.
 ### Entries are rendered as `key: value` pairs in insertion order.
-@readonly
+@[readonly, override]
 routine FastDict[K, V].represent() -> Text
   var result = "FastDict({"
   var first = true
@@ -520,7 +520,7 @@ routine FastDict[K, V].represent() -> Text
   return steal result
 
 ### Returns a diagnostic form that includes the runtime type name and live entry count.
-@readonly
+@[readonly, override]
 routine FastDict[K, V].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
@@ -581,7 +581,7 @@ dangerous routine FastDict[K, V].destroy()
 
 ### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.
 ### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine FastDict[K, V].serialize() -> SerialValue
 needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()

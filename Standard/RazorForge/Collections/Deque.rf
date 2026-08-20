@@ -398,7 +398,7 @@ needs T obeys Equatable
 # Comparison Operations
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine Deque[T].represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
@@ -410,7 +410,7 @@ routine Deque[T].represent() -> Text
   result = result + "])"
   return steal result
 
-@readonly
+@[readonly, override]
 routine Deque[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
@@ -451,7 +451,7 @@ dangerous routine Deque[T].destroy()
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine Deque[T].serialize() -> SerialValue
 needs T obeys Serializable
   var __sv = List[SerialValue]()
