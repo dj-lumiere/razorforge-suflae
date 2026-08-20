@@ -223,6 +223,17 @@ public sealed partial class SemanticVerifier
                         arity: decl.Parameters.Count,
                         constraints: decl.GenericConstraints,
                         body: decl.Body);
+
+                    // A derive template's body is consumed ONLY via the derive-template store
+                    // (GetDeriveTemplate / CloneUniversalDeriveBody) — it must NOT also be registered in
+                    // `_routineBodies`. ResolveRoutineInfoForDeclaration resolves the bare owner `T`
+                    // through the SHARED registry, so a user `record T` makes it resolve to the USER type
+                    // → RegistryKey "Test6.T.represent" → the template body is filed as that type's own
+                    // represent. WiredRoutinePass then skips synthesizing the REAL wired auto-derive (its
+                    // key is already in `_routineBodies`), leaving the wired symbol declared+called but
+                    // never defined (over-prune crash). Name-as-identity trap ([[generic-parameter
+                    // identity = SLOT]]).
+                    continue;
                 }
 
                 RoutineInfo? routineInfo = ResolveRoutineInfoForDeclaration(decl: decl, moduleName: module);
