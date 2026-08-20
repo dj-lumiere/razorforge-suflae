@@ -421,6 +421,50 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
+    /// Regression lock ([[generic-parameter identity = SLOT]]): a user type NAMED like a generic
+    /// parameter must never be confused with that parameter. `record T` shares its name with the `T`
+    /// in the universal `routine T.represent()` derive AND the numeric `common routine T.to_width()` /
+    /// `T.bit()` width helpers. Before the fix the type-level receiver `T` in `T.to_width(...)` resolved
+    /// (global lookup before the in-scope-parameter check) to the user record, so the call bound to
+    /// `record-T.to_width` and codegen emitted garbage (`zext i64 to record-T` → GetLlvmType crash,
+    /// `shl i256 <record-T>`). Driving codegen to completion is the lock — Generate() must not throw.
+    /// </summary>
+    [Fact]
+    public void Codegen_UserRecordNamedLikeGenericParam_DoesNotHijackParam()
+    {
+        string source = """
+                        record T
+                          a: S32
+
+                        routine start()
+                          var s = T(a: 9_s32).represent()
+                          var e = (1.0_d128).erf()
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+
+        Assert.Empty(collection: result.Errors);
+
+        var generator = new LlvmCodeGenerator(program: program,
+            registry: result.Registry,
+            stdlibPrograms: result.Registry.StdlibPrograms,
+            synthesizedBodies: result.SynthesizedBodies,
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
+
+        // Before the fix this threw: `GenericParameterTypeInfo 'T' reached GetLlvmType` (the numeric
+        // helper monomorphized `T.to_width` onto the user record `T`).
+        string llvmIr = generator.Generate();
+
+        Assert.Contains(expectedSubstring: "define", actualString: llvmIr);
+        // The numeric width helper must key on the real int types, never the user record `T`: a
+        // `.T.to_width` (record-owned) symbol is the shadow-hijack signature.
+        Assert.DoesNotContain(expectedSubstring: ".T.to_width", actualString: llvmIr);
+    }
+
+    /// <summary>
     /// Verifies code generation behavior for try floordiv variant uses failable operator symbols.
     /// </summary>
     [Fact]

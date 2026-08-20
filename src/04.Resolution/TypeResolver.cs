@@ -996,7 +996,7 @@ internal sealed class TypeResolver
     /// here because a monomorphized instance can carry concrete argument names in it; such a name only
     /// resolves as a parameter when it has no global type at all (handled by the caller's fall-through).
     /// </summary>
-    private bool IsGenericDefinitionScopeParam(string name)
+    internal bool IsGenericDefinitionScopeParam(string name)
     {
         if (_sa._currentType is { IsGenericDefinition: true, GenericParameters: { } typeParams }
             && typeParams.Contains(value: name))

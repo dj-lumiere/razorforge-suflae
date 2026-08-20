@@ -1619,6 +1619,15 @@ public sealed partial class SemanticVerifier
     internal bool IsGenericParameter(string name) =>
         _typeResolver.IsGenericParameter(name: name);
 
+    /// <summary>True when name is a GENUINE parameter of a generic-definition scope (so it shadows a
+    /// same-named global type). Delegates to <see cref="TypeResolver"/>.</summary>
+    internal bool IsGenericDefinitionScopeParam(string name) =>
+        _typeResolver.IsGenericDefinitionScopeParam(name: name);
+
+    /// <summary>The 0-based positional slot of the in-scope generic parameter. Delegates to <see cref="TypeResolver"/>.</summary>
+    internal int GenericParameterSlot(string name) =>
+        _typeResolver.GenericParameterSlot(name: name);
+
     /// <summary>Resolves a type expression in a protocol context (handles 'Me'). Delegates to <see cref="TypeResolver"/>.</summary>
     internal TypeSymbol ResolveProtocolType(TypeExpression? typeExpr) =>
         _typeResolver.ResolveProtocolType(typeExpr: typeExpr);

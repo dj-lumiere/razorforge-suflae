@@ -238,6 +238,21 @@ public sealed partial class SemanticVerifier
             return choiceCase.Value.ChoiceType;
         }
 
+        // An in-scope generic PARAMETER shadows a same-named global type, BEFORE the global lookup.
+        // A parameter's NAME is only a label; its identity is its positional slot. Inside a
+        // `common routine T.to_width()` body the receiver `T` is UNAMBIGUOUSLY that parameter — there
+        // is no other reading — so a user `record T` must NOT hijack it as the type-level receiver of
+        // `T.to_width(...)`. Without this the receiver resolved to the record, the call bound to
+        // `record-T.to_width`, and GMP emitted it into a 256-bit numeric routine (garbage
+        // `zext i64 to record-T` / `shl i256 <record-T>`). Mirrors TypeResolver.ResolveTypeCore; the
+        // shadow is granted only for a GENUINE definition-scope parameter ([[generic-parameter
+        // identity = SLOT]]).
+        if (IsGenericParameter(name: id.Name) &&
+            (LookupTypeWithImports(name: id.Name) is null || IsGenericDefinitionScopeParam(name: id.Name)))
+        {
+            return new GenericParameterTypeInfo(name: id.Name, slot: GenericParameterSlot(name: id.Name));
+        }
+
         // Try to look up as type FIRST (for static access like `U64.data_size()`).
         // Types take precedence over routines when both share a bare name — bare type
         // references for static access (member access, type-as-value generic args, etc.)
