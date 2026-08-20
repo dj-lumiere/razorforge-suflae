@@ -153,7 +153,8 @@ public sealed partial class SemanticVerifier
                 // Wired routines ($-prefixed) cannot be called directly by user code, except
                 // represent and diagnose which are composable for custom display implementations.
                 if (callName.StartsWith(value: '$')
-                    && callName != "represent" && callName != "diagnose")
+                    && callName != Compiler.Resolution.RuntimeContract.Display.Represent
+                    && callName != Compiler.Resolution.RuntimeContract.Display.Diagnose)
                 {
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
                         message: $"Wired routine '{callName}' cannot be called directly. " +

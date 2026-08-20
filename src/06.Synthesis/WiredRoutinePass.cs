@@ -42,8 +42,9 @@ namespace Compiler.Synthesis;
 /// </summary>
 public sealed class WiredRoutinePass(DesugaringContext ctx)
 {
-    private const string RepresentMemberRoutineName = "represent";
-    private const string DiagnoseMemberRoutineName = "diagnose";
+    private const string RepresentMemberRoutineName = Compiler.Resolution.RuntimeContract.Display.Represent;
+    private const string DiagnoseMemberRoutineName = Compiler.Resolution.RuntimeContract.Display.Diagnose;
+    private const string SerializeMemberRoutineName = Compiler.Resolution.RuntimeContract.Serialize;
     private const string HashMemberRoutineName = "hash";
     private const string BitXorMemberRoutineName = "bitxor";
     private const string ResultVarName = "result";
@@ -210,7 +211,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                             break;
 
                         case RoutineTypeInfo routineOwner
-                            when routine.Name == "serialize" && !routineOwner.IsGenericDefinition:
+                            when routine.Name == SerializeMemberRoutineName && !routineOwner.IsGenericDefinition:
                             // A routine VALUE boxes its `represent()` signature Text as its serialize (the
                             // zero-field path) — a resolved CreatorExpression, unlike the RF template's
                             // `SerialValue(...)` which doesn't re-resolve when cloned for a structural type.
@@ -252,7 +253,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             foreach (RoutineInfo routine in ctx.Registry.GetMemberRoutinesForType(type))
             {
-                if (routine.Name != "serialize") continue;
+                if (routine.Name != SerializeMemberRoutineName) continue;
                 if (ctx.RoutineBodies.ContainsKey(key: routine.RegistryKey)) continue;
                 if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
                 Statement? body = BuildSerializeBody(owner: type, fields: [], textType: textType);
@@ -512,7 +513,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         memberRoutineName: "copy")
                     ?? BuildCloneViaCopyBody(ownerType: record);
                 return;
-            case "serialize" when !record.IsGenericDefinition:
+            case SerializeMemberRoutineName when !record.IsGenericDefinition:
                 // A COMPOSITE record clones the universal `@overridable routine T.serialize()` derive
                 // template (comptime `expand` field-walk into a `Dict[Text, SerialValue]` arm). A type
                 // that boxes into its OWN SerialValue arm keeps the C# builder: the scalar leaves
@@ -526,7 +527,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Statement? recSer =
                     (serializeComposite
                         ? CloneUniversalDeriveBody(ownerType: record, synthesized: routine,
-                            memberRoutineName: "serialize")
+                            memberRoutineName: SerializeMemberRoutineName)
                         : null)
                     ?? BuildSerializeBody(owner: record, fields: record.MemberVariables,
                         textType: textType);
@@ -578,7 +579,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         textType: textType, diagnose: false);
                 break;
 
-            case "serialize":
+            case SerializeMemberRoutineName:
             {
                 // Handled before the opaque-backend skip (see the switch above) so @llvm scalar leaves
                 // get a boxing body; composite records are covered there as well. Nothing to do here.
@@ -651,7 +652,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         textType: textType, diagnose: true);
                 break;
 
-            case "serialize":
+            case SerializeMemberRoutineName:
             {
                 if (entity.IsGenericDefinition) break;
                 // A composite entity clones the universal `@overridable routine T.serialize()` derive
@@ -662,7 +663,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Statement? serBody =
                     (entity.MemberVariables.Count > 0
                         ? CloneUniversalDeriveBody(ownerType: entity, synthesized: routine,
-                            memberRoutineName: "serialize")
+                            memberRoutineName: SerializeMemberRoutineName)
                         : null)
                     ?? BuildSerializeBody(owner: entity, fields: entity.MemberVariables,
                         textType: textType);
@@ -820,7 +821,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         logicBreachedErrorType: logicBreachedErrorType);
                 break;
 
-            case "serialize" when !choice.IsGenericDefinition:
+            case SerializeMemberRoutineName when !choice.IsGenericDefinition:
                 // A `choice` has no serializable payload, so it boxes its `represent()` Text (the zero-field
                 // path of BuildSerializeBody) — the fallback the derived composite's `obeying` else-branch
                 // used to produce, now that serialize is universal.
@@ -1731,7 +1732,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         if (recurse)
             return new CallExpression(
                 Callee: new MemberExpression(Object: meField,
-                    MemberName: "serialize",
+                    MemberName: SerializeMemberRoutineName,
                     Location: _synthLoc) { ResolvedType = serialValue },
                 Arguments: [],
                 Location: _synthLoc) { ResolvedType = serialValue };
@@ -1771,9 +1772,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // LookupMemberRoutine resolves through the generic definition, so a concrete instance like
         // `List[S32]` sees the generic `List[T].serialize` (GetMemberRoutinesForType only lists the instance's
         // own already-materialized memberRoutines, which misses it during field-value synthesis).
-        ctx.Registry.LookupMemberRoutine(type: type, memberRoutineName: "serialize") is not null || ctx.Registry
+        ctx.Registry.LookupMemberRoutine(type: type, memberRoutineName: SerializeMemberRoutineName) is not null || ctx.Registry
            .GetMemberRoutinesForType(type: type)
-           .Any(predicate: m => m.Name == "serialize");
+           .Any(predicate: m => m.Name == SerializeMemberRoutineName);
 
     //  represent / diagnose (choice)
 
@@ -1925,7 +1926,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     ?? BuildFlagsDiagnoseBody(flags: flags, textType: textType, boolType: boolType);
                 break;
 
-            case "serialize" when !flags.IsGenericDefinition:
+            case SerializeMemberRoutineName when !flags.IsGenericDefinition:
                 // A `flags` mask boxes its `represent()` Text (zero-field BuildSerializeBody path) — the
                 // universal-serialize fallback that replaces the composite derive's `obeying` else-branch.
                 ctx.VariantBodies[key: routine.RegistryKey] =
@@ -3192,7 +3193,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     ?? BuildTupleTextBody(tuple: tuple, textType: textType, diagnose: true);
                 break;
 
-            case "serialize":
+            case SerializeMemberRoutineName:
             {
                 // A generic tuple (`Tuple[U64, T]`) has no concrete body — its serialize is cloned per
                 // CONCRETE instantiation during monomorphization; synthesizing one here would send the
@@ -3204,7 +3205,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 // GetOrCreateTupleType only when every element is serializable-or-routine.
                 Statement? tupSer =
                     CloneUniversalDeriveBody(ownerType: tuple, synthesized: routine,
-                        memberRoutineName: "serialize")
+                        memberRoutineName: SerializeMemberRoutineName)
                     ?? BuildSerializeBody(owner: tuple, fields: tuple.MemberVariables,
                         textType: textType);
                 if (tupSer != null) ctx.VariantBodies[key: routine.RegistryKey] = tupSer;

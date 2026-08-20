@@ -478,7 +478,9 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                 case ExpressionPart ep:
                 {
                     Expression loweredInner = LowerExpression(ep.Expression);
-                    string memberRoutineName = ep.FormatSpec is "?" or "=?" ? "diagnose" : "represent";
+                    string memberRoutineName = ep.FormatSpec is "?" or "=?"
+                        ? Resolution.RuntimeContract.Display.Diagnose
+                        : Resolution.RuntimeContract.Display.Represent;
 
                     // "=" and "=?" format specs prepend "varName=" as a text literal.
                     if (ep.FormatSpec is "=" or "=?")

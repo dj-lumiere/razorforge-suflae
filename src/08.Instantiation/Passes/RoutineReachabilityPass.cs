@@ -21,10 +21,10 @@ namespace Compiler.Instantiation.Passes;
 internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 {
     private const string CreateMemberRoutineName = "create";
-    private const string RepresentMemberRoutineName = "represent";
-    private const string DiagnoseMemberRoutineName = "diagnose";
+    private const string RepresentMemberRoutineName = RuntimeContract.Display.Represent;
+    private const string DiagnoseMemberRoutineName = RuntimeContract.Display.Diagnose;
     private const string DestroyMemberRoutineName = "destroy";
-    private const string SerializeMemberRoutineName = "serialize";
+    private const string SerializeMemberRoutineName = RuntimeContract.Serialize;
 
     private readonly HashSet<string> _live = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> _visited = new(comparer: StringComparer.Ordinal);

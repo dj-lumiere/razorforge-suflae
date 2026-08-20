@@ -86,11 +86,11 @@ internal sealed class AutoWiredRegistrationPass
             if (textType != null)
             {
                 MaybeRegisterWired(owner: type,
-                    name: "represent",
+                    name: RuntimeContract.Display.Represent,
                     returnType: textType,
                     existingMemberRoutines: existingMemberRoutines);
                 MaybeRegisterWired(owner: type,
-                    name: "diagnose",
+                    name: RuntimeContract.Display.Diagnose,
                     returnType: textType,
                     existingMemberRoutines: existingMemberRoutines);
             }
@@ -105,7 +105,7 @@ internal sealed class AutoWiredRegistrationPass
                     or TypeCategory.Choice or TypeCategory.Flags)
             {
                 MaybeRegisterWired(owner: type,
-                    name: "serialize",
+                    name: RuntimeContract.Serialize,
                     returnType: serialValueType,
                     existingMemberRoutines: existingMemberRoutines);
             }
@@ -474,11 +474,11 @@ internal sealed class AutoWiredRegistrationPass
                     if (textType != null && !type.IsGenericDefinition)
                     {
                         MaybeRegisterWired(owner: type,
-                            name: "represent",
+                            name: RuntimeContract.Display.Represent,
                             returnType: textType,
                             existingMemberRoutines: existingMemberRoutines);
                         MaybeRegisterWired(owner: type,
-                            name: "diagnose",
+                            name: RuntimeContract.Display.Diagnose,
                             returnType: textType,
                             existingMemberRoutines: existingMemberRoutines);
                     }
@@ -590,11 +590,11 @@ internal sealed class AutoWiredRegistrationPass
         if (textType != null)
         {
             MaybeRegisterWired(owner: tParam,
-                name: "represent",
+                name: RuntimeContract.Display.Represent,
                 returnType: textType,
                 existingMemberRoutines: universalExisting);
             MaybeRegisterWired(owner: tParam,
-                name: "diagnose",
+                name: RuntimeContract.Display.Diagnose,
                 returnType: textType,
                 existingMemberRoutines: universalExisting);
         }

@@ -685,7 +685,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 // `Routine[(S32,), S32]`) directly: no parens, no field walk. (serialize isn't a
                 // universal memberRoutine, so routine serialize is handled where it's registered.)
                 if (resolvedRoutine.OwnerType is RoutineTypeInfo routineOwner
-                    && resolvedRoutine.Name is "represent" or "diagnose")
+                    && resolvedRoutine.Name is RuntimeContract.Display.Represent
+                        or RuntimeContract.Display.Diagnose)
                 {
                     var sigBody = new ReturnStatement(
                         Value: new LiteralExpression(Value: routineOwner.Name,

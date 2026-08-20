@@ -604,7 +604,9 @@ public sealed partial class SemanticVerifier
             bool isEntity = argType is EntityTypeInfo;
             if (!isEntity && IsTriviallyAssignable(type: argType)) continue;
 
-            string memberRoutineName = isAlert ? "diagnose" : "represent";
+            string memberRoutineName = isAlert
+                ? Compiler.Resolution.RuntimeContract.Display.Diagnose
+                : Compiler.Resolution.RuntimeContract.Display.Represent;
             var memberAccess = new MemberExpression(
                 Object: innerExpr,
                 MemberName: memberRoutineName,

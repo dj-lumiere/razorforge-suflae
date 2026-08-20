@@ -91,6 +91,12 @@ public static class RuntimeContract
         public const string Diagnose = "diagnose";
     }
 
+    /// <summary>The universal derive that turns any value into a <c>SerialValue</c> — every value has one so
+    /// a composite walk can call <c>me.field.serialize()</c> unconditionally.</summary>
+    /// <remarks>Sites: AutoWiredRegistrationPass (registration), WiredRoutinePass (body synthesis),
+    /// RoutineReachabilityPass (seed). Body is aggregate field-walk or scalar box.</remarks>
+    public const string Serialize = "serialize";
+
     /// <summary>Carrier record field names on <c>Maybe[T]</c>/<c>Result[T]</c>.</summary>
     /// <remarks>Sites: ExpressionLoweringPass (tuple synthesis), PatternLoweringPass, ErrorHandlingVariantPass,
     /// LLVMCodeGenerator.Statements (field lookup).</remarks>
