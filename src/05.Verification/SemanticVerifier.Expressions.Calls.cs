@@ -150,18 +150,10 @@ public sealed partial class SemanticVerifier
                     }
                 }
 
-                // Wired routines ($-prefixed) cannot be called directly by user code, except
-                // represent and diagnose which are composable for custom display implementations.
-                if (callName.StartsWith(value: '$')
-                    && callName != Compiler.Resolution.RuntimeContract.Display.Represent
-                    && callName != Compiler.Resolution.RuntimeContract.Display.Diagnose)
-                {
-                    ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
-                        message: $"Wired routine '{callName}' cannot be called directly. " +
-                                 "Use the corresponding language construct instead (e.g., '==' for eq, 'each' for iter).",
-                        location: call.Location);
-                    return ErrorTypeInfo.Instance;
-                }
+                // (A direct free call to a wired routine is unreachable now: `$` is a separate Dollar
+                // token that the parser consumes structurally — a free-call `callName` is always bare and
+                // free routines are never wired member routines. Wired-member misuse is caught on the
+                // member-call path below via IsOperatorWired / the iter·access·control guard.)
 
                 // Display-routine desugaring (phase 1): `show(x)` / `alert(x)` where x is a
                 // copy-restricted wrapper becomes `show(x.represent())` / `alert(x.diagnose())`

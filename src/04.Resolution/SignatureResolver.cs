@@ -359,9 +359,8 @@ internal sealed class SignatureResolver
         if (pending.Kind == RoutineKind.MemberRoutine
             && refreshedOwnerType is EntityTypeInfo or RecordTypeInfo
             && pending.RoutineName is not ("create" or "create!")
-            && routine.Name.Contains(value: '.'))
+            && routine.RenderedReceiver is { } recvText)
         {
-            string recvText = routine.Name[..routine.Name.IndexOf(value: '.')];
             if (recvText.Contains(value: '['))
             {
                 TypeExpression? recvExpr = SemanticVerifier.ParseTypeExpressionString(

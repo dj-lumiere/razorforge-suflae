@@ -131,14 +131,12 @@ public sealed partial class SemanticVerifier
             baseName = $"{RoutineInfo.GetTypeIdentity(type: _currentType)}.{routine.Name}";
             routineOwnerType = _currentType;
         }
-        else if (routine.Name.Contains(value: '.'))
+        else if (routine.RenderedReceiver is { } typeName)
         {
-            // Extension memberRoutine syntax (e.g., "List[T].add_last"): memberRoutine + args-stripped owner base
-            // come from the parser's structural fields; `typeName` (owner WITH type-args) is still
-            // needed for the bracketed protocol-extension registry lookup below — that registry-key
-            // string form only lives in Name (ResolveType(ReceiverType) resolves differently here).
-            int dotIndex = routine.Name.IndexOf(value: '.');
-            string typeName = routine.Name[..dotIndex];
+            // Extension memberRoutine syntax (e.g., "List[T].add_last"): member + bare owner come from the
+            // parser's structural fields; `typeName` (owner WITH type-args = the RenderedReceiver) is still
+            // needed for the bracketed protocol-extension registry lookup below — that registry-key string
+            // form is the canonical rendered receiver (ResolveType(ReceiverType) resolves differently here).
             string memberRoutineName = routine.MemberRoutineName!;
             TypeSymbol? ownerType = LookupTypeWithImports(name: routine.OwnerName!);
             // Protocol-extension decls like `Iterable[Text].join` should have `me` typed as the
@@ -174,7 +172,7 @@ public sealed partial class SemanticVerifier
         // binding attached at registration (ResolvedInfo) for THAT case only — every other routine
         // (dotted members, protocol extensions like `MutableIndexable[T].pick`) keeps the existing
         // path, whose `me`-typing special-casing must not be bypassed.
-        bool isConstructorDecl = !routine.Name.Contains(value: '.')
+        bool isConstructorDecl = routine.MemberRoutineName is null
             && routine.ResolvedInfo is { Name: "create", OwnerType: not null };
         if (isConstructorDecl && routine.ResolvedInfo!.OwnerType is { } resolvedInfoOwner)
         {

@@ -184,7 +184,7 @@ public sealed partial class SemanticVerifier
 
                 // Only member routines: standalone free routines aren't candidates for
                 // either variant generation or protocol-default-impl monomorphization.
-                if (!decl.Name.Contains('.'))
+                if (decl.MemberRoutineName is null)
                     continue;
 
                 // Auto-derive template: `@overridable/@override routine T.MemberRoutine()`. Captured
@@ -264,11 +264,10 @@ public sealed partial class SemanticVerifier
 
     private RoutineInfo? ResolveRoutineInfoForDeclaration(RoutineDeclaration decl, string? moduleName = null)
     {
-        if (decl.Name.Contains('.'))
+        if (decl.MemberRoutineName is { } memberRoutineName)
         {
-            int dotIdx = decl.Name.LastIndexOf('.');
-            string ownerTypeName = decl.Name[..dotIdx];
-            string memberRoutineName = decl.Name[(dotIdx + 1)..];
+            // Owner is the RENDERED receiver (Iterable[Text]) — the bracketed-owner bucket key used below.
+            string ownerTypeName = decl.RenderedReceiver!;
 
             // Stdlib protocol-extension decls like `Iterable[Text].join` register their routines
             // under the bracketed-owner bucket (FullName = "Core.Iterable[Text]"). Try the

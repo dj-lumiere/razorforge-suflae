@@ -350,9 +350,8 @@ public sealed partial class StdlibLoader
             return false;
         }
 
-        string name = routine.Name;
-        int dot = name.IndexOf(value: '.');
-        string memberRoutine = dot > 0 ? name[(dot + 1)..] : name;
+        // Structured owner/member (parser-captured), never a re-split of the dotted Name string.
+        string memberRoutine = routine.MemberRoutineName ?? routine.Name;
         if (BuilderServiceClosureCascadingRoutines.Contains(item: memberRoutine))
         {
             return true;
@@ -365,7 +364,8 @@ public sealed partial class StdlibLoader
         // the surface signature — registering it too would create a SECOND, bodiless routine under the
         // same BuilderService.<name> identity, and codegen would emit a call to the undefined one. So the
         // stdlib standalone decl is skipped; the synthesized routine is the sole definition.
-        return dot < 0 && RuntimeContract.BuilderStandaloneRoutines.Contains(item: name);
+        return routine.MemberRoutineName is null
+            && RuntimeContract.BuilderStandaloneRoutines.Contains(item: routine.Name);
     }
 
     private static void RegisterProgramRoutines(TypeRegistry registry, Program program,
@@ -547,20 +547,18 @@ public sealed partial class StdlibLoader
     private static void RegisterRoutine(TypeRegistry registry, RoutineDeclaration routine,
         string moduleName)
     {
-        // Parse memberRoutine names like "S32.add" or "Type.MemberRoutine"
+        // Owner/member come from the parser-captured structured fields (the ONE canonical split);
+        // `typeName` below is the RENDERED receiver ("S32", "List[Agent[V]]"), whose type-args are then
+        // decoded for the generic-def-vs-specialization decision.
         string routineName = routine.Name;
         TypeInfo? ownerType = null;
-        string memberRoutineName = routineName;
+        string memberRoutineName = routine.MemberRoutineName ?? routineName;
         // Receiver text for a GENERIC specialization (e.g. "List[Agent[V]]"); resolved into MeType
         // once the generic context is built, so `me` is typed as the specialized receiver.
         string? meTypeName = null;
 
-        int dotIndex = routineName.IndexOf(value: '.');
-        if (dotIndex > 0)
+        if (routine.RenderedReceiver is { } typeName)
         {
-            string typeName = routineName[..dotIndex];
-            memberRoutineName = routineName[(dotIndex + 1)..]; // Just the memberRoutine part (e.g., "add")
-
             int bracketIndex = typeName.IndexOf(value: '[');
             if (bracketIndex > 0)
             {
@@ -1590,13 +1588,12 @@ public sealed partial class StdlibLoader
                 continue;
             }
 
-            string memberRoutineName = routine.Name;
+            // Member segment + member-vs-free branch come from the parser-captured structured fields;
+            // the owner is the RENDERED receiver (may carry type-args, used as a registry-lookup key).
+            string memberRoutineName = routine.MemberRoutineName ?? routine.Name;
             TypeInfo? ownerType = null;
-            int dotIndex = routine.Name.IndexOf(value: '.');
-            if (dotIndex > 0)
+            if (routine.RenderedReceiver is { } ownerName)
             {
-                string ownerName = routine.Name[..dotIndex];
-                memberRoutineName = routine.Name[(dotIndex + 1)..];
                 ownerType = registry.LookupType(name: ownerName) ??
                             registry.LookupType(name: $"{moduleName}.{ownerName}");
                 if (ownerType == null)

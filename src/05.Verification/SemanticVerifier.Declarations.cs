@@ -593,13 +593,12 @@ public sealed partial class SemanticVerifier
                 ? RoutineKind.Creator
                 : RoutineKind.MemberRoutine;
         }
-        // TODO: Why is this handled here? This name parsing thing should have been parser's role.
-        else if (routine.Name.Contains(value: '.'))
+        else if (routine.MemberRoutineName is { } declaredMember)
         {
             // Member routine syntax: "Type.routine" or "Type[T].routine". The parser already split
             // the owner base (args-stripped) and member routine into structured fields — read them instead of
             // re-parsing the concatenated Name (name-canonicalization).
-            routineName = routine.MemberRoutineName!;
+            routineName = declaredMember;
 
             kind = RoutineKind.MemberRoutine;
 
@@ -658,10 +657,8 @@ public sealed partial class SemanticVerifier
         // failable variant) are validated in CheckReservedVariantCollision, which runs after
         // all routines are registered — the failable base may be declared later in the file,
         // so it isn't reliably visible here at collection time.
-        // TODO: Why is this handled here? This name parsing thing should have been parser's role.
-        string baseName = routineName.Contains(value: '.')
-            ? routineName[(routineName.IndexOf(value: '.') + 1)..]
-            : routineName;
+        // Member segment from the parser-captured structured field, never a re-split of Name.
+        string baseName = routine.MemberRoutineName ?? routineName;
 
         // Validate $ prefixed names are known built-in member routines
         if (IsUnknownWiredMemberRoutine(bareName: baseName, isWired: routine.IsWiredMemberRoutine))

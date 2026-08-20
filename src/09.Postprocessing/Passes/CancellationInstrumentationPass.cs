@@ -97,15 +97,15 @@ public sealed class CancellationInstrumentationPass
     /// </summary>
     private RoutineInfo? ResolveDecl(RoutineDeclaration decl)
     {
-        int dot = decl.Name.LastIndexOf(value: '.');
-        if (dot < 0)
+        if (decl.MemberRoutineName is not { } memberRoutineName)
         {
             return _registry.LookupRoutineByName(name: decl.Name, isFailable: decl.IsFailable);
         }
 
-        string ownerName = decl.Name[..dot];
-        string memberRoutineName = decl.Name[(dot + 1)..];
-        TypeInfo? owner = _registry.LookupType(name: ownerName);
+        // Owner is the RENDERED receiver: a bracketed generic-def owner keys to null here and is skipped
+        // (its instrumentation belongs on the monomorphized bodies), which the bare OwnerName would not
+        // reproduce.
+        TypeInfo? owner = _registry.LookupType(name: decl.RenderedReceiver!);
         return owner == null ? null : _registry.LookupMemberRoutine(type: owner, memberRoutineName: memberRoutineName, isFailable: decl.IsFailable);
     }
 

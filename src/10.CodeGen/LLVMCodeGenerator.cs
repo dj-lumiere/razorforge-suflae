@@ -820,10 +820,8 @@ public partial class LlvmCodeGenerator
                         // wrong initial routineInfo, since LookupRoutineByName returns an
                         // arbitrary overload (possibly from a different type).
                         TypeInfo? resolvedOwner = routineInfo?.OwnerType;
-                        int astDotIdx = routine.Name.IndexOf(value: '.');
-                        if (astDotIdx > 0)
+                        if (routine.RenderedReceiver is { } ownerName)
                         {
-                            string ownerName = routine.Name[..astDotIdx];
                             TypeInfo? t = _registry.LookupType(name: ownerName);
                             if (t != null) resolvedOwner = t;
                         }

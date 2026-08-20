@@ -182,7 +182,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // disambiguate same-named routines across modules (e.g. each imported test module's
                 // `start`). Members keep the bare index (their harness contamination is a separate
                 // follow-up — module-qualified member indexing regressed generic-instance liveness).
-                if (!string.IsNullOrEmpty(value: module) && !decl.Name.Contains(value: '.'))
+                if (!string.IsNullOrEmpty(value: module) && decl.MemberRoutineName is null)
                 {
                     AddDecl(map: _userByName, name: $"{module}.{decl.Name}", decl: decl);
                 }
@@ -198,7 +198,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // Imported project modules are carried here too; index MODULE-LEVEL routines under the
                 // module-qualified name so FindDecl can disambiguate same-named routines across modules
                 // (see the user-index note above).
-                if (!string.IsNullOrEmpty(value: module) && !decl.Name.Contains(value: '.'))
+                if (!string.IsNullOrEmpty(value: module) && decl.MemberRoutineName is null)
                 {
                     AddDecl(map: _stdlibByName, name: $"{module}.{decl.Name}", decl: decl);
                 }
