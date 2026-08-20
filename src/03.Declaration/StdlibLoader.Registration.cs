@@ -673,15 +673,25 @@ public sealed partial class StdlibLoader
 
         if (routine.GenericParameters != null)
         {
-            // Filter out names that resolve to real registered types. The parser collects bracket
-            // contents from owner receivers like `Iterable[Text]` and stuffs them into
-            // routine.GenericParameters, but concrete args (Text) must not shadow the real type
-            // — otherwise `separator: Text` resolves to GenericParameterTypeInfo("Text")
-            // instead of Core.Text, breaking memberRoutine lookup in the body.
+            // Filter out names that resolve to real registered types — but ONLY for RECEIVER-derived
+            // leaves. The parser collects bracket contents from owner receivers like `Iterable[Text]`
+            // and stuffs them into routine.GenericParameters; a concrete arg (Text) there must not
+            // shadow the real type (else `separator: Text` resolves to GenericParameterTypeInfo("Text")
+            // instead of Core.Text, breaking memberRoutine lookup).
+            //
+            // A routine's OWN method-generic param — the `U` in `Iterable[T].accumulate[U]` — is an
+            // EXPLICIT declaration and must NEVER be dropped just because a user type shares its name.
+            // A cross-module `record U` (registered before this stdlib routine's lazy signature
+            // resolution) makes LookupType("U") non-null, and dropping U here left `start: U` resolving
+            // to that record → RF-S502 "cannot convert S64 to U" / mis-sized allocations. Its identity is
+            // its slot, not the label. Only RECEIVER leaves are concrete bindings; keep everything else.
+            HashSet<string> receiverLeaves = CollectReceiverLeafParamNames(routine.ReceiverType);
             foreach (string gp in routine.GenericParameters)
             {
-                if (registry.LookupType(name: gp) is null &&
-                    registry.LookupType(name: $"{moduleName}.{gp}") is null)
+                bool isReceiverBinding = receiverLeaves.Contains(item: gp)
+                    && (registry.LookupType(name: gp) is not null
+                        || registry.LookupType(name: $"{moduleName}.{gp}") is not null);
+                if (!isReceiverBinding)
                 {
                     genericContext.Add(item: gp);
                 }
@@ -814,6 +824,43 @@ public sealed partial class StdlibLoader
         {
             // Ignore duplicate routine registration
         }
+    }
+
+    /// <summary>
+    /// The bare leaf identifiers of a member routine's RECEIVER type — the parameter names that came
+    /// from the receiver's brackets (<c>T</c> in <c>Iterable[T]</c>, <c>K</c>/<c>V</c> in
+    /// <c>List[DictEntry[K, V]]</c>). These may bind a CONCRETE type (<c>Text</c> in
+    /// <c>Iterable[Text].join</c>); a method-generic like <c>U</c> in <c>Iterable[T].accumulate[U]</c>
+    /// is NOT among them. Mirrors <c>SignatureResolver.CollectReceiverLeafParamNames</c>.
+    /// </summary>
+    private static HashSet<string> CollectReceiverLeafParamNames(TypeExpression? receiver)
+    {
+        var names = new HashSet<string>(comparer: System.StringComparer.Ordinal);
+        if (receiver?.GenericArguments is { Count: > 0 } args)
+        {
+            foreach (TypeExpression arg in args)
+            {
+                CollectReceiverLeaves(type: arg, into: names);
+            }
+        }
+
+        return names;
+    }
+
+    private static void CollectReceiverLeaves(TypeExpression type, HashSet<string> into)
+    {
+        if (type.GenericArguments is { Count: > 0 } args)
+        {
+            foreach (TypeExpression arg in args)
+            {
+                CollectReceiverLeaves(type: arg, into: into);
+            }
+
+            return;
+        }
+
+        if (type.Name.Contains(value: '.')) return;
+        into.Add(item: type.Name);
     }
 
     /// <summary>
