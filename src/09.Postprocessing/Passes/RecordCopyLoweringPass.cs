@@ -146,7 +146,9 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             {
                 case RoutineDeclaration r:
                 {
-                    _inCopyRoutine = NameIsCopyRoutine(name: r.Name); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: r.Name);
+                    // Pass the owner-qualified composite: OwnerNameIsRcWrapper parses the OWNER out of the
+                    // name string, which the bare member Name no longer carries.
+                    _inCopyRoutine = NameIsCopyRoutine(name: r.QualifiedName); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: r.QualifiedName);
                     SetBorrowParams(parameters: r.Parameters);
                     Statement newBody = LowerStatement(stmt: r.Body);
                     if (!ReferenceEquals(newBody, r.Body))
@@ -226,7 +228,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             if (members[i] is RoutineDeclaration mr)
             {
-                _inCopyRoutine = NameIsCopyRoutine(name: mr.Name); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: mr.Name);
+                _inCopyRoutine = NameIsCopyRoutine(name: mr.QualifiedName); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: mr.QualifiedName);
                 SetBorrowParams(parameters: mr.Parameters);
                 Statement newBody = LowerStatement(stmt: mr.Body);
                 if (!ReferenceEquals(newBody, mr.Body))

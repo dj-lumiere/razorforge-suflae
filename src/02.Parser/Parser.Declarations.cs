@@ -578,7 +578,10 @@ public partial class Parser
             _inRoutineBody = false;
         }
 
-        return new RoutineDeclaration(Name: name,
+        // Name is the BARE member for an extension-syntax member routine (owner lives in the structured
+        // OwnerName/RenderedReceiver/ReceiverType fields); free routines and type-body members keep their
+        // already-bare name. The owner-qualified composite is rebuilt on demand via QualifiedName.
+        return new RoutineDeclaration(Name: memberMemberRoutineName ?? name,
             Parameters: parameters,
             ReturnType: returnType,
             Body: body,
