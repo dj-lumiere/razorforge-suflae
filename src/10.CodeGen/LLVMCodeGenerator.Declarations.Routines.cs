@@ -282,7 +282,9 @@ public partial class LlvmCodeGenerator
     private RoutineInfo? ResolveRoutineInfoForDefinition(RoutineDeclaration routine,
         string? moduleContext)
     {
-        string baseName = routine.Name;
+        // The owner-qualified composite key (bare member for a free routine); the scoped/unqualified
+        // helpers below split it on '.'.
+        string baseName = routine.QualifiedName;
         RoutineInfo? routineInfo = LookupScopedMemberRoutine(baseName: baseName,
             moduleContext: moduleContext);
 

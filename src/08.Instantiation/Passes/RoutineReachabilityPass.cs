@@ -176,7 +176,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
-                AddDecl(map: _userByName, name: decl.Name, decl: decl);
+                AddDecl(map: _userByName, name: decl.QualifiedName, decl: decl);
                 IndexCreatorDecl(map: _userByName, decl: decl);
                 // Also index MODULE-LEVEL routines under their module-qualified name so FindDecl can
                 // disambiguate same-named routines across modules (e.g. each imported test module's
@@ -193,7 +193,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
-                AddDecl(map: _stdlibByName, name: decl.Name, decl: decl);
+                AddDecl(map: _stdlibByName, name: decl.QualifiedName, decl: decl);
                 IndexCreatorDecl(map: _stdlibByName, decl: decl);
                 // Imported project modules are carried here too; index MODULE-LEVEL routines under the
                 // module-qualified name so FindDecl can disambiguate same-named routines across modules
@@ -253,9 +253,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // module's body under another's RoutineInfo — pruning the real entry's callees.
                 RoutineInfo? info = (!string.IsNullOrEmpty(value: module)
                                         ? ctx.Registry.LookupRoutine(
-                                            fullName: $"{module}.{decl.Name}")
+                                            fullName: $"{module}.{decl.QualifiedName}")
                                         : null)
-                                    ?? ctx.Registry.LookupRoutineByName(name: decl.Name);
+                                    ?? ctx.Registry.LookupRoutineByName(name: decl.QualifiedName);
                 if (info == null) continue;
                 Enqueue(routine: info, decl: decl, typeSubs: new Dictionary<string, TypeInfo>());
             }

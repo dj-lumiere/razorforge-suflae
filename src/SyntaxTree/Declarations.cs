@@ -285,6 +285,19 @@ public record RoutineDeclaration(
     /// </summary>
     public string? RenderedReceiver { get; set; }
 
+    /// <summary>
+    /// The owner-qualified composite identity (<c>"List[T].append"</c>, <c>"S32.add"</c>) used as a
+    /// registry / reachability-index key; for a free routine (or a type-body member whose owner comes from
+    /// the enclosing <c>_currentType</c>, not extension syntax) this is just the bare <see cref="Name"/>.
+    /// Built from the structured <see cref="RenderedReceiver"/> + <see cref="MemberRoutineName"/> in ONE
+    /// place — the canonical composite. Index/lookup sites that need the owner-qualified form MUST read
+    /// this; <see cref="Name"/> is the bare member. (While the parser still folds the owner into
+    /// <see cref="Name"/> this equals <see cref="Name"/> exactly; once <see cref="Name"/> is bare this is
+    /// the sole owner-qualified renderer.)
+    /// </summary>
+    public string QualifiedName =>
+        RenderedReceiver is { } receiver ? $"{receiver}.{MemberRoutineName}" : Name;
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

@@ -56,7 +56,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
-                AddDeclToIndex(key: decl.Name, decl: decl);
+                AddDeclToIndex(key: decl.QualifiedName, decl: decl);
 
                 // A constructor `routine T(...)` / `routine T[params](...)` is registered with the
                 // canonical creator name "create" on its owner type (ResolvedInfo), but its AST

@@ -634,7 +634,7 @@ public partial class LlvmCodeGenerator
             {
                 if (decl is RoutineDeclaration routine)
                 {
-                    routinesWithBodies.Add(item: routine.Name);
+                    routinesWithBodies.Add(item: routine.QualifiedName);
                 }
             }
         }
@@ -739,11 +739,11 @@ public partial class LlvmCodeGenerator
                     // 3. Short name fallback via LookupRoutineByName
                     // 4. Overload-based lookup using AST parameter types
                     RoutineInfo? routineInfo = routine.ResolvedInfo
-                                               ?? _registry.LookupRoutine(fullName: routine.Name);
+                                               ?? _registry.LookupRoutine(fullName: routine.QualifiedName);
                     if (routineInfo == null && !string.IsNullOrEmpty(value: module))
                     {
                         routineInfo =
-                            _registry.LookupRoutine(fullName: $"{module}.{routine.Name}");
+                            _registry.LookupRoutine(fullName: $"{module}.{routine.QualifiedName}");
                     }
 
                     if (routineInfo == null)
@@ -768,7 +768,7 @@ public partial class LlvmCodeGenerator
                         }
                         else
                         {
-                            routineInfo = _registry.LookupRoutineByName(name: routine.Name);
+                            routineInfo = _registry.LookupRoutineByName(name: routine.QualifiedName);
                         }
                     }
 
