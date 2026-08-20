@@ -440,7 +440,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         RoutineInfo failRoutine = failCall.ResolvedRoutine!;
         if (failRoutine.OwnerType is not { } owner) return false;
 
-        string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
+        string baseName = failRoutine.OriginalName ?? failRoutine.Name;
 
         // In the monomorphized (path-2) caller — which runs AFTER reachability — restrict propagation
         // to inner `emit!` calls: `try_emit` is systematically emitted for live iterator instances, so
@@ -534,7 +534,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         RoutineInfo failRoutine = failCall.ResolvedRoutine!;
         if (failRoutine.OwnerType is not { } owner) return false;
 
-        string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
+        string baseName = failRoutine.OriginalName ?? failRoutine.Name;
 
         // Prefer the outer kind's variant, then fall back to the most-informative available.
         string[] order = kind == ErrorHandlingVariantKind.Check
@@ -643,7 +643,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             if (prefix == null) return false;
             if (value is not CallExpression { ResolvedRoutine: { IsFailable: true } callee } call) return false;
 
-            string baseName = (callee.OriginalName ?? callee.Name).TrimStart(trimChar: '$');
+            string baseName = callee.OriginalName ?? callee.Name;
             if (baseName != "emit") return false;
             if (callee.OwnerType is not { } owner) return false;
 
@@ -731,7 +731,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// </summary>
     private RoutineInfo? FindVariant(RoutineInfo original, string prefix)
     {
-        string baseName = original.Name.TrimStart(trimChar: '$');
+        string baseName = original.Name;
         string variantName = $"{prefix}_{baseName}";
         foreach (RoutineInfo r in ctx.Registry.GetAllRoutines())
         {

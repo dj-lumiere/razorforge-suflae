@@ -1769,7 +1769,7 @@ public sealed partial class StdlibLoader
             // can resolve. Mirrors ErrorHandlingGenerator.GenerateTryVariant's shape.
             if (isFailable)
             {
-                string tryName = "try_" + memberRoutineName.TrimStart(trimChar: '$');
+                string tryName = "try_" + memberRoutineName;
                 TypeInfo? tryReturnType;
                 if (resolvedReturnType == null || resolvedReturnType.Name == "None")
                 {

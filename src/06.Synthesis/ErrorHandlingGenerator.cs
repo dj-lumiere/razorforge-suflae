@@ -47,7 +47,7 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The variant name.</returns>
     private static string GenerateVariantName(string prefix, RoutineInfo original)
     {
-        string baseName = original.Name.TrimStart(trimChar: '$');
+        string baseName = original.Name;
         return $"{prefix}_{baseName}";
     }
 

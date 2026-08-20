@@ -1922,8 +1922,11 @@ internal static class GenericAstRewriter
     private static int SafeSizeBytes(TypeInfo? type)
     {
         if (type is null) return 0;
+        // A template hole surfaces as either an unknown LLVM scalar (InvalidOperationException from
+        // SizeOfArbitraryInt) or an unparseable array count (FormatException from int.Parse); anything
+        // else is a real bug and must not be swallowed.
         try { return type.SizeBytes(pointerSize: PointerSize); }
-        catch { return 0; }
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return 0; }
     }
 
     /// <summary>Natural (ABI) alignment of <paramref name="type"/> with the same non-throwing guard as
@@ -1932,7 +1935,7 @@ internal static class GenericAstRewriter
     {
         if (type is null) return 1;
         try { return type.Alignment(pointerSize: PointerSize); }
-        catch { return 1; }
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return 1; }
     }
 
     /// <summary>
