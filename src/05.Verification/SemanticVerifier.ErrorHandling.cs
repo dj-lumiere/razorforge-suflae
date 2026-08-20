@@ -192,12 +192,34 @@ public sealed partial class SemanticVerifier
                 // RoutineInfo — the owner is a type-parameter placeholder that doesn't resolve, and
                 // several same-signature kind-gated templates must coexist in the derive-template
                 // store, which the signature-keyed registry cannot hold.
-                if (decl.Annotations.Contains(item: "overridable")
-                    || decl.Annotations.Contains(item: "override"))
+                //
+                // ONLY a bare type-PARAMETER owner (`routine T.represent()`) is a universal derive:
+                // its `T` binds the WHOLE receiver, so the stored body is re-usable for any type. A
+                // GENERIC-INSTANCE receiver (`routine Dict[K, V].represent()`) is ALSO a monomorphized
+                // template, but keyed by its OWN args (`K`, `V`) — NOT a whole-receiver `T`. It carries
+                // @override to REPLACE the universal derive for Dict, and reaches its own instantiations
+                // through the normal per-type path (FindInStdlib/VariantBodies). Registering it as
+                // universal poisons the store: GetDeriveTemplate could hand Dict's `K`/`V`-bearing body
+                // to an unrelated type whose only substitution is `T`->receiver, leaving `K`/`V` (and
+                // their `me.is_empty()` callee) unsubstituted → a Track-C monomorphization-incompleteness
+                // crash.
+                //
+                // Discriminate on the parser's STRUCTURED syntactic fact `HasReceiverTypeArgs` — exactly
+                // "generic-instance receiver (Dict[K, V]) vs bare owner (T)" — and NOTHING else. Do NOT
+                // gate on `LookupType(owner)` to also exclude a hypothetical concrete `Text.represent`:
+                // this loop runs over stdlib decls but LookupType queries the SHARED registry, so a USER
+                // `record T` would make `LookupType("T")` hit the user type and DROP the real stdlib `T`
+                // template — the name-as-identity trap ([[generic-parameter identity = SLOT]]). A bare
+                // owner is treated as a type parameter unconditionally; stdlib never declares a concrete
+                // bare-owner @override, so there is nothing else to exclude.
+                if (!decl.HasReceiverTypeArgs
+                    && decl.OwnerName is { } deriveOwner
+                    && decl.MemberRoutineName is { } deriveMember
+                    && (decl.Annotations.Contains(item: "overridable")
+                        || decl.Annotations.Contains(item: "override")))
                 {
-                    int dot = decl.Name.IndexOf(value: '.');
-                    _registry.RegisterDeriveTemplate(memberRoutine: decl.Name[(dot + 1)..],
-                        ownerParam: decl.Name[..dot],
+                    _registry.RegisterDeriveTemplate(memberRoutine: deriveMember,
+                        ownerParam: deriveOwner,
                         arity: decl.Parameters.Count,
                         constraints: decl.GenericConstraints,
                         body: decl.Body);
