@@ -348,6 +348,10 @@ public partial class Parser
         string? memberOwnerName = null;
         string? memberMemberRoutineName = null;
         bool memberHasReceiverTypeArgs = false;
+        // The receiver AS WRITTEN incl type-args ("List[T]", "Iterable[Text]"), assembled HERE from the
+        // separate owner/bracket/arg tokens — so consumers read it structurally instead of slicing it back
+        // out of the concatenated `Name`.
+        string? memberRenderedReceiver = null;
 
         while (Match(type: TokenType.Dot))
         {
@@ -364,8 +368,10 @@ public partial class Parser
                 (receiverTypeArgStrings != null || genericParams != null))
             {
                 List<string> nameArgs = receiverTypeArgStrings ?? genericParams!;
+                string renderedArgs = string.Join(separator: ", ", values: nameArgs);
+                memberRenderedReceiver = $"{name}[{renderedArgs}]"; // e.g. "List[T]", "List[DictEntry[K, V]]"
                 nameSb.Append('[');
-                nameSb.Append(string.Join(separator: ", ", values: nameArgs));
+                nameSb.Append(renderedArgs);
                 nameSb.Append("].");
                 nameSb.Append(part);
                 memberHasReceiverTypeArgs = true; // owner carried type-args (List[T].append)
@@ -373,6 +379,9 @@ public partial class Parser
             }
             else
             {
+                // Owner rendered so far (the bare owner, e.g. "S32", "Iterable") — captured BEFORE the
+                // member segment is appended.
+                memberRenderedReceiver = nameSb.ToString();
                 nameSb.Append('.');
                 nameSb.Append(part);
             }
@@ -587,6 +596,7 @@ public partial class Parser
             OwnerName = memberOwnerName,
             MemberRoutineName = memberMemberRoutineName,
             HasReceiverTypeArgs = memberHasReceiverTypeArgs,
+            RenderedReceiver = memberRenderedReceiver,
             ReceiverType = memberOwnerName != null
                 ? new TypeExpression(Name: memberOwnerName, GenericArguments: receiverArgExprs,
                     Location: location)

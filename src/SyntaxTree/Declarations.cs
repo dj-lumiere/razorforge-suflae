@@ -276,16 +276,14 @@ public record RoutineDeclaration(
     /// The receiver exactly AS WRITTEN, including any type-args (<c>"List[T]"</c>, <c>"Iterable[Text]"</c>,
     /// <c>"T"</c>), or null for a free routine. This is the rendered registry-key owner form that several
     /// resolution/registration sites need (a bracketed owner keys the protocol-extension / concrete-
-    /// specialization bucket). It is the ONE canonical way to obtain it: derived by removing the trailing
-    /// <c>".{MemberRoutineName}"</c> from <see cref="Name"/> — an exact suffix strip, since the parser
-    /// builds <see cref="Name"/> as <c>renderedOwner + "." + MemberRoutineName</c> (member-level generics
-    /// are NOT folded into <see cref="Name"/>). This is correct where <c>Name.LastIndexOf('.')</c> is NOT:
-    /// a nested/qualified type-arg (<c>List[Core.Foo].add</c>) carries dots inside the brackets that the
-    /// naive search would split on. Consumers MUST call this rather than slice <see cref="Name"/> inline;
-    /// prefer <see cref="OwnerName"/> (bare) or <see cref="ReceiverType"/> (structured) where those suffice.
+    /// specialization bucket). ASSEMBLED BY THE PARSER from the separate owner/bracket/arg tokens as it
+    /// builds <see cref="Name"/> — NOT sliced back out of the concatenated <see cref="Name"/> string. This
+    /// is the name-canonicalization discipline: the pieces come from the tokens the parser already has;
+    /// the dotted <see cref="Name"/> is a rendering. Consumers MUST read this rather than re-split
+    /// <see cref="Name"/>; prefer <see cref="OwnerName"/> (bare) or <see cref="ReceiverType"/> (structured)
+    /// where those suffice.
     /// </summary>
-    public string? RenderedReceiver =>
-        MemberRoutineName is { } member ? Name[..^(member.Length + 1)] : null;
+    public string? RenderedReceiver { get; set; }
 
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
