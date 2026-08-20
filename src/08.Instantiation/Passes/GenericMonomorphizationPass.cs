@@ -1357,7 +1357,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // falls back to a naive direct field access that reads the RC controller instead of the entity.
         if (type is RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed, TypeArguments: [{ } roamedInner] })
             return FormatReceiverPatternAstName(type: roamedInner);
-        string baseName = TypeInfo.StripTypeArgs(name: type.Name);
+        string baseName = type.BareName;
         int dot = baseName.LastIndexOf(value: '.');
         if (dot >= 0) baseName = baseName[(dot + 1)..];
         if (type.TypeArguments is { Count: > 0 } args)

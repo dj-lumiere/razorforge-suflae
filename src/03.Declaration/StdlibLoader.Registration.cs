@@ -903,7 +903,9 @@ public sealed partial class StdlibLoader
                 .Where(predicate: m => m.Type != null)
                 .All(predicate: m =>
                 {
-                    string baseName = TypeInfo.StripTypeArgs(name: m.Type!.Name);
+                    // TypeExpression.Name is structurally bare — type args live in GenericArguments —
+                    // so no bracket-strip is needed.
+                    string baseName = m.Type!.Name;
                     return baseName is RuntimeContract.Hijacked or RuntimeContract.Viewing or RuntimeContract.Modifying
                         or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Shared or RuntimeContract.Watched;
                 });

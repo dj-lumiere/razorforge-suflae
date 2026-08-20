@@ -343,7 +343,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     {
         if (t is not RecordTypeInfo rec || rec.HasRCMemberVariables)
             return false;
-        string baseName = TypeInfo.StripTypeArgs(name: rec.Name);
+        string baseName = rec.BareName;
         if (RcWrapperBaseNames.Contains(item: baseName))
             return false;
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(t);
