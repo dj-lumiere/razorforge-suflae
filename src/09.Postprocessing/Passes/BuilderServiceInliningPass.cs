@@ -650,10 +650,19 @@ internal sealed class BuilderServiceInliningPass
 
         // 1b. ResolvedType is a generic param -> look it up in the current body's TypeSubs
         //     (e.g. T in List[T].getitem! body with TypeSubs {T -> Core.Byte, I -> Core.S64}).
-        if (receiver.ResolvedType is GenericParameterTypeInfo gp
-            && _currentTypeSubs != null
-            && _currentTypeSubs.TryGetValue(gp.Name, out TypeInfo? subFromSubs))
-            return subFromSubs;
+        if (receiver.ResolvedType is GenericParameterTypeInfo gp)
+        {
+            if (_currentTypeSubs != null
+                && _currentTypeSubs.TryGetValue(gp.Name, out TypeInfo? subFromSubs))
+                return subFromSubs;
+
+            // Still an UNBOUND parameter (no substitution available): DEFER — the fold re-runs on the
+            // concrete owner post-monomorphization. Must NOT fall through to the global LookupType below,
+            // which a same-named user `record T` would hijack: `T.data_size()` in `Sender[T].send` would
+            // fold to the RECORD's size (4) instead of the real element's (8), a too-small channel/buffer
+            // allocation → heap overflow ([[generic-parameter identity = SLOT]]).
+            return null;
+        }
 
         // 2. Look up an identifier as a type name (handles post-monomorphization identifiers
         //    like IdentifierExpression("Core.Byte") produced by GenericAstRewriter).

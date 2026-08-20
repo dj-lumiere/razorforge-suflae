@@ -1,0 +1,30 @@
+module Tests/Stdlib/GenericParamNameCollisionApi
+import IO/Console
+
+# Regression lock ([[generic-parameter identity = SLOT]]): a user type NAMED like a generic parameter
+# must never be confused with that parameter. `record T` shares its name with the `T` in the universal
+# `routine T.represent()` derive, the numeric `common routine T.to_width()` width helpers, AND the
+# `common routine T.data_size()` BuilderService fold used for channel/buffer allocation. `record K` /
+# `Pair[X, Y]` / `mydict[k, v]` cover more names. All must keep their own behavior with no shadowing.
+
+record T
+  a: S32
+
+record K
+  x: Text
+
+record Pair[X, Y]
+  first: X
+  second: Y
+
+record mydict[k, v]
+  key: k
+  val: v
+
+routine start()
+  show(T(a: 9).represent())
+  show(K(x: "hi").represent())
+  show(Pair[Text, S32](first: "p", second: 7).represent())
+  show(mydict[Text, S32](key: "a", val: 42).represent())
+  show((1.0_d128).erf().represent())
+  return
