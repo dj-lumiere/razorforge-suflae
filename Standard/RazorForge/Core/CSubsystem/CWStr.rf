@@ -1,0 +1,24 @@
+module Core
+
+### Represents a null-terminated wide C string (`wchar_t*`) — the FFI wrapper for wide-character
+### C strings, the sibling of {CStr} for narrow `char*`. The wrapper is value-typed (a raw pointer);
+### its element width is platform-dependent because {CWChar} is (16-bit on Windows, 32-bit on Unix), but
+### the pointer representation itself is uniform. Ownership depends on how the pointer was obtained.
+### :see: {CStr}, {CWChar}
+@llvm("ptr")
+record CWStr
+  pass
+
+### Returns the raw null-terminated wide-character pointer backing this string.
+### :returns: The underlying `Hijacked[CWChar]` pointer.
+@readonly
+routine CWStr.ptr() -> Hijacked[CWChar]
+  return LLVM::reinterpret_bits[CWStr, Hijacked[CWChar]](me)
+
+### Wraps an existing null-terminated wide-character pointer as `CWStr`.
+### No copy is performed and ownership is not changed.
+### :param from_ptr: The pointer to wrap.
+### :returns: The resulting `CWStr` value.
+@readonly
+routine CWStr(from_ptr: Hijacked[CWChar]) -> CWStr
+  return LLVM::reinterpret_bits[Hijacked[CWChar], CWStr](from_ptr)
