@@ -196,6 +196,39 @@ public static class ManifestLoader
             }
         }
 
+        // `c_libraries` = external C libraries to link (the `-l` names, e.g. "SDL2"). Names only.
+        if (table.TryGetValue(key: "c_libraries", value: out object? cLibsObj))
+        {
+            IEnumerable<string?> rawEntries = cLibsObj switch
+            {
+                TomlArray array => array.Select(selector: item => item?.ToString()),
+                _ => [cLibsObj?.ToString()]
+            };
+            foreach (string? rawEntry in rawEntries)
+            {
+                if (!string.IsNullOrWhiteSpace(value: rawEntry))
+                    target.CLibraries.Add(item: rawEntry.Trim());
+            }
+        }
+
+        // `library_paths` = additional `-L` search directories for `c_libraries`, resolved relative
+        // to the manifest directory (absolute entries pass through).
+        if (table.TryGetValue(key: "library_paths", value: out object? libPathsObj))
+        {
+            IEnumerable<string?> rawEntries = libPathsObj switch
+            {
+                TomlArray array => array.Select(selector: item => item?.ToString()),
+                _ => [libPathsObj?.ToString()]
+            };
+            foreach (string? rawEntry in rawEntries)
+            {
+                if (string.IsNullOrWhiteSpace(value: rawEntry))
+                    continue;
+                target.LibraryPaths.Add(item: Path.GetFullPath(
+                    path: Path.Combine(path1: manifestDir, path2: rawEntry.Trim())));
+            }
+        }
+
         if (table.TryGetValue(key: "mode", value: out object? mode) &&
             !string.IsNullOrWhiteSpace(value: mode?.ToString()))
         {

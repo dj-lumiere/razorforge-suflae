@@ -110,7 +110,8 @@ internal partial class Program
                 // `codegen` remains the IR-only verb. (All-OS artifacts come from the release CI.)
                 (string? entryFile, string? projectRoot, _,
                     RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2,
-                    bool showStages2, IReadOnlyList<string> libraryRoots2) = ResolveEntryFile(args: args, needsOutputArg: false);
+                    bool showStages2, IReadOnlyList<string> libraryRoots2,
+                    IReadOnlyList<string> cLibraries2, IReadOnlyList<string> libraryPaths2) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
@@ -124,7 +125,9 @@ internal partial class Program
                     saTiming: saTiming2,
                     requireStartRoutine: requireStart2,
                     showBuildStages: showStages2,
-                    libraryRoots: libraryRoots2);
+                    libraryRoots: libraryRoots2,
+                    cLibraries: cLibraries2,
+                    libraryPaths: libraryPaths2);
                 if (buildRc == 0)
                 {
                     Console.WriteLine(value: $"Executable written to: {Path.GetFullPath(path: builtExe)}");
@@ -137,7 +140,8 @@ internal partial class Program
             {
                 (string? entryFile, string? projectRoot, _,
                     RfBuildMode buildMode3, bool dumpAst3, bool saTiming3, bool requireStart3,
-                    bool showStages3, IReadOnlyList<string> libraryRoots3) = ResolveEntryFile(args: args, needsOutputArg: false);
+                    bool showStages3, IReadOnlyList<string> libraryRoots3,
+                    IReadOnlyList<string> cLibraries3, IReadOnlyList<string> libraryPaths3) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
@@ -150,13 +154,15 @@ internal partial class Program
                     saTiming: saTiming3,
                     requireStartRoutine: requireStart3,
                     showBuildStages: showStages3,
-                    libraryRoots: libraryRoots3);
+                    libraryRoots: libraryRoots3,
+                    cLibraries: cLibraries3,
+                    libraryPaths: libraryPaths3);
             }
 
             case "check":
             {
                 (string? entryFile, string? projectRoot, _, _, _, _, _, _,
-                    IReadOnlyList<string> libraryRoots4) =
+                    IReadOnlyList<string> libraryRoots4, _, _) =
                     ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
@@ -201,7 +207,8 @@ internal partial class Program
     /// </summary>
     private static (string? EntryFile, string? ProjectRoot, string? OutputFile,
         RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine, bool ShowBuildStages,
-        IReadOnlyList<string> LibraryRoots) ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
+        IReadOnlyList<string> LibraryRoots, IReadOnlyList<string> CLibraries,
+        IReadOnlyList<string> LibraryPaths) ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
     {
         // args[0] is the command name (build/buildandrun/check)
         string? explicitEntry = null;
@@ -230,7 +237,7 @@ internal partial class Program
                 Console.WriteLine(
                     value:
                     $"Error: unknown option '{args[i]}'. RazorForge takes no build flags — configure builds in razorforge.toml ([target] executable, library, mode, ...).");
-                return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
+                return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
             }
         }
 
@@ -245,7 +252,7 @@ internal partial class Program
             if (!File.Exists(path: explicitEntry))
             {
                 Console.WriteLine(value: $"Error: File '{explicitEntry}' not found.");
-                return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
+                return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
             }
 
             string entryDir =
@@ -256,7 +263,7 @@ internal partial class Program
                 // Truly manifest-less — debug defaults. Assume an executable build so
                 // codegen knows to synthesize @main and SA can require a 'start' routine.
                 return (explicitEntry, entryDir, outputFile, RfBuildMode.Debug, false, false,
-                    true, false, []);
+                    true, false, [], [], []);
             }
 
             try
@@ -282,13 +289,13 @@ internal partial class Program
 
                 return (explicitEntry, manifest.ManifestDirectory, outputFile, buildMode,
                     target.DumpAst, target.SaTiming, true, target.ShowBuildStages,
-                    target.Libraries);
+                    target.Libraries, target.CLibraries, target.LibraryPaths);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(
                     value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-                return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
+                return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
             }
         }
 
@@ -312,7 +319,7 @@ internal partial class Program
                     value: "Either provide an entry file or create a razorforge.toml manifest.");
             }
 
-            return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
+            return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
         }
 
         try
@@ -336,13 +343,14 @@ internal partial class Program
             }
 
             return (target.Executable, manifest.ManifestDirectory, outputFile, buildMode,
-                target.DumpAst, target.SaTiming, true, showBuildStages, target.Libraries);
+                target.DumpAst, target.SaTiming, true, showBuildStages,
+                target.Libraries, target.CLibraries, target.LibraryPaths);
         }
         catch (Exception ex)
         {
             Console.WriteLine(
                 value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-            return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
+            return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
         }
     }
 
@@ -1235,7 +1243,8 @@ internal partial class Program
     private static int BuildExecutable(string entryFile, out string exeFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
         bool requireStartRoutine = true, bool showBuildStages = false,
-        IReadOnlyList<string>? libraryRoots = null)
+        IReadOnlyList<string>? libraryRoots = null, IReadOnlyList<string>? cLibraries = null,
+        IReadOnlyList<string>? libraryPaths = null)
     {
         // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
@@ -1305,7 +1314,8 @@ internal partial class Program
         }
 
         int linkResult = NativeToolchain.LinkExecutable(optFile: optFile, exeFile: exeFile,
-            runtimeLibDir: runtimeLibDir, buildMode: buildMode);
+            runtimeLibDir: runtimeLibDir, buildMode: buildMode,
+            cLibraries: cLibraries, libraryPaths: libraryPaths);
         if (linkResult != 0)
         {
             return linkResult;
@@ -1320,7 +1330,8 @@ internal partial class Program
     private static int BuildAndRun(string entryFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
         bool requireStartRoutine = true,
-        bool showBuildStages = false, IReadOnlyList<string>? libraryRoots = null)
+        bool showBuildStages = false, IReadOnlyList<string>? libraryRoots = null,
+        IReadOnlyList<string>? cLibraries = null, IReadOnlyList<string>? libraryPaths = null)
     {
         int buildResult = BuildExecutable(entryFile: entryFile,
             exeFile: out string exeFile,
@@ -1330,7 +1341,9 @@ internal partial class Program
             saTiming: saTiming,
             requireStartRoutine: requireStartRoutine,
             showBuildStages: showBuildStages,
-            libraryRoots: libraryRoots);
+            libraryRoots: libraryRoots,
+            cLibraries: cLibraries,
+            libraryPaths: libraryPaths);
         if (buildResult != 0)
         {
             return buildResult;

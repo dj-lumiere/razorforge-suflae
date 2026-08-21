@@ -67,6 +67,19 @@ public sealed class BuildTarget
     public List<string> Libraries { get; set; } = [];
 
     /// <summary>
+    /// External C libraries to link (the <c>-l</c> names, e.g. <c>"SDL2"</c>). Names only — the platform
+    /// resolves each to <c>libSDL2.so</c> / <c>SDL2.lib</c> / <c>libSDL2.dylib</c> at link time via the
+    /// bundled clang/lld driver. Search directories come from <see cref="LibraryPaths"/>.
+    /// </summary>
+    public List<string> CLibraries { get; set; } = [];
+
+    /// <summary>
+    /// Additional library search directories (the <c>-L</c> paths) for resolving <see cref="CLibraries"/>.
+    /// Relative entries are resolved against the manifest directory at load time.
+    /// </summary>
+    public List<string> LibraryPaths { get; set; } = [];
+
+    /// <summary>
     /// Build mode for the whole build: "debug" (default), "release", "release-time",
     /// "release-space".
     /// </summary>
