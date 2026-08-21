@@ -1,0 +1,18 @@
+#@target(os: "linux", "macos")
+module Core
+
+### C `wchar_t` on Unix (Linux, macOS): 32-bit. The Windows width (16-bit) lives in the
+### `#@target(os: "windows")` sibling; conditional compilation loads exactly one.
+@llvm("i32")
+record CWChar
+  pass
+
+### Widens a C `wchar_t` to a `U32` code unit (identity on Unix).
+@readonly
+routine U32(from: CWChar) -> U32
+  return LLVM::reinterpret_bits[CWChar, U32](from)
+
+### Narrows a `U32` code unit to a C `wchar_t` (identity on Unix).
+@readonly
+routine CWChar(from: U32) -> CWChar
+  return LLVM::reinterpret_bits[U32, CWChar](from)

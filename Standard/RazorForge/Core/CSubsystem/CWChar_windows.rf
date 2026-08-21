@@ -1,0 +1,20 @@
+#@target(os: "windows")
+module Core
+
+### C `wchar_t` on Windows: 16-bit. The Unix width (32-bit) lives in the
+### `#@target(os: "linux", "macos")` sibling; conditional compilation loads exactly one.
+@llvm("i16")
+record CWChar
+  pass
+
+### Widens a C `wchar_t` to a `U32` code unit (zero-extend, exact).
+@readonly
+routine U32(from: CWChar) -> U32
+  return LLVM::zero_extend[CWChar, U32](from)
+
+### Narrows a `U32` code unit to a C `wchar_t`; fails when the value doesn't fit in 16 bits.
+@readonly
+routine CWChar!(from: U32) -> CWChar
+  if from > 65535u32
+    throw IntegerOverflowError()
+  return LLVM::int_truncate[U32, CWChar](from)

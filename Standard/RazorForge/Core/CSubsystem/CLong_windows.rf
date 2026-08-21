@@ -1,0 +1,20 @@
+#@target(os: "windows")
+module Core
+
+### C `long` under the LLP64 data model (Windows): 32-bit signed. The Unix (LP64, 64-bit) width lives
+### in the `#@target(os: "linux", "macos")` sibling; conditional compilation loads exactly one.
+@llvm("i32")
+record CLong
+  pass
+
+### Widens a C `long` to `S64` (sign-extend, exact).
+@readonly
+routine S64(from: CLong) -> S64
+  return LLVM::sign_extend[CLong, S64](from)
+
+### Narrows an `S64` to a C `long`; fails when the value doesn't fit in 32 bits.
+@readonly
+routine CLong!(from: S64) -> CLong
+  if not (-2147483648s64 <= from <= 2147483647s64)
+    throw IntegerOverflowError()
+  return LLVM::int_truncate[S64, CLong](from)
