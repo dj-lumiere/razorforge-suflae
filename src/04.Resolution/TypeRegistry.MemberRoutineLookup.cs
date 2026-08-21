@@ -728,8 +728,7 @@ public sealed partial class TypeRegistry
         // to "no resolved member routine" warnings during generic monomorphization.
         if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
-            string markerBase = TypeInfo.StripTypeArgs(
-                name: markerProto.GenericDefinition?.Name ?? markerProto.Name);
+            string markerBase = (markerProto.GenericDefinition ?? markerProto).BareName;
             if (markerBase is RuntimeContract.Accessing or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMemberRoutine(type: markerArgs[index: 0],
@@ -857,10 +856,9 @@ public sealed partial class TypeRegistry
             // double-indirection body.
             string recBaseName = type switch
             {
-                RecordTypeInfo r2 => r2.GenericDefinition?.Name ?? r2.Name,
-                _ => type.Name
+                RecordTypeInfo r2 => (r2.GenericDefinition ?? r2).BareName,
+                _ => type.BareName
             };
-            recBaseName = TypeInfo.StripTypeArgs(name: recBaseName);
             bool skipProtocols = recBaseName is RuntimeContract.Retained or RuntimeContract.Tracked;
             if (!skipProtocols)
             {
@@ -969,8 +967,7 @@ public sealed partial class TypeRegistry
         // protocol-dispatch stub on Accessing that has no implementers registered.
         if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
-            string markerBase = TypeInfo.StripTypeArgs(
-                name: markerProto.GenericDefinition?.Name ?? markerProto.Name);
+            string markerBase = (markerProto.GenericDefinition ?? markerProto).BareName;
             if (markerBase is RuntimeContract.Accessing or RuntimeContract.Controlling)
             {
                 RoutineInfo? viaInner = LookupMemberRoutineOverload(type: markerArgs[index: 0],

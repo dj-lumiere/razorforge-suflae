@@ -319,7 +319,7 @@ public sealed partial class SemanticVerifier
         // reject them. Non-collection presets (scalars, constructor calls like `C64(...)`) are fine.
         if (preset.Value is ListLiteralExpression && presetType is not ErrorTypeInfo)
         {
-            string baseName = PresetCollectionBaseName(name: presetType.Name);
+            string baseName = presetType.BareName;
             if (baseName is not ("Array" or "BitArray"))
             {
                 ReportError(code: SemanticDiagnosticCode.NonPresettableCollectionPreset,
@@ -347,17 +347,6 @@ public sealed partial class SemanticVerifier
                 value: preset.Value,
                 isSecret: preset.IsSecret);
         }
-    }
-
-    /// <summary>
-    /// Strips generic arguments and module qualifiers from a type name
-    /// (e.g. <c>Collections.Array[U16, 1000]</c> -&gt; <c>Array</c>) for the Presettable check.
-    /// </summary>
-    private static string PresetCollectionBaseName(string name)
-    {
-        string bare = TypeInfo.StripTypeArgs(name: name);
-        int dot = bare.LastIndexOf(value: '.');
-        return dot >= 0 ? bare[(dot + 1)..] : bare;
     }
 
     private static void SeedPresetValueMetadata(Expression value, TypeSymbol presetType)
@@ -615,9 +604,11 @@ public sealed partial class SemanticVerifier
             // so registration/monomorphization/reachability/codegen treat it exactly as the
             // old `T.create` spelling did. The trailing `!` (failable) is carried structurally
             // on routine.IsFailable, not in the name.
-            // TODO: Why is this handled here? This name parsing thing should have been parser's role.
-            string ctorLookup = TypeInfo.StripTypeArgs(name: routine.Name);
-            TypeSymbol? ctorOwner = LookupTypeWithImports(name: ctorLookup);
+            // TODO: Why is this handled here? Constructor-sugar detection should have been parser's role.
+            // A free routine's Name is the canonical bare identifier (the parser folds `[params]` into the
+            // structured GenericParameters, never into Name for a non-member routine), so it is looked up
+            // directly with no generic-suffix strip.
+            TypeSymbol? ctorOwner = LookupTypeWithImports(name: routine.Name);
             if (ctorOwner is EntityTypeInfo or RecordTypeInfo or ChoiceTypeInfo
                 or FlagsTypeInfo or VariantTypeInfo or CrashableTypeInfo)
             {

@@ -147,6 +147,21 @@ public abstract class TypeInfo
     }
 
     /// <summary>
+    /// Returns the substring inside the outermost <c>[...]</c> of a type/routine name STRING
+    /// (e.g. "Accessing[FastSet[T]]" → "FastSet[T]", "Dict[K, V]" → "K, V"), or <c>null</c> when the
+    /// name carries no non-empty bracket suffix. Companion to <see cref="StripTypeArgs"/> for raw
+    /// name/registry-key strings that have no live <see cref="TypeInfo"/> to read
+    /// <see cref="TypeArguments"/> from — never re-implement the <c>IndexOf('[')</c> /
+    /// <c>LastIndexOf(']')</c> locate inline.
+    /// </summary>
+    public static string? ExtractTypeArgsString(string name)
+    {
+        int open = name.IndexOf(value: '[');
+        int close = name.LastIndexOf(value: ']');
+        return open >= 0 && close > open + 1 ? name[(open + 1)..close].Trim() : null;
+    }
+
+    /// <summary>
     /// Unqualified name with generic args recursively rendered unqualified too
     /// (e.g. <c>List[S64]</c>, <c>Dict[Text, S64]</c>). Built from the structural
     /// <see cref="TypeArguments"/> rather than the baked <see cref="Name"/>, which may embed

@@ -199,10 +199,10 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string ownerPrefix = ri.OwnerType != null
             ? $"{ri.OwnerType.FullName}."
             : string.IsNullOrEmpty(ri.Module) ? "" : $"{ri.Module}.";
-        // Some synthesized routines carry a trailing `!` in the NAME (e.g. `create!`), which double-
-        // counts against the failability marker. `!` is a structured attribute, not part of the name.
-        string bareName = ri.Name.TrimEnd('!');
-        string failable = ri.IsFailable || ri.Name.EndsWith(value: "!") ? "!" : "";
+        // `!` is a structured attribute (IsFailable), never part of the Name — the name is canonically
+        // bare, so it renders directly and the failable marker comes solely from IsFailable.
+        string bareName = ri.Name;
+        string failable = ri.IsFailable ? "!" : "";
         string paramStr = ri.Parameters.Count == 0
             ? ""
             : string.Join(", ", ri.Parameters.Select(p => $"{p.Name}: {p.Type.FullName}"));
@@ -1114,7 +1114,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     {
         if (node.ResolvedInfo is { } ri)
         {
-            string bareName = ri.Name.TrimEnd('!');   // `!` is IsFailable, never part of the name
+            string bareName = ri.Name;   // Name is canonically bare; `!` lives in IsFailable
             if (ri.OwnerType != null)
             {
                 // Constructor: `routine Type(...)`, not `routine Type.create(...)`.

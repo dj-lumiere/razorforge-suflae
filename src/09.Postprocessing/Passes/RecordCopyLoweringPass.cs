@@ -93,7 +93,13 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     // only carry the routine NAME string, so the owner is parsed out of it; the instantiated-generic site has a
     // structural `RoutineInfo.OwnerType` and uses `OwnerTypeIsRcWrapper` instead.
     private static bool OwnerNameIsRcWrapper(string nameOrKey) =>
-        RuntimeContract.RcWrapperBaseNames.Contains(item: OwnerBase(nameOrKey: nameOrKey));
+        OwnerBaseIsRcWrapper(ownerBase: OwnerBase(nameOrKey: nameOrKey));
+
+    // Structural form for AST-declaration sites: the parser's bare OwnerName already IS the owner base
+    // (== OwnerBase applied to the composite), so no QualifiedName re-parsing is needed. A null owner
+    // (free routine) is never an RC wrapper.
+    private static bool OwnerBaseIsRcWrapper(string? ownerBase) =>
+        ownerBase is not null && RuntimeContract.RcWrapperBaseNames.Contains(item: ownerBase);
 
     // Structural form of the above: the routine's OwnerType is an RC wrapper record. Preferred wherever a
     // `RoutineInfo` is on hand — delegates to the same registry check as `IsRcWrapperType`, no name parsing.
@@ -146,9 +152,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             {
                 case RoutineDeclaration r:
                 {
-                    // Pass the owner-qualified composite: OwnerNameIsRcWrapper parses the OWNER out of the
-                    // name string, which the bare member Name no longer carries.
-                    _inCopyRoutine = NameIsCopyRoutine(name: r.QualifiedName); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: r.QualifiedName);
+                    _inCopyRoutine = NameIsCopyRoutine(name: r.QualifiedName); _inRcCopyVerb = OwnerBaseIsRcWrapper(ownerBase: r.OwnerName);
                     SetBorrowParams(parameters: r.Parameters);
                     Statement newBody = LowerStatement(stmt: r.Body);
                     if (!ReferenceEquals(newBody, r.Body))
@@ -228,7 +232,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             if (members[i] is RoutineDeclaration mr)
             {
-                _inCopyRoutine = NameIsCopyRoutine(name: mr.QualifiedName); _inRcCopyVerb = OwnerNameIsRcWrapper(nameOrKey: mr.QualifiedName);
+                _inCopyRoutine = NameIsCopyRoutine(name: mr.QualifiedName); _inRcCopyVerb = OwnerBaseIsRcWrapper(ownerBase: mr.OwnerName);
                 SetBorrowParams(parameters: mr.Parameters);
                 Statement newBody = LowerStatement(stmt: mr.Body);
                 if (!ReferenceEquals(newBody, mr.Body))

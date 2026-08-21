@@ -46,6 +46,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     private const string DiagnoseMemberRoutineName = Compiler.Resolution.RuntimeContract.Display.Diagnose;
     private const string SerializeMemberRoutineName = Compiler.Resolution.RuntimeContract.Serialize;
     private const string HashMemberRoutineName = "hash";
+    private const string CreateMemberRoutineName = "create";
     private const string BitXorMemberRoutineName = "bitxor";
     private const string ResultVarName = "result";
     private const string FirstVarName = "first";
@@ -829,7 +830,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildSerializeBody(owner: choice, fields: [], textType: textType);
                 break;
 
-            case "create!":
+            case CreateMemberRoutineName when routine.IsFailable:
+                // The failable Text -> ChoiceType conversion (bare name `create` + IsFailable).
                 // Text -> ChoiceType conversion is not implementable at the RF level;
                 // this always crashes. The body is unreachable in well-typed programs.
                 ctx.VariantBodies[key: routine.RegistryKey] =

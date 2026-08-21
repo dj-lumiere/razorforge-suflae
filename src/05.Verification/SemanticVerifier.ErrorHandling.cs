@@ -247,10 +247,7 @@ public sealed partial class SemanticVerifier
 
     private static bool LooksLikeGenericParamArg(string ownerTypeName)
     {
-        int lb = ownerTypeName.IndexOf('[');
-        int rb = ownerTypeName.LastIndexOf(']');
-        if (lb < 0 || rb < 0 || rb <= lb) return false;
-        string inside = ownerTypeName.Substring(lb + 1, rb - lb - 1);
+        if (TypeInfo.ExtractTypeArgsString(name: ownerTypeName) is not { } inside) return false;
         foreach (string arg in inside.Split(','))
         {
             string a = arg.Trim();

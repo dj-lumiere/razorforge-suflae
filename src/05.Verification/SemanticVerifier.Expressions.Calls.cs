@@ -564,7 +564,7 @@ public sealed partial class SemanticVerifier
                         // to guess and, for bit-carrier types like F128, mis-lowers it to a raw
                         // `sext`/reinterpret of the integer into the i128 IEEE carrier.
                         bool insideOwnCreate =
-                            _currentRoutine is { Name: "create" or "create!" } currentCreate
+                            _currentRoutine is { Name: "create" } currentCreate
                             && currentCreate.OwnerType != null
                             && (currentCreate.OwnerType.FullName == callableType.FullName
                                 || currentCreate.OwnerType.Name == callableType.Name)

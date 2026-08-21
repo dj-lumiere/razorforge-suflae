@@ -93,7 +93,7 @@ public partial class LlvmCodeGenerator
         // base-case construction inside `create` carry a null/synth resolvedRoutine and still inline.
         bool routesToUserCreate = resolvedRoutine is
         {
-            IsSynthesized: false, Name: "create" or "create!"
+            IsSynthesized: false, Name: "create"
         } && constructedType is EntityTypeInfo;
 
         switch (loweringKind)
@@ -577,7 +577,7 @@ public partial class LlvmCodeGenerator
         // for CStr(Accessing[Text]), and so on. Honor it; never inline a scalar cast, which would
         // bypass the encoding and corrupt carriers (e.g. `D128(42)` as a raw i128 decodes to
         // 4.2E-6175). The backend must not re-decide a conversion the resolver already settled.
-        if (resolvedRoutine is { IsSynthesized: false, Name: "create" or "create!", Parameters.Count: 1 })
+        if (resolvedRoutine is { IsSynthesized: false, Name: "create", Parameters.Count: 1 })
         {
             TypeInfo? paramType = resolvedRoutine.Parameters[index: 0].Type;
             if (paramType != null &&

@@ -282,21 +282,22 @@ public partial class LlvmCodeGenerator
     private RoutineInfo? ResolveRoutineInfoForDefinition(RoutineDeclaration routine,
         string? moduleContext)
     {
-        // The owner-qualified composite key (bare member for a free routine); the scoped/unqualified
-        // helpers below split it on '.'.
+        // The owner-qualified composite key (bare member for a free routine). Used AS-IS for the
+        // whole-key registry lookups; the scoped/unqualified helpers read the routine's STRUCTURED
+        // owner/member fields instead of re-splitting this string.
         string baseName = routine.QualifiedName;
-        RoutineInfo? routineInfo = LookupScopedMemberRoutine(baseName: baseName,
+        RoutineInfo? routineInfo = LookupScopedMemberRoutine(routine: routine,
             moduleContext: moduleContext);
 
         routineInfo ??= _registry.LookupRoutine(fullName: baseName);
-        // Module-level routine (no dot): prefer the module-qualified key so that two modules'
+        // Module-level routine (no owner): prefer the module-qualified key so that two modules'
         // same-named routines each bind to their OWN RoutineInfo.
         if (routineInfo == null && !string.IsNullOrEmpty(value: moduleContext) &&
-            !baseName.Contains(value: '.'))
+            routine.OwnerName is null)
         {
             routineInfo = _registry.LookupRoutine(fullName: $"{moduleContext}.{baseName}");
         }
-        routineInfo ??= LookupUnqualifiedRoutine(baseName: baseName, moduleContext: moduleContext);
+        routineInfo ??= LookupUnqualifiedRoutine(routine: routine, moduleContext: moduleContext);
 
         return ResolveDefinitionOverload(routine: routine, moduleContext: moduleContext,
             routineInfo: routineInfo);
@@ -307,39 +308,37 @@ public partial class LlvmCodeGenerator
     /// <c>LookupRoutine("Box.destroy")</c> returns a first-wins entry, so a 0-param memberRoutine on a
     /// same-named type in another module would otherwise be emitted under the wrong symbol.
     /// </summary>
-    private RoutineInfo? LookupScopedMemberRoutine(string baseName, string? moduleContext)
+    private RoutineInfo? LookupScopedMemberRoutine(RoutineDeclaration routine, string? moduleContext)
     {
-        int memberDot = baseName.IndexOf(value: '.');
-        if (string.IsNullOrEmpty(value: moduleContext) || memberDot <= 0)
+        // OwnerName is the canonical BARE owner (generic args live in RenderedReceiver); MemberRoutineName
+        // is the bare member. Reading them structurally avoids re-splitting QualifiedName on '.'.
+        if (string.IsNullOrEmpty(value: moduleContext) || routine.OwnerName is not { } ownerSeg)
         {
             return null;
         }
 
-        string ownerSeg = TypeInfo.StripTypeArgs(name: baseName[..memberDot]);
         TypeInfo? scopedOwner = _registry.LookupType(name: $"{moduleContext}.{ownerSeg}");
         return scopedOwner == null
             ? null
-            : _registry.LookupMemberRoutine(type: scopedOwner, memberRoutineName: baseName[(memberDot + 1)..]);
+            : _registry.LookupMemberRoutine(type: scopedOwner, memberRoutineName: routine.MemberRoutineName!);
     }
 
     /// <summary>
     /// Fallback lookup when the earlier module-scoped and full-name lookups miss. For a member name
     /// (with a dot) resolves owner-scoped first; otherwise uses the short-name registry fallback.
     /// </summary>
-    private RoutineInfo? LookupUnqualifiedRoutine(string baseName, string? moduleContext)
+    private RoutineInfo? LookupUnqualifiedRoutine(RoutineDeclaration routine, string? moduleContext)
     {
-        int dotIdx = baseName.IndexOf(value: '.');
-        if (dotIdx <= 0)
+        if (routine.OwnerName is not { } ownerPart)
         {
-            // No dot — try short name fallback (e.g., "show" -> finds "IO.show")
-            return _registry.LookupRoutineByName(name: baseName);
+            // Free routine (or type-body member) — bare short-name fallback (e.g. "show" -> "IO.show").
+            return _registry.LookupRoutineByName(name: routine.Name);
         }
 
         // Member declaration (e.g. "UnpackedFloat[M, L, W].cbrt"). Resolve scoped to the owner
         // type FIRST so a bare short-name lookup does not bind to a same-named routine of another
-        // owner.
-        string ownerPart = TypeInfo.StripTypeArgs(name: baseName[..dotIdx]);
-        string shortName = baseName[(dotIdx + 1)..];
+        // owner. OwnerName/MemberRoutineName are the parser's structured pieces — no '.'-splitting.
+        string shortName = routine.MemberRoutineName!;
         TypeInfo? ownerType = (!string.IsNullOrEmpty(value: moduleContext)
             ? _registry.LookupType(name: $"{moduleContext}.{ownerPart}")
             : null) ?? _registry.LookupType(name: ownerPart);

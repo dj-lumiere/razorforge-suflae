@@ -61,18 +61,7 @@ public sealed class VariableInfo
         IsPreset
         && PresetValue is ListLiteralExpression
         && Type is RecordTypeInfo record
-        && BaseTypeName(name: record.GenericDefinition?.Name ?? record.Name) is "Array" or "BitArray";
-
-    /// <summary>
-    /// Strips generic arguments and module qualifiers from a type name
-    /// (e.g. <c>Core.Array[U16, 1000]</c> -&gt; <c>Array</c>).
-    /// </summary>
-    private static string BaseTypeName(string name)
-    {
-        string bare = TypeInfo.StripTypeArgs(name: name);
-        int dot = bare.LastIndexOf(value: '.');
-        return dot >= 0 ? bare[(dot + 1)..] : bare;
-    }
+        && (record.GenericDefinition ?? record).BareName is "Array" or "BitArray";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VariableInfo"/> class.

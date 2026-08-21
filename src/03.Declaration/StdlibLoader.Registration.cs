@@ -607,7 +607,7 @@ public sealed partial class StdlibLoader
                         // text so `me` is typed as the specialized receiver (MeType) below — making
                         // member access like `me[i]` yield Agent[V] instead of List's raw element.
                         ownerType = baseDef;
-                        meTypeName = memberRoutineName is "create" or "create!" ? null : typeName;
+                        meTypeName = memberRoutineName is "create" ? null : typeName;
                     }
                     else
                     {

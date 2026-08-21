@@ -253,7 +253,7 @@ internal sealed class SignatureResolver
         // (e.g. `create(tag: S32)` for field `tag: S64`) is allowed and routes normally.
         // The synthesized memberwise creator is registered elsewhere (AutoWiredRegistrationPass),
         // so it never reaches here.
-        if (pending.RoutineName is "create" or "create!")
+        if (pending.RoutineName is "create")
         {
             List<MemberVariableInfo>? fields = refreshedOwnerType switch
             {
@@ -358,7 +358,7 @@ internal sealed class SignatureResolver
         TypeSymbol? meType = null;
         if (pending.Kind == RoutineKind.MemberRoutine
             && refreshedOwnerType is EntityTypeInfo or RecordTypeInfo
-            && pending.RoutineName is not ("create" or "create!")
+            && pending.RoutineName is not "create"
             && routine.RenderedReceiver is { } recvText)
         {
             if (recvText.Contains(value: '['))
@@ -379,11 +379,11 @@ internal sealed class SignatureResolver
 
         // SF slice 2: `me` of a USER entity member routine is the `Roamed[E]` handle (not bare `E`), so
         // `me.field` routes through the Roamed access machinery and `return me` type-matches the now
-        // `Roamed[E]` return. Creators (create/create!) keep bare `me` — they build the raw entity
-        // before any controller exists. A specialized `meType` (generic receiver) takes precedence.
+        // `Roamed[E]` return. Creators (`create`, incl. the failable ones) keep bare `me` — they build
+        // the raw entity before any controller exists. A specialized `meType` takes precedence.
         if (sfUserEntity && meType == null
             && pending.Kind == RoutineKind.MemberRoutine
-            && pending.RoutineName is not ("create" or "create!")
+            && pending.RoutineName is not "create"
             && refreshedOwnerType is EntityTypeInfo ownerEntity
             && _sa._registry.LookupType(name: RuntimeContract.Roamed) is { } roamedOwnerDef)
         {

@@ -312,8 +312,11 @@ internal sealed class AutoWiredRegistrationPass
 
                     if (textType != null)
                     {
+                        // name stays bare `create` + IsFailable (set by the helper); the `!` is a
+                        // STRUCTURED flag, never baked into the Name. A `.create!(…)` call resolves
+                        // against "create" and the `from: Text` param disambiguates.
                         MaybeRegisterWiredFailable(owner: type,
-                            name: "create!",
+                            name: CreateMemberRoutineName,
                             returnType: type,
                             existingMemberRoutines: existingMemberRoutines,
                             param: ("from", textType),
@@ -759,9 +762,6 @@ internal sealed class AutoWiredRegistrationPass
         });
     }
 
-    /// <summary>
-    /// Registers a failable wired routine if not already defined (for clone, create!).
-    /// </summary>
     /// <summary>
     /// Registers the two auto-generated constructors for each non-<c>None</c> arm of a variant:
     /// <c>V.create(from: Arm) -> V</c> (box) and <c>Arm.create!(from: V) -> Arm</c> (failable extract).

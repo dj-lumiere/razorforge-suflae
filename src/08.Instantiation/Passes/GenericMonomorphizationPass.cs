@@ -1644,13 +1644,9 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     private static string MatchableBaseName(string typeName)
     {
         string baseName = StripGenericSuffix(typeName);
-        if (BorrowWrapperNames.Contains(baseName))
-        {
-            int open = typeName.IndexOf('[');
-            int close = typeName.LastIndexOf(']');
-            if (open >= 0 && close > open + 1)
-                return MatchableBaseName(typeName[(open + 1)..close].Trim());
-        }
+        if (BorrowWrapperNames.Contains(baseName)
+            && TypeInfo.ExtractTypeArgsString(name: typeName) is { } inner)
+            return MatchableBaseName(inner);
         return baseName;
     }
 

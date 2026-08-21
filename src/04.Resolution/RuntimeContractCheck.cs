@@ -42,8 +42,11 @@ public static class RuntimeContractCheck
             {
                 switch (node)
                 {
-                    case RoutineDeclaration d: declaredRoutines.Add(item: BareMemberRoutineName(name: d.Name)); break;
-                    case RoutineSignature s: declaredRoutines.Add(item: BareMemberRoutineName(name: s.Name)); break;
+                    // .Name is the canonical bare member identifier (parser stores owner in the
+                    // structured OwnerName/RenderedReceiver fields; `!` is IsFailable) — matches the
+                    // bare routine-name contracts directly, no owner/generic-suffix splitting needed.
+                    case RoutineDeclaration d: declaredRoutines.Add(item: d.Name); break;
+                    case RoutineSignature s: declaredRoutines.Add(item: s.Name); break;
                 }
             });
         }
@@ -87,18 +90,6 @@ public static class RuntimeContractCheck
         }
 
         return errors;
-    }
-
-    /// <summary>Extracts the bare memberRoutine name from a possibly owner-qualified, possibly generic
-    /// declaration name: <c>Hijacked[T].peek</c> → <c>peek</c>,
-    /// <c>S64.to_width[T]</c> → <c>to_width</c>, <c>make_channel</c> → <c>make_channel</c>. Mirrors the
-    /// split StdlibLoader.Registration performs on the same names. The failable `!` is a structured
-    /// flag, never part of the name, so it is not stripped here.</summary>
-    private static string BareMemberRoutineName(string name)
-    {
-        int dot = name.IndexOf(value: '.');
-        string memberRoutine = dot >= 0 ? name[(dot + 1)..] : name;
-        return TypeInfo.StripTypeArgs(name: memberRoutine);
     }
 
     private static HashSet<string> MemberVariableNames(TypeInfo type)

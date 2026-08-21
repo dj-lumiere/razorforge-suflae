@@ -1372,8 +1372,7 @@ public sealed partial class SemanticVerifier
         // implement Iterable structurally.
         if (iterableType is ProtocolTypeInfo iproto)
         {
-            string baseName = TypeInfo.StripTypeArgs(
-                name: iproto.GenericDefinition?.Name ?? iproto.Name);
+            string baseName = (iproto.GenericDefinition ?? iproto).BareName;
             if (baseName == "Iterable" && iproto.TypeArguments is { Count: > 0 })
             {
                 return iproto.TypeArguments[index: 0];
