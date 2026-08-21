@@ -94,6 +94,12 @@ public sealed partial class SemanticVerifier
 
     private TypeSymbol AnalyzeCallExpression(CallExpression call, TypeSymbol? expectedType = null)
     {
+        // Comptime `expand` gate: a member-routine call on a comptime member value (me.$nameof(m).cmp()/
+        // .hash()/…) is a wired op — a GATED one (cmp/hash/…) needs the enclosing template's `needs P
+        // everywhere` guarantee; a universal one (represent/serialize) passes freely.
+        if (call.Callee is MemberExpression { Object: SpliceMemberExpression, MemberName: var comptimeOp })
+            EnforceComptimeMemberGate(wiredName: comptimeOp, location: call.Location);
+
         // Comptime metadata intrinsic (`nameof(m)` / `sizeof(T)` / …): a call whose callee is one of the
         // reserved `*of` names with a single argument. Intercepted before ordinary routine resolution —
         // these have no RoutineInfo; they fold off the expand-unroll context at monomorphization.

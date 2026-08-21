@@ -347,6 +347,12 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary)
     {
+        // Comptime `expand` gate: a comparison/equality on a comptime member value (me.$nameof(m)) is a
+        // gated wired op (eq/cmp) — it needs the enclosing template's `needs P everywhere` guarantee.
+        if (WiredNameForOperator(op: binary.Operator) is { } opWired
+            && (binary.Left is SpliceMemberExpression || binary.Right is SpliceMemberExpression))
+            EnforceComptimeMemberGate(wiredName: opWired, location: binary.Location);
+
         // Re-binding (lhs = rhs) revives a stolen-from identifier: clear deadref
         // BEFORE analyzing the LHS so the deadref-read check at line ~135 doesn't fire.
         if (binary is { Operator: BinaryOperator.Assign, Left: IdentifierExpression rebindId })

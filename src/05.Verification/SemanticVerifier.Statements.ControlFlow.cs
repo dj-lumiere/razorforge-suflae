@@ -146,6 +146,13 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void AnalyzeExpandStatement(ExpandStatement expandStmt)
     {
+        // Expansion is single-level: a member walk cannot itself contain a member walk.
+        if (_inExpandBody)
+            ReportError(code: SemanticDiagnosticCode.NestedExpandNotAllowed,
+                message:
+                "An 'expand' cannot be nested inside another 'expand' — comptime member expansion is single-level.",
+                location: expandStmt.Location);
+
         _registry.EnterScope(kind: ScopeKind.Loop, name: "expand");
 
         // Resolve the source type for early error surfacing (a bare generic param resolves fine).
@@ -156,7 +163,10 @@ public sealed partial class SemanticVerifier
         _registry.DeclareVariable(name: expandStmt.HandleName,
             type: ComptimeHandleTypeInfo.Instance);
 
+        bool prevInExpand = _inExpandBody;
+        _inExpandBody = true;
         AnalyzeStatement(statement: expandStmt.Body);
+        _inExpandBody = prevInExpand;
 
         _registry.ExitScope();
     }
