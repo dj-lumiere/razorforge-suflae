@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace Compiler.Targeting;
 
@@ -71,20 +73,37 @@ public static class TargetGate
 
     private static bool Matches(string inside, TargetConfig target)
     {
-        foreach (string part in inside.Split(separator: ','))
+        // Parse `key: "v1", "v2", other: "v3"` into key -> [values]. A comma-separated part WITH a
+        // colon starts a new key; a part WITHOUT one is an additional value for the current key — so
+        // `os: "linux", "macos"` reads as os ∈ {linux, macos}. Keys are AND-ed; values within a key
+        // are OR-ed.
+        var conditions = new Dictionary<string, List<string>>(comparer: StringComparer.OrdinalIgnoreCase);
+        string? currentKey = null;
+        foreach (string rawPart in inside.Split(separator: ','))
         {
+            string part = rawPart.Trim();
+            if (part.Length == 0) continue;
             int colon = part.IndexOf(value: ':');
-            if (colon < 0) continue;
-            string key = part[..colon].Trim();
-            string val = part[(colon + 1)..].Trim().Trim('"');
+            if (colon >= 0)
+            {
+                currentKey = part[..colon].Trim();
+                conditions[key: currentKey] = [part[(colon + 1)..].Trim().Trim('"')];
+            }
+            else if (currentKey != null)
+            {
+                conditions[key: currentKey].Add(item: part.Trim('"'));
+            }
+        }
 
+        foreach ((string key, List<string> values) in conditions)
+        {
             bool ok = key switch
             {
-                "os" => string.Equals(a: val, b: target.TargetOS,
-                    comparisonType: StringComparison.OrdinalIgnoreCase),
-                "arch" => string.Equals(a: NormalizeArch(arch: val),
+                "os" => values.Any(predicate: v => string.Equals(a: v, b: target.TargetOS,
+                    comparisonType: StringComparison.OrdinalIgnoreCase)),
+                "arch" => values.Any(predicate: v => string.Equals(a: NormalizeArch(arch: v),
                     b: NormalizeArch(arch: target.TargetArch),
-                    comparisonType: StringComparison.OrdinalIgnoreCase),
+                    comparisonType: StringComparison.OrdinalIgnoreCase)),
                 _ => true // unknown key: forward-compatible, ignore
             };
             if (!ok) return false;

@@ -230,6 +230,14 @@ public sealed partial class StdlibLoader
                      searchOption: SearchOption.AllDirectories)
                  .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
         {
+            // File-granularity conditional compilation applies to the stdlib too: a platform-specific
+            // stdlib file (e.g. the LP64/LLP64 C-type width files) carries a `#@target(...)` directive
+            // and only the matching one is loaded.
+            if (!Compiler.Targeting.TargetGate.ShouldCompile(filePath: filePath))
+            {
+                continue;
+            }
+
             try
             {
                 string code = File.ReadAllText(path: filePath);
